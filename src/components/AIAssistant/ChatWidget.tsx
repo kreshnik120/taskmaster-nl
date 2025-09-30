@@ -19,6 +19,30 @@ export const ChatWidget = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
+  // Load conversation history on mount
+  useEffect(() => {
+    const loadHistory = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: history } = await supabase
+        .from('chat_messages')
+        .select('role, content')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(20);
+
+      if (history && history.length > 0) {
+        setMessages(history as Message[]);
+        console.log('📚 Loaded chat history:', history.length, 'messages');
+      }
+    };
+
+    if (isOpen) {
+      loadHistory();
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -30,6 +54,17 @@ export const ChatWidget = () => {
     setMessages(newMessages);
     setIsLoading(true);
     setInput('');
+
+    // Timeout mechanism for robustness
+    const timeoutId = setTimeout(() => {
+      console.error('Stream timeout after 60s');
+      setIsLoading(false);
+      toast({
+        title: 'Time-out',
+        description: 'AI-assistent reageert te langzaam. Probeer het opnieuw.',
+        variant: 'destructive',
+      });
+    }, 60000);
 
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -44,7 +79,10 @@ export const ChatWidget = () => {
         throw new Error('Je moet ingelogd zijn om de AI-assistent te gebruiken');
       }
 
-      console.log('Sending request to AI with', newMessages.length, 'messages');
+      console.log('🤖 AI Request:', {
+        messageCount: newMessages.length,
+        timestamp: new Date().toISOString()
+      });
       
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`,
@@ -62,12 +100,22 @@ export const ChatWidget = () => {
       );
 
       if (!response.ok) {
+        clearTimeout(timeoutId);
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
         console.error('AI response error:', response.status, errorData);
+        
+        // Enhanced error messages
+        if (response.status === 429) {
+          throw new Error('🚦 Te veel verzoeken. Even wachten voordat je opnieuw probeert.');
+        } else if (response.status === 402) {
+          throw new Error('💳 AI credits op. Neem contact op met support.');
+        }
+        
         throw new Error(errorData.error || `AI fout: ${response.status}`);
       }
       
       if (!response.body) {
+        clearTimeout(timeoutId);
         throw new Error('No response body received');
       }
 
@@ -75,57 +123,77 @@ export const ChatWidget = () => {
       const decoder = new TextDecoder();
       let assistantMessage = '';
       let textBuffer = '';
+      let chunkCount = 0;
 
       // Add empty assistant message that we'll update
       setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      console.log('📡 Starting stream...');
 
-        textBuffer += decoder.decode(value, { stream: true });
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            console.log('✅ Stream complete:', { totalChunks: chunkCount, messageLength: assistantMessage.length });
+            break;
+          }
 
-        let newlineIndex: number;
-        while ((newlineIndex = textBuffer.indexOf('\n')) !== -1) {
-          let line = textBuffer.slice(0, newlineIndex);
-          textBuffer = textBuffer.slice(newlineIndex + 1);
+          chunkCount++;
+          textBuffer += decoder.decode(value, { stream: true });
 
-          if (line.endsWith('\r')) line = line.slice(0, -1);
-          if (line.startsWith(':') || line.trim() === '') continue;
-          if (!line.startsWith('data: ')) continue;
+          let newlineIndex: number;
+          while ((newlineIndex = textBuffer.indexOf('\n')) !== -1) {
+            let line = textBuffer.slice(0, newlineIndex);
+            textBuffer = textBuffer.slice(newlineIndex + 1);
 
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === '[DONE]') break;
+            if (line.endsWith('\r')) line = line.slice(0, -1);
+            if (line.startsWith(':') || line.trim() === '') continue;
+            if (!line.startsWith('data: ')) continue;
 
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              assistantMessage += content;
-              setMessages(prev => {
-                const updated = [...prev];
-                updated[updated.length - 1] = { role: 'assistant', content: assistantMessage };
-                return updated;
-              });
+            const jsonStr = line.slice(6).trim();
+            if (jsonStr === '[DONE]') break;
+
+            try {
+              const parsed = JSON.parse(jsonStr);
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) {
+                assistantMessage += content;
+                setMessages(prev => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = { role: 'assistant', content: assistantMessage };
+                  return updated;
+                });
+              }
+            } catch (parseError) {
+              console.warn('Parse error for chunk:', jsonStr.substring(0, 50));
             }
-          } catch {
-            // Ignore parse errors
           }
         }
+      } catch (streamError) {
+        console.error('Stream reading error:', streamError);
+        throw new Error('Fout bij het ontvangen van AI-antwoord');
       }
 
+      clearTimeout(timeoutId);
       setIsLoading(false);
 
-      // Save to database
+      // Save to database for learning and context
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await supabase.from('chat_messages').insert([
+      if (user && assistantMessage) {
+        console.log('💾 Saving conversation to database');
+        const { error: insertError } = await supabase.from('chat_messages').insert([
           { role: 'user', content: userMessage, user_id: user.id },
           { role: 'assistant', content: assistantMessage, user_id: user.id },
         ]);
+        
+        if (insertError) {
+          console.error('Failed to save chat history:', insertError);
+          // Non-fatal - continue anyway
+        }
       }
 
     } catch (error) {
+      clearTimeout(timeoutId);
       console.error('Chat error:', error);
       setIsLoading(false);
       const errorMessage = error instanceof Error ? error.message : 'Kon geen antwoord krijgen van AI-assistent';

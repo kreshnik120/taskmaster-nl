@@ -67,38 +67,176 @@ serve(async (req) => {
 
     console.log('User authenticated:', user.id);
 
-    // Fetch user's tasks for context
-    const { data: tasks } = await supabase
-      .from('tasks')
-      .select('id, title, priority, due_at, status, next_action, description')
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(50);
+    // Fetch comprehensive context for AI
+    const [
+      tasksResult,
+      profileResult,
+      clientsResult,
+      projectsResult,
+      subtasksResult,
+      commentsResult,
+      timeEntriesResult,
+      activeTimeResult,
+      chatHistoryResult
+    ] = await Promise.all([
+      // Active tasks with full details
+      supabase
+        .from('tasks')
+        .select('id, title, priority, due_at, start_at, next_action, description, estimate_min, completed_at, revenue_impact_eur, transition_related, client_id, assignee_id')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(100),
+      
+      // User profile
+      supabase
+        .from('profiles')
+        .select('name, email')
+        .eq('id', user.id)
+        .single(),
+      
+      // Clients for business context
+      supabase
+        .from('clients')
+        .select('id, name, company, tier, weekly_hours, revenue_per_hour')
+        .limit(50),
+      
+      // Projects for project context
+      supabase
+        .from('projects')
+        .select('id, name, description')
+        .limit(50),
+      
+      // Subtasks for detailed task breakdown
+      supabase
+        .from('subtasks')
+        .select('id, title, status, due_at, task_id')
+        .eq('status', 'active')
+        .limit(100),
+      
+      // Recent comments for conversation context
+      supabase
+        .from('comments')
+        .select('body, created_at, task_id')
+        .order('created_at', { ascending: false })
+        .limit(50),
+      
+      // Time entries for workload insights
+      supabase
+        .from('time_entries')
+        .select('duration_min, start, task_id')
+        .gte('start', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+        .limit(200),
+      
+      // Check for active time tracking
+      supabase
+        .from('time_entries')
+        .select('task_id, start')
+        .is('end', null)
+        .eq('user_id', user.id)
+        .maybeSingle(),
+      
+      // Recent chat history for context continuity
+      supabase
+        .from('chat_messages')
+        .select('role, content, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(20)
+    ]);
 
-    // Fetch user's profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('name')
-      .eq('id', user.id)
-      .single();
+    const tasks = tasksResult.data;
+    const profile = profileResult.data;
+    const clients = clientsResult.data;
+    const projects = projectsResult.data;
+    const subtasks = subtasksResult.data;
+    const recentComments = commentsResult.data;
+    const timeEntries = timeEntriesResult.data;
+    const activeTimeEntry = activeTimeResult.data;
+    const chatHistory = chatHistoryResult.data;
 
-    // Build context-aware system prompt
-    const taskSummary = tasks ? `
-Gebruiker heeft ${tasks.length} actieve taken:
-${tasks.slice(0, 10).map(t => `- ${t.title} (${t.priority} prioriteit, deadline: ${t.due_at || 'geen'})`).join('\n')}
-` : '';
+    // Analyze patterns and build rich context
+    const activeTasks = tasks?.filter(t => !t.completed_at) || [];
+    const completedTasks = tasks?.filter(t => t.completed_at) || [];
+    const overdueTasks = activeTasks.filter(t => t.due_at && new Date(t.due_at) < new Date());
+    const highPriorityTasks = activeTasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL');
+    const revenueImpactTasks = activeTasks.filter(t => t.revenue_impact_eur && t.revenue_impact_eur > 0);
+    
+    // Calculate workload metrics
+    const totalTimeThisWeek = timeEntries?.reduce((sum, e) => sum + (e.duration_min || 0), 0) || 0;
+    const avgTasksPerDay = activeTasks.length / 7;
+    
+    // Client insights
+    const clientMap = new Map(clients?.map(c => [c.id, c]) || []);
+    const tasksWithClients = activeTasks.filter(t => t.client_id);
+    
+    // Build comprehensive context summary
+    const contextSummary = `
+GEBRUIKER: ${profile?.name || 'Gebruiker'} (${profile?.email || ''})
 
-    const systemPrompt = `Je bent een AI-assistent voor TaskFlow, een taakbeheer systeem.
-Je helpt ${profile?.name || 'de gebruiker'} met:
-- Taakbeheer en planning optimalisatie
-- Prioriteiten en deadlines analyseren
-- Workflow suggesties en tips
-- Inzichten uit taakdata
+HUIDIGE WERKSTATUS:
+- Actieve taken: ${activeTasks.length}
+- Afgeronde taken: ${completedTasks.length}
+- Verlopen taken: ${overdueTasks.length}
+- Hoge prioriteit: ${highPriorityTasks.length}
+- Taken met revenue impact: ${revenueImpactTasks.length} (totaal: €${revenueImpactTasks.reduce((sum, t) => sum + (t.revenue_impact_eur || 0), 0).toFixed(2)})
+${activeTimeEntry ? `- 🟢 BEZIG MET: Taak ${activeTimeEntry.task_id} (gestart ${new Date(activeTimeEntry.start).toLocaleTimeString('nl-NL')})` : ''}
 
-${taskSummary}
+WERKBELASTING DEZE WEEK:
+- Totaal gewerkte uren: ${(totalTimeThisWeek / 60).toFixed(1)}h
+- Gemiddeld aantal taken per dag: ${avgTasksPerDay.toFixed(1)}
 
-Wees kort, to-the-point en actiegericht. Spreek Nederlands.
-Gebruik emoji's waar passend. Focus op concrete acties.`;
+CLIENTS: ${clients?.length || 0} actieve clients
+${tasksWithClients.slice(0, 5).map(t => {
+  const client = clientMap.get(t.client_id!);
+  return client ? `- ${client.company}: ${t.title}` : '';
+}).filter(Boolean).join('\n')}
+
+PROJECTEN: ${projects?.length || 0} actieve projecten
+
+TOP 10 PRIORITEITEN:
+${activeTasks.slice(0, 10).map((t, i) => 
+  `${i + 1}. [${t.priority}] ${t.title}${t.due_at ? ` (deadline: ${new Date(t.due_at).toLocaleDateString('nl-NL')})` : ''}${t.next_action ? `\n   → Next: ${t.next_action}` : ''}`
+).join('\n')}
+
+SUBTAKEN STATUS:
+- Actieve subtaken: ${subtasks?.length || 0}
+
+RECENTE ACTIVITEIT:
+${recentComments?.slice(0, 5).map(c => `- ${c.body.substring(0, 80)}...`).join('\n') || '- Geen recente comments'}
+`;
+
+    // Get conversation history (reverse order for chronological display)
+    const historyMessages = chatHistory ? [...chatHistory].reverse().slice(0, 10) : [];
+    const conversationHistory = historyMessages.length > 0
+      ? historyMessages.map(m => `${m.role === 'user' ? '👤' : '🤖'} ${m.content}`).join('\n')
+      : 'Eerste conversatie';
+
+    const systemPrompt = `Je bent een geavanceerde AI-assistent voor TaskFlow, gespecialiseerd in taakbeheer en productiviteitsoptimalisatie.
+
+JOUW CAPABILITIES:
+✅ Volledig inzicht in gebruiker's taken, projecten, clients en werkpatronen
+✅ Real-time context awareness (welke taak is actief, deadlines, prioriteiten)
+✅ Intelligente suggesties gebaseerd op historie en patterns
+✅ Proactieve workflow optimalisatie en planning
+✅ Business impact analyse (revenue, client relationships)
+✅ Tijdmanagement en workload balancering
+
+JOUW GEDRAG:
+- Spreek Nederlands en gebruik emoji's 🎯📊💡 waar passend
+- Wees direct en actiegericht
+- Geef concrete, uitvoerbare suggesties
+- Verwijs naar specifieke taken met hun volledige context
+- Waarschuw voor potentiële problemen (deadlines, overload)
+- Leer van eerdere conversaties en pas je aan aan gebruiker
+- Focus op business impact en prioriteit
+
+HUIDIGE CONTEXT:
+${contextSummary}
+
+CONVERSATIE GESCHIEDENIS:
+${conversationHistory}
+
+Gebruik deze rijke context om intelligente, context-aware antwoorden te geven die echt helpen met productiviteit en taakbeheer.`;
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
