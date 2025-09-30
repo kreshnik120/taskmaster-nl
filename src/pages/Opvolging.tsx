@@ -71,6 +71,8 @@ export default function Opvolging() {
   const [loading, setLoading] = useState(true);
   const [scoringLoading, setScoringLoading] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>(null);
+  const [aiExplanations, setAiExplanations] = useState<Map<string, string>>(new Map());
+  const [loadingExplanations, setLoadingExplanations] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     checkAuth();
@@ -182,6 +184,36 @@ export default function Opvolging() {
       });
     } finally {
       setScoringLoading(false);
+    }
+  };
+
+  const generateTaskExplanation = async (task: Task, scoreBreakdown: any) => {
+    // Check if already loading or already have explanation
+    if (loadingExplanations.has(task.id) || aiExplanations.has(task.id)) {
+      return;
+    }
+
+    setLoadingExplanations(prev => new Set(prev).add(task.id));
+
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-task-explanation', {
+        body: { task, scoreBreakdown }
+      });
+
+      if (error) throw error;
+
+      if (data?.explanation) {
+        setAiExplanations(prev => new Map(prev).set(task.id, data.explanation));
+      }
+    } catch (error) {
+      console.error("Error generating explanation:", error);
+      // Silently fail - numerical breakdown will still be shown
+    } finally {
+      setLoadingExplanations(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(task.id);
+        return newSet;
+      });
     }
   };
 
@@ -424,7 +456,11 @@ export default function Opvolging() {
                             )}
                           </div>
                           <TooltipProvider>
-                            <Tooltip>
+                            <Tooltip onOpenChange={(open) => {
+                              if (open && task.scoreBreakdown && !aiExplanations.has(task.id) && !loadingExplanations.has(task.id)) {
+                                generateTaskExplanation(task, task.scoreBreakdown);
+                              }
+                            }}>
                               <TooltipTrigger asChild>
                                 <div className="text-right cursor-help">
                                   <div className="text-2xl font-bold text-primary">
@@ -448,39 +484,58 @@ export default function Opvolging() {
                                   )}
                                 </div>
                               </TooltipTrigger>
-                              <TooltipContent side="left" className="max-w-xs">
-                                <div className="space-y-2">
-                                  <p className="font-semibold">Score Breakdown (WSJF):</p>
-                                  {task.scoreBreakdown ? (
-                                    <div className="space-y-1 text-sm">
-                                      <div className="flex justify-between">
-                                        <span>💰 Waarde/Impact:</span>
-                                        <span className="font-medium">{Math.round(task.scoreBreakdown.money * 100)}%</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span>⏰ Urgentie:</span>
-                                        <span className="font-medium">{Math.round(task.scoreBreakdown.urgency * 100)}%</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span>✅ Kwaliteit/Gereedheid:</span>
-                                        <span className="font-medium">{Math.round(task.scoreBreakdown.quality * 100)}%</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span>📊 Business Impact:</span>
-                                        <span className="font-medium">{Math.round(task.scoreBreakdown.business * 100)}%</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span>🚀 Groei Potentie:</span>
-                                        <span className="font-medium">{Math.round(task.scoreBreakdown.growth * 100)}%</span>
-                                      </div>
-                                      <div className="flex justify-between border-t pt-1 font-semibold">
-                                        <span>Totaal Score:</span>
-                                        <span>{task.priorityScore}/100</span>
-                                      </div>
+                              <TooltipContent side="left" className="max-w-md">
+                                <div className="space-y-3">
+                                  {aiExplanations.has(task.id) && (
+                                    <div className="pb-3 border-b">
+                                      <p className="font-semibold mb-2 flex items-center gap-2">
+                                        <Sparkles className="h-4 w-4 text-primary" />
+                                        Waarom belangrijk?
+                                      </p>
+                                      <p className="text-sm leading-relaxed">
+                                        {aiExplanations.get(task.id)}
+                                      </p>
                                     </div>
-                                  ) : (
-                                    <p className="text-sm text-muted-foreground">Score wordt berekend...</p>
                                   )}
+                                  {loadingExplanations.has(task.id) && !aiExplanations.has(task.id) && (
+                                    <div className="pb-3 border-b flex items-center gap-2 text-muted-foreground">
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                      <span className="text-sm">AI analyseert taak...</span>
+                                    </div>
+                                  )}
+                                  <div>
+                                    <p className="font-semibold mb-2">Score Breakdown (WSJF):</p>
+                                    {task.scoreBreakdown ? (
+                                      <div className="space-y-1 text-sm">
+                                        <div className="flex justify-between">
+                                          <span>💰 Waarde/Impact:</span>
+                                          <span className="font-medium">{Math.round(task.scoreBreakdown.money * 100)}%</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span>⏰ Urgentie:</span>
+                                          <span className="font-medium">{Math.round(task.scoreBreakdown.urgency * 100)}%</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span>✅ Kwaliteit/Gereedheid:</span>
+                                          <span className="font-medium">{Math.round(task.scoreBreakdown.quality * 100)}%</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span>📊 Business Impact:</span>
+                                          <span className="font-medium">{Math.round(task.scoreBreakdown.business * 100)}%</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span>🚀 Groei Potentie:</span>
+                                          <span className="font-medium">{Math.round(task.scoreBreakdown.growth * 100)}%</span>
+                                        </div>
+                                        <div className="flex justify-between border-t pt-1 font-semibold">
+                                          <span>Totaal Score:</span>
+                                          <span>{task.priorityScore}/100</span>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <p className="text-sm text-muted-foreground">Score wordt berekend...</p>
+                                    )}
+                                  </div>
                                 </div>
                               </TooltipContent>
                             </Tooltip>

@@ -2,3 +2,6 @@ project_id = "oelmsmcgryeoryhonexw"
 
 [functions.prioritizer]
 verify_jwt = true
+
+[functions.generate-task-explanation]
+verify_jwt = true
