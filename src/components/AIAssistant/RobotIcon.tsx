@@ -3,7 +3,7 @@ import { OrbitControls, PerspectiveCamera, Environment } from '@react-three/drei
 import { motion } from 'framer-motion';
 import { Robot3D } from './Robot3D';
 import { RobotErrorBoundary } from './RobotErrorBoundary';
-import { Suspense } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { Bot } from 'lucide-react';
 
 interface RobotIconProps {
@@ -11,27 +11,52 @@ interface RobotIconProps {
   isActive?: boolean;
 }
 
+const STORAGE_KEY = 'robot-position';
+
 export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
+  // Load position from localStorage
+  const [position, setPosition] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return { x: 0, y: 0 };
+      }
+    }
+    return { x: 0, y: 0 };
+  });
+
+  // Save position to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(position));
+  }, [position]);
+
   return (
     <motion.button
+      drag
+      dragMomentum={false}
+      dragElastic={0}
+      onDragEnd={(_, info) => {
+        setPosition({ x: position.x + info.offset.x, y: position.y + info.offset.y });
+      }}
+      style={{ x: position.x, y: position.y }}
       onClick={onClick}
-      className="relative cursor-pointer bg-transparent border-none p-0 w-32 h-32 rounded-2xl overflow-hidden"
+      className="relative cursor-grab active:cursor-grabbing border-none p-0 w-32 h-32"
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}
-      style={{
-        background: 'linear-gradient(135deg, rgba(74, 144, 226, 0.1) 0%, rgba(255, 107, 53, 0.1) 100%)',
-        backdropFilter: 'blur(10px)',
-        border: '1px solid rgba(74, 144, 226, 0.3)',
-      }}
     >
       <RobotErrorBoundary
         fallback={
           <div className="w-full h-full flex items-center justify-center">
-            <Bot className="w-16 h-16 text-primary" />
+            <Bot className="w-16 h-16 text-primary drop-shadow-lg" />
           </div>
         }
       >
-        <Canvas>
+        <Canvas 
+          gl={{ alpha: true, antialias: true }}
+          style={{ background: 'transparent' }}
+        >
           <Suspense fallback={null}>
             <PerspectiveCamera makeDefault position={[0, 0, 4]} />
             
