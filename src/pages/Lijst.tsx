@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, Filter, Plus, Check, Edit2, Clock } from "lucide-react";
+import { Loader2, Filter, Plus, Check, Edit2, Clock, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,6 +15,16 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Task {
   id: string;
@@ -65,6 +75,8 @@ export default function Lijst() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -372,6 +384,35 @@ export default function Lijst() {
     fetchTasks();
   };
 
+  const openDeleteDialog = (task: Task) => {
+    setTaskToDelete(task);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteTask = async () => {
+    if (!taskToDelete || !currentUserId) return;
+
+    try {
+      const { error } = await supabase
+        .from("tasks")
+        .update({
+          deleted_at: new Date().toISOString(),
+          deleted_by: currentUserId,
+        })
+        .eq("id", taskToDelete.id);
+
+      if (error) throw error;
+
+      toast.success("Taak verwijderd");
+      setDeleteDialogOpen(false);
+      setTaskToDelete(null);
+      fetchTasks();
+    } catch (error) {
+      console.error("Error deleting task:", error);
+      toast.error("Fout bij verwijderen van taak");
+    }
+  };
+
   const filteredTasks = tasks.filter((task) => {
     if (filterPriority !== "all" && task.priority !== filterPriority) return false;
     if (filterStatus === "completed" && !task.completed_at) return false;
@@ -591,17 +632,33 @@ export default function Lijst() {
                               )}
                             </TableCell>
                             <TableCell>
-                              {!task.accepted_by && task.assignee_id && (
+                              <div className="flex items-center gap-2">
+                                {!task.accepted_by && task.assignee_id && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleAcceptTask(task.id);
+                                    }}
+                                    className="h-8 text-xs"
+                                  >
+                                    <Check className="h-3 w-3 mr-1" />
+                                    Accepteren
+                                  </Button>
+                                )}
                                 <Button
                                   size="sm"
-                                  variant="outline"
-                                  onClick={() => handleAcceptTask(task.id)}
-                                  className="h-8 text-xs"
+                                  variant="ghost"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openDeleteDialog(task);
+                                  }}
+                                  className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                                 >
-                                  <Check className="h-3 w-3 mr-1" />
-                                  Accepteren
+                                  <Trash2 className="h-4 w-4" />
                                 </Button>
-                              )}
+                              </div>
                             </TableCell>
                             <TableCell className="text-center">
                               <Checkbox
@@ -630,6 +687,24 @@ export default function Lijst() {
           onTaskUpdated={handleTaskUpdated}
         />
       )}
+      
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Taak verwijderen</AlertDialogTitle>
+            <AlertDialogDescription>
+              Weet je zeker dat je de taak "{taskToDelete?.title}" wilt verwijderen? 
+              Deze actie kan ongedaan worden gemaakt vanuit de pagina "Verwijderde Taken".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteTask} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Verwijderen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SidebarProvider>
   );
 }
