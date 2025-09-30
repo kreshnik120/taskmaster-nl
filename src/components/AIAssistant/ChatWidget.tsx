@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Loader2 } from 'lucide-react';
+import { MessageSquare, X, Send, Loader2, Sparkles, Calendar, ListTodo, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -11,12 +12,20 @@ interface Message {
   content: string;
 }
 
+const QUICK_ACTIONS = [
+  { icon: ListTodo, label: 'Mijn taken vandaag', prompt: 'Wat zijn mijn belangrijkste taken voor vandaag?' },
+  { icon: Calendar, label: 'Planning deze week', prompt: 'Geef me een overzicht van mijn planning deze week' },
+  { icon: Clock, label: 'Maak nieuwe taak', prompt: 'Help me een nieuwe taak aan te maken' },
+];
+
 export const ChatWidget = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   // Load conversation history on mount
@@ -34,6 +43,7 @@ export const ChatWidget = () => {
 
       if (history && history.length > 0) {
         setMessages(history as Message[]);
+        setShowWelcome(false);
         console.log('📚 Loaded chat history:', history.length, 'messages');
       }
     };
@@ -43,11 +53,19 @@ export const ChatWidget = () => {
     }
   }, [isOpen]);
 
+  // Smooth auto-scroll to bottom
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+    scrollToBottom();
+  }, [messages, isLoading]);
+
+  const handleQuickAction = (prompt: string) => {
+    setInput(prompt);
+    setShowWelcome(false);
+  };
 
   const streamChat = async (userMessage: string) => {
     const newMessages = [...messages, { role: 'user' as const, content: userMessage }];
@@ -210,6 +228,7 @@ export const ChatWidget = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
+    setShowWelcome(false);
     streamChat(input.trim());
   };
 
@@ -230,10 +249,17 @@ export const ChatWidget = () => {
       {isOpen && (
         <div className="fixed bottom-6 right-6 w-96 h-[600px] bg-background border rounded-lg shadow-xl flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" />
-              <h3 className="font-semibold">AI Assistent</h3>
+          <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-primary/5 to-primary/10">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-9 w-9 border-2 border-primary/20">
+                <AvatarFallback className="bg-primary/10">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <h3 className="font-semibold text-sm">TaskFlow Assistent</h3>
+                <p className="text-xs text-muted-foreground">Altijd klaar om te helpen</p>
+              </div>
             </div>
             <Button
               onClick={() => setIsOpen(false)}
@@ -246,47 +272,100 @@ export const ChatWidget = () => {
           </div>
 
           {/* Messages */}
-          <ScrollArea className="flex-1 p-4" ref={scrollRef}>
-            {messages.length === 0 && (
-              <div className="text-center text-muted-foreground mt-8">
-                <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p className="text-sm">Hoe kan ik je helpen met je taken?</p>
+          <ScrollArea className="flex-1 p-4">
+            {messages.length === 0 && showWelcome && (
+              <div className="space-y-4 mt-4">
+                <div className="flex items-start gap-3">
+                  <Avatar className="h-8 w-8 border border-primary/20">
+                    <AvatarFallback className="bg-primary/10">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="bg-muted rounded-lg px-4 py-3 max-w-[85%]">
+                    <p className="text-sm mb-3">
+                      👋 Hallo! Ik ben je persoonlijke TaskFlow assistent. Ik kan je helpen met:
+                    </p>
+                    <ul className="text-sm space-y-1.5 mb-3">
+                      <li>• 📋 Taken aanmaken en organiseren</li>
+                      <li>• 📅 Je planning optimaliseren</li>
+                      <li>• 🎯 Prioriteiten stellen</li>
+                      <li>• ⏰ Deadlines beheren</li>
+                    </ul>
+                    <p className="text-xs text-muted-foreground">
+                      Kies een snelle actie of stel je eigen vraag!
+                    </p>
+                  </div>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="space-y-2 pl-11">
+                  {QUICK_ACTIONS.map((action, idx) => {
+                    const Icon = action.icon;
+                    return (
+                      <Button
+                        key={idx}
+                        variant="outline"
+                        size="sm"
+                        className="w-full justify-start gap-2 h-auto py-2.5"
+                        onClick={() => handleQuickAction(action.prompt)}
+                      >
+                        <Icon className="h-4 w-4 text-primary" />
+                        <span className="text-sm">{action.label}</span>
+                      </Button>
+                    );
+                  })}
+                </div>
               </div>
             )}
+
             <div className="space-y-4">
               {messages.map((msg, idx) => (
                 <div
                   key={idx}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
                 >
+                  {msg.role === 'assistant' && (
+                    <Avatar className="h-8 w-8 border border-primary/20 shrink-0">
+                      <AvatarFallback className="bg-primary/10">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                      </AvatarFallback>
+                    </Avatar>
+                  )}
                   <div
-                    className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                    className={`rounded-lg px-4 py-2.5 max-w-[85%] ${
                       msg.role === 'user'
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted'
                     }`}
                   >
-                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                   </div>
                 </div>
               ))}
               {isLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-muted rounded-lg px-4 py-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                <div className="flex gap-3">
+                  <Avatar className="h-8 w-8 border border-primary/20">
+                    <AvatarFallback className="bg-primary/10">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="bg-muted rounded-lg px-4 py-2.5 flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    <span className="text-xs text-muted-foreground">Bezig met nadenken...</span>
                   </div>
                 </div>
               )}
+              <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
 
           {/* Input */}
-          <form onSubmit={handleSubmit} className="p-4 border-t">
+          <form onSubmit={handleSubmit} className="p-4 border-t bg-background/50 backdrop-blur-sm">
             <div className="flex gap-2">
               <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Stel een vraag..."
+                placeholder="Typ je vraag... (Enter om te versturen)"
                 className="min-h-[60px] max-h-[120px] resize-none"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -294,13 +373,19 @@ export const ChatWidget = () => {
                     handleSubmit(e);
                   }
                 }}
+                disabled={isLoading}
               />
               <Button
                 type="submit"
                 size="icon"
                 disabled={!input.trim() || isLoading}
+                className="shrink-0"
               >
-                <Send className="h-4 w-4" />
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </Button>
             </div>
           </form>
