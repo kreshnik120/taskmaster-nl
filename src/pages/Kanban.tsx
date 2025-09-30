@@ -194,31 +194,53 @@ const Kanban = () => {
     const { active, over } = event;
     setActiveTask(null);
 
-    if (!over) return;
+    if (!over) {
+      console.log("Drag geannuleerd: geen geldige drop zone");
+      return;
+    }
 
     const taskId = active.id as string;
     const newColumnId = over.id as string;
 
     const task = tasks.find((t) => t.id === taskId);
-    if (!task) return;
-
-    // Update task in database
-    const { error } = await supabase
-      .from("tasks")
-      .update({ column_id: newColumnId })
-      .eq("id", taskId);
-
-    if (error) {
-      toast.error("Fout bij verplaatsen van taak");
+    if (!task) {
+      console.error("Taak niet gevonden:", taskId);
+      toast.error("Taak niet gevonden");
       return;
     }
 
-    // Update local state
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, column_id: newColumnId } : t))
-    );
+    // Check if task is already in this column
+    if (task.column_id === newColumnId) {
+      console.log("Taak is al in deze kolom");
+      return;
+    }
 
-    toast.success("Taak verplaatst");
+    const targetColumn = columns.find((c) => c.id === newColumnId);
+    console.log(`Verplaats taak "${task.title}" naar kolom "${targetColumn?.name}"`);
+
+    try {
+      // Update task in database
+      const { error } = await supabase
+        .from("tasks")
+        .update({ column_id: newColumnId })
+        .eq("id", taskId);
+
+      if (error) {
+        console.error("Database error bij verplaatsen:", error);
+        toast.error(`Fout bij verplaatsen: ${error.message}`);
+        return;
+      }
+
+      // Update local state
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, column_id: newColumnId } : t))
+      );
+
+      toast.success(`Taak verplaatst naar ${targetColumn?.name}`);
+    } catch (err: any) {
+      console.error("Onverwachte fout bij verplaatsen:", err);
+      toast.error("Onverwachte fout bij verplaatsen van taak");
+    }
   };
 
   const getTasksForColumn = (columnId: string) => {
