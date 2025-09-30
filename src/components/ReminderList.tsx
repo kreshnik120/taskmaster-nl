@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Bell, Trash2, Mail, Repeat } from "lucide-react";
