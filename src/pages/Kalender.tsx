@@ -5,7 +5,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { format, startOfWeek, addDays, isSameDay, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, ChevronLeft, ChevronRight, User, Bell } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, User, Bell, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { useToast } from "@/hooks/use-toast";
@@ -217,6 +217,33 @@ export default function Kalender() {
     setDetailModalOpen(false);
   };
 
+  const handleDeleteReminder = async (reminderId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    try {
+      const { error } = await supabase
+        .from('reminders')
+        .delete()
+        .eq('id', reminderId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Herinnering verwijderd",
+        description: "De herinnering is succesvol verwijderd.",
+      });
+
+      fetchReminders();
+    } catch (error) {
+      console.error('Error deleting reminder:', error);
+      toast({
+        title: "Fout",
+        description: "Er is een fout opgetreden bij het verwijderen van de herinnering.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -333,7 +360,7 @@ export default function Kalender() {
                               {taskReminders.map((reminder) => (
                                 <div
                                   key={reminder.id}
-                                  className={`ml-4 rounded border-l-2 ${priorityInfo.color} bg-primary/5 p-1.5 px-2 hover:bg-primary/10 transition-colors`}
+                                  className={`group ml-4 rounded border-l-2 ${priorityInfo.color} bg-primary/5 p-1.5 px-2 hover:bg-primary/10 transition-colors relative`}
                                 >
                                   <div className="flex items-center gap-1.5">
                                     <Bell className="w-3 h-3 text-primary flex-shrink-0" />
@@ -343,6 +370,13 @@ export default function Kalender() {
                                     <p className="text-[10px] text-muted-foreground">
                                       {format(parseISO(reminder.at), "HH:mm")}
                                     </p>
+                                    <button
+                                      onClick={(e) => handleDeleteReminder(reminder.id, e)}
+                                      className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-destructive/10 rounded"
+                                      title="Verwijder herinnering"
+                                    >
+                                      <X className="w-3 h-3 text-destructive" />
+                                    </button>
                                   </div>
                                 </div>
                               ))}
@@ -356,7 +390,7 @@ export default function Kalender() {
                           .map((reminder) => (
                             <div
                               key={reminder.id}
-                              className="rounded border-l-2 border-l-primary/50 bg-primary/5 p-2 hover:bg-primary/10 transition-colors"
+                              className="group rounded border-l-2 border-l-primary/50 bg-primary/5 p-2 hover:bg-primary/10 transition-colors relative"
                             >
                               <div className="flex items-center gap-2">
                                 <Bell className="w-3.5 h-3.5 text-primary flex-shrink-0" />
@@ -368,6 +402,13 @@ export default function Kalender() {
                                     {format(parseISO(reminder.at), "HH:mm")}
                                   </p>
                                 </div>
+                                <button
+                                  onClick={(e) => handleDeleteReminder(reminder.id, e)}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-destructive/10 rounded"
+                                  title="Verwijder herinnering"
+                                >
+                                  <Trash2 className="w-3 h-3 text-destructive" />
+                                </button>
                               </div>
                             </div>
                           ))}
