@@ -6,8 +6,8 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Undo2 } from "lucide-react";
-import { format } from "date-fns";
+import { Undo2, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import {
   Table,
@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
 interface CompletedTask {
@@ -24,6 +25,7 @@ interface CompletedTask {
   title: string;
   priority: string;
   completed_at: string;
+  due_at: string | null;
   org_id: string;
   organizations?: {
     name: string;
@@ -71,6 +73,7 @@ const AfgerondeTaken = () => {
           title,
           priority,
           completed_at,
+          due_at,
           org_id,
           organizations (
             name
@@ -107,6 +110,75 @@ const AfgerondeTaken = () => {
     }
   };
 
+  const isTaskOnTime = (task: CompletedTask): boolean => {
+    if (!task.due_at) return true; // Geen deadline = altijd tijdig
+    const completedDate = parseISO(task.completed_at);
+    const dueDate = parseISO(task.due_at);
+    return completedDate <= dueDate;
+  };
+
+  const onTimeTasks = tasks.filter(isTaskOnTime);
+  const lateTasks = tasks.filter(task => !isTaskOnTime(task));
+
+  const renderTasksTable = (tasksToRender: CompletedTask[], showLateIndicator: boolean = false) => (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Taak</TableHead>
+          <TableHead>Organisatie</TableHead>
+          <TableHead>Prioriteit</TableHead>
+          <TableHead>Deadline</TableHead>
+          <TableHead>Afgerond op</TableHead>
+          <TableHead className="text-right">Acties</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {tasksToRender.map((task) => (
+          <TableRow key={task.id} className={showLateIndicator ? "bg-destructive/5" : ""}>
+            <TableCell className="font-medium">{task.title}</TableCell>
+            <TableCell>{task.organizations?.name || "-"}</TableCell>
+            <TableCell>
+              <Badge variant="secondary" className={priorityColors[task.priority]}>
+                {priorityLabels[task.priority]}
+              </Badge>
+            </TableCell>
+            <TableCell>
+              {task.due_at ? (
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  {format(parseISO(task.due_at), "dd MMM yyyy HH:mm", { locale: nl })}
+                </div>
+              ) : (
+                <span className="text-muted-foreground">Geen deadline</span>
+              )}
+            </TableCell>
+            <TableCell>
+              <div className="flex items-center gap-2">
+                {showLateIndicator ? (
+                  <AlertCircle className="h-4 w-4 text-destructive" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                )}
+                {format(parseISO(task.completed_at), "dd MMM yyyy HH:mm", { locale: nl })}
+              </div>
+            </TableCell>
+            <TableCell className="text-right">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleReopen(task.id)}
+                className="text-primary hover:text-primary hover:bg-primary/10"
+              >
+                <Undo2 className="h-4 w-4 mr-1" />
+                Heropenen
+              </Button>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full">
@@ -117,6 +189,16 @@ const AfgerondeTaken = () => {
           <Card>
             <CardHeader>
               <CardTitle>Afgeronde taken</CardTitle>
+              <div className="flex gap-4 text-sm text-muted-foreground mt-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  <span>Tijdig: {onTimeTasks.length}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-destructive" />
+                  <span>Te laat: {lateTasks.length}</span>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -126,44 +208,45 @@ const AfgerondeTaken = () => {
                   Geen afgeronde taken gevonden
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Taak</TableHead>
-                      <TableHead>Organisatie</TableHead>
-                      <TableHead>Prioriteit</TableHead>
-                      <TableHead>Afgerond op</TableHead>
-                      <TableHead className="text-right">Acties</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tasks.map((task) => (
-                      <TableRow key={task.id}>
-                        <TableCell className="font-medium">{task.title}</TableCell>
-                        <TableCell>{task.organizations?.name || "-"}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className={priorityColors[task.priority]}>
-                            {priorityLabels[task.priority]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {format(new Date(task.completed_at), "dd MMM yyyy HH:mm", { locale: nl })}
-                        </TableCell>
-                        <TableCell className="text-right space-x-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleReopen(task.id)}
-                            className="text-primary hover:text-primary hover:bg-primary/10"
-                          >
-                            <Undo2 className="h-4 w-4 mr-1" />
-                            Heropenen
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <Tabs defaultValue="all" className="w-full">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="all">
+                      Alle ({tasks.length})
+                    </TabsTrigger>
+                    <TabsTrigger value="ontime" className="data-[state=active]:text-green-600">
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Tijdig afgerond ({onTimeTasks.length})
+                    </TabsTrigger>
+                    <TabsTrigger value="late" className="data-[state=active]:text-destructive">
+                      <AlertCircle className="h-4 w-4 mr-2" />
+                      Te laat afgerond ({lateTasks.length})
+                    </TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="all" className="mt-4">
+                    {renderTasksTable(tasks)}
+                  </TabsContent>
+                  
+                  <TabsContent value="ontime" className="mt-4">
+                    {onTimeTasks.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        Geen tijdig afgeronde taken
+                      </div>
+                    ) : (
+                      renderTasksTable(onTimeTasks)
+                    )}
+                  </TabsContent>
+                  
+                  <TabsContent value="late" className="mt-4">
+                    {lateTasks.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        Geen te laat afgeronde taken
+                      </div>
+                    ) : (
+                      renderTasksTable(lateTasks, true)
+                    )}
+                  </TabsContent>
+                </Tabs>
               )}
             </CardContent>
           </Card>

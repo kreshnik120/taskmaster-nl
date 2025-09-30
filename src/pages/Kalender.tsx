@@ -114,6 +114,7 @@ export default function Kalender() {
         `)
         .eq("org_id", userOrgs.org_id)
         .is("deleted_at", null)
+        .is("completed_at", null)
         .or("start_at.not.is.null,due_at.not.is.null")
         .order("start_at", { ascending: true });
 

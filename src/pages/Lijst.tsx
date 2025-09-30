@@ -179,6 +179,7 @@ export default function Lijst() {
           profiles:profiles!tasks_assignee_id_fkey(name, email)
         `)
         .is("deleted_at", null)
+        .is("completed_at", null)
         .order("sequence_number", { ascending: true });
 
       if (error) throw error;
