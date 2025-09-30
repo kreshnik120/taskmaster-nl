@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 interface Task {
   id: string;
   title: string;
+  description?: string | null;
   priority: string;
   start_at: string | null;
   due_at: string | null;
@@ -113,6 +114,7 @@ export default function Opvolging() {
         .select(`
           id,
           title,
+          description,
           priority,
           start_at,
           due_at,
@@ -153,16 +155,20 @@ export default function Opvolging() {
       const taskInputs = tasksList.map(task => ({
         id: task.id,
         title: task.title,
+        description: task.description,
         priority: task.priority,
         due_at: task.due_at,
         start_at: task.start_at,
         estimate_min: task.estimate_min,
         next_action: task.next_action,
         org_id: task.org_id,
+        client_name: task.organizations?.name,
+        assignee_name: task.profiles?.name,
         metadata: task.task_scoring_metadata || undefined
       }));
 
-      const { data, error } = await supabase.functions.invoke('prioritizer', {
+      // Use AI-driven scoring
+      const { data, error } = await supabase.functions.invoke('ai-task-scorer', {
         body: { tasks: taskInputs }
       });
 
@@ -170,16 +176,36 @@ export default function Opvolging() {
 
       if (data?.results) {
         const scoresMap = new Map<string, PriorityScore>();
-        data.results.forEach((result: PriorityScore) => {
-          scoresMap.set(result.task_id, result);
+        const explanationsMap = new Map<string, string>();
+        
+        data.results.forEach((result: any) => {
+          scoresMap.set(result.task_id, {
+            task_id: result.task_id,
+            priority_score: result.priority_score,
+            rank: result.rank,
+            breakdown: result.breakdown,
+            label: result.label
+          });
+          
+          // Store AI explanation
+          if (result.explanation) {
+            explanationsMap.set(result.task_id, result.explanation);
+          }
         });
+        
         setPriorityScores(scoresMap);
+        setAiExplanations(explanationsMap);
+        
+        toast({
+          title: "AI Analyse Voltooid",
+          description: `${data.results.length} taken geanalyseerd met ${data.model}`,
+        });
       }
     } catch (error) {
       console.error("Error calculating priority scores:", error);
       toast({
-        title: "Fout bij berekenen scores",
-        description: "Oude score methode wordt gebruikt als fallback.",
+        title: "Fout bij AI-analyse",
+        description: error instanceof Error ? error.message : "Onbekende fout opgetreden",
         variant: "destructive",
       });
     } finally {
@@ -188,33 +214,13 @@ export default function Opvolging() {
   };
 
   const generateTaskExplanation = async (task: Task, scoreBreakdown: any) => {
-    // Check if already loading or already have explanation
-    if (loadingExplanations.has(task.id) || aiExplanations.has(task.id)) {
+    // Check if already have explanation from AI scorer
+    if (aiExplanations.has(task.id)) {
       return;
     }
 
-    setLoadingExplanations(prev => new Set(prev).add(task.id));
-
-    try {
-      const { data, error } = await supabase.functions.invoke('generate-task-explanation', {
-        body: { task, scoreBreakdown }
-      });
-
-      if (error) throw error;
-
-      if (data?.explanation) {
-        setAiExplanations(prev => new Map(prev).set(task.id, data.explanation));
-      }
-    } catch (error) {
-      console.error("Error generating explanation:", error);
-      // Silently fail - numerical breakdown will still be shown
-    } finally {
-      setLoadingExplanations(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(task.id);
-        return newSet;
-      });
-    }
+    // If no explanation yet, this shouldn't happen with AI scorer but handle as fallback
+    console.log('[OPVOLGING] No AI explanation found for task:', task.id);
   };
 
   const tasksWithNextAction = tasks.filter((t) => t.next_action);
@@ -376,7 +382,7 @@ export default function Opvolging() {
                             activeFilter === "deze-week" ? "Deze week" :
                             "Taken met actie"
                           }`
-                        : "Taken gesorteerd op geavanceerde prioriteits score (WSJF methode)"
+                        : "Taken geanalyseerd en gescoord met AI (Google Gemini 2.5 Flash)"
                       }
                     </CardDescription>
                   </div>
@@ -395,7 +401,7 @@ export default function Opvolging() {
                 {scoringLoading && (
                   <div className="flex items-center justify-center py-4 text-muted-foreground">
                     <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                    Scores berekenen...
+                    AI analyseert taken...
                   </div>
                 )}
                 <div className="space-y-4">
@@ -456,11 +462,7 @@ export default function Opvolging() {
                             )}
                           </div>
                           <TooltipProvider>
-                            <Tooltip onOpenChange={(open) => {
-                              if (open && task.scoreBreakdown && !aiExplanations.has(task.id) && !loadingExplanations.has(task.id)) {
-                                generateTaskExplanation(task, task.scoreBreakdown);
-                              }
-                            }}>
+                            <Tooltip>
                               <TooltipTrigger asChild>
                                 <div className="text-right cursor-help">
                                   <div className="text-2xl font-bold text-primary">
