@@ -511,23 +511,23 @@ export default function Opvolging() {
                                       <div className="space-y-1 text-sm">
                                         <div className="flex justify-between">
                                           <span>🏥 Klant Impact:</span>
-                                          <span className="font-medium">{Math.round((task.scoreBreakdown.klant_impact || 0) * 100)}%</span>
+                                          <span className="font-medium">{Math.round(task.scoreBreakdown.klant_impact || 0)}%</span>
                                         </div>
                                         <div className="flex justify-between">
                                           <span>💰 Omzet Bescherming:</span>
-                                          <span className="font-medium">{Math.round((task.scoreBreakdown.omzet_bescherming || 0) * 100)}%</span>
+                                          <span className="font-medium">{Math.round(task.scoreBreakdown.omzet_bescherming || 0)}%</span>
                                         </div>
                                         <div className="flex justify-between">
                                           <span>⏰ Overgang Voorbereiding:</span>
-                                          <span className="font-medium">{Math.round((task.scoreBreakdown.overgang_voorbereiding || 0) * 100)}%</span>
+                                          <span className="font-medium">{Math.round(task.scoreBreakdown.overgang_voorbereiding || 0)}%</span>
                                         </div>
                                         <div className="flex justify-between">
                                           <span>✅ Compliance:</span>
-                                          <span className="font-medium">{Math.round((task.scoreBreakdown.compliance || 0) * 100)}%</span>
+                                          <span className="font-medium">{Math.round(task.scoreBreakdown.compliance || 0)}%</span>
                                         </div>
                                         <div className="flex justify-between">
                                           <span>🚀 Operationeel:</span>
-                                          <span className="font-medium">{Math.round((task.scoreBreakdown.operationeel || 0) * 100)}%</span>
+                                          <span className="font-medium">{Math.round(task.scoreBreakdown.operationeel || 0)}%</span>
                                         </div>
                                         <div className="flex justify-between border-t pt-1 font-semibold">
                                           <span>Totaal Score:</span>
