@@ -48,7 +48,7 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
       title: "",
       description: "",
       priority: "MEDIUM",
-      assignee_id: "",
+      assignee_id: "unassigned",
       start_at: "",
       due_at: "",
       next_action: "",
@@ -66,7 +66,7 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
           title: "",
           description: "",
           priority: "MEDIUM",
-          assignee_id: "",
+          assignee_id: "unassigned",
           start_at: "",
           due_at: "",
           next_action: "",
@@ -118,7 +118,7 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
         title: data.title,
         description: data.description || "",
         priority: data.priority,
-        assignee_id: data.assignee_id || "",
+        assignee_id: data.assignee_id || "unassigned",
         start_at: data.start_at ? data.start_at.slice(0, 16) : "",
         due_at: data.due_at ? data.due_at.slice(0, 16) : "",
         next_action: data.next_action || "",
@@ -138,7 +138,7 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
         title: values.title,
         description: values.description || null,
         priority: values.priority,
-        assignee_id: values.assignee_id || null,
+        assignee_id: values.assignee_id && values.assignee_id !== "unassigned" ? values.assignee_id : null,
         start_at: values.start_at || null,
         due_at: values.due_at || null,
         next_action: values.next_action || null,
@@ -242,7 +242,7 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">Niet toegewezen</SelectItem>
+                        <SelectItem value="unassigned">Niet toegewezen</SelectItem>
                         {profiles.map((profile) => (
                           <SelectItem key={profile.id} value={profile.id}>
                             {profile.name || "Onbekend"}
