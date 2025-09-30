@@ -335,6 +335,23 @@ const Dashboard = () => {
   };
 
   const handleCompleteSubtask = async (subtaskId: string) => {
+    // Optimistic update - update local state immediately
+    setTasks(prevTasks => 
+      prevTasks.map(task => {
+        if (task.subtasks?.some(s => s.id === subtaskId)) {
+          const updatedSubtasks = task.subtasks.map(s => 
+            s.id === subtaskId ? { ...s, status: 'completed' as const } : s
+          );
+          return {
+            ...task,
+            subtasks: updatedSubtasks,
+            completed_subtask_count: updatedSubtasks.filter(s => s.status === 'completed').length
+          };
+        }
+        return task;
+      })
+    );
+
     try {
       const { error } = await supabase
         .from('subtasks')
@@ -344,14 +361,32 @@ const Dashboard = () => {
       if (error) throw error;
 
       toast.success("Subtaak voltooid");
-      loadTasks();
     } catch (error) {
       console.error('Error completing subtask:', error);
       toast.error("Kon subtaak niet voltooien");
+      // Rollback on error
+      loadTasks();
     }
   };
 
   const handleSkipSubtask = async (subtaskId: string) => {
+    // Optimistic update
+    setTasks(prevTasks => 
+      prevTasks.map(task => {
+        if (task.subtasks?.some(s => s.id === subtaskId)) {
+          const updatedSubtasks = task.subtasks.map(s => 
+            s.id === subtaskId ? { ...s, status: 'skipped' as const } : s
+          );
+          return {
+            ...task,
+            subtasks: updatedSubtasks,
+            completed_subtask_count: updatedSubtasks.filter(s => s.status === 'completed').length
+          };
+        }
+        return task;
+      })
+    );
+
     try {
       const { error } = await supabase
         .from('subtasks')
@@ -361,14 +396,32 @@ const Dashboard = () => {
       if (error) throw error;
 
       toast.success("Subtaak overgeslagen");
-      loadTasks();
     } catch (error) {
       console.error('Error skipping subtask:', error);
       toast.error("Kon subtaak niet overslaan");
+      // Rollback on error
+      loadTasks();
     }
   };
 
   const handleResetSubtask = async (subtaskId: string) => {
+    // Optimistic update
+    setTasks(prevTasks => 
+      prevTasks.map(task => {
+        if (task.subtasks?.some(s => s.id === subtaskId)) {
+          const updatedSubtasks = task.subtasks.map(s => 
+            s.id === subtaskId ? { ...s, status: 'pending' as const } : s
+          );
+          return {
+            ...task,
+            subtasks: updatedSubtasks,
+            completed_subtask_count: updatedSubtasks.filter(s => s.status === 'completed').length
+          };
+        }
+        return task;
+      })
+    );
+
     try {
       const { error } = await supabase
         .from('subtasks')
@@ -378,10 +431,11 @@ const Dashboard = () => {
       if (error) throw error;
 
       toast.success("Subtaak teruggezet");
-      loadTasks();
     } catch (error) {
       console.error('Error resetting subtask:', error);
       toast.error("Kon subtaak niet terugzetten");
+      // Rollback on error
+      loadTasks();
     }
   };
 
