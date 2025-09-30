@@ -38,11 +38,11 @@ interface PriorityScore {
   priority_score: number;
   rank: number;
   breakdown: {
-    money: number;
-    urgency: number;
-    quality: number;
-    business: number;
-    growth: number;
+    klant_impact: number;
+    omzet_bescherming: number;
+    overgang_voorbereiding: number;
+    compliance: number;
+    operationeel: number;
   };
   label: "NORMAL" | "CRITICAL" | "LOW_PRIORITY";
 }
@@ -473,14 +473,14 @@ export default function Opvolging() {
                                   </div>
                                   {task.scoreBreakdown && (
                                     <div className="mt-2 space-y-1">
-                                      {task.scoreBreakdown.money > 0 && (
-                                        <Progress value={task.scoreBreakdown.money * 100} className="h-1" />
+                                      {task.scoreBreakdown.klant_impact > 0 && (
+                                        <Progress value={task.scoreBreakdown.klant_impact * 100} className="h-1" />
                                       )}
-                                      {task.scoreBreakdown.urgency > 0 && (
-                                        <Progress value={task.scoreBreakdown.urgency * 100} className="h-1" />
+                                      {task.scoreBreakdown.omzet_bescherming > 0 && (
+                                        <Progress value={task.scoreBreakdown.omzet_bescherming * 100} className="h-1" />
                                       )}
-                                      {task.scoreBreakdown.quality > 0 && (
-                                        <Progress value={task.scoreBreakdown.quality * 100} className="h-1" />
+                                      {task.scoreBreakdown.overgang_voorbereiding > 0 && (
+                                        <Progress value={task.scoreBreakdown.overgang_voorbereiding * 100} className="h-1" />
                                       )}
                                     </div>
                                   )}
@@ -506,28 +506,28 @@ export default function Opvolging() {
                                     </div>
                                   )}
                                   <div>
-                                    <p className="font-semibold mb-2">Score Breakdown (WSJF):</p>
+                                    <p className="font-semibold mb-2">AI Score Breakdown:</p>
                                     {task.scoreBreakdown ? (
                                       <div className="space-y-1 text-sm">
                                         <div className="flex justify-between">
-                                          <span>💰 Waarde/Impact:</span>
-                                          <span className="font-medium">{Math.round(task.scoreBreakdown.money * 100)}%</span>
+                                          <span>🏥 Klant Impact:</span>
+                                          <span className="font-medium">{Math.round((task.scoreBreakdown.klant_impact || 0) * 100)}%</span>
                                         </div>
                                         <div className="flex justify-between">
-                                          <span>⏰ Urgentie:</span>
-                                          <span className="font-medium">{Math.round(task.scoreBreakdown.urgency * 100)}%</span>
+                                          <span>💰 Omzet Bescherming:</span>
+                                          <span className="font-medium">{Math.round((task.scoreBreakdown.omzet_bescherming || 0) * 100)}%</span>
                                         </div>
                                         <div className="flex justify-between">
-                                          <span>✅ Kwaliteit/Gereedheid:</span>
-                                          <span className="font-medium">{Math.round(task.scoreBreakdown.quality * 100)}%</span>
+                                          <span>⏰ Overgang Voorbereiding:</span>
+                                          <span className="font-medium">{Math.round((task.scoreBreakdown.overgang_voorbereiding || 0) * 100)}%</span>
                                         </div>
                                         <div className="flex justify-between">
-                                          <span>📊 Business Impact:</span>
-                                          <span className="font-medium">{Math.round(task.scoreBreakdown.business * 100)}%</span>
+                                          <span>✅ Compliance:</span>
+                                          <span className="font-medium">{Math.round((task.scoreBreakdown.compliance || 0) * 100)}%</span>
                                         </div>
                                         <div className="flex justify-between">
-                                          <span>🚀 Groei Potentie:</span>
-                                          <span className="font-medium">{Math.round(task.scoreBreakdown.growth * 100)}%</span>
+                                          <span>🚀 Operationeel:</span>
+                                          <span className="font-medium">{Math.round((task.scoreBreakdown.operationeel || 0) * 100)}%</span>
                                         </div>
                                         <div className="flex justify-between border-t pt-1 font-semibold">
                                           <span>Totaal Score:</span>
