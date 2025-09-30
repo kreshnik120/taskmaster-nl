@@ -23,6 +23,9 @@ serve(async (req) => {
       });
     }
 
+    // Extract the access token from the Authorization header
+    const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
     
@@ -43,8 +46,8 @@ serve(async (req) => {
       }
     });
 
-    // Get user context
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    // Get user context with explicit access token
+    const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
     
     if (userError) {
       console.error('Auth error:', userError);
