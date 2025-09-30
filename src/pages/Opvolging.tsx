@@ -19,7 +19,7 @@ interface Task {
   next_action: string | null;
   completed_at: string | null;
   organizations: { name: string } | null;
-  assignee: { name: string | null } | null;
+  profiles: { name: string | null } | null;
 }
 
 const priorityColors = {
@@ -93,7 +93,7 @@ export default function Opvolging() {
           next_action,
           completed_at,
           organizations(name),
-          assignee:profiles!tasks_assignee_id_fkey(name)
+          profiles:profiles!tasks_assignee_id_fkey(name)
         `)
         .is("completed_at", null)
         .order("due_at", { ascending: true });
@@ -218,8 +218,8 @@ export default function Opvolging() {
                             {task.organizations && (
                               <span>{task.organizations.name}</span>
                             )}
-                            {task.assignee?.name && (
-                              <span>• {task.assignee.name}</span>
+                            {task.profiles?.name && (
+                              <span>• {task.profiles.name}</span>
                             )}
                             {task.due_at && (
                               <span>
