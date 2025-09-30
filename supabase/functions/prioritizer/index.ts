@@ -251,6 +251,9 @@ function computeWSJF(breakdown: ScoreBreakdown, weights: any, estimateMin: numbe
   // Calculate weighted components
   let totalValue = 0;
   
+  console.log('[WSJF] Input weights:', weights);
+  console.log('[WSJF] Input breakdown:', breakdown);
+  
   // Map weight keys to breakdown keys
   const weightMapping: Record<string, string> = {
     w_klant_impact: 'klant_impact',
@@ -265,15 +268,24 @@ function computeWSJF(breakdown: ScoreBreakdown, weights: any, estimateMin: numbe
     const breakdownKey = weightMapping[weightKey as string];
     if (breakdownKey && breakdown[breakdownKey as keyof ScoreBreakdown] !== undefined) {
       const rawScore = breakdown[breakdownKey as keyof ScoreBreakdown] as number;
-      totalValue += rawScore * (weight as number);
+      const contribution = rawScore * (weight as number);
+      console.log(`[WSJF] ${weightKey} (${breakdownKey}): ${rawScore.toFixed(3)} * ${weight} = ${contribution.toFixed(3)}`);
+      totalValue += contribution;
+    } else {
+      console.log(`[WSJF] Skipping ${weightKey}: no matching breakdown key`);
     }
   }
 
+  console.log('[WSJF] Total value:', totalValue);
+
   // Job size (duration in hours)
   const jobSize = Math.max(0.5, (estimateMin ?? 60) / 60);
+  const wsjf = totalValue / jobSize;
+  
+  console.log('[WSJF] Job size:', jobSize, 'hours, Final WSJF:', wsjf);
 
   // WSJF = Cost of Delay / Job Size
-  return totalValue / jobSize;
+  return wsjf;
 }
 
 serve(async (req) => {
@@ -313,7 +325,10 @@ serve(async (req) => {
     const results: ScoreOutput[] = [];
     
     for (const task of tasks) {
+      console.log(`\n[TASK ${task.id}] Processing: "${task.title}"`);
+      
       const rawBreakdown = calculateRawScores(task);
+      console.log(`[TASK ${task.id}] Raw scores:`, rawBreakdown);
       
       // Store raw values for percentile calculation
       if (rawBreakdown.klant_impact !== undefined) {
@@ -340,13 +355,16 @@ serve(async (req) => {
         compliance: normByP10P90(percentiles.compliance || [], rawBreakdown.compliance || 0.5),
         operationeel: normByP10P90(percentiles.operationeel || [], rawBreakdown.operationeel || 0.5)
       };
+      console.log(`[TASK ${task.id}] Normalized scores:`, normalized);
 
       // Calculate WSJF
       const wsjf = computeWSJF(normalized, weights, task.estimate_min);
       pushRolling(percentiles.scores || [], wsjf);
+      console.log(`[TASK ${task.id}] Raw WSJF:`, wsjf);
 
       // Normalize final score to 0-100
       const priorityScore = Math.round(100 * normByP10P90(percentiles.scores || [], wsjf));
+      console.log(`[TASK ${task.id}] Final priority score:`, priorityScore);
 
       // Determine label
       let label: "NORMAL" | "CRITICAL" | "LOW_PRIORITY" = "NORMAL";
