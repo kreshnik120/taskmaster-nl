@@ -29,7 +29,7 @@ const priorityColors: Record<string, string> = {
 
 const priorityLabels: Record<string, string> = {
   LOW: "Laag",
-  MEDIUM: "Middel",
+  MEDIUM: "Gemiddeld",
   HIGH: "Hoog",
   CRITICAL: "Kritiek",
 };

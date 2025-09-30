@@ -295,7 +295,7 @@ const Tijdregistratie = () => {
                       <Textarea
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
-                        placeholder="Waar ben je aan bezig?"
+                        placeholder="Bijv. Meeting met team, code review, documentatie schrijven..."
                         rows={2}
                       />
                     </div>

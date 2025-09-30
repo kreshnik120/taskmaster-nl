@@ -37,7 +37,7 @@ const priorityColors = {
 
 const priorityLabels = {
   LOW: "Laag",
-  MEDIUM: "Middel",
+  MEDIUM: "Gemiddeld",
   HIGH: "Hoog",
   CRITICAL: "Kritiek",
 };
@@ -210,7 +210,7 @@ export default function Lijst() {
                 <SelectContent>
                   <SelectItem value="all">Alle prioriteiten</SelectItem>
                   <SelectItem value="LOW">Laag</SelectItem>
-                  <SelectItem value="MEDIUM">Middel</SelectItem>
+                  <SelectItem value="MEDIUM">Gemiddeld</SelectItem>
                   <SelectItem value="HIGH">Hoog</SelectItem>
                   <SelectItem value="CRITICAL">Kritiek</SelectItem>
                 </SelectContent>

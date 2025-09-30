@@ -183,7 +183,7 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
                 <FormItem>
                   <FormLabel>Titel *</FormLabel>
                   <FormControl>
-                    <Input placeholder="Taak titel" {...field} />
+                    <Input placeholder="Bijv. Website ontwerp afmaken" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -197,7 +197,7 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
                 <FormItem>
                   <FormLabel>Beschrijving</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Beschrijving van de taak" rows={4} {...field} />
+                    <Textarea placeholder="Geef een uitgebreide beschrijving van wat er gedaan moet worden..." rows={4} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -293,7 +293,7 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
                 <FormItem>
                   <FormLabel>Volgende actie</FormLabel>
                   <FormControl>
-                    <Input placeholder="Wat is de volgende actie?" {...field} />
+                    <Input placeholder="Bijv. Contact opnemen met klant, mockup maken..." {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

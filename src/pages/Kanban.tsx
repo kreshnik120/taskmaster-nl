@@ -102,7 +102,7 @@ const Kanban = () => {
       // Create default organization
       const { data: newOrg, error: orgError } = await supabase
         .from("organizations")
-        .insert({ name: "Mijn Organisatie" })
+        .insert({ name: "Standaard Organisatie" })
         .select()
         .single();
 
