@@ -3,6 +3,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ReminderDialog } from "./ReminderDialog";
+import { ReminderList } from "./ReminderList";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,6 +45,8 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
   const [loading, setLoading] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [defaultOrgId, setDefaultOrgId] = useState<string | null>(null);
+  const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
+  const [reminderKey, setReminderKey] = useState(0);
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
@@ -303,11 +307,19 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
           />
 
           {taskId && (
-            <div className="pt-4 border-t">
+            <div className="pt-4 border-t space-y-4">
               <SubtaskManager
                 taskId={taskId}
                 profiles={profiles}
               />
+              
+              <div className="pt-4 border-t">
+                <ReminderList
+                  key={reminderKey}
+                  taskId={taskId}
+                  onAddClick={() => setReminderDialogOpen(true)}
+                />
+              </div>
             </div>
           )}
 
@@ -323,6 +335,15 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
           </form>
         </Form>
       </DialogContent>
+
+      <ReminderDialog
+        open={reminderDialogOpen}
+        onOpenChange={setReminderDialogOpen}
+        taskId={taskId}
+        onSuccess={() => {
+          setReminderKey((prev) => prev + 1);
+        }}
+      />
     </Dialog>
   );
 }

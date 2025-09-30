@@ -5,7 +5,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { format, startOfWeek, addDays, isSameDay, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, ChevronLeft, ChevronRight, User } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, User, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { useToast } from "@/hooks/use-toast";
@@ -27,6 +27,16 @@ interface Task {
   } | null;
 }
 
+interface Reminder {
+  id: string;
+  title: string | null;
+  at: string;
+  task_id: string | null;
+  subtask_id: string | null;
+  tasks?: { title: string } | null;
+  subtasks?: { title: string } | null;
+}
+
 const priorityConfig = {
   LOW: { label: "Laag", variant: "outline" as const, color: "border-l-priority-low" },
   MEDIUM: { label: "Normaal", variant: "secondary" as const, color: "border-l-priority-medium" },
@@ -38,6 +48,7 @@ export default function Kalender() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { locale: nl, weekStartsOn: 1 }));
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -47,11 +58,12 @@ export default function Kalender() {
   useEffect(() => {
     checkAuth();
     fetchTasks();
+    fetchReminders();
   }, []);
 
-  // Real-time updates voor tasks
+  // Real-time updates voor tasks en reminders
   useEffect(() => {
-    const channel = supabase
+    const tasksChannel = supabase
       .channel('kalender-tasks-changes')
       .on(
         'postgres_changes',
@@ -66,8 +78,24 @@ export default function Kalender() {
       )
       .subscribe();
 
+    const remindersChannel = supabase
+      .channel('kalender-reminders-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'reminders'
+        },
+        () => {
+          fetchReminders();
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(tasksChannel);
+      supabase.removeChannel(remindersChannel);
     };
   }, []);
 
@@ -132,6 +160,24 @@ export default function Kalender() {
     }
   };
 
+  const fetchReminders = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("reminders")
+        .select(`
+          *,
+          tasks:task_id(title),
+          subtasks:subtask_id(title)
+        `)
+        .order("at", { ascending: true });
+
+      if (error) throw error;
+      setReminders(data || []);
+    } catch (error) {
+      console.error("Error fetching reminders:", error);
+    }
+  };
+
   const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
   const weekDays = viewMode === "5" ? allWeekDays.slice(0, 5) : allWeekDays; // Ma-Vr of Ma-Zo
 
@@ -140,6 +186,12 @@ export default function Kalender() {
       if (task.start_at && isSameDay(parseISO(task.start_at), day)) return true;
       if (task.due_at && isSameDay(parseISO(task.due_at), day)) return true;
       return false;
+    });
+  };
+
+  const getRemindersForDay = (day: Date) => {
+    return reminders.filter((reminder) => {
+      return isSameDay(parseISO(reminder.at), day);
     });
   };
 
@@ -228,53 +280,74 @@ export default function Kalender() {
                   </div>
 
                   <div className="space-y-2">
-                    {dayTasks.length === 0 ? (
+                    {dayTasks.length === 0 && getRemindersForDay(day).length === 0 ? (
                       <p className="text-center text-sm text-muted-foreground">
                         Geen taken
                       </p>
                     ) : (
-                      dayTasks.map((task) => {
-                        const priorityInfo = priorityConfig[task.priority as keyof typeof priorityConfig] || priorityConfig.MEDIUM;
-                        
-                        return (
-                          <div
-                            key={task.id}
-                            onClick={() => handleTaskClick(task)}
-                            className={`rounded-md border-l-4 ${priorityInfo.color} bg-card p-3 hover:shadow-lg hover:scale-[1.02] cursor-pointer transition-all duration-200 space-y-2`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="text-sm font-semibold flex-1 break-words">{task.title}</p>
-                              <PriorityBadge taskId={task.id} priority={task.priority} size="sm" />
-                            </div>
-                            
-                            {task.profiles && (
-                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <User className="h-3 w-3" />
-                                <span className="truncate">{task.profiles.name || task.profiles.email}</span>
+                      <>
+                        {dayTasks.map((task) => {
+                          const priorityInfo = priorityConfig[task.priority as keyof typeof priorityConfig] || priorityConfig.MEDIUM;
+                          
+                          return (
+                            <div
+                              key={task.id}
+                              onClick={() => handleTaskClick(task)}
+                              className={`rounded-md border-l-4 ${priorityInfo.color} bg-card p-3 hover:shadow-lg hover:scale-[1.02] cursor-pointer transition-all duration-200 space-y-2`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-sm font-semibold flex-1 break-words">{task.title}</p>
+                                <PriorityBadge taskId={task.id} priority={task.priority} size="sm" />
                               </div>
-                            )}
-                            
-                            <div className="space-y-1">
-                              {task.start_at && (
-                                <p className="text-xs text-muted-foreground">
-                                  ⏰ {format(parseISO(task.start_at), "HH:mm")}
-                                </p>
+                              
+                              {task.profiles && (
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <User className="h-3 w-3" />
+                                  <span className="truncate">{task.profiles.name || task.profiles.email}</span>
+                                </div>
                               )}
-                              {task.due_at && (
-                                <p className="text-xs text-muted-foreground">
-                                  ⏱️ {format(parseISO(task.due_at), "HH:mm")}
+                              
+                              <div className="space-y-1">
+                                {task.start_at && (
+                                  <p className="text-xs text-muted-foreground">
+                                    ⏰ {format(parseISO(task.start_at), "HH:mm")}
+                                  </p>
+                                )}
+                                {task.due_at && (
+                                  <p className="text-xs text-muted-foreground">
+                                    ⏱️ {format(parseISO(task.due_at), "HH:mm")}
+                                  </p>
+                                )}
+                              </div>
+                              
+                              {task.next_action && (
+                                <p className="text-xs text-primary font-medium break-words">
+                                  → {task.next_action}
                                 </p>
                               )}
                             </div>
-                            
-                            {task.next_action && (
-                              <p className="text-xs text-primary font-medium break-words">
-                                → {task.next_action}
-                              </p>
-                            )}
+                          );
+                        })}
+
+                        {getRemindersForDay(day).map((reminder) => (
+                          <div
+                            key={reminder.id}
+                            className="rounded-md border-l-4 border-l-primary/50 bg-primary/5 p-3 hover:shadow-lg transition-all duration-200 space-y-2"
+                          >
+                            <div className="flex items-start gap-2">
+                              <Bell className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold break-words">
+                                  {reminder.title || reminder.tasks?.title || reminder.subtasks?.title}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {format(parseISO(reminder.at), "HH:mm")}
+                                </p>
+                              </div>
+                            </div>
                           </div>
-                        );
-                      })
+                        ))}
+                      </>
                     )}
                   </div>
                 </div>

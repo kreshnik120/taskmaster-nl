@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, GripVertical, Trash2, Calendar } from "lucide-react";
+import { Plus, GripVertical, Trash2, Calendar, Bell } from "lucide-react";
+import { ReminderDialog } from "./ReminderDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
@@ -37,13 +38,15 @@ function SortableSubtask({
   index, 
   profiles, 
   onUpdate, 
-  onDelete 
+  onDelete,
+  onReminderClick 
 }: { 
   subtask: Subtask; 
   index: number; 
   profiles: Profile[]; 
   onUpdate: (index: number, field: keyof Subtask, value: any) => void;
   onDelete: (index: number) => void;
+  onReminderClick: (subtaskId: string) => void;
 }) {
   const {
     attributes,
@@ -107,15 +110,27 @@ function SortableSubtask({
         </div>
       </div>
       
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={() => onDelete(index)}
-        className="mt-2 text-destructive hover:text-destructive"
-      >
-        <Trash2 className="h-4 w-4" />
-      </Button>
+      <div className="flex gap-1 mt-2">
+        {subtask.id && !subtask.isNew && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => onReminderClick(subtask.id!)}
+          >
+            <Bell className="h-4 w-4" />
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => onDelete(index)}
+          className="text-destructive hover:text-destructive"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -123,6 +138,8 @@ function SortableSubtask({
 export function SubtaskManager({ taskId, profiles, onSubtasksChange }: SubtaskManagerProps) {
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [loading, setLoading] = useState(false);
+  const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
+  const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -325,6 +342,10 @@ export function SubtaskManager({ taskId, profiles, onSubtasksChange }: SubtaskMa
                   profiles={profiles}
                   onUpdate={updateSubtask}
                   onDelete={deleteSubtask}
+                  onReminderClick={(subtaskId) => {
+                    setSelectedSubtaskId(subtaskId);
+                    setReminderDialogOpen(true);
+                  }}
                 />
               ))}
             </div>
@@ -342,6 +363,15 @@ export function SubtaskManager({ taskId, profiles, onSubtasksChange }: SubtaskMa
           {loading ? "Opslaan..." : "Subtaken opslaan"}
         </Button>
       )}
+
+      <ReminderDialog
+        open={reminderDialogOpen}
+        onOpenChange={setReminderDialogOpen}
+        subtaskId={selectedSubtaskId || undefined}
+        onSuccess={() => {
+          setSelectedSubtaskId(null);
+        }}
+      />
     </div>
   );
 }

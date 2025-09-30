@@ -242,23 +242,39 @@ export type Database = {
           channel: Database["public"]["Enums"]["reminder_channel"]
           created_at: string
           id: string
+          repeat_interval: string | null
+          subtask_id: string | null
           task_id: string
+          title: string | null
         }
         Insert: {
           at: string
           channel?: Database["public"]["Enums"]["reminder_channel"]
           created_at?: string
           id?: string
+          repeat_interval?: string | null
+          subtask_id?: string | null
           task_id: string
+          title?: string | null
         }
         Update: {
           at?: string
           channel?: Database["public"]["Enums"]["reminder_channel"]
           created_at?: string
           id?: string
+          repeat_interval?: string | null
+          subtask_id?: string | null
           task_id?: string
+          title?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "reminders_subtask_id_fkey"
+            columns: ["subtask_id"]
+            isOneToOne: false
+            referencedRelation: "subtasks"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reminders_task_id_fkey"
             columns: ["task_id"]
