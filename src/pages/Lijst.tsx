@@ -22,7 +22,7 @@ interface Task {
   org_id: string;
   assignee_id: string | null;
   organizations: { name: string } | null;
-  profiles: { name: string | null } | null;
+  assignee: { name: string | null } | null;
 }
 
 const priorityColors = {
@@ -211,7 +211,7 @@ export default function Lijst() {
                               {task.organizations?.name || "-"}
                             </TableCell>
                             <TableCell>
-                              {task.profiles?.name || "-"}
+                              {task.assignee?.name || "-"}
                             </TableCell>
                             <TableCell>
                               <Badge className={priorityColors[task.priority as keyof typeof priorityColors]}>
