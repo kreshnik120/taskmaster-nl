@@ -312,30 +312,53 @@ export type Database = {
       }
       subtasks: {
         Row: {
+          assignee_id: string | null
           created_at: string
-          done: boolean
+          depends_on_subtask_id: string | null
+          due_at: string | null
           id: string
           order: number
+          status: Database["public"]["Enums"]["subtask_status"]
           task_id: string
           title: string
         }
         Insert: {
+          assignee_id?: string | null
           created_at?: string
-          done?: boolean
+          depends_on_subtask_id?: string | null
+          due_at?: string | null
           id?: string
           order: number
+          status?: Database["public"]["Enums"]["subtask_status"]
           task_id: string
           title: string
         }
         Update: {
+          assignee_id?: string | null
           created_at?: string
-          done?: boolean
+          depends_on_subtask_id?: string | null
+          due_at?: string | null
           id?: string
           order?: number
+          status?: Database["public"]["Enums"]["subtask_status"]
           task_id?: string
           title?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "subtasks_assignee_id_fkey"
+            columns: ["assignee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subtasks_depends_on_subtask_id_fkey"
+            columns: ["depends_on_subtask_id"]
+            isOneToOne: false
+            referencedRelation: "subtasks"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "subtasks_task_id_fkey"
             columns: ["task_id"]
@@ -641,6 +664,7 @@ export type Database = {
       dependency_type: "BLOCKS" | "RELATES" | "DUPLICATE"
       priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
       reminder_channel: "IN_APP" | "EMAIL"
+      subtask_status: "pending" | "active" | "completed" | "skipped"
       task_status: "BACKLOG" | "READY" | "DOING" | "BLOCKED" | "REVIEW" | "DONE"
       user_role: "OWNER" | "ADMIN" | "MEMBER" | "GUEST"
     }
@@ -773,6 +797,7 @@ export const Constants = {
       dependency_type: ["BLOCKS", "RELATES", "DUPLICATE"],
       priority: ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
       reminder_channel: ["IN_APP", "EMAIL"],
+      subtask_status: ["pending", "active", "completed", "skipped"],
       task_status: ["BACKLOG", "READY", "DOING", "BLOCKED", "REVIEW", "DONE"],
       user_role: ["OWNER", "ADMIN", "MEMBER", "GUEST"],
     },
