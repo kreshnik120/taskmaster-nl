@@ -4,6 +4,7 @@ import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { TaskCard } from "@/components/TaskCard";
 import { TaskDialog } from "@/components/TaskDialog";
+import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -14,12 +15,18 @@ import { toast } from "sonner";
 interface Task {
   id: string;
   title: string;
-  description?: string;
+  description: string | null;
   priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-  assignee_id?: string;
-  due_at?: string;
+  assignee_id: string | null;
+  due_at: string | null;
   order_key: string;
   column_id?: string;
+  start_at: string | null;
+  next_action: string | null;
+  profiles: {
+    name: string | null;
+    email: string | null;
+  } | null;
 }
 
 interface Column {
@@ -36,6 +43,8 @@ const Kanban = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -82,7 +91,10 @@ const Kanban = () => {
       // Load tasks
       const { data: tasksData, error: tasksError } = await supabase
         .from("tasks")
-        .select("*")
+        .select(`
+          *,
+          profiles:profiles!tasks_assignee_id_fkey(name, email)
+        `)
         .is("deleted_at", null)
         .order("order_key");
 
@@ -104,7 +116,10 @@ const Kanban = () => {
             // Herlaad taken bij elke wijziging
             supabase
               .from("tasks")
-              .select("*")
+              .select(`
+                *,
+                profiles:profiles!tasks_assignee_id_fkey(name, email)
+              `)
               .is("deleted_at", null)
               .order("order_key")
               .then(({ data }) => {
@@ -327,6 +342,15 @@ const Kanban = () => {
     }
   };
 
+  const handleTaskClick = (task: Task) => {
+    setSelectedTask(task);
+    setDetailModalOpen(true);
+  };
+
+  const handleTaskUpdated = () => {
+    loadData();
+  };
+
   if (loading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -363,6 +387,7 @@ const Kanban = () => {
                   tasks={getTasksForColumn(column.id)}
                   status={column.status}
                   onUpdateName={handleUpdateColumnName}
+                  onTaskClick={handleTaskClick}
                 />
               ))}
         </div>
@@ -377,6 +402,14 @@ const Kanban = () => {
         onSuccess={loadData}
         columnId={columns.find(c => c.status === "BACKLOG")?.id}
       />
+      {selectedTask && (
+        <TaskDetailModal
+          task={selectedTask}
+          open={detailModalOpen}
+          onOpenChange={setDetailModalOpen}
+          onTaskUpdated={handleTaskUpdated}
+        />
+      )}
     </SidebarProvider>
   );
 };

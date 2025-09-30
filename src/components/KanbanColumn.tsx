@@ -23,6 +23,7 @@ interface KanbanColumnProps {
   tasks: Task[];
   status: string;
   onUpdateName?: (columnId: string, newName: string) => Promise<void>;
+  onTaskClick?: (task: Task) => void;
 }
 
 const statusColors: Record<string, string> = {
@@ -34,7 +35,7 @@ const statusColors: Record<string, string> = {
   DONE: "bg-status-done",
 };
 
-export function KanbanColumn({ id, title, tasks, status, onUpdateName }: KanbanColumnProps) {
+export function KanbanColumn({ id, title, tasks, status, onUpdateName, onTaskClick }: KanbanColumnProps) {
   const { setNodeRef } = useDroppable({ id });
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState(title);
@@ -114,7 +115,7 @@ export function KanbanColumn({ id, title, tasks, status, onUpdateName }: KanbanC
         <div ref={setNodeRef} className="space-y-2 min-h-[200px]">
           <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
             {tasks.map((task) => (
-              <TaskCard key={task.id} task={task} />
+              <TaskCard key={task.id} task={task} onClick={onTaskClick} />
             ))}
           </SortableContext>
         </div>

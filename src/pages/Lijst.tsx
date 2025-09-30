@@ -14,6 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { PriorityBadge } from "@/components/PriorityBadge";
+import { TaskDetailModal } from "@/components/TaskDetailModal";
 
 interface Task {
   id: string;
@@ -28,8 +29,12 @@ interface Task {
   assignee_id: string | null;
   accepted_at: string | null;
   accepted_by: string | null;
+  description: string | null;
   organizations: { name: string } | null;
-  profiles: { name: string | null } | null;
+  profiles: { 
+    name: string | null;
+    email: string | null;
+  } | null;
 }
 
 interface Profile {
@@ -58,6 +63,8 @@ export default function Lijst() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [editingAssignee, setEditingAssignee] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -155,8 +162,9 @@ export default function Lijst() {
           assignee_id,
           accepted_at,
           accepted_by,
+          description,
           organizations(name),
-          profiles:profiles!tasks_assignee_id_fkey(name)
+          profiles:profiles!tasks_assignee_id_fkey(name, email)
         `)
         .is("deleted_at", null)
         .order("sequence_number", { ascending: true });
@@ -355,6 +363,15 @@ export default function Lijst() {
     );
   };
 
+  const handleTaskClick = (task: Task) => {
+    setSelectedTask(task);
+    setDetailModalOpen(true);
+  };
+
+  const handleTaskUpdated = () => {
+    fetchTasks();
+  };
+
   const filteredTasks = tasks.filter((task) => {
     if (filterPriority !== "all" && task.priority !== filterPriority) return false;
     if (filterStatus === "completed" && !task.completed_at) return false;
@@ -477,6 +494,7 @@ export default function Lijst() {
                           return (
                             <TableRow 
                               key={task.id} 
+                              onClick={() => handleTaskClick(task)}
                               className={`cursor-pointer hover:bg-muted/50 ${
                                 activeTimer ? "bg-primary/5" : ""
                               }`}
@@ -604,6 +622,14 @@ export default function Lijst() {
           </div>
         </main>
       </div>
+      {selectedTask && (
+        <TaskDetailModal
+          task={selectedTask}
+          open={detailModalOpen}
+          onOpenChange={setDetailModalOpen}
+          onTaskUpdated={handleTaskUpdated}
+        />
+      )}
     </SidebarProvider>
   );
 }

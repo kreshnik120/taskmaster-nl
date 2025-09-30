@@ -18,6 +18,7 @@ interface Task {
 
 interface TaskCardProps {
   task: Task;
+  onClick?: (task: Task) => void;
 }
 
 const priorityColors: Record<string, string> = {
@@ -28,10 +29,18 @@ const priorityColors: Record<string, string> = {
 };
 
 
-export function TaskCard({ task }: TaskCardProps) {
+export function TaskCard({ task, onClick }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't trigger if clicking on drag handle
+    if ((e.target as HTMLElement).closest('[data-drag-handle]')) {
+      return;
+    }
+    onClick?.(task);
+  };
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -43,13 +52,14 @@ export function TaskCard({ task }: TaskCardProps) {
     <Card
       ref={setNodeRef}
       style={style}
+      onClick={handleCardClick}
       className={`cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow ${
         priorityColors[task.priority]
       }`}
     >
       <CardHeader className="p-3">
         <div className="flex items-start gap-2">
-          <div {...attributes} {...listeners} className="mt-1">
+          <div {...attributes} {...listeners} className="mt-1" data-drag-handle>
             <GripVertical className="h-4 w-4 text-muted-foreground" />
           </div>
           <div className="flex-1 min-w-0">

@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { TaskDialog } from "@/components/TaskDialog";
+import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { ActiveProcessWidget } from "@/components/ActiveProcessWidget";
 import {
   AlertDialog,
@@ -31,8 +32,15 @@ interface Task {
   id: string;
   title: string;
   priority: string;
-  due_at?: string;
-  next_action?: string;
+  due_at: string | null;
+  next_action: string | null;
+  description: string | null;
+  start_at: string | null;
+  assignee_id: string | null;
+  profiles: {
+    name: string | null;
+    email: string | null;
+  } | null;
 }
 
 const Dashboard = () => {
@@ -46,6 +54,8 @@ const Dashboard = () => {
   const [completedThisWeek, setCompletedThisWeek] = useState<number>(0);
   const [activeTimers, setActiveTimers] = useState<Record<string, { user_id: string; start: string; profiles: { name: string | null } | null }>>({});
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   useEffect(() => {
     loadTasks();
@@ -109,7 +119,10 @@ const Dashboard = () => {
     try {
       const { data, error } = await supabase
         .from("tasks")
-        .select("*")
+        .select(`
+          *,
+          profiles:profiles!tasks_assignee_id_fkey(name, email)
+        `)
         .is("completed_at", null)
         .is("deleted_at", null)
         .order("due_at", { ascending: true })
@@ -247,6 +260,16 @@ const Dashboard = () => {
     setDeleteDialogOpen(true);
   };
 
+  const handleTaskClick = (task: Task) => {
+    setSelectedTask(task);
+    setDetailModalOpen(true);
+  };
+
+  const handleTaskUpdated = () => {
+    loadTasks();
+    loadCompletedThisWeek();
+  };
+
   const priorityValue: Record<string, number> = {
     LOW: 1,
     MEDIUM: 2,
@@ -366,7 +389,8 @@ const Dashboard = () => {
                 return (
                   <div
                     key={task.id}
-                    className={`flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors ${
+                    onClick={() => handleTaskClick(task)}
+                    className={`flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer ${
                       activeTimer ? "ring-2 ring-primary/50 bg-primary/5" : ""
                     }`}
                   >
@@ -401,7 +425,10 @@ const Dashboard = () => {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleCompleteTask(task.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCompleteTask(task.id);
+                        }}
                         className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
                         title="Markeer als afgerond"
                       >
@@ -410,7 +437,10 @@ const Dashboard = () => {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => openDeleteDialog(task.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDeleteDialog(task.id);
+                        }}
                         className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -432,6 +462,15 @@ const Dashboard = () => {
         }}
         columnId={undefined}
       />
+
+      {selectedTask && (
+        <TaskDetailModal
+          task={selectedTask}
+          open={detailModalOpen}
+          onOpenChange={setDetailModalOpen}
+          onTaskUpdated={handleTaskUpdated}
+        />
+      )}
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
