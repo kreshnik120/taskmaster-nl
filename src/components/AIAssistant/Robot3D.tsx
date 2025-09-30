@@ -13,14 +13,17 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
   const leftEyeRef = useRef<THREE.Group>(null);
   const rightEyeRef = useRef<THREE.Group>(null);
   
-  let time = 0;
-  let blinkTime = 0;
+  const timeRef = useRef(0);
+  const blinkTimeRef = useRef(0);
 
   useFrame((state, delta) => {
     if (!robotRef.current) return;
     
-    time += delta;
-    blinkTime += delta;
+    timeRef.current += delta;
+    blinkTimeRef.current += delta;
+    
+    const time = timeRef.current;
+    const blinkTime = blinkTimeRef.current;
 
     // Subtle floating animation
     robotRef.current.position.y = Math.sin(time * 2) * 0.05;
@@ -52,7 +55,7 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
       }
       
       if (blinkTime > 3.2) {
-        blinkTime = 0;
+        blinkTimeRef.current = 0;
       }
     }
   });

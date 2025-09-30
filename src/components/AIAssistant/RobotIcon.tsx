@@ -2,7 +2,9 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Environment } from '@react-three/drei';
 import { motion } from 'framer-motion';
 import { Robot3D } from './Robot3D';
+import { RobotErrorBoundary } from './RobotErrorBoundary';
 import { Suspense } from 'react';
+import { Bot } from 'lucide-react';
 
 interface RobotIconProps {
   onClick?: () => void;
@@ -22,28 +24,36 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
         border: '1px solid rgba(74, 144, 226, 0.3)',
       }}
     >
-      <Canvas>
-        <Suspense fallback={null}>
-          <PerspectiveCamera makeDefault position={[0, 0, 4]} />
-          
-          {/* Lighting */}
-          <ambientLight intensity={0.5} />
-          <directionalLight position={[5, 5, 5]} intensity={1} />
-          <pointLight position={[-5, 5, 5]} intensity={0.5} color="#FF6B35" />
-          <Environment preset="city" />
-          
-          {/* 3D Robot */}
-          <Robot3D isActive={isActive} />
-          
-          {/* Optional orbit controls for subtle interaction */}
-          <OrbitControls 
-            enableZoom={false} 
-            enablePan={false}
-            autoRotate={!isActive}
-            autoRotateSpeed={0.5}
-          />
-        </Suspense>
-      </Canvas>
+      <RobotErrorBoundary
+        fallback={
+          <div className="w-full h-full flex items-center justify-center">
+            <Bot className="w-16 h-16 text-primary" />
+          </div>
+        }
+      >
+        <Canvas>
+          <Suspense fallback={null}>
+            <PerspectiveCamera makeDefault position={[0, 0, 4]} />
+            
+            {/* Lighting */}
+            <ambientLight intensity={0.5} />
+            <directionalLight position={[5, 5, 5]} intensity={1} />
+            <pointLight position={[-5, 5, 5]} intensity={0.5} color="#FF6B35" />
+            <Environment preset="city" />
+            
+            {/* 3D Robot */}
+            <Robot3D isActive={isActive} />
+            
+            {/* Optional orbit controls for subtle interaction */}
+            <OrbitControls 
+              enableZoom={false} 
+              enablePan={false}
+              autoRotate={!isActive}
+              autoRotateSpeed={0.5}
+            />
+          </Suspense>
+        </Canvas>
+      </RobotErrorBoundary>
       
       {/* Active indicator */}
       {isActive && (
