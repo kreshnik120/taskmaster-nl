@@ -15,6 +15,18 @@ interface Task {
   assignee_id?: string;
   due_at?: string;
   order_key: string;
+  aiScore?: {
+    priority_score: number;
+    label: "NORMAL" | "CRITICAL" | "LOW_PRIORITY";
+    breakdown?: {
+      klant_impact: number;
+      omzet_bescherming: number;
+      overgang_voorbereiding: number;
+      compliance: number;
+      operationeel: number;
+    };
+    explanation?: string;
+  };
 }
 
 interface KanbanColumnProps {
@@ -114,9 +126,14 @@ export function KanbanColumn({ id, title, tasks, status, onUpdateName, onTaskCli
       <CardContent>
         <div ref={setNodeRef} className="space-y-2 min-h-[200px]">
           <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-            {tasks.map((task) => (
-              <TaskCard key={task.id} task={task} onClick={onTaskClick} />
-            ))}
+              {tasks.map((task) => (
+                <TaskCard 
+                  key={task.id} 
+                  task={task} 
+                  onClick={onTaskClick}
+                  aiScore={task.aiScore}
+                />
+              ))}
           </SortableContext>
         </div>
       </CardContent>

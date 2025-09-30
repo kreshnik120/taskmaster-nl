@@ -8,9 +8,10 @@ import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAiScoring } from "@/hooks/useAiScoring";
 
 interface Task {
   id: string;
@@ -26,6 +27,12 @@ interface Task {
   profiles: {
     name: string | null;
     email: string | null;
+  } | null;
+  task_scoring_metadata?: {
+    estimated_value_eur: number | null;
+    complexity_score: number | null;
+    business_impact_score: number | null;
+    market_demand_factor: number | null;
   } | null;
 }
 
@@ -47,6 +54,9 @@ const Kanban = () => {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const navigate = useNavigate();
   const { taskId } = useParams();
+  
+  // AI Scoring integration
+  const { priorityScores, loading: aiLoading, getScoreForTask, refreshScores } = useAiScoring(tasks, true);
 
   useEffect(() => {
     // Check authentication
@@ -89,12 +99,13 @@ const Kanban = () => {
         await createDefaultColumns();
       }
 
-      // Load tasks
+      // Load tasks with scoring metadata
       const { data: tasksData, error: tasksError } = await supabase
         .from("tasks")
         .select(`
           *,
-          profiles:profiles!tasks_assignee_id_fkey(name, email)
+          profiles:profiles!tasks_assignee_id_fkey(name, email),
+          task_scoring_metadata(*)
         `)
         .is("deleted_at", null)
         .order("order_key");
@@ -119,12 +130,17 @@ const Kanban = () => {
               .from("tasks")
               .select(`
                 *,
-                profiles:profiles!tasks_assignee_id_fkey(name, email)
+                profiles:profiles!tasks_assignee_id_fkey(name, email),
+                task_scoring_metadata(*)
               `)
               .is("deleted_at", null)
               .order("order_key")
               .then(({ data }) => {
-                if (data) setTasks(data);
+                if (data) {
+                  setTasks(data);
+                  // Trigger AI re-scoring for changed tasks
+                  refreshScores();
+                }
               });
           }
         )
@@ -316,11 +332,18 @@ const Kanban = () => {
     const column = columns.find(c => c.id === columnId);
     
     // For Backlog column, also include tasks without a column_id
+    let filteredTasks;
     if (column?.status === 'BACKLOG') {
-      return tasks.filter((task) => task.column_id === columnId || task.column_id === null);
+      filteredTasks = tasks.filter((task) => task.column_id === columnId || task.column_id === null);
+    } else {
+      filteredTasks = tasks.filter((task) => task.column_id === columnId);
     }
     
-    return tasks.filter((task) => task.column_id === columnId);
+    // Enrich tasks with AI scores
+    return filteredTasks.map(task => ({
+      ...task,
+      aiScore: getScoreForTask(task.id)
+    }));
   };
 
   const handleUpdateColumnName = async (columnId: string, newName: string) => {
@@ -391,7 +414,15 @@ const Kanban = () => {
           <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Kanban Bord</h1>
+          <div className="flex items-center gap-2 mb-1">
+            <h1 className="text-3xl font-bold">Kanban Bord</h1>
+            {aiLoading && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Sparkles className="h-3 w-3 animate-pulse" />
+                AI scoring...
+              </div>
+            )}
+          </div>
           <p className="text-muted-foreground">Sleep taken tussen kolommen om de status te wijzigen</p>
         </div>
         <Button onClick={() => setDialogOpen(true)}>
@@ -414,7 +445,14 @@ const Kanban = () => {
                 />
               ))}
         </div>
-        <DragOverlay>{activeTask && <TaskCard task={activeTask} />}</DragOverlay>
+        <DragOverlay>
+          {activeTask && (
+            <TaskCard 
+              task={activeTask} 
+              aiScore={getScoreForTask(activeTask.id)}
+            />
+          )}
+        </DragOverlay>
       </DndContext>
           </div>
         </main>

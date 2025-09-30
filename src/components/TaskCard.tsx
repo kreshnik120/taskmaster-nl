@@ -1,10 +1,12 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { GripVertical, Calendar, Clock } from "lucide-react";
+import { GripVertical, Calendar, Sparkles } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { PriorityBadge } from "@/components/PriorityBadge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
 
 interface Task {
   id: string;
@@ -16,9 +18,23 @@ interface Task {
   order_key: string;
 }
 
+interface AIScore {
+  priority_score: number;
+  label: "NORMAL" | "CRITICAL" | "LOW_PRIORITY";
+  breakdown?: {
+    klant_impact: number;
+    omzet_bescherming: number;
+    overgang_voorbereiding: number;
+    compliance: number;
+    operationeel: number;
+  };
+  explanation?: string;
+}
+
 interface TaskCardProps {
   task: Task;
   onClick?: (task: Task) => void;
+  aiScore?: AIScore;
 }
 
 const priorityColors: Record<string, string> = {
@@ -29,7 +45,18 @@ const priorityColors: Record<string, string> = {
 };
 
 
-export function TaskCard({ task, onClick }: TaskCardProps) {
+const getAiScoreBadgeColor = (label?: string) => {
+  switch (label) {
+    case "CRITICAL":
+      return "bg-red-500/10 text-red-600 border-red-500/20";
+    case "LOW_PRIORITY":
+      return "bg-blue-500/10 text-blue-600 border-blue-500/20";
+    default:
+      return "bg-amber-500/10 text-amber-600 border-amber-500/20";
+  }
+};
+
+export function TaskCard({ task, onClick, aiScore }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
@@ -65,7 +92,51 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2 mb-1">
               <CardTitle className="text-sm font-medium line-clamp-2 flex-1">{task.title}</CardTitle>
-              <PriorityBadge taskId={task.id} priority={task.priority} size="sm" />
+              <div className="flex gap-1">
+                <PriorityBadge taskId={task.id} priority={task.priority} size="sm" />
+                {aiScore && (
+                  <TooltipProvider>
+                    <Tooltip delayDuration={200}>
+                      <TooltipTrigger asChild>
+                        <Badge 
+                          variant="outline" 
+                          className={`text-xs h-5 gap-1 ${getAiScoreBadgeColor(aiScore.label)}`}
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          {Math.round(aiScore.priority_score)}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <div className="space-y-2">
+                          <div className="font-semibold flex items-center gap-1">
+                            <Sparkles className="h-3 w-3" />
+                            AI Prioriteit Score: {Math.round(aiScore.priority_score)}
+                          </div>
+                          {aiScore.explanation && (
+                            <p className="text-xs">{aiScore.explanation}</p>
+                          )}
+                          {aiScore.breakdown && (
+                            <div className="text-xs space-y-1 pt-2 border-t">
+                              <div className="flex justify-between">
+                                <span>Klant Impact:</span>
+                                <span className="font-medium">{Math.round(aiScore.breakdown.klant_impact)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Omzet Bescherming:</span>
+                                <span className="font-medium">{Math.round(aiScore.breakdown.omzet_bescherming)}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Overgang:</span>
+                                <span className="font-medium">{Math.round(aiScore.breakdown.overgang_voorbereiding)}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </div>
             </div>
             {task.description && (
               <CardDescription className="text-xs mt-1 line-clamp-2">
