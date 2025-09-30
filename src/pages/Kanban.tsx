@@ -224,13 +224,29 @@ const Kanban = () => {
     }
 
     const taskId = active.id as string;
-    const newColumnId = over.id as string;
-
     const task = tasks.find((t) => t.id === taskId);
     if (!task) {
       console.error("Taak niet gevonden:", taskId);
       toast.error("Taak niet gevonden");
       return;
+    }
+
+    // Detecteer of over.id een column ID of task ID is
+    let newColumnId: string;
+    const isColumnId = columns.some((c) => c.id === over.id);
+    
+    if (isColumnId) {
+      // Direct op een kolom gesleept
+      newColumnId = over.id as string;
+    } else {
+      // Op een taak gesleept, zoek de column_id van die taak
+      const targetTask = tasks.find((t) => t.id === over.id);
+      if (!targetTask || !targetTask.column_id) {
+        console.error("Kan kolom niet bepalen voor drop target:", over.id);
+        toast.error("Fout bij verplaatsen: ongeldige bestemming");
+        return;
+      }
+      newColumnId = targetTask.column_id;
     }
 
     // Check if task is already in this column
