@@ -18,6 +18,19 @@ import { nl } from "date-fns/locale";
 interface Task {
   id: string;
   title: string;
+  priority: string;
+  due_at: string | null;
+  next_action: string | null;
+  assignee_id: string | null;
+}
+
+interface ActiveTimerInfo {
+  task_id: string;
+  user_id: string;
+  start: string;
+  profiles: {
+    name: string | null;
+  } | null;
 }
 
 interface TimeEntry {
@@ -27,7 +40,10 @@ interface TimeEntry {
   end: string | null;
   duration_min: number | null;
   note: string | null;
-  tasks: Task | null;
+  tasks: {
+    id: string;
+    title: string;
+  } | null;
 }
 
 const Tijdregistratie = () => {
@@ -40,6 +56,7 @@ const Tijdregistratie = () => {
   const [note, setNote] = useState("");
   const [filterPeriod, setFilterPeriod] = useState<string>("today");
   const [totalMinutes, setTotalMinutes] = useState(0);
+  const [activeTimers, setActiveTimers] = useState<Record<string, ActiveTimerInfo>>({});
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -49,6 +66,7 @@ const Tijdregistratie = () => {
         loadTasks();
         loadTimeEntries();
         checkActiveTimer();
+        loadAllActiveTimers();
       } else {
         navigate("/auth");
       }
@@ -65,7 +83,45 @@ const Tijdregistratie = () => {
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Real-time listener voor taken
+    const tasksChannel = supabase
+      .channel('tijdregistratie-tasks')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks'
+        },
+        () => {
+          loadTasks();
+        }
+      )
+      .subscribe();
+
+    // Real-time listener voor time_entries
+    const timeEntriesChannel = supabase
+      .channel('tijdregistratie-time-entries')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'time_entries'
+        },
+        () => {
+          checkActiveTimer();
+          loadTimeEntries();
+          loadAllActiveTimers();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+      supabase.removeChannel(tasksChannel);
+      supabase.removeChannel(timeEntriesChannel);
+    };
   }, [navigate]);
 
   useEffect(() => {
@@ -77,12 +133,35 @@ const Tijdregistratie = () => {
   const loadTasks = async () => {
     const { data } = await supabase
       .from("tasks")
-      .select("id, title")
+      .select(`
+        id,
+        title,
+        priority,
+        due_at,
+        next_action,
+        assignee_id,
+        org_id
+      `)
       .is("deleted_at", null)
       .is("completed_at", null)
-      .order("title");
+      .order("due_at", { ascending: true, nullsFirst: false });
     
     if (data) setTasks(data);
+  };
+
+  const loadAllActiveTimers = async () => {
+    const { data } = await supabase
+      .from("time_entries")
+      .select("task_id, user_id, start, profiles:profiles!time_entries_user_id_fkey(name)")
+      .is("end", null);
+    
+    if (data) {
+      const timersMap: Record<string, ActiveTimerInfo> = {};
+      data.forEach((entry: any) => {
+        timersMap[entry.task_id] = entry;
+      });
+      setActiveTimers(timersMap);
+    }
   };
 
   const checkActiveTimer = async () => {
@@ -165,6 +244,7 @@ const Tijdregistratie = () => {
 
     setActiveTimer(data);
     setNote("");
+    loadAllActiveTimers();
     toast.success("Timer gestart");
   };
 
@@ -191,6 +271,7 @@ const Tijdregistratie = () => {
 
     setActiveTimer(null);
     loadTimeEntries();
+    loadAllActiveTimers();
     toast.success(`Timer gestopt: ${formatMinutes(durationMin)}`);
   };
 
@@ -282,11 +363,46 @@ const Tijdregistratie = () => {
                           <SelectValue placeholder="Selecteer een taak" />
                         </SelectTrigger>
                         <SelectContent>
-                          {tasks.map((task) => (
-                            <SelectItem key={task.id} value={task.id}>
-                              {task.title}
-                            </SelectItem>
-                          ))}
+                          {tasks.map((task) => {
+                            const isActive = activeTimers[task.id];
+                            const priorityColors: Record<string, string> = {
+                              LOW: "text-green-600",
+                              MEDIUM: "text-yellow-600",
+                              HIGH: "text-orange-600",
+                              CRITICAL: "text-red-600",
+                            };
+                            
+                            return (
+                              <SelectItem 
+                                key={task.id} 
+                                value={task.id}
+                                disabled={!!isActive}
+                              >
+                                <div className="flex items-center gap-2 w-full">
+                                  <span className="flex-1">{task.title}</span>
+                                  {isActive && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      <Clock className="h-3 w-3 mr-1" />
+                                      {isActive.profiles?.name || "Actief"}
+                                    </Badge>
+                                  )}
+                                  {task.priority && (
+                                    <Badge 
+                                      variant="outline" 
+                                      className={`text-xs ${priorityColors[task.priority]}`}
+                                    >
+                                      {task.priority}
+                                    </Badge>
+                                  )}
+                                  {task.due_at && (
+                                    <span className="text-xs text-muted-foreground">
+                                      {format(new Date(task.due_at), "d MMM", { locale: nl })}
+                                    </span>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                     </div>

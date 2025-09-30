@@ -43,14 +43,16 @@ const Dashboard = () => {
   const [sortOrder, setSortOrder] = useState<"high-to-low" | "low-to-high">("high-to-low");
   const [todayHours, setTodayHours] = useState<string>("0u");
   const [completedThisWeek, setCompletedThisWeek] = useState<number>(0);
+  const [activeTimers, setActiveTimers] = useState<Record<string, { user_id: string; start: string; profiles: { name: string | null } | null }>>({});
 
   useEffect(() => {
     loadTasks();
     loadTodayHours();
     loadCompletedThisWeek();
+    loadActiveTimers();
 
     // Real-time listener voor taak updates
-    const channel = supabase
+    const tasksChannel = supabase
       .channel('dashboard-tasks-changes')
       .on(
         'postgres_changes',
@@ -67,8 +69,26 @@ const Dashboard = () => {
       )
       .subscribe();
 
+    // Real-time listener voor time_entries
+    const timeEntriesChannel = supabase
+      .channel('dashboard-time-entries')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'time_entries'
+        },
+        () => {
+          loadTodayHours();
+          loadActiveTimers();
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(tasksChannel);
+      supabase.removeChannel(timeEntriesChannel);
     };
   }, []);
 
@@ -123,6 +143,30 @@ const Dashboard = () => {
     if (!error && data !== null) {
       setCompletedThisWeek(data.length);
     }
+  };
+
+  const loadActiveTimers = async () => {
+    const { data } = await supabase
+      .from("time_entries")
+      .select("task_id, user_id, start, profiles:profiles!time_entries_user_id_fkey(name)")
+      .is("end", null);
+    
+    if (data) {
+      const timersMap: Record<string, any> = {};
+      data.forEach((entry: any) => {
+        timersMap[entry.task_id] = entry;
+      });
+      setActiveTimers(timersMap);
+    }
+  };
+
+  const getRunningTime = (start: string) => {
+    const now = new Date();
+    const startTime = new Date(start);
+    const minutes = Math.floor((now.getTime() - startTime.getTime()) / 60000);
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}u ${mins}m`;
   };
 
   const handleDeleteTask = async () => {
@@ -285,46 +329,64 @@ const Dashboard = () => {
             </p>
           ) : (
             <div className="space-y-3">
-              {sortedTasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
-                >
-                  <div className="flex-1">
-                    <p className="font-medium">{task.title}</p>
-                    {task.next_action && (
-                      <p className="text-sm text-muted-foreground mt-1">{task.next_action}</p>
-                    )}
+              {sortedTasks.map((task) => {
+                const activeTimer = activeTimers[task.id];
+                return (
+                  <div
+                    key={task.id}
+                    className={`flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors ${
+                      activeTimer ? "ring-2 ring-primary/50 bg-primary/5" : ""
+                    }`}
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">{task.title}</p>
+                        {activeTimer && (
+                          <Badge variant="secondary" className="text-xs bg-primary/20">
+                            <Clock className="h-3 w-3 mr-1" />
+                            {getRunningTime(activeTimer.start)}
+                          </Badge>
+                        )}
+                      </div>
+                      {task.next_action && (
+                        <p className="text-sm text-muted-foreground mt-1">{task.next_action}</p>
+                      )}
+                      {activeTimer && (
+                        <p className="text-xs text-primary mt-1">
+                          {activeTimer.profiles?.name || "Iemand"} werkt hieraan
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className={priorityColors[task.priority]}>
+                        {priorityLabels[task.priority]}
+                      </Badge>
+                      {task.due_at && (
+                        <span className="text-sm text-muted-foreground">
+                          {format(new Date(task.due_at), "d MMM", { locale: nl })}
+                        </span>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleCompleteTask(task.id)}
+                        className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
+                        title="Markeer als afgerond"
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => openDeleteDialog(task.id)}
+                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className={priorityColors[task.priority]}>
-                      {priorityLabels[task.priority]}
-                    </Badge>
-                    {task.due_at && (
-                      <span className="text-sm text-muted-foreground">
-                        {format(new Date(task.due_at), "d MMM", { locale: nl })}
-                      </span>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleCompleteTask(task.id)}
-                      className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
-                      title="Markeer als afgerond"
-                    >
-                      <Check className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => openDeleteDialog(task.id)}
-                      className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

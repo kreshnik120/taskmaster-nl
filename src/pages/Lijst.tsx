@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, Filter, Plus, Check, Edit2 } from "lucide-react";
+import { Loader2, Filter, Plus, Check, Edit2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -51,13 +51,15 @@ export default function Lijst() {
   const [groupBy, setGroupBy] = useState<string>("none");
   const [editingAction, setEditingAction] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState<string>("");
+  const [activeTimers, setActiveTimers] = useState<Record<string, { user_id: string; start: string; profiles: { name: string | null } | null }>>({});
 
   useEffect(() => {
     checkAuth();
     fetchTasks();
+    loadActiveTimers();
 
     // Real-time listener voor taak updates
-    const channel = supabase
+    const tasksChannel = supabase
       .channel('lijst-tasks-changes')
       .on(
         'postgres_changes',
@@ -73,8 +75,25 @@ export default function Lijst() {
       )
       .subscribe();
 
+    // Real-time listener voor time_entries
+    const timeEntriesChannel = supabase
+      .channel('lijst-time-entries')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'time_entries'
+        },
+        () => {
+          loadActiveTimers();
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(tasksChannel);
+      supabase.removeChannel(timeEntriesChannel);
     };
   }, []);
 
@@ -112,6 +131,30 @@ export default function Lijst() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadActiveTimers = async () => {
+    const { data } = await supabase
+      .from("time_entries")
+      .select("task_id, user_id, start, profiles:profiles!time_entries_user_id_fkey(name)")
+      .is("end", null);
+    
+    if (data) {
+      const timersMap: Record<string, any> = {};
+      data.forEach((entry: any) => {
+        timersMap[entry.task_id] = entry;
+      });
+      setActiveTimers(timersMap);
+    }
+  };
+
+  const getRunningTime = (start: string) => {
+    const now = new Date();
+    const startTime = new Date(start);
+    const minutes = Math.floor((now.getTime() - startTime.getTime()) / 60000);
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}u ${mins}m`;
   };
 
   const handleToggleComplete = async (taskId: string, currentStatus: string | null) => {
@@ -269,19 +312,27 @@ export default function Lijst() {
                         <TableHead>Start</TableHead>
                         <TableHead>Eind</TableHead>
                         <TableHead className="min-w-[200px]">Volgende actie</TableHead>
+                        <TableHead className="w-[120px]">Timer</TableHead>
                         <TableHead className="w-[80px] text-center">Afgerond</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {groupTasks.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={9} className="text-center text-muted-foreground">
+                          <TableCell colSpan={10} className="text-center text-muted-foreground">
                             Geen taken gevonden
                           </TableCell>
                         </TableRow>
                       ) : (
-                        groupTasks.map((task) => (
-                          <TableRow key={task.id} className="cursor-pointer hover:bg-muted/50">
+                        groupTasks.map((task) => {
+                          const activeTimer = activeTimers[task.id];
+                          return (
+                            <TableRow 
+                              key={task.id} 
+                              className={`cursor-pointer hover:bg-muted/50 ${
+                                activeTimer ? "bg-primary/5" : ""
+                              }`}
+                            >
                             <TableCell className="font-mono text-xs text-muted-foreground">
                               {task.id.substring(0, 6)}
                             </TableCell>
@@ -336,6 +387,16 @@ export default function Lijst() {
                                 </div>
                               )}
                             </TableCell>
+                            <TableCell>
+                              {activeTimer ? (
+                                <Badge variant="secondary" className="text-xs bg-primary/20">
+                                  <Clock className="h-3 w-3 mr-1" />
+                                  {getRunningTime(activeTimer.start)}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">-</span>
+                              )}
+                            </TableCell>
                             <TableCell className="text-center">
                               <Checkbox
                                 checked={!!task.completed_at}
@@ -344,7 +405,8 @@ export default function Lijst() {
                               />
                             </TableCell>
                           </TableRow>
-                        ))
+                          );
+                        })
                       )}
                     </TableBody>
                   </Table>
