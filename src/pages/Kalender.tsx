@@ -288,65 +288,89 @@ export default function Kalender() {
                       <>
                         {dayTasks.map((task) => {
                           const priorityInfo = priorityConfig[task.priority as keyof typeof priorityConfig] || priorityConfig.MEDIUM;
+                          const taskReminders = getRemindersForDay(day).filter(r => r.task_id === task.id);
                           
                           return (
-                            <div
-                              key={task.id}
-                              onClick={() => handleTaskClick(task)}
-                              className={`rounded-md border-l-4 ${priorityInfo.color} bg-card p-3 hover:shadow-lg hover:scale-[1.02] cursor-pointer transition-all duration-200 space-y-2`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <p className="text-sm font-semibold flex-1 break-words">{task.title}</p>
-                                <PriorityBadge taskId={task.id} priority={task.priority} size="sm" />
-                              </div>
-                              
-                              {task.profiles && (
-                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                  <User className="h-3 w-3" />
-                                  <span className="truncate">{task.profiles.name || task.profiles.email}</span>
+                            <div key={task.id} className="space-y-1">
+                              {/* Main Task */}
+                              <div
+                                onClick={() => handleTaskClick(task)}
+                                className={`rounded-md border-l-4 ${priorityInfo.color} bg-card p-3 hover:shadow-lg hover:scale-[1.02] cursor-pointer transition-all duration-200 space-y-2`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-sm font-semibold flex-1 break-words">{task.title}</p>
+                                  <PriorityBadge taskId={task.id} priority={task.priority} size="sm" />
                                 </div>
-                              )}
-                              
-                              <div className="space-y-1">
-                                {task.start_at && (
-                                  <p className="text-xs text-muted-foreground">
-                                    ⏰ {format(parseISO(task.start_at), "HH:mm")}
-                                  </p>
+                                
+                                {task.profiles && (
+                                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                    <User className="h-3 w-3" />
+                                    <span className="truncate">{task.profiles.name || task.profiles.email}</span>
+                                  </div>
                                 )}
-                                {task.due_at && (
-                                  <p className="text-xs text-muted-foreground">
-                                    ⏱️ {format(parseISO(task.due_at), "HH:mm")}
+                                
+                                <div className="space-y-1">
+                                  {task.start_at && (
+                                    <p className="text-xs text-muted-foreground">
+                                      ⏰ {format(parseISO(task.start_at), "HH:mm")}
+                                    </p>
+                                  )}
+                                  {task.due_at && (
+                                    <p className="text-xs text-muted-foreground">
+                                      ⏱️ {format(parseISO(task.due_at), "HH:mm")}
+                                    </p>
+                                  )}
+                                </div>
+                                
+                                {task.next_action && (
+                                  <p className="text-xs text-primary font-medium break-words">
+                                    → {task.next_action}
                                   </p>
                                 )}
                               </div>
-                              
-                              {task.next_action && (
-                                <p className="text-xs text-primary font-medium break-words">
-                                  → {task.next_action}
-                                </p>
-                              )}
+
+                              {/* Reminders for this task - shown smaller beneath */}
+                              {taskReminders.map((reminder) => (
+                                <div
+                                  key={reminder.id}
+                                  className={`ml-4 rounded border-l-2 ${priorityInfo.color} bg-primary/5 p-1.5 px-2 hover:bg-primary/10 transition-colors`}
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <Bell className="w-3 h-3 text-primary flex-shrink-0" />
+                                    <p className="text-[11px] font-medium text-primary/90 truncate flex-1">
+                                      {reminder.title || "Herinnering"}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground">
+                                      {format(parseISO(reminder.at), "HH:mm")}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           );
                         })}
 
-                        {getRemindersForDay(day).map((reminder) => (
-                          <div
-                            key={reminder.id}
-                            className="rounded-md border-l-4 border-l-primary/50 bg-primary/5 p-3 hover:shadow-lg transition-all duration-200 space-y-2"
-                          >
-                            <div className="flex items-start gap-2">
-                              <Bell className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold break-words">
-                                  {reminder.title || reminder.tasks?.title || reminder.subtasks?.title}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {format(parseISO(reminder.at), "HH:mm")}
-                                </p>
+                        {/* Standalone Reminders (not linked to displayed tasks) */}
+                        {getRemindersForDay(day)
+                          .filter(reminder => !dayTasks.some(task => task.id === reminder.task_id))
+                          .map((reminder) => (
+                            <div
+                              key={reminder.id}
+                              className="rounded border-l-2 border-l-primary/50 bg-primary/5 p-2 hover:bg-primary/10 transition-colors"
+                            >
+                              <div className="flex items-center gap-2">
+                                <Bell className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium text-primary/90 truncate">
+                                    {reminder.title || reminder.tasks?.title || reminder.subtasks?.title}
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                                    {format(parseISO(reminder.at), "HH:mm")}
+                                  </p>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
                       </>
                     )}
                   </div>
