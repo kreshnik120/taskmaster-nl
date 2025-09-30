@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Loader2, Sparkles, Calendar, ListTodo, Clock } from 'lucide-react';
+import { X, Send, Loader2, Sparkles, Calendar, ListTodo, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { RobotIcon } from './RobotIcon';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -234,15 +235,14 @@ export const ChatWidget = () => {
 
   return (
     <>
-      {/* Floating Button */}
+      {/* Robot Assistant */}
       {!isOpen && (
-        <Button
-          onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg hover:scale-110 transition-transform"
-          size="icon"
-        >
-          <MessageSquare className="h-6 w-6" />
-        </Button>
+        <div className="fixed bottom-6 right-6 z-50">
+          <RobotIcon 
+            onClick={() => setIsOpen(true)} 
+            isActive={isLoading}
+          />
+        </div>
       )}
 
       {/* Chat Window */}
