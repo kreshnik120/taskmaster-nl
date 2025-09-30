@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { TaskCard } from "@/components/TaskCard";
+import { TaskDialog } from "@/components/TaskDialog";
 import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -34,6 +35,7 @@ const Kanban = () => {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -212,7 +214,7 @@ const Kanban = () => {
           <h1 className="text-3xl font-bold">Kanban Bord</h1>
           <p className="text-muted-foreground">Sleep taken tussen kolommen om de status te wijzigen</p>
         </div>
-        <Button>
+        <Button onClick={() => setDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Nieuwe taak
         </Button>
@@ -235,6 +237,12 @@ const Kanban = () => {
           </div>
         </main>
       </div>
+      <TaskDialog 
+        open={dialogOpen} 
+        onOpenChange={setDialogOpen} 
+        onSuccess={loadData}
+        columnId={columns.find(c => c.status === "BACKLOG")?.id}
+      />
     </SidebarProvider>
   );
 };
