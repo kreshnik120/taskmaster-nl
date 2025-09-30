@@ -179,12 +179,12 @@ const Dashboard = () => {
 
       if (error) throw error;
       
-      // Calculate subtask counts
+      // Calculate subtask counts (completed + skipped count as done)
       const tasksWithCounts = (data || []).map(task => ({
         ...task,
         subtasks: task.subtasks?.sort((a: Subtask, b: Subtask) => a.order - b.order) || [],
         subtask_count: task.subtasks?.length || 0,
-        completed_subtask_count: task.subtasks?.filter((s: Subtask) => s.status === 'completed').length || 0
+        completed_subtask_count: task.subtasks?.filter((s: Subtask) => s.status === 'completed' || s.status === 'skipped').length || 0
       }));
       
       setTasks(tasksWithCounts);
@@ -354,7 +354,7 @@ const Dashboard = () => {
           return {
             ...task,
             subtasks: updatedSubtasks,
-            completed_subtask_count: updatedSubtasks.filter(s => s.status === 'completed').length
+            completed_subtask_count: updatedSubtasks.filter(s => s.status === 'completed' || s.status === 'skipped').length
           };
         }
         return task;
@@ -392,7 +392,7 @@ const Dashboard = () => {
           return {
             ...task,
             subtasks: updatedSubtasks,
-            completed_subtask_count: updatedSubtasks.filter(s => s.status === 'completed').length
+            completed_subtask_count: updatedSubtasks.filter(s => s.status === 'completed' || s.status === 'skipped').length
           };
         }
         return task;
@@ -430,7 +430,7 @@ const Dashboard = () => {
           return {
             ...task,
             subtasks: updatedSubtasks,
-            completed_subtask_count: updatedSubtasks.filter(s => s.status === 'completed').length
+            completed_subtask_count: updatedSubtasks.filter(s => s.status === 'completed' || s.status === 'skipped').length
           };
         }
         return task;
@@ -604,7 +604,7 @@ const Dashboard = () => {
                           <p className="text-sm text-muted-foreground mt-1">{task.next_action}</p>
                         )}
                         {hasSubtasks && (
-                          <Progress value={progressPercentage} className="h-1.5 mt-2 [&>div]:bg-status-completed [&>div]:transition-all [&>div]:duration-500" />
+                          <Progress value={progressPercentage} className="h-1.5 mt-2 [&>div]:bg-green-500 [&>div]:transition-all [&>div]:duration-500" />
                         )}
                         {activeTimer && (
                           <p className="text-xs text-primary mt-1">
