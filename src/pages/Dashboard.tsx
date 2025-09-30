@@ -220,12 +220,13 @@ const Dashboard = () => {
     
     const { data, error } = await supabase
       .from("tasks")
-      .select("id", { count: "exact", head: true })
+      .select("id")
       .not("completed_at", "is", null)
+      .is("deleted_at", null)
       .gte("completed_at", weekStart.toISOString());
     
-    if (!error && data !== null) {
-      setCompletedThisWeek(data.length);
+    if (!error && data) {
+      setCompletedThisWeek(data.length || 0);
     }
   };
 
