@@ -30,7 +30,6 @@ interface Task {
   accepted_by: string | null;
   organizations: { name: string } | null;
   profiles: { name: string | null } | null;
-  accepted_by_profile: { name: string | null }[] | null;
 }
 
 interface Profile {
@@ -157,8 +156,7 @@ export default function Lijst() {
           accepted_at,
           accepted_by,
           organizations(name),
-          profiles:profiles!tasks_assignee_id_fkey(name),
-          accepted_by_profile:profiles!tasks_accepted_by_fkey(name)
+          profiles:profiles!tasks_assignee_id_fkey(name)
         `)
         .is("deleted_at", null)
         .order("sequence_number", { ascending: true });
