@@ -27,21 +27,36 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
     return { x: 0, y: 0 };
   });
 
+  // Track if user is dragging to prevent click event
+  const [isDragging, setIsDragging] = useState(false);
+
   // Save position to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(position));
   }, [position]);
+
+  const handleClick = () => {
+    // Only trigger onClick if not dragging
+    if (!isDragging && onClick) {
+      onClick();
+    }
+  };
 
   return (
     <motion.button
       drag
       dragMomentum={false}
       dragElastic={0}
+      onDragStart={() => {
+        setIsDragging(true);
+      }}
       onDragEnd={(_, info) => {
         setPosition({ x: position.x + info.offset.x, y: position.y + info.offset.y });
+        // Reset dragging state after a short delay to prevent click
+        setTimeout(() => setIsDragging(false), 100);
       }}
       style={{ x: position.x, y: position.y }}
-      onClick={onClick}
+      onClick={handleClick}
       className="relative cursor-grab active:cursor-grabbing border-none p-0 w-32 h-32"
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}

@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { RobotIcon } from './RobotIcon';
+import { MiniRobotIcon } from './MiniRobotIcon';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -253,11 +254,9 @@ export const ChatWidget = () => {
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-primary/5 to-primary/10">
             <div className="flex items-center gap-3">
-              <Avatar className="h-9 w-9 border-2 border-primary/20">
-                <AvatarFallback className="bg-primary/10">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                </AvatarFallback>
-              </Avatar>
+              <div className="shrink-0">
+                <MiniRobotIcon isActive={isLoading} />
+              </div>
               <div>
                 <h3 className="font-semibold text-sm">TaskFlow Assistent</h3>
                 <p className="text-xs text-muted-foreground">Altijd klaar om te helpen</p>
