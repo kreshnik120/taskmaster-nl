@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Calendar, CheckCircle2, Clock, Trash2, ArrowUpDown, Check } from "lucide-react";
+import { Plus, Calendar, CheckCircle2, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, ListTodo } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { Progress } from "@/components/ui/progress";
+
+interface Subtask {
+  id: string;
+  title: string;
+  status: 'pending' | 'active' | 'completed' | 'skipped';
+  order: number;
+  due_at: string | null;
+  assignee_id: string | null;
+  profiles: {
+    name: string | null;
+  } | null;
+}
 
 interface Task {
   id: string;
@@ -41,6 +54,9 @@ interface Task {
     name: string | null;
     email: string | null;
   } | null;
+  subtasks?: Subtask[];
+  subtask_count?: number;
+  completed_subtask_count?: number;
 }
 
 const Dashboard = () => {
@@ -56,6 +72,7 @@ const Dashboard = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadTasks();
@@ -81,6 +98,22 @@ const Dashboard = () => {
       )
       .subscribe();
 
+    // Real-time listener voor subtasks
+    const subtasksChannel = supabase
+      .channel('dashboard-subtasks-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'subtasks'
+        },
+        () => {
+          loadTasks();
+        }
+      )
+      .subscribe();
+
     // Real-time listener voor time_entries
     const timeEntriesChannel = supabase
       .channel('dashboard-time-entries')
@@ -100,6 +133,7 @@ const Dashboard = () => {
 
     return () => {
       supabase.removeChannel(tasksChannel);
+      supabase.removeChannel(subtasksChannel);
       supabase.removeChannel(timeEntriesChannel);
     };
   }, []);
@@ -121,7 +155,16 @@ const Dashboard = () => {
         .from("tasks")
         .select(`
           *,
-          profiles:profiles!tasks_assignee_id_fkey(name, email)
+          profiles:profiles!tasks_assignee_id_fkey(name, email),
+          subtasks(
+            id,
+            title,
+            status,
+            order,
+            due_at,
+            assignee_id,
+            profiles:profiles!subtasks_assignee_id_fkey(name)
+          )
         `)
         .is("completed_at", null)
         .is("deleted_at", null)
@@ -129,7 +172,16 @@ const Dashboard = () => {
         .limit(10);
 
       if (error) throw error;
-      setTasks(data || []);
+      
+      // Calculate subtask counts
+      const tasksWithCounts = (data || []).map(task => ({
+        ...task,
+        subtasks: task.subtasks?.sort((a: Subtask, b: Subtask) => a.order - b.order) || [],
+        subtask_count: task.subtasks?.length || 0,
+        completed_subtask_count: task.subtasks?.filter((s: Subtask) => s.status === 'completed').length || 0
+      }));
+      
+      setTasks(tasksWithCounts);
     } catch (error) {
       console.error("Error loading tasks:", error);
     } finally {
@@ -270,6 +322,52 @@ const Dashboard = () => {
     loadCompletedThisWeek();
   };
 
+  const toggleTaskExpansion = (taskId: string) => {
+    setExpandedTasks(prev => {
+      const next = new Set(prev);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      return next;
+    });
+  };
+
+  const handleCompleteSubtask = async (subtaskId: string) => {
+    try {
+      const { error } = await supabase
+        .from('subtasks')
+        .update({ status: 'completed' })
+        .eq('id', subtaskId);
+
+      if (error) throw error;
+
+      toast.success("Subtaak voltooid");
+      loadTasks();
+    } catch (error) {
+      console.error('Error completing subtask:', error);
+      toast.error("Kon subtaak niet voltooien");
+    }
+  };
+
+  const handleSkipSubtask = async (subtaskId: string) => {
+    try {
+      const { error } = await supabase
+        .from('subtasks')
+        .update({ status: 'skipped' })
+        .eq('id', subtaskId);
+
+      if (error) throw error;
+
+      toast.success("Subtaak overgeslagen");
+      loadTasks();
+    } catch (error) {
+      console.error('Error skipping subtask:', error);
+      toast.error("Kon subtaak niet overslaan");
+    }
+  };
+
   const priorityValue: Record<string, number> = {
     LOW: 1,
     MEDIUM: 2,
@@ -386,66 +484,150 @@ const Dashboard = () => {
             <div className="space-y-3">
               {sortedTasks.map((task) => {
                 const activeTimer = activeTimers[task.id];
+                const isExpanded = expandedTasks.has(task.id);
+                const hasSubtasks = (task.subtask_count || 0) > 0;
+                const progressPercentage = hasSubtasks 
+                  ? ((task.completed_subtask_count || 0) / (task.subtask_count || 1)) * 100 
+                  : 0;
+
                 return (
-                  <div
-                    key={task.id}
-                    onClick={() => handleTaskClick(task)}
-                    className={`flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer ${
-                      activeTimer ? "ring-2 ring-primary/50 bg-primary/5" : ""
-                    }`}
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium">{task.title}</p>
+                  <div key={task.id} className="border rounded-lg bg-card">
+                    <div
+                      onClick={() => handleTaskClick(task)}
+                      className={`flex items-center justify-between p-3 hover:bg-accent/50 transition-colors cursor-pointer ${
+                        activeTimer ? "ring-2 ring-primary/50 bg-primary/5" : ""
+                      }`}
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium">{task.title}</p>
+                          {hasSubtasks && (
+                            <Badge variant="outline" className="flex items-center gap-1">
+                              <ListTodo className="h-3 w-3" />
+                              {task.completed_subtask_count}/{task.subtask_count}
+                            </Badge>
+                          )}
+                          {activeTimer && (
+                            <Badge variant="secondary" className="text-xs bg-primary/20">
+                              <Clock className="h-3 w-3 mr-1" />
+                              {getRunningTime(activeTimer.start)}
+                            </Badge>
+                          )}
+                        </div>
+                        {task.next_action && (
+                          <p className="text-sm text-muted-foreground mt-1">{task.next_action}</p>
+                        )}
+                        {hasSubtasks && (
+                          <Progress value={progressPercentage} className="h-1.5 mt-2" />
+                        )}
                         {activeTimer && (
-                          <Badge variant="secondary" className="text-xs bg-primary/20">
-                            <Clock className="h-3 w-3 mr-1" />
-                            {getRunningTime(activeTimer.start)}
-                          </Badge>
+                          <p className="text-xs text-primary mt-1">
+                            {activeTimer.profiles?.name || "Iemand"} werkt hieraan
+                          </p>
                         )}
                       </div>
-                      {task.next_action && (
-                        <p className="text-sm text-muted-foreground mt-1">{task.next_action}</p>
-                      )}
-                      {activeTimer && (
-                        <p className="text-xs text-primary mt-1">
-                          {activeTimer.profiles?.name || "Iemand"} werkt hieraan
-                        </p>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className={priorityColors[task.priority]}>
+                          {priorityLabels[task.priority]}
+                        </Badge>
+                        {task.due_at && (
+                          <span className="text-sm text-muted-foreground">
+                            {format(new Date(task.due_at), "d MMM", { locale: nl })}
+                          </span>
+                        )}
+                        {hasSubtasks && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleTaskExpansion(task.id);
+                            }}
+                            className="h-8 w-8"
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCompleteTask(task.id);
+                          }}
+                          className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
+                          title="Markeer als afgerond"
+                        >
+                          <Check className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDeleteDialog(task.id);
+                          }}
+                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className={priorityColors[task.priority]}>
-                        {priorityLabels[task.priority]}
-                      </Badge>
-                      {task.due_at && (
-                        <span className="text-sm text-muted-foreground">
-                          {format(new Date(task.due_at), "d MMM", { locale: nl })}
-                        </span>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCompleteTask(task.id);
-                        }}
-                        className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
-                        title="Markeer als afgerond"
-                      >
-                        <Check className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openDeleteDialog(task.id);
-                        }}
-                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    
+                    {isExpanded && hasSubtasks && (
+                      <div className="px-3 pb-3 border-t">
+                        <div className="pt-3 space-y-2">
+                          <h4 className="text-sm font-medium mb-2">Processtappen</h4>
+                          {task.subtasks?.map((subtask) => (
+                            <div
+                              key={subtask.id}
+                              className={`flex items-center gap-2 p-2 rounded text-sm ${
+                                subtask.status === 'completed'
+                                  ? 'bg-green-50 text-green-900 dark:bg-green-950 dark:text-green-100'
+                                  : subtask.status === 'active'
+                                  ? 'bg-blue-50 text-blue-900 dark:bg-blue-950 dark:text-blue-100'
+                                  : subtask.status === 'skipped'
+                                  ? 'bg-gray-50 text-gray-500 dark:bg-gray-900'
+                                  : 'bg-muted'
+                              }`}
+                            >
+                              {subtask.status === 'completed' ? (
+                                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                              ) : subtask.status === 'skipped' ? (
+                                <SkipForward className="h-4 w-4 text-gray-400" />
+                              ) : (
+                                <Circle className="h-4 w-4" />
+                              )}
+                              <span className="flex-1">{subtask.title}</span>
+                              {subtask.status === 'active' && (
+                                <div className="flex gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={() => handleCompleteSubtask(subtask.id)}
+                                  >
+                                    Voltooid
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={() => handleSkipSubtask(subtask.id)}
+                                  >
+                                    Overslaan
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
