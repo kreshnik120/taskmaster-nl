@@ -180,6 +180,33 @@ export type Database = {
         }
         Relationships: []
       }
+      prioritizer_state: {
+        Row: {
+          betas: Json
+          id: string
+          last_updated: string
+          percentiles: Json
+          segment_key: string
+          weights: Json
+        }
+        Insert: {
+          betas?: Json
+          id?: string
+          last_updated?: string
+          percentiles?: Json
+          segment_key: string
+          weights?: Json
+        }
+        Update: {
+          betas?: Json
+          id?: string
+          last_updated?: string
+          percentiles?: Json
+          segment_key?: string
+          weights?: Json
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -433,6 +460,85 @@ export type Database = {
             foreignKeyName: "tags_on_tasks_task_id_fkey"
             columns: ["task_id"]
             isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_feedback_events: {
+        Row: {
+          components: Json
+          created_at: string
+          decision: Json
+          id: string
+          outcome: Json
+          segment: Json
+          task_id: string
+        }
+        Insert: {
+          components?: Json
+          created_at?: string
+          decision?: Json
+          id?: string
+          outcome?: Json
+          segment?: Json
+          task_id: string
+        }
+        Update: {
+          components?: Json
+          created_at?: string
+          decision?: Json
+          id?: string
+          outcome?: Json
+          segment?: Json
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_feedback_events_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_scoring_metadata: {
+        Row: {
+          business_impact_score: number | null
+          complexity_score: number | null
+          created_at: string
+          estimated_value_eur: number | null
+          id: string
+          market_demand_factor: number | null
+          task_id: string
+          updated_at: string
+        }
+        Insert: {
+          business_impact_score?: number | null
+          complexity_score?: number | null
+          created_at?: string
+          estimated_value_eur?: number | null
+          id?: string
+          market_demand_factor?: number | null
+          task_id: string
+          updated_at?: string
+        }
+        Update: {
+          business_impact_score?: number | null
+          complexity_score?: number | null
+          created_at?: string
+          estimated_value_eur?: number | null
+          id?: string
+          market_demand_factor?: number | null
+          task_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_scoring_metadata_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: true
             referencedRelation: "tasks"
             referencedColumns: ["id"]
           },

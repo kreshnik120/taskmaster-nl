@@ -1,1 +1,4 @@
 project_id = "oelmsmcgryeoryhonexw"
+
+[functions.prioritizer]
+verify_jwt = true

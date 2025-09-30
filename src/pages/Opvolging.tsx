@@ -7,9 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { format, differenceInDays } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, AlertCircle, Clock, TrendingUp } from "lucide-react";
+import { Loader2, AlertCircle, Clock, TrendingUp, Sparkles } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useToast } from "@/hooks/use-toast";
 
 interface Task {
   id: string;
@@ -19,8 +20,30 @@ interface Task {
   due_at: string | null;
   next_action: string | null;
   completed_at: string | null;
+  estimate_min: number | null;
+  org_id: string;
   organizations: { name: string } | null;
   profiles: { name: string | null } | null;
+  task_scoring_metadata?: {
+    estimated_value_eur: number | null;
+    complexity_score: number | null;
+    business_impact_score: number | null;
+    market_demand_factor: number | null;
+  } | null;
+}
+
+interface PriorityScore {
+  task_id: string;
+  priority_score: number;
+  rank: number;
+  breakdown: {
+    money: number;
+    urgency: number;
+    quality: number;
+    business: number;
+    growth: number;
+  };
+  label: "NORMAL" | "CRITICAL" | "LOW_PRIORITY";
 }
 
 const priorityColors = {
@@ -37,72 +60,16 @@ const priorityLabels = {
   CRITICAL: "Kritiek",
 };
 
-interface ScoreBreakdown {
-  priority: number;
-  dueDate: number;
-  overdue: number;
-  startReady: number;
-  total: number;
-}
-
-const calculateFocusScore = (task: Task): number => {
-  let score = 0;
-
-  // Priority weight
-  const priorityWeights = { LOW: 0, MEDIUM: 20, HIGH: 40, CRITICAL: 60 };
-  score += priorityWeights[task.priority as keyof typeof priorityWeights] || 0;
-
-  // Due date weight
-  if (task.due_at) {
-    const daysUntil = differenceInDays(new Date(task.due_at), new Date());
-    const dueWeight = Math.max(0, Math.min(30, 30 - daysUntil));
-    score += dueWeight;
-
-    // Overdue penalty
-    if (daysUntil < 0) {
-      score += 50;
-    }
-  }
-
-  // Start ready bonus
-  if (task.start_at && new Date(task.start_at) <= new Date()) {
-    score += 10;
-  }
-
-  return score;
-};
-
-const getScoreBreakdown = (task: Task): ScoreBreakdown => {
-  const priorityWeights = { LOW: 0, MEDIUM: 20, HIGH: 40, CRITICAL: 60 };
-  const priority = priorityWeights[task.priority as keyof typeof priorityWeights] || 0;
-  
-  let dueDate = 0;
-  let overdue = 0;
-  if (task.due_at) {
-    const daysUntil = differenceInDays(new Date(task.due_at), new Date());
-    dueDate = Math.max(0, Math.min(30, 30 - daysUntil));
-    if (daysUntil < 0) {
-      overdue = 50;
-    }
-  }
-  
-  const startReady = (task.start_at && new Date(task.start_at) <= new Date()) ? 10 : 0;
-  
-  return {
-    priority,
-    dueDate,
-    overdue,
-    startReady,
-    total: priority + dueDate + overdue + startReady,
-  };
-};
 
 type FilterType = "achterstallig" | "deze-week" | "met-actie" | null;
 
 export default function Opvolging() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [priorityScores, setPriorityScores] = useState<Map<string, PriorityScore>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [scoringLoading, setScoringLoading] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>(null);
 
   useEffect(() => {
@@ -149,8 +116,11 @@ export default function Opvolging() {
           due_at,
           next_action,
           completed_at,
+          estimate_min,
+          org_id,
           organizations(name),
-          profiles:profiles!tasks_assignee_id_fkey(name)
+          profiles:profiles!tasks_assignee_id_fkey(name),
+          task_scoring_metadata(estimated_value_eur, complexity_score, business_impact_score, market_demand_factor)
         `)
         .is("completed_at", null)
         .is("deleted_at", null)
@@ -158,10 +128,60 @@ export default function Opvolging() {
 
       if (error) throw error;
       setTasks(data || []);
+      
+      // Calculate priority scores after fetching tasks
+      if (data && data.length > 0) {
+        await calculatePriorityScores(data);
+      }
     } catch (error) {
       console.error("Error fetching tasks:", error);
+      toast({
+        title: "Fout bij ophalen taken",
+        description: "Er is een fout opgetreden bij het ophalen van de taken.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const calculatePriorityScores = async (tasksList: Task[]) => {
+    setScoringLoading(true);
+    try {
+      const taskInputs = tasksList.map(task => ({
+        id: task.id,
+        title: task.title,
+        priority: task.priority,
+        due_at: task.due_at,
+        start_at: task.start_at,
+        estimate_min: task.estimate_min,
+        next_action: task.next_action,
+        org_id: task.org_id,
+        metadata: task.task_scoring_metadata || undefined
+      }));
+
+      const { data, error } = await supabase.functions.invoke('prioritizer', {
+        body: { tasks: taskInputs }
+      });
+
+      if (error) throw error;
+
+      if (data?.results) {
+        const scoresMap = new Map<string, PriorityScore>();
+        data.results.forEach((result: PriorityScore) => {
+          scoresMap.set(result.task_id, result);
+        });
+        setPriorityScores(scoresMap);
+      }
+    } catch (error) {
+      console.error("Error calculating priority scores:", error);
+      toast({
+        title: "Fout bij berekenen scores",
+        description: "Oude score methode wordt gebruikt als fallback.",
+        variant: "destructive",
+      });
+    } finally {
+      setScoringLoading(false);
     }
   };
 
@@ -177,11 +197,17 @@ export default function Opvolging() {
   );
 
   const allFocusTasks = [...tasks]
-    .map((task) => ({
-      ...task,
-      focusScore: calculateFocusScore(task),
-    }))
-    .sort((a, b) => b.focusScore - a.focusScore)
+    .map((task) => {
+      const scoreData = priorityScores.get(task.id);
+      return {
+        ...task,
+        priorityScore: scoreData?.priority_score ?? 0,
+        scoreBreakdown: scoreData?.breakdown,
+        scoreLabel: scoreData?.label,
+        rank: scoreData?.rank
+      };
+    })
+    .sort((a, b) => b.priorityScore - a.priorityScore)
     .slice(0, 10);
 
   // Filter tasks based on active filter
@@ -307,6 +333,8 @@ export default function Opvolging() {
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-primary" />
                   <div>
                     <CardTitle>Top 10 Focus Taken</CardTitle>
                     <CardDescription>
@@ -316,10 +344,11 @@ export default function Opvolging() {
                             activeFilter === "deze-week" ? "Deze week" :
                             "Taken met actie"
                           }`
-                        : "Taken gesorteerd op focus score (prioriteit, deadline, startdatum)"
+                        : "Taken gesorteerd op geavanceerde prioriteits score (WSJF methode)"
                       }
                     </CardDescription>
                   </div>
+                </div>
                   {activeFilter && (
                     <button
                       onClick={() => setActiveFilter(null)}
@@ -331,6 +360,12 @@ export default function Opvolging() {
                 </div>
               </CardHeader>
               <CardContent>
+                {scoringLoading && (
+                  <div className="flex items-center justify-center py-4 text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                    Scores berekenen...
+                  </div>
+                )}
                 <div className="space-y-4">
                   {focusTasks.length === 0 ? (
                     <p className="text-center text-muted-foreground">
@@ -338,11 +373,12 @@ export default function Opvolging() {
                     </p>
                   ) : (
                     focusTasks.map((task) => {
-                      const breakdown = getScoreBreakdown(task);
                       const taskHighlightClass = 
                         activeFilter === "achterstallig" && isTaskInCategory(task, "achterstallig") ? "bg-destructive/10 border-destructive/50" :
                         activeFilter === "deze-week" && isTaskInCategory(task, "deze-week") ? "bg-primary/10 border-primary/50" :
                         activeFilter === "met-actie" && isTaskInCategory(task, "met-actie") ? "bg-accent/10 border-accent/50" :
+                        task.scoreLabel === "CRITICAL" ? "bg-destructive/10 border-destructive/50" :
+                        task.scoreLabel === "LOW_PRIORITY" ? "bg-muted/50" :
                         "";
                       
                       return (
@@ -352,10 +388,20 @@ export default function Opvolging() {
                         >
                           <div className="flex-1 space-y-1">
                             <div className="flex items-center gap-2">
+                              {task.rank && (
+                                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold">
+                                  {task.rank}
+                                </span>
+                              )}
                               <p className="font-medium">{task.title}</p>
                               <Badge className={priorityColors[task.priority as keyof typeof priorityColors]}>
                                 {priorityLabels[task.priority as keyof typeof priorityLabels]}
                               </Badge>
+                              {task.scoreLabel === "CRITICAL" && (
+                                <Badge variant="destructive" className="ml-1">
+                                  Kritiek
+                                </Badge>
+                              )}
                             </div>
                             <div className="flex items-center gap-4 text-sm text-muted-foreground">
                               {task.organizations && (
@@ -382,55 +428,59 @@ export default function Opvolging() {
                               <TooltipTrigger asChild>
                                 <div className="text-right cursor-help">
                                   <div className="text-2xl font-bold text-primary">
-                                    {task.focusScore}
+                                    {task.priorityScore}
                                   </div>
                                   <div className="text-xs text-muted-foreground">
-                                    focus score
+                                    prioriteits score
                                   </div>
-                                  <div className="mt-2 space-y-1">
-                                    {breakdown.priority > 0 && (
-                                      <Progress value={(breakdown.priority / breakdown.total) * 100} className="h-1" />
-                                    )}
-                                    {breakdown.dueDate > 0 && (
-                                      <Progress value={(breakdown.dueDate / breakdown.total) * 100} className="h-1" />
-                                    )}
-                                    {breakdown.overdue > 0 && (
-                                      <Progress value={(breakdown.overdue / breakdown.total) * 100} className="h-1 bg-destructive/20" />
-                                    )}
-                                  </div>
+                                  {task.scoreBreakdown && (
+                                    <div className="mt-2 space-y-1">
+                                      {task.scoreBreakdown.money > 0 && (
+                                        <Progress value={task.scoreBreakdown.money * 100} className="h-1" />
+                                      )}
+                                      {task.scoreBreakdown.urgency > 0 && (
+                                        <Progress value={task.scoreBreakdown.urgency * 100} className="h-1" />
+                                      )}
+                                      {task.scoreBreakdown.quality > 0 && (
+                                        <Progress value={task.scoreBreakdown.quality * 100} className="h-1" />
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent side="left" className="max-w-xs">
                                 <div className="space-y-2">
-                                  <p className="font-semibold">Score Breakdown:</p>
-                                  <div className="space-y-1 text-sm">
-                                    <div className="flex justify-between">
-                                      <span>Prioriteit ({priorityLabels[task.priority as keyof typeof priorityLabels]}):</span>
-                                      <span className="font-medium">{breakdown.priority} pts</span>
-                                    </div>
-                                    {breakdown.dueDate > 0 && (
+                                  <p className="font-semibold">Score Breakdown (WSJF):</p>
+                                  {task.scoreBreakdown ? (
+                                    <div className="space-y-1 text-sm">
                                       <div className="flex justify-between">
-                                        <span>Deadline nabijheid:</span>
-                                        <span className="font-medium">{breakdown.dueDate} pts</span>
+                                        <span>💰 Waarde/Impact:</span>
+                                        <span className="font-medium">{Math.round(task.scoreBreakdown.money * 100)}%</span>
                                       </div>
-                                    )}
-                                    {breakdown.overdue > 0 && (
-                                      <div className="flex justify-between text-destructive">
-                                        <span>Achterstallig:</span>
-                                        <span className="font-medium">+{breakdown.overdue} pts</span>
-                                      </div>
-                                    )}
-                                    {breakdown.startReady > 0 && (
                                       <div className="flex justify-between">
-                                        <span>Klaar om te starten:</span>
-                                        <span className="font-medium">{breakdown.startReady} pts</span>
+                                        <span>⏰ Urgentie:</span>
+                                        <span className="font-medium">{Math.round(task.scoreBreakdown.urgency * 100)}%</span>
                                       </div>
-                                    )}
-                                    <div className="flex justify-between border-t pt-1 font-semibold">
-                                      <span>Totaal:</span>
-                                      <span>{breakdown.total} pts</span>
+                                      <div className="flex justify-between">
+                                        <span>✅ Kwaliteit/Gereedheid:</span>
+                                        <span className="font-medium">{Math.round(task.scoreBreakdown.quality * 100)}%</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span>📊 Business Impact:</span>
+                                        <span className="font-medium">{Math.round(task.scoreBreakdown.business * 100)}%</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span>🚀 Groei Potentie:</span>
+                                        <span className="font-medium">{Math.round(task.scoreBreakdown.growth * 100)}%</span>
+                                      </div>
+                                      <div className="flex justify-between border-t pt-1 font-semibold">
+                                        <span>Totaal Score:</span>
+                                        <span>{task.priorityScore}/100</span>
+                                      </div>
                                     </div>
-                                  </div>
+                                  ) : (
+                                    <p className="text-sm text-muted-foreground">Score wordt berekend...</p>
+                                  )}
                                 </div>
                               </TooltipContent>
                             </Tooltip>
