@@ -6,6 +6,7 @@ import { Plus, Calendar, CheckCircle2, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
+import { TaskDialog } from "@/components/TaskDialog";
 
 interface Task {
   id: string;
@@ -18,6 +19,7 @@ interface Task {
 const Dashboard = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   useEffect(() => {
     loadTasks();
@@ -64,7 +66,7 @@ const Dashboard = () => {
             {format(new Date(), "EEEE, d MMMM yyyy", { locale: nl })}
           </p>
         </div>
-        <Button>
+        <Button onClick={() => setDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Nieuwe taak
         </Button>
@@ -144,6 +146,15 @@ const Dashboard = () => {
           )}
         </CardContent>
       </Card>
+
+      <TaskDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSuccess={() => {
+          loadTasks();
+        }}
+        columnId={undefined}
+      />
     </div>
   );
 };
