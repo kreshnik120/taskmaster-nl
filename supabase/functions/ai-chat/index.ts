@@ -16,20 +16,53 @@ serve(async (req) => {
     
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      throw new Error('No authorization header');
+      console.error('No authorization header provided');
+      return new Response(JSON.stringify({ error: 'Authenticatie vereist' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: authHeader } }
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Missing Supabase environment variables');
+      throw new Error('Server configuration error');
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { 
+        headers: { 
+          Authorization: authHeader 
+        } 
+      },
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      }
     });
 
     // Get user context
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      throw new Error('User not authenticated');
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
+    if (userError) {
+      console.error('Auth error:', userError);
+      return new Response(JSON.stringify({ error: 'Authenticatie gefaald' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
+    
+    if (!user) {
+      console.error('No user found');
+      return new Response(JSON.stringify({ error: 'Gebruiker niet gevonden' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log('User authenticated:', user.id);
 
     // Fetch user's tasks for context
     const { data: tasks } = await supabase

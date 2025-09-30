@@ -32,11 +32,20 @@ export const ChatWidget = () => {
     setInput('');
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('Not authenticated');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError);
+        throw new Error('Authenticatie fout. Probeer opnieuw in te loggen.');
+      }
+      
+      if (!session?.access_token) {
+        console.error('No valid session or access token');
+        throw new Error('Je moet ingelogd zijn om de AI-assistent te gebruiken');
       }
 
+      console.log('Sending request to AI with', newMessages.length, 'messages');
+      
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`,
         {
@@ -44,6 +53,7 @@ export const ChatWidget = () => {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
           },
           body: JSON.stringify({
             messages: newMessages.map(m => ({ role: m.role, content: m.content })),
@@ -51,8 +61,14 @@ export const ChatWidget = () => {
         }
       );
 
-      if (!response.ok || !response.body) {
-        throw new Error('Failed to get response');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('AI response error:', response.status, errorData);
+        throw new Error(errorData.error || `AI fout: ${response.status}`);
+      }
+      
+      if (!response.body) {
+        throw new Error('No response body received');
       }
 
       const reader = response.body.getReader();
@@ -112,11 +128,14 @@ export const ChatWidget = () => {
     } catch (error) {
       console.error('Chat error:', error);
       setIsLoading(false);
+      const errorMessage = error instanceof Error ? error.message : 'Kon geen antwoord krijgen van AI-assistent';
       toast({
         title: 'Fout',
-        description: 'Kon geen antwoord krijgen van AI-assistent',
+        description: errorMessage,
         variant: 'destructive',
       });
+      // Remove the user message if we failed to get a response
+      setMessages(prev => prev.slice(0, -1));
     }
   };
 
