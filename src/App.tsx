@@ -10,6 +10,7 @@ import Kanban from "./pages/Kanban";
 import Lijst from "./pages/Lijst";
 import Kalender from "./pages/Kalender";
 import Opvolging from "./pages/Opvolging";
+import VerwijderdeTaken from "./pages/VerwijderdeTaken";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/lijst" element={<Lijst />} />
           <Route path="/kalender" element={<Kalender />} />
           <Route path="/opvolging" element={<Opvolging />} />
+          <Route path="/verwijderd" element={<VerwijderdeTaken />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

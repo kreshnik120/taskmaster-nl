@@ -7,9 +7,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, Filter, Plus } from "lucide-react";
+import { Loader2, Filter, Plus, Check, Edit2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 
 interface Task {
   id: string;
@@ -46,6 +49,8 @@ export default function Lijst() {
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [groupBy, setGroupBy] = useState<string>("none");
+  const [editingAction, setEditingAction] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState<string>("");
 
   useEffect(() => {
     checkAuth();
@@ -76,6 +81,7 @@ export default function Lijst() {
           organizations(name),
           profiles:profiles!tasks_assignee_id_fkey(name)
         `)
+        .is("deleted_at", null)
         .order("start_at", { ascending: true });
 
       if (error) throw error;
@@ -84,6 +90,58 @@ export default function Lijst() {
       console.error("Error fetching tasks:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleComplete = async (taskId: string, currentStatus: string | null) => {
+    try {
+      const { error } = await supabase
+        .from("tasks")
+        .update({ 
+          completed_at: currentStatus ? null : new Date().toISOString() 
+        })
+        .eq("id", taskId);
+
+      if (error) throw error;
+
+      toast.success(currentStatus ? "Taak gemarkeerd als actief" : "Taak afgerond");
+      fetchTasks();
+    } catch (error) {
+      console.error("Error toggling task completion:", error);
+      toast.error("Fout bij updaten van taak");
+    }
+  };
+
+  const handleEditAction = (taskId: string, currentAction: string | null) => {
+    setEditingAction(taskId);
+    setEditingValue(currentAction || "");
+  };
+
+  const handleSaveAction = async (taskId: string) => {
+    try {
+      const { error } = await supabase
+        .from("tasks")
+        .update({ next_action: editingValue || null })
+        .eq("id", taskId);
+
+      if (error) throw error;
+
+      toast.success("Vervolgactie bijgewerkt");
+      setEditingAction(null);
+      setEditingValue("");
+      fetchTasks();
+    } catch (error) {
+      console.error("Error updating next action:", error);
+      toast.error("Fout bij bijwerken vervolgactie");
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent, taskId: string) => {
+    if (e.key === "Enter") {
+      handleSaveAction(taskId);
+    } else if (e.key === "Escape") {
+      setEditingAction(null);
+      setEditingValue("");
     }
   };
 
@@ -189,8 +247,8 @@ export default function Lijst() {
                         <TableHead>Prioriteit</TableHead>
                         <TableHead>Start</TableHead>
                         <TableHead>Eind</TableHead>
-                        <TableHead>Volgende actie</TableHead>
-                        <TableHead className="w-[100px]">Afgerond</TableHead>
+                        <TableHead className="min-w-[200px]">Volgende actie</TableHead>
+                        <TableHead className="w-[80px] text-center">Afgerond</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -228,15 +286,41 @@ export default function Lijst() {
                                 ? format(new Date(task.due_at), "dd MMM yyyy", { locale: nl })
                                 : "-"}
                             </TableCell>
-                            <TableCell className="max-w-[200px] truncate">
-                              {task.next_action || "-"}
-                            </TableCell>
-                            <TableCell>
-                              {task.completed_at ? (
-                                <Badge variant="secondary">✓</Badge>
+                            <TableCell className="min-w-[200px]">
+                              {editingAction === task.id ? (
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    value={editingValue}
+                                    onChange={(e) => setEditingValue(e.target.value)}
+                                    onKeyDown={(e) => handleKeyPress(e, task.id)}
+                                    onBlur={() => handleSaveAction(task.id)}
+                                    className="h-8"
+                                    placeholder="Vervolgactie..."
+                                    autoFocus
+                                  />
+                                </div>
                               ) : (
-                                <span className="text-muted-foreground">-</span>
+                                <div className="flex items-center gap-2 group">
+                                  <span className={task.next_action ? "" : "text-muted-foreground"}>
+                                    {task.next_action || "Geen vervolgactie"}
+                                  </span>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={() => handleEditAction(task.id, task.next_action)}
+                                  >
+                                    <Edit2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
                               )}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Checkbox
+                                checked={!!task.completed_at}
+                                onCheckedChange={() => handleToggleComplete(task.id, task.completed_at)}
+                                className="mx-auto"
+                              />
                             </TableCell>
                           </TableRow>
                         ))

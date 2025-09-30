@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Calendar, CheckCircle2, Clock, Trash2, ArrowUpDown } from "lucide-react";
+import { Plus, Calendar, CheckCircle2, Clock, Trash2, ArrowUpDown, Check } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +52,7 @@ const Dashboard = () => {
         .from("tasks")
         .select("*")
         .is("completed_at", null)
+        .is("deleted_at", null)
         .order("due_at", { ascending: true })
         .limit(10);
 
@@ -68,9 +69,14 @@ const Dashboard = () => {
     if (!taskToDelete) return;
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
       const { error } = await supabase
         .from("tasks")
-        .delete()
+        .update({ 
+          deleted_at: new Date().toISOString(),
+          deleted_by: user?.id 
+        })
         .eq("id", taskToDelete);
 
       if (error) throw error;
@@ -83,6 +89,23 @@ const Dashboard = () => {
     } finally {
       setDeleteDialogOpen(false);
       setTaskToDelete(null);
+    }
+  };
+
+  const handleCompleteTask = async (taskId: string) => {
+    try {
+      const { error } = await supabase
+        .from("tasks")
+        .update({ completed_at: new Date().toISOString() })
+        .eq("id", taskId);
+
+      if (error) throw error;
+
+      toast.success("Taak afgerond");
+      loadTasks();
+    } catch (error) {
+      console.error("Error completing task:", error);
+      toast.error("Fout bij afronden van taak");
     }
   };
 
@@ -219,6 +242,15 @@ const Dashboard = () => {
                     <Button
                       variant="ghost"
                       size="icon"
+                      onClick={() => handleCompleteTask(task.id)}
+                      className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
+                      title="Markeer als afgerond"
+                    >
+                      <Check className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => openDeleteDialog(task.id)}
                       className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                     >
@@ -246,7 +278,7 @@ const Dashboard = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Taak verwijderen</AlertDialogTitle>
             <AlertDialogDescription>
-              Weet je zeker dat je deze taak wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.
+              Weet je zeker dat je deze taak wilt verwijderen? Je kunt deze later terugvinden in "Verwijderde taken".
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

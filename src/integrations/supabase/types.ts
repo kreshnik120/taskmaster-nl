@@ -402,6 +402,8 @@ export type Database = {
           column_id: string | null
           completed_at: string | null
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           description: string | null
           due_at: string | null
           estimate_min: number | null
@@ -422,6 +424,8 @@ export type Database = {
           column_id?: string | null
           completed_at?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           description?: string | null
           due_at?: string | null
           estimate_min?: number | null
@@ -442,6 +446,8 @@ export type Database = {
           column_id?: string | null
           completed_at?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           description?: string | null
           due_at?: string | null
           estimate_min?: number | null

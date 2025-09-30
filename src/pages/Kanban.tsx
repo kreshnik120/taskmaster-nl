@@ -83,6 +83,7 @@ const Kanban = () => {
       const { data: tasksData, error: tasksError } = await supabase
         .from("tasks")
         .select("*")
+        .is("deleted_at", null)
         .order("order_key");
 
       if (tasksError) throw tasksError;
