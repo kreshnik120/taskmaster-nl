@@ -81,8 +81,23 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
   };
 
   const loadDefaultOrg = async () => {
-    const { data } = await supabase.from("user_organizations").select("org_id").limit(1).single();
-    if (data) setDefaultOrgId(data.org_id);
+    const { data, error } = await supabase
+      .from("user_organizations")
+      .select("org_id")
+      .limit(1)
+      .maybeSingle();
+    
+    if (error) {
+      console.error("Error loading organization:", error);
+      toast.error("Fout bij laden van organisatie");
+      return;
+    }
+    
+    if (data) {
+      setDefaultOrgId(data.org_id);
+    } else {
+      toast.error("Geen organisatie gevonden. Neem contact op met de beheerder.");
+    }
   };
 
   const loadTask = async () => {
