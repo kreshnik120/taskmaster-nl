@@ -42,10 +42,12 @@ const Dashboard = () => {
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"high-to-low" | "low-to-high">("high-to-low");
   const [todayHours, setTodayHours] = useState<string>("0u");
+  const [completedThisWeek, setCompletedThisWeek] = useState<number>(0);
 
   useEffect(() => {
     loadTasks();
     loadTodayHours();
+    loadCompletedThisWeek();
   }, []);
 
   const loadTasks = async () => {
@@ -81,6 +83,23 @@ const Dashboard = () => {
       const hours = Math.floor(totalMinutes / 60);
       const minutes = totalMinutes % 60;
       setTodayHours(minutes > 0 ? `${hours}u ${minutes}m` : `${hours}u`);
+    }
+  };
+
+  const loadCompletedThisWeek = async () => {
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay() + 1); // Monday
+    weekStart.setHours(0, 0, 0, 0);
+    
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .not("completed_at", "is", null)
+      .gte("completed_at", weekStart.toISOString());
+    
+    if (!error && data !== null) {
+      setCompletedThisWeek(data.length);
     }
   };
 
@@ -178,7 +197,7 @@ const Dashboard = () => {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
+        <Card className="cursor-pointer hover:bg-accent/50 transition-colors">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Vandaag</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -188,13 +207,16 @@ const Dashboard = () => {
             <p className="text-xs text-muted-foreground">Openstaande taken</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className="cursor-pointer hover:bg-accent/50 transition-colors"
+          onClick={() => window.location.href = '/afgerond'}
+        >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Afgerond</CardTitle>
             <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
+            <div className="text-2xl font-bold">{completedThisWeek}</div>
             <p className="text-xs text-muted-foreground">Deze week</p>
           </CardContent>
         </Card>
