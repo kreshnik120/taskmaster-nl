@@ -46,6 +46,39 @@ export type Database = {
           },
         ]
       }
+      clients: {
+        Row: {
+          company: string
+          created_at: string
+          id: string
+          name: string
+          revenue_per_hour: number | null
+          tier: number
+          updated_at: string
+          weekly_hours: number | null
+        }
+        Insert: {
+          company: string
+          created_at?: string
+          id?: string
+          name: string
+          revenue_per_hour?: number | null
+          tier?: number
+          updated_at?: string
+          weekly_hours?: number | null
+        }
+        Update: {
+          company?: string
+          created_at?: string
+          id?: string
+          name?: string
+          revenue_per_hour?: number | null
+          tier?: number
+          updated_at?: string
+          weekly_hours?: number | null
+        }
+        Relationships: []
+      }
       columns: {
         Row: {
           created_at: string
@@ -549,6 +582,7 @@ export type Database = {
           accepted_at: string | null
           accepted_by: string | null
           assignee_id: string | null
+          client_id: string | null
           column_id: string | null
           completed_at: string | null
           created_at: string
@@ -565,15 +599,18 @@ export type Database = {
           priority: Database["public"]["Enums"]["priority"]
           project_id: string | null
           reporter_id: string | null
+          revenue_impact_eur: number | null
           sequence_number: number | null
           start_at: string | null
           title: string
+          transition_related: boolean | null
           updated_at: string
         }
         Insert: {
           accepted_at?: string | null
           accepted_by?: string | null
           assignee_id?: string | null
+          client_id?: string | null
           column_id?: string | null
           completed_at?: string | null
           created_at?: string
@@ -590,15 +627,18 @@ export type Database = {
           priority?: Database["public"]["Enums"]["priority"]
           project_id?: string | null
           reporter_id?: string | null
+          revenue_impact_eur?: number | null
           sequence_number?: number | null
           start_at?: string | null
           title: string
+          transition_related?: boolean | null
           updated_at?: string
         }
         Update: {
           accepted_at?: string | null
           accepted_by?: string | null
           assignee_id?: string | null
+          client_id?: string | null
           column_id?: string | null
           completed_at?: string | null
           created_at?: string
@@ -615,9 +655,11 @@ export type Database = {
           priority?: Database["public"]["Enums"]["priority"]
           project_id?: string | null
           reporter_id?: string | null
+          revenue_impact_eur?: number | null
           sequence_number?: number | null
           start_at?: string | null
           title?: string
+          transition_related?: boolean | null
           updated_at?: string
         }
         Relationships: [
@@ -626,6 +668,13 @@ export type Database = {
             columns: ["assignee_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
           {

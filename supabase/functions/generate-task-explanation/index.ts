@@ -36,32 +36,83 @@ serve(async (req) => {
       complexity: task.task_scoring_metadata?.complexity_score,
     };
 
-    const prompt = `Je bent een Nederlandse business analyst die uitlegt waarom een taak belangrijk is. Analyseer de volgende taak en geef een korte, concrete uitleg (2-3 zinnen) waarom deze taak nu prioriteit heeft.
+    // Determine if this is ABCzorg or CitoZorg context
+    const isABCzorg = task.title?.toLowerCase().includes('abczorg') || 
+                      task.description?.toLowerCase().includes('abczorg');
+    const company = isABCzorg ? 'ABCzorg' : 'CitoZorg';
+
+    // Check for transition-related keywords
+    const transitionKeywords = ['abcito', 'uitzendkracht', 'uitzend', 'transitie', 'zzp', 'overgang', '1/1/2026', '2026'];
+    const isTransitionRelated = transitionKeywords.some(keyword => 
+      task.title?.toLowerCase().includes(keyword) || 
+      task.description?.toLowerCase().includes(keyword)
+    );
+
+    // Calculate days to transition deadline
+    const transitionDeadline = new Date('2026-01-01');
+    const now = new Date();
+    const daysToTransition = Math.ceil((transitionDeadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    const weeksToTransition = Math.ceil(daysToTransition / 7);
+
+    const prompt = `Je bent een senior consultant bij ${company}, specialist in zorgbemiddeling. Je begrijpt de urgentie van de ZZP naar uitzendkracht transitie en de impact op de omzet.
+
+KRITIEKE CONTEXT ${company}:
+- Per 1/1/2026: ZZP-verbod in de zorg → VERPLICHTE overstap naar uitzendkrachten
+- Huidige omzet: €28.000/week (4000 uur * €7/uur)
+- Risico: 70% omzetdaling = €19.600/week VERLIES zonder actie
+- ABCito-constructie = essentiële oplossing voor omzetbehoud en klanttevredenheid
+- Nog ${daysToTransition} dagen (${weeksToTransition} weken) tot 1/1/2026 deadline
+
+KLANTEN CitoZorg: Prisma (1000 uur/week), SIZA (1200 uur/week), SWZ (900 uur/week), Lunet (700 uur/week)
+KLANTEN ABCzorg: 's Heerenloo, Leger des Heils, Amarant, Pro Persona, Pluryn, Dimence, IrisZorg, + 50 andere zorgorganisaties
 
 Taak Details:
 - Titel: ${taskContext.title}
 - Prioriteit: ${taskContext.priority}
 ${taskContext.dueDate ? `- Deadline: ${new Date(taskContext.dueDate).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}` : ''}
 ${taskContext.nextAction ? `- Volgende actie: ${taskContext.nextAction}` : ''}
-${taskContext.organization ? `- Organisatie: ${taskContext.organization}` : ''}
+${taskContext.organization ? `- Klant: ${taskContext.organization}` : ''}
 ${taskContext.assignee ? `- Toegewezen aan: ${taskContext.assignee}` : ''}
+${taskContext.estimatedValue ? `- Geschatte waarde: €${taskContext.estimatedValue}` : ''}
 
 Score Breakdown:
-- Waarde/Impact: ${Math.round(scoreBreakdown.money * 100)}%
-- Urgentie: ${Math.round(scoreBreakdown.urgency * 100)}%
-- Kwaliteit/Gereedheid: ${Math.round(scoreBreakdown.quality * 100)}%
-- Business Impact: ${Math.round(scoreBreakdown.business * 100)}%
-- Groeipotentie: ${Math.round(scoreBreakdown.growth * 100)}%
+${Object.entries(scoreBreakdown).map(([key, value]) => {
+  const labels: Record<string, string> = {
+    klant_impact: 'Klant Impact',
+    omzet_bescherming: 'Omzet Bescherming',
+    overgang_voorbereiding: 'Transitie Voorbereiding',
+    compliance: 'Compliance',
+    operationeel: 'Operationeel',
+    money: 'Waarde/Impact',
+    urgency: 'Urgentie',
+    quality: 'Kwaliteit',
+    business: 'Business Impact',
+    growth: 'Groei'
+  };
+  return `- ${labels[key] || key}: ${Math.round((value as number) * 100)}%`;
+}).join('\n')}
 
-Geef een concrete, gerichte uitleg die ingaat op:
-1. De belangrijkste reden waarom deze taak nu prioriteit heeft (kijk naar de hoogste score componenten)
-2. Specifieke aspecten van deze taak (gebruik de titel, next_action, deadline)
-3. Wat dit betekent voor de organisatie
+Geef een KORTE, DIRECTE uitleg (maximaal 2-3 zinnen) waarom deze taak nu prioriteit heeft:
 
-Gebruik een directe, duidelijke schrijfstijl in het Nederlands. Begin NIET met "Deze taak" maar ga direct in op de kernreden. Gebruik relevante emoji's (🎯, ⚡, 💰, 📈) om de uitleg visueel aantrekkelijk te maken.
+1. Als het transitie-gerelateerd is (ABCito, uitzendkracht, ZZP): 
+   - Benadruk de 1/1/2026 deadline urgentie
+   - Link aan omzetbeschermingsrisico (€19.600/week)
+   - Gebruik emoji's: ⚠️ 🗓️ 💰
 
-Voorbeeld formaat:
-"🎯 [Concrete reden waarom urgent]. [Specifiek detail over deze taak]. [Impact voor organisatie]."`;
+2. Als het klant-specifiek is (Prisma, SIZA, SWZ, etc.):
+   - Noem de klant bij naam
+   - Kwantificeer de impact (uren/week, omzet)
+   - Gebruik emoji's: 🏥 ⚡ 💼
+
+3. Als het omzetbeschermend is:
+   - Vermeld het concrete bedrag
+   - Link aan klantbehoud
+   - Gebruik emoji's: 💰 📈 🎯
+
+Schrijfstijl: Direct, resultaatgericht, urgentie-gedreven, geen abstracte taal.
+
+FOUT: "Deze taak is belangrijk omdat..."
+GOED: "⚠️ Prisma heeft 25 uitzendkrachten nodig voor week 52. Zonder snelle actie loopt CitoZorg €3.500 omzet mis. ABCito-constructie moet vóór 1/1/2026 operationeel zijn."`;
 
     console.log("Calling Lovable AI with task:", task.title);
 

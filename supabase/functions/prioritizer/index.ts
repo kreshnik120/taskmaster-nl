@@ -9,22 +9,32 @@ const corsHeaders = {
 // Types
 type Priority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 type ScoreBreakdown = {
-  money: number;
-  urgency: number;
-  quality: number;
-  business: number;
-  growth: number;
+  klant_impact?: number;
+  omzet_bescherming?: number;
+  overgang_voorbereiding?: number;
+  compliance?: number;
+  operationeel?: number;
+  // Legacy fields for backwards compatibility
+  money?: number;
+  urgency?: number;
+  quality?: number;
+  business?: number;
+  growth?: number;
 };
 
 type TaskInput = {
   id: string;
   title: string;
+  description?: string;
   priority: Priority;
   due_at: string | null;
   start_at: string | null;
   estimate_min: number | null;
   next_action: string | null;
   org_id: string;
+  client_id?: string | null;
+  revenue_impact_eur?: number | null;
+  transition_related?: boolean | null;
   metadata?: {
     estimated_value_eur?: number;
     complexity_score?: number;
@@ -41,6 +51,31 @@ type ScoreOutput = {
   label: "NORMAL" | "CRITICAL" | "LOW_PRIORITY";
 };
 
+// Default state with ABCzorg/CitoZorg specific weights
+const DEFAULT_STATE_CITOZORG = {
+  weights: {
+    w_klant_impact: 0.50,           // Prisma/SIZA/SWZ/Lunet impact
+    w_omzet_bescherming: 0.25,      // €19.600/week risk protection
+    w_overgang_voorbereiding: 0.15, // ABCito construction / transition
+    w_compliance: 0.07,             // Care standards
+    w_operationeel: 0.03,           // Daily operations
+  },
+  percentiles: {},
+  betas: {},
+};
+
+const DEFAULT_STATE_ABCZORG = {
+  weights: {
+    w_klant_diversiteit: 0.35,      // Broad customer portfolio (renamed from klant_impact)
+    w_omzet_bescherming: 0.30,      // €28.000/week scale advantage
+    w_overgang_voorbereiding: 0.20, // Mass transition to temporary workers
+    w_compliance: 0.10,             // Complex compliance
+    w_operationeel: 0.05,           // Daily operations
+  },
+  percentiles: {},
+  betas: {},
+};
+
 // Utility functions
 const clamp = (x: number, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, x));
 
@@ -48,8 +83,20 @@ function getSegmentKey(orgId: string): string {
   return `org_${orgId}`;
 }
 
+// Helper to determine which default state to use
+function getDefaultState(segmentKey: string, taskTitle: string = '') {
+  // Check if ABCzorg or CitoZorg based on segment key or task context
+  const isABCzorg = segmentKey.toLowerCase().includes('abczorg') || 
+                    taskTitle.toLowerCase().includes('abczorg');
+  
+  if (isABCzorg) {
+    return DEFAULT_STATE_ABCZORG;
+  }
+  return DEFAULT_STATE_CITOZORG;
+}
+
 // Initialize or get state from database
-async function getOrCreateState(supabase: any, segmentKey: string) {
+async function getOrCreateState(supabase: any, segmentKey: string, taskTitle: string = '') {
   const { data, error } = await supabase
     .from('prioritizer_state')
     .select('*')
@@ -60,33 +107,39 @@ async function getOrCreateState(supabase: any, segmentKey: string) {
     console.error('Error fetching state:', error);
   }
 
+  const defaultState = getDefaultState(segmentKey, taskTitle);
+
   if (data) {
-    return data;
+    return {
+      ...data,
+      weights: data.weights || defaultState.weights,
+      percentiles: data.percentiles || {},
+      betas: data.betas || {}
+    };
   }
 
   // Create new state
-  const defaultWeights = {
-    w_money: 0.30,
-    w_urgency: 0.35,
-    w_quality: 0.15,
-    w_business: 0.15,
-    w_growth: 0.05
-  };
-
   const { data: newState, error: insertError } = await supabase
     .from('prioritizer_state')
     .insert({
       segment_key: segmentKey,
-      weights: defaultWeights,
+      weights: defaultState.weights,
       betas: {},
-      percentiles: { scores: [], money: [], urgency: [], quality: [], business: [], growth: [] }
+      percentiles: { 
+        scores: [], 
+        klant_impact: [], 
+        omzet_bescherming: [], 
+        overgang_voorbereiding: [], 
+        compliance: [], 
+        operationeel: [] 
+      }
     })
     .select()
     .single();
 
   if (insertError) {
     console.error('Error creating state:', insertError);
-    throw insertError;
+    return defaultState;
   }
 
   return newState;
@@ -120,78 +173,107 @@ function pushRolling(arr: number[], val: number, cap = 500): void {
   if (arr.length > cap) arr.shift();
 }
 
-// Score calculation
+// Score calculation with care brokerage context
 function calculateRawScores(task: TaskInput): ScoreBreakdown {
-  const priorityWeights = { LOW: 0.2, MEDIUM: 0.5, HIGH: 0.8, CRITICAL: 1.0 };
-  
-  // Money component (based on priority and estimated value)
-  const priorityBase = priorityWeights[task.priority];
-  const valueMultiplier = task.metadata?.estimated_value_eur 
-    ? Math.min(task.metadata.estimated_value_eur / 10000, 2.0)
-    : 1.0;
-  const moneyRaw = priorityBase * valueMultiplier;
+  const now = Date.now();
+  const dueDate = task.due_at ? new Date(task.due_at).getTime() : null;
+  const daysToDue = dueDate ? (dueDate - now) / (1000 * 60 * 60 * 24) : 999;
 
-  // Urgency component (based on due date)
-  let urgencyRaw = 0;
-  if (task.due_at) {
-    const now = new Date();
-    const due = new Date(task.due_at);
-    const hoursUntilDue = (due.getTime() - now.getTime()) / (1000 * 60 * 60);
-    
-    if (hoursUntilDue < 0) {
-      // Overdue - critical urgency
-      urgencyRaw = 1.0 + Math.min(Math.abs(hoursUntilDue) / 48, 0.5);
-    } else if (hoursUntilDue <= 24) {
-      urgencyRaw = 0.9;
-    } else if (hoursUntilDue <= 48) {
-      urgencyRaw = 0.7;
-    } else if (hoursUntilDue <= 168) { // 1 week
-      urgencyRaw = 0.5;
-    } else {
-      urgencyRaw = 0.3;
-    }
-  } else {
-    urgencyRaw = 0.2; // No due date
+  // Determine company from task context
+  const isABCzorg = task.title?.toLowerCase().includes('abczorg') || 
+                    task.description?.toLowerCase().includes('abczorg');
+
+  // Check for transition-related keywords
+  const transitionKeywords = ['abcito', 'uitzendkracht', 'uitzend', 'transitie', 'zzp', 'overgang', '1/1/2026', '2026'];
+  const isTransitionRelated = task.transition_related || transitionKeywords.some(keyword => 
+    task.title?.toLowerCase().includes(keyword) || 
+    task.description?.toLowerCase().includes(keyword)
+  );
+
+  // Client impact score (will be enhanced when client data is fetched)
+  let klantImpact = 0.5; // Default
+  if (task.client_id) {
+    // For now, use priority as proxy for client importance
+    const priorityWeights = { LOW: 0.3, MEDIUM: 0.5, HIGH: 0.8, CRITICAL: 1.0 };
+    klantImpact = priorityWeights[task.priority];
   }
 
-  // Quality component (based on next_action and complexity)
-  const hasNextAction = task.next_action ? 0.8 : 0.3;
-  const complexityFactor = task.metadata?.complexity_score ?? 0.5;
-  const qualityRaw = hasNextAction * (1 - complexityFactor * 0.3);
+  // Revenue protection score
+  const revenueImpact = Math.max(0, task.revenue_impact_eur || 0);
+  const omzetBescherming = revenueImpact > 0 ? Math.min(1.0, revenueImpact / 5000) : 0.5;
 
-  // Business impact component
-  const businessRaw = task.metadata?.business_impact_score ?? 0.5;
+  // Transition preparation score
+  let overgangVoorbereiding = isTransitionRelated ? 0.8 : 0.3;
+  
+  // Add urgency boost based on 1/1/2026 deadline
+  const transitionDeadline = new Date('2026-01-01').getTime();
+  const daysToTransition = (transitionDeadline - now) / (1000 * 60 * 60 * 24);
+  if (daysToTransition < 365 && daysToTransition > 0 && isTransitionRelated) {
+    // Increase urgency as deadline approaches (up to +0.2)
+    overgangVoorbereiding = Math.min(1.0, overgangVoorbereiding + (365 - daysToTransition) / 365 * 0.2);
+  }
 
-  // Growth component (market demand and strategic value)
-  const marketFactor = task.metadata?.market_demand_factor ?? 1.0;
-  const growthRaw = Math.min(marketFactor * 0.5, 1.0);
+  // Compliance score (from business impact)
+  const compliance = task.metadata?.business_impact_score || 0.5;
 
-  return {
-    money: moneyRaw,
-    urgency: urgencyRaw,
-    quality: qualityRaw,
-    business: businessRaw,
-    growth: growthRaw
+  // Operational score (inverse of complexity)
+  const complexity = task.metadata?.complexity_score || 0.5;
+  const operationeel = Math.max(0.1, 1 - complexity);
+
+  // Calculate urgency from deadline
+  let urgency = 0.3;
+  if (daysToDue < 999) {
+    if (daysToDue <= 0) urgency = 1.0;
+    else if (daysToDue <= 1) urgency = 0.9;
+    else if (daysToDue <= 3) urgency = 0.7;
+    else if (daysToDue <= 7) urgency = 0.5;
+    else if (daysToDue <= 14) urgency = 0.4;
+    else urgency = 0.3;
+  }
+
+  // Boost urgency for transition tasks
+  if (isTransitionRelated) {
+    urgency = Math.max(urgency, 0.7);
+  }
+
+  return { 
+    klant_impact: klantImpact, 
+    omzet_bescherming: omzetBescherming, 
+    overgang_voorbereiding: overgangVoorbereiding, 
+    compliance, 
+    operationeel,
+    // Include urgency separately for label determination
+    urgency
   };
 }
 
 function computeWSJF(breakdown: ScoreBreakdown, weights: any, estimateMin: number | null): number {
-  const { money, urgency, quality, business, growth } = breakdown;
+  // Calculate weighted components
+  let totalValue = 0;
   
-  // Cost of delay
-  const CoD = (
-    weights.w_money * money +
-    weights.w_urgency * urgency +
-    weights.w_quality * quality +
-    weights.w_business * business +
-    weights.w_growth * growth
-  );
+  // Map weight keys to breakdown keys
+  const weightMapping: Record<string, string> = {
+    w_klant_impact: 'klant_impact',
+    w_klant_diversiteit: 'klant_impact', // ABCzorg uses this name but same metric
+    w_omzet_bescherming: 'omzet_bescherming',
+    w_overgang_voorbereiding: 'overgang_voorbereiding',
+    w_compliance: 'compliance',
+    w_operationeel: 'operationeel'
+  };
+
+  for (const [weightKey, weight] of Object.entries(weights)) {
+    const breakdownKey = weightMapping[weightKey as string];
+    if (breakdownKey && breakdown[breakdownKey as keyof ScoreBreakdown] !== undefined) {
+      const rawScore = breakdown[breakdownKey as keyof ScoreBreakdown] as number;
+      totalValue += rawScore * (weight as number);
+    }
+  }
 
   // Job size (duration in hours)
   const jobSize = Math.max(0.5, (estimateMin ?? 60) / 60);
 
   // WSJF = Cost of Delay / Job Size
-  return CoD / jobSize;
+  return totalValue / jobSize;
 }
 
 serve(async (req) => {
@@ -216,9 +298,16 @@ serve(async (req) => {
 
     // Get or create state for the first task's org
     const segmentKey = getSegmentKey(tasks[0].org_id);
-    const state = await getOrCreateState(supabaseClient, segmentKey);
+    const state = await getOrCreateState(supabaseClient, segmentKey, tasks[0].title);
     const weights = state.weights;
-    const percentiles = state.percentiles;
+    const percentiles = state.percentiles || {
+      scores: [],
+      klant_impact: [],
+      omzet_bescherming: [],
+      overgang_voorbereiding: [],
+      compliance: [],
+      operationeel: []
+    };
 
     // Calculate raw scores and update percentiles
     const results: ScoreOutput[] = [];
@@ -227,33 +316,51 @@ serve(async (req) => {
       const rawBreakdown = calculateRawScores(task);
       
       // Store raw values for percentile calculation
-      pushRolling(percentiles.money, rawBreakdown.money);
-      pushRolling(percentiles.urgency, rawBreakdown.urgency);
-      pushRolling(percentiles.quality, rawBreakdown.quality);
-      pushRolling(percentiles.business, rawBreakdown.business);
-      pushRolling(percentiles.growth, rawBreakdown.growth);
+      if (rawBreakdown.klant_impact !== undefined) {
+        pushRolling(percentiles.klant_impact || [], rawBreakdown.klant_impact);
+      }
+      if (rawBreakdown.omzet_bescherming !== undefined) {
+        pushRolling(percentiles.omzet_bescherming || [], rawBreakdown.omzet_bescherming);
+      }
+      if (rawBreakdown.overgang_voorbereiding !== undefined) {
+        pushRolling(percentiles.overgang_voorbereiding || [], rawBreakdown.overgang_voorbereiding);
+      }
+      if (rawBreakdown.compliance !== undefined) {
+        pushRolling(percentiles.compliance || [], rawBreakdown.compliance);
+      }
+      if (rawBreakdown.operationeel !== undefined) {
+        pushRolling(percentiles.operationeel || [], rawBreakdown.operationeel);
+      }
 
       // Normalize components
-      const normalized = {
-        money: normByP10P90(percentiles.money, rawBreakdown.money),
-        urgency: normByP10P90(percentiles.urgency, rawBreakdown.urgency),
-        quality: normByP10P90(percentiles.quality, rawBreakdown.quality),
-        business: normByP10P90(percentiles.business, rawBreakdown.business),
-        growth: normByP10P90(percentiles.growth, rawBreakdown.growth)
+      const normalized: ScoreBreakdown = {
+        klant_impact: normByP10P90(percentiles.klant_impact || [], rawBreakdown.klant_impact || 0.5),
+        omzet_bescherming: normByP10P90(percentiles.omzet_bescherming || [], rawBreakdown.omzet_bescherming || 0.5),
+        overgang_voorbereiding: normByP10P90(percentiles.overgang_voorbereiding || [], rawBreakdown.overgang_voorbereiding || 0.5),
+        compliance: normByP10P90(percentiles.compliance || [], rawBreakdown.compliance || 0.5),
+        operationeel: normByP10P90(percentiles.operationeel || [], rawBreakdown.operationeel || 0.5)
       };
 
       // Calculate WSJF
       const wsjf = computeWSJF(normalized, weights, task.estimate_min);
-      pushRolling(percentiles.scores, wsjf);
+      pushRolling(percentiles.scores || [], wsjf);
 
       // Normalize final score to 0-100
-      const priorityScore = Math.round(100 * normByP10P90(percentiles.scores, wsjf));
+      const priorityScore = Math.round(100 * normByP10P90(percentiles.scores || [], wsjf));
 
       // Determine label
       let label: "NORMAL" | "CRITICAL" | "LOW_PRIORITY" = "NORMAL";
-      if (priorityScore >= 90 || (rawBreakdown.urgency >= 1.0 && task.priority === "CRITICAL")) {
+      
+      // Check for transition-related critical tasks
+      const transitionKeywords = ['abcito', 'uitzendkracht', 'uitzend', 'transitie', 'zzp', 'overgang', '1/1/2026', '2026'];
+      const isTransitionRelated = task.transition_related || transitionKeywords.some(keyword => 
+        task.title?.toLowerCase().includes(keyword) || 
+        task.description?.toLowerCase().includes(keyword)
+      );
+      
+      if (priorityScore >= 85 || isTransitionRelated || (rawBreakdown.urgency && rawBreakdown.urgency >= 0.9 && task.priority === "CRITICAL")) {
         label = "CRITICAL";
-      } else if (priorityScore < 20) {
+      } else if (priorityScore < 25) {
         label = "LOW_PRIORITY";
       }
 
