@@ -249,6 +249,21 @@ BELANGRIJK:
 - Als je een taak aanmaakt, geef het task ID terug
 - Als informatie ontbreekt, gebruik slimme defaults (bijv. MEDIUM priority)
 
+DATUM & TIJD RICHTLIJNEN:
+- Ken ALTIJD zowel start_at als due_at toe wanneer je een taak aanmaakt
+- Als gebruiker zegt "voeg taak toe", gebruik vandaag als start_at tenzij anders aangegeven
+- Voor "morgen", gebruik morgen 09:00 als start_at
+- Voor "deze week", gebruik een passende dag deze week
+- Gebruik ISO 8601 formaat: YYYY-MM-DDTHH:mm:ss+02:00 (Nederlandse tijdzone)
+- Taken zonder start_at of due_at zijn NIET zichtbaar in de kalender!
+
+PRIORITEIT RICHTLIJNEN:
+- Gebruik ALLEEN: LOW, MEDIUM, HIGH, of CRITICAL
+- MEDIUM is de standaard voor normale taken
+- HIGH voor urgente taken
+- CRITICAL voor zeer kritieke taken
+- LOW voor niet-urgente taken
+
 JOUW GEDRAG:
 - Spreek Nederlands en gebruik emoji's 🎯📊💡 waar passend
 - Wees direct en actiegericht
@@ -283,8 +298,9 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
             properties: {
               title: { type: "string", description: "Titel van de taak" },
               description: { type: "string", description: "Gedetailleerde beschrijving van de taak" },
-              priority: { type: "string", enum: ["LOW", "MEDIUM", "HIGH"], description: "Prioriteit van de taak" },
+              priority: { type: "string", enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"], description: "Prioriteit van de taak (gebruik LOW, MEDIUM, HIGH, of CRITICAL)" },
               due_at: { type: "string", description: "Deadline in ISO 8601 formaat (optioneel)" },
+              start_at: { type: "string", description: "Start datum/tijd in ISO 8601 formaat (optioneel, maar aanbevolen voor kalender zichtbaarheid)" },
               project_id: { type: "string", description: "UUID van het project (optioneel)" },
               client_id: { type: "string", description: "UUID van de client (optioneel)" },
               assignee_id: { type: "string", description: "UUID van de toegewezen persoon (optioneel)" }
@@ -304,7 +320,8 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
               task_id: { type: "string", description: "UUID van de taak om te wijzigen" },
               title: { type: "string", description: "Nieuwe titel (optioneel)" },
               description: { type: "string", description: "Nieuwe beschrijving (optioneel)" },
-              priority: { type: "string", enum: ["LOW", "MEDIUM", "HIGH"], description: "Nieuwe prioriteit (optioneel)" },
+              priority: { type: "string", enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"], description: "Nieuwe prioriteit (gebruik LOW, MEDIUM, HIGH, of CRITICAL)" },
+              start_at: { type: "string", description: "Nieuwe start datum/tijd in ISO 8601 formaat (optioneel)" },
               due_at: { type: "string", description: "Nieuwe deadline in ISO 8601 formaat (optioneel)" },
               completed_at: { type: "string", description: "Completion timestamp in ISO 8601 formaat om taak af te ronden (optioneel)" }
             },
@@ -429,13 +446,34 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
 
                       switch (toolCall.function.name) {
                         case "create_task":
+                          // Normalize priority (handle NORMAL -> MEDIUM mapping)
+                          let normalizedPriority = (args.priority || "MEDIUM").toUpperCase();
+                          if (normalizedPriority === "NORMAL") normalizedPriority = "MEDIUM";
+                          if (!["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(normalizedPriority)) {
+                            normalizedPriority = "MEDIUM";
+                          }
+
+                          // Smart date defaults: if due_at is set but start_at isn't, set start_at to today
+                          let startAt = args.start_at || null;
+                          const dueAt = args.due_at || null;
+                          
+                          if (dueAt && !startAt) {
+                            // If only due_at is provided, set start_at to now (for calendar visibility)
+                            startAt = new Date().toISOString();
+                          } else if (!dueAt && !startAt) {
+                            // If neither is provided, set both to today (for "Mijn Dag" context)
+                            const today = new Date();
+                            startAt = today.toISOString();
+                          }
+
                           const { data: newTask, error: createError } = await supabaseClient
                             .from("tasks")
                             .insert({
                               title: args.title,
                               description: args.description || null,
-                              priority: args.priority || "MEDIUM",
-                              due_at: args.due_at || null,
+                              priority: normalizedPriority,
+                              due_at: dueAt,
+                              start_at: startAt,
                               project_id: args.project_id || null,
                               client_id: args.client_id || null,
                               assignee_id: args.assignee_id || null,
@@ -446,14 +484,30 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             .single();
 
                           if (createError) throw createError;
-                          result = { success: true, task_id: newTask.id, message: `Taak "${args.title}" succesvol aangemaakt met ID ${newTask.sequence_number || newTask.id}` };
+                          
+                          const dateInfo = startAt ? ` (start: ${new Date(startAt).toLocaleString('nl-NL')})` : '';
+                          result = { 
+                            success: true, 
+                            task_id: newTask.id, 
+                            message: `✅ Taak "${args.title}" succesvol aangemaakt met ID ${newTask.sequence_number || newTask.id}${dateInfo}. Deze taak is nu zichtbaar in de kalender!` 
+                          };
                           break;
 
                         case "update_task":
                           const updateData: any = {};
                           if (args.title) updateData.title = args.title;
                           if (args.description !== undefined) updateData.description = args.description;
-                          if (args.priority) updateData.priority = args.priority;
+                          
+                          // Normalize priority
+                          if (args.priority) {
+                            let normalizedUpdatePriority = args.priority.toUpperCase();
+                            if (normalizedUpdatePriority === "NORMAL") normalizedUpdatePriority = "MEDIUM";
+                            if (["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(normalizedUpdatePriority)) {
+                              updateData.priority = normalizedUpdatePriority;
+                            }
+                          }
+                          
+                          if (args.start_at !== undefined) updateData.start_at = args.start_at;
                           if (args.due_at !== undefined) updateData.due_at = args.due_at;
                           if (args.completed_at !== undefined) updateData.completed_at = args.completed_at;
 
