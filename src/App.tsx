@@ -28,7 +28,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
-          <Route path="/kanban" element={<Kanban />} />
+          <Route path="/kanban/:taskId?" element={<Kanban />} />
           <Route path="/lijst" element={<Lijst />} />
           <Route path="/kalender" element={<Kalender />} />
           <Route path="/tijdregistratie" element={<Tijdregistratie />} />

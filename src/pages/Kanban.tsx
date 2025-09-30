@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { TaskCard } from "@/components/TaskCard";
@@ -46,6 +46,7 @@ const Kanban = () => {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const navigate = useNavigate();
+  const { taskId } = useParams();
 
   useEffect(() => {
     // Check authentication
@@ -350,6 +351,21 @@ const Kanban = () => {
   const handleTaskUpdated = () => {
     loadData();
   };
+
+  // Auto-open task modal from URL parameter
+  useEffect(() => {
+    if (taskId && tasks.length > 0 && !loading) {
+      const task = tasks.find((t) => t.id === taskId);
+      if (task) {
+        setSelectedTask(task);
+        setDetailModalOpen(true);
+        toast.success("Navigeren naar taak...");
+      } else {
+        toast.error("Taak niet gevonden");
+        navigate("/kanban");
+      }
+    }
+  }, [taskId, tasks, loading, navigate]);
 
   if (loading || !user) {
     return (

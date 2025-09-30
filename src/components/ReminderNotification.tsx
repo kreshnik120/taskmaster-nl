@@ -59,7 +59,7 @@ export const ReminderNotification = ({
   }, [reminder]);
 
   const handleGoToTask = () => {
-    navigate(`/kanban`);
+    navigate(`/kanban/${reminder.task_id}`);
     onClose();
   };
 
