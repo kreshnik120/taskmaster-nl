@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { format, startOfWeek, addDays, isSameDay, parseISO } from "date-fns";
+import { format, startOfWeek, addDays, isSameDay, parseISO, getWeek } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Loader2, ChevronLeft, ChevronRight, User, Bell, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -258,7 +258,9 @@ export default function Kalender() {
         <AppSidebar />
         <main className="flex-1 overflow-auto bg-background p-6">
           <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
-            <h1 className="text-3xl font-bold">Kalender</h1>
+            <h1 className="text-3xl font-bold">
+              Kalender - {format(currentWeekStart, "MMMM yyyy", { locale: nl })}, Week {getWeek(currentWeekStart, { locale: nl })}
+            </h1>
             <div className="flex items-center gap-4 flex-wrap">
               <ToggleGroup type="single" value={viewMode} onValueChange={(value) => value && setViewMode(value as "5" | "7")}>
                 <ToggleGroupItem value="5" aria-label="Werkweek" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
