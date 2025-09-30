@@ -368,6 +368,23 @@ const Dashboard = () => {
     }
   };
 
+  const handleResetSubtask = async (subtaskId: string) => {
+    try {
+      const { error } = await supabase
+        .from('subtasks')
+        .update({ status: 'pending' })
+        .eq('id', subtaskId);
+
+      if (error) throw error;
+
+      toast.success("Subtaak teruggezet");
+      loadTasks();
+    } catch (error) {
+      console.error('Error resetting subtask:', error);
+      toast.error("Kon subtaak niet terugzetten");
+    }
+  };
+
   const priorityValue: Record<string, number> = {
     LOW: 1,
     MEDIUM: 2,
@@ -595,13 +612,24 @@ const Dashboard = () => {
                                   : 'bg-muted'
                               }`}
                             >
-                              {subtask.status === 'completed' ? (
-                                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                              ) : subtask.status === 'skipped' ? (
-                                <SkipForward className="h-4 w-4 text-gray-400" />
-                              ) : (
-                                <Circle className="h-4 w-4" />
-                              )}
+                              <div className="flex-shrink-0">
+                                {subtask.status === 'completed' ? (
+                                  <CheckCircle2 
+                                    className="h-4 w-4 text-green-600 cursor-pointer hover:text-green-700 hover:scale-110 transition-all" 
+                                    onClick={() => handleResetSubtask(subtask.id)}
+                                  />
+                                ) : subtask.status === 'skipped' ? (
+                                  <SkipForward 
+                                    className="h-4 w-4 text-gray-400 cursor-pointer hover:text-gray-600 hover:scale-110 transition-all" 
+                                    onClick={() => handleResetSubtask(subtask.id)}
+                                  />
+                                ) : (
+                                  <Circle 
+                                    className="h-4 w-4 cursor-pointer hover:text-primary hover:scale-110 transition-all" 
+                                    onClick={() => handleCompleteSubtask(subtask.id)}
+                                  />
+                                )}
+                              </div>
                               <span className="flex-1">{subtask.title}</span>
                               {subtask.status === 'active' && (
                                 <div className="flex gap-1">

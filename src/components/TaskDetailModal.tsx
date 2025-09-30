@@ -160,6 +160,29 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
     }
   };
 
+  const handleResetStep = async (subtaskId: string) => {
+    try {
+      const { error } = await supabase
+        .from('subtasks')
+        .update({ status: 'pending' })
+        .eq('id', subtaskId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Stap teruggezet",
+        description: "Processtap is teruggezet naar pending"
+      });
+    } catch (error) {
+      console.error('Error resetting step:', error);
+      toast({
+        title: "Fout",
+        description: "Kon stap niet terugzetten",
+        variant: "destructive"
+      });
+    }
+  };
+
   if (!task) return null;
 
   const priorityInfo = priorityConfig[task.priority as keyof typeof priorityConfig] || priorityConfig.MEDIUM;
@@ -265,6 +288,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                     subtasks={subtasks}
                     onCompleteStep={handleCompleteStep}
                     onSkipStep={handleSkipStep}
+                    onResetStep={handleResetStep}
                   />
                 )}
               </div>
