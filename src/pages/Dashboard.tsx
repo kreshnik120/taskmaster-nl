@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -73,6 +73,7 @@ const Dashboard = () => {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
+  const lastUserActionRef = useRef<number>(0);
 
   useEffect(() => {
     loadTasks();
@@ -109,7 +110,12 @@ const Dashboard = () => {
           table: 'subtasks'
         },
         () => {
-          loadTasks();
+          // Only refresh if it's been more than 1 second since last user action
+          // This prevents real-time updates from overriding optimistic updates
+          const timeSinceLastAction = Date.now() - lastUserActionRef.current;
+          if (timeSinceLastAction > 1000) {
+            loadTasks();
+          }
         }
       )
       .subscribe();
@@ -335,6 +341,9 @@ const Dashboard = () => {
   };
 
   const handleCompleteSubtask = async (subtaskId: string) => {
+    // Track user action timestamp
+    lastUserActionRef.current = Date.now();
+    
     // Optimistic update - update local state immediately
     setTasks(prevTasks => 
       prevTasks.map(task => {
@@ -370,6 +379,9 @@ const Dashboard = () => {
   };
 
   const handleSkipSubtask = async (subtaskId: string) => {
+    // Track user action timestamp
+    lastUserActionRef.current = Date.now();
+    
     // Optimistic update
     setTasks(prevTasks => 
       prevTasks.map(task => {
@@ -405,6 +417,9 @@ const Dashboard = () => {
   };
 
   const handleResetSubtask = async (subtaskId: string) => {
+    // Track user action timestamp
+    lastUserActionRef.current = Date.now();
+    
     // Optimistic update
     setTasks(prevTasks => 
       prevTasks.map(task => {
@@ -589,7 +604,7 @@ const Dashboard = () => {
                           <p className="text-sm text-muted-foreground mt-1">{task.next_action}</p>
                         )}
                         {hasSubtasks && (
-                          <Progress value={progressPercentage} className="h-1.5 mt-2" />
+                          <Progress value={progressPercentage} className="h-1.5 mt-2 [&>div]:bg-status-completed [&>div]:transition-all [&>div]:duration-500" />
                         )}
                         {activeTimer && (
                           <p className="text-xs text-primary mt-1">
