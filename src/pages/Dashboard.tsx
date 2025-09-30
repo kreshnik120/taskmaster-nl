@@ -48,6 +48,28 @@ const Dashboard = () => {
     loadTasks();
     loadTodayHours();
     loadCompletedThisWeek();
+
+    // Real-time listener voor taak updates
+    const channel = supabase
+      .channel('dashboard-tasks-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks'
+        },
+        (payload) => {
+          console.log('Task change detected:', payload);
+          loadTasks();
+          loadCompletedThisWeek();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const loadTasks = async () => {
@@ -176,7 +198,7 @@ const Dashboard = () => {
 
   const priorityLabels: Record<string, string> = {
     LOW: "Laag",
-    MEDIUM: "Middel",
+    MEDIUM: "Gemiddeld",
     HIGH: "Hoog",
     CRITICAL: "Kritiek",
   };

@@ -55,6 +55,27 @@ export default function Lijst() {
   useEffect(() => {
     checkAuth();
     fetchTasks();
+
+    // Real-time listener voor taak updates
+    const channel = supabase
+      .channel('lijst-tasks-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks'
+        },
+        (payload) => {
+          console.log('Task change detected:', payload);
+          fetchTasks();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const checkAuth = async () => {

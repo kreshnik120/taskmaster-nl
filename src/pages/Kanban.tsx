@@ -88,6 +88,36 @@ const Kanban = () => {
 
       if (tasksError) throw tasksError;
       setTasks(tasksData || []);
+
+      // Real-time listener voor taak updates
+      const channel = supabase
+        .channel('kanban-tasks-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'tasks'
+          },
+          (payload) => {
+            console.log('Task change detected:', payload);
+            // Herlaad taken bij elke wijziging
+            supabase
+              .from("tasks")
+              .select("*")
+              .is("deleted_at", null)
+              .order("order_key")
+              .then(({ data }) => {
+                if (data) setTasks(data);
+              });
+          }
+        )
+        .subscribe();
+
+      // Cleanup function wordt aangeroepen bij unmount
+      return () => {
+        supabase.removeChannel(channel);
+      };
     } catch (error: any) {
       toast.error("Fout bij laden van gegevens: " + error.message);
     } finally {
