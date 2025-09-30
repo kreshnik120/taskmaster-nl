@@ -97,10 +97,13 @@ const getScoreBreakdown = (task: Task): ScoreBreakdown => {
   };
 };
 
+type FilterType = "achterstallig" | "deze-week" | "met-actie" | null;
+
 export default function Opvolging() {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState<FilterType>(null);
 
   useEffect(() => {
     checkAuth();
@@ -172,13 +175,50 @@ export default function Opvolging() {
       differenceInDays(new Date(t.due_at), new Date()) <= 7
   );
 
-  const focusTasks = [...tasks]
+  const allFocusTasks = [...tasks]
     .map((task) => ({
       ...task,
       focusScore: calculateFocusScore(task),
     }))
     .sort((a, b) => b.focusScore - a.focusScore)
     .slice(0, 10);
+
+  // Filter tasks based on active filter
+  const focusTasks = activeFilter
+    ? allFocusTasks.filter((task) => {
+        if (activeFilter === "achterstallig") {
+          return task.due_at && new Date(task.due_at) < new Date();
+        }
+        if (activeFilter === "deze-week") {
+          return (
+            task.due_at &&
+            new Date(task.due_at) >= new Date() &&
+            differenceInDays(new Date(task.due_at), new Date()) <= 7
+          );
+        }
+        if (activeFilter === "met-actie") {
+          return task.next_action;
+        }
+        return true;
+      })
+    : allFocusTasks;
+
+  const isTaskInCategory = (task: Task, category: FilterType): boolean => {
+    if (category === "achterstallig") {
+      return !!(task.due_at && new Date(task.due_at) < new Date());
+    }
+    if (category === "deze-week") {
+      return !!(
+        task.due_at &&
+        new Date(task.due_at) >= new Date() &&
+        differenceInDays(new Date(task.due_at), new Date()) <= 7
+      );
+    }
+    if (category === "met-actie") {
+      return !!task.next_action;
+    }
+    return false;
+  };
 
   if (loading) {
     return (
@@ -201,7 +241,14 @@ export default function Opvolging() {
           </div>
 
           <div className="mb-6 grid gap-4 md:grid-cols-3">
-            <Card>
+            <Card 
+              className={`cursor-pointer transition-all hover:shadow-md ${
+                activeFilter === "achterstallig" 
+                  ? "ring-2 ring-destructive bg-destructive/5" 
+                  : "hover:bg-muted/50"
+              }`}
+              onClick={() => setActiveFilter(activeFilter === "achterstallig" ? null : "achterstallig")}
+            >
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium">Achterstallig</CardTitle>
                 <AlertCircle className="h-4 w-4 text-destructive" />
@@ -214,7 +261,14 @@ export default function Opvolging() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card 
+              className={`cursor-pointer transition-all hover:shadow-md ${
+                activeFilter === "deze-week" 
+                  ? "ring-2 ring-primary bg-primary/5" 
+                  : "hover:bg-muted/50"
+              }`}
+              onClick={() => setActiveFilter(activeFilter === "deze-week" ? null : "deze-week")}
+            >
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium">Deze week</CardTitle>
                 <Clock className="h-4 w-4 text-primary" />
@@ -227,7 +281,14 @@ export default function Opvolging() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card 
+              className={`cursor-pointer transition-all hover:shadow-md ${
+                activeFilter === "met-actie" 
+                  ? "ring-2 ring-accent bg-accent/5" 
+                  : "hover:bg-muted/50"
+              }`}
+              onClick={() => setActiveFilter(activeFilter === "met-actie" ? null : "met-actie")}
+            >
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium">Met actie</CardTitle>
                 <TrendingUp className="h-4 w-4 text-accent" />
@@ -244,24 +305,49 @@ export default function Opvolging() {
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Top 10 Focus Taken</CardTitle>
-                <CardDescription>
-                  Taken gesorteerd op focus score (prioriteit, deadline, startdatum)
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Top 10 Focus Taken</CardTitle>
+                    <CardDescription>
+                      {activeFilter 
+                        ? `Gefilterd op: ${
+                            activeFilter === "achterstallig" ? "Achterstallige taken" :
+                            activeFilter === "deze-week" ? "Deze week" :
+                            "Taken met actie"
+                          }`
+                        : "Taken gesorteerd op focus score (prioriteit, deadline, startdatum)"
+                      }
+                    </CardDescription>
+                  </div>
+                  {activeFilter && (
+                    <button
+                      onClick={() => setActiveFilter(null)}
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
+                    >
+                      Alle taken tonen
+                    </button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {focusTasks.length === 0 ? (
                     <p className="text-center text-muted-foreground">
-                      Geen taken gevonden
+                      Geen taken gevonden voor dit filter
                     </p>
                   ) : (
                     focusTasks.map((task) => {
                       const breakdown = getScoreBreakdown(task);
+                      const taskHighlightClass = 
+                        activeFilter === "achterstallig" && isTaskInCategory(task, "achterstallig") ? "bg-destructive/10 border-destructive/50" :
+                        activeFilter === "deze-week" && isTaskInCategory(task, "deze-week") ? "bg-primary/10 border-primary/50" :
+                        activeFilter === "met-actie" && isTaskInCategory(task, "met-actie") ? "bg-accent/10 border-accent/50" :
+                        "";
+                      
                       return (
                         <div
                           key={task.id}
-                          className="flex items-center gap-4 rounded-lg border p-4 hover:bg-muted/50 cursor-pointer transition-colors"
+                          className={`flex items-center gap-4 rounded-lg border p-4 hover:bg-muted/50 cursor-pointer transition-all ${taskHighlightClass}`}
                         >
                           <div className="flex-1 space-y-1">
                             <div className="flex items-center gap-2">
