@@ -17,6 +17,7 @@ import { PriorityBadge } from "@/components/PriorityBadge";
 
 interface Task {
   id: string;
+  sequence_number: number;
   title: string;
   priority: string;
   start_at: string | null;
@@ -116,6 +117,7 @@ export default function Lijst() {
         .from("tasks")
         .select(`
           id,
+          sequence_number,
           title,
           priority,
           start_at,
@@ -128,7 +130,7 @@ export default function Lijst() {
           profiles:profiles!tasks_assignee_id_fkey(name)
         `)
         .is("deleted_at", null)
-        .order("start_at", { ascending: true });
+        .order("sequence_number", { ascending: true });
 
       if (error) throw error;
       setTasks(data || []);
@@ -341,7 +343,7 @@ export default function Lijst() {
                               }`}
                             >
                             <TableCell className="font-mono text-xs text-muted-foreground">
-                              {task.id.substring(0, 6)}
+                              {String(task.sequence_number).padStart(2, '0')}
                             </TableCell>
                             <TableCell className="font-medium">{task.title}</TableCell>
                       <TableCell>
