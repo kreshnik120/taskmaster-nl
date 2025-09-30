@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { useToast } from "@/hooks/use-toast";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 interface Task {
   id: string;
@@ -41,6 +42,7 @@ export default function Kalender() {
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { locale: nl, weekStartsOn: 1 }));
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"5" | "7">("5"); // 5-dag of 7-dag weergave
 
   useEffect(() => {
     checkAuth();
@@ -129,7 +131,8 @@ export default function Kalender() {
     }
   };
 
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
+  const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
+  const weekDays = viewMode === "5" ? allWeekDays.slice(0, 5) : allWeekDays; // Ma-Vr of Ma-Zo
 
   const getTasksForDay = (day: Date) => {
     return tasks.filter((task) => {
@@ -174,22 +177,32 @@ export default function Kalender() {
       <div className="flex min-h-screen w-full">
         <AppSidebar />
         <main className="flex-1 overflow-auto bg-background p-6">
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
             <h1 className="text-3xl font-bold">Kalender</h1>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" size="sm" onClick={goToToday}>
-                Vandaag
-              </Button>
-              <Button variant="outline" size="sm" onClick={goToNextWeek}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+            <div className="flex items-center gap-4 flex-wrap">
+              <ToggleGroup type="single" value={viewMode} onValueChange={(value) => value && setViewMode(value as "5" | "7")}>
+                <ToggleGroupItem value="5" aria-label="Werkweek" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+                  Werkweek (Ma-Vr)
+                </ToggleGroupItem>
+                <ToggleGroupItem value="7" aria-label="Volle week" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+                  Volle week (Ma-Zo)
+                </ToggleGroupItem>
+              </ToggleGroup>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={goToToday}>
+                  Vandaag
+                </Button>
+                <Button variant="outline" size="sm" onClick={goToNextWeek}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-7 gap-2">
+          <div className={`grid ${viewMode === "5" ? "grid-cols-5" : "grid-cols-7"} gap-4`}>
             {weekDays.map((day) => {
               const dayTasks = getTasksForDay(day);
               const isToday = isSameDay(day, new Date());
@@ -197,7 +210,7 @@ export default function Kalender() {
               return (
                 <div
                   key={day.toISOString()}
-                  className={`min-h-[400px] rounded-lg border bg-card p-4 ${
+                  className={`min-h-[500px] rounded-lg border bg-card p-4 ${
                     isToday ? "border-primary ring-2 ring-primary/20" : ""
                   }`}
                 >
@@ -226,10 +239,10 @@ export default function Kalender() {
                           <div
                             key={task.id}
                             onClick={() => handleTaskClick(task)}
-                            className={`rounded-md border-l-4 ${priorityInfo.color} bg-card p-3 hover:shadow-md cursor-pointer transition-all duration-200 space-y-2`}
+                            className={`rounded-md border-l-4 ${priorityInfo.color} bg-card p-3 hover:shadow-lg hover:scale-[1.02] cursor-pointer transition-all duration-200 space-y-2`}
                           >
                             <div className="flex items-start justify-between gap-2">
-                              <p className="text-sm font-semibold line-clamp-2 flex-1">{task.title}</p>
+                              <p className="text-sm font-semibold flex-1 break-words">{task.title}</p>
                               <Badge variant={priorityInfo.variant} className="text-xs shrink-0">
                                 {priorityInfo.label}
                               </Badge>
@@ -256,7 +269,7 @@ export default function Kalender() {
                             </div>
                             
                             {task.next_action && (
-                              <p className="text-xs text-primary font-medium truncate">
+                              <p className="text-xs text-primary font-medium break-words">
                                 → {task.next_action}
                               </p>
                             )}
