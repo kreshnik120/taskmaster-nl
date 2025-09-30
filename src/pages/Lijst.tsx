@@ -26,8 +26,16 @@ interface Task {
   completed_at: string | null;
   org_id: string;
   assignee_id: string | null;
+  accepted_at: string | null;
+  accepted_by: string | null;
   organizations: { name: string } | null;
   profiles: { name: string | null } | null;
+  accepted_by_profile: { name: string | null }[] | null;
+}
+
+interface Profile {
+  id: string;
+  name: string | null;
 }
 
 const priorityLabels = {
@@ -48,11 +56,15 @@ export default function Lijst() {
   const [editingValue, setEditingValue] = useState<string>("");
   const [activeTimers, setActiveTimers] = useState<Record<string, { user_id: string; start: string; profiles: { name: string | null } | null }>>({});
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [editingAssignee, setEditingAssignee] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
     checkAuth();
     fetchTasks();
     loadActiveTimers();
+    loadProfiles();
 
     // Real-time listener voor taak updates
     const tasksChannel = supabase
@@ -108,6 +120,22 @@ export default function Lijst() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       navigate("/auth");
+    } else {
+      setCurrentUserId(session.user.id);
+    }
+  };
+
+  const loadProfiles = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, name")
+        .order("name");
+      
+      if (error) throw error;
+      setProfiles(data || []);
+    } catch (error) {
+      console.error("Error loading profiles:", error);
     }
   };
 
@@ -126,8 +154,11 @@ export default function Lijst() {
           completed_at,
           org_id,
           assignee_id,
+          accepted_at,
+          accepted_by,
           organizations(name),
-          profiles:profiles!tasks_assignee_id_fkey(name)
+          profiles:profiles!tasks_assignee_id_fkey(name),
+          accepted_by_profile:profiles!tasks_accepted_by_fkey(name)
         `)
         .is("deleted_at", null)
         .order("sequence_number", { ascending: true });
@@ -216,6 +247,85 @@ export default function Lijst() {
       setEditingAction(null);
       setEditingValue("");
     }
+  };
+
+  const handleAcceptTask = async (taskId: string) => {
+    if (!currentUserId) return;
+    
+    try {
+      const { error } = await supabase
+        .from("tasks")
+        .update({ 
+          accepted_by: currentUserId,
+          accepted_at: new Date().toISOString(),
+          assignee_id: currentUserId
+        })
+        .eq("id", taskId);
+
+      if (error) throw error;
+
+      toast.success("Taak geaccepteerd");
+      fetchTasks();
+    } catch (error) {
+      console.error("Error accepting task:", error);
+      toast.error("Fout bij accepteren van taak");
+    }
+  };
+
+  const handleUpdateAssignee = async (taskId: string, assigneeId: string | null) => {
+    try {
+      const updates: any = { assignee_id: assigneeId || null };
+      
+      // Als er niemand toegewezen wordt, reset ook de acceptatie
+      if (!assigneeId) {
+        updates.accepted_by = null;
+        updates.accepted_at = null;
+      }
+
+      const { error } = await supabase
+        .from("tasks")
+        .update(updates)
+        .eq("id", taskId);
+
+      if (error) throw error;
+
+      toast.success("Verantwoordelijke bijgewerkt");
+      setEditingAssignee(null);
+      fetchTasks();
+    } catch (error) {
+      console.error("Error updating assignee:", error);
+      toast.error("Fout bij bijwerken verantwoordelijke");
+    }
+  };
+
+  const getTaskStatus = (task: Task) => {
+    if (task.accepted_by) return "accepted";
+    if (task.assignee_id) return "assigned";
+    return "unassigned";
+  };
+
+  const getStatusBadge = (task: Task) => {
+    const status = getTaskStatus(task);
+    
+    if (status === "accepted") {
+      return (
+        <Badge variant="default" className="bg-green-600">
+          Geaccepteerd
+        </Badge>
+      );
+    }
+    if (status === "assigned") {
+      return (
+        <Badge variant="secondary">
+          Toegewezen
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="outline">
+        Niet toegewezen
+      </Badge>
+    );
   };
 
   const filteredTasks = tasks.filter((task) => {
@@ -317,11 +427,13 @@ export default function Lijst() {
                         <TableHead>Taak</TableHead>
                         <TableHead>Organisatie</TableHead>
                         <TableHead>Verantwoordelijke</TableHead>
+                        <TableHead>Status</TableHead>
                         <TableHead>Prioriteit</TableHead>
                         <TableHead>Start</TableHead>
                         <TableHead>Eind</TableHead>
                         <TableHead className="min-w-[200px]">Volgende actie</TableHead>
                         <TableHead className="w-[120px]">Timer</TableHead>
+                        <TableHead className="w-[100px]">Actie</TableHead>
                         <TableHead className="w-[80px] text-center">Afgerond</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -350,7 +462,36 @@ export default function Lijst() {
                         {task.organizations?.name || "-"}
                       </TableCell>
                       <TableCell>
-                        {task.profiles?.name || "-"}
+                        {editingAssignee === task.id ? (
+                          <Select
+                            value={task.assignee_id || "none"}
+                            onValueChange={(value) => {
+                              handleUpdateAssignee(task.id, value === "none" ? null : value);
+                            }}
+                          >
+                            <SelectTrigger className="w-[180px] h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Niet toegewezen</SelectItem>
+                              {profiles.map((profile) => (
+                                <SelectItem key={profile.id} value={profile.id}>
+                                  {profile.name || "Naamloos"}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <div 
+                            className="cursor-pointer hover:bg-muted/50 rounded px-2 py-1"
+                            onClick={() => setEditingAssignee(task.id)}
+                          >
+                            {task.profiles?.name || "-"}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {getStatusBadge(task)}
                       </TableCell>
                       <TableCell>
                         <PriorityBadge taskId={task.id} priority={task.priority} size="md" />
@@ -402,6 +543,19 @@ export default function Lijst() {
                                 </Badge>
                               ) : (
                                 <span className="text-muted-foreground text-xs">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {!task.accepted_by && task.assignee_id && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleAcceptTask(task.id)}
+                                  className="h-8 text-xs"
+                                >
+                                  <Check className="h-3 w-3 mr-1" />
+                                  Accepteren
+                                </Button>
                               )}
                             </TableCell>
                             <TableCell className="text-center">
