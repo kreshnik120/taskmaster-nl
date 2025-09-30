@@ -2,11 +2,29 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Calendar, CheckCircle2, Clock } from "lucide-react";
+import { Plus, Calendar, CheckCircle2, Clock, Trash2, ArrowUpDown } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { TaskDialog } from "@/components/TaskDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
 
 interface Task {
   id: string;
@@ -20,6 +38,9 @@ const Dashboard = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<"high-to-low" | "low-to-high">("high-to-low");
 
   useEffect(() => {
     loadTasks();
@@ -42,6 +63,48 @@ const Dashboard = () => {
       setLoading(false);
     }
   };
+
+  const handleDeleteTask = async () => {
+    if (!taskToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from("tasks")
+        .delete()
+        .eq("id", taskToDelete);
+
+      if (error) throw error;
+
+      toast.success("Taak verwijderd");
+      loadTasks();
+    } catch (error) {
+      console.error("Error deleting task:", error);
+      toast.error("Fout bij verwijderen van taak");
+    } finally {
+      setDeleteDialogOpen(false);
+      setTaskToDelete(null);
+    }
+  };
+
+  const openDeleteDialog = (taskId: string) => {
+    setTaskToDelete(taskId);
+    setDeleteDialogOpen(true);
+  };
+
+  const priorityValue: Record<string, number> = {
+    LOW: 1,
+    MEDIUM: 2,
+    HIGH: 3,
+    CRITICAL: 4,
+  };
+
+  const sortedTasks = [...tasks].sort((a, b) => {
+    if (sortOrder === "high-to-low") {
+      return priorityValue[b.priority] - priorityValue[a.priority];
+    } else {
+      return priorityValue[a.priority] - priorityValue[b.priority];
+    }
+  });
 
   const priorityColors: Record<string, string> = {
     LOW: "text-priority-low",
@@ -107,8 +170,22 @@ const Dashboard = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle>Focus taken</CardTitle>
-          <CardDescription>De belangrijkste taken om vandaag aan te werken</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Focus taken</CardTitle>
+              <CardDescription>De belangrijkste taken om vandaag aan te werken</CardDescription>
+            </div>
+            <Select value={sortOrder} onValueChange={(value: any) => setSortOrder(value)}>
+              <SelectTrigger className="w-[180px]">
+                <ArrowUpDown className="h-4 w-4 mr-2" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="high-to-low">Hoog → Laag</SelectItem>
+                <SelectItem value="low-to-high">Laag → Hoog</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -119,10 +196,10 @@ const Dashboard = () => {
             </p>
           ) : (
             <div className="space-y-3">
-              {tasks.map((task) => (
+              {sortedTasks.map((task) => (
                 <div
                   key={task.id}
-                  className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+                  className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
                 >
                   <div className="flex-1">
                     <p className="font-medium">{task.title}</p>
@@ -139,6 +216,14 @@ const Dashboard = () => {
                         {format(new Date(task.due_at), "d MMM", { locale: nl })}
                       </span>
                     )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => openDeleteDialog(task.id)}
+                      className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -155,6 +240,23 @@ const Dashboard = () => {
         }}
         columnId={undefined}
       />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Taak verwijderen</AlertDialogTitle>
+            <AlertDialogDescription>
+              Weet je zeker dat je deze taak wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteTask} className="bg-destructive hover:bg-destructive/90">
+              Verwijderen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
