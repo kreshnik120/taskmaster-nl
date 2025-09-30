@@ -44,6 +44,7 @@ const Dashboard = () => {
   const [todayHours, setTodayHours] = useState<string>("0u");
   const [completedThisWeek, setCompletedThisWeek] = useState<number>(0);
   const [activeTimers, setActiveTimers] = useState<Record<string, { user_id: string; start: string; profiles: { name: string | null } | null }>>({});
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     loadTasks();
@@ -91,6 +92,17 @@ const Dashboard = () => {
       supabase.removeChannel(timeEntriesChannel);
     };
   }, []);
+
+  // Live timer update elke seconde
+  useEffect(() => {
+    if (Object.keys(activeTimers).length > 0) {
+      const interval = setInterval(() => {
+        setCurrentTime(new Date());
+      }, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [activeTimers]);
 
   const loadTasks = async () => {
     try {
@@ -161,12 +173,13 @@ const Dashboard = () => {
   };
 
   const getRunningTime = (start: string) => {
-    const now = new Date();
+    const now = currentTime;
     const startTime = new Date(start);
-    const minutes = Math.floor((now.getTime() - startTime.getTime()) / 60000);
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return `${hours}u ${mins}m`;
+    const totalSeconds = Math.floor((now.getTime() - startTime.getTime()) / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${hours}u ${minutes}m ${seconds}s`;
   };
 
   const handleDeleteTask = async () => {

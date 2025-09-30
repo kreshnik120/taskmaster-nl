@@ -57,6 +57,7 @@ const Tijdregistratie = () => {
   const [filterPeriod, setFilterPeriod] = useState<string>("today");
   const [totalMinutes, setTotalMinutes] = useState(0);
   const [activeTimers, setActiveTimers] = useState<Record<string, ActiveTimerInfo>>({});
+  const [currentTime, setCurrentTime] = useState(new Date());
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -129,6 +130,17 @@ const Tijdregistratie = () => {
       loadTimeEntries();
     }
   }, [filterPeriod, user]);
+
+  // Live timer update elke seconde
+  useEffect(() => {
+    if (activeTimer || Object.keys(activeTimers).length > 0) {
+      const interval = setInterval(() => {
+        setCurrentTime(new Date());
+      }, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [activeTimer, activeTimers]);
 
   const loadTasks = async () => {
     const { data } = await supabase
@@ -297,11 +309,14 @@ const Tijdregistratie = () => {
   };
 
   const getRunningTime = () => {
-    if (!activeTimer) return "0u 0m";
-    const now = new Date();
+    if (!activeTimer) return "0u 0m 0s";
+    const now = currentTime;
     const start = new Date(activeTimer.start);
-    const minutes = Math.floor((now.getTime() - start.getTime()) / 60000);
-    return formatMinutes(minutes);
+    const totalSeconds = Math.floor((now.getTime() - start.getTime()) / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${hours}u ${minutes}m ${seconds}s`;
   };
 
   if (loading) {
