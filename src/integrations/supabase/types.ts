@@ -243,6 +243,7 @@ export type Database = {
           created_at: string
           id: string
           repeat_interval: string | null
+          shown_at: string | null
           subtask_id: string | null
           task_id: string
           title: string | null
@@ -253,6 +254,7 @@ export type Database = {
           created_at?: string
           id?: string
           repeat_interval?: string | null
+          shown_at?: string | null
           subtask_id?: string | null
           task_id: string
           title?: string | null
@@ -263,6 +265,7 @@ export type Database = {
           created_at?: string
           id?: string
           repeat_interval?: string | null
+          shown_at?: string | null
           subtask_id?: string | null
           task_id?: string
           title?: string | null
