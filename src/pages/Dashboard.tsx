@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Calendar, CheckCircle2, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, ListTodo } from "lucide-react";
+import { Plus, Calendar, CheckCircle2, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, ListTodo, User } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
@@ -591,6 +591,17 @@ const Dashboard = () => {
                             <Badge variant="outline" className="flex items-center gap-1">
                               <ListTodo className="h-3 w-3" />
                               {task.completed_subtask_count}/{task.subtask_count}
+                            </Badge>
+                          )}
+                          {task.profiles ? (
+                            <Badge variant="secondary" className="flex items-center gap-1">
+                              <User className="h-3 w-3" />
+                              {task.profiles.name || task.profiles.email}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="flex items-center gap-1 text-muted-foreground">
+                              <User className="h-3 w-3" />
+                              Niet toegewezen
                             </Badge>
                           )}
                           {activeTimer && (
