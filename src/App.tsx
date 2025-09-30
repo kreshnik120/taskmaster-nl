@@ -9,6 +9,7 @@ import Auth from "./pages/Auth";
 import Kanban from "./pages/Kanban";
 import Lijst from "./pages/Lijst";
 import Kalender from "./pages/Kalender";
+import Tijdregistratie from "./pages/Tijdregistratie";
 import Opvolging from "./pages/Opvolging";
 import VerwijderdeTaken from "./pages/VerwijderdeTaken";
 import AfgerondeTaken from "./pages/AfgerondeTaken";
@@ -28,6 +29,7 @@ const App = () => (
           <Route path="/kanban" element={<Kanban />} />
           <Route path="/lijst" element={<Lijst />} />
           <Route path="/kalender" element={<Kalender />} />
+          <Route path="/tijdregistratie" element={<Tijdregistratie />} />
           <Route path="/opvolging" element={<Opvolging />} />
           <Route path="/verwijderd" element={<VerwijderdeTaken />} />
           <Route path="/afgerond" element={<AfgerondeTaken />} />

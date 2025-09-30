@@ -41,9 +41,11 @@ const Dashboard = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"high-to-low" | "low-to-high">("high-to-low");
+  const [todayHours, setTodayHours] = useState<string>("0u");
 
   useEffect(() => {
     loadTasks();
+    loadTodayHours();
   }, []);
 
   const loadTasks = async () => {
@@ -62,6 +64,23 @@ const Dashboard = () => {
       console.error("Error loading tasks:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTodayHours = async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const { data } = await supabase
+      .from("time_entries")
+      .select("duration_min")
+      .gte("start", today.toISOString());
+    
+    if (data) {
+      const totalMinutes = data.reduce((sum, entry) => sum + (entry.duration_min || 0), 0);
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      setTodayHours(minutes > 0 ? `${hours}u ${minutes}m` : `${hours}u`);
     }
   };
 
@@ -179,13 +198,16 @@ const Dashboard = () => {
             <p className="text-xs text-muted-foreground">Deze week</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className="cursor-pointer hover:bg-accent/50 transition-colors"
+          onClick={() => window.location.href = '/tijdregistratie'}
+        >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Tijdregistratie</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0u</div>
+            <div className="text-2xl font-bold">{todayHours}</div>
             <p className="text-xs text-muted-foreground">Vandaag gewerkt</p>
           </CardContent>
         </Card>

@@ -1,4 +1,4 @@
-import { Home, Kanban, List, Calendar, BarChart3, Trash2, CheckCircle2, LogOut } from "lucide-react";
+import { Home, Kanban, List, Calendar, Clock, BarChart3, Trash2, CheckCircle2, LogOut } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   Sidebar,
@@ -19,6 +19,7 @@ const menuItems = [
   { title: "Kanban bord", url: "/kanban", icon: Kanban },
   { title: "Lijstweergave", url: "/lijst", icon: List },
   { title: "Kalender", url: "/kalender", icon: Calendar },
+  { title: "Tijdregistratie", url: "/tijdregistratie", icon: Clock },
   { title: "Opvolging", url: "/opvolging", icon: BarChart3 },
   { title: "Afgeronde taken", url: "/afgerond", icon: CheckCircle2 },
   { title: "Verwijderde taken", url: "/verwijderd", icon: Trash2 },
