@@ -211,9 +211,24 @@ const Dashboard = () => {
 
   const handleCompleteTask = async (taskId: string) => {
     try {
+      // Zoek de "Afgerond" kolom
+      const { data: doneColumn } = await supabase
+        .from("columns")
+        .select("id")
+        .eq("status", "DONE")
+        .limit(1)
+        .single();
+
+      const updates: any = { completed_at: new Date().toISOString() };
+      
+      // Synchroniseer column_id met "Afgerond" kolom
+      if (doneColumn) {
+        updates.column_id = doneColumn.id;
+      }
+
       const { error } = await supabase
         .from("tasks")
-        .update({ completed_at: new Date().toISOString() })
+        .update(updates)
         .eq("id", taskId);
 
       if (error) throw error;

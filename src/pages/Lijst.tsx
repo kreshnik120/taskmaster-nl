@@ -197,11 +197,40 @@ export default function Lijst() {
 
   const handleToggleComplete = async (taskId: string, currentStatus: string | null) => {
     try {
+      const updates: any = {
+        completed_at: currentStatus ? null : new Date().toISOString()
+      };
+
+      // Synchroniseer column_id met completion status
+      if (!currentStatus) {
+        // Markeer als afgerond → verplaats naar "Afgerond" kolom
+        const { data: doneColumn } = await supabase
+          .from("columns")
+          .select("id")
+          .eq("status", "DONE")
+          .limit(1)
+          .maybeSingle();
+
+        if (doneColumn) {
+          updates.column_id = doneColumn.id;
+        }
+      } else {
+        // Markeer als actief → verplaats naar "Bezig" kolom
+        const { data: doingColumn } = await supabase
+          .from("columns")
+          .select("id")
+          .eq("status", "DOING")
+          .limit(1)
+          .maybeSingle();
+
+        if (doingColumn) {
+          updates.column_id = doingColumn.id;
+        }
+      }
+
       const { error } = await supabase
         .from("tasks")
-        .update({ 
-          completed_at: currentStatus ? null : new Date().toISOString() 
-        })
+        .update(updates)
         .eq("id", taskId);
 
       if (error) throw error;

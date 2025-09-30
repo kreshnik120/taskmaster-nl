@@ -256,13 +256,26 @@ const Kanban = () => {
     }
 
     const targetColumn = columns.find((c) => c.id === newColumnId);
+    const oldColumn = columns.find((c) => c.id === task.column_id);
     console.log(`Verplaats taak "${task.title}" naar kolom "${targetColumn?.name}"`);
 
     try {
+      // Bereid updates voor
+      const updates: any = { column_id: newColumnId };
+      
+      // Synchroniseer completed_at met kolom status
+      if (targetColumn?.status === "DONE") {
+        // Verplaatst naar "Afgerond" kolom → markeer als afgerond
+        updates.completed_at = new Date().toISOString();
+      } else if (oldColumn?.status === "DONE") {
+        // Verplaatst WEG van "Afgerond" kolom → markeer als actief
+        updates.completed_at = null;
+      }
+
       // Update task in database
       const { error } = await supabase
         .from("tasks")
-        .update({ column_id: newColumnId })
+        .update(updates)
         .eq("id", taskId);
 
       if (error) {
@@ -273,7 +286,7 @@ const Kanban = () => {
 
       // Update local state
       setTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, column_id: newColumnId } : t))
+        prev.map((t) => (t.id === taskId ? { ...t, ...updates } : t))
       );
 
       toast.success(`Taak verplaatst naar ${targetColumn?.name}`);
