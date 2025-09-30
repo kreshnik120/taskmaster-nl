@@ -11,6 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { SubtaskManager } from "./SubtaskManager";
 
 const taskSchema = z.object({
   title: z.string().min(1, "Titel is verplicht").max(200, "Titel mag maximaal 200 karakters zijn"),
@@ -35,6 +36,7 @@ interface TaskDialogProps {
 interface Profile {
   id: string;
   name: string | null;
+  email: string | null;
 }
 
 export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: TaskDialogProps) {
@@ -76,7 +78,7 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
   }, [open, taskId]);
 
   const loadProfiles = async () => {
-    const { data } = await supabase.from("profiles").select("id, name");
+    const { data } = await supabase.from("profiles").select("id, name, email");
     if (data) setProfiles(data);
   };
 
@@ -296,11 +298,20 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
                     <Input placeholder="Bijv. Contact opnemen met klant, mockup maken..." {...field} />
                   </FormControl>
                   <FormMessage />
-                </FormItem>
-              )}
-            />
+              </FormItem>
+            )}
+          />
 
-            <DialogFooter>
+          {taskId && (
+            <div className="pt-4 border-t">
+              <SubtaskManager
+                taskId={taskId}
+                profiles={profiles}
+              />
+            </div>
+          )}
+
+          <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
                 Annuleren
               </Button>
