@@ -9,6 +9,7 @@ import { format, differenceInDays } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Loader2, AlertCircle, Clock, TrendingUp } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Task {
   id: string;
@@ -31,10 +32,18 @@ const priorityColors = {
 
 const priorityLabels = {
   LOW: "Laag",
-  MEDIUM: "Middel",
+  MEDIUM: "Gemiddeld",
   HIGH: "Hoog",
   CRITICAL: "Kritiek",
 };
+
+interface ScoreBreakdown {
+  priority: number;
+  dueDate: number;
+  overdue: number;
+  startReady: number;
+  total: number;
+}
 
 const calculateFocusScore = (task: Task): number => {
   let score = 0;
@@ -63,6 +72,31 @@ const calculateFocusScore = (task: Task): number => {
   return score;
 };
 
+const getScoreBreakdown = (task: Task): ScoreBreakdown => {
+  const priorityWeights = { LOW: 0, MEDIUM: 20, HIGH: 40, CRITICAL: 60 };
+  const priority = priorityWeights[task.priority as keyof typeof priorityWeights] || 0;
+  
+  let dueDate = 0;
+  let overdue = 0;
+  if (task.due_at) {
+    const daysUntil = differenceInDays(new Date(task.due_at), new Date());
+    dueDate = Math.max(0, Math.min(30, 30 - daysUntil));
+    if (daysUntil < 0) {
+      overdue = 50;
+    }
+  }
+  
+  const startReady = (task.start_at && new Date(task.start_at) <= new Date()) ? 10 : 0;
+  
+  return {
+    priority,
+    dueDate,
+    overdue,
+    startReady,
+    total: priority + dueDate + overdue + startReady,
+  };
+};
+
 export default function Opvolging() {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -71,6 +105,26 @@ export default function Opvolging() {
   useEffect(() => {
     checkAuth();
     fetchTasks();
+
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel('tasks-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks'
+        },
+        () => {
+          fetchTasks();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const checkAuth = async () => {
@@ -202,48 +256,101 @@ export default function Opvolging() {
                       Geen taken gevonden
                     </p>
                   ) : (
-                    focusTasks.map((task) => (
-                      <div
-                        key={task.id}
-                        className="flex items-center gap-4 rounded-lg border p-4 hover:bg-muted/50 cursor-pointer transition-colors"
-                      >
-                        <div className="flex-1 space-y-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">{task.title}</p>
-                            <Badge className={priorityColors[task.priority as keyof typeof priorityColors]}>
-                              {priorityLabels[task.priority as keyof typeof priorityLabels]}
-                            </Badge>
+                    focusTasks.map((task) => {
+                      const breakdown = getScoreBreakdown(task);
+                      return (
+                        <div
+                          key={task.id}
+                          className="flex items-center gap-4 rounded-lg border p-4 hover:bg-muted/50 cursor-pointer transition-colors"
+                        >
+                          <div className="flex-1 space-y-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium">{task.title}</p>
+                              <Badge className={priorityColors[task.priority as keyof typeof priorityColors]}>
+                                {priorityLabels[task.priority as keyof typeof priorityLabels]}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              {task.organizations && (
+                                <span>{task.organizations.name}</span>
+                              )}
+                              {task.profiles?.name && (
+                                <span>• {task.profiles.name}</span>
+                              )}
+                              {task.due_at && (
+                                <span>
+                                  • Deadline:{" "}
+                                  {format(new Date(task.due_at), "dd MMM yyyy", { locale: nl })}
+                                </span>
+                              )}
+                            </div>
+                            {task.next_action && (
+                              <p className="text-sm text-accent">
+                                → {task.next_action}
+                              </p>
+                            )}
                           </div>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            {task.organizations && (
-                              <span>{task.organizations.name}</span>
-                            )}
-                            {task.profiles?.name && (
-                              <span>• {task.profiles.name}</span>
-                            )}
-                            {task.due_at && (
-                              <span>
-                                • Deadline:{" "}
-                                {format(new Date(task.due_at), "dd MMM yyyy", { locale: nl })}
-                              </span>
-                            )}
-                          </div>
-                          {task.next_action && (
-                            <p className="text-sm text-accent">
-                              → {task.next_action}
-                            </p>
-                          )}
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="text-right cursor-help">
+                                  <div className="text-2xl font-bold text-primary">
+                                    {task.focusScore}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    focus score
+                                  </div>
+                                  <div className="mt-2 space-y-1">
+                                    {breakdown.priority > 0 && (
+                                      <Progress value={(breakdown.priority / breakdown.total) * 100} className="h-1" />
+                                    )}
+                                    {breakdown.dueDate > 0 && (
+                                      <Progress value={(breakdown.dueDate / breakdown.total) * 100} className="h-1" />
+                                    )}
+                                    {breakdown.overdue > 0 && (
+                                      <Progress value={(breakdown.overdue / breakdown.total) * 100} className="h-1 bg-destructive/20" />
+                                    )}
+                                  </div>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="left" className="max-w-xs">
+                                <div className="space-y-2">
+                                  <p className="font-semibold">Score Breakdown:</p>
+                                  <div className="space-y-1 text-sm">
+                                    <div className="flex justify-between">
+                                      <span>Prioriteit ({priorityLabels[task.priority as keyof typeof priorityLabels]}):</span>
+                                      <span className="font-medium">{breakdown.priority} pts</span>
+                                    </div>
+                                    {breakdown.dueDate > 0 && (
+                                      <div className="flex justify-between">
+                                        <span>Deadline nabijheid:</span>
+                                        <span className="font-medium">{breakdown.dueDate} pts</span>
+                                      </div>
+                                    )}
+                                    {breakdown.overdue > 0 && (
+                                      <div className="flex justify-between text-destructive">
+                                        <span>Achterstallig:</span>
+                                        <span className="font-medium">+{breakdown.overdue} pts</span>
+                                      </div>
+                                    )}
+                                    {breakdown.startReady > 0 && (
+                                      <div className="flex justify-between">
+                                        <span>Klaar om te starten:</span>
+                                        <span className="font-medium">{breakdown.startReady} pts</span>
+                                      </div>
+                                    )}
+                                    <div className="flex justify-between border-t pt-1 font-semibold">
+                                      <span>Totaal:</span>
+                                      <span>{breakdown.total} pts</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
-                        <div className="text-right">
-                          <div className="text-2xl font-bold text-primary">
-                            {task.focusScore}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            focus score
-                          </div>
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </CardContent>
