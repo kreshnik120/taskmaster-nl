@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { TaskDialog } from "@/components/TaskDialog";
+import { ActiveProcessWidget } from "@/components/ActiveProcessWidget";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -328,6 +329,9 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Active Process Steps Widget */}
+      <ActiveProcessWidget />
 
       <Card>
         <CardHeader>

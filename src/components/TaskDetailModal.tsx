@@ -1,11 +1,27 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, User, FileText, ArrowRight, Edit } from "lucide-react";
+import { Calendar, Clock, User, FileText, ArrowRight, Edit, ListChecks } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { TaskDialog } from "./TaskDialog";
+import { ProcessTimeline } from "./ProcessTimeline";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+
+interface Subtask {
+  id: string;
+  title: string;
+  status: 'pending' | 'active' | 'completed' | 'skipped';
+  order: number;
+  due_at: string | null;
+  assignee_id: string | null;
+  profiles: {
+    name: string | null;
+    email: string | null;
+  } | null;
+}
 
 interface Task {
   id: string;
@@ -38,6 +54,111 @@ const priorityConfig = {
 
 export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: TaskDetailModalProps) {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [subtasks, setSubtasks] = useState<Subtask[]>([]);
+  const [loadingSubtasks, setLoadingSubtasks] = useState(false);
+  const { toast } = useToast();
+
+  // Load subtasks when task changes
+  useEffect(() => {
+    if (task?.id && open) {
+      loadSubtasks();
+      
+      // Subscribe to realtime updates
+      const channel = supabase
+        .channel(`subtasks-${task.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'subtasks',
+            filter: `task_id=eq.${task.id}`
+          },
+          () => {
+            loadSubtasks();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [task?.id, open]);
+
+  const loadSubtasks = async () => {
+    if (!task?.id) return;
+    
+    setLoadingSubtasks(true);
+    try {
+      const { data, error } = await supabase
+        .from('subtasks')
+        .select(`
+          *,
+          profiles:assignee_id(name, email)
+        `)
+        .eq('task_id', task.id)
+        .order('order', { ascending: true });
+
+      if (error) throw error;
+      setSubtasks(data || []);
+    } catch (error) {
+      console.error('Error loading subtasks:', error);
+      toast({
+        title: "Fout bij laden processtappen",
+        description: "Kon processtappen niet laden",
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingSubtasks(false);
+    }
+  };
+
+  const handleCompleteStep = async (subtaskId: string) => {
+    try {
+      const { error } = await supabase
+        .from('subtasks')
+        .update({ status: 'completed' })
+        .eq('id', subtaskId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Stap voltooid",
+        description: "Processtap is afgerond"
+      });
+    } catch (error) {
+      console.error('Error completing step:', error);
+      toast({
+        title: "Fout",
+        description: "Kon stap niet voltooien",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleSkipStep = async (subtaskId: string) => {
+    try {
+      const { error } = await supabase
+        .from('subtasks')
+        .update({ status: 'skipped' })
+        .eq('id', subtaskId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Stap overgeslagen",
+        description: "Processtap is overgeslagen"
+      });
+    } catch (error) {
+      console.error('Error skipping step:', error);
+      toast({
+        title: "Fout",
+        description: "Kon stap niet overslaan",
+        variant: "destructive"
+      });
+    }
+  };
 
   if (!task) return null;
 
@@ -127,6 +248,25 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 <div className="bg-primary/10 border-l-4 border-primary rounded-lg p-4">
                   <p className="text-sm font-medium">{task.next_action}</p>
                 </div>
+              </div>
+            )}
+
+            {/* Process Steps */}
+            {subtasks.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <ListChecks className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium text-muted-foreground">Processtappen:</span>
+                </div>
+                {loadingSubtasks ? (
+                  <div className="text-sm text-muted-foreground">Laden...</div>
+                ) : (
+                  <ProcessTimeline 
+                    subtasks={subtasks}
+                    onCompleteStep={handleCompleteStep}
+                    onSkipStep={handleSkipStep}
+                  />
+                )}
               </div>
             )}
           </div>
