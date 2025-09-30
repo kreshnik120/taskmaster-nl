@@ -90,7 +90,7 @@ const Kanban = () => {
       setTasks(tasksData || []);
 
       // Real-time listener voor taak updates
-      const channel = supabase
+      const tasksChannel = supabase
         .channel('kanban-tasks-changes')
         .on(
           'postgres_changes',
@@ -114,9 +114,33 @@ const Kanban = () => {
         )
         .subscribe();
 
+      // Real-time listener voor kolom updates
+      const columnsChannel = supabase
+        .channel('kanban-columns-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'columns'
+          },
+          (payload) => {
+            console.log('Kolom bijgewerkt:', payload);
+            setColumns((prev) =>
+              prev.map((col) =>
+                col.id === payload.new.id
+                  ? { ...col, name: payload.new.name }
+                  : col
+              )
+            );
+          }
+        )
+        .subscribe();
+
       // Cleanup function wordt aangeroepen bij unmount
       return () => {
-        supabase.removeChannel(channel);
+        supabase.removeChannel(tasksChannel);
+        supabase.removeChannel(columnsChannel);
       };
     } catch (error: any) {
       toast.error("Fout bij laden van gegevens: " + error.message);
@@ -247,6 +271,33 @@ const Kanban = () => {
     return tasks.filter((task) => task.column_id === columnId);
   };
 
+  const handleUpdateColumnName = async (columnId: string, newName: string) => {
+    try {
+      const { error } = await supabase
+        .from("columns")
+        .update({ name: newName })
+        .eq("id", columnId);
+
+      if (error) {
+        console.error("Fout bij bijwerken kolomnaam:", error);
+        toast.error(`Fout bij opslaan: ${error.message}`);
+        return;
+      }
+
+      // Optimistic update
+      setColumns((prev) =>
+        prev.map((col) =>
+          col.id === columnId ? { ...col, name: newName } : col
+        )
+      );
+
+      toast.success("Kolomnaam bijgewerkt");
+    } catch (err: any) {
+      console.error("Onverwachte fout bij bijwerken kolomnaam:", err);
+      toast.error("Fout bij opslaan van kolomnaam");
+    }
+  };
+
   if (loading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -275,15 +326,16 @@ const Kanban = () => {
 
       <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="flex gap-4 overflow-x-auto pb-4">
-          {columns.map((column) => (
-            <KanbanColumn
-              key={column.id}
-              id={column.id}
-              title={column.name}
-              tasks={getTasksForColumn(column.id)}
-              status={column.status}
-            />
-          ))}
+              {columns.map((column) => (
+                <KanbanColumn
+                  key={column.id}
+                  id={column.id}
+                  title={column.name}
+                  tasks={getTasksForColumn(column.id)}
+                  status={column.status}
+                  onUpdateName={handleUpdateColumnName}
+                />
+              ))}
         </div>
         <DragOverlay>{activeTask && <TaskCard task={activeTask} />}</DragOverlay>
       </DndContext>
