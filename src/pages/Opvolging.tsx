@@ -153,6 +153,7 @@ export default function Opvolging() {
           profiles:profiles!tasks_assignee_id_fkey(name)
         `)
         .is("completed_at", null)
+        .is("deleted_at", null)
         .order("due_at", { ascending: true });
 
       if (error) throw error;
