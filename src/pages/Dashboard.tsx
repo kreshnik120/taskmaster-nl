@@ -751,7 +751,7 @@ const Dashboard = () => {
         onSuccess={() => {
           loadTasks();
         }}
-        columnId={undefined}
+        columnId="770e8400-e29b-41d4-a716-446655440001"
       />
 
       {selectedTask && (
