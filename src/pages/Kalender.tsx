@@ -7,10 +7,10 @@ import { format, startOfWeek, addDays, isSameDay, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Loader2, ChevronLeft, ChevronRight, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { useToast } from "@/hooks/use-toast";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { PriorityBadge } from "@/components/PriorityBadge";
 
 interface Task {
   id: string;
@@ -243,9 +243,7 @@ export default function Kalender() {
                           >
                             <div className="flex items-start justify-between gap-2">
                               <p className="text-sm font-semibold flex-1 break-words">{task.title}</p>
-                              <Badge variant={priorityInfo.variant} className="text-xs shrink-0">
-                                {priorityInfo.label}
-                              </Badge>
+                              <PriorityBadge taskId={task.id} priority={task.priority} size="sm" />
                             </div>
                             
                             {task.profiles && (

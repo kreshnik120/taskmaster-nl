@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { PriorityBadge } from "@/components/PriorityBadge";
 
 interface Task {
   id: string;
@@ -27,13 +28,6 @@ interface Task {
   organizations: { name: string } | null;
   profiles: { name: string | null } | null;
 }
-
-const priorityColors = {
-  LOW: "bg-priority-low text-priority-low-foreground",
-  MEDIUM: "bg-priority-medium text-priority-medium-foreground",
-  HIGH: "bg-priority-high text-priority-high-foreground",
-  CRITICAL: "bg-priority-critical text-priority-critical-foreground",
-};
 
 const priorityLabels = {
   LOW: "Laag",
@@ -350,17 +344,15 @@ export default function Lijst() {
                               {task.id.substring(0, 6)}
                             </TableCell>
                             <TableCell className="font-medium">{task.title}</TableCell>
-                            <TableCell>
-                              {task.organizations?.name || "-"}
-                            </TableCell>
-                            <TableCell>
-                              {task.profiles?.name || "-"}
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={priorityColors[task.priority as keyof typeof priorityColors]}>
-                                {priorityLabels[task.priority as keyof typeof priorityLabels]}
-                              </Badge>
-                            </TableCell>
+                      <TableCell>
+                        {task.organizations?.name || "-"}
+                      </TableCell>
+                      <TableCell>
+                        {task.profiles?.name || "-"}
+                      </TableCell>
+                      <TableCell>
+                        <PriorityBadge taskId={task.id} priority={task.priority} size="md" />
+                      </TableCell>
                             <TableCell>
                               {task.start_at
                                 ? format(new Date(task.start_at), "dd MMM yyyy", { locale: nl })

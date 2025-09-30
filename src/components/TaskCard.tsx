@@ -1,10 +1,10 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { GripVertical, Calendar, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import { PriorityBadge } from "@/components/PriorityBadge";
 
 interface Task {
   id: string;
@@ -27,12 +27,6 @@ const priorityColors: Record<string, string> = {
   CRITICAL: "border-l-4 border-l-priority-critical",
 };
 
-const priorityLabels: Record<string, string> = {
-  LOW: "Laag",
-  MEDIUM: "Gemiddeld",
-  HIGH: "Hoog",
-  CRITICAL: "Kritiek",
-};
 
 export function TaskCard({ task }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -59,23 +53,21 @@ export function TaskCard({ task }: TaskCardProps) {
             <GripVertical className="h-4 w-4 text-muted-foreground" />
           </div>
           <div className="flex-1 min-w-0">
-            <CardTitle className="text-sm font-medium line-clamp-2">{task.title}</CardTitle>
+            <div className="flex items-start justify-between gap-2 mb-1">
+              <CardTitle className="text-sm font-medium line-clamp-2 flex-1">{task.title}</CardTitle>
+              <PriorityBadge taskId={task.id} priority={task.priority} size="sm" />
+            </div>
             {task.description && (
               <CardDescription className="text-xs mt-1 line-clamp-2">
                 {task.description}
               </CardDescription>
             )}
-            <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <Badge variant="secondary" className="text-xs">
-                {priorityLabels[task.priority]}
-              </Badge>
-              {task.due_at && (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Calendar className="h-3 w-3" />
-                  {format(new Date(task.due_at), "d MMM", { locale: nl })}
-                </div>
-              )}
-            </div>
+            {task.due_at && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
+                <Calendar className="h-3 w-3" />
+                {format(new Date(task.due_at), "d MMM", { locale: nl })}
+              </div>
+            )}
           </div>
         </div>
       </CardHeader>
