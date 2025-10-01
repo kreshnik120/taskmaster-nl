@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { RobotIcon } from './RobotIcon';
 import { MiniRobotIcon } from './MiniRobotIcon';
 import { ChatDatePicker, ChatTimePicker, ChatSelect, ChatButtonGroup } from './InteractiveChatElements';
+import { MessageFeedback } from './MessageFeedback';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 
@@ -425,14 +426,19 @@ export const ChatWidget = () => {
                     </Avatar>
                   )}
                   <div className="flex flex-col gap-2 max-w-[85%]">
-                    <div
-                      className={`rounded-lg px-4 py-2.5 ${
-                        msg.role === 'user'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted'
-                      }`}
-                    >
-                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                    <div>
+                      <div
+                        className={`rounded-lg px-4 py-2.5 ${
+                          msg.role === 'user'
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted'
+                        }`}
+                      >
+                        <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                      </div>
+                      {msg.role === 'assistant' && msg.content && !isLoading && (
+                        <MessageFeedback messageContent={msg.content} messageIndex={idx} />
+                      )}
                     </div>
                     
                     {/* Interactive Elements */}

@@ -405,23 +405,46 @@ JE HEBT TOEGANG TOT EEN VOLLEDIG GEHEUGEN SYSTEEM:
    - Sentiment en context van gesprekken
    - Key points uit eerdere conversaties
 
-🎯 HOE TE GEBRUIKEN:
-- ALTIJD refereren naar eerdere kennis uit de knowledge base
-- LEER van succesvolle en mislukte interacties
-- PAS je suggesties aan gebaseerd op gebruiker voorkeuren
-- ONTHOUD belangrijke details en beslissingen
-- VERBETER je antwoorden gebaseerd op feedback
-- DETECTEER patronen en optimalisatiemogelijkheden
-- VERWIJS naar eerdere conversaties wanneer relevant
-- BOUW voort op eerdere beslissingen en context
+🎯 ACTIEF LEREN - GEBRUIK DEZE TOOLS PROACTIEF:
+================================================
+⚠️ BELANGRIJK: Gebruik de save_knowledge, log_learning_event en create_business_intelligence tools ACTIEF tijdens elke conversatie!
 
-💾 AUTOMATISCH OPSLAAN:
-- Belangrijke gebruiker voorkeuren worden automatisch opgeslagen
-- Feedback wordt gelogd voor learning
-- Patronen worden gedetecteerd en opgeslagen
-- Business insights worden bijgehouden
+WANNEER GEBRUIK JE SAVE_KNOWLEDGE:
+✅ Gebruiker geeft voorkeur aan (bijv. "Ik werk het liefst 's ochtends")
+   → Sla meteen op: category: "user_preference", key: "work_time_preference", value: {"preferred": "morning"}
+✅ Bedrijfsregel wordt duidelijk (bijv. "ABCzorg taken zijn altijd HIGH priority")
+   → Sla meteen op: category: "business_rule", key: "abczorg_priority_rule", value: {"client": "ABCzorg", "default_priority": "HIGH"}
+✅ Herhalend patroon detecteren (bijv. gebruiker maakt elke maandag planning)
+   → Sla meteen op: category: "workflow_pattern", key: "weekly_planning_ritual", value: {"day": "monday", "action": "create_weekly_plan"}
+✅ Belangrijke beslissing wordt genomen
+   → Sla meteen op: category: "decision_context", key: "project_x_approach", value: {"decision": "...", "reasoning": "..."}
 
-⚡ JE BENT NIET MEER STATELESS - JE HEBT EEN VOLLEDIG GEHEUGEN!
+WANNEER GEBRUIK JE LOG_LEARNING_EVENT:
+✅ Gebruiker accepteert je suggestie
+   → event_type: "suggestion_accepted", context: {...}, outcome: "success", learning_score: 0.8
+✅ Gebruiker wijst je suggestie af
+   → event_type: "suggestion_rejected", context: {...}, user_action: {"reason": "..."}, outcome: "failure", learning_score: 0.3
+✅ Je detecteert een patroon
+   → event_type: "pattern_detected", context: {...}, outcome: "success", learning_score: 0.7
+✅ Gebruiker geeft expliciete feedback
+   → event_type: "feedback_positive" of "feedback_negative", context: {...}
+
+WANNEER GEBRUIK JE CREATE_BUSINESS_INTELLIGENCE:
+✅ Je ziet een bottleneck (bijv. te veel HIGH priority taken tegelijk)
+   → intelligence_type: "bottleneck", title: "Prioriteit overload", description: "...", impact_score: 7
+✅ Je detecteert optimalisatiemogelijkheid
+   → intelligence_type: "optimization_opportunity", title: "Taak batching mogelijk", description: "..."
+✅ Je ziet een workflow patroon
+   → intelligence_type: "workflow_pattern", title: "Wekelijkse planning cyclus", description: "..."
+
+🔥 GEDRAGSREGEL: Bij ELKE interactie, vraag jezelf af:
+1. "Moet ik dit onthouden?" → gebruik save_knowledge
+2. "Is dit feedback op mijn suggestie?" → gebruik log_learning_event  
+3. "Zie ik een patroon of verbetering?" → gebruik create_business_intelligence
+
+💡 DOE DIT AUTOMATISCH - de gebruiker hoeft niet te vragen!
+
+⚡ JE BENT NIET MEER STATELESS - JE HEBT EEN VOLLEDIG GEHEUGEN & JE MOET HET ACTIEF GEBRUIKEN!
 
 HUIDIGE CONTEXT:
 ${contextSummary}
@@ -572,7 +595,7 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-pro',
         messages: [
           { role: 'system', content: systemPrompt },
           ...messages,

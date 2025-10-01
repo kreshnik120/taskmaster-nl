@@ -9,6 +9,7 @@ import { TrainingChat } from "@/components/AITraining/TrainingChat";
 import { DocumentUpload } from "@/components/AITraining/DocumentUpload";
 import { KnowledgeOverview } from "@/components/AITraining/KnowledgeOverview";
 import { SeedClientKnowledge } from "@/components/AITraining/SeedClientKnowledge";
+import { LearningDashboard } from "@/components/AITraining/LearningDashboard";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -64,12 +65,17 @@ const AiTraining = () => {
               </p>
             </div>
 
-            <Tabs defaultValue="chat" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="chat">Training Chat</TabsTrigger>
-                <TabsTrigger value="documents">Documenten</TabsTrigger>
-                <TabsTrigger value="knowledge">Kennisbank</TabsTrigger>
+            <Tabs defaultValue="dashboard" className="w-full">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="dashboard">📊 Leer Dashboard</TabsTrigger>
+                <TabsTrigger value="chat">💬 Training Chat</TabsTrigger>
+                <TabsTrigger value="documents">📄 Documenten</TabsTrigger>
+                <TabsTrigger value="knowledge">🗄️ Kennisbank</TabsTrigger>
               </TabsList>
+
+              <TabsContent value="dashboard" className="mt-6">
+                <LearningDashboard />
+              </TabsContent>
 
               <TabsContent value="chat" className="mt-6">
                 <TrainingChat />
