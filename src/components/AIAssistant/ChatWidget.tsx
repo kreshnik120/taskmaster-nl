@@ -77,6 +77,22 @@ export const ChatWidget = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Prevent default drag/drop behavior globally
+  useEffect(() => {
+    const preventDefaults = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    window.addEventListener('dragover', preventDefaults);
+    window.addEventListener('drop', preventDefaults);
+
+    return () => {
+      window.removeEventListener('dragover', preventDefaults);
+      window.removeEventListener('drop', preventDefaults);
+    };
+  }, []);
+
   // Load conversation history on mount
   useEffect(() => {
     const loadHistory = async () => {
@@ -291,7 +307,13 @@ export const ChatWidget = () => {
     e.preventDefault();
     e.stopPropagation();
     setDragCounter(prev => prev + 1);
-    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+    
+    // Check if dragged items contain images
+    const hasImage = Array.from(e.dataTransfer.items || []).some(
+      item => item.type.startsWith('image/')
+    );
+    
+    if (hasImage || (e.dataTransfer.files && e.dataTransfer.files.length > 0)) {
       setIsDragging(true);
     }
   };
@@ -319,10 +341,35 @@ export const ChatWidget = () => {
     setIsDragging(false);
     setDragCounter(0);
 
-    const files = e.dataTransfer.files;
-    if (files && files.length > 0) {
-      const file = files[0];
+    // Try to get file from items first (handles more drag sources)
+    let file: File | null = null;
+
+    // Check dataTransfer.items (more reliable for some drag sources)
+    if (e.dataTransfer.items) {
+      for (let i = 0; i < e.dataTransfer.items.length; i++) {
+        if (e.dataTransfer.items[i].type.startsWith('image/')) {
+          file = e.dataTransfer.items[i].getAsFile();
+          if (file) break;
+        }
+      }
+    }
+
+    // Fallback to dataTransfer.files
+    if (!file && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const droppedFile = e.dataTransfer.files[0];
+      if (droppedFile.type.startsWith('image/')) {
+        file = droppedFile;
+      }
+    }
+
+    if (file) {
       processImageFile(file);
+    } else {
+      toast({
+        title: 'Geen afbeelding',
+        description: 'Sleep alleen afbeeldingen (PNG, JPG, WEBP)',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -344,6 +391,13 @@ export const ChatWidget = () => {
     setMessages(newMessages);
     setIsLoading(true);
     setInput('');
+    
+    // Show confirmation if image is included
+    if (uploadedImage) {
+      toast({
+        description: '🖼️ Afbeelding meegestuurd naar AI',
+      });
+    }
     
     // Clear image after sending
     const currentImage = uploadedImage;
