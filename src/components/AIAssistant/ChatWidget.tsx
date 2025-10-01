@@ -53,9 +53,12 @@ export const ChatWidget = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragCounter, setDragCounter] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
 
   // Check authentication status
@@ -228,10 +231,7 @@ export const ChatWidget = () => {
     return { content };
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const processImageFile = (file: File) => {
     // Validate file type
     if (!file.type.startsWith('image/')) {
       toast({
@@ -258,8 +258,72 @@ export const ChatWidget = () => {
       const base64 = reader.result as string;
       setUploadedImage(base64);
       setImagePreview(base64);
+      toast({
+        description: '📷 Afbeelding toegevoegd',
+      });
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processImageFile(file);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        e.preventDefault();
+        const file = items[i].getAsFile();
+        if (file) {
+          processImageFile(file);
+        }
+        break;
+      }
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragCounter(prev => prev + 1);
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragCounter(prev => {
+      const newCount = prev - 1;
+      if (newCount === 0) {
+        setIsDragging(false);
+      }
+      return newCount;
+    });
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    setDragCounter(0);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      processImageFile(file);
+    }
   };
 
   const removeImage = () => {
@@ -478,7 +542,24 @@ export const ChatWidget = () => {
 
       {/* Chat Window */}
       {isOpen && (
-        <div className="fixed bottom-6 right-28 w-96 h-[600px] bg-background border rounded-lg shadow-xl flex flex-col animate-in slide-in-from-right duration-300 z-[2147483647]">
+        <div 
+          className="fixed bottom-6 right-28 w-96 h-[600px] bg-background border rounded-lg shadow-xl flex flex-col animate-in slide-in-from-right duration-300 z-[2147483647]"
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {/* Drag & Drop Overlay */}
+          {isDragging && (
+            <div className="absolute inset-0 bg-primary/10 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg border-2 border-dashed border-primary">
+              <div className="text-center">
+                <ImageIcon className="w-16 h-16 mx-auto mb-2 text-primary" />
+                <p className="text-lg font-semibold">Sleep je afbeelding hier</p>
+                <p className="text-sm text-muted-foreground">Loslaten om te uploaden</p>
+              </div>
+            </div>
+          )}
+          
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-primary/5 to-primary/10">
             <div className="flex items-center gap-3">
@@ -659,48 +740,54 @@ export const ChatWidget = () => {
                 </Button>
               </div>
             )}
-            <div className="flex gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="hidden"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isLoading}
-                className="shrink-0"
-                title="Voeg afbeelding toe"
-              >
-                <ImageIcon className="h-4 w-4" />
-              </Button>
-              <Textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Typ je vraag of upload een afbeelding..."
-                className="min-h-[60px] max-h-[120px] resize-none"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit(e);
-                  }
-                }}
-                disabled={isLoading}
-              />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+            <div className="flex gap-2 items-end">
+              <div className="flex-1 relative">
+                <Textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onPaste={handlePaste}
+                  placeholder="Typ, plak of sleep een afbeelding..."
+                  className="min-h-[60px] max-h-[120px] resize-none pr-20"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSubmit(e);
+                    }
+                  }}
+                  disabled={isLoading}
+                />
+                <div className="absolute bottom-2 right-2 flex gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isLoading}
+                    className="h-8 w-8 hover:bg-primary/10"
+                    title="Voeg afbeelding toe (of sleep/plak)"
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
               <Button
                 type="submit"
                 size="icon"
                 disabled={(!input.trim() && !uploadedImage) || isLoading}
-                className="shrink-0"
+                className="shrink-0 h-[60px] w-[60px]"
               >
                 {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
-                  <Send className="h-4 w-4" />
+                  <Send className="h-5 w-5" />
                 )}
               </Button>
             </div>
