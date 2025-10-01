@@ -100,11 +100,7 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
       }}
       title="Klik voor AI hulp"
     >
-      {/* Glow effect */}
-      <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl group-hover:bg-primary/30 transition-all duration-300" />
-      
-      <div className="relative w-full h-full rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 backdrop-blur-sm border border-primary/20 group-hover:border-primary/40 transition-all duration-300"
-    >
+      <div className="relative w-full h-full transition-all duration-300">
         <RobotErrorBoundary
           fallback={
             <div className="w-full h-full flex items-center justify-center">
