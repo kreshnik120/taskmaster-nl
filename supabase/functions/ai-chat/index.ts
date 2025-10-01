@@ -87,7 +87,11 @@ serve(async (req) => {
       timeEntriesResult,
       activeTimeResult,
       chatHistoryResult,
-      deletedTasksResult
+      deletedTasksResult,
+      knowledgeBaseResult,
+      learningEventsResult,
+      businessIntelResult,
+      conversationContextResult
     ] = await Promise.all([
       // Active tasks with full details
       supabaseClient
@@ -157,7 +161,41 @@ serve(async (req) => {
       supabaseClient
         .from('tasks')
         .select('id', { count: 'exact', head: true })
-        .not('deleted_at', 'is', null)
+        .not('deleted_at', 'is', null),
+      
+      // AI Knowledge Base - permanente kennis
+      supabaseClient
+        .from('ai_knowledge_base')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('confidence_score', { ascending: false })
+        .order('usage_count', { ascending: false })
+        .limit(100),
+      
+      // Recent Learning Events - leer van recente interacties
+      supabaseClient
+        .from('ai_learning_events')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      
+      // Business Intelligence - bedrijfsinzichten
+      supabaseClient
+        .from('business_intelligence')
+        .select('*')
+        .eq('org_id', userOrg.org_id)
+        .eq('status', 'active')
+        .order('impact_score', { ascending: false })
+        .limit(20),
+      
+      // Conversation Context - eerdere conversaties
+      supabaseClient
+        .from('conversation_context')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10)
     ]);
 
     const tasks = tasksResult.data;
@@ -170,6 +208,10 @@ serve(async (req) => {
     const activeTimeEntry = activeTimeResult.data;
     const chatHistory = chatHistoryResult.data;
     const deletedTasksCount = deletedTasksResult.count || 0;
+    const knowledgeBase = knowledgeBaseResult.data || [];
+    const learningEvents = learningEventsResult.data || [];
+    const businessIntel = businessIntelResult.data || [];
+    const conversationContext = conversationContextResult.data || [];
 
     // Analyze patterns and build rich context
     const activeTasks = tasks?.filter(t => !t.completed_at) || [];
@@ -177,6 +219,17 @@ serve(async (req) => {
     const overdueTasks = activeTasks.filter(t => t.due_at && new Date(t.due_at) < new Date());
     const highPriorityTasks = activeTasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL');
     const revenueImpactTasks = activeTasks.filter(t => t.revenue_impact_eur && t.revenue_impact_eur > 0);
+    
+    // Analyze knowledge base for user preferences and patterns
+    const userPreferences = knowledgeBase.filter((kb: any) => kb.category === 'user_preference');
+    const businessRules = knowledgeBase.filter((kb: any) => kb.category === 'business_rule');
+    const workflowPatterns = knowledgeBase.filter((kb: any) => kb.category === 'workflow_pattern');
+    const decisionContexts = knowledgeBase.filter((kb: any) => kb.category === 'decision_context');
+    
+    // Analyze learning events for patterns
+    const successfulPatterns = learningEvents.filter((le: any) => le.outcome === 'success' && le.learning_score > 0.7);
+    const rejectedSuggestions = learningEvents.filter((le: any) => le.event_type === 'suggestion_rejected');
+    const acceptedSuggestions = learningEvents.filter((le: any) => le.event_type === 'suggestion_accepted');
     
     // Calculate workload metrics
     const totalTimeThisWeek = timeEntries?.reduce((sum, e) => sum + (e.duration_min || 0), 0) || 0;
@@ -200,6 +253,26 @@ HUIDIGE WERKSTATUS:
 ${activeTimeEntry ? `- 🟢 BEZIG MET: Taak ${activeTimeEntry.task_id} (gestart ${new Date(activeTimeEntry.start).toLocaleTimeString('nl-NL')})` : ''}
 ${activeTasks.length === 0 ? '\n⚠️ BELANGRIJK: De takenlijst is momenteel LEEG! Er zijn geen actieve taken.' : ''}
 ${activeTasks.length > 0 && activeTasks.length <= 3 && deletedTasksCount > 10 ? `\n⚠️ LET OP: Er zijn slechts ${activeTasks.length} actieve taken, maar ${deletedTasksCount} taken zijn verwijderd.` : ''}
+
+AI GEHEUGEN & KENNIS BASE (${knowledgeBase.length} items):
+${userPreferences.length > 0 ? `\n📌 GEBRUIKER VOORKEUREN (${userPreferences.length}):\n${userPreferences.slice(0, 5).map((kb: any) => `  - ${kb.key}: ${JSON.stringify(kb.value)} (confidence: ${kb.confidence_score}, gebruikt: ${kb.usage_count}x)`).join('\n')}` : ''}
+${businessRules.length > 0 ? `\n📋 BEDRIJFSREGELS (${businessRules.length}):\n${businessRules.slice(0, 5).map((kb: any) => `  - ${kb.key}: ${JSON.stringify(kb.value)}`).join('\n')}` : ''}
+${workflowPatterns.length > 0 ? `\n🔄 WORKFLOW PATRONEN (${workflowPatterns.length}):\n${workflowPatterns.slice(0, 5).map((kb: any) => `  - ${kb.key}: ${JSON.stringify(kb.value)}`).join('\n')}` : ''}
+${decisionContexts.length > 0 ? `\n💡 BESLISSING CONTEXTEN (${decisionContexts.length}):\n${decisionContexts.slice(0, 3).map((kb: any) => `  - ${kb.key}: ${JSON.stringify(kb.value)}`).join('\n')}` : ''}
+
+LEER GESCHIEDENIS (${learningEvents.length} events):
+${successfulPatterns.length > 0 ? `\n✅ SUCCESVOLLE PATRONEN (${successfulPatterns.length}):\n${successfulPatterns.slice(0, 3).map((le: any) => `  - ${le.event_type}: ${JSON.stringify(le.context).substring(0, 100)}...`).join('\n')}` : ''}
+${acceptedSuggestions.length > 0 ? `\n👍 GEACCEPTEERDE SUGGESTIES: ${acceptedSuggestions.length}` : ''}
+${rejectedSuggestions.length > 0 ? `\n👎 AFGEWEZEN SUGGESTIES: ${rejectedSuggestions.length}\n${rejectedSuggestions.slice(0, 2).map((le: any) => `  - Reden: ${JSON.stringify(le.user_action).substring(0, 80)}`).join('\n')}` : ''}
+
+BUSINESS INTELLIGENCE (${businessIntel.length} insights):
+${businessIntel.length > 0 ? businessIntel.map((bi: any) => `\n🔍 ${bi.intelligence_type.toUpperCase()} - ${bi.title}\n  Impact: ${bi.impact_score}/10 | Priority: ${bi.priority}\n  ${bi.description || ''}`).join('\n') : ''}
+
+CONVERSATIE GESCHIEDENIS:
+${conversationContext.length > 0 ? conversationContext.slice(0, 3).map((cc: any) => `\n💬 ${cc.category} - ${cc.sentiment}\n  Topics: ${cc.topics?.join(', ')}\n  ${cc.summary || ''}`).join('\n') : ''}
+
+CONVERSATIE GESCHIEDENIS:
+${conversationContext.length > 0 ? conversationContext.slice(0, 3).map(cc => `\n💬 ${cc.category} - ${cc.sentiment}\n  Topics: ${cc.topics?.join(', ')}\n  ${cc.summary || ''}`).join('\n') : ''}
 
 WERKBELASTING DEZE WEEK:
 - Totaal gewerkte uren: ${(totalTimeThisWeek / 60).toFixed(1)}h
@@ -292,6 +365,51 @@ BELANGRIJK - CONTEXT AWARENESS OVER VERWIJDERDE TAKEN:
 - Verwijs NOOIT naar taken die niet in de actieve takenlijst staan
 - Als de lijst (bijna) leeg is, wees proactief in het voorstellen van nieuwe taken
 
+🧠 PERMANENTE GEHEUGEN & LEER SYSTEEM:
+=======================================
+JE HEBT TOEGANG TOT EEN VOLLEDIG GEHEUGEN SYSTEEM:
+
+1. **KENNIS BASE** - Permanente opslag van belangrijke informatie:
+   - Gebruiker voorkeuren (wat de gebruiker prefereert, hoe ze werken)
+   - Bedrijfsregels (policies, procedures, standaarden)
+   - Workflow patronen (herhalende processen, best practices)
+   - Beslissing contexten (waarom bepaalde keuzes gemaakt zijn)
+   
+2. **LEER GESCHIEDENIS** - Feedback en patronen:
+   - Succesvolle interacties (wat werkte goed)
+   - Afgewezen suggesties (wat werkte niet, waarom)
+   - Geaccepteerde voorstellen (wat de gebruiker waardeert)
+   - Pattern recognition (terugkerende situaties)
+
+3. **BUSINESS INTELLIGENCE** - Bedrijfsinzichten:
+   - Workflow patronen en optimalisaties
+   - Productiviteit insights
+   - Bottlenecks en verbeterpunten
+   - Automatiseringsmogelijkheden
+
+4. **CONVERSATIE CONTEXT** - Eerdere discussies:
+   - Onderwerpen die besproken zijn
+   - Sentiment en context van gesprekken
+   - Key points uit eerdere conversaties
+
+🎯 HOE TE GEBRUIKEN:
+- ALTIJD refereren naar eerdere kennis uit de knowledge base
+- LEER van succesvolle en mislukte interacties
+- PAS je suggesties aan gebaseerd op gebruiker voorkeuren
+- ONTHOUD belangrijke details en beslissingen
+- VERBETER je antwoorden gebaseerd op feedback
+- DETECTEER patronen en optimalisatiemogelijkheden
+- VERWIJS naar eerdere conversaties wanneer relevant
+- BOUW voort op eerdere beslissingen en context
+
+💾 AUTOMATISCH OPSLAAN:
+- Belangrijke gebruiker voorkeuren worden automatisch opgeslagen
+- Feedback wordt gelogd voor learning
+- Patronen worden gedetecteerd en opgeslagen
+- Business insights worden bijgehouden
+
+⚡ JE BENT NIET MEER STATELESS - JE HEBT EEN VOLLEDIG GEHEUGEN!
+
 HUIDIGE CONTEXT:
 ${contextSummary}
 
@@ -360,6 +478,74 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
               body: { type: "string", description: "Inhoud van de comment" }
             },
             required: ["task_id", "body"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "save_knowledge",
+          description: "Sla belangrijke informatie op in de permanente knowledge base (gebruiker voorkeuren, bedrijfsregels, workflow patronen, beslissingen)",
+          parameters: {
+            type: "object",
+            properties: {
+              category: { 
+                type: "string", 
+                enum: ["user_preference", "business_rule", "workflow_pattern", "decision_context"],
+                description: "Type kennis: user_preference (hoe gebruiker werkt), business_rule (policies/procedures), workflow_pattern (herhalende processen), decision_context (waarom iets besloten is)" 
+              },
+              key: { type: "string", description: "Unieke sleutel voor deze kennis (bijv. 'preferred_work_hours', 'client_x_sla')" },
+              value: { type: "object", description: "De data om op te slaan (JSON object)" },
+              confidence_score: { type: "number", description: "Hoe zeker ben je van deze informatie (0.0 - 1.0)", minimum: 0, maximum: 1 },
+              source: { type: "string", description: "Waar komt deze kennis vandaan (bijv. 'user_stated', 'observed_pattern')" }
+            },
+            required: ["category", "key", "value"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "log_learning_event",
+          description: "Log een leer gebeurtenis voor pattern recognition en verbetering",
+          parameters: {
+            type: "object",
+            properties: {
+              event_type: { 
+                type: "string",
+                enum: ["feedback_positive", "feedback_negative", "task_completed", "pattern_detected", "suggestion_accepted", "suggestion_rejected"],
+                description: "Type leer gebeurtenis"
+              },
+              context: { type: "object", description: "Alle relevante context (wat gebeurde er)" },
+              ai_response: { type: "object", description: "Wat had je gesuggereerd/gezegd (optioneel)" },
+              user_action: { type: "object", description: "Wat deed de gebruiker (optioneel)" },
+              outcome: { type: "string", enum: ["success", "failure", "partial"], description: "Resultaat" },
+              learning_score: { type: "number", description: "Hoe waardevol is deze learning (0.0 - 1.0)", minimum: 0, maximum: 1 }
+            },
+            required: ["event_type", "context", "outcome"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "create_business_intelligence",
+          description: "Creëer een business intelligence insight (workflow pattern, bottleneck, optimalisatie mogelijkheid)",
+          parameters: {
+            type: "object",
+            properties: {
+              intelligence_type: {
+                type: "string",
+                enum: ["workflow_pattern", "productivity_insight", "bottleneck", "optimization_opportunity"],
+                description: "Type insight"
+              },
+              title: { type: "string", description: "Korte titel van het insight" },
+              description: { type: "string", description: "Gedetailleerde beschrijving" },
+              data: { type: "object", description: "Alle ondersteunende data" },
+              priority: { type: "string", enum: ["low", "medium", "high"], description: "Prioriteit van dit insight" },
+              impact_score: { type: "number", description: "Verwachte impact (0.0 - 10.0)", minimum: 0, maximum: 10 }
+            },
+            required: ["intelligence_type", "title", "data"]
           }
         }
       }
@@ -554,6 +740,82 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
 
                           if (commentError) throw commentError;
                           result = { success: true, comment_id: newComment.id, message: `Comment toegevoegd aan taak` };
+                          break;
+
+                        case "save_knowledge":
+                          const { data: knowledge, error: knowledgeError } = await supabaseClient
+                            .from("ai_knowledge_base")
+                            .upsert({
+                              user_id: user.id,
+                              org_id: userOrgId,
+                              category: args.category,
+                              key: args.key,
+                              value: args.value,
+                              confidence_score: args.confidence_score || 1.0,
+                              source: args.source || 'ai_conversation',
+                              usage_count: 0,
+                              last_used_at: new Date().toISOString()
+                            }, {
+                              onConflict: 'user_id,org_id,category,key'
+                            })
+                            .select()
+                            .single();
+
+                          if (knowledgeError) throw knowledgeError;
+                          result = { 
+                            success: true, 
+                            knowledge_id: knowledge.id, 
+                            message: `📚 Kennis opgeslagen: ${args.key} (${args.category})` 
+                          };
+                          break;
+
+                        case "log_learning_event":
+                          const { data: learningEvent, error: learningError } = await supabaseClient
+                            .from("ai_learning_events")
+                            .insert({
+                              user_id: user.id,
+                              org_id: userOrgId,
+                              event_type: args.event_type,
+                              context: args.context,
+                              ai_response: args.ai_response || null,
+                              user_action: args.user_action || null,
+                              outcome: args.outcome,
+                              learning_score: args.learning_score || 0.5,
+                              applied_to_knowledge_base: false
+                            })
+                            .select()
+                            .single();
+
+                          if (learningError) throw learningError;
+                          result = { 
+                            success: true, 
+                            event_id: learningEvent.id, 
+                            message: `🎓 Leer event gelogd: ${args.event_type}` 
+                          };
+                          break;
+
+                        case "create_business_intelligence":
+                          const { data: biInsight, error: biError } = await supabaseClient
+                            .from("business_intelligence")
+                            .insert({
+                              org_id: userOrgId,
+                              intelligence_type: args.intelligence_type,
+                              title: args.title,
+                              description: args.description || null,
+                              data: args.data,
+                              priority: args.priority || 'medium',
+                              impact_score: args.impact_score || 5.0,
+                              status: 'active'
+                            })
+                            .select()
+                            .single();
+
+                          if (biError) throw biError;
+                          result = { 
+                            success: true, 
+                            insight_id: biInsight.id, 
+                            message: `💡 Business Intelligence insight gecreëerd: ${args.title}` 
+                          };
                           break;
 
                         default:

@@ -14,6 +14,109 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_knowledge_base: {
+        Row: {
+          category: string
+          confidence_score: number | null
+          created_at: string | null
+          id: string
+          key: string
+          last_used_at: string | null
+          org_id: string
+          source: string | null
+          updated_at: string | null
+          usage_count: number | null
+          user_id: string
+          value: Json
+        }
+        Insert: {
+          category: string
+          confidence_score?: number | null
+          created_at?: string | null
+          id?: string
+          key: string
+          last_used_at?: string | null
+          org_id: string
+          source?: string | null
+          updated_at?: string | null
+          usage_count?: number | null
+          user_id: string
+          value: Json
+        }
+        Update: {
+          category?: string
+          confidence_score?: number | null
+          created_at?: string | null
+          id?: string
+          key?: string
+          last_used_at?: string | null
+          org_id?: string
+          source?: string | null
+          updated_at?: string | null
+          usage_count?: number | null
+          user_id?: string
+          value?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_knowledge_base_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_learning_events: {
+        Row: {
+          ai_response: Json | null
+          applied_to_knowledge_base: boolean | null
+          context: Json
+          created_at: string | null
+          event_type: string
+          id: string
+          learning_score: number | null
+          org_id: string
+          outcome: string | null
+          user_action: Json | null
+          user_id: string
+        }
+        Insert: {
+          ai_response?: Json | null
+          applied_to_knowledge_base?: boolean | null
+          context: Json
+          created_at?: string | null
+          event_type: string
+          id?: string
+          learning_score?: number | null
+          org_id: string
+          outcome?: string | null
+          user_action?: Json | null
+          user_id: string
+        }
+        Update: {
+          ai_response?: Json | null
+          applied_to_knowledge_base?: boolean | null
+          context?: Json
+          created_at?: string | null
+          event_type?: string
+          id?: string
+          learning_score?: number | null
+          org_id?: string
+          outcome?: string | null
+          user_action?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_learning_events_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attachments: {
         Row: {
           created_at: string
@@ -42,6 +145,56 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_intelligence: {
+        Row: {
+          data: Json
+          description: string | null
+          detected_at: string | null
+          id: string
+          impact_score: number | null
+          intelligence_type: string
+          last_updated_at: string | null
+          org_id: string
+          priority: string | null
+          status: string | null
+          title: string
+        }
+        Insert: {
+          data: Json
+          description?: string | null
+          detected_at?: string | null
+          id?: string
+          impact_score?: number | null
+          intelligence_type: string
+          last_updated_at?: string | null
+          org_id: string
+          priority?: string | null
+          status?: string | null
+          title: string
+        }
+        Update: {
+          data?: Json
+          description?: string | null
+          detected_at?: string | null
+          id?: string
+          impact_score?: number | null
+          intelligence_type?: string
+          last_updated_at?: string | null
+          org_id?: string
+          priority?: string | null
+          status?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_intelligence_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -179,6 +332,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      conversation_context: {
+        Row: {
+          category: string
+          conversation_id: string
+          created_at: string | null
+          ended_at: string | null
+          id: string
+          key_points: Json | null
+          sentiment: string | null
+          summary: string | null
+          topics: string[] | null
+          user_id: string
+        }
+        Insert: {
+          category: string
+          conversation_id: string
+          created_at?: string | null
+          ended_at?: string | null
+          id?: string
+          key_points?: Json | null
+          sentiment?: string | null
+          summary?: string | null
+          topics?: string[] | null
+          user_id: string
+        }
+        Update: {
+          category?: string
+          conversation_id?: string
+          created_at?: string | null
+          ended_at?: string | null
+          id?: string
+          key_points?: Json | null
+          sentiment?: string | null
+          summary?: string | null
+          topics?: string[] | null
+          user_id?: string
+        }
+        Relationships: []
       }
       dependencies: {
         Row: {
