@@ -74,20 +74,11 @@ export default function Opvolging() {
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Use the smart caching hook
-  const { 
-    priorityScores, 
+  const {
+    priorityScores,
     loading: scoringLoading,
-    getScoreForTask,
-    calculateScores
+    getScoreForTask
   } = useAiScoring(tasks, true);
-
-  // Force AI calculation if tasks are loaded but no scores exist
-  useEffect(() => {
-    if (tasks.length > 0 && priorityScores.size === 0 && !scoringLoading) {
-      console.log('🚀 No AI scores found, triggering calculation for', tasks.length, 'tasks');
-      calculateScores(tasks);
-    }
-  }, [tasks.length, priorityScores.size, scoringLoading]);
 
   useEffect(() => {
     checkAuth();
@@ -437,13 +428,13 @@ export default function Opvolging() {
                                   {task.scoreBreakdown && (
                                     <div className="mt-2 space-y-1">
                                       {task.scoreBreakdown.klant_impact > 0 && (
-                                        <Progress value={task.scoreBreakdown.klant_impact * 100} className="h-1" />
+                                        <Progress value={task.scoreBreakdown.klant_impact} className="h-1" />
                                       )}
                                       {task.scoreBreakdown.omzet_bescherming > 0 && (
-                                        <Progress value={task.scoreBreakdown.omzet_bescherming * 100} className="h-1" />
+                                        <Progress value={task.scoreBreakdown.omzet_bescherming} className="h-1" />
                                       )}
                                       {task.scoreBreakdown.overgang_voorbereiding > 0 && (
-                                        <Progress value={task.scoreBreakdown.overgang_voorbereiding * 100} className="h-1" />
+                                        <Progress value={task.scoreBreakdown.overgang_voorbereiding} className="h-1" />
                                       )}
                                     </div>
                                   )}

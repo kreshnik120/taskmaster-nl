@@ -56,7 +56,7 @@ const Kanban = () => {
   const { taskId } = useParams();
   
   // AI Scoring integration
-  const { priorityScores, loading: aiLoading, getScoreForTask, refreshScores } = useAiScoring(tasks, true);
+  const { priorityScores, loading: aiLoading, getScoreForTask } = useAiScoring(tasks, true);
 
   useEffect(() => {
     // Check authentication
@@ -138,8 +138,6 @@ const Kanban = () => {
               .then(({ data }) => {
                 if (data) {
                   setTasks(data);
-                  // Trigger AI re-scoring for changed tasks
-                  refreshScores();
                 }
               });
           }

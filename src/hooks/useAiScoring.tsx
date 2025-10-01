@@ -118,15 +118,15 @@ export const useAiScoring = (tasks: Task[], enableAutoScoring: boolean = false) 
           throw error;
         }
 
-        if (data?.scores) {
+        if (data?.results) {
           const newCache = new Map(cache);
-          data.scores.forEach((score: PriorityScore) => {
+          data.results.forEach((score: PriorityScore) => {
             newScores.set(score.task_id, score);
             newCache.set(score.task_id, { score, timestamp: now });
           });
           setCache(newCache);
           saveCacheToStorage(newCache);
-          console.log(`✅ AI scoring completed for ${data.scores.length} tasks`);
+          console.log(`✅ AI scoring completed for ${data.results.length} tasks`);
         }
       } else {
         console.log(`✅ Using cached scores for all ${tasksToScore.length} tasks`);
@@ -154,20 +154,9 @@ export const useAiScoring = (tasks: Task[], enableAutoScoring: boolean = false) 
     return priorityScores.get(taskId);
   }, [priorityScores]);
 
-  const refreshScores = useCallback(() => {
-    calculateScores(tasks);
-  }, [tasks, calculateScores]);
-
-  const scoreTask = useCallback(async (task: Task) => {
-    await calculateScores([task]);
-  }, [calculateScores]);
-
   return {
     priorityScores,
     loading,
-    getScoreForTask,
-    refreshScores,
-    scoreTask,
-    calculateScores
+    getScoreForTask
   };
 };
