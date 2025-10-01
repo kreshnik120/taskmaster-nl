@@ -27,7 +27,7 @@ serve(async (req) => {
       throw new Error("Niet geautoriseerd");
     }
 
-    const { message } = await req.json();
+    const { message, isChunk, chunkIndex, totalChunks } = await req.json();
 
     const { data: orgData } = await supabase
       .from("user_organizations")
@@ -55,21 +55,25 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `Je bent een AI training assistent. Je helpt gebruikers bij het opbouwen van een kennisbank voor een bedrijfs-specifiek AI systeem.
+            content: `Je bent een geavanceerde AI training assistent voor CitoZorg. Je verwerkt bedrijfsinformatie in een kennisbank.
 
-Je taken:
-1. Ontvang bedrijfsinformatie van gebruikers
-2. Identificeer belangrijke kennis zoals:
-   - Bedrijfsprocessen
-   - Standaard procedures
-   - Klantinformatie
-   - Voorkeuren en regels
-   - Workflow patronen
-   
-3. Extraheer deze informatie in gestructureerde kennis items
-4. Geef suggesties voor aanvullende informatie die nuttig zou zijn
+${isChunk ? `⚠️ DIT IS DEEL ${chunkIndex}/${totalChunks} VAN EEN GROOT DOCUMENT - VERWERK ALLES ZONDER UITZONDERINGEN!` : ''}
 
-Wees interactief en stel gerichte vragen om de kennisbank te verrijken.`,
+BELANGRIJKE INSTRUCTIES:
+1. Extraheer ALLE relevante informatie - mis niets!
+2. Verdeel informatie over deze categorieën:
+   - bedrijfsgegevens: KvK, adressen, contacten, structuur, directie
+   - tarieven: uurtarieven, marges, toeslagen, prijsafspraken per niveau/dagdeel
+   - contracten: overeenkomsten, looptijden, fees, voorwaarden
+   - processen: workflows, procedures, governance, planning, facturatie
+   - compliance: wetgeving, verzekeringen, VOG, diploma's, registraties
+   - zzp_vereisten: kwalificaties, documenten, gedragsregels voor zzp'ers
+
+3. Voor ELKE categorie die je detecteert, gebruik save_training_knowledge
+4. Splits complexe informatie in meerdere kennisitems met unieke keys
+5. Wees extreem grondig - elke regel, elk tarief, elke eis moet opgeslagen worden
+
+${isChunk ? 'LET OP: Dit is een deel van een groter document. Verwerk alles in dit deel volledig!' : ''}`,
           },
           { role: "user", content: message },
         ],
@@ -84,7 +88,7 @@ Wees interactief en stel gerichte vragen om de kennisbank te verrijken.`,
                 properties: {
                   category: {
                     type: "string",
-                    enum: ["bedrijfsregels", "processen", "klantinfo", "voorkeuren", "workflow"],
+                    enum: ["bedrijfsgegevens", "tarieven", "contracten", "processen", "compliance", "zzp_vereisten", "klantinfo"],
                   },
                   key: { type: "string" },
                   value: { type: "object" },
@@ -107,28 +111,55 @@ Wees interactief en stel gerichte vragen om de kennisbank te verrijken.`,
     const aiData = await aiResponse.json();
     const choice = aiData.choices?.[0];
 
+    let savedCount = 0;
+
     if (choice?.message?.tool_calls) {
       for (const toolCall of choice.message.tool_calls) {
         if (toolCall.function.name === "save_training_knowledge") {
           const args = JSON.parse(toolCall.function.arguments);
           
-          await supabase.from("ai_knowledge_base").insert({
-            user_id: user.id,
-            org_id: orgData.org_id,
-            category: args.category,
-            key: args.key,
-            value: args.value,
-            source: "training_chat",
-            confidence_score: 1.0,
-          });
+          // Check of deze kennis al bestaat
+          const { data: existing } = await supabase
+            .from("ai_knowledge_base")
+            .select("id")
+            .eq("org_id", orgData.org_id)
+            .eq("category", args.category)
+            .eq("key", args.key)
+            .maybeSingle();
+
+          if (!existing) {
+            const { error: insertError } = await supabase.from("ai_knowledge_base").insert({
+              user_id: user.id,
+              org_id: orgData.org_id,
+              category: args.category,
+              key: args.key,
+              value: args.value,
+              source: isChunk ? "training_chat_batch" : "training_chat",
+              confidence_score: 0.95, // Hoge score voor handmatige training
+            });
+
+            if (!insertError) {
+              savedCount++;
+              console.log(`Saved knowledge: ${args.category}/${args.key}`);
+            } else {
+              console.error("Insert error:", insertError);
+            }
+          }
         }
       }
     }
 
-    const responseContent = choice?.message?.content || "Kennis opgeslagen.";
+    const responseContent = isChunk 
+      ? `Deel ${chunkIndex}/${totalChunks} verwerkt - ${savedCount} items opgeslagen`
+      : choice?.message?.content || `${savedCount} kennisitem(s) opgeslagen`;
 
     return new Response(
-      JSON.stringify({ response: responseContent }),
+      JSON.stringify({ 
+        response: responseContent,
+        savedCount,
+        isChunk,
+        chunkIndex
+      }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
