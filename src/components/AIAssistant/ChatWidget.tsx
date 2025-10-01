@@ -396,15 +396,11 @@ export const ChatWidget = () => {
     streamChat(input.trim());
   };
 
-  // Don't render if not authenticated
-  if (!isAuthenticated) {
-    return null;
-  }
 
   return (
     <>
       {/* Robot Assistant - Visible for logged in users */}
-      <div className="fixed bottom-6 right-6 z-[100] pointer-events-none">
+      <div className="fixed bottom-6 right-6 z-[2147483647] pointer-events-none">
         <div className="pointer-events-auto drop-shadow-2xl">
           <RobotIcon 
             onClick={() => setIsOpen(!isOpen)} 
@@ -415,7 +411,7 @@ export const ChatWidget = () => {
 
       {/* Chat Window */}
       {isOpen && (
-        <div className="fixed bottom-6 right-28 w-96 h-[600px] bg-background border rounded-lg shadow-xl flex flex-col animate-in slide-in-from-right duration-300">
+        <div className="fixed bottom-6 right-28 w-96 h-[600px] bg-background border rounded-lg shadow-xl flex flex-col animate-in slide-in-from-right duration-300 z-[2147483647]">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-primary/5 to-primary/10">
             <div className="flex items-center gap-3">

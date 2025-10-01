@@ -30,6 +30,11 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
   // Track if user is dragging to prevent click event
   const [isDragging, setIsDragging] = useState(false);
 
+  // Clamp any restored position on mount to ensure visibility
+  useEffect(() => {
+    setPosition(prev => constrainPosition(prev.x, prev.y));
+  }, []);
+
   // Save position to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(position));
@@ -50,8 +55,8 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
 
   // Boundary check function
   const constrainPosition = (x: number, y: number) => {
-    const maxX = window.innerWidth - 120; // Account for robot width
-    const maxY = window.innerHeight - 120;
+    const maxX = 0; // Prevent moving further right than bottom-right anchor
+    const maxY = 0; // Prevent moving further down than bottom-right anchor
     const minX = -window.innerWidth + 120;
     const minY = -window.innerHeight + 120;
     
@@ -81,7 +86,7 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
       style={{ x: position.x, y: position.y }}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
-      className="relative group fixed bottom-6 right-6 z-50 cursor-grab active:cursor-grabbing border-none p-0 w-32 h-32 drop-shadow-2xl"
+      className="relative group fixed bottom-6 right-6 z-[2147483647] cursor-grab active:cursor-grabbing border-none p-0 w-32 h-32 drop-shadow-2xl"
       whileHover={{ scale: 1.15 }}
       whileTap={{ scale: 0.9 }}
       animate={!isActive ? { 
