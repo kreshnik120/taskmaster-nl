@@ -971,6 +971,56 @@ export type Database = {
           },
         ]
       }
+      training_documents: {
+        Row: {
+          created_at: string | null
+          extracted_knowledge_count: number | null
+          file_name: string
+          file_path: string
+          file_size: number
+          id: string
+          mime_type: string
+          org_id: string
+          processed_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          extracted_knowledge_count?: number | null
+          file_name: string
+          file_path: string
+          file_size: number
+          id?: string
+          mime_type: string
+          org_id: string
+          processed_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          extracted_knowledge_count?: number | null
+          file_name?: string
+          file_path?: string
+          file_size?: number
+          id?: string
+          mime_type?: string
+          org_id?: string
+          processed_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_documents_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_organizations: {
         Row: {
           org_id: string

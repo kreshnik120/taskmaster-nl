@@ -1,4 +1,4 @@
-import { Home, Kanban, List, Calendar, Clock, BarChart3, Trash2, CheckCircle2, LogOut } from "lucide-react";
+import { Home, Kanban, List, Calendar, Clock, BarChart3, Trash2, CheckCircle2, Brain, LogOut } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   Sidebar,
@@ -23,6 +23,7 @@ const menuItems = [
   { title: "Opvolging", url: "/opvolging", icon: BarChart3 },
   { title: "Afgeronde taken", url: "/afgerond", icon: CheckCircle2 },
   { title: "Verwijderde taken", url: "/verwijderd", icon: Trash2 },
+  { title: "AI Training", url: "/ai-training", icon: Brain },
 ];
 
 export function AppSidebar() {
