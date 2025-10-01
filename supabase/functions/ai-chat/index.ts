@@ -357,12 +357,20 @@ Bij planning: houd rekening met Nederlandse werkdagen en werktijden (ma-vr, 09:0
 Als gebruiker meer wil zonder trigger woord: vraag "Wil je meer details?"
 
 🎯 ACTIES (gebruik tools):
-- create_task: Maak taken aan
+- create_task: Maak 1 taak aan
+- create_multiple_tasks: Maak meerdere taken tegelijk aan (gebruik dit bij 4+ taken, bij lijsten/bulk imports)
 - update_task: Wijzig taken (status, priority, deadline)
 - add_comment: Voeg comments toe
 - save_knowledge: Sla permanente kennis op
 - log_learning_event: Log feedback & patronen
 - create_business_intelligence: Creëer business insights
+
+🔄 BULK IMPORT INSTRUCTIES:
+- Bij 1-3 taken: gebruik create_task per taak
+- Bij 4+ taken: gebruik create_multiple_tasks voor efficiency
+- Bij gestructureerde data (Excel/tabel): parse alle taken en gebruik create_multiple_tasks
+- Let op datum formats: Nederlandse datums (DD-MM-YYYY) converteren naar ISO 8601
+- Let op prioriteit mapping: Laag→LOW, Middel→MEDIUM, Hoog→HIGH
 
 🚫 WANNEER GEEN TAAK AANMAKEN:
 - INFORMATIEVRAGEN: "welke", "hoeveel", "wanneer", "waar", "hoe", "waarom", "wat zijn", "wie", "toon", "laat zien", "geef overzicht"
@@ -616,6 +624,37 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                 default: 10
               }
             }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "create_multiple_tasks",
+          description: "Maak meerdere taken tegelijk aan in bulk. Gebruik dit wanneer de gebruiker een lijst van taken uploadt of meerdere taken tegelijk wil aanmaken (bijv. uit een Excel/tabel). Voor 1-3 taken gebruik create_task, voor 4+ taken gebruik create_multiple_tasks.",
+          parameters: {
+            type: "object",
+            properties: {
+              tasks: {
+                type: "array",
+                description: "Array van taken om aan te maken",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string", description: "Titel van de taak" },
+                    description: { type: "string", description: "Gedetailleerde beschrijving" },
+                    priority: { type: "string", enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"], description: "Prioriteit (LOW, MEDIUM, HIGH, of CRITICAL)" },
+                    due_at: { type: "string", description: "Deadline in ISO 8601 formaat (optioneel)" },
+                    start_at: { type: "string", description: "Start datum/tijd in ISO 8601 formaat (optioneel)" },
+                    project_id: { type: "string", description: "UUID van het project (optioneel)" },
+                    client_id: { type: "string", description: "UUID van de client (optioneel)" },
+                    assignee_id: { type: "string", description: "UUID van de toegewezen persoon (optioneel)" }
+                  },
+                  required: ["title"]
+                }
+              }
+            },
+            required: ["tasks"]
           }
         }
       }
@@ -925,6 +964,75 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             result = { 
                               success: true, 
                               message: `✅ ${searchData.total_found} professionals gevonden${filterInfo.length > 0 ? ` (${filterInfo.join(', ')})` : ''}:\n\n${profList}` 
+                            };
+                          }
+                          break;
+
+                        case "create_multiple_tasks":
+                          console.log(`📦 Bulk creating ${args.tasks.length} tasks`);
+                          
+                          const bulkResults = {
+                            successful: [] as any[],
+                            failed: [] as any[]
+                          };
+
+                          // Prepare all tasks for bulk insert
+                          const tasksToInsert = args.tasks.map((task: any) => {
+                            // Normalize priority
+                            let normalizedPriority = (task.priority || "MEDIUM").toUpperCase();
+                            if (normalizedPriority === "NORMAL") normalizedPriority = "MEDIUM";
+                            if (!["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(normalizedPriority)) {
+                              normalizedPriority = "MEDIUM";
+                            }
+
+                            // Smart date defaults
+                            let startAt = task.start_at || null;
+                            const dueAt = task.due_at || null;
+                            
+                            if (dueAt && !startAt) {
+                              startAt = new Date().toISOString();
+                            } else if (!dueAt && !startAt) {
+                              startAt = new Date().toISOString();
+                            }
+
+                            return {
+                              title: task.title,
+                              description: task.description || null,
+                              priority: normalizedPriority,
+                              due_at: dueAt,
+                              start_at: startAt,
+                              project_id: task.project_id || null,
+                              client_id: task.client_id || null,
+                              assignee_id: task.assignee_id || null,
+                              org_id: userOrgId,
+                              reporter_id: user.id
+                            };
+                          });
+
+                          // Bulk insert
+                          const { data: createdTasks, error: bulkError } = await supabaseClient
+                            .from("tasks")
+                            .insert(tasksToInsert)
+                            .select();
+
+                          if (bulkError) {
+                            console.error("Bulk insert error:", bulkError);
+                            result = {
+                              success: false,
+                              message: `❌ Fout bij bulk aanmaken: ${bulkError.message}`
+                            };
+                          } else {
+                            const successCount = createdTasks?.length || 0;
+                            const tasksList = createdTasks
+                              ?.slice(0, 5)
+                              .map((t: any, i: number) => `${i + 1}. ${t.title} (ID: ${t.sequence_number || t.id})`)
+                              .join('\n') || '';
+                            
+                            const moreText = successCount > 5 ? `\n... en ${successCount - 5} meer taken` : '';
+                            
+                            result = {
+                              success: true,
+                              message: `✅ ${successCount} taken succesvol aangemaakt!\n\n${tasksList}${moreText}\n\n🎯 Alle taken zijn nu zichtbaar in Kanban, Lijst en Kalender views.`
                             };
                           }
                           break;
