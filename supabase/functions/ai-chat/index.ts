@@ -278,11 +278,16 @@ WERKBELASTING DEZE WEEK:
 - Totaal gewerkte uren: ${(totalTimeThisWeek / 60).toFixed(1)}h
 - Gemiddeld aantal taken per dag: ${avgTasksPerDay.toFixed(1)}
 
-CLIENTS: ${clients?.length || 0} actieve clients
-${tasksWithClients.slice(0, 5).map(t => {
-  const client = clientMap.get(t.client_id!);
-  return client ? `- ${client.company}: ${t.title}` : '';
-}).filter(Boolean).join('\n')}
+CLIENTS (${clients?.length || 0} actieve clients):
+${clients?.map(c => `
+📍 ${c.company} (${c.name})
+   - Tier: ${c.tier}
+   - Uren/week: ${c.weekly_hours || 'Niet ingesteld'}
+   - Revenue/uur: €${c.revenue_per_hour || 'Niet ingesteld'}
+   - Maandelijkse waarde: €${c.weekly_hours && c.revenue_per_hour ? (c.weekly_hours * c.revenue_per_hour * 4).toFixed(2) : 'Niet ingesteld'}
+   - Client ID: ${c.id}
+   - Actieve taken: ${tasksWithClients.filter(t => t.client_id === c.id).length}
+`).join('') || '- Geen clients geregistreerd'}
 
 PROJECTEN: ${projects?.length || 0} actieve projecten
 
@@ -314,6 +319,14 @@ JOUW CAPABILITIES:
 ✅ Business impact analyse (revenue, client relationships)
 ✅ Tijdmanagement en workload balancering
 ✅ **ACTIES UITVOEREN**: Je kunt daadwerkelijk taken aanmaken, wijzigen en beheren!
+✅ **CLIENT KENNIS**: Directe toegang tot alle client informatie (namen, bedrijven, tiers, revenue)
+
+CLIENT INFORMATIE GEBRUIK:
+- Als gevraagd wordt naar clients, gebruik de CLIENTS sectie in de context
+- Alle client details zijn beschikbaar: bedrijfsnaam, contactpersoon, tier, uren, revenue
+- Je kunt client_id gebruiken bij het aanmaken van taken
+- Rapporteer altijd complete client lijsten wanneer gevraagd
+- Gebruik client info voor prioritering en planning
 
 BESCHIKBARE ACTIES (Tools):
 🔧 create_task: Maak nieuwe taken aan in het systeem

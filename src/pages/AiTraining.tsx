@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TrainingChat } from "@/components/AITraining/TrainingChat";
 import { DocumentUpload } from "@/components/AITraining/DocumentUpload";
 import { KnowledgeOverview } from "@/components/AITraining/KnowledgeOverview";
+import { SeedClientKnowledge } from "@/components/AITraining/SeedClientKnowledge";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -79,7 +80,10 @@ const AiTraining = () => {
               </TabsContent>
 
               <TabsContent value="knowledge" className="mt-6">
-                <KnowledgeOverview />
+                <div className="space-y-6">
+                  <SeedClientKnowledge />
+                  <KnowledgeOverview />
+                </div>
               </TabsContent>
             </Tabs>
           </div>

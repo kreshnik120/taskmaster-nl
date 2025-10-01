@@ -17,3 +17,6 @@ verify_jwt = true
 
 [functions.process-training-document]
 verify_jwt = true
+
+[functions.seed-client-knowledge]
+verify_jwt = true
