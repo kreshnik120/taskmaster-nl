@@ -236,17 +236,21 @@ export const ChatWidget = () => {
 
   return (
     <>
-      {/* Robot Assistant */}
-      {!isOpen && (
-        <div className="fixed bottom-6 right-6 z-[100] pointer-events-none">
-          <div className="pointer-events-auto drop-shadow-2xl">
-            <RobotIcon 
-              onClick={() => setIsOpen(true)} 
-              isActive={isLoading}
-            />
-          </div>
+      {/* Robot Assistant - Always Visible */}
+      <div className={`fixed z-[100] pointer-events-none transition-all duration-300 ${
+        isOpen 
+          ? 'bottom-[640px] right-6' 
+          : 'bottom-6 right-6'
+      }`}>
+        <div className={`pointer-events-auto drop-shadow-2xl transition-transform duration-300 ${
+          isOpen ? 'scale-75' : 'scale-100'
+        }`}>
+          <RobotIcon 
+            onClick={() => setIsOpen(!isOpen)} 
+            isActive={isLoading}
+          />
         </div>
-      )}
+      </div>
 
       {/* Chat Window */}
       {isOpen && (
