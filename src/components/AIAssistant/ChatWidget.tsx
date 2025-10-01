@@ -43,6 +43,22 @@ const QUICK_ACTIONS = [
   { icon: Clock, label: 'Maak nieuwe taak', prompt: 'Help me een nieuwe taak aan te maken' },
 ];
 
+// Helper functions for conversation session management
+const getConversationId = (): string => {
+  let conversationId = localStorage.getItem('chat_conversation_id');
+  if (!conversationId) {
+    conversationId = crypto.randomUUID();
+    localStorage.setItem('chat_conversation_id', conversationId);
+  }
+  return conversationId;
+};
+
+const startNewConversation = (): string => {
+  const newConversationId = crypto.randomUUID();
+  localStorage.setItem('chat_conversation_id', newConversationId);
+  return newConversationId;
+};
+
 export const ChatWidget = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -99,17 +115,22 @@ export const ChatWidget = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      const conversationId = getConversationId();
+
       const { data: history } = await supabase
         .from('chat_messages')
         .select('role, content')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: true })
-        .limit(20);
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: false })
+        .limit(50);
 
       if (history && history.length > 0) {
-        setMessages(history as Message[]);
+        setMessages(history.reverse() as Message[]);
         setShowWelcome(false);
-        console.log('📚 Loaded chat history:', history.length, 'messages');
+        console.log('📚 Loaded chat history:', history.length, 'messages for conversation:', conversationId);
+      } else {
+        setShowWelcome(true);
       }
     };
 
@@ -144,22 +165,19 @@ export const ChatWidget = () => {
         return;
       }
 
-      // Wis alleen chat_messages (training data blijft behouden)
-      const { error } = await supabase
-        .from('chat_messages')
-        .delete()
-        .eq('user_id', session.user.id);
-
-      if (error) throw error;
-
+      // Start nieuwe conversatie sessie (geen database DELETE)
+      const newConversationId = startNewConversation();
+      
       // Reset lokale state
       setMessages([]);
       setShowWelcome(true);
       setShowResetDialog(false);
 
+      console.log('🔄 Nieuwe conversatie gestart:', newConversationId);
+      
       toast({
         title: "✅ Chat gewist",
-        description: "Verse start - AI trainingsdata is behouden",
+        description: "Verse start - alle gesprekken blijven bewaard voor AI training",
       });
     } catch (error) {
       console.error('Error clearing chat:', error);
@@ -546,10 +564,11 @@ export const ChatWidget = () => {
       // Save to database for learning and context
       const { data: { user } } = await supabase.auth.getUser();
       if (user && assistantMessage) {
-        console.log('💾 Saving conversation to database');
+        const conversationId = getConversationId();
+        console.log('💾 Saving conversation to database (session:', conversationId, ')');
         const { error: insertError } = await supabase.from('chat_messages').insert([
-          { role: 'user', content: userMessage, user_id: user.id },
-          { role: 'assistant', content: assistantMessage, user_id: user.id },
+          { role: 'user', content: userMessage, user_id: user.id, conversation_id: conversationId },
+          { role: 'assistant', content: assistantMessage, user_id: user.id, conversation_id: conversationId },
         ]);
         
         if (insertError) {
