@@ -220,11 +220,71 @@ serve(async (req) => {
     const highPriorityTasks = activeTasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL');
     const revenueImpactTasks = activeTasks.filter(t => t.revenue_impact_eur && t.revenue_impact_eur > 0);
     
-    // Analyze knowledge base for user preferences and patterns
-    const userPreferences = knowledgeBase.filter((kb: any) => kb.category === 'user_preference');
-    const businessRules = knowledgeBase.filter((kb: any) => kb.category === 'business_rule');
-    const workflowPatterns = knowledgeBase.filter((kb: any) => kb.category === 'workflow_pattern');
-    const decisionContexts = knowledgeBase.filter((kb: any) => kb.category === 'decision_context');
+    // Fetch ALL knowledge base items with org_id filter for comprehensive access
+    const { data: allKnowledgeBase } = await supabaseClient
+      .from('ai_knowledge_base')
+      .select('category, key, value, confidence_score, source, usage_count')
+      .or(`user_id.eq.${user.id},org_id.eq.${userOrgId}`)
+      .order('confidence_score', { ascending: false })
+      .order('usage_count', { ascending: false });
+    
+    const fullKnowledgeBase = allKnowledgeBase || [];
+    
+    // Organize knowledge by category for structured presentation
+    const knowledgeByCategory: { [key: string]: any[] } = {};
+    fullKnowledgeBase.forEach((kb: any) => {
+      if (!knowledgeByCategory[kb.category]) {
+        knowledgeByCategory[kb.category] = [];
+      }
+      knowledgeByCategory[kb.category].push(kb);
+    });
+    
+    // Format knowledge base for AI consumption
+    const formatKnowledgeBase = () => {
+      if (fullKnowledgeBase.length === 0) return "Geen kennis beschikbaar.";
+      
+      let formatted = "";
+      const categoryLabels: { [key: string]: string } = {
+        bedrijfsgegevens: "📋 BEDRIJFSGEGEVENS",
+        tarieven: "💰 TARIEVEN & PRIJZEN",
+        contracten: "📝 CONTRACTEN & AFSPRAKEN",
+        processen: "⚙️ PROCESSEN & WORKFLOWS",
+        compliance: "✅ COMPLIANCE & REGELGEVING",
+        zzp_vereisten: "👤 ZZP VEREISTEN",
+        user_preference: "⭐ GEBRUIKER VOORKEUREN",
+        business_rule: "📏 BEDRIJFSREGELS",
+        workflow_pattern: "🔄 WORKFLOW PATRONEN",
+        decision_context: "🎯 BESLISSING CONTEXT"
+      };
+      
+      // Priority order for categories
+      const priorityCategories = [
+        "contracten", "tarieven", "zzp_vereisten", "compliance", 
+        "processen", "bedrijfsgegevens", "user_preference", "business_rule", 
+        "workflow_pattern", "decision_context"
+      ];
+      
+      priorityCategories.forEach(category => {
+        if (knowledgeByCategory[category] && knowledgeByCategory[category].length > 0) {
+          formatted += `\n${categoryLabels[category] || category.toUpperCase()}:\n`;
+          knowledgeByCategory[category].forEach((kb: any) => {
+            const value = typeof kb.value === 'string' ? kb.value : JSON.stringify(kb.value, null, 2);
+            formatted += `  • ${kb.key}: ${value}`;
+            if (kb.confidence_score) formatted += ` [Zekerheid: ${(kb.confidence_score * 100).toFixed(0)}%]`;
+            if (kb.source) formatted += ` [Bron: ${kb.source}]`;
+            formatted += `\n`;
+          });
+        }
+      });
+      
+      return formatted;
+    };
+    
+    // Analyze knowledge base for user preferences and patterns (keep for backward compatibility)
+    const userPreferences = fullKnowledgeBase.filter((kb: any) => kb.category === 'user_preference');
+    const businessRules = fullKnowledgeBase.filter((kb: any) => kb.category === 'business_rule');
+    const workflowPatterns = fullKnowledgeBase.filter((kb: any) => kb.category === 'workflow_pattern');
+    const decisionContexts = fullKnowledgeBase.filter((kb: any) => kb.category === 'decision_context');
     
     // Analyze learning events for patterns
     const successfulPatterns = learningEvents.filter((le: any) => le.outcome === 'success' && le.learning_score > 0.7);
@@ -253,7 +313,7 @@ ${clients?.map(c => `${c.company}: ${c.weekly_hours || 0}h/week, €${c.revenue_
 TOP TAKEN:
 ${activeTasks.slice(0, 5).map((t, i) => `${i + 1}. [${t.priority}] ${t.title}${t.due_at ? ` (${new Date(t.due_at).toLocaleDateString('nl-NL')})` : ''}`).join('\n')}
 
-KENNIS: ${knowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
+KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
 `;
 
     // Get conversation history (reverse order for chronological display)
@@ -354,8 +414,17 @@ WANNEER GEBRUIK JE CREATE_BUSINESS_INTELLIGENCE:
 HUIDIGE CONTEXT:
 ${contextSummary}
 
+📚 KENNISBANK (${fullKnowledgeBase.length} items):
+${formatKnowledgeBase()}
+
 CONVERSATIE GESCHIEDENIS:
 ${conversationHistory}
+
+🎯 GEBRUIK DE KENNISBANK ACTIEF:
+- Bij vragen over contracten, tarieven, compliance → Verwijs naar de specifieke kennis hierboven
+- Geef exacte details met bronvermelding (bijv. "Volgens contract Lunet...")
+- Bij onduidelijkheid: vraag gebruiker om meer training data
+- Update usage_count door relevante kennis te gebruiken
 
 Gebruik deze rijke context om intelligente, context-aware antwoorden te geven die echt helpen met productiviteit en taakbeheer. En vergeet niet: je kunt nu DAADWERKELIJK acties uitvoeren!`;
 
