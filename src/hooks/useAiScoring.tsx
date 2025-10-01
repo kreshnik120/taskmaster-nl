@@ -68,6 +68,23 @@ export const useAiScoring = (tasks: Task[], enableAutoScoring: boolean = false) 
   const [loading, setLoading] = useState(false);
   const [cache, setCache] = useState<Map<string, CachedScore>>(() => loadCacheFromStorage());
 
+  // Load cached scores into state on mount
+  useEffect(() => {
+    const cachedScores = new Map<string, PriorityScore>();
+    const now = Date.now();
+    
+    cache.forEach((cachedScore, taskId) => {
+      if ((now - cachedScore.timestamp) <= CACHE_DURATION) {
+        cachedScores.set(taskId, cachedScore.score);
+      }
+    });
+    
+    if (cachedScores.size > 0) {
+      console.log(`✅ Loaded ${cachedScores.size} cached AI scores from sessionStorage`);
+      setPriorityScores(cachedScores);
+    }
+  }, []); // Only run on mount
+
   const calculateScores = useCallback(async (tasksToScore: Task[]) => {
     if (tasksToScore.length === 0) return;
 
@@ -127,9 +144,11 @@ export const useAiScoring = (tasks: Task[], enableAutoScoring: boolean = false) 
   // Auto-score on mount or when tasks change (if enabled)
   useEffect(() => {
     if (enableAutoScoring && tasks.length > 0) {
+      const taskIds = tasks.map(t => t.id).join(',');
+      console.log(`🔄 Auto-scoring triggered for ${tasks.length} tasks`);
       calculateScores(tasks);
     }
-  }, [enableAutoScoring, tasks.length]); // Only re-score when task count changes
+  }, [enableAutoScoring, tasks.map(t => t.id).join(',')]); // Re-score when task IDs change
 
   const getScoreForTask = useCallback((taskId: string): PriorityScore | undefined => {
     return priorityScores.get(taskId);
