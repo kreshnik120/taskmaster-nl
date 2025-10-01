@@ -42,6 +42,12 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
     }
   };
 
+  const handleDoubleClick = () => {
+    // Reset position on double click
+    setPosition({ x: 0, y: 0 });
+    localStorage.removeItem(STORAGE_KEY);
+  };
+
   return (
     <motion.button
       drag
@@ -57,9 +63,18 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
       }}
       style={{ x: position.x, y: position.y }}
       onClick={handleClick}
-      className="relative cursor-grab active:cursor-grabbing border-none p-0 w-32 h-32"
-      whileHover={{ scale: 1.05 }}
+      onDoubleClick={handleDoubleClick}
+      className="fixed bottom-6 right-6 z-50 cursor-grab active:cursor-grabbing border-none p-0 w-20 h-20 drop-shadow-2xl"
+      whileHover={{ scale: 1.1 }}
       whileTap={{ scale: 0.95 }}
+      animate={!isActive ? { 
+        y: [0, -10, 0],
+      } : {}}
+      transition={{
+        duration: 2,
+        repeat: Infinity,
+        ease: "easeInOut"
+      }}
     >
       <RobotErrorBoundary
         fallback={
@@ -98,9 +113,18 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
       {/* Active indicator */}
       {isActive && (
         <motion.div
-          className="absolute top-2 right-2 w-3 h-3 bg-green-500 rounded-full shadow-lg"
-          animate={{ scale: [1, 1.2, 1], opacity: [1, 0.7, 1] }}
+          className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full shadow-lg border-2 border-background"
+          animate={{ scale: [1, 1.3, 1], opacity: [1, 0.8, 1] }}
           transition={{ duration: 1, repeat: Infinity }}
+        />
+      )}
+      
+      {/* Glow effect when inactive */}
+      {!isActive && (
+        <motion.div
+          className="absolute inset-0 rounded-full bg-primary/20 blur-xl -z-10"
+          animate={{ opacity: [0.3, 0.6, 0.3] }}
+          transition={{ duration: 2, repeat: Infinity }}
         />
       )}
     </motion.button>
