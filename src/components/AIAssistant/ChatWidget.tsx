@@ -237,14 +237,8 @@ export const ChatWidget = () => {
   return (
     <>
       {/* Robot Assistant - Always Visible */}
-      <div className={`fixed z-[100] pointer-events-none transition-all duration-300 ${
-        isOpen 
-          ? 'bottom-[640px] right-6' 
-          : 'bottom-6 right-6'
-      }`}>
-        <div className={`pointer-events-auto drop-shadow-2xl transition-transform duration-300 ${
-          isOpen ? 'scale-75' : 'scale-100'
-        }`}>
+      <div className="fixed bottom-6 right-6 z-[100] pointer-events-none">
+        <div className="pointer-events-auto drop-shadow-2xl">
           <RobotIcon 
             onClick={() => setIsOpen(!isOpen)} 
             isActive={isLoading}
@@ -254,7 +248,7 @@ export const ChatWidget = () => {
 
       {/* Chat Window */}
       {isOpen && (
-        <div className="fixed bottom-6 right-6 w-96 h-[600px] bg-background border rounded-lg shadow-xl flex flex-col">
+        <div className="fixed bottom-6 right-28 w-96 h-[600px] bg-background border rounded-lg shadow-xl flex flex-col animate-in slide-in-from-right duration-300">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-primary/5 to-primary/10">
             <div className="flex items-center gap-3">
