@@ -86,7 +86,8 @@ serve(async (req) => {
       commentsResult,
       timeEntriesResult,
       activeTimeResult,
-      chatHistoryResult
+      chatHistoryResult,
+      deletedTasksResult
     ] = await Promise.all([
       // Active tasks with full details
       supabaseClient
@@ -150,7 +151,13 @@ serve(async (req) => {
         .select('role, content, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-        .limit(20)
+        .limit(20),
+      
+      // Count deleted tasks for context awareness
+      supabaseClient
+        .from('tasks')
+        .select('id', { count: 'exact', head: true })
+        .not('deleted_at', 'is', null)
     ]);
 
     const tasks = tasksResult.data;
@@ -162,6 +169,7 @@ serve(async (req) => {
     const timeEntries = timeEntriesResult.data;
     const activeTimeEntry = activeTimeResult.data;
     const chatHistory = chatHistoryResult.data;
+    const deletedTasksCount = deletedTasksResult.count || 0;
 
     // Analyze patterns and build rich context
     const activeTasks = tasks?.filter(t => !t.completed_at) || [];
@@ -185,10 +193,13 @@ GEBRUIKER: ${profile?.name || 'Gebruiker'} (${profile?.email || ''})
 HUIDIGE WERKSTATUS:
 - Actieve taken: ${activeTasks.length}
 - Afgeronde taken: ${completedTasks.length}
+- Verwijderde taken: ${deletedTasksCount}
 - Verlopen taken: ${overdueTasks.length}
 - Hoge prioriteit: ${highPriorityTasks.length}
 - Taken met revenue impact: ${revenueImpactTasks.length} (totaal: €${revenueImpactTasks.reduce((sum, t) => sum + (t.revenue_impact_eur || 0), 0).toFixed(2)})
 ${activeTimeEntry ? `- 🟢 BEZIG MET: Taak ${activeTimeEntry.task_id} (gestart ${new Date(activeTimeEntry.start).toLocaleTimeString('nl-NL')})` : ''}
+${activeTasks.length === 0 ? '\n⚠️ BELANGRIJK: De takenlijst is momenteel LEEG! Er zijn geen actieve taken.' : ''}
+${activeTasks.length > 0 && activeTasks.length <= 3 && deletedTasksCount > 10 ? `\n⚠️ LET OP: Er zijn slechts ${activeTasks.length} actieve taken, maar ${deletedTasksCount} taken zijn verwijderd.` : ''}
 
 WERKBELASTING DEZE WEEK:
 - Totaal gewerkte uren: ${(totalTimeThisWeek / 60).toFixed(1)}h
@@ -272,6 +283,14 @@ JOUW GEDRAG:
 - Waarschuw voor potentiële problemen (deadlines, overload)
 - Leer van eerdere conversaties en pas je aan aan gebruiker
 - Focus op business impact en prioriteit
+
+BELANGRIJK - CONTEXT AWARENESS OVER VERWIJDERDE TAKEN:
+⚠️ Let goed op de telling van actieve vs verwijderde taken in de context!
+- Als er GEEN actieve taken zijn: Vermeld expliciet dat de takenlijst leeg is
+- Als er weinig actieve taken zijn maar veel verwijderde: Meld dit aan de gebruiker
+- Pas je suggesties aan gebaseerd op de werkelijke toestand van de takenlijst
+- Verwijs NOOIT naar taken die niet in de actieve takenlijst staan
+- Als de lijst (bijna) leeg is, wees proactief in het voorstellen van nieuwe taken
 
 HUIDIGE CONTEXT:
 ${contextSummary}
