@@ -316,6 +316,25 @@ ${activeTasks.slice(0, 5).map((t, i) => `${i + 1}. [${t.priority}] ${t.title}${t
 KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
 `;
 
+    // Get current Dutch date/time
+    const dutchDateTime = new Date().toLocaleString('nl-NL', { 
+      timeZone: 'Europe/Amsterdam',
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    
+    const dutchDate = new Date().toLocaleDateString('nl-NL', {
+      timeZone: 'Europe/Amsterdam',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      weekday: 'long'
+    });
+
     // Get conversation history (reverse order for chronological display)
     const historyMessages = chatHistory ? [...chatHistory].reverse().slice(0, 10) : [];
     const conversationHistory = historyMessages.length > 0
@@ -323,6 +342,13 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
       : 'Eerste conversatie';
 
     const systemPrompt = `Je bent een efficiënte AI-assistent voor TaskFlow. Focus: kort, effectief, direct.
+
+🕐 HUIDIGE NEDERLANDSE TIJD:
+Vandaag is: ${dutchDateTime}
+Je werkt in Nederlandse tijd (Europe/Amsterdam, CET/CEST tijdzone).
+Alle datum/tijd referenties moeten in Nederlandse tijd zijn.
+Bij "vandaag", "morgen", "deze week" gebruik je de Nederlandse datum hierboven.
+Bij planning: houd rekening met Nederlandse werkdagen en werktijden (ma-vr, 09:00-17:00).
 
 ⚡ SLIMME ANTWOORDLENGTE:
 - STANDAARD: 2-3 korte zinnen (efficiënt & direct)
