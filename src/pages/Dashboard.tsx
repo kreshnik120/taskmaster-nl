@@ -259,23 +259,34 @@ const Dashboard = () => {
     if (!taskToDelete) return;
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        console.error("Auth error:", userError);
+        toast.error("Authenticatie fout");
+        return;
+      }
+
+      console.log("Deleting task:", taskToDelete, "by user:", user.id);
       
       const { error } = await supabase
         .from("tasks")
         .update({ 
           deleted_at: new Date().toISOString(),
-          deleted_by: user?.id 
+          deleted_by: user.id 
         })
         .eq("id", taskToDelete);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Delete error details:", error);
+        throw error;
+      }
 
       toast.success("Taak verwijderd");
       loadTasks();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting task:", error);
-      toast.error("Fout bij verwijderen van taak");
+      toast.error(`Fout bij verwijderen: ${error.message || 'Onbekende fout'}`);
     } finally {
       setDeleteDialogOpen(false);
       setTaskToDelete(null);
