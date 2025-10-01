@@ -31,17 +31,42 @@ interface Task {
   } | null;
 }
 
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
+const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes cache
+const SESSION_STORAGE_KEY = 'ai-scoring-cache';
 
 interface CachedScore {
   score: PriorityScore;
   timestamp: number;
 }
 
+// Load cache from sessionStorage
+const loadCacheFromStorage = (): Map<string, CachedScore> => {
+  try {
+    const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return new Map(Object.entries(parsed));
+    }
+  } catch (error) {
+    console.error('Error loading cache from sessionStorage:', error);
+  }
+  return new Map();
+};
+
+// Save cache to sessionStorage
+const saveCacheToStorage = (cache: Map<string, CachedScore>) => {
+  try {
+    const obj = Object.fromEntries(cache);
+    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(obj));
+  } catch (error) {
+    console.error('Error saving cache to sessionStorage:', error);
+  }
+};
+
 export const useAiScoring = (tasks: Task[], enableAutoScoring: boolean = false) => {
   const [priorityScores, setPriorityScores] = useState<Map<string, PriorityScore>>(new Map());
   const [loading, setLoading] = useState(false);
-  const [cache, setCache] = useState<Map<string, CachedScore>>(new Map());
+  const [cache, setCache] = useState<Map<string, CachedScore>>(() => loadCacheFromStorage());
 
   const calculateScores = useCallback(async (tasksToScore: Task[]) => {
     if (tasksToScore.length === 0) return;
@@ -83,8 +108,11 @@ export const useAiScoring = (tasks: Task[], enableAutoScoring: boolean = false) 
             newCache.set(score.task_id, { score, timestamp: now });
           });
           setCache(newCache);
+          saveCacheToStorage(newCache);
           console.log(`✅ AI scoring completed for ${data.scores.length} tasks`);
         }
+      } else {
+        console.log(`✅ Using cached scores for all ${tasksToScore.length} tasks`);
       }
 
       setPriorityScores(newScores);

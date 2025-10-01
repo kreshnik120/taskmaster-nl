@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -11,6 +11,7 @@ import { Loader2, AlertCircle, Clock, TrendingUp, Sparkles } from "lucide-react"
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { useAiScoring } from "@/hooks/useAiScoring";
 
 interface Task {
   id: string;
@@ -68,18 +69,23 @@ export default function Opvolging() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [priorityScores, setPriorityScores] = useState<Map<string, PriorityScore>>(new Map());
   const [loading, setLoading] = useState(true);
-  const [scoringLoading, setScoringLoading] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>(null);
-  const [aiExplanations, setAiExplanations] = useState<Map<string, string>>(new Map());
-  const [loadingExplanations, setLoadingExplanations] = useState<Set<string>>(new Set());
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Use the smart caching hook
+  const { 
+    priorityScores, 
+    loading: scoringLoading,
+    getScoreForTask,
+    calculateScores
+  } = useAiScoring(tasks, true);
 
   useEffect(() => {
     checkAuth();
     fetchTasks();
 
-    // Subscribe to real-time updates
+    // Subscribe to real-time updates with debouncing
     const channel = supabase
       .channel('tasks-changes')
       .on(
@@ -89,13 +95,26 @@ export default function Opvolging() {
           schema: 'public',
           table: 'tasks'
         },
-        () => {
-          fetchTasks();
+        (payload) => {
+          // Only refetch for relevant events
+          if (['INSERT', 'UPDATE', 'DELETE'].includes(payload.eventType)) {
+            // Debounce refetch to prevent cascade updates
+            if (debounceTimerRef.current) {
+              clearTimeout(debounceTimerRef.current);
+            }
+            debounceTimerRef.current = setTimeout(() => {
+              console.log('🔄 Real-time update detected, refetching tasks');
+              fetchTasks();
+            }, 300);
+          }
         }
       )
       .subscribe();
 
     return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
       supabase.removeChannel(channel);
     };
   }, []);
@@ -133,10 +152,7 @@ export default function Opvolging() {
       if (error) throw error;
       setTasks(data || []);
       
-      // Calculate priority scores after fetching tasks
-      if (data && data.length > 0) {
-        await calculatePriorityScores(data);
-      }
+      // useAiScoring hook will automatically handle scoring
     } catch (error) {
       console.error("Error fetching tasks:", error);
       toast({
@@ -149,79 +165,6 @@ export default function Opvolging() {
     }
   };
 
-  const calculatePriorityScores = async (tasksList: Task[]) => {
-    setScoringLoading(true);
-    try {
-      const taskInputs = tasksList.map(task => ({
-        id: task.id,
-        title: task.title,
-        description: task.description,
-        priority: task.priority,
-        due_at: task.due_at,
-        start_at: task.start_at,
-        estimate_min: task.estimate_min,
-        next_action: task.next_action,
-        org_id: task.org_id,
-        client_name: task.organizations?.name,
-        assignee_name: task.profiles?.name,
-        metadata: task.task_scoring_metadata || undefined
-      }));
-
-      // Use AI-driven scoring
-      const { data, error } = await supabase.functions.invoke('ai-task-scorer', {
-        body: { tasks: taskInputs }
-      });
-
-      if (error) throw error;
-
-      if (data?.results) {
-        const scoresMap = new Map<string, PriorityScore>();
-        const explanationsMap = new Map<string, string>();
-        
-        data.results.forEach((result: any) => {
-          scoresMap.set(result.task_id, {
-            task_id: result.task_id,
-            priority_score: result.priority_score,
-            rank: result.rank,
-            breakdown: result.breakdown,
-            label: result.label
-          });
-          
-          // Store AI explanation
-          if (result.explanation) {
-            explanationsMap.set(result.task_id, result.explanation);
-          }
-        });
-        
-        setPriorityScores(scoresMap);
-        setAiExplanations(explanationsMap);
-        
-        toast({
-          title: "AI Analyse Voltooid",
-          description: `${data.results.length} taken geanalyseerd met ${data.model}`,
-        });
-      }
-    } catch (error) {
-      console.error("Error calculating priority scores:", error);
-      toast({
-        title: "Fout bij AI-analyse",
-        description: error instanceof Error ? error.message : "Onbekende fout opgetreden",
-        variant: "destructive",
-      });
-    } finally {
-      setScoringLoading(false);
-    }
-  };
-
-  const generateTaskExplanation = async (task: Task, scoreBreakdown: any) => {
-    // Check if already have explanation from AI scorer
-    if (aiExplanations.has(task.id)) {
-      return;
-    }
-
-    // If no explanation yet, this shouldn't happen with AI scorer but handle as fallback
-    console.log('[OPVOLGING] No AI explanation found for task:', task.id);
-  };
 
   const tasksWithNextAction = tasks.filter((t) => t.next_action);
   const overdueTasks = tasks.filter(
@@ -236,13 +179,14 @@ export default function Opvolging() {
 
   const allFocusTasks = [...tasks]
     .map((task) => {
-      const scoreData = priorityScores.get(task.id);
+      const scoreData = getScoreForTask(task.id);
       return {
         ...task,
         priorityScore: scoreData?.priority_score ?? 0,
         scoreBreakdown: scoreData?.breakdown,
         scoreLabel: scoreData?.label,
-        rank: scoreData?.rank
+        rank: scoreData?.rank,
+        aiExplanation: scoreData?.explanation
       };
     })
     .sort((a, b) => b.priorityScore - a.priorityScore)
@@ -488,21 +432,15 @@ export default function Opvolging() {
                               </TooltipTrigger>
                               <TooltipContent side="left" className="max-w-md">
                                 <div className="space-y-3">
-                                  {aiExplanations.has(task.id) && (
+                                  {task.aiExplanation && (
                                     <div className="pb-3 border-b">
                                       <p className="font-semibold mb-2 flex items-center gap-2">
                                         <Sparkles className="h-4 w-4 text-primary" />
                                         Waarom belangrijk?
                                       </p>
                                       <p className="text-sm leading-relaxed">
-                                        {aiExplanations.get(task.id)}
+                                        {task.aiExplanation}
                                       </p>
-                                    </div>
-                                  )}
-                                  {loadingExplanations.has(task.id) && !aiExplanations.has(task.id) && (
-                                    <div className="pb-3 border-b flex items-center gap-2 text-muted-foreground">
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                      <span className="text-sm">AI analyseert taak...</span>
                                     </div>
                                   )}
                                   <div>
