@@ -1,9 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Loader2, Sparkles, Calendar, ListTodo, Clock } from 'lucide-react';
+import { X, Send, Loader2, Sparkles, Calendar, ListTodo, Clock, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { RobotIcon } from './RobotIcon';
@@ -38,6 +48,7 @@ export const ChatWidget = () => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showWelcome, setShowWelcome] = useState(true);
+  const [showResetDialog, setShowResetDialog] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -79,6 +90,45 @@ export const ChatWidget = () => {
   const handleQuickAction = (prompt: string) => {
     setInput(prompt);
     setShowWelcome(false);
+  };
+
+  const handleClearChat = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        toast({
+          title: "Fout",
+          description: "Je moet ingelogd zijn om de chat te wissen",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Wis alleen chat_messages (training data blijft behouden)
+      const { error } = await supabase
+        .from('chat_messages')
+        .delete()
+        .eq('user_id', session.user.id);
+
+      if (error) throw error;
+
+      // Reset lokale state
+      setMessages([]);
+      setShowWelcome(true);
+      setShowResetDialog(false);
+
+      toast({
+        title: "✅ Chat gewist",
+        description: "Verse start - AI trainingsdata is behouden",
+      });
+    } catch (error) {
+      console.error('Error clearing chat:', error);
+      toast({
+        title: "Fout",
+        description: "Kon chat niet wissen. Probeer het opnieuw.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleInteractiveSelection = (type: string, value: string | Date) => {
@@ -355,14 +405,25 @@ export const ChatWidget = () => {
                 <p className="text-xs text-muted-foreground">Altijd klaar om te helpen</p>
               </div>
             </div>
-            <Button
-              onClick={() => setIsOpen(false)}
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                onClick={() => setShowResetDialog(true)}
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                title="Chat wissen (training blijft behouden)"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+              <Button
+                onClick={() => setIsOpen(false)}
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           {/* Messages */}
@@ -518,6 +579,25 @@ export const ChatWidget = () => {
           </form>
         </div>
       )}
+
+      {/* Reset Dialog */}
+      <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Chat wissen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Dit wist je conversatiegeschiedenis voor een verse start. 
+              Je trainingsdata en feedback blijven behouden zodat de AI blijft leren.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogAction onClick={handleClearChat}>
+              Wis Chat
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };
