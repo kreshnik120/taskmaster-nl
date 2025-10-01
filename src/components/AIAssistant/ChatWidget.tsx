@@ -8,10 +8,21 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { RobotIcon } from './RobotIcon';
 import { MiniRobotIcon } from './MiniRobotIcon';
+import { ChatDatePicker, ChatTimePicker, ChatSelect, ChatButtonGroup } from './InteractiveChatElements';
+import { format } from 'date-fns';
+import { nl } from 'date-fns/locale';
+
+interface InteractiveElement {
+  type: 'date_picker' | 'time_picker' | 'select' | 'button_group';
+  label?: string;
+  options?: { value: string; label: string }[];
+}
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  interactive?: InteractiveElement;
+  showInteractive?: boolean;
 }
 
 const QUICK_ACTIONS = [
@@ -67,6 +78,82 @@ export const ChatWidget = () => {
   const handleQuickAction = (prompt: string) => {
     setInput(prompt);
     setShowWelcome(false);
+  };
+
+  const handleInteractiveSelection = (type: string, value: string | Date) => {
+    let formattedValue = "";
+    
+    if (value instanceof Date) {
+      formattedValue = format(value, "d MMMM yyyy", { locale: nl });
+    } else {
+      formattedValue = value;
+    }
+
+    // Remove interactive element from last assistant message
+    setMessages((prev) => {
+      const updated = [...prev];
+      const lastMsg = updated[updated.length - 1];
+      if (lastMsg?.role === "assistant") {
+        lastMsg.showInteractive = false;
+      }
+      return updated;
+    });
+
+    // Send user selection as new message
+    streamChat(formattedValue);
+  };
+
+  const parseAssistantResponse = (content: string): { content: string; interactive?: InteractiveElement } => {
+    const lowerContent = content.toLowerCase();
+    
+    // Detect date requests
+    if (lowerContent.includes("datum") && (lowerContent.includes("?") || lowerContent.includes("wanneer") || lowerContent.includes("kies"))) {
+      return {
+        content,
+        interactive: { type: "date_picker" }
+      };
+    }
+    
+    // Detect time requests
+    if (lowerContent.includes("tijd") && (lowerContent.includes("?") || lowerContent.includes("hoe laat") || lowerContent.includes("uur"))) {
+      return {
+        content,
+        interactive: { type: "time_picker" }
+      };
+    }
+    
+    // Detect priority requests
+    if (lowerContent.includes("prioriteit") && lowerContent.includes("?")) {
+      return {
+        content,
+        interactive: {
+          type: "select",
+          label: "Kies prioriteit",
+          options: [
+            { value: "LOW", label: "Laag" },
+            { value: "MEDIUM", label: "Gemiddeld" },
+            { value: "HIGH", label: "Hoog" }
+          ]
+        }
+      };
+    }
+    
+    // Detect yes/no questions
+    if (lowerContent.includes("?") && (lowerContent.includes("wil je") || lowerContent.includes("moet") || lowerContent.includes("zal ik"))) {
+      return {
+        content,
+        interactive: {
+          type: "button_group",
+          label: "Kies een optie",
+          options: [
+            { value: "ja", label: "Ja" },
+            { value: "nee", label: "Nee" }
+          ]
+        }
+      };
+    }
+
+    return { content };
   };
 
   const streamChat = async (userMessage: string) => {
@@ -146,7 +233,7 @@ export const ChatWidget = () => {
       let chunkCount = 0;
 
       // Add empty assistant message that we'll update
-      setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: '', showInteractive: false }]);
 
       console.log('📡 Starting stream...');
 
@@ -178,9 +265,16 @@ export const ChatWidget = () => {
               const content = parsed.choices?.[0]?.delta?.content;
               if (content) {
                 assistantMessage += content;
+                const parsedResponse = parseAssistantResponse(assistantMessage);
+                
                 setMessages(prev => {
                   const updated = [...prev];
-                  updated[updated.length - 1] = { role: 'assistant', content: assistantMessage };
+                  updated[updated.length - 1] = {
+                    role: 'assistant',
+                    content: assistantMessage,
+                    interactive: parsedResponse.interactive,
+                    showInteractive: !!parsedResponse.interactive,
+                  };
                   return updated;
                 });
               }
@@ -330,14 +424,42 @@ export const ChatWidget = () => {
                       </AvatarFallback>
                     </Avatar>
                   )}
-                  <div
-                    className={`rounded-lg px-4 py-2.5 max-w-[85%] ${
-                      msg.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
-                    }`}
-                  >
-                    <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                  <div className="flex flex-col gap-2 max-w-[85%]">
+                    <div
+                      className={`rounded-lg px-4 py-2.5 ${
+                        msg.role === 'user'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted'
+                      }`}
+                    >
+                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                    </div>
+                    
+                    {/* Interactive Elements */}
+                    {msg.role === 'assistant' && msg.showInteractive && msg.interactive && (
+                      <div>
+                        {msg.interactive.type === 'date_picker' && (
+                          <ChatDatePicker onSelect={(date) => handleInteractiveSelection('date', date)} />
+                        )}
+                        {msg.interactive.type === 'time_picker' && (
+                          <ChatTimePicker onSelect={(time) => handleInteractiveSelection('time', time)} />
+                        )}
+                        {msg.interactive.type === 'select' && msg.interactive.options && (
+                          <ChatSelect
+                            label={msg.interactive.label || 'Selecteer'}
+                            options={msg.interactive.options}
+                            onSelect={(value) => handleInteractiveSelection('select', value)}
+                          />
+                        )}
+                        {msg.interactive.type === 'button_group' && msg.interactive.options && (
+                          <ChatButtonGroup
+                            label={msg.interactive.label || 'Kies een optie'}
+                            options={msg.interactive.options}
+                            onSelect={(value) => handleInteractiveSelection('button', value)}
+                          />
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
