@@ -76,7 +76,7 @@ serve(async (req) => {
     
     const userOrgId = userOrg?.org_id;
 
-    // Fetch comprehensive context for AI
+    // Smart context filtering - alleen relevante data
     const [
       tasksResult,
       profileResult,
@@ -93,13 +93,13 @@ serve(async (req) => {
       businessIntelResult,
       conversationContextResult
     ] = await Promise.all([
-      // Active tasks with full details
+      // Top 10 recente actieve taken
       supabaseClient
         .from('tasks')
         .select('id, title, priority, due_at, start_at, next_action, description, estimate_min, completed_at, revenue_impact_eur, transition_related, client_id, assignee_id')
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
-        .limit(100),
+        .limit(10),
       
       // User profile
       supabaseClient
@@ -108,38 +108,38 @@ serve(async (req) => {
         .eq('id', user.id)
         .single(),
       
-      // Clients for business context
+      // Top 10 clients
       supabaseClient
         .from('clients')
         .select('id, name, company, tier, weekly_hours, revenue_per_hour')
-        .limit(50),
+        .limit(10),
       
-      // Projects for project context
+      // Top 5 projecten
       supabaseClient
         .from('projects')
         .select('id, name, description')
-        .limit(50),
+        .limit(5),
       
-      // Subtasks for detailed task breakdown
+      // Top 10 actieve subtaken
       supabaseClient
         .from('subtasks')
         .select('id, title, status, due_at, task_id')
         .eq('status', 'active')
-        .limit(100),
+        .limit(10),
       
-      // Recent comments for conversation context
+      // 5 meest recente comments
       supabaseClient
         .from('comments')
         .select('body, created_at, task_id')
         .order('created_at', { ascending: false })
-        .limit(50),
+        .limit(5),
       
-      // Time entries for workload insights
+      // Time entries laatste 7 dagen (max 20)
       supabaseClient
         .from('time_entries')
         .select('duration_min, start, task_id')
         .gte('start', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-        .limit(200),
+        .limit(20),
       
       // Check for active time tracking
       supabaseClient
@@ -149,13 +149,13 @@ serve(async (req) => {
         .eq('user_id', user.id)
         .maybeSingle(),
       
-      // Recent chat history for context continuity
+      // 5 meest recente chat berichten
       supabaseClient
         .from('chat_messages')
         .select('role, content, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-        .limit(20),
+        .limit(5),
       
       // Count deleted tasks for context awareness
       supabaseClient
@@ -163,39 +163,39 @@ serve(async (req) => {
         .select('id', { count: 'exact', head: true })
         .not('deleted_at', 'is', null),
       
-      // AI Knowledge Base - permanente kennis
+      // Top 10 kennis items
       supabaseClient
         .from('ai_knowledge_base')
         .select('*')
         .eq('user_id', user.id)
         .order('confidence_score', { ascending: false })
         .order('usage_count', { ascending: false })
-        .limit(100),
+        .limit(10),
       
-      // Recent Learning Events - leer van recente interacties
+      // 5 meest recente learning events
       supabaseClient
         .from('ai_learning_events')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-        .limit(50),
+        .limit(5),
       
-      // Business Intelligence - bedrijfsinzichten
+      // Top 5 business intelligence insights
       supabaseClient
         .from('business_intelligence')
         .select('*')
         .eq('org_id', userOrg.org_id)
         .eq('status', 'active')
         .order('impact_score', { ascending: false })
-        .limit(20),
+        .limit(5),
       
-      // Conversation Context - eerdere conversaties
+      // 3 meest recente conversatie contexten
       supabaseClient
         .from('conversation_context')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-        .limit(10)
+        .limit(3)
     ]);
 
     const tasks = tasksResult.data;
@@ -239,68 +239,21 @@ serve(async (req) => {
     const clientMap = new Map(clients?.map(c => [c.id, c]) || []);
     const tasksWithClients = activeTasks.filter(t => t.client_id);
     
-    // Build comprehensive context summary
+    // Compacte context summary
     const contextSummary = `
-GEBRUIKER: ${profile?.name || 'Gebruiker'} (${profile?.email || ''})
+GEBRUIKER: ${profile?.name || 'Gebruiker'}
 
-HUIDIGE WERKSTATUS:
-- Actieve taken: ${activeTasks.length}
-- Afgeronde taken: ${completedTasks.length}
-- Verwijderde taken: ${deletedTasksCount}
-- Verlopen taken: ${overdueTasks.length}
-- Hoge prioriteit: ${highPriorityTasks.length}
-- Taken met revenue impact: ${revenueImpactTasks.length} (totaal: €${revenueImpactTasks.reduce((sum, t) => sum + (t.revenue_impact_eur || 0), 0).toFixed(2)})
-${activeTimeEntry ? `- 🟢 BEZIG MET: Taak ${activeTimeEntry.task_id} (gestart ${new Date(activeTimeEntry.start).toLocaleTimeString('nl-NL')})` : ''}
-${activeTasks.length === 0 ? '\n⚠️ BELANGRIJK: De takenlijst is momenteel LEEG! Er zijn geen actieve taken.' : ''}
-${activeTasks.length > 0 && activeTasks.length <= 3 && deletedTasksCount > 10 ? `\n⚠️ LET OP: Er zijn slechts ${activeTasks.length} actieve taken, maar ${deletedTasksCount} taken zijn verwijderd.` : ''}
+STATUS:
+- Actief: ${activeTasks.length} | Afgerond: ${completedTasks.length} | Verlopen: ${overdueTasks.length}
+${activeTimeEntry ? `🟢 Bezig: Taak ${activeTimeEntry.task_id}` : ''}
 
-AI GEHEUGEN & KENNIS BASE (${knowledgeBase.length} items):
-${userPreferences.length > 0 ? `\n📌 GEBRUIKER VOORKEUREN (${userPreferences.length}):\n${userPreferences.slice(0, 5).map((kb: any) => `  - ${kb.key}: ${JSON.stringify(kb.value)} (confidence: ${kb.confidence_score}, gebruikt: ${kb.usage_count}x)`).join('\n')}` : ''}
-${businessRules.length > 0 ? `\n📋 BEDRIJFSREGELS (${businessRules.length}):\n${businessRules.slice(0, 5).map((kb: any) => `  - ${kb.key}: ${JSON.stringify(kb.value)}`).join('\n')}` : ''}
-${workflowPatterns.length > 0 ? `\n🔄 WORKFLOW PATRONEN (${workflowPatterns.length}):\n${workflowPatterns.slice(0, 5).map((kb: any) => `  - ${kb.key}: ${JSON.stringify(kb.value)}`).join('\n')}` : ''}
-${decisionContexts.length > 0 ? `\n💡 BESLISSING CONTEXTEN (${decisionContexts.length}):\n${decisionContexts.slice(0, 3).map((kb: any) => `  - ${kb.key}: ${JSON.stringify(kb.value)}`).join('\n')}` : ''}
+CLIENTS (${clients?.length || 0}):
+${clients?.map(c => `${c.company}: ${c.weekly_hours || 0}h/week, €${c.revenue_per_hour || 0}/u`).join(' | ') || 'Geen'}
 
-LEER GESCHIEDENIS (${learningEvents.length} events):
-${successfulPatterns.length > 0 ? `\n✅ SUCCESVOLLE PATRONEN (${successfulPatterns.length}):\n${successfulPatterns.slice(0, 3).map((le: any) => `  - ${le.event_type}: ${JSON.stringify(le.context).substring(0, 100)}...`).join('\n')}` : ''}
-${acceptedSuggestions.length > 0 ? `\n👍 GEACCEPTEERDE SUGGESTIES: ${acceptedSuggestions.length}` : ''}
-${rejectedSuggestions.length > 0 ? `\n👎 AFGEWEZEN SUGGESTIES: ${rejectedSuggestions.length}\n${rejectedSuggestions.slice(0, 2).map((le: any) => `  - Reden: ${JSON.stringify(le.user_action).substring(0, 80)}`).join('\n')}` : ''}
+TOP TAKEN:
+${activeTasks.slice(0, 5).map((t, i) => `${i + 1}. [${t.priority}] ${t.title}${t.due_at ? ` (${new Date(t.due_at).toLocaleDateString('nl-NL')})` : ''}`).join('\n')}
 
-BUSINESS INTELLIGENCE (${businessIntel.length} insights):
-${businessIntel.length > 0 ? businessIntel.map((bi: any) => `\n🔍 ${bi.intelligence_type.toUpperCase()} - ${bi.title}\n  Impact: ${bi.impact_score}/10 | Priority: ${bi.priority}\n  ${bi.description || ''}`).join('\n') : ''}
-
-CONVERSATIE GESCHIEDENIS:
-${conversationContext.length > 0 ? conversationContext.slice(0, 3).map((cc: any) => `\n💬 ${cc.category} - ${cc.sentiment}\n  Topics: ${cc.topics?.join(', ')}\n  ${cc.summary || ''}`).join('\n') : ''}
-
-CONVERSATIE GESCHIEDENIS:
-${conversationContext.length > 0 ? conversationContext.slice(0, 3).map(cc => `\n💬 ${cc.category} - ${cc.sentiment}\n  Topics: ${cc.topics?.join(', ')}\n  ${cc.summary || ''}`).join('\n') : ''}
-
-WERKBELASTING DEZE WEEK:
-- Totaal gewerkte uren: ${(totalTimeThisWeek / 60).toFixed(1)}h
-- Gemiddeld aantal taken per dag: ${avgTasksPerDay.toFixed(1)}
-
-CLIENTS (${clients?.length || 0} actieve clients):
-${clients?.map(c => `
-📍 ${c.company} (${c.name})
-   - Tier: ${c.tier}
-   - Uren/week: ${c.weekly_hours || 'Niet ingesteld'}
-   - Revenue/uur: €${c.revenue_per_hour || 'Niet ingesteld'}
-   - Maandelijkse waarde: €${c.weekly_hours && c.revenue_per_hour ? (c.weekly_hours * c.revenue_per_hour * 4).toFixed(2) : 'Niet ingesteld'}
-   - Client ID: ${c.id}
-   - Actieve taken: ${tasksWithClients.filter(t => t.client_id === c.id).length}
-`).join('') || '- Geen clients geregistreerd'}
-
-PROJECTEN: ${projects?.length || 0} actieve projecten
-
-TOP 10 PRIORITEITEN:
-${activeTasks.slice(0, 10).map((t, i) => 
-  `${i + 1}. [${t.priority}] ${t.title}${t.due_at ? ` (deadline: ${new Date(t.due_at).toLocaleDateString('nl-NL')})` : ''}${t.next_action ? `\n   → Next: ${t.next_action}` : ''}`
-).join('\n')}
-
-SUBTAKEN STATUS:
-- Actieve subtaken: ${subtasks?.length || 0}
-
-RECENTE ACTIVITEIT:
-${recentComments?.slice(0, 5).map(c => `- ${c.body.substring(0, 80)}...`).join('\n') || '- Geen recente comments'}
+KENNIS: ${knowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
 `;
 
     // Get conversation history (reverse order for chronological display)
@@ -309,100 +262,37 @@ ${recentComments?.slice(0, 5).map(c => `- ${c.body.substring(0, 80)}...`).join('
       ? historyMessages.map(m => `${m.role === 'user' ? '👤' : '🤖'} ${m.content}`).join('\n')
       : 'Eerste conversatie';
 
-    const systemPrompt = `Je bent een geavanceerde AI-assistent voor TaskFlow, gespecialiseerd in taakbeheer en productiviteitsoptimalisatie.
+    const systemPrompt = `Je bent een efficiënte AI-assistent voor TaskFlow. Focus: kort, effectief, direct.
 
-JOUW CAPABILITIES:
-✅ Volledig inzicht in gebruiker's taken, projecten, clients en werkpatronen
-✅ Real-time context awareness (welke taak is actief, deadlines, prioriteiten)
-✅ Intelligente suggesties gebaseerd op historie en patterns
-✅ Proactieve workflow optimalisatie en planning
-✅ Business impact analyse (revenue, client relationships)
-✅ Tijdmanagement en workload balancering
-✅ **ACTIES UITVOEREN**: Je kunt daadwerkelijk taken aanmaken, wijzigen en beheren!
-✅ **CLIENT KENNIS**: Directe toegang tot alle client informatie (namen, bedrijven, tiers, revenue)
+⚡ KERNREGEL: MAX 2-3 ZINNEN PER ANTWOORD
+Als gebruiker meer wil: vraag "Wil je meer details?"
 
-CLIENT INFORMATIE GEBRUIK:
-- Als gevraagd wordt naar clients, gebruik de CLIENTS sectie in de context
-- Alle client details zijn beschikbaar: bedrijfsnaam, contactpersoon, tier, uren, revenue
-- Je kunt client_id gebruiken bij het aanmaken van taken
-- Rapporteer altijd complete client lijsten wanneer gevraagd
-- Gebruik client info voor prioritering en planning
+🎯 ACTIES (gebruik tools):
+- create_task: Maak taken aan
+- update_task: Wijzig taken (status, priority, deadline)
+- add_comment: Voeg comments toe
+- save_knowledge: Sla permanente kennis op
+- log_learning_event: Log feedback & patronen
+- create_business_intelligence: Creëer business insights
 
-BESCHIKBARE ACTIES (Tools):
-🔧 create_task: Maak nieuwe taken aan in het systeem
-🔧 update_task: Wijzig bestaande taken (status, prioriteit, deadline, etc.)
-🔧 add_comment: Voeg comments toe aan taken
+📋 DATUM FORMAT: ISO 8601 (YYYY-MM-DDTHH:mm:ss+02:00)
+📋 PRIORITY: LOW, MEDIUM, HIGH, CRITICAL (default: MEDIUM)
 
-WANNEER ACTIES UITVOEREN:
-- Als gebruiker vraagt om "taak toe te voegen" of "nieuwe taak" → gebruik create_task
-- Als gebruiker vraagt om taak te wijzigen/updaten → gebruik update_task
-- Als gebruiker vraagt om taak af te ronden → gebruik update_task met completed_at
-- Als gebruiker feedback geeft op een taak → gebruik add_comment
-- Wees proactief: stel voor om acties uit te voeren als dat logisch is
+💼 CITÖZORG CONTEXT (hoofdactiviteit):
+- Flexwerker bemiddeling in zorg
+- Hoofdklanten: Prisma, Lunet, SWZ, SIZA
+- Elke klant heeft 10-15 sub-locaties
+- 89 actieve flexwerkers
+- Zorgtypen: EVB, EMB, LVB, NAH
+- 2025 totaal: 21.359,65 uur
+- Tarieven: €7.21-€10.29/uur
+- Maandelijkse omzet: €179k-€201k
 
-BELANGRIJK:
-- Voer ALTIJD de gevraagde actie uit via tools, niet alleen beschrijven
-- Bevestig na elke actie wat je hebt gedaan met concrete details
-- Als je een taak aanmaakt, geef het task ID terug
-- Als informatie ontbreekt, gebruik slimme defaults (bijv. MEDIUM priority)
-
-DATUM & TIJD RICHTLIJNEN:
-- Ken ALTIJD zowel start_at als due_at toe wanneer je een taak aanmaakt
-- Als gebruiker zegt "voeg taak toe", gebruik vandaag als start_at tenzij anders aangegeven
-- Voor "morgen", gebruik morgen 09:00 als start_at
-- Voor "deze week", gebruik een passende dag deze week
-- Gebruik ISO 8601 formaat: YYYY-MM-DDTHH:mm:ss+02:00 (Nederlandse tijdzone)
-- Taken zonder start_at of due_at zijn NIET zichtbaar in de kalender!
-
-PRIORITEIT RICHTLIJNEN:
-- Gebruik ALLEEN: LOW, MEDIUM, HIGH, of CRITICAL
-- MEDIUM is de standaard voor normale taken
-- HIGH voor urgente taken
-- CRITICAL voor zeer kritieke taken
-- LOW voor niet-urgente taken
-
-JOUW GEDRAG:
-- Spreek Nederlands en gebruik emoji's 🎯📊💡 waar passend
-- Wees direct en actiegericht
-- Geef concrete, uitvoerbare suggesties
-- Verwijs naar specifieke taken met hun volledige context
-- Waarschuw voor potentiële problemen (deadlines, overload)
-- Leer van eerdere conversaties en pas je aan aan gebruiker
-- Focus op business impact en prioriteit
-
-BELANGRIJK - CONTEXT AWARENESS OVER VERWIJDERDE TAKEN:
-⚠️ Let goed op de telling van actieve vs verwijderde taken in de context!
-- Als er GEEN actieve taken zijn: Vermeld expliciet dat de takenlijst leeg is
-- Als er weinig actieve taken zijn maar veel verwijderde: Meld dit aan de gebruiker
-- Pas je suggesties aan gebaseerd op de werkelijke toestand van de takenlijst
-- Verwijs NOOIT naar taken die niet in de actieve takenlijst staan
-- Als de lijst (bijna) leeg is, wees proactief in het voorstellen van nieuwe taken
-
-🧠 PERMANENTE GEHEUGEN & LEER SYSTEEM:
-=======================================
-JE HEBT TOEGANG TOT EEN VOLLEDIG GEHEUGEN SYSTEEM:
-
-1. **KENNIS BASE** - Permanente opslag van belangrijke informatie:
-   - Gebruiker voorkeuren (wat de gebruiker prefereert, hoe ze werken)
-   - Bedrijfsregels (policies, procedures, standaarden)
-   - Workflow patronen (herhalende processen, best practices)
-   - Beslissing contexten (waarom bepaalde keuzes gemaakt zijn)
-   
-2. **LEER GESCHIEDENIS** - Feedback en patronen:
-   - Succesvolle interacties (wat werkte goed)
-   - Afgewezen suggesties (wat werkte niet, waarom)
-   - Geaccepteerde voorstellen (wat de gebruiker waardeert)
-   - Pattern recognition (terugkerende situaties)
-
-3. **BUSINESS INTELLIGENCE** - Bedrijfsinzichten:
-   - Workflow patronen en optimalisaties
-   - Productiviteit insights
-   - Bottlenecks en verbeterpunten
-   - Automatiseringsmogelijkheden
-
-4. **CONVERSATIE CONTEXT** - Eerdere discussies:
-   - Onderwerpen die besproken zijn
-   - Sentiment en context van gesprekken
+🎯 GEDRAG:
+- Nederlands, direct, actionable
+- Emoji's: 🎯📊💡✅⚡
+- Focus op business impact
+- Verwijs naar concrete data
    - Key points uit eerdere conversaties
 
 🎯 ACTIEF LEREN - GEBRUIK DEZE TOOLS PROACTIEF:
