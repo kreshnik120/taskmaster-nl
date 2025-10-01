@@ -558,6 +558,40 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
             required: ["intelligence_type", "title", "data"]
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "search_professionals",
+          description: "Zoek beschikbare ZZP'ers/professionals op basis van filters. Gebruik dit wanneer gebruiker vraagt om namen van ZZP'ers, wie beschikbaar is, of een lijst van professionals wil. Gebruik dit ALTIJD als de gebruiker vraagt naar specifieke namen of een lijst.",
+          parameters: {
+            type: "object",
+            properties: {
+              functie: {
+                type: "string",
+                enum: ["Helpende 2", "VIG", "VP3", "VP4", "HBO-V"],
+                description: "Functie niveau van de professional"
+              },
+              regio: {
+                type: "string",
+                description: "Regio/locatie waar professional moet werken (bijv. Eindhoven, Nijmegen)"
+              },
+              vanaf_datum: {
+                type: "string",
+                description: "Start datum (YYYY-MM-DD) voor beschikbaarheid check"
+              },
+              tot_datum: {
+                type: "string",
+                description: "Eind datum (YYYY-MM-DD) voor beschikbaarheid check"
+              },
+              aantal: {
+                type: "number",
+                description: "Aantal professionals om te tonen",
+                default: 10
+              }
+            }
+          }
+        }
       }
     ];
 
@@ -826,6 +860,47 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             insight_id: biInsight.id, 
                             message: `💡 Business Intelligence insight gecreëerd: ${args.title}` 
                           };
+                          break;
+
+                        case "search_professionals":
+                          const { functie, regio, vanaf_datum, tot_datum, aantal = 10 } = args;
+                          
+                          console.log("🔍 Searching professionals:", { functie, regio, vanaf_datum, tot_datum, aantal });
+
+                          // Call talent-search function
+                          const { data: searchData, error: searchError } = await supabaseClient.functions.invoke('talent-search', {
+                            body: { functie, regio, vanaf_datum, tot_datum, aantal }
+                          });
+
+                          if (searchError) {
+                            console.error("Search error:", searchError);
+                            result = { 
+                              success: false, 
+                              message: `❌ Fout bij zoeken professionals: ${searchError.message}` 
+                            };
+                          } else if (!searchData.professionals || searchData.professionals.length === 0) {
+                            result = { 
+                              success: false, 
+                              message: `ℹ️ Geen professionals gevonden met deze filters. Probeer filters te verruimen of voeg eerst professionals toe via de Professionals pagina.` 
+                            };
+                          } else {
+                            const profList = searchData.professionals
+                              .map((p: any, i: number) => 
+                                `${i + 1}. **${p.full_name}** - ${p.functie_niveau}${p.regio ? ` (${p.regio})` : ''}${p.rating ? ` ⭐ ${p.rating.toFixed(1)}` : ''}`
+                              )
+                              .join('\n');
+                            
+                            const filterInfo = [];
+                            if (functie) filterInfo.push(`functie: ${functie}`);
+                            if (regio) filterInfo.push(`regio: ${regio}`);
+                            if (vanaf_datum) filterInfo.push(`vanaf: ${vanaf_datum}`);
+                            if (tot_datum) filterInfo.push(`tot: ${tot_datum}`);
+                            
+                            result = { 
+                              success: true, 
+                              message: `✅ ${searchData.total_found} professionals gevonden${filterInfo.length > 0 ? ` (${filterInfo.join(', ')})` : ''}:\n\n${profList}` 
+                            };
+                          }
                           break;
 
                         default:

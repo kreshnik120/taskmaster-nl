@@ -456,6 +456,94 @@ export type Database = {
         }
         Relationships: []
       }
+      professional_availability: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          is_available: boolean
+          professional_id: string
+          shift: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          is_available?: boolean
+          professional_id: string
+          shift: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          is_available?: boolean
+          professional_id?: string
+          shift?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professional_availability_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      professionals: {
+        Row: {
+          beschikbaarheidsnotities: string | null
+          created_at: string
+          full_name: string
+          functie_niveau: string
+          id: string
+          org_id: string
+          rating: number | null
+          regio: string | null
+          skills: string[] | null
+          status: string
+          tags: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          beschikbaarheidsnotities?: string | null
+          created_at?: string
+          full_name: string
+          functie_niveau: string
+          id?: string
+          org_id: string
+          rating?: number | null
+          regio?: string | null
+          skills?: string[] | null
+          status?: string
+          tags?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          beschikbaarheidsnotities?: string | null
+          created_at?: string
+          full_name?: string
+          functie_niveau?: string
+          id?: string
+          org_id?: string
+          rating?: number | null
+          regio?: string | null
+          skills?: string[] | null
+          status?: string
+          tags?: string[] | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professionals_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
