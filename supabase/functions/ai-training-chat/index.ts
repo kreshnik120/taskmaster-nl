@@ -112,6 +112,7 @@ ${isChunk ? 'LET OP: Dit is een deel van een groter document. Verwerk alles in d
     const choice = aiData.choices?.[0];
 
     let savedCount = 0;
+    const categoryCounts: Record<string, number> = {};
 
     if (choice?.message?.tool_calls) {
       for (const toolCall of choice.message.tool_calls) {
@@ -140,23 +141,33 @@ ${isChunk ? 'LET OP: Dit is een deel van een groter document. Verwerk alles in d
 
             if (!insertError) {
               savedCount++;
-              console.log(`Saved knowledge: ${args.category}/${args.key}`);
+              categoryCounts[args.category] = (categoryCounts[args.category] || 0) + 1;
+              console.log(`✅ Saved: ${args.category}/${args.key}`);
             } else {
-              console.error("Insert error:", insertError);
+              console.error("❌ Insert error:", insertError);
             }
+          } else {
+            console.log(`⏭️ Skipped duplicate: ${args.category}/${args.key}`);
           }
         }
       }
     }
 
+    const categoryList = Object.entries(categoryCounts)
+      .map(([cat, count]) => `${cat}: ${count} items`)
+      .join(", ");
+
     const responseContent = isChunk 
-      ? `Deel ${chunkIndex}/${totalChunks} verwerkt - ${savedCount} items opgeslagen`
-      : choice?.message?.content || `${savedCount} kennisitem(s) opgeslagen`;
+      ? `✅ Deel ${chunkIndex}/${totalChunks} verwerkt\n📊 ${savedCount} items opgeslagen\n📋 ${categoryList || "Geen nieuwe items"}`
+      : choice?.message?.content || `✅ ${savedCount} kennisitem(s) succesvol opgeslagen!\n\n📋 Categorieën:\n${categoryList}`;
+
+    console.log(`📊 Total saved: ${savedCount}, Categories:`, categoryCounts);
 
     return new Response(
       JSON.stringify({ 
         response: responseContent,
         savedCount,
+        categories: categoryCounts,
         isChunk,
         chunkIndex
       }),
