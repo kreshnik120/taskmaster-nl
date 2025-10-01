@@ -81,7 +81,7 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
       style={{ x: position.x, y: position.y }}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
-      className="fixed bottom-6 right-6 z-50 cursor-grab active:cursor-grabbing border-none p-0 w-24 h-24 drop-shadow-2xl"
+      className="relative group fixed bottom-6 right-6 z-50 cursor-grab active:cursor-grabbing border-none p-0 w-32 h-32 drop-shadow-2xl"
       whileHover={{ scale: 1.15 }}
       whileTap={{ scale: 0.9 }}
       animate={!isActive ? { 
@@ -93,50 +93,65 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
         repeat: Infinity,
         ease: "easeInOut"
       }}
+      title="Klik voor AI hulp"
     >
-      <RobotErrorBoundary
-        fallback={
-          <div className="w-full h-full flex items-center justify-center">
-            <Bot className="w-16 h-16 text-primary" />
-          </div>
-        }
-      >
-        <Canvas 
-          gl={{ alpha: true, antialias: true }}
-          style={{ background: 'transparent' }}
+      {/* Glow effect */}
+      <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl group-hover:bg-primary/30 transition-all duration-300" />
+      
+      <div className="relative w-full h-full rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 backdrop-blur-sm border border-primary/20 group-hover:border-primary/40 transition-all duration-300"
+    >
+        <RobotErrorBoundary
+          fallback={
+            <div className="w-full h-full flex items-center justify-center">
+              <Bot className="w-16 h-16 text-primary" />
+            </div>
+          }
         >
-          <Suspense fallback={null}>
-            <PerspectiveCamera makeDefault position={[0, 0, 4]} />
-            
-            {/* Lighting */}
-            <ambientLight intensity={0.5} />
-            <directionalLight position={[5, 5, 5]} intensity={1} />
-            <pointLight position={[-5, 5, 5]} intensity={0.5} color="#FF6B35" />
-            <Environment preset="city" />
-            
-            {/* 3D Robot */}
-            <Robot3D isActive={isActive} />
-            
-            {/* Optional orbit controls for subtle interaction */}
-            <OrbitControls 
-              enableZoom={false} 
-              enablePan={false}
-              autoRotate={!isActive}
-              autoRotateSpeed={0.5}
-            />
-          </Suspense>
-        </Canvas>
-      </RobotErrorBoundary>
+          <Canvas 
+            gl={{ alpha: true, antialias: true }}
+            style={{ background: 'transparent' }}
+          >
+            <Suspense fallback={null}>
+              <PerspectiveCamera makeDefault position={[0, 0, 4]} />
+              
+              {/* Lighting */}
+              <ambientLight intensity={0.5} />
+              <directionalLight position={[5, 5, 5]} intensity={1} />
+              <pointLight position={[-5, 5, 5]} intensity={0.5} color="#FF6B35" />
+              <Environment preset="city" />
+              
+              {/* 3D Robot */}
+              <Robot3D isActive={isActive} />
+              
+              {/* Optional orbit controls for subtle interaction */}
+              <OrbitControls 
+                enableZoom={false} 
+                enablePan={false}
+                autoRotate={!isActive}
+                autoRotateSpeed={0.5}
+              />
+            </Suspense>
+          </Canvas>
+        </RobotErrorBoundary>
+        
+        {/* Active indicator */}
+        {isActive && (
+          <motion.div
+            className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full shadow-lg border-2 border-background"
+            animate={{ scale: [1, 1.3, 1], opacity: [1, 0.8, 1] }}
+            transition={{ duration: 1, repeat: Infinity }}
+          />
+        )}
+      </div>
       
-      {/* Active indicator */}
-      {isActive && (
-        <motion.div
-          className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full shadow-lg border-2 border-background"
-          animate={{ scale: [1, 1.3, 1], opacity: [1, 0.8, 1] }}
-          transition={{ duration: 1, repeat: Infinity }}
-        />
-      )}
-      
+      {/* Tooltip on first visit */}
+      <motion.div
+        className="absolute -top-12 left-1/2 -translate-x-1/2 bg-background border border-primary/20 rounded-lg px-3 py-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap"
+        initial={{ opacity: 0, y: 5 }}
+        whileHover={{ opacity: 1, y: 0 }}
+      >
+        <p className="text-xs font-medium">Klik voor AI hulp 🤖</p>
+      </motion.div>
     </motion.button>
   );
 };

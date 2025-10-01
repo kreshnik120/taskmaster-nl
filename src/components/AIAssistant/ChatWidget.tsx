@@ -49,9 +49,26 @@ export const ChatWidget = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showWelcome, setShowWelcome] = useState(true);
   const [showResetDialog, setShowResetDialog] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  // Check authentication status
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setIsAuthenticated(!!session?.user);
+    };
+
+    checkAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session?.user);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Load conversation history on mount
   useEffect(() => {
@@ -379,9 +396,14 @@ export const ChatWidget = () => {
     streamChat(input.trim());
   };
 
+  // Don't render if not authenticated
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
     <>
-      {/* Robot Assistant - Always Visible */}
+      {/* Robot Assistant - Visible for logged in users */}
       <div className="fixed bottom-6 right-6 z-[100] pointer-events-none">
         <div className="pointer-events-auto drop-shadow-2xl">
           <RobotIcon 
