@@ -48,6 +48,19 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
     localStorage.removeItem(STORAGE_KEY);
   };
 
+  // Boundary check function
+  const constrainPosition = (x: number, y: number) => {
+    const maxX = window.innerWidth - 120; // Account for robot width
+    const maxY = window.innerHeight - 120;
+    const minX = -window.innerWidth + 120;
+    const minY = -window.innerHeight + 120;
+    
+    return {
+      x: Math.max(minX, Math.min(maxX, x)),
+      y: Math.max(minY, Math.min(maxY, y))
+    };
+  };
+
   return (
     <motion.button
       drag
@@ -57,29 +70,37 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
         setIsDragging(true);
       }}
       onDragEnd={(_, info) => {
-        setPosition({ x: position.x + info.offset.x, y: position.y + info.offset.y });
+        const newPos = constrainPosition(
+          position.x + info.offset.x,
+          position.y + info.offset.y
+        );
+        setPosition(newPos);
         // Reset dragging state after a short delay to prevent click
         setTimeout(() => setIsDragging(false), 100);
       }}
       style={{ x: position.x, y: position.y }}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
-      className="fixed bottom-6 right-6 z-50 cursor-grab active:cursor-grabbing border-none p-0 w-20 h-20 drop-shadow-2xl"
-      whileHover={{ scale: 1.1 }}
-      whileTap={{ scale: 0.95 }}
+      className="fixed bottom-6 right-6 z-50 cursor-grab active:cursor-grabbing border-none p-0 w-24 h-24 drop-shadow-2xl"
+      whileHover={{ scale: 1.15 }}
+      whileTap={{ scale: 0.9 }}
       animate={!isActive ? { 
-        y: [0, -10, 0],
+        y: [0, -15, 0],
+        scale: [1, 1.05, 1],
       } : {}}
       transition={{
-        duration: 2,
+        duration: 2.5,
         repeat: Infinity,
         ease: "easeInOut"
       }}
     >
+      {/* Contrast border ring */}
+      <div className="absolute inset-0 rounded-full border-4 border-primary/30 shadow-[0_0_30px_rgba(var(--primary),0.4)]" />
+      
       <RobotErrorBoundary
         fallback={
-          <div className="w-full h-full flex items-center justify-center">
-            <Bot className="w-16 h-16 text-primary drop-shadow-lg" />
+          <div className="w-full h-full flex items-center justify-center bg-background/80 rounded-full backdrop-blur-sm border-2 border-primary/50">
+            <Bot className="w-16 h-16 text-primary drop-shadow-lg animate-pulse" />
           </div>
         }
       >
@@ -119,13 +140,26 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
         />
       )}
       
-      {/* Glow effect when inactive */}
+      {/* Enhanced glow effect when inactive */}
       {!isActive && (
-        <motion.div
-          className="absolute inset-0 rounded-full bg-primary/20 blur-xl -z-10"
-          animate={{ opacity: [0.3, 0.6, 0.3] }}
-          transition={{ duration: 2, repeat: Infinity }}
-        />
+        <>
+          <motion.div
+            className="absolute inset-0 rounded-full bg-primary/40 blur-2xl -z-10"
+            animate={{ 
+              opacity: [0.4, 0.8, 0.4],
+              scale: [1, 1.2, 1]
+            }}
+            transition={{ duration: 2.5, repeat: Infinity }}
+          />
+          <motion.div
+            className="absolute inset-0 rounded-full bg-accent/30 blur-xl -z-10"
+            animate={{ 
+              opacity: [0.2, 0.5, 0.2],
+              scale: [1.2, 1, 1.2]
+            }}
+            transition={{ duration: 3, repeat: Infinity }}
+          />
+        </>
       )}
     </motion.button>
   );
