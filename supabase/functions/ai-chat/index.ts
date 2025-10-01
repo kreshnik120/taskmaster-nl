@@ -12,7 +12,8 @@ serve(async (req) => {
   }
 
   try {
-    const { messages } = await req.json();
+    const requestBody = await req.json();
+    const { messages } = requestBody;
     
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -371,6 +372,15 @@ Als gebruiker meer wil zonder trigger woord: vraag "Wil je meer details?"
 - Bij gestructureerde data (Excel/tabel): parse alle taken en gebruik create_multiple_tasks
 - Let op datum formats: Nederlandse datums (DD-MM-YYYY) converteren naar ISO 8601
 - Let op prioriteit mapping: Laag→LOW, Middel→MEDIUM, Hoog→HIGH
+
+🖼️ AFBEELDING PROCESSING:
+- Je kunt afbeeldingen analyseren en begrijpen (multimodal support)
+- Bij spreadsheets/tabellen met taken: automatisch extracten en create_multiple_tasks gebruiken
+- Bij screenshots van planning/kalendars: taken identificeren en importeren
+- Bij andere afbeeldingen: beschrijf wat je ziet en vraag wat de gebruiker ermee wil doen
+- Focus op: taak titels, beschrijvingen, deadlines, prioriteiten, verantwoordelijken
+- Converteeer altijd Nederlandse datums correct naar ISO 8601 format
+- Bij onduidelijke data: vraag om verduidelijking voordat je taken aanmaakt
 
 🚫 WANNEER GEEN TAAK AANMAKEN:
 - INFORMATIEVRAGEN: "welke", "hoeveel", "wanneer", "waar", "hoe", "waarom", "wat zijn", "wie", "toon", "laat zien", "geef overzicht"

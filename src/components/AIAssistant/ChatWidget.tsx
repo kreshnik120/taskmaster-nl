@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Loader2, Sparkles, Calendar, ListTodo, Clock, RotateCcw } from 'lucide-react';
+import { X, Send, Loader2, Sparkles, Calendar, ListTodo, Clock, RotateCcw, Image as ImageIcon, X as XIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -34,6 +34,7 @@ interface Message {
   content: string;
   interactive?: InteractiveElement;
   showInteractive?: boolean;
+  image?: string; // Base64 image data
 }
 
 const QUICK_ACTIONS = [
@@ -50,6 +51,9 @@ export const ChatWidget = () => {
   const [showWelcome, setShowWelcome] = useState(true);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -224,11 +228,62 @@ export const ChatWidget = () => {
     return { content };
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Ongeldig bestand',
+        description: 'Upload alleen afbeeldingen (PNG, JPG, WEBP)',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: 'Bestand te groot',
+        description: 'Maximale bestandsgrootte is 10MB',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Convert to base64
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result as string;
+      setUploadedImage(base64);
+      setImagePreview(base64);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = () => {
+    setUploadedImage(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const streamChat = async (userMessage: string) => {
-    const newMessages = [...messages, { role: 'user' as const, content: userMessage }];
+    const newMessage: Message = { 
+      role: 'user' as const, 
+      content: userMessage,
+      image: uploadedImage || undefined
+    };
+    const newMessages = [...messages, newMessage];
     setMessages(newMessages);
     setIsLoading(true);
     setInput('');
+    
+    // Clear image after sending
+    const currentImage = uploadedImage;
+    removeImage();
 
     // Timeout mechanism for robustness
     const timeoutId = setTimeout(() => {
@@ -269,7 +324,18 @@ export const ChatWidget = () => {
             'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
           },
           body: JSON.stringify({
-            messages: newMessages.map(m => ({ role: m.role, content: m.content })),
+            messages: newMessages.map(m => {
+              if (m.image) {
+                return {
+                  role: m.role,
+                  content: [
+                    { type: 'text', text: m.content },
+                    { type: 'image_url', image_url: { url: m.image } }
+                  ]
+                };
+              }
+              return { role: m.role, content: m.content };
+            }),
           }),
         }
       );
@@ -391,9 +457,10 @@ export const ChatWidget = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if ((!input.trim() && !uploadedImage) || isLoading) return;
     setShowWelcome(false);
-    streamChat(input.trim());
+    const messageText = input.trim() || "Wat zie je in deze afbeelding?";
+    streamChat(messageText);
   };
 
 
@@ -504,7 +571,7 @@ export const ChatWidget = () => {
                       </AvatarFallback>
                     </Avatar>
                   )}
-                  <div className="flex flex-col gap-2 max-w-[85%]">
+                   <div className="flex flex-col gap-2 max-w-[85%]">
                     <div>
                       <div
                         className={`rounded-lg px-4 py-2.5 ${
@@ -513,6 +580,13 @@ export const ChatWidget = () => {
                             : 'bg-muted'
                         }`}
                       >
+                        {msg.image && (
+                          <img 
+                            src={msg.image} 
+                            alt="Uploaded" 
+                            className="max-w-full rounded mb-2 max-h-48 object-contain"
+                          />
+                        )}
                         <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                       </div>
                       {msg.role === 'assistant' && msg.content && !isLoading && (
@@ -567,11 +641,47 @@ export const ChatWidget = () => {
 
           {/* Input */}
           <form onSubmit={handleSubmit} className="p-4 border-t bg-background/50 backdrop-blur-sm">
+            {imagePreview && (
+              <div className="mb-2 relative inline-block">
+                <img 
+                  src={imagePreview} 
+                  alt="Preview" 
+                  className="max-h-24 rounded border"
+                />
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="icon"
+                  className="absolute -top-2 -right-2 h-6 w-6"
+                  onClick={removeImage}
+                >
+                  <XIcon className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
             <div className="flex gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+                className="shrink-0"
+                title="Voeg afbeelding toe"
+              >
+                <ImageIcon className="h-4 w-4" />
+              </Button>
               <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Typ je vraag... (Enter om te versturen)"
+                placeholder="Typ je vraag of upload een afbeelding..."
                 className="min-h-[60px] max-h-[120px] resize-none"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -584,7 +694,7 @@ export const ChatWidget = () => {
               <Button
                 type="submit"
                 size="icon"
-                disabled={!input.trim() || isLoading}
+                disabled={(!input.trim() && !uploadedImage) || isLoading}
                 className="shrink-0"
               >
                 {isLoading ? (
