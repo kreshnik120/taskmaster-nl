@@ -94,13 +94,10 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
         ease: "easeInOut"
       }}
     >
-      {/* Contrast border ring */}
-      <div className="absolute inset-0 rounded-full border-4 border-primary/30 shadow-[0_0_30px_rgba(var(--primary),0.4)]" />
-      
       <RobotErrorBoundary
         fallback={
-          <div className="w-full h-full flex items-center justify-center bg-background/80 rounded-full backdrop-blur-sm border-2 border-primary/50">
-            <Bot className="w-16 h-16 text-primary drop-shadow-lg animate-pulse" />
+          <div className="w-full h-full flex items-center justify-center">
+            <Bot className="w-16 h-16 text-primary" />
           </div>
         }
       >
@@ -140,27 +137,6 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
         />
       )}
       
-      {/* Enhanced glow effect when inactive */}
-      {!isActive && (
-        <>
-          <motion.div
-            className="absolute inset-0 rounded-full bg-primary/40 blur-2xl -z-10"
-            animate={{ 
-              opacity: [0.4, 0.8, 0.4],
-              scale: [1, 1.2, 1]
-            }}
-            transition={{ duration: 2.5, repeat: Infinity }}
-          />
-          <motion.div
-            className="absolute inset-0 rounded-full bg-accent/30 blur-xl -z-10"
-            animate={{ 
-              opacity: [0.2, 0.5, 0.2],
-              scale: [1.2, 1, 1.2]
-            }}
-            transition={{ duration: 3, repeat: Infinity }}
-          />
-        </>
-      )}
     </motion.button>
   );
 };
