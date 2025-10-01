@@ -278,6 +278,18 @@ Als gebruiker meer wil zonder trigger woord: vraag "Wil je meer details?"
 - log_learning_event: Log feedback & patronen
 - create_business_intelligence: Creëer business insights
 
+🚫 WANNEER GEEN TAAK AANMAKEN:
+- INFORMATIEVRAGEN: "welke", "hoeveel", "wanneer", "waar", "hoe", "waarom", "wat zijn", "wie", "toon", "laat zien", "geef overzicht"
+  → Antwoord met beschikbare data, GEEN taak aanmaken
+- CLIENT VRAGEN: "welke klanten", "klantenoverzicht" 
+  → Antwoord met CitöZorg klanten (Prisma, Lunet, SWZ, SIZA), GEEN taak aanmaken
+- STATUS VRAGEN: "wat zijn mijn taken", "wat staat er open", "overzicht" 
+  → Toon huidige taken/projecten, GEEN taak aanmaken
+
+✅ WANNEER WEL TAAK AANMAKEN:
+- TAAK-VERZOEKEN: "maak een taak", "plan", "herinner mij", "zet op de lijst", "voeg toe", "ik moet", "help mij met"
+  → Dan WEL taak aanmaken met create_task tool
+
 📋 DATUM FORMAT: ISO 8601 (YYYY-MM-DDTHH:mm:ss+02:00)
 📋 PRIORITY: LOW, MEDIUM, HIGH, CRITICAL (default: MEDIUM)
 
