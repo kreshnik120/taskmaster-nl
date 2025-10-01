@@ -81,6 +81,14 @@ export default function Opvolging() {
     calculateScores
   } = useAiScoring(tasks, true);
 
+  // Force AI calculation if tasks are loaded but no scores exist
+  useEffect(() => {
+    if (tasks.length > 0 && priorityScores.size === 0 && !scoringLoading) {
+      console.log('🚀 No AI scores found, triggering calculation for', tasks.length, 'tasks');
+      calculateScores(tasks);
+    }
+  }, [tasks.length, priorityScores.size, scoringLoading]);
+
   useEffect(() => {
     checkAuth();
     fetchTasks();
@@ -405,16 +413,27 @@ export default function Opvolging() {
                               </p>
                             )}
                           </div>
-                          <TooltipProvider>
+                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <div className="text-right cursor-help">
-                                  <div className="text-2xl font-bold text-primary">
-                                    {task.priorityScore}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    prioriteits score
-                                  </div>
+                                  {task.priorityScore === 0 ? (
+                                    <div className="flex flex-col items-center gap-1">
+                                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                                      <div className="text-xs text-muted-foreground">
+                                        Berekenen...
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <div className="text-2xl font-bold text-primary">
+                                        {task.priorityScore}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground">
+                                        prioriteits score
+                                      </div>
+                                    </>
+                                  )}
                                   {task.scoreBreakdown && (
                                     <div className="mt-2 space-y-1">
                                       {task.scoreBreakdown.klant_impact > 0 && (
