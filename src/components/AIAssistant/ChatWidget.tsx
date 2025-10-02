@@ -802,11 +802,11 @@ export const ChatWidget = () => {
           )}
           
           {/* Header */}
-          <div 
-            className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-primary/5 to-primary/10 cursor-move select-none"
-            onPointerDown={startDrag}
-          >
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-primary/5 to-primary/10">
+            <div 
+              className="flex items-center gap-3 flex-1 cursor-move select-none"
+              onPointerDown={startDrag}
+            >
               <div className="shrink-0">
                 <MiniRobotIcon isActive={isLoading} />
               </div>
