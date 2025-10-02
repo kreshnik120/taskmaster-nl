@@ -757,8 +757,10 @@ export const ChatWidget = () => {
       {isOpen && (
         <div 
           ref={chatWindowRef}
-          className="fixed bg-background border rounded-lg shadow-xl flex flex-col animate-in slide-in-from-right duration-300 z-[2147483647]"
-          style={{ 
+          className={`fixed bg-background border rounded-lg shadow-xl flex flex-col animate-in slide-in-from-right duration-300 ${
+            showResetDialog ? 'z-40' : 'z-[2147483647]'
+          }`}
+          style={{
             width: `${dimensions.width}px`, 
             height: `${dimensions.height}px`,
             left: `${position.x}px`,
