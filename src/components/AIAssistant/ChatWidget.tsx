@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Loader2, Sparkles, Calendar, ListTodo, Clock, RotateCcw, Image as ImageIcon, X as XIcon } from 'lucide-react';
+import { X, Send, Loader2, Sparkles, Calendar, ListTodo, Clock, RotateCcw, Image as ImageIcon, X as XIcon, GripVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -71,10 +71,16 @@ export const ChatWidget = () => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragCounter, setDragCounter] = useState(0);
+  const [dimensions, setDimensions] = useState(() => ({
+    width: parseInt(localStorage.getItem('chatWidth') || '384'),
+    height: parseInt(localStorage.getItem('chatHeight') || '600')
+  }));
+  const [isResizing, setIsResizing] = useState<'width' | 'height' | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const chatWindowRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   // Check authentication status
@@ -600,6 +606,55 @@ export const ChatWidget = () => {
     streamChat(messageText);
   };
 
+  // Resize handlers
+  const startResize = (type: 'width' | 'height', e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(type);
+  };
+
+  useEffect(() => {
+    if (!isResizing || !chatWindowRef.current) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!chatWindowRef.current) return;
+
+      const rect = chatWindowRef.current.getBoundingClientRect();
+      
+      if (isResizing === 'width') {
+        // Resize from left edge - mouse moves left to increase width
+        const newWidth = rect.right - e.clientX;
+        const constrainedWidth = Math.min(Math.max(newWidth, 320), 600);
+        setDimensions(prev => {
+          const updated = { ...prev, width: constrainedWidth };
+          localStorage.setItem('chatWidth', constrainedWidth.toString());
+          return updated;
+        });
+      } else if (isResizing === 'height') {
+        // Resize from top edge - mouse moves up to increase height
+        const newHeight = rect.bottom - e.clientY;
+        const constrainedHeight = Math.min(Math.max(newHeight, 400), 800);
+        setDimensions(prev => {
+          const updated = { ...prev, height: constrainedHeight };
+          localStorage.setItem('chatHeight', constrainedHeight.toString());
+          return updated;
+        });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(null);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
 
   return (
     <>
@@ -616,12 +671,36 @@ export const ChatWidget = () => {
       {/* Chat Window */}
       {isOpen && (
         <div 
-          className="fixed bottom-6 right-28 w-96 h-[600px] bg-background border rounded-lg shadow-xl flex flex-col animate-in slide-in-from-right duration-300 z-[2147483647]"
+          ref={chatWindowRef}
+          className="fixed bottom-6 right-28 bg-background border rounded-lg shadow-xl flex flex-col animate-in slide-in-from-right duration-300 z-[2147483647] transition-all"
+          style={{ 
+            width: `${dimensions.width}px`, 
+            height: `${dimensions.height}px` 
+          }}
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
+          {/* Resize Handle - Left (Width) */}
+          <div
+            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-primary/20 transition-colors group flex items-center justify-center"
+            onMouseDown={(e) => startResize('width', e)}
+          >
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+              <GripVertical className="h-4 w-4 text-primary rotate-90" />
+            </div>
+          </div>
+
+          {/* Resize Handle - Top (Height) */}
+          <div
+            className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-primary/20 transition-colors group flex items-center justify-center"
+            onMouseDown={(e) => startResize('height', e)}
+          >
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+              <GripVertical className="h-4 w-4 text-primary" />
+            </div>
+          </div>
           {/* Drag & Drop Overlay */}
           {isDragging && (
             <div className="absolute inset-0 bg-primary/10 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg border-2 border-dashed border-primary">
