@@ -1,5 +1,8 @@
 project_id = "oelmsmcgryeoryhonexw"
 
+[functions.process-application-email]
+verify_jwt = false
+
 [functions.prioritizer]
 verify_jwt = true
 
