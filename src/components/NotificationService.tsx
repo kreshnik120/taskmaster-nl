@@ -82,7 +82,7 @@ export const NotificationService = () => {
               .from("tasks")
               .select("title")
               .eq("id", reminder.task_id)
-              .single();
+              .maybeSingle();
 
             let subtaskTitle = null;
             if (reminder.subtask_id) {
@@ -90,7 +90,7 @@ export const NotificationService = () => {
                 .from("subtasks")
                 .select("title")
                 .eq("id", reminder.subtask_id)
-                .single();
+                .maybeSingle();
               subtaskTitle = subtask?.title;
             }
 
