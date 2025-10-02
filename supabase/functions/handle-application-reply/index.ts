@@ -152,7 +152,7 @@ serve(async (req) => {
       .from("application_conversations")
       .insert({
         application_id: applicationId,
-        role: "applicant",
+        role: "user",
         content: text,
         metadata: {
           email_id: message_id,
