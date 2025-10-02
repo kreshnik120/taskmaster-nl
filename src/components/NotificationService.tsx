@@ -26,7 +26,8 @@ export const NotificationService = () => {
       const now = new Date();
       const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000);
 
-      const { data: dueReminders, error } = await supabase
+      // Check for IN_APP reminders
+      const { data: inAppReminders, error: inAppError } = await supabase
         .from("reminders")
         .select("*")
         .is("shown_at", null)
@@ -34,21 +35,34 @@ export const NotificationService = () => {
         .gte("at", twoMinutesAgo.toISOString())
         .eq("channel", "IN_APP");
 
-      if (error) {
-        console.error("Error fetching reminders:", error);
-        return;
+      if (inAppError) {
+        console.error("Error fetching IN_APP reminders:", inAppError);
       }
 
-      if (dueReminders && dueReminders.length > 0) {
+      // Check for EMAIL reminders
+      const { data: emailReminders, error: emailError } = await supabase
+        .from("reminders")
+        .select("*")
+        .is("shown_at", null)
+        .lte("at", now.toISOString())
+        .gte("at", twoMinutesAgo.toISOString())
+        .eq("channel", "EMAIL");
+
+      if (emailError) {
+        console.error("Error fetching EMAIL reminders:", emailError);
+      }
+
+      // Handle IN_APP reminders
+      if (inAppReminders && inAppReminders.length > 0) {
         setActiveReminders((prev) => {
-          const newReminders = dueReminders.filter(
+          const newReminders = inAppReminders.filter(
             (reminder) => !prev.some((r) => r.id === reminder.id)
           );
           return [...prev, ...newReminders];
         });
 
         // Show browser notification
-        dueReminders.forEach((reminder) => {
+        inAppReminders.forEach((reminder) => {
           if ("Notification" in window && Notification.permission === "granted") {
             new Notification(reminder.title || "Herinnering", {
               body: `Herinnering voor taak`,
@@ -57,6 +71,66 @@ export const NotificationService = () => {
             });
           }
         });
+      }
+
+      // Handle EMAIL reminders
+      if (emailReminders && emailReminders.length > 0) {
+        for (const reminder of emailReminders) {
+          try {
+            // Fetch task and subtask details
+            const { data: task } = await supabase
+              .from("tasks")
+              .select("title")
+              .eq("id", reminder.task_id)
+              .single();
+
+            let subtaskTitle = null;
+            if (reminder.subtask_id) {
+              const { data: subtask } = await supabase
+                .from("subtasks")
+                .select("title")
+                .eq("id", reminder.subtask_id)
+                .single();
+              subtaskTitle = subtask?.title;
+            }
+
+            // Get user email
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user?.email) {
+              console.error("No user email found for reminder:", reminder.id);
+              continue;
+            }
+
+            // Send email via edge function
+            const { error: emailSendError } = await supabase.functions.invoke(
+              "send-reminder-email",
+              {
+                body: {
+                  to: user.email,
+                  reminderTitle: reminder.title,
+                  taskTitle: task?.title,
+                  subtaskTitle,
+                  reminderTime: reminder.at,
+                  taskId: reminder.task_id,
+                },
+              }
+            );
+
+            if (emailSendError) {
+              console.error("Error sending reminder email:", emailSendError);
+            } else {
+              console.log("Reminder email sent successfully for:", reminder.id);
+              
+              // Mark reminder as shown
+              await supabase
+                .from("reminders")
+                .update({ shown_at: new Date().toISOString() })
+                .eq("id", reminder.id);
+            }
+          } catch (error) {
+            console.error("Error processing EMAIL reminder:", error);
+          }
+        }
       }
     };
 

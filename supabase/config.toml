@@ -26,3 +26,6 @@ verify_jwt = true
 
 [functions.import-professionals]
 verify_jwt = true
+
+[functions.send-reminder-email]
+verify_jwt = true
