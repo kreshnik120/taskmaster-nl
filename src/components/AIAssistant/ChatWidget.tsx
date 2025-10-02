@@ -82,7 +82,6 @@ export const ChatWidget = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatWindowRef = useRef<HTMLDivElement>(null);
   const resizeRef = useRef({ width: dimensions.width, height: dimensions.height });
-  const rafRef = useRef<number>();
   const { toast } = useToast();
 
   // Check authentication status
@@ -100,6 +99,11 @@ export const ChatWidget = () => {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Sync resizeRef with dimensions state
+  useEffect(() => {
+    resizeRef.current = { width: dimensions.width, height: dimensions.height };
+  }, [dimensions]);
 
   // Prevent default drag/drop behavior globally
   useEffect(() => {
@@ -609,23 +613,28 @@ export const ChatWidget = () => {
   };
 
   // Resize handlers
-  const startResize = (type: 'width' | 'height', e: React.MouseEvent) => {
+  const startResize = (type: 'width' | 'height', e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
     setIsResizing(type);
   };
 
   useEffect(() => {
     if (!isResizing || !chatWindowRef.current) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
-      // Cancel vorige frame als die er is
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-      }
+    let isFramePending = false;
+
+    const handlePointerMove = (e: PointerEvent) => {
+      // Skip als er al een frame pending is (throttle)
+      if (isFramePending) return;
+
+      isFramePending = true;
 
       // Schedule update voor volgende frame (60fps)
-      rafRef.current = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        isFramePending = false;
+        
         if (!chatWindowRef.current) return;
 
         const rect = chatWindowRef.current.getBoundingClientRect();
@@ -646,7 +655,7 @@ export const ChatWidget = () => {
       });
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
       setIsResizing(null);
       
       // Nu pas state + localStorage updaten (slechts 1x)
@@ -656,24 +665,14 @@ export const ChatWidget = () => {
       });
       localStorage.setItem('chatWidth', resizeRef.current.width.toString());
       localStorage.setItem('chatHeight', resizeRef.current.height.toString());
-      
-      // Cleanup
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-      }
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      
-      // Cleanup bij unmount
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-      }
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
     };
   }, [isResizing]);
 
@@ -694,10 +693,12 @@ export const ChatWidget = () => {
       {isOpen && (
         <div 
           ref={chatWindowRef}
-          className="fixed bottom-6 right-28 bg-background border rounded-lg shadow-xl flex flex-col animate-in slide-in-from-right duration-300 z-[2147483647] transition-all"
+          className="fixed bottom-6 right-28 bg-background border rounded-lg shadow-xl flex flex-col animate-in slide-in-from-right duration-300 z-[2147483647]"
           style={{ 
             width: `${dimensions.width}px`, 
-            height: `${dimensions.height}px` 
+            height: `${dimensions.height}px`,
+            willChange: isResizing ? 'width, height' : 'auto',
+            transition: isResizing ? 'none' : 'all 0.3s'
           }}
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
@@ -707,7 +708,7 @@ export const ChatWidget = () => {
           {/* Resize Handle - Left (Width) */}
           <div
             className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-primary/20 transition-colors group flex items-center justify-center"
-            onMouseDown={(e) => startResize('width', e)}
+            onPointerDown={(e) => startResize('width', e)}
           >
             <div className="opacity-0 group-hover:opacity-100 transition-opacity">
               <GripVertical className="h-4 w-4 text-primary rotate-90" />
@@ -717,7 +718,7 @@ export const ChatWidget = () => {
           {/* Resize Handle - Top (Height) */}
           <div
             className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-primary/20 transition-colors group flex items-center justify-center"
-            onMouseDown={(e) => startResize('height', e)}
+            onPointerDown={(e) => startResize('height', e)}
           >
             <div className="opacity-0 group-hover:opacity-100 transition-opacity">
               <GripVertical className="h-4 w-4 text-primary" />
