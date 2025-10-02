@@ -32,7 +32,7 @@ const handler = async (req: Request): Promise<Response> => {
     const taskUrl = `${appUrl}/kanban/${taskId}`;
 
     const emailResponse = await resend.emails.send({
-      from: "CitoZorg TaskMaster <noreply@send.citozorg.nl>",
+      from: "CitoZorg TaskMaster <noreply@citozorg.nl>",
       to: [to],
       subject: `Herinnering: ${reminderTitle || taskTitle || "Taak"}`,
       html: `
