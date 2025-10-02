@@ -76,6 +76,12 @@ export const ChatWidget = () => {
     height: parseInt(localStorage.getItem('chatHeight') || '600')
   }));
   const [isResizing, setIsResizing] = useState<'width' | 'height' | null>(null);
+  const [position, setPosition] = useState(() => ({
+    x: parseInt(localStorage.getItem('chatPosX') || `${typeof window !== 'undefined' ? window.innerWidth - 384 - 112 : 800}`),
+    y: parseInt(localStorage.getItem('chatPosY') || `${typeof window !== 'undefined' ? window.innerHeight - 600 - 24 : 100}`)
+  }));
+  const [isDraggingWindow, setIsDraggingWindow] = useState(false);
+  const dragStartRef = useRef({ x: 0, y: 0, windowX: 0, windowY: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -612,6 +618,64 @@ export const ChatWidget = () => {
     streamChat(messageText);
   };
 
+  // Drag handlers
+  const startDrag = (e: React.PointerEvent) => {
+    if (isResizing) return; // Don't drag during resize
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsDraggingWindow(true);
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      windowX: position.x,
+      windowY: position.y
+    };
+  };
+
+  useEffect(() => {
+    if (!isDraggingWindow) return;
+
+    let isFramePending = false;
+
+    const handleDragMove = (e: PointerEvent) => {
+      if (isFramePending) return;
+      
+      isFramePending = true;
+      
+      requestAnimationFrame(() => {
+        isFramePending = false;
+        
+        const deltaX = e.clientX - dragStartRef.current.x;
+        const deltaY = e.clientY - dragStartRef.current.y;
+        
+        let newX = dragStartRef.current.windowX + deltaX;
+        let newY = dragStartRef.current.windowY + deltaY;
+        
+        // Viewport constraints (keep at least 50px visible)
+        const minVisible = 50;
+        newX = Math.max(-dimensions.width + minVisible, Math.min(newX, window.innerWidth - minVisible));
+        newY = Math.max(0, Math.min(newY, window.innerHeight - minVisible));
+        
+        setPosition({ x: newX, y: newY });
+      });
+    };
+
+    const handleDragEnd = () => {
+      setIsDraggingWindow(false);
+      localStorage.setItem('chatPosX', position.x.toString());
+      localStorage.setItem('chatPosY', position.y.toString());
+    };
+
+    document.addEventListener('pointermove', handleDragMove);
+    document.addEventListener('pointerup', handleDragEnd);
+
+    return () => {
+      document.removeEventListener('pointermove', handleDragMove);
+      document.removeEventListener('pointerup', handleDragEnd);
+    };
+  }, [isDraggingWindow, position.x, position.y, dimensions.width]);
+
   // Resize handlers
   const startResize = (type: 'width' | 'height', e: React.PointerEvent) => {
     e.preventDefault();
@@ -693,12 +757,14 @@ export const ChatWidget = () => {
       {isOpen && (
         <div 
           ref={chatWindowRef}
-          className="fixed bottom-6 right-28 bg-background border rounded-lg shadow-xl flex flex-col animate-in slide-in-from-right duration-300 z-[2147483647]"
+          className="fixed bg-background border rounded-lg shadow-xl flex flex-col animate-in slide-in-from-right duration-300 z-[2147483647]"
           style={{ 
             width: `${dimensions.width}px`, 
             height: `${dimensions.height}px`,
-            willChange: isResizing ? 'width, height' : 'auto',
-            transition: isResizing ? 'none' : 'all 0.3s'
+            left: `${position.x}px`,
+            top: `${position.y}px`,
+            willChange: isResizing || isDraggingWindow ? 'width, height, transform' : 'auto',
+            transition: isResizing || isDraggingWindow ? 'none' : 'all 0.3s'
           }}
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
@@ -736,7 +802,10 @@ export const ChatWidget = () => {
           )}
           
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-primary/5 to-primary/10">
+          <div 
+            className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-primary/5 to-primary/10 cursor-move select-none"
+            onPointerDown={startDrag}
+          >
             <div className="flex items-center gap-3">
               <div className="shrink-0">
                 <MiniRobotIcon isActive={isLoading} />
