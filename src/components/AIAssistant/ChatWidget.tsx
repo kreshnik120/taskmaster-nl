@@ -121,7 +121,7 @@ export const ChatWidget = () => {
         .from('chat_messages')
         .select('role, content')
         .eq('user_id', user.id)
-        .eq('conversation_id', conversationId)
+        .or(`conversation_id.eq.${conversationId},conversation_id.is.null`)
         .order('created_at', { ascending: false })
         .limit(50);
 
