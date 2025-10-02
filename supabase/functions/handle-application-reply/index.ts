@@ -1,0 +1,452 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from '@supabase/supabase-js';
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+interface ResendWebhookPayload {
+  type: string;
+  data: {
+    from: string;
+    to: string;
+    subject: string;
+    text: string;
+    html?: string;
+    in_reply_to?: string;
+    references?: string;
+    message_id?: string;
+    attachments?: Array<{
+      filename: string;
+      content: string;
+      content_type: string;
+    }>;
+  };
+}
+
+serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const resendApiKey = Deno.env.get("RESEND_API_KEY")!;
+    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY")!;
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const payload: ResendWebhookPayload = await req.json();
+    console.log("=== Processing Application Reply ===");
+    console.log("Webhook type:", payload.type);
+
+    // Only process email.received events
+    if (payload.type !== "email.received") {
+      console.log("Ignoring non-email event");
+      return new Response(JSON.stringify({ message: "Event ignored" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    const { from, to, subject, text, in_reply_to, message_id } = payload.data;
+    console.log("From:", from);
+    console.log("Subject:", subject);
+    console.log("In-Reply-To:", in_reply_to);
+
+    // Find the original conversation by matching in_reply_to with the email_id in metadata
+    let applicationId: string | null = null;
+
+    if (in_reply_to) {
+      console.log("Looking up conversation by in_reply_to:", in_reply_to);
+      const { data: conversations, error: convError } = await supabase
+        .from("application_conversations")
+        .select("application_id, metadata")
+        .not("metadata", "is", null);
+
+      if (convError) {
+        console.error("Error fetching conversations:", convError);
+      } else {
+        console.log(`Found ${conversations?.length || 0} conversations to check`);
+        
+        // Find conversation where metadata.email_id matches in_reply_to
+        const matchingConv = conversations?.find((conv) => {
+          const metadata = conv.metadata as { email_id?: string };
+          return metadata?.email_id === in_reply_to;
+        });
+
+        if (matchingConv) {
+          applicationId = matchingConv.application_id;
+          console.log("Found application_id via in_reply_to:", applicationId);
+        }
+      }
+    }
+
+    // Fallback: match by email address and subject
+    if (!applicationId) {
+      console.log("Trying fallback: matching by email and subject");
+      const cleanSubject = subject.replace(/^Re:\s*/i, "").trim();
+      
+      const { data: application, error: appError } = await supabase
+        .from("professional_applications")
+        .select("id, email_from, email_subject")
+        .eq("email_from", from)
+        .ilike("email_subject", `%${cleanSubject}%`)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (appError) {
+        console.error("Error finding application:", appError);
+      }
+
+      if (application) {
+        applicationId = application.id;
+        console.log("Found application_id via fallback:", applicationId);
+      }
+    }
+
+    if (!applicationId) {
+      console.error("Could not find application for this reply");
+      return new Response(
+        JSON.stringify({ error: "Application not found for this reply" }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 404,
+        }
+      );
+    }
+
+    // Get full application details
+    console.log("Fetching application details...");
+    const { data: application, error: appDetailsError } = await supabase
+      .from("professional_applications")
+      .select(`
+        *,
+        professionals (*)
+      `)
+      .eq("id", applicationId)
+      .single();
+
+    if (appDetailsError || !application) {
+      console.error("Error fetching application details:", appDetailsError);
+      return new Response(
+        JSON.stringify({ error: "Application not found" }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 404,
+        }
+      );
+    }
+
+    console.log("Application found:", application.id);
+    console.log("Current completeness:", application.completeness_score);
+    console.log("Current missing_info:", application.missing_info);
+
+    // Save the applicant's reply to conversations
+    console.log("Saving applicant reply to conversations...");
+    const { error: replyInsertError } = await supabase
+      .from("application_conversations")
+      .insert({
+        application_id: applicationId,
+        role: "applicant",
+        content: text,
+        metadata: {
+          email_id: message_id,
+          subject: subject,
+        },
+      });
+
+    if (replyInsertError) {
+      console.error("Error saving reply:", replyInsertError);
+    }
+
+    // Use AI to analyze the reply and extract new information
+    console.log("Analyzing reply with AI...");
+    const analysisPrompt = `
+Je bent een recruitment assistant voor een thuiszorg organisatie. Analyseer deze email van een sollicitant en extract de volgende informatie:
+
+**Huidige missing_info:** ${JSON.stringify(application.missing_info || [])}
+
+**Email van sollicitant:**
+${text}
+
+**Instructies:**
+1. Identificeer welke missing_info items nu zijn ingevuld
+2. Extract specifieke data als beschikbaar (bijv. VOG datum, auto ja/nee, rijbewijs ja/nee)
+3. Detecteer of de sollicitant vraagt om een gesprek/interview
+4. Bepaal of er nieuwe vragen zijn die beantwoord moeten worden
+
+Return JSON in dit formaat:
+\`\`\`json
+{
+  "filled_info": ["VOG", "Auto"],
+  "new_data": {
+    "vog_date": "2025-01-15",
+    "has_car": true,
+    "has_drivers_license": true
+  },
+  "requests_interview": true,
+  "has_questions": false,
+  "remaining_missing_info": [],
+  "confidence": 0.95
+}
+\`\`\`
+`;
+
+    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${lovableApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "system",
+            content: "Je bent een recruitment assistant. Return alleen valid JSON zonder extra tekst.",
+          },
+          {
+            role: "user",
+            content: analysisPrompt,
+          },
+        ],
+      }),
+    });
+
+    if (!aiResponse.ok) {
+      const errorText = await aiResponse.text();
+      console.error("AI API error:", aiResponse.status, errorText);
+      throw new Error(`AI API error: ${errorText}`);
+    }
+
+    const aiData = await aiResponse.json();
+    const aiContent = aiData.choices?.[0]?.message?.content || "";
+    console.log("AI analysis:", aiContent);
+
+    // Parse AI response
+    let analysis;
+    try {
+      const jsonMatch = aiContent.match(/```json\n([\s\S]*?)\n```/);
+      const jsonStr = jsonMatch ? jsonMatch[1] : aiContent;
+      analysis = JSON.parse(jsonStr);
+    } catch (e) {
+      console.error("Failed to parse AI response:", e);
+      analysis = {
+        filled_info: [],
+        new_data: {},
+        requests_interview: text.toLowerCase().includes("gesprek") || 
+                           text.toLowerCase().includes("interview") ||
+                           text.toLowerCase().includes("afspraak"),
+        has_questions: false,
+        remaining_missing_info: application.missing_info || [],
+        confidence: 0.5,
+      };
+    }
+
+    // Calculate new completeness score
+    const totalFields = 10; // Adjust based on your requirements
+    const filledFields = totalFields - (analysis.remaining_missing_info?.length || 0);
+    const newCompletenessScore = Math.round((filledFields / totalFields) * 100);
+
+    console.log("Analysis result:", analysis);
+    console.log("New completeness score:", newCompletenessScore);
+
+    // Update professional record with new data
+    if (analysis.new_data && Object.keys(analysis.new_data).length > 0) {
+      console.log("Updating professional record...");
+      
+      const professionalUpdates: any = {};
+      
+      // Add new data to description or notes
+      const professional = application.professionals;
+      let updatedNotes = professional.beschikbaarheidsnotities || "";
+      
+      if (analysis.new_data.vog_date) {
+        updatedNotes += `\nVOG: Geldig vanaf ${analysis.new_data.vog_date}`;
+      }
+      if (analysis.new_data.has_car !== undefined) {
+        updatedNotes += `\nAuto: ${analysis.new_data.has_car ? "Ja" : "Nee"}`;
+      }
+      if (analysis.new_data.has_drivers_license !== undefined) {
+        updatedNotes += `\nRijbewijs: ${analysis.new_data.has_drivers_license ? "Ja" : "Nee"}`;
+      }
+      
+      if (updatedNotes !== professional.beschikbaarheidsnotities) {
+        professionalUpdates.beschikbaarheidsnotities = updatedNotes.trim();
+      }
+
+      if (Object.keys(professionalUpdates).length > 0) {
+        const { error: profUpdateError } = await supabase
+          .from("professionals")
+          .update(professionalUpdates)
+          .eq("id", professional.id);
+
+        if (profUpdateError) {
+          console.error("Error updating professional:", profUpdateError);
+        } else {
+          console.log("Professional record updated");
+        }
+      }
+    }
+
+    // Update application with new completeness and missing_info
+    console.log("Updating application record...");
+    const { error: appUpdateError } = await supabase
+      .from("professional_applications")
+      .update({
+        missing_info: analysis.remaining_missing_info || [],
+        completeness_score: newCompletenessScore,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", applicationId);
+
+    if (appUpdateError) {
+      console.error("Error updating application:", appUpdateError);
+    }
+
+    // Generate intelligent response
+    console.log("Generating response email...");
+    let responseSubject = `Re: ${subject}`;
+    let responseBody = "";
+
+    const professional = application.professionals;
+
+    if (newCompletenessScore >= 90 && analysis.requests_interview) {
+      // Application is complete and they want an interview
+      responseSubject = `Re: ${subject}`;
+      responseBody = `
+        <h2>Beste ${professional.full_name},</h2>
+        
+        <p>Geweldig! Je sollicitatie is nu compleet. 🎉</p>
+        
+        <p>We zouden graag kennismaken om te kijken of er een match is. Wanneer zou het jou uitkomen voor een (video)gesprek?</p>
+        
+        <p><strong>Volgende stappen:</strong></p>
+        <ul>
+          <li>Reageer met je beschikbaarheid voor deze week</li>
+          <li>Of bel ons op: 020-1234567</li>
+          <li>Of plan direct in via: <a href="https://calendly.com/citozorg">onze agenda</a></li>
+        </ul>
+        
+        <p>We kijken ernaar uit!</p>
+        
+        <p>Met vriendelijke groet,<br>
+        Het CitoZorg Recruitment Team<br>
+        <a href="mailto:personeel@citozorg.nl">personeel@citozorg.nl</a></p>
+      `;
+    } else if (analysis.remaining_missing_info && analysis.remaining_missing_info.length > 0) {
+      // Still missing some information
+      responseSubject = `Re: ${subject} - Aanvullende informatie nodig`;
+      responseBody = `
+        <h2>Beste ${professional.full_name},</h2>
+        
+        <p>Bedankt voor je snelle reactie!</p>
+        
+        <p>We hebben nog de volgende informatie nodig om je sollicitatie compleet te maken:</p>
+        <ul>
+          ${analysis.remaining_missing_info.map((item: string) => `<li>${item}</li>`).join("")}
+        </ul>
+        
+        <p>Zou je deze informatie kunnen aanvullen? Dan kunnen we snel verder met je sollicitatie.</p>
+        
+        <p>Met vriendelijke groet,<br>
+        Het CitoZorg Recruitment Team<br>
+        <a href="mailto:personeel@citozorg.nl">personeel@citozorg.nl</a></p>
+      `;
+    } else {
+      // Application is complete, standard acknowledgment
+      responseSubject = `Re: ${subject}`;
+      responseBody = `
+        <h2>Beste ${professional.full_name},</h2>
+        
+        <p>Super, bedankt voor de aanvullende informatie! Je sollicitatie is nu compleet.</p>
+        
+        <p>We gaan je gegevens nu beoordelen en nemen binnen 2 werkdagen contact met je op voor de volgende stappen.</p>
+        
+        <p>Heb je nog vragen? Laat het gerust weten!</p>
+        
+        <p>Met vriendelijke groet,<br>
+        Het CitoZorg Recruitment Team<br>
+        <a href="mailto:personeel@citozorg.nl">personeel@citozorg.nl</a></p>
+      `;
+    }
+
+    // Send response email via Resend API
+    console.log("Sending response email...");
+    const emailResponse = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "CitoZorg Recruitment <personeel@citozorg.nl>",
+        to: from,
+        subject: responseSubject,
+        html: responseBody,
+        reply_to: "personeel@citozorg.nl",
+      }),
+    });
+
+    let emailData: any = null;
+    if (!emailResponse.ok) {
+      const errorText = await emailResponse.text();
+      console.error("Error sending email:", emailResponse.status, errorText);
+    } else {
+      emailData = await emailResponse.json();
+      console.log("Email sent:", emailData);
+    }
+
+    // Save assistant response to conversations
+    console.log("Saving assistant response...");
+    const { error: responseInsertError } = await supabase
+      .from("application_conversations")
+      .insert({
+        application_id: applicationId,
+        role: "assistant",
+        content: responseBody.replace(/<[^>]*>/g, ""), // Strip HTML for text version
+        metadata: {
+          email_id: emailData?.id,
+          subject: responseSubject,
+          completeness_score: newCompletenessScore,
+          requests_interview: analysis.requests_interview,
+        },
+      });
+
+    if (responseInsertError) {
+      console.error("Error saving response:", responseInsertError);
+    }
+
+    console.log("=== Reply Processing Complete ===");
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        application_id: applicationId,
+        completeness_score: newCompletenessScore,
+        remaining_missing_info: analysis.remaining_missing_info,
+        email_sent: !!emailData,
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      }
+    );
+  } catch (error) {
+    console.error("Error processing reply:", error);
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Unknown error",
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+      }
+    );
+  }
+});
