@@ -81,6 +81,8 @@ export const ChatWidget = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chatWindowRef = useRef<HTMLDivElement>(null);
+  const resizeRef = useRef({ width: dimensions.width, height: dimensions.height });
+  const rafRef = useRef<number>();
   const { toast } = useToast();
 
   // Check authentication status
@@ -617,33 +619,48 @@ export const ChatWidget = () => {
     if (!isResizing || !chatWindowRef.current) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (!chatWindowRef.current) return;
-
-      const rect = chatWindowRef.current.getBoundingClientRect();
-      
-      if (isResizing === 'width') {
-        // Resize from left edge - mouse moves left to increase width
-        const newWidth = rect.right - e.clientX;
-        const constrainedWidth = Math.min(Math.max(newWidth, 320), 600);
-        setDimensions(prev => {
-          const updated = { ...prev, width: constrainedWidth };
-          localStorage.setItem('chatWidth', constrainedWidth.toString());
-          return updated;
-        });
-      } else if (isResizing === 'height') {
-        // Resize from top edge - mouse moves up to increase height
-        const newHeight = rect.bottom - e.clientY;
-        const constrainedHeight = Math.min(Math.max(newHeight, 400), 800);
-        setDimensions(prev => {
-          const updated = { ...prev, height: constrainedHeight };
-          localStorage.setItem('chatHeight', constrainedHeight.toString());
-          return updated;
-        });
+      // Cancel vorige frame als die er is
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
       }
+
+      // Schedule update voor volgende frame (60fps)
+      rafRef.current = requestAnimationFrame(() => {
+        if (!chatWindowRef.current) return;
+
+        const rect = chatWindowRef.current.getBoundingClientRect();
+        
+        if (isResizing === 'width') {
+          // Resize from left edge - mouse moves left to increase width
+          const newWidth = rect.right - e.clientX;
+          const constrainedWidth = Math.min(Math.max(newWidth, 320), 600);
+          resizeRef.current.width = constrainedWidth;
+          chatWindowRef.current.style.width = `${constrainedWidth}px`;
+        } else if (isResizing === 'height') {
+          // Resize from top edge - mouse moves up to increase height
+          const newHeight = rect.bottom - e.clientY;
+          const constrainedHeight = Math.min(Math.max(newHeight, 400), 800);
+          resizeRef.current.height = constrainedHeight;
+          chatWindowRef.current.style.height = `${constrainedHeight}px`;
+        }
+      });
     };
 
     const handleMouseUp = () => {
       setIsResizing(null);
+      
+      // Nu pas state + localStorage updaten (slechts 1x)
+      setDimensions({
+        width: resizeRef.current.width,
+        height: resizeRef.current.height
+      });
+      localStorage.setItem('chatWidth', resizeRef.current.width.toString());
+      localStorage.setItem('chatHeight', resizeRef.current.height.toString());
+      
+      // Cleanup
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
     };
 
     document.addEventListener('mousemove', handleMouseMove);
@@ -652,6 +669,11 @@ export const ChatWidget = () => {
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      
+      // Cleanup bij unmount
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
     };
   }, [isResizing]);
 
