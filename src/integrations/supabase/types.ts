@@ -117,6 +117,41 @@ export type Database = {
           },
         ]
       }
+      application_conversations: {
+        Row: {
+          application_id: string
+          content: string
+          created_at: string | null
+          id: string
+          metadata: Json | null
+          role: string
+        }
+        Insert: {
+          application_id: string
+          content: string
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          role: string
+        }
+        Update: {
+          application_id?: string
+          content?: string
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "application_conversations_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attachments: {
         Row: {
           created_at: string
@@ -414,6 +449,82 @@ export type Database = {
           },
         ]
       }
+      interview_appointments: {
+        Row: {
+          application_id: string
+          confirmation_sent_at: string | null
+          created_at: string | null
+          duration_min: number | null
+          id: string
+          location: string | null
+          meeting_link: string | null
+          notes: string | null
+          org_id: string
+          professional_id: string
+          recruiter_id: string | null
+          scheduled_at: string
+          status: string
+          task_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          application_id: string
+          confirmation_sent_at?: string | null
+          created_at?: string | null
+          duration_min?: number | null
+          id?: string
+          location?: string | null
+          meeting_link?: string | null
+          notes?: string | null
+          org_id: string
+          professional_id: string
+          recruiter_id?: string | null
+          scheduled_at: string
+          status?: string
+          task_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          application_id?: string
+          confirmation_sent_at?: string | null
+          created_at?: string | null
+          duration_min?: number | null
+          id?: string
+          location?: string | null
+          meeting_link?: string | null
+          notes?: string | null
+          org_id?: string
+          professional_id?: string
+          recruiter_id?: string | null
+          scheduled_at?: string
+          status?: string
+          task_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interview_appointments_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interview_appointments_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interview_appointments_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           created_at: string
@@ -459,6 +570,62 @@ export type Database = {
         }
         Relationships: []
       }
+      professional_applications: {
+        Row: {
+          completeness_score: number | null
+          created_at: string | null
+          cv_file_name: string | null
+          cv_file_path: string | null
+          email_body: string | null
+          email_from: string
+          email_subject: string | null
+          id: string
+          missing_info: Json | null
+          org_id: string
+          professional_id: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          completeness_score?: number | null
+          created_at?: string | null
+          cv_file_name?: string | null
+          cv_file_path?: string | null
+          email_body?: string | null
+          email_from: string
+          email_subject?: string | null
+          id?: string
+          missing_info?: Json | null
+          org_id: string
+          professional_id: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          completeness_score?: number | null
+          created_at?: string | null
+          cv_file_name?: string | null
+          cv_file_path?: string | null
+          email_body?: string | null
+          email_from?: string
+          email_subject?: string | null
+          id?: string
+          missing_info?: Json | null
+          org_id?: string
+          professional_id?: string
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professional_applications_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       professional_availability: {
         Row: {
           created_at: string
@@ -497,10 +664,14 @@ export type Database = {
       professionals: {
         Row: {
           beschikbaarheidsnotities: string | null
+          btw_nummer: string | null
+          cao_akkoord: boolean | null
           created_at: string
           full_name: string
           functie_niveau: string
+          gewenst_uurloon: number | null
           id: string
+          kvk_nummer: string | null
           org_id: string
           rating: number | null
           regio: string | null
@@ -508,13 +679,18 @@ export type Database = {
           status: string
           tags: string[] | null
           updated_at: string
+          werkvorm: string | null
         }
         Insert: {
           beschikbaarheidsnotities?: string | null
+          btw_nummer?: string | null
+          cao_akkoord?: boolean | null
           created_at?: string
           full_name: string
           functie_niveau: string
+          gewenst_uurloon?: number | null
           id?: string
+          kvk_nummer?: string | null
           org_id: string
           rating?: number | null
           regio?: string | null
@@ -522,13 +698,18 @@ export type Database = {
           status?: string
           tags?: string[] | null
           updated_at?: string
+          werkvorm?: string | null
         }
         Update: {
           beschikbaarheidsnotities?: string | null
+          btw_nummer?: string | null
+          cao_akkoord?: boolean | null
           created_at?: string
           full_name?: string
           functie_niveau?: string
+          gewenst_uurloon?: number | null
           id?: string
+          kvk_nummer?: string | null
           org_id?: string
           rating?: number | null
           regio?: string | null
@@ -536,6 +717,7 @@ export type Database = {
           status?: string
           tags?: string[] | null
           updated_at?: string
+          werkvorm?: string | null
         }
         Relationships: [
           {
