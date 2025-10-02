@@ -223,7 +223,8 @@ Belangrijke regels:
         gewenst_uurloon: extractedData.gewenst_uurloon,
         kvk_nummer: extractedData.kvk_nummer,
         btw_nummer: extractedData.btw_nummer,
-        status: "sollicitant",
+        status: "actief",
+        tags: ["sollicitant"],
       })
       .select()
       .single();
