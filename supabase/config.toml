@@ -35,3 +35,6 @@ verify_jwt = true
 
 [functions.send-reminder-email]
 verify_jwt = true
+
+[functions.setup-resend-inbound]
+verify_jwt = false
