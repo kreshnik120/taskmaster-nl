@@ -9,7 +9,7 @@ const corsHeaders = {
 const CUTOFF_DATE = new Date('2025-10-06T23:59:59Z');
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
-// ULTRA SELF-TRAINING QUESTIONS (25 complexity levels)
+// ULTRA SELF-TRAINING QUESTIONS (52 vragen + PLANNING & MATCHING FOCUS)
 const SELF_TRAINING_QUESTIONS = [
   // NIVEAU 1: Basis Knowledge Check (5)
   "Wat zijn de belangrijkste CAO VVT bepalingen voor 2025?",
@@ -18,33 +18,67 @@ const SELF_TRAINING_QUESTIONS = [
   "Wat zijn de basiseisen voor ZZP'ers in de zorg?",
   "Welke registraties zijn verplicht voor zorgverleners?",
   
-  // NIVEAU 2: Applied Knowledge (5)
+  // NIVEAU 2: Applied Knowledge (11 vragen - 6 NEW)
   "Hoe bereken ik het correcte uurtarief voor een Verpleegkundige niveau 4 volgens CAO?",
   "Welke stappen moet ik volgen om een ZZP'er compliant in te zetten?",
   "Wat zijn de juridische risico's bij inzet van tijdelijke krachten?",
   "Hoe controleer ik of een professional voldoet aan alle compliance eisen?",
   "Welke verzekeringen moet een ZZP'er minimaal hebben?",
+  // NEW PLANNING/MATCHING BASICS:
+  "Wat zijn basis criteria voor professional-client matching?",
+  "Hoe werkt beschikbaarheid planning voor ZZP'ers?",
+  "Wat is optimale shift lengte voor Verzorgende IG?",
+  "Welke kwalificaties zijn vereist voor functie niveau 4?",
+  "Hoe check ik beschikbaarheid van een professional?",
+  "Wat zijn typische planning constraints in de zorg?",
   
-  // NIVEAU 3: Complex Scenarios (5)
+  // NIVEAU 3: Complex Scenarios (15 vragen - 10 NEW)
   "Een ZZP'er wil 32 uur per week werken bij Stichting X. Wat zijn alle juridische, financiële en compliance aspecten die ik moet checken?",
   "Hoe ga ik om met een situatie waarbij een professional niet BIG-geregistreerd is maar wel relevante ervaring heeft?",
   "Wat is het verschil in aansprakelijkheid tussen een ZZP'er met BAV en zonder BAV?",
   "Welke CAO bepalingen zijn van toepassing bij overwerk in de nachtdienst?",
   "Hoe combineer ik Wlz tarieven met CAO schalen voor een juiste prijsstelling?",
+  // NEW PLANNING/MATCHING SCENARIOS:
+  "Welke factoren bepalen een succesvolle professional-client match?",
+  "Wat zijn typische planningsconflicten en hoe los je die op?",
+  "Hoe bepaal je optimale shift lengte per functie niveau?",
+  "Welke rol speelt reistijd in planning optimalisatie?",
+  "Hoe combineer je ZZP en loondienst personeel effectief?",
+  "Wat zijn early warning signals voor planning problemen?",
+  "Hoe balanceer je client voorkeuren met professional beschikbaarheid?",
+  "Welke metrics gebruik je voor match quality?",
+  "Hoe optimaliseer je capacity utilization?",
+  "Wat zijn best practices voor last-minute vervangingen?",
   
-  // NIVEAU 4: Strategic Thinking (5)
+  // NIVEAU 4: Strategic Thinking (15 vragen - 10 NEW)
   "Analyseer de belangrijkste compliance risico's voor CitoZorg en geef concrete mitigatie strategieën.",
   "Wat zijn de financiële implicaties van de nieuwe Wet DBA voor ons bedrijfsmodel?",
   "Hoe kunnen we onze matching algoritme optimaliseren op basis van CAO schalen en client budgets?",
   "Welke trends zie je in de zorgarbeidsmarkt en hoe moeten we daarop anticiperen?",
   "Wat zijn de 3 grootste knowledge gaps in onze huidige database?",
+  // NEW PLANNING/MATCHING STRATEGY:
+  "Hoe optimaliseer je reistijd tussen opeenvolgende opdrachten?",
+  "Wanneer automatisch toewijzen vs. handmatig reviewen?",
+  "Welke early warning signals voor professional burnout?",
+  "Hoe voorkom je onder-/overbezetting bij clients?",
+  "Strategieën voor capacity planning bij onverwachte pieken?",
+  "Hoe balanceer je workload over verschillende functieniveaus?",
+  "Welke data points zijn kritiek voor accurate planning?",
+  "Hoe optimaliseer je professional satisfaction vs. business efficiency?",
+  "Wat zijn de trade-offs tussen verschillende staffing modellen?",
+  "Hoe meet je en verbeter je matching accuracy over tijd?",
   
-  // NIVEAU 5: Meta-Learning (5)
+  // NIVEAU 5: Meta-Learning (6 vragen - 4 NEW)
   "Welke informatie zou ik MOETEN weten maar momenteel NIET weet?",
   "Op welke vragen geef ik momenteel suboptimale antwoorden?",
   "Welke nieuwe regelgeving komt eraan waar we nu al op moeten anticiperen?",
   "Hoe kan ik mijn confidence scores beter kalibreren?",
-  "Welke bronnen zou ik moeten monitoren voor proactieve updates?"
+  "Welke bronnen zou ik moeten monitoren voor proactieve updates?",
+  // NEW META-LEARNING PLANNING:
+  "Ontwerp een self-learning matching algoritme dat verbetert met elke assignment",
+  "Hoe anticipeer je op toekomstige workforce trends en skill gaps?",
+  "Welke onzichtbare patronen in onze data kunnen planning optimaliseren?",
+  "Hoe balanceer je korte termijn efficiency met lange termijn talent development?"
 ];
 
 serve(async (req) => {

@@ -50,6 +50,7 @@ verify_jwt = true
 
 [functions.knowledge-graph-builder]
 verify_jwt = false
+schedule = "0 */2 * * *"
 
 [functions.continuous-learner]
 verify_jwt = true
@@ -71,9 +72,15 @@ verify_jwt = true
 
 [functions.auto-knowledge-harvester]
 verify_jwt = false
+schedule = "0,30 */2 * * *"
 
 [functions.vision-document-processor]
 verify_jwt = true
 
 [functions.self-trainer]
 verify_jwt = false
+schedule = "*/100 * * * *"
+
+[functions.batch-vision-processor]
+verify_jwt = false
+schedule = "0 */6 * * *"

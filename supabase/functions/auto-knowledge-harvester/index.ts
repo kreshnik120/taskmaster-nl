@@ -115,7 +115,7 @@ serve(async (req) => {
 
     console.log('🌐 Auto Knowledge Harvester starting search...');
 
-    // ULTRA TOPICS: 50+ onderwerpen voor maximale coverage
+    // ULTRA TOPICS: 125+ onderwerpen voor maximale coverage + PLANNING & MATCHING
     const defaultTopics = [
       // CAO & Arbeidsvoorwaarden (12)
       'CAO VVT wijzigingen 2025', 'CAO GGZ updates 2025', 'CAO Sociaal Werk nieuwe regels',
@@ -147,7 +147,49 @@ serve(async (req) => {
       
       // Verzekeringen & Aansprakelijkheid (5)
       'Beroepsaansprakelijkheidsverzekering BAV eisen', 'Bedrijfsaansprakelijkheid zorg minimum',
-      'Arbeidsongeschiktheidsverzekering ZZP', 'Aansprakelijkheid zorgverlener', 'Verzekeringen verplicht ZZP'
+      'Arbeidsongeschiktheidsverzekering ZZP', 'Aansprakelijkheid zorgverlener', 'Verzekeringen verplicht ZZP',
+
+      // === NIEUWE PLANNING INTELLIGENCE TOPICS (25) ===
+      'Shift optimalisatie algoritmes zorg', 'Reistijd berekening tussen opdrachten',
+      'Capacity planning uitzendkrachten', 'Rustperiode compliance CAO', 'Nachtdienst rooster regels',
+      'Planning constraints Wlz zorg', 'Shift lengte per functieniveau', 'Break time regelgeving',
+      'Opeenvolgende diensten maximum', 'Planning software vereisten zorg',
+      'Automated scheduling best practices', 'Last-minute vervangingen protocol',
+      'Beschikbaarheid voorspelling modellen', 'Seasonal demand patterns zorg',
+      'Weekend shift premies', 'Holiday shift staffing strategies', 'Continuïteit van zorg planning',
+      'Flexpool management', 'On-call beschikbaarheid tarieven', 'Shift swap policies',
+      'Planning efficiency metrics', 'Workforce forecasting methoden', 'Schedule optimization KPIs',
+      'Real-time planning aanpassingen', 'Capacity utilization targets zorg',
+
+      // === NIEUWE MATCHING INTELLIGENCE TOPICS (25) ===
+      'Professional-client match success factors', 'Skill matching algoritmes',
+      'Experience requirements per functieniveau', 'Cultural fit indicators zorg',
+      'Client preference patterns', 'Professional satisfaction metrics',
+      'Match quality scoring systemen', 'Assignment success predictors',
+      'Client feedback patterns matching', 'Retention prediction models',
+      'Skill gap analysis professionals', 'Training recommendations matching',
+      'Client-professional compatibility scores', 'Long-term assignment success factors',
+      'Professional development paths', 'Client needs assessment criteria',
+      'Assignment duration optimization', 'Professional preference learning',
+      'Client loyalty indicators', 'Match performance tracking metrics',
+      'Professional burnout early warning signs', 'Client satisfaction drivers',
+      'Assignment complexity scoring', 'Team composition optimization',
+      'Cross-training opportunities identification',
+
+      // === NIEUWE WORKFORCE OPTIMIZATION TOPICS (25) ===
+      'ZZP vs loondienst cost comparison', 'Flexible staffing strategy zorg',
+      'Workforce mix optimization', 'Cost per hour analyses per werkmodel',
+      'Marginal contribution per professional type', 'Break-even point calculations',
+      'Capacity planning forecast models', 'Demand volatility management',
+      'Professional utilization rates optimization', 'Idle time reduction strategies',
+      'Multi-skilling ROI calculations', 'Training investment optimization',
+      'Professional retention strategies cost-benefit', 'Recruitment channel effectiveness',
+      'Onboarding efficiency metrics', 'Time to productivity benchmarks',
+      'Professional lifecycle value', 'Churn prediction models',
+      'Compensation competitiveness analysis', 'Benefit package optimization',
+      'Performance incentive structures', 'Career progression frameworks',
+      'Talent pipeline management', 'Succession planning strategies',
+      'Workforce analytics dashboards'
     ];
 
     const topics = search_topics || defaultTopics;
