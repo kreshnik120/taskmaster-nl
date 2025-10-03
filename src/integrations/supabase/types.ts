@@ -1330,6 +1330,7 @@ export type Database = {
           accepted_at: string | null
           accepted_by: string | null
           assignee_id: string | null
+          category: string | null
           client_id: string | null
           column_id: string | null
           completed_at: string | null
@@ -1339,8 +1340,11 @@ export type Database = {
           description: string | null
           due_at: string | null
           estimate_min: number | null
+          estimated_hours: number | null
+          forecast_metadata: Json | null
           id: string
           is_all_day: boolean
+          is_forecast: boolean | null
           next_action: string | null
           order_key: string
           org_id: string
@@ -1350,6 +1354,7 @@ export type Database = {
           revenue_impact_eur: number | null
           sequence_number: number | null
           start_at: string | null
+          status: string | null
           title: string
           transition_related: boolean | null
           updated_at: string
@@ -1358,6 +1363,7 @@ export type Database = {
           accepted_at?: string | null
           accepted_by?: string | null
           assignee_id?: string | null
+          category?: string | null
           client_id?: string | null
           column_id?: string | null
           completed_at?: string | null
@@ -1367,8 +1373,11 @@ export type Database = {
           description?: string | null
           due_at?: string | null
           estimate_min?: number | null
+          estimated_hours?: number | null
+          forecast_metadata?: Json | null
           id?: string
           is_all_day?: boolean
+          is_forecast?: boolean | null
           next_action?: string | null
           order_key?: string
           org_id: string
@@ -1378,6 +1387,7 @@ export type Database = {
           revenue_impact_eur?: number | null
           sequence_number?: number | null
           start_at?: string | null
+          status?: string | null
           title: string
           transition_related?: boolean | null
           updated_at?: string
@@ -1386,6 +1396,7 @@ export type Database = {
           accepted_at?: string | null
           accepted_by?: string | null
           assignee_id?: string | null
+          category?: string | null
           client_id?: string | null
           column_id?: string | null
           completed_at?: string | null
@@ -1395,8 +1406,11 @@ export type Database = {
           description?: string | null
           due_at?: string | null
           estimate_min?: number | null
+          estimated_hours?: number | null
+          forecast_metadata?: Json | null
           id?: string
           is_all_day?: boolean
+          is_forecast?: boolean | null
           next_action?: string | null
           order_key?: string
           org_id?: string
@@ -1406,6 +1420,7 @@ export type Database = {
           revenue_impact_eur?: number | null
           sequence_number?: number | null
           start_at?: string | null
+          status?: string | null
           title?: string
           transition_related?: boolean | null
           updated_at?: string

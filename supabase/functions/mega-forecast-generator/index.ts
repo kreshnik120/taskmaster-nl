@@ -207,7 +207,7 @@ BELANGRIJK:
         status: 'todo',
         priority: task.priority || 'medium',
         client_id: task.client_id || null,
-        assigned_to: task.assigned_to || null,
+        assignee_id: task.assigned_to || null,
         estimated_hours: task.estimated_hours || 2,
         category: task.category || 'Algemeen',
         is_forecast: true,
