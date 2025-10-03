@@ -41,3 +41,9 @@ verify_jwt = false
 
 [functions.process-feedback]
 verify_jwt = true
+
+[functions.review-knowledge]
+verify_jwt = true
+
+[functions.rollback-knowledge]
+verify_jwt = true

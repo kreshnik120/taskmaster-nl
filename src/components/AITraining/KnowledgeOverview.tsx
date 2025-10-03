@@ -3,10 +3,11 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Search, Trash2, FileText, MessageSquare, Brain } from "lucide-react";
+import { Search, Trash2, FileText, MessageSquare, Brain, AlertTriangle, XCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { VersionHistory } from "./VersionHistory";
 
 export const KnowledgeOverview = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -92,6 +93,18 @@ export const KnowledgeOverview = () => {
                     {getSourceIcon(item.source)}
                     <h3 className="font-semibold">{item.key}</h3>
                     <Badge variant="secondary">{item.category}</Badge>
+                    {item.needs_review && (
+                      <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                        <AlertTriangle className="h-3 w-3 mr-1" />
+                        Needs Review
+                      </Badge>
+                    )}
+                    {item.deleted_at && (
+                      <Badge variant="outline" className="text-red-600 border-red-600">
+                        <XCircle className="h-3 w-3 mr-1" />
+                        Deleted
+                      </Badge>
+                    )}
                   </div>
 
                   <div className="text-sm text-muted-foreground">
@@ -112,17 +125,29 @@ export const KnowledgeOverview = () => {
                     <span>
                       Aangemaakt: {new Date(item.created_at).toLocaleDateString("nl-NL")}
                     </span>
+                    {item.last_reviewed_at && (
+                      <span>
+                        Gereviewed: {new Date(item.last_reviewed_at).toLocaleDateString("nl-NL")}
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleDelete(item.id)}
-                  className="text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-2">
+                  <VersionHistory 
+                    knowledgeId={item.id} 
+                    currentCategory={item.category}
+                    currentKey={item.key}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleDelete(item.id)}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </Card>
           ))

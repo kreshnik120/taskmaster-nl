@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       ai_knowledge_base: {
         Row: {
+          auto_reviewed_at: string | null
           category: string
           confidence_score: number | null
           created_at: string | null
@@ -24,10 +25,12 @@ export type Database = {
           deletion_reason: Json | null
           id: string
           key: string
+          last_reviewed_at: string | null
           last_used_at: string | null
           last_validation_error: string | null
           needs_review: boolean | null
           org_id: string
+          review_count: number | null
           source: string | null
           updated_at: string | null
           usage_count: number | null
@@ -36,6 +39,7 @@ export type Database = {
           value: Json
         }
         Insert: {
+          auto_reviewed_at?: string | null
           category: string
           confidence_score?: number | null
           created_at?: string | null
@@ -44,10 +48,12 @@ export type Database = {
           deletion_reason?: Json | null
           id?: string
           key: string
+          last_reviewed_at?: string | null
           last_used_at?: string | null
           last_validation_error?: string | null
           needs_review?: boolean | null
           org_id: string
+          review_count?: number | null
           source?: string | null
           updated_at?: string | null
           usage_count?: number | null
@@ -56,6 +62,7 @@ export type Database = {
           value: Json
         }
         Update: {
+          auto_reviewed_at?: string | null
           category?: string
           confidence_score?: number | null
           created_at?: string | null
@@ -64,10 +71,12 @@ export type Database = {
           deletion_reason?: Json | null
           id?: string
           key?: string
+          last_reviewed_at?: string | null
           last_used_at?: string | null
           last_validation_error?: string | null
           needs_review?: boolean | null
           org_id?: string
+          review_count?: number | null
           source?: string | null
           updated_at?: string | null
           usage_count?: number | null
@@ -81,6 +90,59 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_knowledge_versions: {
+        Row: {
+          ai_action_context: Json | null
+          category: string
+          change_reason: string | null
+          change_type: string
+          changed_by: string | null
+          confidence_score: number | null
+          created_at: string
+          id: string
+          key: string
+          knowledge_id: string
+          value: Json
+          version_number: number
+        }
+        Insert: {
+          ai_action_context?: Json | null
+          category: string
+          change_reason?: string | null
+          change_type: string
+          changed_by?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          id?: string
+          key: string
+          knowledge_id: string
+          value: Json
+          version_number: number
+        }
+        Update: {
+          ai_action_context?: Json | null
+          category?: string
+          change_reason?: string | null
+          change_type?: string
+          changed_by?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          id?: string
+          key?: string
+          knowledge_id?: string
+          value?: Json
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_knowledge_versions_knowledge_id_fkey"
+            columns: ["knowledge_id"]
+            isOneToOne: false
+            referencedRelation: "ai_knowledge_base"
             referencedColumns: ["id"]
           },
         ]
@@ -134,6 +196,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ai_performance_metrics: {
+        Row: {
+          created_at: string | null
+          id: string
+          metadata: Json | null
+          metric_type: string
+          org_id: string
+          period_end: string
+          period_start: string
+          sample_size: number | null
+          value: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          metric_type: string
+          org_id: string
+          period_end: string
+          period_start: string
+          sample_size?: number | null
+          value: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          metric_type?: string
+          org_id?: string
+          period_end?: string
+          period_start?: string
+          sample_size?: number | null
+          value?: number
+        }
+        Relationships: []
       }
       application_conversations: {
         Row: {

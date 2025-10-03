@@ -12,6 +12,7 @@ import { SeedClientKnowledge } from "@/components/AITraining/SeedClientKnowledge
 import { LearningDashboard } from "@/components/AITraining/LearningDashboard";
 import { SmartKnowledgeSearch } from "@/components/AITraining/SmartKnowledgeSearch";
 import { ConflictResolutionPanel } from "@/components/AITraining/ConflictResolutionPanel";
+import { PerformanceMetrics } from "@/components/AITraining/PerformanceMetrics";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -68,17 +69,22 @@ const AiTraining = () => {
             </div>
 
             <Tabs defaultValue="dashboard" className="w-full">
-              <TabsList className="grid w-full grid-cols-6">
+              <TabsList className="grid w-full grid-cols-7">
                 <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
+                <TabsTrigger value="metrics">📈 Metrics</TabsTrigger>
                 <TabsTrigger value="conflicts">⚠️ Conflicten</TabsTrigger>
-                <TabsTrigger value="search">🔍 Slim Zoeken</TabsTrigger>
+                <TabsTrigger value="search">🔍 Zoeken</TabsTrigger>
                 <TabsTrigger value="chat">💬 Training</TabsTrigger>
                 <TabsTrigger value="documents">📄 Docs</TabsTrigger>
-                <TabsTrigger value="knowledge">🗄️ Kennisbank</TabsTrigger>
+                <TabsTrigger value="knowledge">🗄️ Kennis</TabsTrigger>
               </TabsList>
 
               <TabsContent value="dashboard" className="mt-6">
                 <LearningDashboard />
+              </TabsContent>
+
+              <TabsContent value="metrics" className="mt-6">
+                <PerformanceMetrics />
               </TabsContent>
 
               <TabsContent value="conflicts" className="mt-6">
