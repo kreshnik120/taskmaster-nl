@@ -13,6 +13,7 @@ import { LearningDashboard } from "@/components/AITraining/LearningDashboard";
 import { SmartKnowledgeSearch } from "@/components/AITraining/SmartKnowledgeSearch";
 import { ConflictResolutionPanel } from "@/components/AITraining/ConflictResolutionPanel";
 import { PerformanceMetrics } from "@/components/AITraining/PerformanceMetrics";
+import { SystemMonitor } from "@/components/SystemMonitor";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -68,8 +69,9 @@ const AiTraining = () => {
               </p>
             </div>
 
-            <Tabs defaultValue="dashboard" className="w-full">
-              <TabsList className="grid w-full grid-cols-7">
+            <Tabs defaultValue="monitor" className="w-full">
+              <TabsList className="grid w-full grid-cols-8">
+                <TabsTrigger value="monitor">🚀 Monitor</TabsTrigger>
                 <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
                 <TabsTrigger value="metrics">📈 Metrics</TabsTrigger>
                 <TabsTrigger value="conflicts">⚠️ Conflicten</TabsTrigger>
@@ -78,6 +80,10 @@ const AiTraining = () => {
                 <TabsTrigger value="documents">📄 Docs</TabsTrigger>
                 <TabsTrigger value="knowledge">🗄️ Kennis</TabsTrigger>
               </TabsList>
+
+              <TabsContent value="monitor" className="mt-6">
+                <SystemMonitor />
+              </TabsContent>
 
               <TabsContent value="dashboard" className="mt-6">
                 <LearningDashboard />

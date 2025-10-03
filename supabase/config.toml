@@ -49,7 +49,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.knowledge-graph-builder]
-verify_jwt = true
+verify_jwt = false
 
 [functions.continuous-learner]
 verify_jwt = true
@@ -70,10 +70,10 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.auto-knowledge-harvester]
-verify_jwt = true
+verify_jwt = false
 
 [functions.vision-document-processor]
 verify_jwt = true
 
 [functions.self-trainer]
-verify_jwt = true
+verify_jwt = false
