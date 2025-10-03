@@ -309,31 +309,40 @@ Return JSON in dit formaat:
         console.log("✅ Professional created:", newProfessional.id);
         professionalId = newProfessional.id;
         
-        // Link professional to application
-        await supabase
+        // ✅ ATOMIC UPDATE: Update application with ALL fields at once
+        console.log("Updating application record with professional_id...");
+        const { error: appUpdateError } = await supabase
           .from("professional_applications")
           .update({ 
             professional_id: newProfessional.id,
             status: "compleet",
+            missing_info: [],
+            completeness_score: 100,
+            extracted_data: mergedData,
+            updated_at: new Date().toISOString(),
           })
           .eq("id", applicationId);
+
+        if (appUpdateError) {
+          console.error("Error updating application:", appUpdateError);
+        }
       }
-    }
+    } else {
+      // Update application without professional_id (not 100% complete yet)
+      console.log("Updating application record...");
+      const { error: appUpdateError } = await supabase
+        .from("professional_applications")
+        .update({
+          missing_info: analysis.remaining_missing_info || [],
+          completeness_score: newCompletenessScore,
+          extracted_data: mergedData,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", applicationId);
 
-    // Update application with new completeness, missing_info, and merged extracted_data
-    console.log("Updating application record...");
-    const { error: appUpdateError } = await supabase
-      .from("professional_applications")
-      .update({
-        missing_info: analysis.remaining_missing_info || [],
-        completeness_score: newCompletenessScore,
-        extracted_data: mergedData,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", applicationId);
-
-    if (appUpdateError) {
-      console.error("Error updating application:", appUpdateError);
+      if (appUpdateError) {
+        console.error("Error updating application:", appUpdateError);
+      }
     }
 
     // Generate intelligent response
