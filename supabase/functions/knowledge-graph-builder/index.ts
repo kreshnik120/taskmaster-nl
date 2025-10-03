@@ -31,37 +31,78 @@ serve(async (req) => {
       });
     }
 
-    const authHeader = req.headers.get('Authorization')!;
+    // Support both authenticated (Test Nu) and autonomous (cron) modes
+    const authHeader = req.headers.get('Authorization');
+    
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
+      authHeader ? Deno.env.get('SUPABASE_ANON_KEY') ?? '' : Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      authHeader ? { global: { headers: { Authorization: authHeader } } } : {}
     );
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Unauthorized');
+    let orgId: string;
+    let userId: string;
+    
+    if (authHeader) {
+      // Authenticated mode (Test Nu button)
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        console.error('❌ Authentication failed in authenticated mode');
+        throw new Error('Unauthorized');
+      }
 
-    const { data: userOrg } = await supabase
-      .from('user_organizations')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
+      const { data: userOrg } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .single();
 
-    if (!userOrg) throw new Error('No organization found');
+      if (!userOrg) {
+        throw new Error('No organization found');
+      }
+
+      orgId = userOrg.org_id;
+      userId = user.id;
+      console.log('🔐 Running in authenticated mode for org:', orgId);
+    } else {
+      // Autonomous mode (cron job) - use first organization
+      const { data: orgs, error: orgsError } = await supabase
+        .from('organizations')
+        .select('id')
+        .limit(1);
+
+      if (orgsError || !orgs || orgs.length === 0) {
+        console.error('❌ No organizations found in autonomous mode');
+        throw new Error('No organizations found');
+      }
+
+      orgId = orgs[0].id;
+      
+      // Get first user from org for userId
+      const { data: orgUser } = await supabase
+        .from('user_organizations')
+        .select('user_id')
+        .eq('org_id', orgId)
+        .limit(1)
+        .single();
+      
+      userId = orgUser?.user_id || orgId;
+      console.log('🤖 Running in autonomous mode for org:', orgId);
+    }
 
     const { batch_size, parallel_mode } = await req.json();
 
     // ULTRA MODE: Process 200 items per batch (was 50)
     const effectiveBatchSize = batch_size || 200;
 
-    console.log(`🧠 ULTRA Knowledge Graph Builder for org ${userOrg.org_id}`);
+    console.log(`🧠 ULTRA Knowledge Graph Builder for org ${orgId}`);
     console.log(`📊 Processing batch of ${effectiveBatchSize} items (parallel: ${parallel_mode})`);
 
     // Fetch knowledge items
     const { data: knowledgeItems, error: fetchError } = await supabase
       .from('ai_knowledge_base')
       .select('id, category, key, value, confidence_score')
-      .eq('org_id', userOrg.org_id)
+      .eq('org_id', orgId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(effectiveBatchSize);
@@ -242,8 +283,8 @@ Output ALLEEN valid JSON array:
       : 0;
 
     await supabase.from('function_call_logs').insert({
-      user_id: user.id,
-      org_id: userOrg.org_id,
+      user_id: userId,
+      org_id: orgId,
       function_name: 'knowledge-graph-builder',
       input_tokens: inputTokens,
       output_tokens: outputTokens,

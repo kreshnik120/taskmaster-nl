@@ -28,23 +28,66 @@ serve(async (req) => {
       });
     }
 
-    const authHeader = req.headers.get('Authorization')!;
+    // Support both authenticated (Test Nu) and autonomous (cron) modes
+    const authHeader = req.headers.get('Authorization');
+    
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
+      authHeader ? Deno.env.get('SUPABASE_ANON_KEY') ?? '' : Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      authHeader ? { global: { headers: { Authorization: authHeader } } } : {}
     );
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Unauthorized');
+    let orgId: string;
+    let userId: string;
+    
+    if (authHeader) {
+      // Authenticated mode (Test Nu button)
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        console.error('❌ Authentication failed in authenticated mode');
+        throw new Error('Unauthorized');
+      }
 
-    const { data: userOrg } = await supabase
-      .from('user_organizations')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
+      const { data: userOrg, error: orgError } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .single();
 
-    if (!userOrg) throw new Error('No organization found');
+      if (orgError || !userOrg) {
+        console.error('❌ No organization found for user');
+        throw new Error('No organization found');
+      }
+
+      orgId = userOrg.org_id;
+      userId = user.id;
+      console.log('🔐 Running in authenticated mode for org:', orgId);
+    } else {
+      // Autonomous mode (cron job) - use first organization
+      const { data: orgs, error: orgsError } = await supabase
+        .from('organizations')
+        .select('id')
+        .limit(1);
+
+      if (orgsError || !orgs || orgs.length === 0) {
+        console.error('❌ No organizations found in autonomous mode');
+        throw new Error('No organizations found');
+      }
+
+      orgId = orgs[0].id;
+      
+      // Get first user from org for userId
+      const { data: orgUser } = await supabase
+        .from('user_organizations')
+        .select('user_id')
+        .eq('org_id', orgId)
+        .limit(1)
+        .single();
+      
+      userId = orgUser?.user_id || orgId; // Fallback to orgId if no user found
+      console.log('🤖 Running in autonomous mode for org:', orgId);
+    }
 
     const { search_topics } = await req.json();
 
@@ -187,8 +230,8 @@ Output ALLEEN valid JSON:
               : item.confidence;
 
             newKnowledge.push({
-              org_id: userOrg.org_id,
-              user_id: user.id,
+              org_id: orgId,
+              user_id: userId,
               category: `${item.category}_unknown`,
               key: item.key,
               value: {
