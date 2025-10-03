@@ -576,6 +576,54 @@ export type Database = {
           },
         ]
       }
+      function_call_logs: {
+        Row: {
+          created_at: string | null
+          error_message: string | null
+          estimated_cost_eur: number | null
+          execution_time_ms: number | null
+          function_name: string
+          id: string
+          input_tokens: number | null
+          model_used: string | null
+          org_id: string
+          output_tokens: number | null
+          success: boolean | null
+          total_tokens: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          error_message?: string | null
+          estimated_cost_eur?: number | null
+          execution_time_ms?: number | null
+          function_name: string
+          id?: string
+          input_tokens?: number | null
+          model_used?: string | null
+          org_id: string
+          output_tokens?: number | null
+          success?: boolean | null
+          total_tokens?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          error_message?: string | null
+          estimated_cost_eur?: number | null
+          execution_time_ms?: number | null
+          function_name?: string
+          id?: string
+          input_tokens?: number | null
+          model_used?: string | null
+          org_id?: string
+          output_tokens?: number | null
+          success?: boolean | null
+          total_tokens?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       interview_appointments: {
         Row: {
           application_id: string
@@ -648,6 +696,60 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      knowledge_relationships: {
+        Row: {
+          confidence_score: number
+          context: string | null
+          created_at: string | null
+          detected_by: string
+          id: string
+          metadata: Json | null
+          relationship_type: string
+          source_knowledge_id: string
+          target_knowledge_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          confidence_score?: number
+          context?: string | null
+          created_at?: string | null
+          detected_by?: string
+          id?: string
+          metadata?: Json | null
+          relationship_type: string
+          source_knowledge_id: string
+          target_knowledge_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          confidence_score?: number
+          context?: string | null
+          created_at?: string | null
+          detected_by?: string
+          id?: string
+          metadata?: Json | null
+          relationship_type?: string
+          source_knowledge_id?: string
+          target_knowledge_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_relationships_source_knowledge_id_fkey"
+            columns: ["source_knowledge_id"]
+            isOneToOne: false
+            referencedRelation: "ai_knowledge_base"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_relationships_target_knowledge_id_fkey"
+            columns: ["target_knowledge_id"]
+            isOneToOne: false
+            referencedRelation: "ai_knowledge_base"
             referencedColumns: ["id"]
           },
         ]

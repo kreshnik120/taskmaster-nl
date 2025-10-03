@@ -47,3 +47,30 @@ verify_jwt = true
 
 [functions.rollback-knowledge]
 verify_jwt = true
+
+[functions.knowledge-graph-builder]
+verify_jwt = true
+
+[functions.continuous-learner]
+verify_jwt = true
+
+[functions.compliance-expert]
+verify_jwt = true
+
+[functions.tariff-analyzer]
+verify_jwt = true
+
+[functions.professional-matcher]
+verify_jwt = true
+
+[functions.planning-optimizer]
+verify_jwt = true
+
+[functions.agent-orchestrator]
+verify_jwt = true
+
+[functions.auto-knowledge-harvester]
+verify_jwt = true
+
+[functions.vision-document-processor]
+verify_jwt = true
