@@ -141,14 +141,23 @@ CV inhoud: ${cvContent.substring(0, 2000)}
 Geef terug in dit EXACTE JSON formaat (geen extra tekst):
 {
   "full_name": "Voor- en achternaam",
+  "telefoonnummer": "06-12345678 of null",
+  "email": "${applicantEmail}",
+  "adres": "Straat + huisnummer of null",
+  "postcode": "1234AB of null",
+  "woonplaats": "Amsterdam of null",
   "functie_niveau": "VP4, VP5, VIG, of Helpende",
   "werkvorm": "ZZP of Uitzendkracht",
   "skills": ["skill1", "skill2"],
   "regio": "Utrecht, Amsterdam, etc",
   "gewenst_uurloon": 45,
+  "vog_date": "2025-01-15 of null",
+  "big_nummer": "123456789 of null",
+  "heeft_auto": true,
+  "heeft_rijbewijs": true,
   "kvk_nummer": "12345678 of null",
   "btw_nummer": "NL123456789B01 of null",
-  "missing_info": ["VOG", "BIG-nummer", "Tarief"],
+  "missing_info": ["VOG", "BIG-nummer", "Adres", "Telefoonnummer"],
   "confidence": 0.8
 }
 
@@ -156,8 +165,10 @@ Belangrijke regels:
 - functie_niveau moet exact zijn: VP4, VP5, VIG, of Helpende
 - werkvorm moet exact zijn: ZZP of Uitzendkracht
 - Als info ontbreekt, gebruik null
-- missing_info moet een array zijn van ontbrekende zaken
-- gewenst_uurloon is een getal (euro per uur)`;
+- missing_info moet een array zijn van ALLE ontbrekende zaken (inclusief Adres, Telefoonnummer, VOG, BIG-nummer, Auto, Rijbewijs)
+- gewenst_uurloon is een getal (euro per uur)
+- vog_date is een datum (YYYY-MM-DD format)
+- heeft_auto en heeft_rijbewijs zijn boolean (true/false)`;
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -197,66 +208,55 @@ Belangrijke regels:
       // Fallback with minimal data
       extractedData = {
         full_name: applicantEmail.split("@")[0],
+        telefoonnummer: null,
+        email: applicantEmail,
+        adres: null,
+        postcode: null,
+        woonplaats: null,
         functie_niveau: "VP4",
         werkvorm: "Uitzendkracht",
         skills: [],
         regio: null,
         gewenst_uurloon: null,
+        vog_date: null,
+        big_nummer: null,
+        heeft_auto: false,
+        heeft_rijbewijs: false,
         kvk_nummer: null,
         btw_nummer: null,
-        missing_info: ["VOG", "BIG-nummer", "Tarief", "Regio"],
+        missing_info: ["VOG", "BIG-nummer", "Tarief", "Regio", "Adres", "Telefoonnummer", "Auto", "Rijbewijs"],
         confidence: 0.3,
       };
     }
 
-    // Insert professional record
-    console.log("Creating professional record...");
-    const { data: professional, error: profError } = await supabase
-      .from("professionals")
-      .insert({
-        org_id: orgId,
-        full_name: extractedData.full_name,
-        functie_niveau: extractedData.functie_niveau,
-        werkvorm: extractedData.werkvorm,
-        skills: extractedData.skills || [],
-        regio: extractedData.regio,
-        gewenst_uurloon: extractedData.gewenst_uurloon,
-        kvk_nummer: extractedData.kvk_nummer,
-        btw_nummer: extractedData.btw_nummer,
-        status: "actief",
-        tags: ["sollicitant"],
-      })
-      .select()
-      .single();
-
-    if (profError) {
-      console.error("Professional insert error:", profError);
-      throw profError;
-    }
-
-    console.log("Professional created:", professional.id);
-
-    // Calculate completeness score
-    const totalFields = 9; // full_name, functie_niveau, werkvorm, skills, regio, uurloon, kvk, btw, VOG/BIG
+    // Calculate completeness score (0-100%)
+    const totalFields = 13; // full_name, telefoonnummer, email, adres, postcode, woonplaats, functie_niveau, werkvorm, skills, regio, uurloon, VOG, BIG, auto, rijbewijs
     const filledFields = [
       extractedData.full_name,
+      extractedData.telefoonnummer,
+      extractedData.email,
+      extractedData.adres,
+      extractedData.postcode,
+      extractedData.woonplaats,
       extractedData.functie_niveau,
       extractedData.werkvorm,
       extractedData.skills?.length > 0,
       extractedData.regio,
       extractedData.gewenst_uurloon,
-      extractedData.kvk_nummer,
-      extractedData.btw_nummer,
+      extractedData.vog_date,
+      extractedData.big_nummer,
     ].filter(Boolean).length;
     const completenessScore = Math.round((filledFields / totalFields) * 100);
+    
+    console.log(`Completeness: ${completenessScore}% (${filledFields}/${totalFields} fields filled)`);
 
-    // Insert application record
+    // Insert application record (WITHOUT professional_id - will be created at 100% completeness)
     console.log("Creating application record...");
     const { data: application, error: appError } = await supabase
       .from("professional_applications")
       .insert({
         org_id: orgId,
-        professional_id: professional.id,
+        professional_id: null, // ⚠️ NULL - professional wordt pas aangemaakt bij 100% completeness
         email_from: applicantEmail,
         email_subject: emailSubject,
         email_body: emailBody,
@@ -265,6 +265,7 @@ Belangrijke regels:
         status: "nieuw",
         completeness_score: completenessScore,
         missing_info: extractedData.missing_info || [],
+        extracted_data: extractedData, // 🆕 Sla alle extracted data tijdelijk op
       })
       .select()
       .single();
@@ -289,11 +290,23 @@ Belangrijke regels:
       if (missingInfo.includes("BIG-nummer")) {
         followUpQuestions += "🏥 **BIG-registratie**: Wat is je BIG-registratienummer?\n\n";
       }
-      if (missingInfo.includes("Tarief")) {
+      if (missingInfo.includes("Tarief") || missingInfo.includes("Uurloon")) {
         followUpQuestions += "💰 **Gewenst uurloon**: Wat is je gewenste uurloon (exclusief BTW)?\n\n";
       }
       if (missingInfo.includes("Regio")) {
         followUpQuestions += "📍 **Regio voorkeur**: In welke regio(s) wil je werken?\n\n";
+      }
+      if (missingInfo.includes("Adres")) {
+        followUpQuestions += "🏠 **Adres**: Wat is je volledige adres (straat, nummer, postcode, woonplaats)?\n\n";
+      }
+      if (missingInfo.includes("Telefoonnummer")) {
+        followUpQuestions += "📞 **Telefoonnummer**: Wat is je telefoonnummer?\n\n";
+      }
+      if (missingInfo.includes("Auto")) {
+        followUpQuestions += "🚗 **Auto**: Heb je een eigen auto?\n\n";
+      }
+      if (missingInfo.includes("Rijbewijs")) {
+        followUpQuestions += "🪪 **Rijbewijs**: Heb je een geldig rijbewijs?\n\n";
       }
       if (extractedData.werkvorm === "ZZP" && missingInfo.includes("KvK")) {
         followUpQuestions += "🏢 **KvK-nummer**: Wat is je KvK-nummer?\n\n";
@@ -396,42 +409,14 @@ Belangrijke regels:
       },
     });
 
-    // Auto-learn: Insert knowledge into ai_knowledge_base
-    if (extractedData.gewenst_uurloon) {
-      await supabase.from("ai_knowledge_base").insert({
-        org_id: orgId,
-        user_id: userId,
-        category: "tarieven",
-        key: `tarief_${extractedData.functie_niveau?.toLowerCase()}_${extractedData.regio?.toLowerCase() || 'algemeen'}`,
-        value: { 
-          uurloon: extractedData.gewenst_uurloon,
-          functie_niveau: extractedData.functie_niveau,
-          regio: extractedData.regio,
-          werkvorm: extractedData.werkvorm,
-        },
-        source: `sollicitatie_${professional.id}`,
-        confidence_score: extractedData.confidence || 0.7,
-      }).select();
-    }
-
-    if (extractedData.werkvorm === "ZZP" && extractedData.kvk_nummer) {
-      await supabase.from("ai_knowledge_base").insert({
-        org_id: orgId,
-        user_id: userId,
-        category: "zzp_vereisten",
-        key: "zzp_vereist_kvk",
-        value: { required: true, example: extractedData.kvk_nummer },
-        source: `sollicitatie_${professional.id}`,
-        confidence_score: 1.0,
-      }).select();
-    }
+    // Note: Auto-learning will happen when professional is created (at 100% completeness)
 
     console.log("=== Application Processing Complete ===");
 
     return new Response(
       JSON.stringify({
         success: true,
-        professional_id: professional.id,
+        professional_id: null, // Will be created when completeness reaches 100%
         application_id: application.id,
         completeness_score: completenessScore,
         missing_info: missingInfo,

@@ -579,10 +579,11 @@ export type Database = {
           email_body: string | null
           email_from: string
           email_subject: string | null
+          extracted_data: Json | null
           id: string
           missing_info: Json | null
           org_id: string
-          professional_id: string
+          professional_id: string | null
           status: string
           updated_at: string | null
         }
@@ -594,10 +595,11 @@ export type Database = {
           email_body?: string | null
           email_from: string
           email_subject?: string | null
+          extracted_data?: Json | null
           id?: string
           missing_info?: Json | null
           org_id: string
-          professional_id: string
+          professional_id?: string | null
           status?: string
           updated_at?: string | null
         }
@@ -609,10 +611,11 @@ export type Database = {
           email_body?: string | null
           email_from?: string
           email_subject?: string | null
+          extracted_data?: Json | null
           id?: string
           missing_info?: Json | null
           org_id?: string
-          professional_id?: string
+          professional_id?: string | null
           status?: string
           updated_at?: string | null
         }
@@ -663,61 +666,88 @@ export type Database = {
       }
       professionals: {
         Row: {
+          adres: string | null
           beschikbaarheidsnotities: string | null
+          big_nummer: string | null
           btw_nummer: string | null
           cao_akkoord: boolean | null
           created_at: string
+          email: string | null
           full_name: string
           functie_niveau: string
           gewenst_uurloon: number | null
+          heeft_auto: boolean | null
+          heeft_rijbewijs: boolean | null
           id: string
           kvk_nummer: string | null
           org_id: string
+          postcode: string | null
           rating: number | null
           regio: string | null
           skills: string[] | null
           status: string
           tags: string[] | null
+          telefoonnummer: string | null
           updated_at: string
+          vog_date: string | null
           werkvorm: string | null
+          woonplaats: string | null
         }
         Insert: {
+          adres?: string | null
           beschikbaarheidsnotities?: string | null
+          big_nummer?: string | null
           btw_nummer?: string | null
           cao_akkoord?: boolean | null
           created_at?: string
+          email?: string | null
           full_name: string
           functie_niveau: string
           gewenst_uurloon?: number | null
+          heeft_auto?: boolean | null
+          heeft_rijbewijs?: boolean | null
           id?: string
           kvk_nummer?: string | null
           org_id: string
+          postcode?: string | null
           rating?: number | null
           regio?: string | null
           skills?: string[] | null
           status?: string
           tags?: string[] | null
+          telefoonnummer?: string | null
           updated_at?: string
+          vog_date?: string | null
           werkvorm?: string | null
+          woonplaats?: string | null
         }
         Update: {
+          adres?: string | null
           beschikbaarheidsnotities?: string | null
+          big_nummer?: string | null
           btw_nummer?: string | null
           cao_akkoord?: boolean | null
           created_at?: string
+          email?: string | null
           full_name?: string
           functie_niveau?: string
           gewenst_uurloon?: number | null
+          heeft_auto?: boolean | null
+          heeft_rijbewijs?: boolean | null
           id?: string
           kvk_nummer?: string | null
           org_id?: string
+          postcode?: string | null
           rating?: number | null
           regio?: string | null
           skills?: string[] | null
           status?: string
           tags?: string[] | null
+          telefoonnummer?: string | null
           updated_at?: string
+          vog_date?: string | null
           werkvorm?: string | null
+          woonplaats?: string | null
         }
         Relationships: [
           {

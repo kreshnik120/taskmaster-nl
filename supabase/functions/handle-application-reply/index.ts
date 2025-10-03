@@ -170,24 +170,31 @@ serve(async (req) => {
 Je bent een recruitment assistant voor een thuiszorg organisatie. Analyseer deze email van een sollicitant en extract de volgende informatie:
 
 **Huidige missing_info:** ${JSON.stringify(application.missing_info || [])}
+**Huidige extracted_data:** ${JSON.stringify(application.extracted_data || {})}
 
 **Email van sollicitant:**
 ${text}
 
 **Instructies:**
 1. Identificeer welke missing_info items nu zijn ingevuld
-2. Extract specifieke data als beschikbaar (bijv. VOG datum, auto ja/nee, rijbewijs ja/nee)
+2. Extract specifieke data als beschikbaar (telefoonnummer, adres, postcode, woonplaats, VOG datum, BIG-nummer, auto ja/nee, rijbewijs ja/nee, gewenst_uurloon, etc)
 3. Detecteer of de sollicitant vraagt om een gesprek/interview
 4. Bepaal of er nieuwe vragen zijn die beantwoord moeten worden
 
 Return JSON in dit formaat:
 \`\`\`json
 {
-  "filled_info": ["VOG", "Auto"],
+  "filled_info": ["VOG", "Auto", "Adres"],
   "new_data": {
+    "telefoonnummer": "06-12345678",
+    "adres": "Hoofdstraat 123",
+    "postcode": "1234AB",
+    "woonplaats": "Amsterdam",
     "vog_date": "2025-01-15",
-    "has_car": true,
-    "has_drivers_license": true
+    "big_nummer": "123456789",
+    "heeft_auto": true,
+    "heeft_rijbewijs": true,
+    "gewenst_uurloon": 45
   },
   "requests_interview": true,
   "has_questions": false,
@@ -249,58 +256,78 @@ Return JSON in dit formaat:
     }
 
     // Calculate new completeness score
-    const totalFields = 10; // Adjust based on your requirements
+    const totalFields = 13; // Match with process-application-email
     const filledFields = totalFields - (analysis.remaining_missing_info?.length || 0);
     const newCompletenessScore = Math.round((filledFields / totalFields) * 100);
 
     console.log("Analysis result:", analysis);
     console.log("New completeness score:", newCompletenessScore);
 
-    // Update professional record with new data
-    if (analysis.new_data && Object.keys(analysis.new_data).length > 0) {
-      console.log("Updating professional record...");
-      
-      const professionalUpdates: any = {};
-      
-      // Add new data to description or notes
-      const professional = application.professionals;
-      let updatedNotes = professional.beschikbaarheidsnotities || "";
-      
-      if (analysis.new_data.vog_date) {
-        updatedNotes += `\nVOG: Geldig vanaf ${analysis.new_data.vog_date}`;
-      }
-      if (analysis.new_data.has_car !== undefined) {
-        updatedNotes += `\nAuto: ${analysis.new_data.has_car ? "Ja" : "Nee"}`;
-      }
-      if (analysis.new_data.has_drivers_license !== undefined) {
-        updatedNotes += `\nRijbewijs: ${analysis.new_data.has_drivers_license ? "Ja" : "Nee"}`;
-      }
-      
-      if (updatedNotes !== professional.beschikbaarheidsnotities) {
-        professionalUpdates.beschikbaarheidsnotities = updatedNotes.trim();
-      }
+    // Merge new data with existing extracted_data
+    const mergedData = {
+      ...(application.extracted_data || {}),
+      ...(analysis.new_data || {}),
+    };
 
-      if (Object.keys(professionalUpdates).length > 0) {
-        const { error: profUpdateError } = await supabase
-          .from("professionals")
-          .update(professionalUpdates)
-          .eq("id", professional.id);
+    // 🎉 CHECK: Is completeness 100% AND no professional created yet?
+    let professionalId = application.professional_id;
+    
+    if (newCompletenessScore === 100 && !application.professional_id) {
+      console.log("🎉 Application is 100% compleet! Creating professional record...");
+      
+      // Create professional with all collected data
+      const { data: newProfessional, error: profError } = await supabase
+        .from("professionals")
+        .insert({
+          org_id: application.org_id,
+          full_name: mergedData.full_name,
+          telefoonnummer: mergedData.telefoonnummer,
+          email: mergedData.email || application.email_from,
+          adres: mergedData.adres,
+          postcode: mergedData.postcode,
+          woonplaats: mergedData.woonplaats,
+          functie_niveau: mergedData.functie_niveau,
+          werkvorm: mergedData.werkvorm,
+          skills: mergedData.skills || [],
+          regio: mergedData.regio,
+          gewenst_uurloon: mergedData.gewenst_uurloon,
+          vog_date: mergedData.vog_date,
+          big_nummer: mergedData.big_nummer,
+          heeft_auto: mergedData.heeft_auto || false,
+          heeft_rijbewijs: mergedData.heeft_rijbewijs || false,
+          kvk_nummer: mergedData.kvk_nummer,
+          btw_nummer: mergedData.btw_nummer,
+          status: "actief",
+          tags: ["sollicitant", "compleet"],
+        })
+        .select()
+        .single();
 
-        if (profUpdateError) {
-          console.error("Error updating professional:", profUpdateError);
-        } else {
-          console.log("Professional record updated");
-        }
+      if (profError) {
+        console.error("Error creating professional:", profError);
+      } else {
+        console.log("✅ Professional created:", newProfessional.id);
+        professionalId = newProfessional.id;
+        
+        // Link professional to application
+        await supabase
+          .from("professional_applications")
+          .update({ 
+            professional_id: newProfessional.id,
+            status: "compleet",
+          })
+          .eq("id", applicationId);
       }
     }
 
-    // Update application with new completeness and missing_info
+    // Update application with new completeness, missing_info, and merged extracted_data
     console.log("Updating application record...");
     const { error: appUpdateError } = await supabase
       .from("professional_applications")
       .update({
         missing_info: analysis.remaining_missing_info || [],
         completeness_score: newCompletenessScore,
+        extracted_data: mergedData,
         updated_at: new Date().toISOString(),
       })
       .eq("id", applicationId);
@@ -314,15 +341,15 @@ Return JSON in dit formaat:
     let responseSubject = `Re: ${subject}`;
     let responseBody = "";
 
-    const professional = application.professionals;
+    const professionalName = mergedData.full_name || application.email_from.split("@")[0];
 
-    if (newCompletenessScore >= 90 && analysis.requests_interview) {
-      // Application is complete and they want an interview
-      responseSubject = `Re: ${subject}`;
+    if (newCompletenessScore === 100) {
+      // Application is 100% complete!
+      responseSubject = `Re: ${subject} - Sollicitatie Compleet! 🎉`;
       responseBody = `
-        <h2>Beste ${professional.full_name},</h2>
+        <h2>Beste ${professionalName},</h2>
         
-        <p>Geweldig! Je sollicitatie is nu compleet. 🎉</p>
+        <p><strong>Geweldig nieuws!</strong> Je sollicitatie is nu compleet. 🎉</p>
         
         <p>We zouden graag kennismaken om te kijken of er een match is. Wanneer zou het jou uitkomen voor een (video)gesprek?</p>
         
@@ -343,7 +370,7 @@ Return JSON in dit formaat:
       // Still missing some information
       responseSubject = `Re: ${subject} - Aanvullende informatie nodig`;
       responseBody = `
-        <h2>Beste ${professional.full_name},</h2>
+        <h2>Beste ${professionalName},</h2>
         
         <p>Bedankt voor je snelle reactie!</p>
         
@@ -359,10 +386,10 @@ Return JSON in dit formaat:
         <a href="mailto:personeel@citozorg.nl">personeel@citozorg.nl</a></p>
       `;
     } else {
-      // Application is complete, standard acknowledgment
+      // Standard acknowledgment
       responseSubject = `Re: ${subject}`;
       responseBody = `
-        <h2>Beste ${professional.full_name},</h2>
+        <h2>Beste ${professionalName},</h2>
         
         <p>Super, bedankt voor de aanvullende informatie! Je sollicitatie is nu compleet.</p>
         
