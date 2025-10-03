@@ -6,6 +6,74 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Track knowledge usage based on AI response content
+async function trackKnowledgeUsage(
+  responseText: string,
+  availableKnowledge: any[],
+  supabase: any,
+  userId: string
+): Promise<string[]> {
+  const usedKnowledgeIds: string[] = [];
+  const responseLower = responseText.toLowerCase();
+  
+  for (const kb of availableKnowledge) {
+    let matchScore = 0;
+    
+    // Match 1: Direct key match in response
+    const keyLower = kb.key.toLowerCase();
+    if (responseLower.includes(keyLower.replace(/_/g, ' ')) || responseLower.includes(keyLower)) {
+      matchScore += 3;
+    }
+    
+    // Match 2: Category context match
+    const categoryKeywords = kb.category.toLowerCase().split('_');
+    categoryKeywords.forEach((keyword: string) => {
+      if (keyword.length > 3 && responseLower.includes(keyword)) {
+        matchScore += 1;
+      }
+    });
+    
+    // Match 3: Value content match (for string values or object fields)
+    if (kb.value) {
+      const valueStr = typeof kb.value === 'string' 
+        ? kb.value.toLowerCase() 
+        : JSON.stringify(kb.value).toLowerCase();
+      
+      // Extract meaningful words (>3 chars) from value
+      const valueWords = valueStr.match(/\b\w{4,}\b/g) || [];
+      valueWords.slice(0, 5).forEach((word: string) => {
+        if (responseLower.includes(word)) {
+          matchScore += 2;
+        }
+      });
+    }
+    
+    // If sufficient match, mark as used
+    if (matchScore >= 3) {
+      usedKnowledgeIds.push(kb.id);
+      
+      // Increment usage_count and update last_used_at
+      const { error } = await supabase
+        .from('ai_knowledge_base')
+        .update({
+          usage_count: (kb.usage_count || 0) + 1,
+          last_used_at: new Date().toISOString()
+        })
+        .eq('id', kb.id);
+      
+      if (error) {
+        console.error(`Failed to update knowledge ${kb.id}:`, error);
+      }
+    }
+  }
+  
+  if (usedKnowledgeIds.length > 0) {
+    console.log(`🎯 Knowledge used in response: ${usedKnowledgeIds.length} items`, usedKnowledgeIds.slice(0, 5));
+  }
+  
+  return usedKnowledgeIds;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -741,6 +809,7 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
       async start(controller) {
         let buffer = "";
         let toolCalls: any[] = [];
+        let fullResponse = ""; // Collect complete AI response for usage tracking
         
         try {
           while (true) {
@@ -780,6 +849,7 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
 
                 // Stream regular content
                 if (delta?.content) {
+                  fullResponse += delta.content; // Collect for usage tracking
                   controller.enqueue(encoder.encode(`data: ${data}\n\n`));
                 }
 
@@ -1112,6 +1182,11 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
           }
 
           controller.close();
+          
+          // Track knowledge usage asynchronously (no blocking)
+          trackKnowledgeUsage(fullResponse, fullKnowledgeBase, supabaseClient, user.id).catch(err => {
+            console.error("Knowledge tracking error:", err);
+          });
         } catch (error) {
           console.error("Stream processing error:", error);
           controller.error(error);
