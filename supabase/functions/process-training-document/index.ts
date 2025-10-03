@@ -36,21 +36,30 @@ serve(async (req) => {
 
     console.log(`[PROCESS-DOC] File: ${fileName}, Size: ${(fileSize / 1024 / 1024).toFixed(2)}MB, Large: ${isLargeFile}`);
 
-    // Download file
+    // Download file as binary
     const { data: fileData, error: downloadError } = await supabase.storage
       .from("training-documents")
       .download(filePath);
 
     if (downloadError) throw downloadError;
 
-    const text = await fileData.text();
+    const fileBlob = await fileData.arrayBuffer();
+
+    // Detect file type for routing
+    const isPdf = fileName.toLowerCase().endsWith('.pdf');
+    const isDocx = fileName.toLowerCase().endsWith('.docx');
 
     // For large files, process in background
     if (isLargeFile) {
       console.log(`[PROCESS-DOC] Large file detected, processing in background`);
       
-      // Start background processing
-      processLargeFileInBackground(supabase, filePath, fileName, text, docData.user_id, docData.org_id);
+      // Start background processing with appropriate method
+      if (isPdf || isDocx) {
+        processLargeFileWithVisionInBackground(supabase, filePath, fileName, fileBlob, docData.user_id, docData.org_id);
+      } else {
+        const text = new TextDecoder().decode(fileBlob);
+        processLargeFileInBackground(supabase, filePath, fileName, text, docData.user_id, docData.org_id);
+      }
       
       // Return immediate response
       return new Response(
@@ -59,8 +68,13 @@ serve(async (req) => {
       );
     }
 
-    // Small files: process immediately
-    await processDocument(supabase, filePath, fileName, text, docData.user_id, docData.org_id, 0);
+    // Small files: process immediately with appropriate method
+    if (isPdf || isDocx) {
+      await processWithVision(supabase, filePath, fileName, fileBlob, docData.user_id, docData.org_id);
+    } else {
+      const text = new TextDecoder().decode(fileBlob);
+      await processWithText(supabase, filePath, fileName, text, docData.user_id, docData.org_id, 0);
+    }
 
     return new Response(
       JSON.stringify({ success: true }),
@@ -89,6 +103,160 @@ serve(async (req) => {
   }
 });
 
+async function processWithVision(
+  supabase: any,
+  filePath: string,
+  fileName: string,
+  fileBlob: ArrayBuffer,
+  userId: string,
+  orgId: string
+): Promise<any[]> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    throw new Error("LOVABLE_API_KEY niet geconfigureerd");
+  }
+
+  console.log(`[PROCESS-DOC] Processing with Vision API: ${fileName}`);
+
+  // Convert to base64
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(fileBlob)));
+  
+  // Detect MIME type
+  const mimeType = fileName.toLowerCase().endsWith('.pdf') 
+    ? 'application/pdf' 
+    : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+  const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-pro",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              content: `Analyseer dit bedrijfsdocument (${fileName}) en extraheer belangrijke kennis zoals:
+- Bedrijfsprocessen en workflows
+- Standaard procedures en protocollen
+- Klantinformatie (namen, adressen, contactgegevens)
+- Tarieven en prijsafspraken
+- Contractvoorwaarden
+- Regels en richtlijnen
+- Facturatie details
+
+Geef je antwoord als gestructureerde kennis items in helder Nederlands.`
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${mimeType};base64,${base64}`
+              }
+            }
+          ]
+        }
+      ]
+    }),
+  });
+
+  if (!aiResponse.ok) {
+    const errorText = await aiResponse.text();
+    console.error(`[VISION] AI error (${aiResponse.status}):`, errorText);
+    
+    await supabase
+      .from("training_documents")
+      .update({ 
+        status: "failed",
+        processing_method: "vision"
+      })
+      .eq("file_path", filePath);
+    
+    throw new Error(`Vision API mislukt: ${errorText}`);
+  }
+
+  const aiData = await aiResponse.json();
+  const extractedInfo = aiData.choices?.[0]?.message?.content || "";
+
+  if (!extractedInfo) {
+    console.log(`[VISION] No content extracted from document`);
+    await supabase
+      .from("training_documents")
+      .update({ 
+        status: "failed",
+        processing_method: "vision"
+      })
+      .eq("file_path", filePath);
+    return [];
+  }
+
+  const knowledgeItems = [
+    {
+      user_id: userId,
+      org_id: orgId,
+      category: "documenten",
+      key: `document_${fileName}_${Date.now()}`,
+      value: { content: extractedInfo, source_file: fileName },
+      source: `document:${fileName}`,
+      confidence_score: 0.95,
+    },
+  ];
+
+  await supabase.from("ai_knowledge_base").insert(knowledgeItems);
+
+  await supabase
+    .from("training_documents")
+    .update({
+      status: "completed",
+      processed_at: new Date().toISOString(),
+      extracted_knowledge_count: knowledgeItems.length,
+      processing_progress: 100,
+      processing_method: "vision"
+    })
+    .eq("file_path", filePath);
+
+  console.log(`[VISION] Successfully processed: ${knowledgeItems.length} knowledge items`);
+  return knowledgeItems;
+}
+
+async function processLargeFileWithVisionInBackground(
+  supabase: any,
+  filePath: string,
+  fileName: string,
+  fileBlob: ArrayBuffer,
+  userId: string,
+  orgId: string
+) {
+  try {
+    console.log(`[PROCESS-DOC] Processing large document with Vision: ${fileName}`);
+    
+    // For large PDFs, process as a single vision request
+    // (Vision API handles the entire document at once)
+    const knowledgeItems = await processWithVision(
+      supabase,
+      filePath,
+      fileName,
+      fileBlob,
+      userId,
+      orgId
+    );
+
+    console.log(`[PROCESS-DOC] Large file completed: ${knowledgeItems.length} knowledge items extracted`);
+  } catch (error: any) {
+    console.error(`[PROCESS-DOC] Background vision processing failed:`, error);
+    await supabase
+      .from("training_documents")
+      .update({ 
+        status: "failed",
+        processing_method: "vision"
+      })
+      .eq("file_path", filePath);
+  }
+}
+
 async function processLargeFileInBackground(
   supabase: any,
   filePath: string,
@@ -99,7 +267,7 @@ async function processLargeFileInBackground(
 ) {
   try {
     const chunks = Math.ceil(text.length / CHUNK_SIZE);
-    console.log(`[PROCESS-DOC] Processing ${chunks} chunks for ${fileName}`);
+    console.log(`[PROCESS-DOC] Processing ${chunks} text chunks for ${fileName}`);
 
     let allKnowledgeItems: any[] = [];
 
@@ -112,7 +280,7 @@ async function processLargeFileInBackground(
 
       const progress = Math.round(((i + 1) / chunks) * 100);
       
-      const knowledgeItems = await processDocument(
+      const knowledgeItems = await processWithText(
         supabase,
         filePath,
         fileName,
@@ -139,6 +307,7 @@ async function processLargeFileInBackground(
         processed_at: new Date().toISOString(),
         extracted_knowledge_count: allKnowledgeItems.length,
         processing_progress: 100,
+        processing_method: "text"
       })
       .eq("file_path", filePath);
 
@@ -147,12 +316,15 @@ async function processLargeFileInBackground(
     console.error(`[PROCESS-DOC] Background processing failed:`, error);
     await supabase
       .from("training_documents")
-      .update({ status: "failed" })
+      .update({ 
+        status: "failed",
+        processing_method: "text"
+      })
       .eq("file_path", filePath);
   }
 }
 
-async function processDocument(
+async function processWithText(
   supabase: any,
   filePath: string,
   fileName: string,
@@ -227,6 +399,7 @@ Geef je antwoord als gestructureerde kennis items.`,
         processed_at: new Date().toISOString(),
         extracted_knowledge_count: knowledgeItems.length,
         processing_progress: 100,
+        processing_method: "text"
       })
       .eq("file_path", filePath);
   }

@@ -89,7 +89,7 @@ export const DocumentUpload = () => {
         if (!validTypes.includes(fileExt)) {
           toast({
             title: "Ongeldig bestandstype",
-            description: `${file.name} wordt niet ondersteund. Gebruik PDF, DOCX, TXT of MD.`,
+            description: `${file.name} wordt niet ondersteund. Gebruik PDF, DOCX, TXT of MD bestanden.`,
             variant: "destructive",
           });
           continue;

@@ -1297,6 +1297,7 @@ export type Database = {
           org_id: string
           original_folder: string | null
           processed_at: string | null
+          processing_method: string | null
           processing_progress: number | null
           relative_path: string | null
           status: string
@@ -1313,6 +1314,7 @@ export type Database = {
           org_id: string
           original_folder?: string | null
           processed_at?: string | null
+          processing_method?: string | null
           processing_progress?: number | null
           relative_path?: string | null
           status?: string
@@ -1329,6 +1331,7 @@ export type Database = {
           org_id?: string
           original_folder?: string | null
           processed_at?: string | null
+          processing_method?: string | null
           processing_progress?: number | null
           relative_path?: string | null
           status?: string
