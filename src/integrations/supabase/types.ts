@@ -22,11 +22,14 @@ export type Database = {
           id: string
           key: string
           last_used_at: string | null
+          last_validation_error: string | null
+          needs_review: boolean | null
           org_id: string
           source: string | null
           updated_at: string | null
           usage_count: number | null
           user_id: string
+          validation_failures: number | null
           value: Json
         }
         Insert: {
@@ -36,11 +39,14 @@ export type Database = {
           id?: string
           key: string
           last_used_at?: string | null
+          last_validation_error?: string | null
+          needs_review?: boolean | null
           org_id: string
           source?: string | null
           updated_at?: string | null
           usage_count?: number | null
           user_id: string
+          validation_failures?: number | null
           value: Json
         }
         Update: {
@@ -50,11 +56,14 @@ export type Database = {
           id?: string
           key?: string
           last_used_at?: string | null
+          last_validation_error?: string | null
+          needs_review?: boolean | null
           org_id?: string
           source?: string | null
           updated_at?: string | null
           usage_count?: number | null
           user_id?: string
+          validation_failures?: number | null
           value?: Json
         }
         Relationships: [

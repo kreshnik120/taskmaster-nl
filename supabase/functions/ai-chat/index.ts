@@ -6,15 +6,103 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Track knowledge usage based on AI response content
+// Helper: Extract client name from knowledge item
+function extractClientFromKnowledge(kb: any): string | null {
+  // Check key
+  const keyLower = kb.key.toLowerCase();
+  if (keyLower.includes('swz') || keyLower.includes('stichting_swz')) return 'swz';
+  if (keyLower.includes('prisma')) return 'prisma';
+  if (keyLower.includes('lunet')) return 'lunet';
+  if (keyLower.includes('evb')) return 'evb';
+  
+  // Check value
+  const valueStr = JSON.stringify(kb.value).toLowerCase();
+  if (valueStr.includes('stichting swz') || valueStr.includes('swz')) return 'swz';
+  if (valueStr.includes('prisma')) return 'prisma';
+  if (valueStr.includes('lunet')) return 'lunet';
+  if (valueStr.includes('evb')) return 'evb';
+  
+  return null;
+}
+
+// Detect conflicts between knowledge items
+async function detectKnowledgeConflicts(
+  knowledgeBase: any[],
+  supabase: any,
+  orgId: string
+): Promise<void> {
+  // Group by category + client
+  const grouped: { [key: string]: any[] } = {};
+  
+  knowledgeBase.forEach(kb => {
+    const client = extractClientFromKnowledge(kb) || 'unknown';
+    const groupKey = `${kb.category}_${client}`;
+    
+    if (!grouped[groupKey]) grouped[groupKey] = [];
+    grouped[groupKey].push(kb);
+  });
+  
+  // Check for conflicts within each group
+  for (const [groupKey, items] of Object.entries(grouped)) {
+    if (items.length > 1) {
+      // Extract tariff values for comparison
+      const tariffs = items.map(kb => {
+        const val = kb.value;
+        return val?.werkdagen_dagtarief?.all_in_tarief || 
+               val?.overdag || 
+               val?.helpende_niveau_2?.overdag ||
+               val?.verzorgende_ig_niveau_3?.overdag ||
+               JSON.stringify(val);
+      }).filter(Boolean);
+      
+      const uniqueTariffs = [...new Set(tariffs.map(t => typeof t === 'number' ? t : JSON.stringify(t)))];
+      
+      if (uniqueTariffs.length > 1) {
+        console.error(`🚨 CONFLICT DETECTED in ${groupKey}:`, uniqueTariffs);
+        
+        // Create high-priority intelligence alert
+        await supabase.from('business_intelligence').insert({
+          org_id: orgId,
+          intelligence_type: 'data_quality',
+          priority: 'high',
+          title: `Kennisconflict: ${groupKey}`,
+          description: `Meerdere verschillende tarieven gevonden voor ${groupKey}: ${uniqueTariffs.join(' vs ')}`,
+          data: {
+            conflicting_items: items.map(kb => ({
+              id: kb.id,
+              key: kb.key,
+              value: kb.value
+            })),
+            unique_values: uniqueTariffs
+          },
+          impact_score: 0.9
+        });
+      }
+    }
+  }
+}
+
+// Track knowledge usage based on AI response content with CLIENT VALIDATION
 async function trackKnowledgeUsage(
   responseText: string,
   availableKnowledge: any[],
   supabase: any,
-  userId: string
+  userId: string,
+  messages: any[]
 ): Promise<string[]> {
   const usedKnowledgeIds: string[] = [];
   const responseLower = responseText.toLowerCase();
+  
+  // Extract client name from user's question
+  const lastMessage = messages[messages.length - 1]?.content?.toLowerCase() || '';
+  const clientMentions = ['swz', 'stichting swz', 'prisma', 'lunet', 'evb'];
+  let questionClient: string | null = null;
+  for (const client of clientMentions) {
+    if (lastMessage.includes(client)) {
+      questionClient = client.includes('stichting') ? 'swz' : client;
+      break;
+    }
+  }
   
   for (const kb of availableKnowledge) {
     let matchScore = 0;
@@ -48,11 +136,47 @@ async function trackKnowledgeUsage(
       });
     }
     
-    // If sufficient match, mark as used
+    // If sufficient match, validate client context
     if (matchScore >= 3) {
+      const kbClient = extractClientFromKnowledge(kb);
+      
+      // CLIENT MISMATCH DETECTION
+      if (questionClient && kbClient && kbClient !== questionClient) {
+        console.warn(`⚠️ Client mismatch detected: KB="${kbClient}", Question="${questionClient}"`);
+        
+        // Lower confidence instead of incrementing usage
+        await supabase
+          .from('ai_knowledge_base')
+          .update({
+            confidence_score: Math.max(0.3, (kb.confidence_score || 0.5) - 0.3),
+            needs_review: true,
+            validation_failures: (kb.validation_failures || 0) + 1,
+            last_validation_error: `Client mismatch: KB claims ${kbClient}, but used for ${questionClient} query`
+          })
+          .eq('id', kb.id);
+        
+        // Create business intelligence alert
+        await supabase.from('business_intelligence').insert({
+          org_id: kb.org_id,
+          intelligence_type: 'knowledge_quality',
+          priority: 'high',
+          title: `Kennisfout: ${kb.key}`,
+          description: `Knowledge item "${kb.key}" bevat ${kbClient} data maar werd gebruikt voor ${questionClient} vraag`,
+          data: { 
+            kb_id: kb.id, 
+            expected_client: questionClient, 
+            actual_client: kbClient,
+            response_snippet: responseText.substring(0, 200)
+          },
+          impact_score: 0.8
+        });
+        
+        continue; // Skip usage increment
+      }
+      
+      // Valid usage: increment normally
       usedKnowledgeIds.push(kb.id);
       
-      // Increment usage_count and update last_used_at
       const { error } = await supabase
         .from('ai_knowledge_base')
         .update({
@@ -321,6 +445,9 @@ serve(async (req) => {
     .slice(0, 20); // Top 20 most relevant items
     
     const fullKnowledgeBase = rankedKnowledge;
+    
+    // PHASE 1.5: Detect knowledge conflicts before using
+    await detectKnowledgeConflicts(fullKnowledgeBase, supabaseClient, userOrgId);
     
     // Organize knowledge by category for structured presentation
     const knowledgeByCategory: { [key: string]: any[] } = {};
@@ -1183,8 +1310,8 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
 
           controller.close();
           
-          // Track knowledge usage asynchronously (no blocking)
-          trackKnowledgeUsage(fullResponse, fullKnowledgeBase, supabaseClient, user.id).catch(err => {
+          // Track knowledge usage asynchronously (no blocking) with messages for client validation
+          trackKnowledgeUsage(fullResponse, fullKnowledgeBase, supabaseClient, user.id, messages).catch(err => {
             console.error("Knowledge tracking error:", err);
           });
         } catch (error) {
