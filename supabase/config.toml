@@ -8,12 +8,14 @@ verify_jwt = false
 
 [functions.prioritizer]
 verify_jwt = true
+schedule = "0 */6 * * *"
 
 [functions.generate-task-explanation]
 verify_jwt = true
 
 [functions.ai-task-scorer]
 verify_jwt = true
+schedule = "0 */12 * * *"
 
 [functions.ai-chat]
 verify_jwt = true
@@ -60,12 +62,15 @@ verify_jwt = true
 
 [functions.tariff-analyzer]
 verify_jwt = true
+schedule = "0 */6 * * *"
 
 [functions.professional-matcher]
 verify_jwt = true
+schedule = "0 */12 * * *"
 
 [functions.planning-optimizer]
 verify_jwt = true
+schedule = "0 */12 * * *"
 
 [functions.agent-orchestrator]
 verify_jwt = true
@@ -84,3 +89,19 @@ schedule = "*/100 * * * *"
 [functions.batch-vision-processor]
 verify_jwt = false
 schedule = "0 */6 * * *"
+
+[functions.mega-forecast-generator]
+verify_jwt = false
+schedule = "0 8 * * *"
+
+[functions.professional-enricher]
+verify_jwt = false
+schedule = "0 */8 * * *"
+
+[functions.client-intelligence]
+verify_jwt = false
+schedule = "0 */8 * * *"
+
+[functions.compliance-extractor]
+verify_jwt = false
+schedule = "0 */4 * * *"
