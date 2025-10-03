@@ -14,6 +14,7 @@ import { SmartKnowledgeSearch } from "@/components/AITraining/SmartKnowledgeSear
 import { ConflictResolutionPanel } from "@/components/AITraining/ConflictResolutionPanel";
 import { PerformanceMetrics } from "@/components/AITraining/PerformanceMetrics";
 import { SystemMonitor } from "@/components/SystemMonitor";
+import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -82,7 +83,10 @@ const AiTraining = () => {
               </TabsList>
 
               <TabsContent value="monitor" className="mt-6">
-                <SystemMonitor />
+                <div className="space-y-6">
+                  <ManualFunctionTrigger />
+                  <SystemMonitor />
+                </div>
               </TabsContent>
 
               <TabsContent value="dashboard" className="mt-6">
