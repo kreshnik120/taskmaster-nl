@@ -55,9 +55,9 @@ export function PerformanceMetrics() {
 
       if (error) throw error;
       
-      // Get unique metrics (latest of each type)
+      // Get unique metrics (latest of each type) - filter out empty samples
       const uniqueMetrics = data?.reduce((acc: Metric[], metric) => {
-        if (!acc.find(m => m.metric_type === metric.metric_type)) {
+        if (!acc.find(m => m.metric_type === metric.metric_type) && metric.sample_size > 0) {
           acc.push(metric);
         }
         return acc;
@@ -170,9 +170,21 @@ export function PerformanceMetrics() {
       </div>
 
       {metrics.length === 0 ? (
-        <Card>
-          <CardContent className="text-center py-8 text-muted-foreground">
-            Nog geen metrics beschikbaar. Start een review om metrics te genereren.
+        <Card className="border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800">
+          <CardContent className="text-center py-8">
+            <div className="flex flex-col items-center gap-3">
+              <div className="text-4xl">✅</div>
+              <h4 className="font-semibold text-green-900 dark:text-green-100">
+                Kennisbank is gezond
+              </h4>
+              <p className="text-sm text-green-700 dark:text-green-300 max-w-md">
+                Geen items vereisen momenteel review. Alle kennis is recent, 
+                consistent en van goede kwaliteit.
+              </p>
+              <p className="text-xs text-green-600 dark:text-green-400 mt-2">
+                💡 Metrics verschijnen zodra er conflicten of verouderde data wordt gedetecteerd
+              </p>
+            </div>
           </CardContent>
         </Card>
       ) : (
