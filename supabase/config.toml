@@ -122,3 +122,7 @@ schedule = "30 * * * *"
 [functions.source-validator]
 verify_jwt = false
 schedule = "35 * * * *"
+
+[functions.client-communication-coach]
+verify_jwt = false
+schedule = "55 * * * *"

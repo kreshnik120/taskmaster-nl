@@ -44,6 +44,7 @@ export const SystemMonitor = () => {
         { jobname: 'professional-matcher', schedule: '40 * * * *', active: true },
         { jobname: 'tariff-analyzer', schedule: '45 * * * *', active: true },
         { jobname: 'mega-forecast-generator', schedule: '50 * * * *', active: true },
+        { jobname: 'client-communication-coach', schedule: '55 * * * *', active: true },
       ]);
 
       // Load knowledge stats
@@ -356,6 +357,12 @@ export const SystemMonitor = () => {
       cron: 'mega-forecast-generator',
       description: 'Genereert forecast reports voor planning optimalisatie',
       schedule: '50 * * * *',
+    },
+    {
+      name: 'client-communication-coach',
+      cron: 'client-communication-coach',
+      description: 'Analyseert klantcommunicatie en verbetert klantvriendelijkheid',
+      schedule: '55 * * * *',
     },
   ];
 
