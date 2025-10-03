@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -48,6 +49,7 @@ serve(async (req) => {
     // Detect file type for routing
     const isPdf = fileName.toLowerCase().endsWith('.pdf');
     const isDocx = fileName.toLowerCase().endsWith('.docx');
+    const isExcel = fileName.toLowerCase().match(/\.(xlsx?|xls)$/i);
 
     // For large files, process in background
     if (isLargeFile) {
@@ -56,6 +58,8 @@ serve(async (req) => {
       // Start background processing with appropriate method
       if (isPdf || isDocx) {
         processLargeFileWithVisionInBackground(supabase, filePath, fileName, fileBlob, docData.user_id, docData.org_id);
+      } else if (isExcel) {
+        processExcelInBackground(supabase, filePath, fileName, fileBlob, docData.user_id, docData.org_id);
       } else {
         const text = new TextDecoder().decode(fileBlob);
         processLargeFileInBackground(supabase, filePath, fileName, text, docData.user_id, docData.org_id);
@@ -71,6 +75,8 @@ serve(async (req) => {
     // Small files: process immediately with appropriate method
     if (isPdf || isDocx) {
       await processWithVision(supabase, filePath, fileName, fileBlob, docData.user_id, docData.org_id);
+    } else if (isExcel) {
+      await processExcelFile(supabase, filePath, fileName, fileBlob, docData.user_id, docData.org_id);
     } else {
       const text = new TextDecoder().decode(fileBlob);
       await processWithText(supabase, filePath, fileName, text, docData.user_id, docData.org_id, 0);
@@ -103,6 +109,105 @@ serve(async (req) => {
   }
 });
 
+// Helper function: Convert ArrayBuffer to base64 in chunks to prevent call stack overflow
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 8192; // 8KB chunks
+  
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  
+  return btoa(binary);
+}
+
+async function processExcelFile(
+  supabase: any,
+  filePath: string,
+  fileName: string,
+  fileBlob: ArrayBuffer,
+  userId: string,
+  orgId: string
+): Promise<any[]> {
+  console.log(`[EXCEL] Processing Excel file: ${fileName}`);
+  
+  // Parse workbook
+  const workbook = XLSX.read(new Uint8Array(fileBlob), { type: 'array' });
+  
+  // Convert alle sheets naar text
+  let fullText = `Excel bestand: ${fileName}\n\n`;
+  
+  workbook.SheetNames.forEach(sheetName => {
+    const sheet = workbook.Sheets[sheetName];
+    
+    // Convert naar CSV met pipe separator voor betere AI parsing
+    const csv = XLSX.utils.sheet_to_csv(sheet, { 
+      FS: ' | ', // Pipe separator
+      RS: '\n'
+    });
+    
+    fullText += `=== Sheet: "${sheetName}" ===\n${csv}\n\n`;
+  });
+  
+  console.log(`[EXCEL] Extracted ${fullText.length} characters from ${workbook.SheetNames.length} sheets`);
+  
+  // Process met text-based AI (efficiënt en goedkoop)
+  return await processWithText(
+    supabase, 
+    filePath, 
+    fileName, 
+    fullText, 
+    userId, 
+    orgId, 
+    0
+  );
+}
+
+async function processExcelInBackground(
+  supabase: any,
+  filePath: string,
+  fileName: string,
+  fileBlob: ArrayBuffer,
+  userId: string,
+  orgId: string
+) {
+  try {
+    console.log(`[EXCEL] Processing large Excel file in background: ${fileName}`);
+    
+    // Parse workbook
+    const workbook = XLSX.read(new Uint8Array(fileBlob), { type: 'array' });
+    
+    // Convert alle sheets naar text
+    let fullText = `Excel bestand: ${fileName}\n\n`;
+    
+    workbook.SheetNames.forEach(sheetName => {
+      const sheet = workbook.Sheets[sheetName];
+      const csv = XLSX.utils.sheet_to_csv(sheet, { 
+        FS: ' | ',
+        RS: '\n'
+      });
+      fullText += `=== Sheet: "${sheetName}" ===\n${csv}\n\n`;
+    });
+    
+    console.log(`[EXCEL] Extracted ${fullText.length} characters, processing with text chunking`);
+    
+    // Use text chunking for large Excel files
+    await processLargeFileInBackground(supabase, filePath, fileName, fullText, userId, orgId);
+    
+  } catch (error: any) {
+    console.error(`[EXCEL] Background processing failed:`, error);
+    await supabase
+      .from("training_documents")
+      .update({ 
+        status: "failed",
+        processing_method: "excel"
+      })
+      .eq("file_path", filePath);
+  }
+}
+
 async function processWithVision(
   supabase: any,
   filePath: string,
@@ -118,8 +223,8 @@ async function processWithVision(
 
   console.log(`[PROCESS-DOC] Processing with Vision API: ${fileName}`);
 
-  // Convert to base64
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(fileBlob)));
+  // Convert to base64 with chunked encoding to prevent call stack overflow
+  const base64 = arrayBufferToBase64(fileBlob);
   
   // Detect MIME type
   const mimeType = fileName.toLowerCase().endsWith('.pdf') 
@@ -392,6 +497,9 @@ Geef je antwoord als gestructureerde kennis items.`,
 
   // Update status for small files only
   if (currentProgress === 0) {
+    // Detect if this is Excel processing
+    const isExcel = fileName.toLowerCase().match(/\.(xlsx?|xls)$/i);
+    
     await supabase
       .from("training_documents")
       .update({
@@ -399,7 +507,7 @@ Geef je antwoord als gestructureerde kennis items.`,
         processed_at: new Date().toISOString(),
         extracted_knowledge_count: knowledgeItems.length,
         processing_progress: 100,
-        processing_method: "text"
+        processing_method: isExcel ? "excel" : "text"
       })
       .eq("file_path", filePath);
   }

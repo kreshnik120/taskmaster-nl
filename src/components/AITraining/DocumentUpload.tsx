@@ -85,12 +85,12 @@ export const DocumentUpload = () => {
         }
 
         // Validate file type
-        const validTypes = ['.pdf', '.docx', '.txt', '.md'];
+        const validTypes = ['.pdf', '.docx', '.xlsx', '.xls', '.txt', '.md'];
         const fileExt = '.' + file.name.split(".").pop()?.toLowerCase();
         if (!validTypes.includes(fileExt)) {
           toast({
             title: "Ongeldig bestandstype",
-            description: `${file.name} wordt niet ondersteund. Gebruik PDF, DOCX, TXT of MD bestanden.`,
+            description: `${file.name} wordt niet ondersteund. Gebruik PDF, DOCX, XLSX, XLS, TXT of MD bestanden.`,
             variant: "destructive",
           });
           continue;
