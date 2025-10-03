@@ -29,6 +29,8 @@ import {
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 
+// Deployment trigger - 2025-10-03 23:21
+
 interface Subtask {
   id: string;
   title: string;
