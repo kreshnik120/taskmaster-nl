@@ -1296,6 +1296,7 @@ export type Database = {
           mime_type: string
           org_id: string
           processed_at: string | null
+          processing_progress: number | null
           status: string
           user_id: string
         }
@@ -1309,6 +1310,7 @@ export type Database = {
           mime_type: string
           org_id: string
           processed_at?: string | null
+          processing_progress?: number | null
           status?: string
           user_id: string
         }
@@ -1322,6 +1324,7 @@ export type Database = {
           mime_type?: string
           org_id?: string
           processed_at?: string | null
+          processing_progress?: number | null
           status?: string
           user_id?: string
         }

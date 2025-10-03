@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, FileText, Loader2, CheckCircle, XCircle } from "lucide-react";
+import { Upload, FileText, Loader2, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
+import { Progress } from "@/components/ui/progress";
+
+const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
+const LARGE_FILE_THRESHOLD = 100 * 1024 * 1024; // 100MB
 
 export const DocumentUpload = () => {
   const [uploading, setUploading] = useState(false);
@@ -22,6 +26,18 @@ export const DocumentUpload = () => {
       return data;
     },
   });
+
+  // Auto-refresh for processing documents
+  useEffect(() => {
+    const hasProcessing = documents?.some(doc => doc.status === "processing");
+    if (!hasProcessing) return;
+
+    const interval = setInterval(() => {
+      refetch();
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [documents, refetch]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -42,6 +58,24 @@ export const DocumentUpload = () => {
       if (!orgData) throw new Error("Geen organisatie gevonden");
 
       for (const file of Array.from(files)) {
+        // Validate file size
+        if (file.size > MAX_FILE_SIZE) {
+          toast({
+            title: "Bestand te groot",
+            description: `${file.name} is ${(file.size / 1024 / 1024).toFixed(1)}MB. Maximum is 500MB.`,
+            variant: "destructive",
+          });
+          continue;
+        }
+
+        // Show warning for large files
+        if (file.size > LARGE_FILE_THRESHOLD) {
+          toast({
+            title: "Groot bestand gedetecteerd",
+            description: `${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB) wordt verwerkt in achtergrond. Dit kan enkele minuten duren.`,
+          });
+        }
+
         const fileExt = file.name.split(".").pop();
         const filePath = `${user.id}/${Date.now()}_${file.name}`;
 
@@ -59,6 +93,7 @@ export const DocumentUpload = () => {
           file_size: file.size,
           mime_type: file.type,
           status: "processing",
+          processing_progress: 0,
         });
 
         if (dbError) throw dbError;
@@ -114,7 +149,11 @@ export const DocumentUpload = () => {
               Sleep documenten hierheen of klik om te uploaden
             </p>
             <p className="text-xs text-muted-foreground mb-4">
-              Ondersteunde formaten: PDF, DOCX, TXT, MD (max 50MB)
+              Ondersteunde formaten: PDF, DOCX, TXT, MD (max 500MB)
+            </p>
+            <p className="text-xs text-amber-600 mb-4 flex items-center justify-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              Bestanden &gt;100MB worden verwerkt in achtergrond
             </p>
             <Button disabled={uploading} asChild>
               <label className="cursor-pointer">
@@ -152,15 +191,23 @@ export const DocumentUpload = () => {
                 key={doc.id}
                 className="flex items-center justify-between p-3 border rounded-lg"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-1">
                   <FileText className="h-5 w-5 text-muted-foreground" />
-                  <div>
+                  <div className="flex-1">
                     <p className="text-sm font-medium">{doc.file_name}</p>
                     <p className="text-xs text-muted-foreground">
                       {new Date(doc.created_at).toLocaleDateString("nl-NL")}
                       {doc.extracted_knowledge_count > 0 &&
                         ` • ${doc.extracted_knowledge_count} kennis items`}
                     </p>
+                    {doc.status === "processing" && doc.processing_progress > 0 && (
+                      <div className="mt-2 space-y-1">
+                        <Progress value={doc.processing_progress} className="h-1" />
+                        <p className="text-xs text-muted-foreground">
+                          {doc.processing_progress}% verwerkt
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
