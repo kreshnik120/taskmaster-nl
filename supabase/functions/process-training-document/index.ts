@@ -324,6 +324,10 @@ Geef je antwoord als gestructureerde kennis items in helder Nederlands.`
     .eq("file_path", filePath);
 
   console.log(`[VISION] Successfully processed: ${knowledgeItems.length} knowledge items`);
+  
+  // Auto-detect conflicts for newly uploaded content
+  await autoDetectConflictsAfterUpload(supabase, fileName);
+  
   return knowledgeItems;
 }
 
@@ -417,6 +421,9 @@ async function processLargeFileInBackground(
       .eq("file_path", filePath);
 
     console.log(`[PROCESS-DOC] Completed: ${allKnowledgeItems.length} knowledge items extracted`);
+    
+    // Auto-detect conflicts for newly uploaded content
+    await autoDetectConflictsAfterUpload(supabase, fileName);
   } catch (error: any) {
     console.error(`[PROCESS-DOC] Background processing failed:`, error);
     await supabase
@@ -599,6 +606,9 @@ Geef je antwoord als gestructureerde kennis items.`,
         processing_method: isExcel ? "excel" : "text"
       })
       .eq("file_path", filePath);
+    
+    // Auto-detect conflicts for newly uploaded content
+    await autoDetectConflictsAfterUpload(supabase, fileName);
   }
 
   return knowledgeItems;
@@ -676,4 +686,272 @@ Return ALLEEN een JSON object:
   }
   
   return semanticMatches.sort((a, b) => b.similarity - a.similarity);
+}
+
+// ============= AUTO CONFLICT DETECTION =============
+async function autoDetectConflictsAfterUpload(
+  supabaseClient: any,
+  documentName: string
+): Promise<void> {
+  console.log(`[AUTO-DETECT] Starting conflict detection for: ${documentName}`);
+  
+  try {
+    // Get all items from this document upload
+    const { data: newItems, error: fetchError } = await supabaseClient
+      .from('ai_knowledge_base')
+      .select('*')
+      .eq('source', documentName)
+      .is('soft_deleted_at', null);
+
+    if (fetchError || !newItems || newItems.length === 0) {
+      console.log(`[AUTO-DETECT] No new items found for ${documentName}`);
+      return;
+    }
+
+    console.log(`[AUTO-DETECT] Found ${newItems.length} new items to analyze`);
+
+    // Run conflict detection for each new item
+    for (const item of newItems) {
+      await detectConflictsForItem(supabaseClient, item);
+    }
+
+    console.log(`[AUTO-DETECT] Completed conflict detection for ${documentName}`);
+  } catch (error) {
+    console.error(`[AUTO-DETECT] Error in auto-detection:`, error);
+  }
+}
+
+async function detectConflictsForItem(supabaseClient: any, item: any): Promise<void> {
+  try {
+    // Find potentially conflicting items (excluding the item itself)
+    const { data: allItems, error } = await supabaseClient
+      .from('ai_knowledge_base')
+      .select('*')
+      .neq('id', item.id)
+      .is('soft_deleted_at', null);
+
+    if (error || !allItems) return;
+
+    // Look for semantic conflicts
+    const conflicts: any[] = [];
+    
+    for (const other of allItems) {
+      // Quick category/keyword filter
+      const hasOverlap = 
+        item.category === other.category ||
+        item.keywords?.some((k: string) => other.keywords?.includes(k));
+      
+      if (!hasOverlap) continue;
+
+      // Check semantic similarity
+      const similarity = await checkSemanticSimilarity(item, other);
+      
+      if (similarity >= 0.70) {
+        conflicts.push({ item: other, similarity });
+      }
+    }
+
+    if (conflicts.length === 0) return;
+
+    // Analyze conflicts using AI
+    const analysis = await deepConflictAnalysisForUpload(
+      supabaseClient,
+      item,
+      conflicts
+    );
+
+    // Handle based on confidence tier
+    if (analysis.confidence >= 0.95) {
+      // Tier 1: Auto-resolve
+      await handleTier1AutoResolve(supabaseClient, item, analysis);
+    } else if (analysis.confidence >= 0.70) {
+      // Tier 2: Create AI suggestion
+      await handleTier2Suggestion(supabaseClient, item, analysis);
+    } else {
+      // Tier 3: Mark for review
+      await handleTier3Review(supabaseClient, item, analysis);
+    }
+
+  } catch (error) {
+    console.error(`[AUTO-DETECT] Error detecting conflicts for item ${item.id}:`, error);
+  }
+}
+
+async function checkSemanticSimilarity(item1: any, item2: any): Promise<number> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) return 0;
+
+  try {
+    const prompt = `Compare these two knowledge items and rate their semantic similarity (0-1):
+
+Item 1: ${item1.content}
+Item 2: ${item2.content}
+
+Return ONLY a JSON object: {"similarity": 0.X}`;
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!response.ok) return 0;
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || "";
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return parsed.similarity || 0;
+    }
+  } catch (error) {
+    console.error(`[SIMILARITY] Error:`, error);
+  }
+  
+  return 0;
+}
+
+async function deepConflictAnalysisForUpload(
+  supabaseClient: any,
+  newItem: any,
+  conflicts: any[]
+): Promise<any> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    return { confidence: 0.5, action: "preserve_all", reasoning: "No API key" };
+  }
+
+  try {
+    const prompt = `Analyze this knowledge conflict:
+
+NEW ITEM (just uploaded):
+- Content: ${newItem.content}
+- Category: ${newItem.category}
+- Source: ${newItem.source}
+
+CONFLICTING ITEMS (${conflicts.length}):
+${conflicts.map((c, i) => `${i + 1}. Content: ${c.item.content}\n   Similarity: ${(c.similarity * 100).toFixed(1)}%\n   Confidence: ${c.item.confidence_score}`).join('\n')}
+
+Determine:
+1. Is this a true conflict or complementary information?
+2. Which item(s) should be kept?
+3. Should any be soft-deleted?
+
+Return JSON:
+{
+  "confidence": 0.XX (0-1, how certain you are),
+  "action": "keep_new" | "keep_existing" | "preserve_all",
+  "items_to_delete": [item_ids],
+  "reasoning": "explanation"
+}`;
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      return { confidence: 0.5, action: "preserve_all", reasoning: "API error" };
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || "";
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+  } catch (error) {
+    console.error(`[DEEP-ANALYSIS] Error:`, error);
+  }
+
+  return { confidence: 0.5, action: "preserve_all", reasoning: "Analysis failed" };
+}
+
+async function handleTier1AutoResolve(
+  supabaseClient: any,
+  item: any,
+  analysis: any
+): Promise<void> {
+  console.log(`[TIER-1] Auto-resolving conflict for item ${item.id} (confidence: ${analysis.confidence})`);
+  
+  const idsToDelete = analysis.items_to_delete || [];
+  
+  for (const id of idsToDelete) {
+    await supabaseClient
+      .from('ai_knowledge_base')
+      .update({
+        soft_deleted_at: new Date().toISOString(),
+        soft_deleted_by: 'ai_auto_cleanup',
+        soft_delete_reason: `Auto-resolved: ${analysis.reasoning}`
+      })
+      .eq('id', id);
+  }
+
+  // Log to business_intelligence
+  await supabaseClient
+    .from('business_intelligence')
+    .insert({
+      type: 'auto_cleanup',
+      confidence_score: analysis.confidence,
+      ai_reasoning: analysis.reasoning,
+      affected_item_ids: idsToDelete,
+      metadata: { trigger: 'document_upload', item_id: item.id }
+    });
+}
+
+async function handleTier2Suggestion(
+  supabaseClient: any,
+  item: any,
+  analysis: any
+): Promise<void> {
+  console.log(`[TIER-2] Creating AI suggestion for item ${item.id} (confidence: ${analysis.confidence})`);
+  
+  await supabaseClient
+    .from('business_intelligence')
+    .insert({
+      type: 'ai_suggestion',
+      confidence_score: analysis.confidence,
+      ai_reasoning: analysis.reasoning,
+      recommended_action: analysis.action,
+      affected_item_ids: analysis.items_to_delete || [],
+      metadata: { trigger: 'document_upload', item_id: item.id }
+    });
+}
+
+async function handleTier3Review(
+  supabaseClient: any,
+  item: any,
+  analysis: any
+): Promise<void> {
+  console.log(`[TIER-3] Marking for review: item ${item.id} (confidence: ${analysis.confidence})`);
+  
+  await supabaseClient
+    .from('ai_knowledge_base')
+    .update({ needs_review: true })
+    .eq('id', item.id);
+
+  await supabaseClient
+    .from('business_intelligence')
+    .insert({
+      type: 'data_quality',
+      confidence_score: analysis.confidence,
+      ai_reasoning: `Low confidence conflict - needs human review: ${analysis.reasoning}`,
+      affected_item_ids: [item.id],
+      metadata: { trigger: 'document_upload' }
+    });
 }
