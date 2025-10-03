@@ -113,7 +113,6 @@ Als er GEEN duplicates zijn, return: []`
                 })), null, 2)}`
               }
             ],
-            temperature: 0.1,
           }),
         });
 

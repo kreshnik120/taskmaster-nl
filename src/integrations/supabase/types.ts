@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           auto_reviewed_at: string | null
           category: string
+          client_id: string | null
           confidence_score: number | null
           created_at: string | null
           deleted_at: string | null
@@ -41,6 +42,7 @@ export type Database = {
         Insert: {
           auto_reviewed_at?: string | null
           category: string
+          client_id?: string | null
           confidence_score?: number | null
           created_at?: string | null
           deleted_at?: string | null
@@ -64,6 +66,7 @@ export type Database = {
         Update: {
           auto_reviewed_at?: string | null
           category?: string
+          client_id?: string | null
           confidence_score?: number | null
           created_at?: string | null
           deleted_at?: string | null
@@ -85,6 +88,13 @@ export type Database = {
           value?: Json
         }
         Relationships: [
+          {
+            foreignKeyName: "ai_knowledge_base_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ai_knowledge_base_org_id_fkey"
             columns: ["org_id"]

@@ -236,7 +236,6 @@ Output ALLEEN valid JSON:
             content: `Beschikbare kennis:\n${contextStr}\n\nVraag: ${question}`
           }
         ],
-        temperature: 0.2,
       }),
     });
 

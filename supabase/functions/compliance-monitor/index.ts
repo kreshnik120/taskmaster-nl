@@ -103,7 +103,7 @@ Output JSON:
             },
             {
               role: 'user',
-              content: `Check ${source.name} voor updates sinds ${new Date(lastCheckDate).toLocaleDateString('nl-NL')}.
+          content: `Check ${source.name} voor updates sinds ${new Date(lastCheckDate).toLocaleDateString('nl-NL')}.
 
 Focus op:
 - Nieuwe tarieven of wijzigingen
@@ -111,11 +111,10 @@ Focus op:
 - Wetgeving updates
 - Compliance requirements
 - Specifiek relevant voor ABCzorg en CitoZorg`
-            }
-          ],
-          temperature: 0.1,
-        }),
-      });
+          }
+        ],
+      }),
+    });
 
       if (!aiResponse.ok) {
         console.error(`AI check failed for ${source.name}`);

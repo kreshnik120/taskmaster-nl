@@ -71,15 +71,36 @@ serve(async (req) => {
 
     console.log('💰 Tariff Analyzer processing request...');
 
-    // Fetch tariff knowledge
-    const { data: tariffKnowledge } = await supabase
+    // Fetch tariff knowledge with client context
+    let tariffQuery = supabase
       .from('ai_knowledge_base')
       .select('*')
       .eq('org_id', orgId)
       .in('category', ['tarieven', 'cao', 'wetgeving'])
       .is('deleted_at', null)
-      .order('confidence_score', { ascending: false })
-      .limit(20);
+      .order('confidence_score', { ascending: false });
+
+    // If question mentions a specific client, filter for that client
+    const clientKeywords = ['swz', 'prisma', 'lunet', 'evb', 'citozorg', 'abczorg'];
+    const questionLower = question.toLowerCase();
+    const mentionedClients = clientKeywords.filter(kw => questionLower.includes(kw));
+    
+    if (mentionedClients.length > 0) {
+      // Get client ID
+      const { data: client } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('org_id', orgId)
+        .ilike('name', `%${mentionedClients[0]}%`)
+        .single();
+      
+      if (client) {
+        // Filter for client-specific OR general knowledge
+        tariffQuery = tariffQuery.or(`client_id.eq.${client.id},client_id.is.null`);
+      }
+    }
+
+    const { data: tariffKnowledge } = await tariffQuery.limit(20);
 
     // Fetch client data for tariff comparison
     const { data: clients } = await supabase
@@ -135,7 +156,6 @@ CLIENT DATA:
 ${clientsContext}`
           }
         ],
-        temperature: 0.1,
       }),
     });
 

@@ -56,7 +56,6 @@ async function matchTaskToProfessional(
           content: `Task: ${JSON.stringify(taskRequirements)}\n\nProfessionals: ${JSON.stringify(professionalsContext)}`
         }
       ],
-      temperature: 0.1,
     }),
   });
 
@@ -267,7 +266,6 @@ BESCHIKBARE PROFESSIONALS:
 ${JSON.stringify(professionalsContext, null, 2)}`
           }
         ],
-        temperature: 0.2,
       }),
     });
 

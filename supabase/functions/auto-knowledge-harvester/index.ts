@@ -275,7 +275,6 @@ Output ALLEEN valid JSON:
               content: `Zoek actuele informatie over: ${topic}\n\nVandaag is: ${new Date().toISOString().split('T')[0]}`
             }
           ],
-          temperature: 0.1,
         }),
       });
 
@@ -371,23 +370,79 @@ Output ALLEEN valid JSON:
         .eq('org_id', orgId)
         .eq('user_id', userId);
 
-      // Enrich with incremented usage_count for existing items
-      const enrichedKnowledge = newKnowledge.map(item => {
-        const existingItem = existing?.find(e => e.key === item.key);
-        return {
-          ...item,
-          usage_count: existingItem ? (existingItem.usage_count || 0) + 1 : 1
-        };
-      });
+          // Enrich with incremented usage_count for existing items
+          const enrichedKnowledge = newKnowledge.map(item => {
+            const existingItem = existing?.find(e => e.key === item.key);
+            
+            // Extract client from key/value for tagging
+            const keyLower = item.key.toLowerCase();
+            const valueLower = JSON.stringify(item.value).toLowerCase();
+            let clientId = null;
+            
+            // Check for client keywords
+            const clientMap: Record<string, string> = {
+              'lunet': 'lunet',
+              'prisma': 'prisma',
+              'swz': 'swz',
+              'stichting swz': 'swz',
+              'citozorg': 'citozorg',
+              'abczorg': 'abczorg',
+              'evb': 'evb'
+            };
+            
+            for (const [keyword, clientName] of Object.entries(clientMap)) {
+              if (keyLower.includes(keyword) || valueLower.includes(keyword)) {
+                // Try to find client_id
+                clientId = clientName; // Will be resolved in a separate query
+                break;
+              }
+            }
+            
+            return {
+              ...item,
+              usage_count: existingItem ? (existingItem.usage_count || 0) + 1 : 1,
+              client_keyword: clientId // Temporary field for resolution
+            };
+          });
 
-      // UPSERT: Insert new items, update existing ones
-      const { data, error } = await supabase
-        .from('ai_knowledge_base')
-        .upsert(enrichedKnowledge, {
-          onConflict: 'user_id,org_id,category,key',
-          ignoreDuplicates: false  // Update existing records
-        })
-        .select();
+          // Resolve client_keywords to client_ids
+          const clientKeywords = [...new Set(enrichedKnowledge.map(item => item.client_keyword).filter(Boolean))];
+          const clientIdMap: Record<string, string> = {};
+          
+          if (clientKeywords.length > 0) {
+            for (const keyword of clientKeywords) {
+              if (!keyword) continue; // Skip null/undefined
+              
+              const { data: client } = await supabase
+                .from('clients')
+                .select('id, name')
+                .eq('org_id', orgId)
+                .ilike('name', `%${keyword}%`)
+                .single();
+              
+              if (client) {
+                clientIdMap[keyword] = client.id;
+              }
+            }
+          }
+
+          // Map client_keyword to client_id
+          const finalKnowledge = enrichedKnowledge.map(item => {
+            const { client_keyword, ...rest } = item;
+            return {
+              ...rest,
+              client_id: client_keyword ? (clientIdMap[client_keyword] || null) : null
+            };
+          });
+
+          // UPSERT: Insert new items, update existing ones
+          const { data, error } = await supabase
+            .from('ai_knowledge_base')
+            .upsert(finalKnowledge, {
+              onConflict: 'user_id,org_id,category,key',
+              ignoreDuplicates: false  // Update existing records
+            })
+            .select();
 
       if (error) {
         console.error('❌ Upsert error:', error);

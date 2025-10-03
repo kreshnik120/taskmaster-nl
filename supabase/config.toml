@@ -89,7 +89,10 @@ schedule = "10 * * * *"
 
 [functions.batch-vision-processor]
 verify_jwt = false
-schedule = "35 */6 * * *"
+
+[functions.category-classifier]
+verify_jwt = false
+schedule = "0 3 * * *"
 
 [functions.mega-forecast-generator]
 verify_jwt = false
