@@ -205,7 +205,13 @@ BELANGRIJK:
         title: task.title,
         description: task.description || '',
         status: 'todo',
-        priority: task.priority || 'medium',
+        priority: (() => {
+          const p = (task.priority || 'MEDIUM').toUpperCase();
+          if (p === 'HIGH') return 'HIGH';
+          if (p === 'LOW') return 'LOW';
+          if (p === 'CRITICAL') return 'CRITICAL';
+          return 'MEDIUM';
+        })(),
         client_id: task.client_id || null,
         assignee_id: task.assigned_to || null,
         estimated_hours: task.estimated_hours || 2,
