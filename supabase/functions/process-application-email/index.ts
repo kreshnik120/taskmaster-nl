@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.58.0";
 import { Resend } from "https://esm.sh/resend@4.0.0";
-import pdfParse from "https://esm.sh/pdf-parse@1.1.1";
+import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.0.379";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -121,15 +121,34 @@ const handler = async (req: Request): Promise<Response> => {
 
         console.log("CV uploaded to:", cvFilePath);
 
-        // Extract text from PDF for AI analysis
+        // Extract text from PDF for AI analysis using PDF.js
         if (cvAttachment.content_type === "application/pdf") {
           try {
-            console.log("Extracting text from PDF...");
-            const pdfData = await pdfParse(cvBuffer);
-            cvContent = pdfData.text;
-            console.log("PDF text extracted:", cvContent.substring(0, 200) + "...");
+            console.log("Extracting text from PDF with PDF.js...");
+            
+            // Load PDF document
+            const loadingTask = pdfjsLib.getDocument({ data: cvBuffer });
+            const pdfDocument = await loadingTask.promise;
+            console.log(`PDF loaded: ${pdfDocument.numPages} pages`);
+            
+            // Extract text from all pages
+            let fullText = "";
+            for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
+              const page = await pdfDocument.getPage(pageNum);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items
+                .map((item: any) => item.str)
+                .join(" ");
+              fullText += pageText + "\n";
+            }
+            
+            cvContent = fullText.trim();
+            console.log(`PDF text extracted: ${cvContent.length} characters, first 200: ${cvContent.substring(0, 200)}...`);
           } catch (pdfError) {
             console.error("PDF parsing error:", pdfError);
+            if (pdfError instanceof Error) {
+              console.error("PDF error details:", pdfError.message, pdfError.stack);
+            }
             cvContent = emailBody; // Fallback to email body
           }
         } else {
