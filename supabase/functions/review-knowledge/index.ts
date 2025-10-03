@@ -202,14 +202,14 @@ Geef een JSON response met:
       }
     }
 
-    // STEP 2: Auto-cleanup old duplicates
+    // STEP 2: Auto-cleanup old duplicates (STRENGTHENED)
     const { data: oldDuplicates } = await supabaseClient
       .from('ai_knowledge_base')
       .select('*, created_at')
       .eq('org_id', userOrg.org_id)
       .is('deleted_at', null)
-      .lt('confidence_score', 0.3)
-      .lt('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()); // Older than 30 days
+      .lt('confidence_score', 0.5)
+      .lt('created_at', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()); // Older than 14 days
 
     let cleanedUpCount = 0;
     if (oldDuplicates && oldDuplicates.length > 0) {

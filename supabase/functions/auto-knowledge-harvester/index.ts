@@ -115,81 +115,87 @@ serve(async (req) => {
 
     console.log('🌐 Auto Knowledge Harvester starting search...');
 
-    // ULTRA TOPICS: 125+ onderwerpen voor maximale coverage + PLANNING & MATCHING
+    // ULTRA TOPICS: ABCzorg/CitoZorg specifiek + Maximale data kwaliteit
     const defaultTopics = [
-      // CAO & Arbeidsvoorwaarden (12)
-      'CAO VVT wijzigingen 2025', 'CAO GGZ updates 2025', 'CAO Sociaal Werk nieuwe regels',
-      'Eindejaarsuitkering zorg 2025', 'Vakantietoeslag regelgeving', 'Pensioenregeling zorg PFZW',
-      'Onregelmatigheidstoeslag (ORT) tarieven', 'Overwerk compensatie zorg', 'Bereikbaarheidsdienst vergoeding',
-      'Oproepkrachten rechten CAO', 'Parttimers secundaire arbeidsvoorwaarden', 'Loonschalen zorg 2025',
+      // ABCzorg/CitoZorg Specifieke Topics (50+)
+      'ABCzorg organisatiestructuur en compliance 2025',
+      'CitoZorg operationele procedures en werkwijzen',
+      'ABCzorg WMO contracten per gemeente',
+      'CitoZorg Wlz zorgzwaartepakketten VV4-VV7',
+      'ABCzorg tariefstructuur en DBC codes',
+      'CitoZorg HR beleid duurzame inzetbaarheid',
+      'ABCzorg professional pool samenstelling',
+      'CitoZorg verzuimprotocol en re-integratie',
+      'ABCzorg kwaliteitsindicatoren HKZ/ISO',
+      'CitoZorg client portfolio en zorgplannen',
+      'ABCzorg flexpool management strategie',
+      'CitoZorg roostering en shift planning',
+      'ABCzorg client tevredenheid metrics',
+      'CitoZorg professioneel ontwikkeling trajecten',
+      'ABCzorg compliance monitoring procedures',
+      'CitoZorg medicatieveiligheid protocollen',
+      'ABCzorg dossiervoering requirements',
+      'CitoZorg BIG-registratie verificatie',
+      'ABCzorg capacity planning forecasts',
+      'CitoZorg professional satisfaction scores',
       
-      // ZZP & DBA (10)
-      'ZZP wetgeving Nederland 2025', 'Wet DBA handhaving 2025', 'Fictieve dienstbetrekking criteria',
-      'ZZP opdrachtgeversverklaring eisen', 'Modelovereenkomst ZZP zorg', 'VAR verklaring afschaffing',
-      'G-rekening ZZP constructie', 'Ketenaansprakelijkheid WKA zorg', 'ZZP rechten en plichten',
-      'Tarievenafspraken ZZP zorg',
+      // CAO & Arbeidsvoorwaarden (Relevant voor ABCzorg/CitoZorg)
+      'CAO VVT wijzigingen 2025 voor ABCzorg',
+      'CAO GGZ updates 2025 CitoZorg',
+      'Eindejaarsuitkering zorg ABCzorg 2025',
+      'Vakantietoeslag regelgeving CitoZorg',
+      'Pensioenregeling zorg PFZW ABCzorg',
+      'Onregelmatigheidstoeslag (ORT) tarieven CitoZorg',
+      'Overwerk compensatie ABCzorg praktijk',
+      'Bereikbaarheidsdienst vergoeding CitoZorg',
       
-      // Registraties & Kwalificaties (8)
-      'BIG-registratie nieuwe eisen 2025', 'LRZa registratie verplichtingen', 'SKJ register jeugdzorg',
-      'Kwaliteitsregister Verpleegkundigen', 'VOG aanvraag procedure zorg', 'Artikel 9 screening zorg',
-      'Herregistratie BIG verplichtingen', 'E-learning verplicht zorg',
+      // ZZP & DBA (Specifiek voor ABCzorg/CitoZorg context)
+      'ZZP wetgeving Nederland 2025 ABCzorg',
+      'Wet DBA handhaving 2025 CitoZorg',
+      'ZZP opdrachtgeversverklaring eisen ABCzorg',
+      'Modelovereenkomst ZZP zorg CitoZorg',
+      'Tarievenafspraken ZZP zorg ABCzorg',
       
-      // Wetgeving & Compliance (10)
-      'Wtza vergunningplicht zorg', 'Wkkgz meldplicht incidenten', 'AVG privacy zorg',
-      'Zorgverzekeringswet Zvw updates', 'Wet langdurige zorg Wlz wijzigingen', 'WMO 2015 nieuwe regels',
-      'Jeugdwet aanpassingen', 'Kwaliteitswet zorginstellingen', 'IGJ toezicht nieuwe eisen',
-      'NEN normeringen zorg',
+      // Registraties & Kwalificaties
+      'BIG-registratie nieuwe eisen 2025 ABCzorg',
+      'LRZa registratie verplichtingen CitoZorg',
+      'Kwaliteitsregister Verpleegkundigen ABCzorg',
+      'VOG aanvraag procedure CitoZorg',
+      'Herregistratie BIG verplichtingen ABCzorg',
       
-      // Tarieven & Financiën (8)
-      'Zorgtarieven NZa 2025', 'ZZP tariefadvies 2025', 'Wmo tarief per uur',
-      'Pgb budget 2025', 'Zorgzwaartepakketten ZZP tarieven', 'Uurtarief Wlz 2025',
-      'Jeugdzorg tarief per uur', 'NZa beleidsregels tarieven',
+      // Wetgeving & Compliance (ABCzorg/CitoZorg relevant)
+      'Wtza vergunningplicht ABCzorg',
+      'Wkkgz meldplicht incidenten CitoZorg',
+      'AVG privacy zorg ABCzorg implementatie',
+      'Zorgverzekeringswet Zvw updates ABCzorg',
+      'Wet langdurige zorg Wlz wijzigingen CitoZorg',
+      'WMO 2015 nieuwe regels ABCzorg',
+      'IGJ toezicht nieuwe eisen CitoZorg',
       
-      // Verzekeringen & Aansprakelijkheid (5)
-      'Beroepsaansprakelijkheidsverzekering BAV eisen', 'Bedrijfsaansprakelijkheid zorg minimum',
-      'Arbeidsongeschiktheidsverzekering ZZP', 'Aansprakelijkheid zorgverlener', 'Verzekeringen verplicht ZZP',
-
-      // === NIEUWE PLANNING INTELLIGENCE TOPICS (25) ===
-      'Shift optimalisatie algoritmes zorg', 'Reistijd berekening tussen opdrachten',
-      'Capacity planning uitzendkrachten', 'Rustperiode compliance CAO', 'Nachtdienst rooster regels',
-      'Planning constraints Wlz zorg', 'Shift lengte per functieniveau', 'Break time regelgeving',
-      'Opeenvolgende diensten maximum', 'Planning software vereisten zorg',
-      'Automated scheduling best practices', 'Last-minute vervangingen protocol',
-      'Beschikbaarheid voorspelling modellen', 'Seasonal demand patterns zorg',
-      'Weekend shift premies', 'Holiday shift staffing strategies', 'Continuïteit van zorg planning',
-      'Flexpool management', 'On-call beschikbaarheid tarieven', 'Shift swap policies',
-      'Planning efficiency metrics', 'Workforce forecasting methoden', 'Schedule optimization KPIs',
-      'Real-time planning aanpassingen', 'Capacity utilization targets zorg',
-
-      // === NIEUWE MATCHING INTELLIGENCE TOPICS (25) ===
-      'Professional-client match success factors', 'Skill matching algoritmes',
-      'Experience requirements per functieniveau', 'Cultural fit indicators zorg',
-      'Client preference patterns', 'Professional satisfaction metrics',
-      'Match quality scoring systemen', 'Assignment success predictors',
-      'Client feedback patterns matching', 'Retention prediction models',
-      'Skill gap analysis professionals', 'Training recommendations matching',
-      'Client-professional compatibility scores', 'Long-term assignment success factors',
-      'Professional development paths', 'Client needs assessment criteria',
-      'Assignment duration optimization', 'Professional preference learning',
-      'Client loyalty indicators', 'Match performance tracking metrics',
-      'Professional burnout early warning signs', 'Client satisfaction drivers',
-      'Assignment complexity scoring', 'Team composition optimization',
-      'Cross-training opportunities identification',
-
-      // === NIEUWE WORKFORCE OPTIMIZATION TOPICS (25) ===
-      'ZZP vs loondienst cost comparison', 'Flexible staffing strategy zorg',
-      'Workforce mix optimization', 'Cost per hour analyses per werkmodel',
-      'Marginal contribution per professional type', 'Break-even point calculations',
-      'Capacity planning forecast models', 'Demand volatility management',
-      'Professional utilization rates optimization', 'Idle time reduction strategies',
-      'Multi-skilling ROI calculations', 'Training investment optimization',
-      'Professional retention strategies cost-benefit', 'Recruitment channel effectiveness',
-      'Onboarding efficiency metrics', 'Time to productivity benchmarks',
-      'Professional lifecycle value', 'Churn prediction models',
-      'Compensation competitiveness analysis', 'Benefit package optimization',
-      'Performance incentive structures', 'Career progression frameworks',
-      'Talent pipeline management', 'Succession planning strategies',
-      'Workforce analytics dashboards'
+      // Tarieven & Financiën (ABCzorg/CitoZorg)
+      'Zorgtarieven NZa 2025 ABCzorg',
+      'ZZP tariefadvies 2025 CitoZorg',
+      'Wmo tarief per uur ABCzorg',
+      'Zorgzwaartepakketten ZZP tarieven CitoZorg',
+      'Uurtarief Wlz 2025 ABCzorg',
+      
+      // Planning & Matching Intelligence
+      'Shift optimalisatie algoritmes ABCzorg',
+      'Reistijd berekening tussen opdrachten CitoZorg',
+      'Capacity planning uitzendkrachten ABCzorg',
+      'Rustperiode compliance CAO CitoZorg',
+      'Professional-client match success ABCzorg',
+      'Skill matching algoritmes CitoZorg',
+      'Client preference patterns ABCzorg',
+      'Assignment duration optimization CitoZorg',
+      
+      // Workforce Optimization
+      'ZZP vs loondienst cost comparison ABCzorg',
+      'Flexible staffing strategy CitoZorg',
+      'Professional utilization rates ABCzorg',
+      'Training investment optimization CitoZorg',
+      'Professional retention strategies ABCzorg',
+      'Churn prediction models CitoZorg'
     ];
 
     const topics = search_topics || defaultTopics;
@@ -212,31 +218,37 @@ serve(async (req) => {
               role: 'system',
               content: `Je bent een ULTRA research assistant die actuele informatie zoekt en valideert met MULTI-TIER validation.
 
-TIER 1 BRONNEN (confidence 0.9-1.0):
+TIER 1 BRONNEN (confidence 0.9-1.0) - ALLEEN DEZE ACCEPTEREN:
 - overheid.nl, rijksoverheid.nl, belastingdienst.nl
 - nza.nl (Nederlandse Zorgautoriteit)
 - igj.nl (Inspectie Gezondheidszorg en Jeugd)
 - officiële CAO websites (caovvt.nl)
+- bigregister.nl (BIG-registratie)
+- duo.nl (Overheid diploma's)
 
-TIER 2 BRONNEN (confidence 0.7-0.9):
+TIER 2 BRONNEN (confidence 0.7-0.9) - ALLEEN MET CROSS-VALIDATIE:
 - actiz.nl, btsg.nl, ggznederland.nl (brancheorganisaties)
 - nivel.nl (Nederlands instituut voor onderzoek)
 - vilans.nl (kenniscentrum langdurige zorg)
 - vgn.nl (Vereniging Gehandicaptenzorg)
+- MOET cross-validated zijn door TIER 1 bron
 
-TIER 3 BRONNEN (confidence 0.5-0.7):
-- zorgvisie.nl, skipr.nl (vakbladen)
-- universiteiten en hogescholen (.edu)
-- adviesbureaus en consultancy
+TIER 3 BRONNEN: NIET MEER ACCEPTEREN
+
+SPECIFIEK VOOR ABCZORG/CITOZORG:
+- Focus op organisatie-specifieke compliance, procedures, tarieven
+- Valideer alle data met officiële bronnen
+- Cross-validatie VERPLICHT voor TIER 2
 
 Voor het gegeven onderwerp:
-1. Zoek in MEERDERE bronnen (minimaal 2 verschillende tiers)
-2. Cross-valideer informatie tussen bronnen
+1. Zoek ALLEEN in TIER 1 + TIER 2 bronnen
+2. TIER 2 informatie MOET cross-validated zijn
 3. Extraheer concrete feiten, cijfers, datums
 4. Geef confidence score gebaseerd op:
-   - Tier van de bron (zie boven)
+   - Tier van de bron (TIER 1 = 0.9-1.0, TIER 2 = 0.7-0.9)
    - Actualiteit (2024-2025 = +0.1, 2023 = +0.0, ouder = -0.2)
-   - Cross-validatie (2+ bronnen bevestigen = +0.1)
+   - Cross-validatie (VERPLICHT voor TIER 2 = +0.1)
+5. Focus op ABCzorg/CitoZorg relevantie
 
 Output ALLEEN valid JSON:
 {
@@ -286,17 +298,42 @@ Output ALLEEN valid JSON:
 
       if (searchResults.found_information && searchResults.items) {
         for (const item of searchResults.items) {
-          // ULTRA MODE: Lowered threshold to 0.5, accept all tier sources
-          if (item.confidence >= 0.5) {
+          // QUALITY MODE: Increased threshold to 0.7, TIER 1+2 only
+          // Reject TIER 3 sources
+          if (item.source_type?.includes('tier3')) {
+            console.log(`❌ Rejected TIER 3 source: ${item.key}`);
+            continue;
+          }
+          
+          // TIER 2 must be cross-validated
+          if (item.source_type?.includes('tier2') && !item.cross_validated) {
+            console.log(`❌ Rejected uncross-validated TIER 2: ${item.key}`);
+            continue;
+          }
+          
+          if (item.confidence >= 0.7) {
             // Boost confidence if cross-validated
             const finalConfidence = item.cross_validated 
               ? Math.min(item.confidence + 0.1, 1.0) 
               : item.confidence;
 
+            // Category normalization (remove _unknown suffix)
+            const categoryMap: Record<string, string> = {
+              'cao_unknown': 'cao',
+              'wetgeving_unknown': 'wetgeving',
+              'compliance_unknown': 'compliance',
+              'tarieven_unknown': 'tarieven',
+              'zzp_unknown': 'zzp_vereisten',
+              'registraties_unknown': 'registraties',
+              'verzekeringen_unknown': 'verzekeringen'
+            };
+            
+            const normalizedCategory = categoryMap[item.category] || item.category.replace('_unknown', '');
+
             newKnowledge.push({
               org_id: orgId,
               user_id: userId,
-              category: `${item.category}_unknown`,
+              category: normalizedCategory,
               key: item.key,
               value: {
                 content: item.value,

@@ -22,23 +22,54 @@ serve(async (req) => {
       });
     }
 
-    const authHeader = req.headers.get('Authorization')!;
+    // Support both authenticated and autonomous modes
+    const authHeader = req.headers.get('Authorization');
+    
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
+      authHeader ? Deno.env.get('SUPABASE_ANON_KEY') ?? '' : Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      authHeader ? { global: { headers: { Authorization: authHeader } } } : {}
     );
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Unauthorized');
+    let orgId: string;
+    let dateRange: any = {
+      start: new Date().toISOString(),
+      end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    };
+    let optimizationGoal = 'efficiency';
 
-    const { data: userOrg } = await supabase
-      .from('user_organizations')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
+    if (authHeader) {
+      // Authenticated mode
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Unauthorized');
 
-    const { date_range, optimization_goal = 'efficiency' } = await req.json();
+      const { data: userOrg } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .single();
+
+      orgId = userOrg!.org_id;
+      
+      const body = await req.json();
+      dateRange = body.date_range || dateRange;
+      optimizationGoal = body.optimization_goal || 'efficiency';
+      
+      console.log('🔐 Authenticated mode');
+    } else {
+      // Autonomous mode
+      const { data: orgs } = await supabase
+        .from('organizations')
+        .select('id')
+        .limit(1);
+
+      if (!orgs || orgs.length === 0) {
+        throw new Error('No organizations found');
+      }
+
+      orgId = orgs[0].id;
+      console.log('🤖 Autonomous mode: optimizing planning');
+    }
 
     console.log('📅 Planning Optimizer analyzing schedule...');
 
@@ -46,24 +77,24 @@ serve(async (req) => {
     const { data: tasks } = await supabase
       .from('tasks')
       .select('*')
-      .eq('org_id', userOrg!.org_id)
-      .gte('start_at', date_range?.start || new Date().toISOString())
-      .lte('start_at', date_range?.end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString())
+      .eq('org_id', orgId)
+      .gte('start_at', dateRange.start)
+      .lte('start_at', dateRange.end)
       .is('deleted_at', null);
 
     // Fetch professionals and their availability
     const { data: professionals } = await supabase
       .from('professionals')
       .select('*')
-      .eq('org_id', userOrg!.org_id)
+      .eq('org_id', orgId)
       .eq('status', 'actief');
 
     const { data: availability } = await supabase
       .from('professional_availability')
       .select('*, professionals(*)')
       .in('professional_id', professionals?.map(p => p.id) || [])
-      .gte('date', date_range?.start || new Date().toISOString())
-      .lte('date', date_range?.end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString());
+      .gte('date', dateRange.start)
+      .lte('date', dateRange.end);
 
     const tasksContext = tasks?.map(t => ({
       id: t.id,
@@ -121,7 +152,7 @@ Output ALLEEN valid JSON object: {"conflicts": [...], "optimization_suggestions"
           },
           {
             role: 'user',
-            content: `OPTIMIZATION GOAL: ${optimization_goal}
+            content: `OPTIMIZATION GOAL: ${optimizationGoal}
 
 TASKS:
 ${JSON.stringify(tasksContext, null, 2)}

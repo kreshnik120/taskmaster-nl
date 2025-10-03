@@ -9,6 +9,86 @@ const corsHeaders = {
 const CUTOFF_DATE = new Date('2025-10-06T23:59:59Z');
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
+// Helper function to match a task to a professional
+async function matchTaskToProfessional(
+  supabase: any,
+  orgId: string,
+  taskRequirements: any,
+  clientId: string | null,
+  taskId: string
+): Promise<boolean> {
+  // Fetch professionals
+  const { data: professionals } = await supabase
+    .from('professionals')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('status', 'actief');
+
+  if (!professionals || professionals.length === 0) {
+    return false;
+  }
+
+  const professionalsContext = professionals.map((p: any) => ({
+    id: p.id,
+    name: p.full_name,
+    functie_niveau: p.functie_niveau,
+    skills: p.skills || [],
+    regio: p.regio,
+    rating: p.rating
+  }));
+
+  // Use AI to find best match
+  const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'google/gemini-2.5-flash',
+      messages: [
+        {
+          role: 'system',
+          content: `Find BEST professional match. Return JSON: {"professional_id": "uuid", "match_score": 0-100, "reasoning": "text"}`
+        },
+        {
+          role: 'user',
+          content: `Task: ${JSON.stringify(taskRequirements)}\n\nProfessionals: ${JSON.stringify(professionalsContext)}`
+        }
+      ],
+      temperature: 0.1,
+    }),
+  });
+
+  if (!aiResponse.ok) {
+    return false;
+  }
+
+  const aiData = await aiResponse.json();
+  const content = aiData.choices[0].message.content;
+
+  let match;
+  try {
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    match = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+  } catch {
+    return false;
+  }
+
+  if (match && match.match_score >= 70) {
+    // Assign task
+    await supabase
+      .from('tasks')
+      .update({ assignee_id: match.professional_id })
+      .eq('id', taskId);
+
+    console.log(`✅ Matched task ${taskId} to ${match.professional_id} (score: ${match.match_score})`);
+    return true;
+  }
+
+  return false;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -22,40 +102,116 @@ serve(async (req) => {
       });
     }
 
-    const authHeader = req.headers.get('Authorization')!;
+    // Support both authenticated and autonomous modes
+    const authHeader = req.headers.get('Authorization');
+    
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
+      authHeader ? Deno.env.get('SUPABASE_ANON_KEY') ?? '' : Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      authHeader ? { global: { headers: { Authorization: authHeader } } } : {}
     );
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Unauthorized');
+    let orgId: string;
+    let taskRequirements: any;
+    let clientId: string | null = null;
 
-    const { data: userOrg } = await supabase
-      .from('user_organizations')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
+    if (authHeader) {
+      // Authenticated mode
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Unauthorized');
 
-    const { task_requirements, client_id } = await req.json();
+      const { data: userOrg } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .single();
+
+      orgId = userOrg!.org_id;
+      
+      const body = await req.json();
+      taskRequirements = body.task_requirements;
+      clientId = body.client_id;
+      
+      console.log('🔐 Authenticated mode');
+    } else {
+      // Autonomous mode - match unassigned forecast tasks
+      const { data: orgs } = await supabase
+        .from('organizations')
+        .select('id')
+        .limit(1);
+
+      if (!orgs || orgs.length === 0) {
+        throw new Error('No organizations found');
+      }
+
+      orgId = orgs[0].id;
+      console.log('🤖 Autonomous mode: matching forecast tasks');
+    }
 
     console.log('🎯 Professional Matcher finding best matches...');
+
+    // In autonomous mode, get unassigned forecast tasks
+    if (!authHeader) {
+      const { data: forecastTasks } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('org_id', orgId)
+        .eq('is_forecast', true)
+        .is('assignee_id', null)
+        .limit(20);
+
+      if (!forecastTasks || forecastTasks.length === 0) {
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: 'No unassigned forecast tasks',
+          tasks_matched: 0 
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      console.log(`📋 Found ${forecastTasks.length} unassigned forecast tasks`);
+      
+      // Process each task
+      let matchedCount = 0;
+      for (const task of forecastTasks) {
+        taskRequirements = {
+          title: task.title,
+          category: task.category,
+          priority: task.priority,
+          estimated_hours: task.estimated_hours,
+          complexity: task.complexity || 3
+        };
+        clientId = task.client_id;
+
+        // Continue to matching logic below
+        const matched = await matchTaskToProfessional(supabase, orgId, taskRequirements, clientId, task.id);
+        if (matched) matchedCount++;
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        forecast_tasks_processed: forecastTasks.length,
+        tasks_matched: matchedCount
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Fetch all active professionals
     const { data: professionals } = await supabase
       .from('professionals')
       .select('*')
-      .eq('org_id', userOrg!.org_id)
+      .eq('org_id', orgId)
       .eq('status', 'actief');
 
     // Fetch client info if provided
     let clientInfo = null;
-    if (client_id) {
+    if (clientId) {
       const { data: client } = await supabase
         .from('clients')
         .select('*')
-        .eq('id', client_id)
+        .eq('id', clientId)
         .single();
       clientInfo = client;
     }
@@ -102,7 +258,7 @@ Output ALLEEN valid JSON array met: [{"professional_id": "uuid", "match_score": 
           {
             role: 'user',
             content: `OPDRACHT REQUIREMENTS:
-${JSON.stringify(task_requirements, null, 2)}
+${JSON.stringify(taskRequirements, null, 2)}
 
 CLIENT INFO:
 ${clientInfo ? JSON.stringify(clientInfo, null, 2) : 'Geen client info'}

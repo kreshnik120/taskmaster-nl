@@ -22,23 +22,52 @@ serve(async (req) => {
       });
     }
 
-    const authHeader = req.headers.get('Authorization')!;
+    // Support both authenticated and autonomous modes
+    const authHeader = req.headers.get('Authorization');
+    
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
+      authHeader ? Deno.env.get('SUPABASE_ANON_KEY') ?? '' : Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      authHeader ? { global: { headers: { Authorization: authHeader } } } : {}
     );
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Unauthorized');
+    let orgId: string;
+    let question: string;
+    let context: string = '';
 
-    const { data: userOrg } = await supabase
-      .from('user_organizations')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
+    if (authHeader) {
+      // Authenticated mode
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Unauthorized');
 
-    const { question, context } = await req.json();
+      const { data: userOrg } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .single();
+
+      orgId = userOrg!.org_id;
+      
+      const body = await req.json();
+      question = body.question;
+      context = body.context || '';
+      
+      console.log('🔐 Authenticated mode');
+    } else {
+      // Autonomous mode - analyze all clients
+      const { data: orgs } = await supabase
+        .from('organizations')
+        .select('id')
+        .limit(1);
+
+      if (!orgs || orgs.length === 0) {
+        throw new Error('No organizations found');
+      }
+
+      orgId = orgs[0].id;
+      question = 'Analyseer tariefstructuur en geef optimalisatie suggesties';
+      console.log('🤖 Autonomous mode: analyzing tariffs');
+    }
 
     console.log('💰 Tariff Analyzer processing request...');
 
@@ -46,8 +75,8 @@ serve(async (req) => {
     const { data: tariffKnowledge } = await supabase
       .from('ai_knowledge_base')
       .select('*')
-      .eq('org_id', userOrg!.org_id)
-      .in('category', ['contracten_tarieven', 'tarieven_zzp', 'bedrijfsgegevens_unknown'])
+      .eq('org_id', orgId)
+      .in('category', ['tarieven', 'cao', 'wetgeving'])
       .is('deleted_at', null)
       .order('confidence_score', { ascending: false })
       .limit(20);
@@ -56,7 +85,7 @@ serve(async (req) => {
     const { data: clients } = await supabase
       .from('clients')
       .select('*')
-      .eq('org_id', userOrg!.org_id);
+      .eq('org_id', orgId);
 
     const knowledgeContext = tariffKnowledge?.map(k => 
       `[${k.category}] ${k.key}: ${typeof k.value === 'string' ? k.value : JSON.stringify(k.value)}`
