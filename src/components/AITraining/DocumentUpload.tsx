@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, FileText, Loader2, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { Upload, FileText, Loader2, CheckCircle, XCircle, AlertCircle, FolderOpen } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
 const LARGE_FILE_THRESHOLD = 100 * 1024 * 1024; // 100MB
@@ -13,7 +14,13 @@ const LARGE_FILE_THRESHOLD = 100 * 1024 * 1024; // 100MB
 export const DocumentUpload = () => {
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isFirefox, setIsFirefox] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Detect Firefox browser
+    setIsFirefox(/firefox/i.test(navigator.userAgent));
+  }, []);
 
   const { data: documents, refetch } = useQuery({
     queryKey: ["training-documents"],
@@ -40,10 +47,16 @@ export const DocumentUpload = () => {
     return () => clearInterval(interval);
   }, [documents, refetch]);
 
-  const processFiles = async (files: FileList | File[]) => {
+  const processFiles = async (files: FileList | File[], folderName?: string) => {
     if (!files || files.length === 0) return;
 
     setUploading(true);
+    const fileArray = Array.from(files);
+    
+    toast({
+      title: folderName ? `Map "${folderName}" uploaden...` : "Uploading documenten...",
+      description: `Bezig met uploaden van ${fileArray.length} document(en)`,
+    });
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -57,7 +70,9 @@ export const DocumentUpload = () => {
 
       if (!orgData) throw new Error("Geen organisatie gevonden");
 
-      for (const file of Array.from(files)) {
+      let successCount = 0;
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i];
         // Validate file size
         if (file.size > MAX_FILE_SIZE) {
           toast({
@@ -88,6 +103,13 @@ export const DocumentUpload = () => {
           });
         }
 
+        // Extract relative path for folder uploads
+        const relativePath = (file as any).webkitRelativePath || file.name;
+        const pathParts = relativePath.split('/');
+        const relativePathWithoutRoot = pathParts.length > 1 
+          ? pathParts.slice(1).join('/') 
+          : file.name;
+
         const filePath = `${user.id}/${Date.now()}_${file.name}`;
 
         const { error: uploadError } = await supabase.storage
@@ -105,9 +127,12 @@ export const DocumentUpload = () => {
           mime_type: file.type,
           status: "processing",
           processing_progress: 0,
+          relative_path: folderName ? relativePathWithoutRoot : null,
+          original_folder: folderName || null,
         });
 
         if (dbError) throw dbError;
+        successCount++;
 
         await supabase.functions.invoke("process-training-document", {
           body: { filePath, fileName: file.name },
@@ -115,8 +140,10 @@ export const DocumentUpload = () => {
       }
 
       toast({
-        title: "Documenten geüpload",
-        description: "De documenten worden verwerkt...",
+        title: "Upload succesvol",
+        description: folderName 
+          ? `${successCount} document(en) uit map "${folderName}" worden verwerkt`
+          : `${successCount} document(en) worden verwerkt`,
       });
       refetch();
     } catch (error: any) {
@@ -135,6 +162,18 @@ export const DocumentUpload = () => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
     await processFiles(files);
+    event.target.value = "";
+  };
+
+  const handleFolderUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    // Extract folder name from first file's webkitRelativePath
+    const firstFile = files[0] as any;
+    const folderName = firstFile.webkitRelativePath?.split('/')[0] || 'Onbekend';
+
+    await processFiles(files, folderName);
     event.target.value = "";
   };
 
@@ -186,7 +225,16 @@ export const DocumentUpload = () => {
             </p>
           </div>
 
-          <div 
+          {isFirefox && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Map upload wordt niet ondersteund in Firefox. Gebruik Chrome, Edge of Safari, of selecteer individuele bestanden.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div
             className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
               isDragging 
                 ? 'border-primary bg-primary/5 scale-[1.02]' 
@@ -210,29 +258,62 @@ export const DocumentUpload = () => {
               <AlertCircle className="h-3 w-3" />
               Bestanden &gt;100MB worden verwerkt in achtergrond
             </p>
-            <Button disabled={uploading} asChild>
-              <label className="cursor-pointer">
-                {uploading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Uploaden...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-4 w-4 mr-2" />
-                    Selecteer bestanden
-                  </>
-                )}
-                <input
-                  type="file"
-                  multiple
-                  accept=".pdf,.docx,.txt,.md"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  disabled={uploading}
-                />
-              </label>
-            </Button>
+            <div className="flex gap-3 justify-center flex-wrap">
+              <input
+                type="file"
+                onChange={handleFileUpload}
+                multiple
+                accept=".pdf,.docx,.txt,.md"
+                className="hidden"
+                id="file-upload"
+                disabled={uploading}
+              />
+              <Button asChild disabled={uploading} variant="default">
+                <label htmlFor="file-upload" className="cursor-pointer">
+                  {uploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Selecteer bestanden
+                    </>
+                  )}
+                </label>
+              </Button>
+
+              {!isFirefox && (
+                <>
+                  <input
+                    type="file"
+                    onChange={handleFolderUpload}
+                    /* @ts-ignore - webkitdirectory is not in TS types but widely supported */
+                    webkitdirectory="true"
+                    multiple
+                    className="hidden"
+                    id="folder-upload"
+                    disabled={uploading}
+                  />
+                  <Button asChild disabled={uploading} variant="outline">
+                    <label htmlFor="folder-upload" className="cursor-pointer">
+                      {uploading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <FolderOpen className="h-4 w-4 mr-2" />
+                          Kies Map
+                        </>
+                      )}
+                    </label>
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </Card>

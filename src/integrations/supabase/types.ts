@@ -1295,8 +1295,10 @@ export type Database = {
           id: string
           mime_type: string
           org_id: string
+          original_folder: string | null
           processed_at: string | null
           processing_progress: number | null
+          relative_path: string | null
           status: string
           user_id: string
         }
@@ -1309,8 +1311,10 @@ export type Database = {
           id?: string
           mime_type: string
           org_id: string
+          original_folder?: string | null
           processed_at?: string | null
           processing_progress?: number | null
+          relative_path?: string | null
           status?: string
           user_id: string
         }
@@ -1323,8 +1327,10 @@ export type Database = {
           id?: string
           mime_type?: string
           org_id?: string
+          original_folder?: string | null
           processed_at?: string | null
           processing_progress?: number | null
+          relative_path?: string | null
           status?: string
           user_id?: string
         }
