@@ -495,31 +495,71 @@ Geef je antwoord als gestructureerde kennis items.`,
     },
   ];
 
-  // PHASE 2: Pre-Insert Duplicate Detection
+  // SPRINT 2: Enhanced duplicate detection with semantic analysis
   const itemsToInsert = [];
   
   for (const newItem of knowledgeItems) {
-    // Simplify key by removing timestamps
     const simplifiedKey = newItem.key.replace(/_\d+$/, '');
     
-    // Check for existing similar items
-    const { data: existingItems } = await supabase
+    // STEP 1: Basic key-based pre-filter (fast initial check)
+    const { data: candidateItems } = await supabase
       .from('ai_knowledge_base')
       .select('*')
       .eq('category', newItem.category)
       .eq('org_id', orgId)
-      .ilike('key', `%${simplifiedKey.split('_').slice(0, -1).join('_')}%`)
       .is('deleted_at', null);
     
     let shouldInsert = true;
     
-    if (existingItems && existingItems.length > 0) {
-      for (const existing of existingItems) {
+    // STEP 2: Semantic duplicate check (if candidates found and API key available)
+    if (candidateItems && candidateItems.length > 0 && LOVABLE_API_KEY) {
+      console.log(`[SEMANTIC] Checking ${candidateItems.length} candidates for: ${newItem.key}`);
+      
+      const semanticDuplicates = await findSemanticDuplicates(
+        newItem,
+        candidateItems,
+        LOVABLE_API_KEY
+      );
+      
+      if (semanticDuplicates.length > 0) {
+        const topMatch = semanticDuplicates[0];
+        console.log(`🔍 Semantic duplicate found: ${(topMatch.similarity * 100).toFixed(0)}% similarity with item ${topMatch.id}`);
+        
+        // >90% similarity → very likely exact duplicate → skip
+        if (topMatch.similarity > 0.90) {
+          console.log(`⏭️ Skipping insert (high similarity duplicate)`);
+          
+          // BOOST confidence of existing item instead
+          const existingItem = candidateItems.find((c: any) => c.id === topMatch.id);
+          if (existingItem) {
+            await supabase
+              .from('ai_knowledge_base')
+              .update({
+                confidence_score: Math.min(1.0, (existingItem.confidence_score || 0.5) + 0.1),
+                usage_count: (existingItem.usage_count || 0) + 1,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', topMatch.id);
+          }
+          
+          shouldInsert = false;
+          continue;
+        }
+        
+        // 85-90% → possible variant → insert but mark as needs review
+        if (topMatch.similarity > 0.85) {
+          console.log(`⚠️ Possible variant detected (${(topMatch.similarity * 100).toFixed(0)}%), inserting with needs_review flag`);
+          (newItem as any).needs_review = true;
+          (newItem as any).last_validation_error = `Mogelijke variant van item ${topMatch.id}: ${topMatch.reason}`;
+        }
+      }
+    } else if (candidateItems && candidateItems.length > 0) {
+      // FALLBACK: Basic exact value matching (if no API key)
+      for (const existing of candidateItems) {
         const isSameValue = JSON.stringify(existing.value) === JSON.stringify(newItem.value);
         
         if (isSameValue) {
-          // BOOST confidence instead of creating duplicate
-          console.log(`✅ Boosted confidence for existing item: ${existing.key}`);
+          console.log(`✅ Exact match found, boosting confidence: ${existing.key}`);
           await supabase
             .from('ai_knowledge_base')
             .update({
@@ -530,11 +570,6 @@ Geef je antwoord als gestructureerde kennis items.`,
           
           shouldInsert = false;
           break;
-        } else {
-          // DIFFERENT value → mark for review
-          console.warn(`⚠️ Potential conflict detected: ${newItem.key} vs ${existing.key}`);
-          (newItem as any).needs_review = true;
-          (newItem as any).last_validation_error = `Mogelijk conflict met bestaand item ${existing.id}`;
         }
       }
     }
@@ -567,4 +602,78 @@ Geef je antwoord als gestructureerde kennis items.`,
   }
 
   return knowledgeItems;
+}
+
+// SPRINT 2: Semantic duplicate detection function
+async function findSemanticDuplicates(
+  newItem: { key: string; value: any; category: string },
+  existingItems: any[],
+  lovableApiKey: string
+): Promise<Array<{ id: string; similarity: number; reason: string }>> {
+  const sameCategoryItems = existingItems.filter(item => item.category === newItem.category);
+  
+  if (sameCategoryItems.length === 0) return [];
+  
+  const semanticMatches: Array<{ id: string; similarity: number; reason: string }> = [];
+  
+  // Check top 5 most relevant existing items (performance optimization)
+  const topItems = sameCategoryItems.slice(0, 5);
+  
+  for (const existingItem of topItems) {
+    const prompt = `Vergelijk deze twee knowledge items semantisch:
+
+NIEUW ITEM:
+Key: ${newItem.key}
+Value: ${JSON.stringify(newItem.value, null, 2)}
+
+BESTAAND ITEM:
+Key: ${existingItem.key}
+Value: ${JSON.stringify(existingItem.value, null, 2)}
+
+Analyseer:
+1. Betekenen ze hetzelfde?
+2. Is het dezelfde informatie in andere woorden?
+3. Overlappen ze qua context?
+
+Return ALLEEN een JSON object:
+{
+  "similarity": 0.0-1.0,
+  "reason": "kort waarom wel/niet duplicate"
+}`;
+
+    try {
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${lovableApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content || "";
+      
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.similarity >= 0.85) {
+          semanticMatches.push({
+            id: existingItem.id,
+            similarity: parsed.similarity,
+            reason: parsed.reason || "Semantisch vergelijkbaar"
+          });
+        }
+      }
+    } catch (error) {
+      console.error(`[SEMANTIC] Error comparing items:`, error);
+    }
+  }
+  
+  return semanticMatches.sort((a, b) => b.similarity - a.similarity);
 }

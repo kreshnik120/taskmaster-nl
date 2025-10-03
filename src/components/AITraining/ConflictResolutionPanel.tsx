@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertTriangle, CheckCircle2, Trash2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Trash2, XCircle, Lightbulb } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -40,6 +40,22 @@ export const ConflictResolutionPanel = () => {
         .eq("deleted_by", "AI_AUTO_RESOLVE")
         .gte("deleted_at", thirtyDaysAgo)
         .order("deleted_at", { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // SPRINT 2: Query voor AI suggestions (Tier 2: 70-94% confidence)
+  const { data: suggestions } = useQuery({
+    queryKey: ["ai-suggestions"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("business_intelligence")
+        .select("*")
+        .eq("intelligence_type", "ai_suggestion")
+        .eq("status", "active")
+        .order("detected_at", { ascending: false });
 
       if (error) throw error;
       return data || [];
@@ -138,6 +154,73 @@ export const ConflictResolutionPanel = () => {
     },
   });
 
+  // SPRINT 2: Approve AI suggestion mutation
+  const approveSuggestionMutation = useMutation({
+    mutationFn: async ({ suggestionId, actions }: { 
+      suggestionId: string; 
+      actions: Array<{ item_id: string; action: 'keep' | 'delete' }>;
+    }) => {
+      const deleteIds = actions.filter(a => a.action === 'delete').map(a => a.item_id);
+      
+      // Soft delete losers
+      if (deleteIds.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('ai_knowledge_base')
+          .update({
+            deleted_at: new Date().toISOString(),
+            deleted_by: 'USER_APPROVED_AI_SUGGESTION',
+            deletion_reason: { suggestion_id: suggestionId }
+          })
+          .in('id', deleteIds);
+        
+        if (deleteError) throw deleteError;
+      }
+      
+      // Mark suggestion as resolved
+      const { error: updateError } = await supabase
+        .from('business_intelligence')
+        .update({ status: 'resolved' })
+        .eq('id', suggestionId);
+      
+      if (updateError) throw updateError;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Suggestie goedgekeurd",
+        description: "AI suggestie is geaccepteerd en uitgevoerd"
+      });
+      queryClient.invalidateQueries({ queryKey: ["ai-suggestions"] });
+      queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
+      queryClient.invalidateQueries({ queryKey: ["ai-deleted-items"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Fout bij goedkeuren",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // SPRINT 2: Reject AI suggestion mutation
+  const rejectSuggestionMutation = useMutation({
+    mutationFn: async (suggestionId: string) => {
+      const { error } = await supabase
+        .from('business_intelligence')
+        .update({ status: 'dismissed' })
+        .eq('id', suggestionId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Suggestie afgewezen",
+        description: "AI suggestie is afgewezen en verwijderd"
+      });
+      queryClient.invalidateQueries({ queryKey: ["ai-suggestions"] });
+    },
+  });
+
   const getScoreBadge = (score: number, label: string) => {
     if (score >= 0.8) return <Badge variant="default" className="bg-green-600">{label}: {Math.round(score * 100)}%</Badge>;
     if (score >= 0.5) return <Badge variant="secondary">{label}: {Math.round(score * 100)}%</Badge>;
@@ -168,7 +251,104 @@ export const ConflictResolutionPanel = () => {
 
   return (
     <div className="space-y-6">
-      {/* Bestaande conflicts sectie */}
+      {/* SPRINT 2: AI Suggestions (Tier 2) */}
+      {suggestions && suggestions.length > 0 && (
+        <>
+          <div className="flex items-center gap-2">
+            <Lightbulb className="h-5 w-5 text-blue-500" />
+            <h2 className="text-2xl font-bold">AI Suggesties ({suggestions.length})</h2>
+          </div>
+          
+          <ScrollArea className="h-[400px]">
+            <div className="space-y-3 pr-4">
+              {suggestions.map((suggestion: any) => {
+                const data = suggestion.data as any;
+                const conflictingItems = data?.conflicting_items || [];
+                const actions = data?.recommended_actions || [];
+                const keepItem = conflictingItems.find((item: any) => 
+                  actions.find((a: any) => a.item_id === item.id && a.action === 'keep')
+                );
+                const deleteItems = conflictingItems.filter((item: any) => 
+                  actions.find((a: any) => a.item_id === item.id && a.action === 'delete')
+                );
+
+                return (
+                  <Card key={suggestion.id} className="p-4 border-blue-200 bg-blue-50 dark:bg-blue-950">
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-semibold flex items-center gap-2">
+                            <Lightbulb className="h-4 w-4" />
+                            {suggestion.title}
+                          </h4>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {suggestion.description}
+                          </p>
+                          <Badge variant="outline" className="mt-2">
+                            {(data.confidence * 100).toFixed(0)}% zekerheid
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {data.reasoning && (
+                        <div className="text-sm bg-white dark:bg-gray-900 p-3 rounded border">
+                          <p className="font-medium text-xs text-muted-foreground mb-1">AI Redenering:</p>
+                          <p className="italic">"{data.reasoning}"</p>
+                        </div>
+                      )}
+
+                      {/* Show what will be kept vs deleted */}
+                      <div className="grid grid-cols-2 gap-3">
+                        {keepItem && (
+                          <div className="bg-green-50 dark:bg-green-950 p-3 rounded border border-green-200">
+                            <p className="text-xs font-semibold text-green-700 dark:text-green-400 mb-2">✅ Behouden:</p>
+                            <p className="text-xs font-mono">{keepItem.key}</p>
+                            <pre className="text-xs mt-1 overflow-x-auto">
+                              {JSON.stringify(keepItem.value, null, 2).substring(0, 100)}...
+                            </pre>
+                          </div>
+                        )}
+                        
+                        {deleteItems.length > 0 && (
+                          <div className="bg-red-50 dark:bg-red-950 p-3 rounded border border-red-200">
+                            <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-2">❌ Verwijderen ({deleteItems.length}):</p>
+                            {deleteItems.map((item: any, idx: number) => (
+                              <p key={idx} className="text-xs font-mono">{item.key}</p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          size="sm"
+                          onClick={() => approveSuggestionMutation.mutate({
+                            suggestionId: suggestion.id,
+                            actions: data.recommended_actions
+                          })}
+                          disabled={approveSuggestionMutation.isPending}
+                        >
+                          ✅ Goedkeuren
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => rejectSuggestionMutation.mutate(suggestion.id)}
+                          disabled={rejectSuggestionMutation.isPending}
+                        >
+                          ❌ Afwijzen
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        </>
+      )}
+
+      {/* Bestaande conflicts sectie (Tier 3) */}
       {conflicts && conflicts.length > 0 && (
         <>
           <div className="flex items-center gap-2">

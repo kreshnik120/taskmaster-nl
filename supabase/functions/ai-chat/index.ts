@@ -51,70 +51,229 @@ async function getSuggestedDocuments(
     .sort((a, b) => b.kb_count - a.kb_count); // Most relevant first
 }
 
-// PHASE 2: AI-Assisted conflict resolution using heuristics
-function analyzeConflict(items: any[]): {
-  recommended_id: string;
-  reason: string;
+// SPRINT 2: Semantic duplicate detection with AI
+async function findSemanticDuplicates(
+  newItem: { key: string; value: any; category: string },
+  existingItems: any[],
+  lovableApiKey: string
+): Promise<Array<{ id: string; similarity: number; reason: string }>> {
+  // Filter op zelfde category (performance optimization)
+  const sameCategoryItems = existingItems.filter(item => item.category === newItem.category);
+  
+  if (sameCategoryItems.length === 0) return [];
+  
+  const semanticMatches: Array<{ id: string; similarity: number; reason: string }> = [];
+  
+  // Check elk item met AI
+  for (const existingItem of sameCategoryItems) {
+    const prompt = `Vergelijk deze twee knowledge items semantisch:
+
+NIEUW ITEM:
+Key: ${newItem.key}
+Value: ${JSON.stringify(newItem.value, null, 2)}
+
+BESTAAND ITEM:
+Key: ${existingItem.key}
+Value: ${JSON.stringify(existingItem.value, null, 2)}
+
+Analyseer:
+1. Betekenen ze hetzelfde? (synoniemen, taalvariaties)
+2. Is het dezelfde informatie in andere woorden?
+3. Overlappen ze qua context (client, contractperiode)?
+
+Return ALLEEN een JSON object:
+{
+  "similarity": 0.0-1.0,
+  "reason": "kort waarom wel/niet duplicate"
+}`;
+
+    try {
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${lovableApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content || "";
+      
+      // Parse JSON uit response
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.similarity >= 0.85) {
+          semanticMatches.push({
+            id: existingItem.id,
+            similarity: parsed.similarity,
+            reason: parsed.reason || "Semantisch vergelijkbaar"
+          });
+        }
+      }
+    } catch (error) {
+      console.error(`[SEMANTIC] Error comparing with ${existingItem.id}:`, error);
+    }
+  }
+  
+  return semanticMatches.sort((a, b) => b.similarity - a.similarity);
+}
+
+// SPRINT 2: Deep conflict analysis with 3-tier system
+async function deepConflictAnalysis(
+  items: any[],
+  lovableApiKey: string
+): Promise<{
+  recommended_id: string | null;
   confidence: number;
-} {
-  // Heuristics scoring:
-  // 1. Newest created_at (+30 points)
-  // 2. Highest confidence_score (+40 points)
-  // 3. Most usage_count (+20 points)
-  // 4. Source = "document" (+10 points)
+  tier: 'auto_resolve' | 'suggestion' | 'preserve_all';
+  reason: string;
+  actions?: { item_id: string; action: 'keep' | 'delete' }[];
+}> {
+  // STEP 1: Heuristic checks (basis score)
+  let baseConfidence = 0;
+  let heuristicWinner: string | null = null;
   
   const scores = items.map(item => {
     let score = 0;
     
-    // Recency
+    // Recency check
     const ageInDays = (Date.now() - new Date(item.created_at).getTime()) / (1000 * 60 * 60 * 24);
     if (ageInDays < 7) score += 30;
     else if (ageInDays < 30) score += 20;
+    else if (ageInDays > 90) score -= 10; // Penalty voor oude items
     
-    // Confidence
+    // Confidence score
     score += (item.confidence_score || 0.5) * 40;
     
-    // Usage
-    score += Math.min(20, (item.usage_count || 0) * 2);
+    // Usage count
+    if ((item.usage_count || 0) > 10) score += 20;
+    else if ((item.usage_count || 0) > 0) score += 10;
     
     // Source
     if (item.source?.includes('document')) score += 10;
     
-    return { id: item.id, key: item.key, score };
+    return { id: item.id, key: item.key, score, item };
   });
   
   scores.sort((a, b) => b.score - a.score);
+  heuristicWinner = scores[0].id;
+  baseConfidence = scores[0].score / 100;
   
-  const winner = scores[0];
-  let reason = `Hoogste score (${winner.score.toFixed(0)}/100)`;
+  // STEP 2: AI Deep Analysis
+  const prompt = `Analyseer dit kennisconflict:
+
+ITEMS:
+${items.map((item, i) => `
+Item ${i + 1} (ID: ${item.id}):
+- Key: ${item.key}
+- Value: ${JSON.stringify(item.value, null, 2)}
+- Created: ${new Date(item.created_at).toLocaleDateString('nl-NL')}
+- Usage: ${item.usage_count || 0} keer gebruikt
+- Confidence: ${((item.confidence_score || 0.5) * 100).toFixed(0)}%
+- Source: ${item.source || 'unknown'}
+`).join('\n')}
+
+VRAAG: Welk item is het meest betrouwbaar? Waarom?
+
+Return ALLEEN een JSON object:
+{
+  "winner_id": "uuid of null als onduidelijk",
+  "confidence": 0.0-1.0,
+  "reasoning": "Max 2 zinnen waarom dit de beste keuze is",
+  "should_delete_others": true/false
+}`;
+
+  let aiConfidence = 0;
+  let aiWinnerId: string | null = null;
+  let aiReasoning = "";
   
-  // Add specific reasons
+  try {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${lovableApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content || "";
+      
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        aiWinnerId = parsed.winner_id;
+        aiConfidence = parsed.confidence || 0;
+        aiReasoning = parsed.reasoning || "";
+      }
+    }
+  } catch (error) {
+    console.error('[DEEP-ANALYSIS] AI call failed:', error);
+  }
+  
+  // STEP 3: Combine scores
+  const finalConfidence = (baseConfidence * 0.4) + (aiConfidence * 0.6);
+  const winnerId = aiWinnerId || heuristicWinner;
+  
+  // STEP 4: Tier assignment
+  let tier: 'auto_resolve' | 'suggestion' | 'preserve_all';
+  if (finalConfidence >= 0.95) {
+    tier = 'auto_resolve';
+  } else if (finalConfidence >= 0.70) {
+    tier = 'suggestion';
+  } else {
+    tier = 'preserve_all';
+  }
+  
+  // Build reason
   const reasons = [];
-  const winnerItem = items.find(i => i.id === winner.id);
+  if (aiReasoning) reasons.push(aiReasoning);
+  const winnerItem = items.find(i => i.id === winnerId);
   if (winnerItem) {
     const ageInDays = (Date.now() - new Date(winnerItem.created_at).getTime()) / (1000 * 60 * 60 * 24);
     if (ageInDays < 7) reasons.push('nieuwste data');
-    if ((winnerItem.confidence_score || 0) > 0.8) reasons.push('hoogste zekerheid');
     if ((winnerItem.usage_count || 0) > 5) reasons.push('meest gebruikt');
-    if (winnerItem.source?.includes('document')) reasons.push('uit document');
   }
   
-  if (reasons.length > 0) {
-    reason += ` - ${reasons.join(', ')}`;
-  }
+  const finalReason = reasons.length > 0 
+    ? reasons.join(', ') 
+    : `Analyse score: ${(finalConfidence * 100).toFixed(0)}%`;
+  
+  // Build actions
+  const actions = winnerId 
+    ? items.map(item => ({
+        item_id: item.id,
+        action: (item.id === winnerId ? 'keep' : 'delete') as 'keep' | 'delete'
+      }))
+    : [];
   
   return {
-    recommended_id: winner.id,
-    reason,
-    confidence: winner.score / 100
+    recommended_id: winnerId,
+    confidence: finalConfidence,
+    tier,
+    reason: finalReason,
+    actions
   };
 }
 
-// Detect conflicts between knowledge items
+// Detect conflicts between knowledge items with SPRINT 2 deep analysis
 async function detectKnowledgeConflicts(
   knowledgeBase: any[],
   supabase: any,
-  orgId: string
+  orgId: string,
+  lovableApiKey: string
 ): Promise<void> {
   // Group by category + client
   const grouped: { [key: string]: any[] } = {};
@@ -145,19 +304,19 @@ async function detectKnowledgeConflicts(
       if (uniqueTariffs.length > 1) {
         console.error(`🚨 CONFLICT DETECTED in ${groupKey}:`, uniqueTariffs);
         
-        // PHASE 2: Get suggested documents and AI recommendation
+        // Get suggested documents
         const suggestedDocs = await getSuggestedDocuments(
           items.map(kb => kb.id),
           supabase
         );
         
-        const aiRecommendation = analyzeConflict(items);
+        // SPRINT 2: Deep conflict analysis with 3-tier system
+        const aiRecommendation = await deepConflictAnalysis(items, lovableApiKey);
         
-        // NEW: Auto-resolve bij hoge zekerheid (≥95%)
-        if (aiRecommendation.confidence >= 0.95) {
-          console.log(`🤖 AUTO-RESOLVE: ${groupKey} (confidence: ${(aiRecommendation.confidence * 100).toFixed(0)}%)`);
+        // TIER 1: Auto-resolve (≥95% confidence)
+        if (aiRecommendation.tier === 'auto_resolve' && aiRecommendation.recommended_id) {
+          console.log(`🤖 AUTO-RESOLVE (Tier 1): ${groupKey} (${(aiRecommendation.confidence * 100).toFixed(0)}%)`);
           
-          // Soft delete "verliezers"
           const losers = items.filter(kb => kb.id !== aiRecommendation.recommended_id);
           const loserIds = losers.map(kb => kb.id);
           
@@ -171,6 +330,7 @@ async function detectKnowledgeConflicts(
                 reason: aiRecommendation.reason,
                 winner_id: aiRecommendation.recommended_id,
                 confidence: aiRecommendation.confidence,
+                tier: 'auto_resolve',
                 deleted_items: losers.map(kb => ({
                   id: kb.id,
                   key: kb.key,
@@ -181,13 +341,12 @@ async function detectKnowledgeConflicts(
             })
             .in('id', loserIds);
           
-          // Log auto-resolve in BI (niet als "conflict" maar als "auto_cleanup")
           await supabase.from('business_intelligence').insert({
             org_id: orgId,
             intelligence_type: 'auto_cleanup',
             priority: 'low',
             title: `Auto-resolved: ${groupKey}`,
-            description: `AI heeft ${losers.length} conflicterende item(s) verwijderd met ${(aiRecommendation.confidence * 100).toFixed(0)}% zekerheid`,
+            description: `AI heeft ${losers.length} item(s) verwijderd (${(aiRecommendation.confidence * 100).toFixed(0)}% zekerheid)`,
             data: {
               winner_id: aiRecommendation.recommended_id,
               deleted_ids: loserIds,
@@ -197,31 +356,72 @@ async function detectKnowledgeConflicts(
             impact_score: 0.3
           });
           
-          continue; // Skip creating "active" conflict alert
+          continue;
         }
         
-        // FALLBACK: Lage zekerheid → menselijke review (bestaande logica)
-        await supabase.from('business_intelligence').insert({
-          org_id: orgId,
-          intelligence_type: 'data_quality',
-          priority: 'high',
-          title: `Kennisconflict: ${groupKey}`,
-          description: `Meerdere verschillende tarieven gevonden voor ${groupKey}: ${uniqueTariffs.join(' vs ')}`,
-          data: {
-            conflicting_items: items.map(kb => ({
-              id: kb.id,
-              key: kb.key,
-              value: kb.value,
-              confidence: kb.confidence_score,
-              usage_count: kb.usage_count,
-              created_at: kb.created_at
-            })),
-            unique_values: uniqueTariffs,
-            suggested_documents: suggestedDocs,
-            ai_recommendation: aiRecommendation
-          },
-          impact_score: 0.9
-        });
+        // TIER 2: Suggestion (70-94% confidence)
+        if (aiRecommendation.tier === 'suggestion') {
+          console.log(`💡 SUGGESTION (Tier 2): ${groupKey} (${(aiRecommendation.confidence * 100).toFixed(0)}%)`);
+          
+          await supabase.from('business_intelligence').insert({
+            org_id: orgId,
+            intelligence_type: 'ai_suggestion',
+            priority: 'medium',
+            title: `AI Suggestie: ${groupKey}`,
+            description: `AI stelt voor om ${aiRecommendation.actions?.filter(a => a.action === 'delete').length} item(s) te verwijderen (${(aiRecommendation.confidence * 100).toFixed(0)}% zekerheid)`,
+            data: {
+              recommended_actions: aiRecommendation.actions,
+              reasoning: aiRecommendation.reason,
+              confidence: aiRecommendation.confidence,
+              requires_approval: true,
+              conflicting_items: items.map(kb => ({
+                id: kb.id,
+                key: kb.key,
+                value: kb.value,
+                confidence: kb.confidence_score,
+                usage_count: kb.usage_count,
+                created_at: kb.created_at
+              })),
+              suggested_documents: suggestedDocs
+            },
+            impact_score: 0.6
+          });
+          
+          continue;
+        }
+        
+        // TIER 3: Preserve all (<70% confidence)
+        if (aiRecommendation.tier === 'preserve_all') {
+          console.log(`⚠️ PRESERVE ALL (Tier 3): ${groupKey} (${(aiRecommendation.confidence * 100).toFixed(0)}%)`);
+          
+          // Mark all items as needing review
+          await supabase
+            .from('ai_knowledge_base')
+            .update({ needs_review: true })
+            .in('id', items.map(kb => kb.id));
+          
+          await supabase.from('business_intelligence').insert({
+            org_id: orgId,
+            intelligence_type: 'data_quality',
+            priority: 'high',
+            title: `Complex conflict: ${groupKey}`,
+            description: `AI kan niet met zekerheid bepalen welk item correct is (${(aiRecommendation.confidence * 100).toFixed(0)}%). Menselijke review vereist.`,
+            data: {
+              conflicting_items: items.map(kb => ({
+                id: kb.id,
+                key: kb.key,
+                value: kb.value,
+                confidence: kb.confidence_score,
+                usage_count: kb.usage_count,
+                created_at: kb.created_at
+              })),
+              unique_values: uniqueTariffs,
+              ai_reasoning: aiRecommendation.reason,
+              suggested_documents: suggestedDocs
+            },
+            impact_score: 0.9
+          });
+        }
       }
     }
   }
@@ -592,8 +792,14 @@ serve(async (req) => {
     
     const fullKnowledgeBase = rankedKnowledge;
     
-    // PHASE 1.5: Detect knowledge conflicts before using
-    await detectKnowledgeConflicts(fullKnowledgeBase, supabaseClient, userOrgId);
+    // Get Lovable API Key for deep analysis
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      throw new Error('LOVABLE_API_KEY is not configured');
+    }
+    
+    // PHASE 1.5: Detect knowledge conflicts before using (with SPRINT 2 deep analysis)
+    await detectKnowledgeConflicts(fullKnowledgeBase, supabaseClient, userOrgId, LOVABLE_API_KEY);
     
     // Organize knowledge by category for structured presentation
     const knowledgeByCategory: { [key: string]: any[] } = {};
@@ -836,7 +1042,8 @@ ${conversationHistory}
 
 Gebruik deze rijke context om intelligente, context-aware antwoorden te geven die echt helpen met productiviteit en taakbeheer. En vergeet niet: je kunt nu DAADWERKELIJK acties uitvoeren!`;
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    // LOVABLE_API_KEY already fetched earlier for conflict detection
+    // Just verify it's still available
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
