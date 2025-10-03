@@ -10,6 +10,7 @@ import { DocumentUpload } from "@/components/AITraining/DocumentUpload";
 import { KnowledgeOverview } from "@/components/AITraining/KnowledgeOverview";
 import { SeedClientKnowledge } from "@/components/AITraining/SeedClientKnowledge";
 import { LearningDashboard } from "@/components/AITraining/LearningDashboard";
+import { SmartKnowledgeSearch } from "@/components/AITraining/SmartKnowledgeSearch";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -66,15 +67,20 @@ const AiTraining = () => {
             </div>
 
             <Tabs defaultValue="dashboard" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="dashboard">📊 Leer Dashboard</TabsTrigger>
-                <TabsTrigger value="chat">💬 Training Chat</TabsTrigger>
-                <TabsTrigger value="documents">📄 Documenten</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-5">
+                <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
+                <TabsTrigger value="search">🔍 Slim Zoeken</TabsTrigger>
+                <TabsTrigger value="chat">💬 Training</TabsTrigger>
+                <TabsTrigger value="documents">📄 Docs</TabsTrigger>
                 <TabsTrigger value="knowledge">🗄️ Kennisbank</TabsTrigger>
               </TabsList>
 
               <TabsContent value="dashboard" className="mt-6">
                 <LearningDashboard />
+              </TabsContent>
+
+              <TabsContent value="search" className="mt-6">
+                <SmartKnowledgeSearch />
               </TabsContent>
 
               <TabsContent value="chat" className="mt-6">

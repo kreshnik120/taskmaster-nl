@@ -221,15 +221,38 @@ serve(async (req) => {
     const highPriorityTasks = activeTasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL');
     const revenueImpactTasks = activeTasks.filter(t => t.revenue_impact_eur && t.revenue_impact_eur > 0);
     
-    // Fetch ALL knowledge base items with org_id filter for comprehensive access
+    // SMART CONTEXT RETRIEVAL: Match keywords from user message with knowledge base
+    const lastUserMessage = messages[messages.length - 1]?.content?.toLowerCase() || '';
+    const messageKeywords = lastUserMessage.split(' ').filter((w: string) => w.length > 3);
+    
+    // Fetch ALL knowledge base items with relevance scoring
     const { data: allKnowledgeBase } = await supabaseClient
       .from('ai_knowledge_base')
-      .select('category, key, value, confidence_score, source, usage_count')
+      .select('id, category, key, value, confidence_score, source, usage_count')
       .or(`user_id.eq.${user.id},org_id.eq.${userOrgId}`)
       .order('confidence_score', { ascending: false })
       .order('usage_count', { ascending: false });
     
-    const fullKnowledgeBase = allKnowledgeBase || [];
+    // Score and rank knowledge items by relevance to current query
+    const rankedKnowledge = (allKnowledgeBase || []).map((kb: any) => {
+      let relevanceScore = 0;
+      const searchText = `${kb.key} ${kb.category} ${JSON.stringify(kb.value)}`.toLowerCase();
+      
+      // Keyword matching
+      messageKeywords.forEach((keyword: string) => {
+        if (searchText.includes(keyword)) relevanceScore += 2;
+      });
+      
+      // Boost by confidence and usage
+      relevanceScore += (kb.confidence_score || 0) * 10;
+      relevanceScore += Math.min((kb.usage_count || 0) * 0.1, 5);
+      
+      return { ...kb, relevanceScore };
+    })
+    .sort((a, b) => b.relevanceScore - a.relevanceScore)
+    .slice(0, 20); // Top 20 most relevant items
+    
+    const fullKnowledgeBase = rankedKnowledge;
     
     // Organize knowledge by category for structured presentation
     const knowledgeByCategory: { [key: string]: any[] } = {};
