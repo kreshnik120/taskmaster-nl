@@ -19,6 +19,9 @@ export type Database = {
           category: string
           confidence_score: number | null
           created_at: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          deletion_reason: Json | null
           id: string
           key: string
           last_used_at: string | null
@@ -36,6 +39,9 @@ export type Database = {
           category: string
           confidence_score?: number | null
           created_at?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deletion_reason?: Json | null
           id?: string
           key: string
           last_used_at?: string | null
@@ -53,6 +59,9 @@ export type Database = {
           category?: string
           confidence_score?: number | null
           created_at?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deletion_reason?: Json | null
           id?: string
           key?: string
           last_used_at?: string | null

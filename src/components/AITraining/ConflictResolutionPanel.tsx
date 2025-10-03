@@ -28,6 +28,24 @@ export const ConflictResolutionPanel = () => {
     },
   });
 
+  // Query voor AI-deleted items (laatste 30 dagen)
+  const { data: deletedItems } = useQuery({
+    queryKey: ["ai-deleted-items"],
+    queryFn: async () => {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      
+      const { data, error } = await supabase
+        .from("ai_knowledge_base")
+        .select("*")
+        .eq("deleted_by", "AI_AUTO_RESOLVE")
+        .gte("deleted_at", thirtyDaysAgo)
+        .order("deleted_at", { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   const resolveConflictMutation = useMutation({
     mutationFn: async ({
       conflictId,
@@ -89,6 +107,37 @@ export const ConflictResolutionPanel = () => {
     },
   });
 
+  // Restore mutation
+  const restoreMutation = useMutation({
+    mutationFn: async (itemId: string) => {
+      const { error } = await supabase
+        .from("ai_knowledge_base")
+        .update({
+          deleted_at: null,
+          deleted_by: null,
+          deletion_reason: null,
+        })
+        .eq("id", itemId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Item hersteld",
+        description: "Knowledge item is succesvol teruggedraaid",
+      });
+      queryClient.invalidateQueries({ queryKey: ["ai-deleted-items"] });
+      queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Fout bij herstellen",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const getScoreBadge = (score: number, label: string) => {
     if (score >= 0.8) return <Badge variant="default" className="bg-green-600">{label}: {Math.round(score * 100)}%</Badge>;
     if (score >= 0.5) return <Badge variant="secondary">{label}: {Math.round(score * 100)}%</Badge>;
@@ -119,14 +168,17 @@ export const ConflictResolutionPanel = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <AlertTriangle className="h-5 w-5 text-amber-500" />
-        <h2 className="text-2xl font-bold">Kennisconflicten ({conflicts.length})</h2>
-      </div>
+      {/* Bestaande conflicts sectie */}
+      {conflicts && conflicts.length > 0 && (
+        <>
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            <h2 className="text-2xl font-bold">Kennisconflicten ({conflicts.length})</h2>
+          </div>
 
-      <ScrollArea className="h-[600px]">
-        <div className="space-y-4 pr-4">
-          {conflicts.map((conflict) => {
+          <ScrollArea className="h-[600px]">
+            <div className="space-y-4 pr-4">
+              {conflicts.map((conflict) => {
             const conflictData = conflict.data as any;
             const items = conflictData?.conflicting_items || [];
             const aiRec = conflictData?.ai_recommendation;
@@ -294,9 +346,77 @@ export const ConflictResolutionPanel = () => {
                 </div>
               </Card>
             );
-          })}
-        </div>
-      </ScrollArea>
+              })}
+            </div>
+          </ScrollArea>
+        </>
+      )}
+
+      {/* NIEUWE SECTIE: AI-verwijderde items */}
+      {deletedItems && deletedItems.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 mt-8">
+            <XCircle className="h-5 w-5 text-blue-500" />
+            <h2 className="text-2xl font-bold">Recent verwijderd door AI ({deletedItems.length})</h2>
+          </div>
+
+          <ScrollArea className="h-[400px]">
+            <div className="space-y-3 pr-4">
+              {deletedItems.map((item: any) => {
+                const reason = item.deletion_reason as any;
+                const daysLeft = Math.ceil(
+                  (30 - (Date.now() - new Date(item.deleted_at).getTime()) / (1000 * 60 * 60 * 24))
+                );
+
+                return (
+                  <Card key={item.id} className="p-4 border-blue-200 bg-blue-50 dark:bg-blue-950">
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-sm">{item.key}</h4>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Verwijderd: {format(new Date(item.deleted_at), "PPp", { locale: nl })}
+                          </p>
+                          <Badge variant="outline" className="mt-2">
+                            Nog {daysLeft} dagen beschikbaar
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {reason && (
+                        <div className="text-sm">
+                          <p className="text-muted-foreground">Reden: {reason.reason}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Zekerheid: {(reason.confidence * 100).toFixed(0)}%
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="text-xs bg-muted p-2 rounded">
+                        <span className="text-muted-foreground">Waarde:</span>
+                        <pre className="mt-1 overflow-x-auto">
+                          {typeof item.value === "string"
+                            ? item.value
+                            : JSON.stringify(item.value, null, 2)}
+                        </pre>
+                      </div>
+
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => restoreMutation.mutate(item.id)}
+                      >
+                        ↩️ Terugdraaien
+                      </Button>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        </>
+      )}
     </div>
   );
 };

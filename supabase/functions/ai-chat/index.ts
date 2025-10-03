@@ -33,7 +33,8 @@ async function getSuggestedDocuments(
   const { data: knowledgeItems } = await supabase
     .from('ai_knowledge_base')
     .select('source, key')
-    .in('id', conflictedKnowledgeIds);
+    .in('id', conflictedKnowledgeIds)
+    .is('deleted_at', null);
   
   // Extract and count source documents
   const documentCounts: { [doc: string]: number } = {};
@@ -152,7 +153,54 @@ async function detectKnowledgeConflicts(
         
         const aiRecommendation = analyzeConflict(items);
         
-        // Create high-priority intelligence alert
+        // NEW: Auto-resolve bij hoge zekerheid (≥95%)
+        if (aiRecommendation.confidence >= 0.95) {
+          console.log(`🤖 AUTO-RESOLVE: ${groupKey} (confidence: ${(aiRecommendation.confidence * 100).toFixed(0)}%)`);
+          
+          // Soft delete "verliezers"
+          const losers = items.filter(kb => kb.id !== aiRecommendation.recommended_id);
+          const loserIds = losers.map(kb => kb.id);
+          
+          await supabase
+            .from('ai_knowledge_base')
+            .update({
+              deleted_at: new Date().toISOString(),
+              deleted_by: 'AI_AUTO_RESOLVE',
+              deletion_reason: {
+                conflict_group: groupKey,
+                reason: aiRecommendation.reason,
+                winner_id: aiRecommendation.recommended_id,
+                confidence: aiRecommendation.confidence,
+                deleted_items: losers.map(kb => ({
+                  id: kb.id,
+                  key: kb.key,
+                  value: kb.value,
+                  confidence_score: kb.confidence_score
+                }))
+              }
+            })
+            .in('id', loserIds);
+          
+          // Log auto-resolve in BI (niet als "conflict" maar als "auto_cleanup")
+          await supabase.from('business_intelligence').insert({
+            org_id: orgId,
+            intelligence_type: 'auto_cleanup',
+            priority: 'low',
+            title: `Auto-resolved: ${groupKey}`,
+            description: `AI heeft ${losers.length} conflicterende item(s) verwijderd met ${(aiRecommendation.confidence * 100).toFixed(0)}% zekerheid`,
+            data: {
+              winner_id: aiRecommendation.recommended_id,
+              deleted_ids: loserIds,
+              reason: aiRecommendation.reason,
+              restore_available_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+            },
+            impact_score: 0.3
+          });
+          
+          continue; // Skip creating "active" conflict alert
+        }
+        
+        // FALLBACK: Lage zekerheid → menselijke review (bestaande logica)
         await supabase.from('business_intelligence').insert({
           org_id: orgId,
           intelligence_type: 'data_quality',
@@ -519,6 +567,7 @@ serve(async (req) => {
       .from('ai_knowledge_base')
       .select('id, category, key, value, confidence_score, source, usage_count')
       .or(`user_id.eq.${user.id},org_id.eq.${userOrgId}`)
+      .is('deleted_at', null)
       .order('confidence_score', { ascending: false })
       .order('usage_count', { ascending: false });
     

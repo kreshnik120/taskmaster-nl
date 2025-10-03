@@ -508,7 +508,8 @@ Geef je antwoord als gestructureerde kennis items.`,
       .select('*')
       .eq('category', newItem.category)
       .eq('org_id', orgId)
-      .ilike('key', `%${simplifiedKey.split('_').slice(0, -1).join('_')}%`);
+      .ilike('key', `%${simplifiedKey.split('_').slice(0, -1).join('_')}%`)
+      .is('deleted_at', null);
     
     let shouldInsert = true;
     
