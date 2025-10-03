@@ -12,6 +12,7 @@ const LARGE_FILE_THRESHOLD = 100 * 1024 * 1024; // 100MB
 
 export const DocumentUpload = () => {
   const [uploading, setUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
 
   const { data: documents, refetch } = useQuery({
@@ -39,8 +40,7 @@ export const DocumentUpload = () => {
     return () => clearInterval(interval);
   }, [documents, refetch]);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
+  const processFiles = async (files: FileList | File[]) => {
     if (!files || files.length === 0) return;
 
     setUploading(true);
@@ -68,6 +68,18 @@ export const DocumentUpload = () => {
           continue;
         }
 
+        // Validate file type
+        const validTypes = ['.pdf', '.docx', '.txt', '.md'];
+        const fileExt = '.' + file.name.split(".").pop()?.toLowerCase();
+        if (!validTypes.includes(fileExt)) {
+          toast({
+            title: "Ongeldig bestandstype",
+            description: `${file.name} wordt niet ondersteund. Gebruik PDF, DOCX, TXT of MD.`,
+            variant: "destructive",
+          });
+          continue;
+        }
+
         // Show warning for large files
         if (file.size > LARGE_FILE_THRESHOLD) {
           toast({
@@ -76,7 +88,6 @@ export const DocumentUpload = () => {
           });
         }
 
-        const fileExt = file.name.split(".").pop();
         const filePath = `${user.id}/${Date.now()}_${file.name}`;
 
         const { error: uploadError } = await supabase.storage
@@ -117,8 +128,40 @@ export const DocumentUpload = () => {
       });
     } finally {
       setUploading(false);
-      event.target.value = "";
     }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    await processFiles(files);
+    event.target.value = "";
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    
+    const files = e.dataTransfer.files;
+    await processFiles(files);
   };
 
   const getStatusIcon = (status: string) => {
@@ -143,10 +186,22 @@ export const DocumentUpload = () => {
             </p>
           </div>
 
-          <div className="border-2 border-dashed rounded-lg p-8 text-center">
-            <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+          <div 
+            className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
+              isDragging 
+                ? 'border-primary bg-primary/5 scale-[1.02]' 
+                : 'border-border hover:border-primary/50'
+            }`}
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <Upload className={`h-12 w-12 mx-auto mb-4 transition-colors ${
+              isDragging ? 'text-primary' : 'text-muted-foreground'
+            }`} />
             <p className="text-sm text-muted-foreground mb-4">
-              Sleep documenten hierheen of klik om te uploaden
+              {isDragging ? 'Laat bestanden los om te uploaden' : 'Sleep documenten hierheen of klik om te uploaden'}
             </p>
             <p className="text-xs text-muted-foreground mb-4">
               Ondersteunde formaten: PDF, DOCX, TXT, MD (max 500MB)
