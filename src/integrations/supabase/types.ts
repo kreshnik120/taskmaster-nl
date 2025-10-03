@@ -267,6 +267,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          org_id: string
           revenue_per_hour: number | null
           tier: number
           updated_at: string
@@ -277,6 +278,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          org_id: string
           revenue_per_hour?: number | null
           tier?: number
           updated_at?: string
@@ -287,12 +289,21 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          org_id?: string
           revenue_per_hour?: number | null
           tier?: number
           updated_at?: string
           weekly_hours?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "clients_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       columns: {
         Row: {
