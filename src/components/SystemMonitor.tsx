@@ -34,10 +34,10 @@ export const SystemMonitor = () => {
     try {
       // Load cron jobs status (hardcoded as we can't query cron.job directly via Supabase client)
       setCronJobs([
-        { jobname: 'ultra-auto-harvester', schedule: '0 */1 * * *', active: true },
-        { jobname: 'ultra-self-trainer', schedule: '0 */1 * * *', active: true },
-        { jobname: 'ultra-knowledge-graph', schedule: '0 */1 * * *', active: true },
-        { jobname: 'ultra-daily-report', schedule: '0 0 * * *', active: true },
+        { jobname: 'auto-knowledge-harvester', schedule: '0,30 */2 * * *', active: true },
+        { jobname: 'self-trainer', schedule: '*/100 * * * *', active: true },
+        { jobname: 'knowledge-graph-builder', schedule: '0 */2 * * *', active: true },
+        { jobname: 'batch-vision-processor', schedule: '0 */6 * * *', active: true },
       ]);
 
       // Load knowledge stats
@@ -145,18 +145,40 @@ export const SystemMonitor = () => {
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
 
-    // Parse cron schedule (e.g., "0 */1 * * *" = every hour at minute 0)
+    // Parse cron schedule
     const parts = schedule.split(' ');
     const minute = parts[0];
     const hour = parts[1];
 
-    if (hour === '*/1' || hour === '*') {
-      // Every hour
-      const nextHour = currentMinute === 0 ? currentHour : currentHour + 1;
-      const minutesUntil = currentMinute === 0 ? 60 : 60 - currentMinute;
-      return `over ${minutesUntil} minuten`;
-    } else if (hour === '0' && minute === '0') {
-      // Midnight only
+    // Handle "*/100 * * * *" (every 100 minutes)
+    if (minute.startsWith('*/')) {
+      const interval = parseInt(minute.substring(2));
+      return `elke ${interval} minuten`;
+    }
+
+    // Handle "0,30 */2 * * *" (every 2 hours at :00 and :30)
+    if (minute.includes(',') && hour.startsWith('*/')) {
+      const hourInterval = parseInt(hour.substring(2));
+      const minutes = minute.split(',').map(m => parseInt(m));
+      const nextMinutes = minutes.filter(m => m > currentMinute);
+      if (nextMinutes.length > 0) {
+        return `over ${nextMinutes[0] - currentMinute} minuten`;
+      }
+      return `over ${(60 - currentMinute) + minutes[0]} minuten`;
+    }
+
+    // Handle "0 */X * * *" (every X hours)
+    if (hour.startsWith('*/')) {
+      const hourInterval = parseInt(hour.substring(2));
+      const minutesUntil = currentMinute === 0 ? hourInterval * 60 : (60 - currentMinute);
+      if (hourInterval === 1) {
+        return `over ${minutesUntil} minuten`;
+      }
+      return `elke ${hourInterval} uur`;
+    }
+
+    // Handle "0 0 * * *" (midnight)
+    if (hour === '0' && minute === '0') {
       const hoursUntil = 24 - currentHour;
       return `over ${hoursUntil} uur (00:00)`;
     }
@@ -192,21 +214,27 @@ export const SystemMonitor = () => {
   const functions = [
     {
       name: 'auto-knowledge-harvester',
-      cron: 'ultra-auto-harvester',
-      description: 'Zoekt automatisch 50+ onderwerpen per run',
-      schedule: '0 */1 * * *',
+      cron: 'auto-knowledge-harvester',
+      description: 'Zoekt automatisch 128 planning & matching onderwerpen per run',
+      schedule: '0,30 */2 * * *',
     },
     {
       name: 'self-trainer',
-      cron: 'ultra-self-trainer',
-      description: 'Stelt zichzelf vragen en leert van antwoorden',
-      schedule: '0 */1 * * *',
+      cron: 'self-trainer',
+      description: 'Stelt 52 planning/matching vragen en leert van antwoorden',
+      schedule: '*/100 * * * *',
     },
     {
       name: 'knowledge-graph-builder',
-      cron: 'ultra-knowledge-graph',
+      cron: 'knowledge-graph-builder',
       description: 'Bouwt relaties tussen knowledge items',
-      schedule: '0 */1 * * *',
+      schedule: '0 */2 * * *',
+    },
+    {
+      name: 'batch-vision-processor',
+      cron: 'batch-vision-processor',
+      description: 'Verwerkt documenten met Vision AI (CVs, contracts, schedules)',
+      schedule: '0 */6 * * *',
     },
   ];
 
@@ -324,11 +352,12 @@ export const SystemMonitor = () => {
           <CardTitle>ℹ️ Systeem Informatie</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <p>✅ <strong>Status:</strong> Alle autonome functies zijn nu PUBLIEK (verify_jwt = false)</p>
-          <p>🔒 <strong>Veiligheid:</strong> CUTOFF_DATE hardcoded tot 6 oktober 2025, 23:59</p>
-          <p>⏰ <strong>Schedule:</strong> Auto-runs elk uur (00:00, 01:00, 02:00, etc.)</p>
-          <p>💰 <strong>Budget:</strong> Geschatte waarde €320 tot cutoff (GRATIS promo periode)</p>
-          <p>📈 <strong>Verwachting:</strong> 8,000-10,000 knowledge items en 50,000+ relationships</p>
+          <p>🚀 <strong>Status:</strong> FULL 300% TURBO MODE actief (4 functies)</p>
+          <p>🔒 <strong>Veiligheid:</strong> CUTOFF_DATE tot 6 oktober 2025, 23:59</p>
+          <p>⏰ <strong>Frequentie:</strong> Harvester 9.6x/dag • Self-trainer 14.4x/dag • Graph 12x/dag • Vision 4x/dag</p>
+          <p>🎯 <strong>Focus:</strong> 128 planning & matching topics + 52 gerichte vragen + vision docs</p>
+          <p>💰 <strong>Kosten:</strong> €0 tot 6 okt (2.3M tokens gratis promo) • Daarna €0.03/dag</p>
+          <p>📈 <strong>Verwachting:</strong> 5,400+ knowledge items by 6 okt (waarvan ~2,800 planning/matching)</p>
         </CardContent>
       </Card>
     </div>
