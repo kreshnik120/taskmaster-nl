@@ -50,12 +50,39 @@ serve(async (req) => {
 
     console.log('🌐 Auto Knowledge Harvester starting search...');
 
+    // ULTRA TOPICS: 50+ onderwerpen voor maximale coverage
     const defaultTopics = [
-      'CAO VVT wijzigingen 2025',
-      'ZZP wetgeving update Nederland 2025',
-      'BIG-registratie nieuwe eisen',
-      'Zorgtarieven 2025',
-      'Wet DBA update'
+      // CAO & Arbeidsvoorwaarden (12)
+      'CAO VVT wijzigingen 2025', 'CAO GGZ updates 2025', 'CAO Sociaal Werk nieuwe regels',
+      'Eindejaarsuitkering zorg 2025', 'Vakantietoeslag regelgeving', 'Pensioenregeling zorg PFZW',
+      'Onregelmatigheidstoeslag (ORT) tarieven', 'Overwerk compensatie zorg', 'Bereikbaarheidsdienst vergoeding',
+      'Oproepkrachten rechten CAO', 'Parttimers secundaire arbeidsvoorwaarden', 'Loonschalen zorg 2025',
+      
+      // ZZP & DBA (10)
+      'ZZP wetgeving Nederland 2025', 'Wet DBA handhaving 2025', 'Fictieve dienstbetrekking criteria',
+      'ZZP opdrachtgeversverklaring eisen', 'Modelovereenkomst ZZP zorg', 'VAR verklaring afschaffing',
+      'G-rekening ZZP constructie', 'Ketenaansprakelijkheid WKA zorg', 'ZZP rechten en plichten',
+      'Tarievenafspraken ZZP zorg',
+      
+      // Registraties & Kwalificaties (8)
+      'BIG-registratie nieuwe eisen 2025', 'LRZa registratie verplichtingen', 'SKJ register jeugdzorg',
+      'Kwaliteitsregister Verpleegkundigen', 'VOG aanvraag procedure zorg', 'Artikel 9 screening zorg',
+      'Herregistratie BIG verplichtingen', 'E-learning verplicht zorg',
+      
+      // Wetgeving & Compliance (10)
+      'Wtza vergunningplicht zorg', 'Wkkgz meldplicht incidenten', 'AVG privacy zorg',
+      'Zorgverzekeringswet Zvw updates', 'Wet langdurige zorg Wlz wijzigingen', 'WMO 2015 nieuwe regels',
+      'Jeugdwet aanpassingen', 'Kwaliteitswet zorginstellingen', 'IGJ toezicht nieuwe eisen',
+      'NEN normeringen zorg',
+      
+      // Tarieven & Financiën (8)
+      'Zorgtarieven NZa 2025', 'ZZP tariefadvies 2025', 'Wmo tarief per uur',
+      'Pgb budget 2025', 'Zorgzwaartepakketten ZZP tarieven', 'Uurtarief Wlz 2025',
+      'Jeugdzorg tarief per uur', 'NZa beleidsregels tarieven',
+      
+      // Verzekeringen & Aansprakelijkheid (5)
+      'Beroepsaansprakelijkheidsverzekering BAV eisen', 'Bedrijfsaansprakelijkheid zorg minimum',
+      'Arbeidsongeschiktheidsverzekering ZZP', 'Aansprakelijkheid zorgverlener', 'Verzekeringen verplicht ZZP'
     ];
 
     const topics = search_topics || defaultTopics;
@@ -76,29 +103,52 @@ serve(async (req) => {
           messages: [
             {
               role: 'system',
-              content: `Je bent een research assistant die actuele informatie zoekt en valideert.
+              content: `Je bent een ULTRA research assistant die actuele informatie zoekt en valideert met MULTI-TIER validation.
+
+TIER 1 BRONNEN (confidence 0.9-1.0):
+- overheid.nl, rijksoverheid.nl, belastingdienst.nl
+- nza.nl (Nederlandse Zorgautoriteit)
+- igj.nl (Inspectie Gezondheidszorg en Jeugd)
+- officiële CAO websites (caovvt.nl)
+
+TIER 2 BRONNEN (confidence 0.7-0.9):
+- actiz.nl, btsg.nl, ggznederland.nl (brancheorganisaties)
+- nivel.nl (Nederlands instituut voor onderzoek)
+- vilans.nl (kenniscentrum langdurige zorg)
+- vgn.nl (Vereniging Gehandicaptenzorg)
+
+TIER 3 BRONNEN (confidence 0.5-0.7):
+- zorgvisie.nl, skipr.nl (vakbladen)
+- universiteiten en hogescholen (.edu)
+- adviesbureaus en consultancy
 
 Voor het gegeven onderwerp:
-1. Zoek naar actuele, betrouwbare informatie
-2. Valideer de bronnen (officiële overheid, brancheorganisaties)
-3. Extraheer concrete feiten en cijfers
-4. Geef confidence score (0.0-1.0) op basis van betrouwbaarheid bron
+1. Zoek in MEERDERE bronnen (minimaal 2 verschillende tiers)
+2. Cross-valideer informatie tussen bronnen
+3. Extraheer concrete feiten, cijfers, datums
+4. Geef confidence score gebaseerd op:
+   - Tier van de bron (zie boven)
+   - Actualiteit (2024-2025 = +0.1, 2023 = +0.0, ouder = -0.2)
+   - Cross-validatie (2+ bronnen bevestigen = +0.1)
 
 Output ALLEEN valid JSON:
 {
   "found_information": true/false,
   "items": [
     {
-      "category": "compliance/tarieven/cao/etc",
-      "key": "short_descriptive_key",
-      "value": "detailed_information",
-      "confidence": 0.0-1.0,
-      "source_url": "url",
-      "source_type": "officieel/branche/news",
-      "date_published": "YYYY-MM-DD"
+      "category": "compliance/tarieven/cao/zzp/registraties/wetgeving/verzekeringen",
+      "key": "descriptive_unique_key",
+      "value": "detailed_information_with_specifics",
+      "confidence": 0.5-1.0,
+      "source_url": "primary_source_url",
+      "source_type": "tier1_officieel/tier2_branche/tier3_vakblad",
+      "date_published": "YYYY-MM-DD",
+      "cross_validated": true/false,
+      "validation_sources": ["url1", "url2"]
     }
   ],
-  "search_quality": "excellent/good/poor"
+  "search_quality": "excellent/good/poor",
+  "total_sources_checked": 3
 }`
             },
             {
@@ -129,8 +179,13 @@ Output ALLEEN valid JSON:
 
       if (searchResults.found_information && searchResults.items) {
         for (const item of searchResults.items) {
-          // Only store high-quality information from reliable sources
-          if (item.confidence >= 0.7 && ['officieel', 'branche'].includes(item.source_type)) {
+          // ULTRA MODE: Lowered threshold to 0.5, accept all tier sources
+          if (item.confidence >= 0.5) {
+            // Boost confidence if cross-validated
+            const finalConfidence = item.cross_validated 
+              ? Math.min(item.confidence + 0.1, 1.0) 
+              : item.confidence;
+
             newKnowledge.push({
               org_id: userOrg.org_id,
               user_id: user.id,
@@ -141,10 +196,13 @@ Output ALLEEN valid JSON:
                 source_url: item.source_url,
                 source_type: item.source_type,
                 date_published: item.date_published,
+                cross_validated: item.cross_validated || false,
+                validation_sources: item.validation_sources || [],
                 auto_harvested: true,
-                harvest_date: new Date().toISOString()
+                harvest_date: new Date().toISOString(),
+                search_quality: searchResults.search_quality
               },
-              confidence_score: item.confidence,
+              confidence_score: finalConfidence,
               source: `auto-harvest:${topic}`
             });
           }
@@ -169,11 +227,22 @@ Output ALLEEN valid JSON:
       }
     }
 
+    // Calculate quality metrics
+    const avgConfidence = newKnowledge.length > 0
+      ? newKnowledge.reduce((sum, item) => sum + item.confidence_score, 0) / newKnowledge.length
+      : 0;
+    const crossValidatedCount = newKnowledge.filter(item => 
+      item.value.cross_validated === true
+    ).length;
+
     return new Response(JSON.stringify({
       success: true,
       topics_searched: topics.length,
       items_found: newKnowledge.length,
       items_stored: insertedCount,
+      avg_confidence: avgConfidence.toFixed(2),
+      cross_validated_items: crossValidatedCount,
+      quality_rate: `${((crossValidatedCount / Math.max(insertedCount, 1)) * 100).toFixed(1)}%`,
       warning: 'This function will be auto-disabled after October 6th'
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -49,10 +49,13 @@ serve(async (req) => {
 
     if (!userOrg) throw new Error('No organization found');
 
-    const { batch_size = 50 } = await req.json();
+    const { batch_size, parallel_mode } = await req.json();
 
-    console.log(`🧠 Starting Knowledge Graph Builder for org ${userOrg.org_id}`);
-    console.log(`📊 Processing batch of ${batch_size} items`);
+    // ULTRA MODE: Process 200 items per batch (was 50)
+    const effectiveBatchSize = batch_size || 200;
+
+    console.log(`🧠 ULTRA Knowledge Graph Builder for org ${userOrg.org_id}`);
+    console.log(`📊 Processing batch of ${effectiveBatchSize} items (parallel: ${parallel_mode})`);
 
     // Fetch knowledge items
     const { data: knowledgeItems, error: fetchError } = await supabase
@@ -60,7 +63,8 @@ serve(async (req) => {
       .select('id, category, key, value, confidence_score')
       .eq('org_id', userOrg.org_id)
       .is('deleted_at', null)
-      .limit(batch_size);
+      .order('created_at', { ascending: false })
+      .limit(effectiveBatchSize);
 
     if (fetchError) throw fetchError;
     if (!knowledgeItems || knowledgeItems.length === 0) {
@@ -92,30 +96,52 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-pro',
         messages: [
           {
             role: 'system',
-            content: `Je bent een knowledge graph expert die semantische relaties detecteert tussen kennisitems.
+            content: `Je bent een ULTRA knowledge graph expert die semantische relaties detecteert tussen kennisitems.
             
-Analyseer de gegeven kennisitems en detecteer ALLE mogelijke relaties tussen ze.
+ULTRA MODE: Detecteer ook 2e-graads relaties en hiërarchieën.
 
-Relationship types:
+EXTENDED Relationship Types (12):
 - "contradicts": Items die elkaar tegenspreken
 - "supports": Items die elkaar ondersteunen/aanvullen
-- "related_to": Items die gerelateerd zijn aan elkaar
-- "depends_on": Item A hangt af van/vereist item B
-- "supersedes": Item A vervangt/overschrijft item B (newer info)
-- "exemplifies": Item A is een voorbeeld van item B
-- "compares": Items die vergeleken moeten worden
+- "extends": Item breidt ander item uit met details
+- "requires": Item vereist ander item (harde afhankelijkheid)
+- "prerequisite": Item is voorwaarde voor ander item
+- "replaces": Nieuwe info vervangt oude (met datum)
+- "supersedes": Nieuwere versie van oude info
+- "related_to": Algemene thematische relatie
+- "part_of": Item is onderdeel van groter geheel
+- "example_of": Item is voorbeeld van algemene regel
+- "alternative": Item is alternatief voor ander item
+- "price_comparison": Tariefvergelijking tussen items
+
+ADVANCED ANALYSIS:
+- Detecteer ook indirecte relaties (A→B, B→C betekent A⇢C)
+- Let op temporele relaties (oude vs nieuwe regelgeving)
+- Identificeer hiërarchieën (CAO → schaal → functie)
+- Zoek cross-category relaties
 
 Voor elke relatie, geef:
-1. source_id en target_id
-2. relationship_type
-3. confidence (0.0-1.0 hoe zeker je bent)
-4. context (waarom deze relatie bestaat, max 200 chars)
+1. source_id en target_id (UUID's)
+2. relationship_type (uit bovenstaande lijst)
+3. confidence (0.5-1.0)
+4. context (gedetailleerde uitleg, max 200 chars)
+5. strength ("weak"/"medium"/"strong")
 
-Output ALLEEN valid JSON array, geen extra tekst.`
+Output ALLEEN valid JSON array:
+[
+  {
+    "source_id": "uuid",
+    "target_id": "uuid",
+    "relationship_type": "type",
+    "confidence": 0.8,
+    "context": "explanation",
+    "strength": "medium"
+  }
+]`
           },
           {
             role: 'user',
@@ -158,39 +184,45 @@ Output ALLEEN valid JSON array, geen extra tekst.`
 
     console.log(`🔗 Detected ${relationships.length} relationships`);
 
-    // Store relationships in database
+    // ULTRA MODE: Batch insert relationships with enhanced metadata
     let insertedCount = 0;
-    const errors = [];
+    const errors: Array<{error: string, count?: number}> = [];
 
-    for (const rel of relationships) {
+    if (relationships.length > 0) {
       try {
-        const { error: insertError } = await supabase
+        const relationshipsToInsert = relationships.map((rel: any) => ({
+          source_knowledge_id: rel.source_id,
+          target_knowledge_id: rel.target_id,
+          relationship_type: rel.relationship_type,
+          confidence_score: rel.confidence || 0.8,
+          detected_by: 'ai',
+          context: rel.context || '',
+          metadata: {
+            strength: rel.strength || 'medium',
+            model: 'gemini-2.5-pro',
+            detected_at: new Date().toISOString(),
+            batch_size: effectiveBatchSize,
+            ultra_mode: true
+          }
+        }));
+
+        const { data: inserted, error: batchError } = await supabase
           .from('knowledge_relationships')
-          .upsert({
-            source_knowledge_id: rel.source_id,
-            target_knowledge_id: rel.target_id,
-            relationship_type: rel.relationship_type,
-            confidence_score: rel.confidence || 0.8,
-            detected_by: 'ai',
-            context: rel.context || '',
-            metadata: {
-              model: 'gemini-2.5-flash',
-              detected_at: new Date().toISOString()
-            }
-          }, {
+          .upsert(relationshipsToInsert, {
             onConflict: 'source_knowledge_id,target_knowledge_id,relationship_type',
             ignoreDuplicates: false
-          });
+          })
+          .select();
 
-        if (insertError) {
-          console.error('Insert error:', insertError);
-          errors.push({ rel, error: insertError.message });
+        if (batchError) {
+          console.error('Batch insert error:', batchError);
+          errors.push({ error: batchError.message, count: relationships.length });
         } else {
-          insertedCount++;
+          insertedCount = inserted?.length || 0;
         }
       } catch (err) {
-        console.error('Error processing relationship:', err);
-        errors.push({ rel, error: err instanceof Error ? err.message : String(err) });
+        console.error('Error processing relationships:', err);
+        errors.push({ error: err instanceof Error ? err.message : String(err) });
       }
     }
 
@@ -198,6 +230,16 @@ Output ALLEEN valid JSON array, geen extra tekst.`
     const executionTime = Date.now() - startTime;
     const inputTokens = Math.ceil(JSON.stringify(knowledgeContext).length / 4);
     const outputTokens = Math.ceil(aiContent.length / 4);
+
+    // Calculate relationship type distribution
+    const typeDistribution = relationships.reduce((acc: Record<string, number>, rel: any) => {
+      acc[rel.relationship_type] = (acc[rel.relationship_type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const avgConfidence = relationships.length > 0 
+      ? relationships.reduce((sum: number, r: any) => sum + r.confidence, 0) / relationships.length
+      : 0;
 
     await supabase.from('function_call_logs').insert({
       user_id: user.id,
@@ -207,24 +249,29 @@ Output ALLEEN valid JSON array, geen extra tekst.`
       output_tokens: outputTokens,
       total_tokens: inputTokens + outputTokens,
       estimated_cost_eur: 0, // Free during promotion
-      model_used: 'gemini-2.5-flash',
+      model_used: 'gemini-2.5-pro',
       success: true,
       execution_time_ms: executionTime
     });
 
-    console.log(`✅ Successfully inserted ${insertedCount} relationships`);
+    console.log(`✅ ULTRA MODE: Successfully inserted ${insertedCount} relationships`);
+    console.log(`📊 Type distribution:`, typeDistribution);
     if (errors.length > 0) {
       console.log(`⚠️ ${errors.length} errors occurred during insertion`);
     }
 
     return new Response(JSON.stringify({
       success: true,
+      mode: 'ultra',
       knowledge_items_analyzed: knowledgeItems.length,
       relationships_detected: relationships.length,
       relationships_stored: insertedCount,
+      relationship_types: typeDistribution,
+      avg_confidence: avgConfidence.toFixed(2),
       errors: errors.length,
       execution_time_ms: executionTime,
-      tokens_used: inputTokens + outputTokens
+      tokens_used: inputTokens + outputTokens,
+      cost_estimate: `€${((inputTokens + outputTokens) * 0.000001 * 0.30).toFixed(4)}`
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

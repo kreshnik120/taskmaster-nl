@@ -1636,7 +1636,15 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      autonomous_system_status: {
+        Row: {
+          component: string | null
+          items_generated: number | null
+          items_last_24h: number | null
+          last_run: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       user_is_org_member: {

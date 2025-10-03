@@ -74,3 +74,6 @@ verify_jwt = true
 
 [functions.vision-document-processor]
 verify_jwt = true
+
+[functions.self-trainer]
+verify_jwt = true
