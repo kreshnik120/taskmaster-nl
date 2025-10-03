@@ -53,7 +53,7 @@ verify_jwt = true
 
 [functions.knowledge-graph-builder]
 verify_jwt = false
-schedule = "15 */2 * * *"
+schedule = "15 * * * *"
 
 [functions.continuous-learner]
 verify_jwt = true
@@ -63,11 +63,11 @@ verify_jwt = true
 
 [functions.tariff-analyzer]
 verify_jwt = false
-schedule = "0 */12 * * *"
+schedule = "45 * * * *"
 
 [functions.professional-matcher]
 verify_jwt = false
-schedule = "0 */6 * * *"
+schedule = "40 * * * *"
 
 [functions.planning-optimizer]
 verify_jwt = false
@@ -78,14 +78,14 @@ verify_jwt = true
 
 [functions.auto-knowledge-harvester]
 verify_jwt = false
-schedule = "5 */2 * * *"
+schedule = "5 * * * *"
 
 [functions.vision-document-processor]
 verify_jwt = true
 
 [functions.self-trainer]
 verify_jwt = false
-schedule = "25 * * * *"
+schedule = "10 * * * *"
 
 [functions.batch-vision-processor]
 verify_jwt = false
@@ -93,7 +93,7 @@ schedule = "35 */6 * * *"
 
 [functions.mega-forecast-generator]
 verify_jwt = false
-schedule = "0 8 * * *"
+schedule = "50 * * * *"
 
 [functions.professional-enricher]
 verify_jwt = false
@@ -109,16 +109,16 @@ schedule = "10 */4 * * *"
 
 [functions.data-quality-auditor]
 verify_jwt = false
-schedule = "0 1 * * *"
+schedule = "20 * * * *"
 
 [functions.compliance-monitor]
 verify_jwt = false
-schedule = "0 3 * * *"
+schedule = "25 * * * *"
 
 [functions.smart-deduplicator]
 verify_jwt = false
-schedule = "0 4 * * 0"
+schedule = "30 * * * *"
 
 [functions.source-validator]
 verify_jwt = false
-schedule = "0 5 * * 1"
+schedule = "35 * * * *"
