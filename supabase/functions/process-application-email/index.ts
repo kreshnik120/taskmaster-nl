@@ -146,7 +146,7 @@ Geef terug in dit EXACTE JSON formaat (geen extra tekst):
   "adres": "Straat + huisnummer of null",
   "postcode": "1234AB of null",
   "woonplaats": "Amsterdam of null",
-  "functie_niveau": "VP4, VP5, VIG, of Helpende",
+  "functie_niveau": "VIG, VP3, VP4, HBO-V, of Helpende 2",
   "werkvorm": "ZZP of Uitzendkracht",
   "skills": ["skill1", "skill2"],
   "regio": "Utrecht, Amsterdam, etc",
@@ -161,11 +161,18 @@ Geef terug in dit EXACTE JSON formaat (geen extra tekst):
   "confidence": 0.8
 }
 
-Belangrijke regels:
-- functie_niveau moet exact zijn: VP4, VP5, VIG, of Helpende
-- werkvorm moet exact zijn: ZZP of Uitzendkracht
+**KRITIEK - functie_niveau moet EXACT een van deze waarden zijn:**
+- "VIG" (voor Verzorgende IG)
+- "VP3" (voor Verzorgende Niveau 3)
+- "VP4" (voor Verzorgende Niveau 4)
+- "HBO-V" (voor HBO Verpleegkundige)
+- "Helpende 2"
+
+Belangrijk:
+- functie_niveau: gebruik exact VIG, VP3, VP4, HBO-V, of Helpende 2
+- werkvorm: gebruik exact ZZP of Uitzendkracht
 - Als info ontbreekt, gebruik null
-- missing_info moet een array zijn van ALLE ontbrekende zaken (inclusief Adres, Telefoonnummer, VOG, BIG-nummer, Auto, Rijbewijs)
+- missing_info moet een array zijn van ALLE ontbrekende zaken
 - gewenst_uurloon is een getal (euro per uur)
 - vog_date is een datum (YYYY-MM-DD format)
 - heeft_auto en heeft_rijbewijs zijn boolean (true/false)`;
@@ -227,6 +234,33 @@ Belangrijke regels:
         missing_info: ["VOG", "BIG-nummer", "Tarief", "Regio", "Adres", "Telefoonnummer", "Auto", "Rijbewijs"],
         confidence: 0.3,
       };
+    }
+
+    // 🔧 POST-PROCESSING: Map functie_niveau variations to exact DB values
+    if (extractedData.functie_niveau) {
+      const functieNiveauMapping: Record<string, string> = {
+        "verzorgende ig": "VIG",
+        "verzorgende IG": "VIG",
+        "vig": "VIG",
+        "verzorgende niveau 3": "VP3",
+        "verzorgende 3": "VP3",
+        "vp3": "VP3",
+        "verzorgende niveau 4": "VP4",
+        "verzorgende 4": "VP4",
+        "vp4": "VP4",
+        "hbo verpleegkundige": "HBO-V",
+        "hbo-v": "HBO-V",
+        "hbov": "HBO-V",
+        "helpende": "Helpende 2",
+        "helpende 2": "Helpende 2",
+        "helpende niveau 2": "Helpende 2",
+      };
+
+      const normalized = extractedData.functie_niveau.toLowerCase().trim();
+      if (functieNiveauMapping[normalized]) {
+        console.log(`Mapped functie_niveau: "${extractedData.functie_niveau}" → "${functieNiveauMapping[normalized]}"`);
+        extractedData.functie_niveau = functieNiveauMapping[normalized];
+      }
     }
 
     // Calculate completeness score (0-100%)
