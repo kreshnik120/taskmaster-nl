@@ -15,6 +15,7 @@ export const DocumentUpload = () => {
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isFirefox, setIsFirefox] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -203,6 +204,53 @@ export const DocumentUpload = () => {
     await processFiles(files);
   };
 
+  const reprocessFailedDocuments = async () => {
+    setReprocessing(true);
+    try {
+      const { data: failedDocs, error } = await supabase
+        .from("training_documents")
+        .select("*")
+        .eq("status", "processing")
+        .is("processed_at", null);
+
+      if (error) throw error;
+      if (!failedDocs || failedDocs.length === 0) {
+        toast({
+          title: "Geen documenten om te herverwerken",
+          description: "Alle documenten zijn succesvol verwerkt.",
+        });
+        return;
+      }
+
+      toast({
+        title: "Herverwerken gestart",
+        description: `${failedDocs.length} document(en) worden opnieuw verwerkt met Vision API`,
+      });
+
+      for (const doc of failedDocs) {
+        await supabase.functions.invoke("process-training-document", {
+          body: { filePath: doc.file_path, fileName: doc.file_name },
+        });
+      }
+
+      toast({
+        title: "Herverwerking succesvol",
+        description: `${failedDocs.length} document(en) worden nu verwerkt`,
+      });
+      
+      refetch();
+    } catch (error: any) {
+      console.error("Reprocess error:", error);
+      toast({
+        title: "Herverwerking mislukt",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setReprocessing(false);
+    }
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "completed":
@@ -319,7 +367,29 @@ export const DocumentUpload = () => {
       </Card>
 
       <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Geüploade Documenten</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Geüploade Documenten</h3>
+          {documents && documents.some(doc => doc.status === "processing" && !doc.processed_at) && (
+            <Button 
+              onClick={reprocessFailedDocuments} 
+              disabled={reprocessing}
+              variant="outline"
+              size="sm"
+            >
+              {reprocessing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Herverwerken...
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="h-4 w-4 mr-2" />
+                  Herverwerk Documenten
+                </>
+              )}
+            </Button>
+          )}
+        </div>
         <div className="space-y-2">
           {documents && documents.length > 0 ? (
             documents.map((doc) => (
