@@ -363,7 +363,7 @@ Return JSON in dit formaat:
           .from("professional_applications")
           .update({ 
             professional_id: newProfessional.id,
-            status: "compleet",
+            status: "geaccepteerd",
             missing_info: [],
             completeness_score: 100,
             extracted_data: mergedData,
