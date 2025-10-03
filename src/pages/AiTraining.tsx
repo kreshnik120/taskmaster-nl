@@ -11,6 +11,7 @@ import { KnowledgeOverview } from "@/components/AITraining/KnowledgeOverview";
 import { SeedClientKnowledge } from "@/components/AITraining/SeedClientKnowledge";
 import { LearningDashboard } from "@/components/AITraining/LearningDashboard";
 import { SmartKnowledgeSearch } from "@/components/AITraining/SmartKnowledgeSearch";
+import { ConflictResolutionPanel } from "@/components/AITraining/ConflictResolutionPanel";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -67,8 +68,9 @@ const AiTraining = () => {
             </div>
 
             <Tabs defaultValue="dashboard" className="w-full">
-              <TabsList className="grid w-full grid-cols-5">
+              <TabsList className="grid w-full grid-cols-6">
                 <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
+                <TabsTrigger value="conflicts">⚠️ Conflicten</TabsTrigger>
                 <TabsTrigger value="search">🔍 Slim Zoeken</TabsTrigger>
                 <TabsTrigger value="chat">💬 Training</TabsTrigger>
                 <TabsTrigger value="documents">📄 Docs</TabsTrigger>
@@ -77,6 +79,10 @@ const AiTraining = () => {
 
               <TabsContent value="dashboard" className="mt-6">
                 <LearningDashboard />
+              </TabsContent>
+
+              <TabsContent value="conflicts" className="mt-6">
+                <ConflictResolutionPanel />
               </TabsContent>
 
               <TabsContent value="search" className="mt-6">

@@ -490,10 +490,63 @@ Geef je antwoord als gestructureerde kennis items.`,
       value: { content: extractedInfo, source_file: fileName },
       source: `document:${fileName}`,
       confidence_score: 0.9,
+      needs_review: false,
+      last_validation_error: null,
     },
   ];
 
-  await supabase.from("ai_knowledge_base").insert(knowledgeItems);
+  // PHASE 2: Pre-Insert Duplicate Detection
+  const itemsToInsert = [];
+  
+  for (const newItem of knowledgeItems) {
+    // Simplify key by removing timestamps
+    const simplifiedKey = newItem.key.replace(/_\d+$/, '');
+    
+    // Check for existing similar items
+    const { data: existingItems } = await supabase
+      .from('ai_knowledge_base')
+      .select('*')
+      .eq('category', newItem.category)
+      .eq('org_id', orgId)
+      .ilike('key', `%${simplifiedKey.split('_').slice(0, -1).join('_')}%`);
+    
+    let shouldInsert = true;
+    
+    if (existingItems && existingItems.length > 0) {
+      for (const existing of existingItems) {
+        const isSameValue = JSON.stringify(existing.value) === JSON.stringify(newItem.value);
+        
+        if (isSameValue) {
+          // BOOST confidence instead of creating duplicate
+          console.log(`✅ Boosted confidence for existing item: ${existing.key}`);
+          await supabase
+            .from('ai_knowledge_base')
+            .update({
+              confidence_score: Math.min(1.0, (existing.confidence_score || 0.5) + 0.1),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existing.id);
+          
+          shouldInsert = false;
+          break;
+        } else {
+          // DIFFERENT value → mark for review
+          console.warn(`⚠️ Potential conflict detected: ${newItem.key} vs ${existing.key}`);
+          (newItem as any).needs_review = true;
+          (newItem as any).last_validation_error = `Mogelijk conflict met bestaand item ${existing.id}`;
+        }
+      }
+    }
+    
+    if (shouldInsert) {
+      itemsToInsert.push(newItem);
+    }
+  }
+
+  // Insert only non-duplicate items
+  if (itemsToInsert.length > 0) {
+    await supabase.from("ai_knowledge_base").insert(itemsToInsert);
+  }
 
   // Update status for small files only
   if (currentProgress === 0) {

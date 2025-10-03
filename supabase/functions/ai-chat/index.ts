@@ -25,6 +25,90 @@ function extractClientFromKnowledge(kb: any): string | null {
   return null;
 }
 
+// PHASE 2: Get suggested source documents for conflicting knowledge items
+async function getSuggestedDocuments(
+  conflictedKnowledgeIds: string[],
+  supabase: any
+): Promise<{ document_name: string; kb_count: number }[]> {
+  const { data: knowledgeItems } = await supabase
+    .from('ai_knowledge_base')
+    .select('source, key')
+    .in('id', conflictedKnowledgeIds);
+  
+  // Extract and count source documents
+  const documentCounts: { [doc: string]: number } = {};
+  
+  knowledgeItems?.forEach((kb: any) => {
+    if (kb.source?.startsWith('document:')) {
+      const docName = kb.source.replace('document:', '');
+      documentCounts[docName] = (documentCounts[docName] || 0) + 1;
+    }
+  });
+  
+  return Object.entries(documentCounts)
+    .map(([name, count]) => ({ document_name: name, kb_count: count }))
+    .sort((a, b) => b.kb_count - a.kb_count); // Most relevant first
+}
+
+// PHASE 2: AI-Assisted conflict resolution using heuristics
+function analyzeConflict(items: any[]): {
+  recommended_id: string;
+  reason: string;
+  confidence: number;
+} {
+  // Heuristics scoring:
+  // 1. Newest created_at (+30 points)
+  // 2. Highest confidence_score (+40 points)
+  // 3. Most usage_count (+20 points)
+  // 4. Source = "document" (+10 points)
+  
+  const scores = items.map(item => {
+    let score = 0;
+    
+    // Recency
+    const ageInDays = (Date.now() - new Date(item.created_at).getTime()) / (1000 * 60 * 60 * 24);
+    if (ageInDays < 7) score += 30;
+    else if (ageInDays < 30) score += 20;
+    
+    // Confidence
+    score += (item.confidence_score || 0.5) * 40;
+    
+    // Usage
+    score += Math.min(20, (item.usage_count || 0) * 2);
+    
+    // Source
+    if (item.source?.includes('document')) score += 10;
+    
+    return { id: item.id, key: item.key, score };
+  });
+  
+  scores.sort((a, b) => b.score - a.score);
+  
+  const winner = scores[0];
+  let reason = `Hoogste score (${winner.score.toFixed(0)}/100)`;
+  
+  // Add specific reasons
+  const reasons = [];
+  const winnerItem = items.find(i => i.id === winner.id);
+  if (winnerItem) {
+    const ageInDays = (Date.now() - new Date(winnerItem.created_at).getTime()) / (1000 * 60 * 60 * 24);
+    if (ageInDays < 7) reasons.push('nieuwste data');
+    if ((winnerItem.confidence_score || 0) > 0.8) reasons.push('hoogste zekerheid');
+    if ((winnerItem.usage_count || 0) > 5) reasons.push('meest gebruikt');
+    if (winnerItem.source?.includes('document')) reasons.push('uit document');
+  }
+  
+  if (reasons.length > 0) {
+    reason += ` - ${reasons.join(', ')}`;
+  }
+  
+  return {
+    recommended_id: winner.id,
+    reason,
+    confidence: winner.score / 100
+  };
+}
+
 // Detect conflicts between knowledge items
 async function detectKnowledgeConflicts(
   knowledgeBase: any[],
@@ -60,6 +144,14 @@ async function detectKnowledgeConflicts(
       if (uniqueTariffs.length > 1) {
         console.error(`🚨 CONFLICT DETECTED in ${groupKey}:`, uniqueTariffs);
         
+        // PHASE 2: Get suggested documents and AI recommendation
+        const suggestedDocs = await getSuggestedDocuments(
+          items.map(kb => kb.id),
+          supabase
+        );
+        
+        const aiRecommendation = analyzeConflict(items);
+        
         // Create high-priority intelligence alert
         await supabase.from('business_intelligence').insert({
           org_id: orgId,
@@ -71,9 +163,14 @@ async function detectKnowledgeConflicts(
             conflicting_items: items.map(kb => ({
               id: kb.id,
               key: kb.key,
-              value: kb.value
+              value: kb.value,
+              confidence: kb.confidence_score,
+              usage_count: kb.usage_count,
+              created_at: kb.created_at
             })),
-            unique_values: uniqueTariffs
+            unique_values: uniqueTariffs,
+            suggested_documents: suggestedDocs,
+            ai_recommendation: aiRecommendation
           },
           impact_score: 0.9
         });
