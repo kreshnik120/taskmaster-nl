@@ -90,13 +90,6 @@ serve(async (req) => {
       .eq('org_id', orgId)
       .limit(50);
 
-    const { data: professionals } = await supabase
-      .from('professionals')
-      .select('id, full_name, functie_niveau')
-      .eq('org_id', orgId)
-      .eq('status', 'actief')
-      .limit(20);
-
     const systemPrompt = `Je bent een expert planner voor ABCzorg en CitoZorg, Nederlandse zorginstellingen.
 
 CONTEXT:
@@ -124,7 +117,6 @@ GENEREER ${tasksToGenerate} realistische taken in JSON array formaat:
     "category": "Een van bovenstaande categorieën",
     "priority": "low/medium/high",
     "client_id": "UUID van client of null",
-    "assigned_to": "UUID van professional of null",
     "estimated_hours": 1-8,
     "complexity": 1-5,
     "urgency": 1-5
@@ -136,7 +128,8 @@ BELANGRIJK:
 - Mix van urgent/regulier werk
 - Realistische tijdsinschattingen
 - Sommige taken zijn client-specifiek, andere algemeen
-- Varieer in complexiteit (simpel tot expert-niveau)`;
+- Varieer in complexiteit (simpel tot expert-niveau)
+- Genereer ONGEASSIGNEERDE forecast taken (voor autonome AI planning)`;
 
     const batchSize = 50;
     const batches = Math.ceil(tasksToGenerate / batchSize);
@@ -159,7 +152,7 @@ BELANGRIJK:
             { role: 'system', content: systemPrompt.replace(`${tasksToGenerate}`, `${tasksInBatch}`) },
             { 
               role: 'user', 
-              content: `Genereer ${tasksInBatch} forecast taken voor:\n\nClients: ${JSON.stringify(clients?.slice(0, 10) || [])}\n\nProfessionals: ${JSON.stringify(professionals?.slice(0, 5) || [])}`
+              content: `Genereer ${tasksInBatch} ongeassigneerde forecast taken voor autonome planning.\n\nBeschikbare clients: ${JSON.stringify(clients?.slice(0, 10) || [])}\n\nNOTE: Genereer taken ZONDER toewijzing aan specifieke professionals. De AI zal deze later autonoom plannen op basis van data-analyse.`
             }
           ],
           temperature: 0.9,
@@ -213,7 +206,7 @@ BELANGRIJK:
           return 'MEDIUM';
         })(),
         client_id: task.client_id || null,
-        assignee_id: task.assigned_to || null,
+        assignee_id: null,
         estimated_hours: task.estimated_hours || 2,
         category: task.category || 'Algemeen',
         is_forecast: true,
