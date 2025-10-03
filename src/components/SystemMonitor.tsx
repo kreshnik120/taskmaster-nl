@@ -150,45 +150,124 @@ export const SystemMonitor = () => {
     const now = new Date();
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
+    const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
 
-    // Parse cron schedule
+    // Parse cron schedule: minute hour day month weekday
     const parts = schedule.split(' ');
     const minute = parts[0];
     const hour = parts[1];
+    const dayOfMonth = parts[2];
+    const month = parts[3];
+    const weekday = parts[4];
 
-    // Handle "*/100 * * * *" (every 100 minutes)
-    if (minute.startsWith('*/')) {
-      const interval = parseInt(minute.substring(2));
-      return `elke ${interval} minuten`;
-    }
+    // Helper: format tijd
+    const formatTime = (h: number, m: number) => {
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    };
 
-    // Handle "0,30 */2 * * *" (every 2 hours at :00 and :30)
-    if (minute.includes(',') && hour.startsWith('*/')) {
+    // Helper: weekdag naam
+    const weekdayName = (day: number) => {
+      const names = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
+      return names[day];
+    };
+
+    // 1. Handle "5 */2 * * *" - Specific minute + interval hour
+    if (!minute.includes('*') && !minute.includes(',') && hour.startsWith('*/') && weekday === '*') {
+      const targetMinute = parseInt(minute);
       const hourInterval = parseInt(hour.substring(2));
-      const minutes = minute.split(',').map(m => parseInt(m));
-      const nextMinutes = minutes.filter(m => m > currentMinute);
-      if (nextMinutes.length > 0) {
-        return `over ${nextMinutes[0] - currentMinute} minuten`;
+      
+      // Calculate next occurrence
+      const minutesIntoInterval = (currentHour % hourInterval) * 60 + currentMinute;
+      const targetMinuteInInterval = targetMinute;
+      
+      if (minutesIntoInterval < targetMinuteInInterval) {
+        // Next run is in current interval
+        const minutesUntil = targetMinuteInInterval - minutesIntoInterval;
+        return `over ${minutesUntil} min`;
+      } else {
+        // Next run is in next interval
+        const minutesUntilNextInterval = (hourInterval * 60) - minutesIntoInterval;
+        const minutesUntil = minutesUntilNextInterval + targetMinute;
+        const hoursUntil = Math.floor(minutesUntil / 60);
+        const minsUntil = minutesUntil % 60;
+        if (hoursUntil > 0) {
+          return `over ${hoursUntil}u ${minsUntil}min`;
+        }
+        return `over ${minutesUntil} min`;
       }
-      return `over ${(60 - currentMinute) + minutes[0]} minuten`;
     }
 
-    // Handle "0 */X * * *" (every X hours)
-    if (hour.startsWith('*/')) {
+    // 2. Handle "25 * * * *" - Specific minute every hour
+    if (!minute.includes('*') && !minute.includes(',') && hour === '*' && weekday === '*') {
+      const targetMinute = parseInt(minute);
+      
+      if (currentMinute < targetMinute) {
+        const minutesUntil = targetMinute - currentMinute;
+        return `over ${minutesUntil} min`;
+      } else {
+        const minutesUntil = (60 - currentMinute) + targetMinute;
+        return `over ${minutesUntil} min`;
+      }
+    }
+
+    // 3. Handle "0 8 * * *" - Specific time daily
+    if (!minute.includes('*') && !hour.includes('*') && weekday === '*' && dayOfMonth === '*') {
+      const targetHour = parseInt(hour);
+      const targetMinute = parseInt(minute);
+      
+      if (currentHour < targetHour || (currentHour === targetHour && currentMinute < targetMinute)) {
+        // Today
+        const minutesUntil = (targetHour - currentHour) * 60 + (targetMinute - currentMinute);
+        const hoursUntil = Math.floor(minutesUntil / 60);
+        return `over ${hoursUntil}u (${formatTime(targetHour, targetMinute)})`;
+      } else {
+        // Tomorrow
+        return `morgen om ${formatTime(targetHour, targetMinute)}`;
+      }
+    }
+
+    // 4. Handle "0 4 * * 0" - Specific time on specific weekday
+    if (!minute.includes('*') && !hour.includes('*') && weekday !== '*' && dayOfMonth === '*') {
+      const targetWeekday = parseInt(weekday);
+      const targetHour = parseInt(hour);
+      const targetMinute = parseInt(minute);
+      
+      // Calculate days until target
+      let daysUntil = targetWeekday - currentDay;
+      if (daysUntil < 0) daysUntil += 7;
+      if (daysUntil === 0 && (currentHour > targetHour || (currentHour === targetHour && currentMinute >= targetMinute))) {
+        daysUntil = 7; // Next week
+      }
+      
+      if (daysUntil === 0) {
+        // Today
+        const minutesUntil = (targetHour - currentHour) * 60 + (targetMinute - currentMinute);
+        const hoursUntil = Math.floor(minutesUntil / 60);
+        return `over ${hoursUntil}u (${formatTime(targetHour, targetMinute)})`;
+      } else if (daysUntil === 1) {
+        return `morgen om ${formatTime(targetHour, targetMinute)}`;
+      } else {
+        return `${weekdayName(targetWeekday)} om ${formatTime(targetHour, targetMinute)}`;
+      }
+    }
+
+    // 5. Handle "0 */6 * * *" - Every X hours at minute 0
+    if (minute === '0' && hour.startsWith('*/') && weekday === '*') {
       const hourInterval = parseInt(hour.substring(2));
-      const minutesUntil = currentMinute === 0 ? hourInterval * 60 : (60 - currentMinute);
-      if (hourInterval === 1) {
-        return `over ${minutesUntil} minuten`;
+      
+      const minutesIntoInterval = (currentHour % hourInterval) * 60 + currentMinute;
+      const minutesUntil = (hourInterval * 60) - minutesIntoInterval;
+      
+      const hoursUntil = Math.floor(minutesUntil / 60);
+      const minsUntil = minutesUntil % 60;
+      
+      if (hoursUntil > 0) {
+        return `over ${hoursUntil}u ${minsUntil}min`;
       }
-      return `elke ${hourInterval} uur`;
+      return `over ${minutesUntil} min`;
     }
 
-    // Handle "0 0 * * *" (midnight)
-    if (hour === '0' && minute === '0') {
-      const hoursUntil = 24 - currentHour;
-      return `over ${hoursUntil} uur (00:00)`;
-    }
-
+    // Fallback
     return 'onbekend';
   };
 
