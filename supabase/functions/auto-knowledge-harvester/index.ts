@@ -265,10 +265,12 @@ Output ALLEEN valid JSON:
                 validation_sources: item.validation_sources || [],
                 auto_harvested: true,
                 harvest_date: new Date().toISOString(),
-                search_quality: searchResults.search_quality
+                search_quality: searchResults.search_quality,
+                last_verified: new Date().toISOString()
               },
               confidence_score: finalConfidence,
-              source: `auto-harvest:${topic}`
+              source: `auto-harvest:${topic}`,
+              last_used_at: new Date().toISOString()
             });
           }
         }
@@ -277,18 +279,45 @@ Output ALLEEN valid JSON:
 
     console.log(`📚 Found ${newKnowledge.length} new knowledge items to store`);
 
-    // Store new knowledge
+    // Store new knowledge with UPSERT (insert new + update existing)
     let insertedCount = 0;
+    let updatedCount = 0;
     if (newKnowledge.length > 0) {
+      // First, get existing keys to track updates vs inserts
+      const existingKeys = newKnowledge.map(item => item.key);
+      const { data: existing } = await supabase
+        .from('ai_knowledge_base')
+        .select('key, usage_count')
+        .in('key', existingKeys)
+        .eq('org_id', orgId)
+        .eq('user_id', userId);
+
+      // Enrich with incremented usage_count for existing items
+      const enrichedKnowledge = newKnowledge.map(item => {
+        const existingItem = existing?.find(e => e.key === item.key);
+        return {
+          ...item,
+          usage_count: existingItem ? (existingItem.usage_count || 0) + 1 : 1
+        };
+      });
+
+      // UPSERT: Insert new items, update existing ones
       const { data, error } = await supabase
         .from('ai_knowledge_base')
-        .insert(newKnowledge)
+        .upsert(enrichedKnowledge, {
+          onConflict: 'user_id,org_id,category,key',
+          ignoreDuplicates: false  // Update existing records
+        })
         .select();
 
       if (error) {
-        console.error('Insert error:', error);
+        console.error('❌ Upsert error:', error);
       } else {
-        insertedCount = data?.length || 0;
+        // Calculate inserted vs updated
+        const existingKeySet = new Set(existing?.map(e => e.key) || []);
+        insertedCount = data?.filter(d => !existingKeySet.has(d.key)).length || 0;
+        updatedCount = (data?.length || 0) - insertedCount;
+        console.log(`✅ Stored: ${insertedCount} nieuwe items, ${updatedCount} updates`);
       }
     }
 
@@ -304,10 +333,12 @@ Output ALLEEN valid JSON:
       success: true,
       topics_searched: topics.length,
       items_found: newKnowledge.length,
-      items_stored: insertedCount,
+      items_stored: insertedCount + updatedCount,
+      items_inserted: insertedCount,
+      items_updated: updatedCount,
       avg_confidence: avgConfidence.toFixed(2),
       cross_validated_items: crossValidatedCount,
-      quality_rate: `${((crossValidatedCount / Math.max(insertedCount, 1)) * 100).toFixed(1)}%`,
+      quality_rate: `${((crossValidatedCount / Math.max(insertedCount + updatedCount, 1)) * 100).toFixed(1)}%`,
       warning: 'This function will be auto-disabled after October 6th'
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
