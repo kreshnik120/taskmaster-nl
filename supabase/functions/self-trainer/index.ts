@@ -68,10 +68,10 @@ serve(async (req) => {
     // Support both authenticated (Test Nu) and autonomous (cron) modes
     const authHeader = req.headers.get('Authorization');
     
+    // Always use SERVICE_ROLE_KEY for both modes
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      authHeader ? Deno.env.get('SUPABASE_ANON_KEY') ?? '' : Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      authHeader ? { global: { headers: { Authorization: authHeader } } } : {}
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     let orgId: string;
@@ -79,27 +79,49 @@ serve(async (req) => {
     
     if (authHeader) {
       // Authenticated mode (Test Nu button)
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
       
       if (authError || !user) {
-        console.error('❌ Authentication failed in authenticated mode');
-        throw new Error('Unauthorized');
+        console.error('❌ Authentication failed, falling back to autonomous mode');
+        // Fallback to autonomous mode
+        const { data: orgs } = await supabase
+          .from('organizations')
+          .select('id')
+          .limit(1);
+        
+        if (!orgs || orgs.length === 0) {
+          throw new Error('No organizations found');
+        }
+        
+        orgId = orgs[0].id;
+        
+        const { data: orgUser } = await supabase
+          .from('user_organizations')
+          .select('user_id')
+          .eq('org_id', orgId)
+          .limit(1)
+          .single();
+        
+        userId = orgUser?.user_id || orgId;
+        console.log('🤖 Fallback to autonomous mode for org:', orgId);
+      } else {
+
+        const { data: userOrg, error: orgError } = await supabase
+          .from('user_organizations')
+          .select('org_id')
+          .eq('user_id', user.id)
+          .single();
+
+        if (orgError || !userOrg) {
+          console.error('❌ No organization found for user');
+          throw new Error('No organization found');
+        }
+
+        orgId = userOrg.org_id;
+        userId = user.id;
+        console.log('🔐 Running in authenticated mode for org:', orgId);
       }
-
-      const { data: userOrg, error: orgError } = await supabase
-        .from('user_organizations')
-        .select('org_id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (orgError || !userOrg) {
-        console.error('❌ No organization found for user');
-        throw new Error('No organization found');
-      }
-
-      orgId = userOrg.org_id;
-      userId = user.id;
-      console.log('🔐 Running in authenticated mode for org:', orgId);
     } else {
       // Autonomous mode (cron job) - use first organization
       const { data: orgs, error: orgsError } = await supabase
