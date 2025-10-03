@@ -27,6 +27,7 @@ export const SystemMonitor = () => {
   const [loading, setLoading] = useState(true);
   const [testingFunction, setTestingFunction] = useState<string | null>(null);
   const [runningJobs, setRunningJobs] = useState<string[]>([]);
+  const [jobIntervals, setJobIntervals] = useState<Record<string, NodeJS.Timeout>>({});
   const { toast } = useToast();
 
   const loadData = async () => {
@@ -65,33 +66,68 @@ export const SystemMonitor = () => {
   };
 
   const testFunction = async (functionName: string) => {
+    const startTime = Date.now();
+    const initialKnowledgeCount = knowledgeStats.total;
+    
     setTestingFunction(functionName);
     setRunningJobs(prev => [...prev, functionName]);
     
     try {
-      // Fire and forget - don't wait for response
+      // Fire and forget
       supabase.functions.invoke(functionName, {
         body: { 
           trigger: 'manual_test',
           async: true
         }
-      }).then(() => {
-        console.log(`${functionName} completed in background`);
-        loadData();
-        setRunningJobs(prev => prev.filter(job => job !== functionName));
-      }).catch((error) => {
-        console.error(`${functionName} background error:`, error);
-        setRunningJobs(prev => prev.filter(job => job !== functionName));
       });
 
-      // Immediate success feedback
       toast({
         title: "🚀 Test gestart",
-        description: `${functionName} draait nu op de achtergrond. Dit kan 5-30 minuten duren. De stats updaten automatisch.`,
+        description: `${functionName} draait op de achtergrond. Monitoring status...`,
         duration: 5000,
       });
 
       setTestingFunction(null);
+
+      // Hybrid monitoring: stats changes + timeout fallback
+      const maxRuntime = 20 * 60 * 1000; // 20 min max
+      const checkInterval = setInterval(async () => {
+        // Query database directly to get fresh count
+        const { count: currentTotal } = await supabase
+          .from('ai_knowledge_base')
+          .select('*', { count: 'exact', head: true })
+          .is('deleted_at', null);
+        
+        // Check completion conditions
+        const statsChanged = (currentTotal || 0) > initialKnowledgeCount;
+        const timeoutReached = Date.now() - startTime > maxRuntime;
+        
+        if (statsChanged || timeoutReached) {
+          clearInterval(checkInterval);
+          setRunningJobs(prev => prev.filter(job => job !== functionName));
+          setJobIntervals(prev => {
+            const updated = { ...prev };
+            delete updated[functionName];
+            return updated;
+          });
+          
+          // Refresh UI stats
+          await loadData();
+          
+          if (statsChanged) {
+            const newItems = (currentTotal || 0) - initialKnowledgeCount;
+            toast({
+              title: "✅ Nieuwe kennis toegevoegd",
+              description: `${functionName}: ${newItems} nieuwe items gevonden!`,
+            });
+          } else if (timeoutReached) {
+            console.log(`${functionName} timeout reached (20 min), clearing UI`);
+          }
+        }
+      }, 10000); // Check every 10s
+      
+      // Store interval for cleanup
+      setJobIntervals(prev => ({ ...prev, [functionName]: checkInterval }));
       
     } catch (error: any) {
       toast({
@@ -138,8 +174,12 @@ export const SystemMonitor = () => {
   useEffect(() => {
     loadData();
     const interval = setInterval(loadData, 5000); // Refresh every 5 seconds for live updates
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      clearInterval(interval);
+      // Cleanup all job monitoring intervals
+      Object.values(jobIntervals).forEach(clearInterval);
+    };
+  }, [jobIntervals]);
 
   if (loading) {
     return (
