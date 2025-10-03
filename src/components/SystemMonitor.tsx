@@ -26,6 +26,7 @@ export const SystemMonitor = () => {
   const [knowledgeStats, setKnowledgeStats] = useState({ total: 0, today: 0 });
   const [loading, setLoading] = useState(true);
   const [testingFunction, setTestingFunction] = useState<string | null>(null);
+  const [runningJobs, setRunningJobs] = useState<string[]>([]);
   const { toast } = useToast();
 
   const loadData = async () => {
@@ -65,28 +66,41 @@ export const SystemMonitor = () => {
 
   const testFunction = async (functionName: string) => {
     setTestingFunction(functionName);
+    setRunningJobs(prev => [...prev, functionName]);
+    
     try {
-      const { data, error } = await supabase.functions.invoke(functionName, {
-        body: { trigger: 'manual_test' }
+      // Fire and forget - don't wait for response
+      supabase.functions.invoke(functionName, {
+        body: { 
+          trigger: 'manual_test',
+          async: true
+        }
+      }).then(() => {
+        console.log(`${functionName} completed in background`);
+        loadData();
+        setRunningJobs(prev => prev.filter(job => job !== functionName));
+      }).catch((error) => {
+        console.error(`${functionName} background error:`, error);
+        setRunningJobs(prev => prev.filter(job => job !== functionName));
       });
 
-      if (error) throw error;
-
+      // Immediate success feedback
       toast({
-        title: "✅ Test geslaagd",
-        description: `${functionName} heeft succesvol gedraaid. Bekijk de logs hieronder voor details.`,
+        title: "🚀 Test gestart",
+        description: `${functionName} draait nu op de achtergrond. Dit kan 5-30 minuten duren. De stats updaten automatisch.`,
+        duration: 5000,
       });
 
-      // Reload data after test
-      await loadData();
+      setTestingFunction(null);
+      
     } catch (error: any) {
       toast({
-        title: "❌ Test mislukt",
+        title: "❌ Kon test niet starten",
         description: error.message,
         variant: "destructive",
       });
-    } finally {
       setTestingFunction(null);
+      setRunningJobs(prev => prev.filter(job => job !== functionName));
     }
   };
 
@@ -123,7 +137,7 @@ export const SystemMonitor = () => {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 30000); // Refresh every 30 seconds
+    const interval = setInterval(loadData, 5000); // Refresh every 5 seconds for live updates
     return () => clearInterval(interval);
   }, []);
 
@@ -202,9 +216,10 @@ export const SystemMonitor = () => {
           const status = getCronStatus(func.cron);
           const StatusIcon = status.icon;
           const cronJob = cronJobs.find(j => j.jobname === func.cron);
+          const isRunning = runningJobs.includes(func.name);
 
           return (
-            <Card key={func.name}>
+            <Card key={func.name} className={isRunning ? 'border-primary animate-pulse' : ''}>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div className="space-y-1">
@@ -214,18 +229,24 @@ export const SystemMonitor = () => {
                         <StatusIcon className="h-3 w-3 mr-1" />
                         {status.text}
                       </Badge>
+                      {isRunning && (
+                        <Badge variant="secondary" className="animate-pulse">
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          Draait...
+                        </Badge>
+                      )}
                     </CardTitle>
                     <CardDescription>{func.description}</CardDescription>
                   </div>
                   <Button
                     onClick={() => testFunction(func.name)}
-                    disabled={testingFunction === func.name}
+                    disabled={isRunning}
                     size="sm"
                   >
-                    {testingFunction === func.name ? (
+                    {isRunning ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Testing...
+                        Op achtergrond...
                       </>
                     ) : (
                       <>
