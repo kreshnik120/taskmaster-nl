@@ -34,10 +34,16 @@ export const SystemMonitor = () => {
     try {
       // Load cron jobs status (hardcoded as we can't query cron.job directly via Supabase client)
       setCronJobs([
-        { jobname: 'auto-knowledge-harvester', schedule: '0,30 */2 * * *', active: true },
-        { jobname: 'self-trainer', schedule: '*/100 * * * *', active: true },
-        { jobname: 'knowledge-graph-builder', schedule: '0 */2 * * *', active: true },
-        { jobname: 'batch-vision-processor', schedule: '0 */6 * * *', active: true },
+        { jobname: 'auto-knowledge-harvester', schedule: '5 */2 * * *', active: true },
+        { jobname: 'self-trainer', schedule: '25 * * * *', active: true },
+        { jobname: 'knowledge-graph-builder', schedule: '15 */2 * * *', active: true },
+        { jobname: 'mega-forecast-generator', schedule: '0 8 * * *', active: true },
+        { jobname: 'data-quality-auditor', schedule: '0 1 * * *', active: true },
+        { jobname: 'compliance-monitor', schedule: '0 3 * * *', active: true },
+        { jobname: 'smart-deduplicator', schedule: '0 4 * * 0', active: true },
+        { jobname: 'source-validator', schedule: '0 5 * * 1', active: true },
+        { jobname: 'professional-matcher', schedule: '0 */6 * * *', active: true },
+        { jobname: 'tariff-analyzer', schedule: '0 */12 * * *', active: true },
       ]);
 
       // Load knowledge stats
@@ -216,25 +222,61 @@ export const SystemMonitor = () => {
       name: 'auto-knowledge-harvester',
       cron: 'auto-knowledge-harvester',
       description: 'Zoekt automatisch 128 planning & matching onderwerpen per run',
-      schedule: '0,30 */2 * * *',
+      schedule: '5 */2 * * *',
     },
     {
       name: 'self-trainer',
       cron: 'self-trainer',
       description: 'Stelt 52 planning/matching vragen en leert van antwoorden',
-      schedule: '*/100 * * * *',
+      schedule: '25 * * * *',
     },
     {
       name: 'knowledge-graph-builder',
       cron: 'knowledge-graph-builder',
       description: 'Bouwt relaties tussen knowledge items',
-      schedule: '0 */2 * * *',
+      schedule: '15 */2 * * *',
     },
     {
-      name: 'batch-vision-processor',
-      cron: 'batch-vision-processor',
-      description: 'Verwerkt documenten met Vision AI (CVs, contracts, schedules)',
+      name: 'mega-forecast-generator',
+      cron: 'mega-forecast-generator',
+      description: 'Genereert forecast reports voor planning optimalisatie',
+      schedule: '0 8 * * *',
+    },
+    {
+      name: 'data-quality-auditor',
+      cron: 'data-quality-auditor',
+      description: 'Controleert data kwaliteit en verwijdert duplicaten/low-confidence items',
+      schedule: '0 1 * * *',
+    },
+    {
+      name: 'compliance-monitor',
+      cron: 'compliance-monitor',
+      description: 'Monitort officiële bronnen voor compliance updates (ABCzorg/CitoZorg)',
+      schedule: '0 3 * * *',
+    },
+    {
+      name: 'smart-deduplicator',
+      cron: 'smart-deduplicator',
+      description: 'Merget semantisch identieke kennis items (weekly)',
+      schedule: '0 4 * * 0',
+    },
+    {
+      name: 'source-validator',
+      cron: 'source-validator',
+      description: 'Valideert externe bronnen op bereikbaarheid (weekly)',
+      schedule: '0 5 * * 1',
+    },
+    {
+      name: 'professional-matcher',
+      cron: 'professional-matcher',
+      description: 'Matcht professionals aan taken op basis van kennis',
       schedule: '0 */6 * * *',
+    },
+    {
+      name: 'tariff-analyzer',
+      cron: 'tariff-analyzer',
+      description: 'Analyseert tarieven en kostenstructuren',
+      schedule: '0 */12 * * *',
     },
   ];
 
@@ -352,12 +394,12 @@ export const SystemMonitor = () => {
           <CardTitle>ℹ️ Systeem Informatie</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <p>🚀 <strong>Status:</strong> FULL 300% TURBO MODE actief (4 functies)</p>
+          <p>🚀 <strong>Status:</strong> MEGA AUTONOMOUS MODE actief (10 functies)</p>
           <p>🔒 <strong>Veiligheid:</strong> CUTOFF_DATE tot 6 oktober 2025, 23:59</p>
-          <p>⏰ <strong>Frequentie:</strong> Harvester 9.6x/dag • Self-trainer 14.4x/dag • Graph 12x/dag • Vision 4x/dag</p>
-          <p>🎯 <strong>Focus:</strong> 128 planning & matching topics + 52 gerichte vragen + vision docs</p>
-          <p>💰 <strong>Kosten:</strong> €0 tot 6 okt (2.3M tokens gratis promo) • Daarna €0.03/dag</p>
-          <p>📈 <strong>Verwachting:</strong> 5,400+ knowledge items by 6 okt (waarvan ~2,800 planning/matching)</p>
+          <p>⏰ <strong>Frequentie:</strong> Harvester 12x/dag • Self-trainer 24x/dag • Graph 12x/dag • Quality 1x/nacht • Compliance 1x/nacht • Dedup 1x/week • Validator 1x/week • Matcher 4x/dag • Tariff 2x/dag</p>
+          <p>🎯 <strong>Focus:</strong> Autonomous learning + quality monitoring + compliance tracking + professional matching</p>
+          <p>💰 <strong>Kosten:</strong> €0 tot 6 okt (2.3M tokens gratis promo) • Daarna ~€0.05/dag</p>
+          <p>📈 <strong>Verwachting:</strong> 6,000+ high-quality knowledge items by 6 okt + realtime compliance monitoring</p>
         </CardContent>
       </Card>
     </div>
