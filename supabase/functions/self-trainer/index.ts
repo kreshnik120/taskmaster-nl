@@ -81,6 +81,46 @@ const SELF_TRAINING_QUESTIONS = [
   "Hoe balanceer je korte termijn efficiency met lange termijn talent development?"
 ];
 
+// Helper function to extract category from question
+function extractCategoryFromQuestion(question: string): string {
+  const lowerQ = question.toLowerCase();
+  
+  // Planning/Matching related
+  if (lowerQ.includes('planning') || lowerQ.includes('shift') || lowerQ.includes('beschikbaarheid')) {
+    return 'processen';
+  }
+  
+  // Compliance/Legal
+  if (lowerQ.includes('cao') || lowerQ.includes('schaal')) {
+    return 'cao';
+  }
+  if (lowerQ.includes('compliance') || lowerQ.includes('big') || lowerQ.includes('registratie')) {
+    return 'compliance';
+  }
+  if (lowerQ.includes('zzp') || lowerQ.includes('zelfstandige')) {
+    return 'zzp_vereisten';
+  }
+  if (lowerQ.includes('wetgeving') || lowerQ.includes('wet ') || lowerQ.includes('juridisch')) {
+    return 'wetgeving';
+  }
+  
+  // Financial
+  if (lowerQ.includes('tarief') || lowerQ.includes('uurtarief') || lowerQ.includes('prijsstelling')) {
+    return 'tarieven';
+  }
+  
+  // Insurance/Contracts
+  if (lowerQ.includes('verzekering') || lowerQ.includes('aansprakelijkheid')) {
+    return 'verzekeringen';
+  }
+  if (lowerQ.includes('contract')) {
+    return 'contracten';
+  }
+  
+  // Default fallback
+  return 'compliance';
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -259,6 +299,55 @@ Output ALLEEN valid JSON:
       };
     }
 
+    // Save high-confidence answers to knowledge base
+    let savedItemsCount = 0;
+    if (result.confidence >= 0.8 && result.answer) {
+      try {
+        // Extract category from question context
+        const category = extractCategoryFromQuestion(question);
+        const key = `self_trained_${category}_${Date.now()}`;
+        
+        // Check for existing similar knowledge to prevent duplicates
+        const { data: existing } = await supabase
+          .from('ai_knowledge_base')
+          .select('id')
+          .eq('category', category)
+          .eq('key', key)
+          .is('deleted_at', null)
+          .maybeSingle();
+        
+        if (!existing) {
+          const { error: insertError } = await supabase
+            .from('ai_knowledge_base')
+            .insert({
+              org_id: orgId,
+              user_id: userId,
+              category: category,
+              key: key,
+              value: {
+                answer: result.answer,
+                question: question,
+                confidence: result.confidence,
+                source: 'self_training',
+                learned_at: new Date().toISOString()
+              },
+              confidence_score: result.confidence,
+              source: `self_training_q${questionIdx}_complexity_${complexity}`,
+              needs_review: result.confidence < 0.9 // Flag for manual review if confidence < 0.9
+            });
+          
+          if (!insertError) {
+            savedItemsCount++;
+            console.log(`✅ Saved high-confidence answer to knowledge base (confidence: ${result.confidence})`);
+          } else {
+            console.error('❌ Failed to save to knowledge base:', insertError);
+          }
+        }
+      } catch (saveError) {
+        console.error('❌ Error saving to knowledge base:', saveError);
+      }
+    }
+
     // Store the learning event
     const { error: learningError } = await supabase
       .from('ai_learning_events')
@@ -275,7 +364,7 @@ Output ALLEEN valid JSON:
         ai_response: result,
         learning_score: result.confidence,
         outcome: result.needs_research ? 'needs_research' : 'learned',
-        applied_to_knowledge_base: false
+        applied_to_knowledge_base: savedItemsCount > 0
       });
 
     if (learningError) {
@@ -314,6 +403,7 @@ Output ALLEEN valid JSON:
       question,
       complexity_level: complexity,
       result,
+      knowledge_items_saved: savedItemsCount,
       auto_research_triggered: result.confidence < 0.7 || result.needs_research,
       next_question_index: (questionIdx + 1) % SELF_TRAINING_QUESTIONS.length
     }), {
