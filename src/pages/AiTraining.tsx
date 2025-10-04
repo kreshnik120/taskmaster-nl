@@ -15,6 +15,7 @@ import { ConflictResolutionPanel } from "@/components/AITraining/ConflictResolut
 import { PerformanceMetrics } from "@/components/AITraining/PerformanceMetrics";
 import { SystemMonitor } from "@/components/SystemMonitor";
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
+import { AdminOnly } from "@/components/auth/AdminOnly";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -70,11 +71,15 @@ const AiTraining = () => {
               </p>
             </div>
 
-            <Tabs defaultValue="monitor" className="w-full">
+            <Tabs defaultValue="dashboard" className="w-full">
               <TabsList className="grid w-full grid-cols-8">
-                <TabsTrigger value="monitor">🚀 Monitor</TabsTrigger>
+                <AdminOnly>
+                  <TabsTrigger value="monitor">🚀 Monitor</TabsTrigger>
+                </AdminOnly>
                 <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
-                <TabsTrigger value="metrics">📈 Metrics</TabsTrigger>
+                <AdminOnly>
+                  <TabsTrigger value="metrics">📈 Metrics</TabsTrigger>
+                </AdminOnly>
                 <TabsTrigger value="conflicts">⚠️ Conflicten</TabsTrigger>
                 <TabsTrigger value="search">🔍 Zoeken</TabsTrigger>
                 <TabsTrigger value="chat">💬 Training</TabsTrigger>

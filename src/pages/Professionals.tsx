@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Upload, Search } from "lucide-react";
+import { useUserRole } from "@/hooks/useUserRole";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +43,7 @@ const Professionals = () => {
   const [filterFunctie, setFilterFunctie] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const { toast } = useToast();
+  const { canEdit } = useUserRole();
 
   const [newProfessional, setNewProfessional] = useState({
     full_name: "",
@@ -169,13 +171,14 @@ const Professionals = () => {
                 <h1 className="text-3xl font-bold">Professionals</h1>
                 <p className="text-muted-foreground">Beheer jouw ZZP'ers en flexwerkers</p>
               </div>
-              <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Toevoegen
-                  </Button>
-                </DialogTrigger>
+              {canEdit() && (
+                <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Toevoegen
+                    </Button>
+                  </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Nieuwe Professional</DialogTitle>
@@ -255,6 +258,7 @@ const Professionals = () => {
                   </div>
                 </DialogContent>
               </Dialog>
+              )}
             </div>
 
             <div className="flex gap-4">

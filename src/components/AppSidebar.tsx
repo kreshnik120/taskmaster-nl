@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/sidebar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useUserRole } from "@/hooks/useUserRole";
 
 const menuItems = [
   { title: "Mijn dag", url: "/", icon: Home },
@@ -29,6 +30,7 @@ const menuItems = [
 
 export function AppSidebar() {
   const navigate = useNavigate();
+  const { isAdmin, canEdit } = useUserRole();
 
   const handleLogout = async () => {
     try {
@@ -40,6 +42,12 @@ export function AppSidebar() {
     }
   };
 
+  const filteredMenuItems = menuItems.filter((item) => {
+    if (item.url === '/ai-training') return isAdmin();
+    if (item.url === '/professionals') return canEdit();
+    return true;
+  });
+
   return (
     <Sidebar>
       <SidebarContent>
@@ -47,7 +55,7 @@ export function AppSidebar() {
           <SidebarGroupLabel className="text-lg font-bold">TaskFlow</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
+              {filteredMenuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink
