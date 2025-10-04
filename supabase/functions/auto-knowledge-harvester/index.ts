@@ -111,6 +111,12 @@ serve(async (req) => {
       console.log('🤖 Running in autonomous mode for org:', orgId);
     }
 
+    // Token tracking for all AI calls
+    const startTime = Date.now();
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let totalTokensUsed = 0;
+
     const { search_topics } = await req.json();
 
     console.log('🌐 Auto Knowledge Harvester starting search...');
@@ -279,11 +285,41 @@ Output ALLEEN valid JSON:
       });
 
       if (!searchResponse.ok) {
+        if (searchResponse.status === 429) {
+          console.error(`⚠️ Rate limit exceeded for topic: ${topic}`);
+          return new Response(JSON.stringify({ 
+            error: 'Rate limits exceeded', 
+            message: 'Please try again later or reduce request frequency.' 
+          }), {
+            status: 429,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (searchResponse.status === 402) {
+          console.error(`💳 Credits exhausted for topic: ${topic}`);
+          return new Response(JSON.stringify({ 
+            error: 'Credits exhausted', 
+            message: 'Please add funds to your Lovable AI workspace to continue.' 
+          }), {
+            status: 402,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         console.error(`Search failed for topic: ${topic}`);
         continue;
       }
 
       const searchData = await searchResponse.json();
+      
+      // Extract and accumulate token usage
+      if (searchData.usage) {
+        totalInputTokens += searchData.usage.prompt_tokens || 0;
+        totalOutputTokens += searchData.usage.completion_tokens || 0;
+        totalTokensUsed += searchData.usage.total_tokens || 0;
+      }
+      
       const searchContent = searchData.choices[0].message.content;
 
       let searchResults;
@@ -462,6 +498,30 @@ Output ALLEEN valid JSON:
     const crossValidatedCount = newKnowledge.filter(item => 
       item.value.cross_validated === true
     ).length;
+
+    // Log function execution metrics
+    const endTime = Date.now();
+    const executionTimeMs = endTime - startTime;
+
+    await supabase
+      .from('function_call_logs')
+      .insert({
+        function_name: 'auto-knowledge-harvester',
+        org_id: orgId,
+        user_id: userId,
+        status: 'completed',
+        execution_time_ms: executionTimeMs,
+        model_used: 'google/gemini-2.5-pro',
+        input_tokens: totalInputTokens,
+        output_tokens: totalOutputTokens,
+        total_tokens: totalTokensUsed,
+        estimated_cost_eur: 0, // Free during promo period
+        parameters_used: {
+          topics_count: topics.length,
+          items_found: newKnowledge.length,
+          items_stored: insertedCount + updatedCount
+        }
+      });
 
     return new Response(JSON.stringify({
       success: true,
