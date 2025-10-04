@@ -46,6 +46,8 @@ serve(async (req) => {
     const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
     const issues: string[] = [];
     let fixedItemsCount = 0;
+    let archivedCount = 0;
+    let boostedCount = 0;
 
     // Get all clients for lookup during auto-fix
     const { data: allClients } = await supabase
@@ -65,24 +67,60 @@ serve(async (req) => {
       }
     });
 
-    // SCAN 1: Outdated information (> 6 months)
+    // SCAN 1: Outdated information (> 6 months) + AUTO-ARCHIVE
     const { data: outdated } = await supabase
       .from('ai_knowledge_base')
-      .select('id, key, category, updated_at')
+      .select('id, key, category, updated_at, last_used_at, usage_count, created_at')
       .eq('org_id', orgId)
       .is('deleted_at', null)
       .lt('updated_at', sixMonthsAgo)
       .limit(100);
 
     if (outdated && outdated.length > 0) {
-      console.log(`⚠️ Found ${outdated.length} outdated items`);
+      console.log(`⚠️ Found ${outdated.length} outdated items - checking usage...`);
       
-      await supabase
-        .from('ai_knowledge_base')
-        .update({ needs_review: true })
-        .in('id', outdated.map(i => i.id));
+      for (const item of outdated) {
+        const lastUsed = item.last_used_at ? new Date(item.last_used_at) : null;
+        const monthsUnused = lastUsed 
+          ? (Date.now() - lastUsed.getTime()) / (1000 * 60 * 60 * 24 * 30)
+          : 999; // Never used
+        
+        // AUTO-ARCHIVE: If >6 months old AND >3 months unused
+        if (monthsUnused > 3) {
+          await supabase
+            .from('ai_knowledge_base')
+            .update({
+              deleted_at: new Date().toISOString(),
+              deleted_by: 'data-quality-auditor',
+              deletion_reason: {
+                reason: 'auto_archived_outdated',
+                age_months: Math.floor(monthsUnused),
+                last_updated: item.updated_at,
+                last_used: item.last_used_at || 'never'
+              },
+              needs_review: false
+            })
+            .eq('id', item.id);
+          
+          archivedCount++;
+          console.log(`📦 Auto-archived: ${item.key} (unused for ${Math.floor(monthsUnused)} months)`);
+        } else {
+          // Old but recently used - flag for review
+          await supabase
+            .from('ai_knowledge_base')
+            .update({ needs_review: true })
+            .eq('id', item.id);
+        }
+      }
       
-      issues.push(`${outdated.length} outdated items (>6 months)`);
+      if (archivedCount > 0) {
+        issues.push(`${archivedCount} items auto-archived (outdated + unused)`);
+      }
+      
+      const reviewCount = outdated.length - archivedCount;
+      if (reviewCount > 0) {
+        issues.push(`${reviewCount} outdated items flagged for review`);
+      }
     }
 
     // SCAN 2: Low confidence items (< 0.7)
@@ -187,18 +225,64 @@ serve(async (req) => {
       }
     }
 
+    // SCAN 5: Smart Confidence Boost
+    const { data: mediumConfidence } = await supabase
+      .from('ai_knowledge_base')
+      .select('id, key, category, confidence_score, usage_count, created_at, last_used_at')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .gte('confidence_score', 0.7)
+      .lt('confidence_score', 0.85)
+      .gte('usage_count', 3) // Minimum 3x gebruikt
+      .limit(50);
+
+    if (mediumConfidence && mediumConfidence.length > 0) {
+      console.log(`🔍 Analyzing ${mediumConfidence.length} medium-confidence items for boost...`);
+      
+      for (const item of mediumConfidence) {
+        const daysSinceCreation = (Date.now() - new Date(item.created_at).getTime()) / (1000 * 60 * 60 * 24);
+        const usageRate = item.usage_count / Math.max(daysSinceCreation, 1); // Uses per day
+        
+        // BOOST CRITERIA: ≥3x gebruikt + usage rate ≥ 0.1 per day
+        if (usageRate >= 0.1) {
+          const newConfidence = Math.min(0.9, item.confidence_score + 0.1);
+          
+          await supabase
+            .from('ai_knowledge_base')
+            .update({
+              confidence_score: newConfidence,
+              needs_review: false,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', item.id);
+          
+          boostedCount++;
+          console.log(`📈 Confidence boost: ${item.key} (${item.confidence_score} → ${newConfidence}) - ${item.usage_count} uses in ${Math.floor(daysSinceCreation)} days`);
+        }
+      }
+      
+      if (boostedCount > 0) {
+        console.log(`✅ Boosted confidence for ${boostedCount} well-performing items`);
+      }
+    }
+
     // Report to business intelligence
-    if (issues.length > 0 || fixedItemsCount > 0) {
+    if (issues.length > 0 || fixedItemsCount > 0 || archivedCount > 0 || boostedCount > 0) {
+      const summary = [];
+      if (fixedItemsCount > 0) summary.push(`${fixedItemsCount} auto-fixed`);
+      if (archivedCount > 0) summary.push(`${archivedCount} archived`);
+      if (boostedCount > 0) summary.push(`${boostedCount} boosted`);
+      
       await supabase
         .from('business_intelligence')
         .insert({
           org_id: orgId,
           intelligence_type: 'data_quality_audit',
-          title: fixedItemsCount > 0 
-            ? `Data Quality Audit: ${issues.length} issues found, ${fixedItemsCount} auto-fixed`
+          title: summary.length > 0
+            ? `Data Quality Audit: ${issues.length} issues, ${summary.join(', ')}`
             : `Data Quality Audit: ${issues.length} issues found`,
           description: issues.join(', '),
-          priority: fixedItemsCount > 0 ? 'medium' : 'high',
+          priority: (fixedItemsCount > 0 || archivedCount > 0 || boostedCount > 0) ? 'medium' : 'high',
           status: 'active',
           data: {
             timestamp: new Date().toISOString(),
@@ -207,6 +291,8 @@ serve(async (req) => {
             unvalidated_count: unvalidatedItems.length,
             failed_validation_count: failed?.length || 0,
             auto_fixed_count: fixedItemsCount,
+            auto_archived_count: archivedCount,
+            confidence_boosted_count: boostedCount,
             total_issues: issues.length
           }
         });
@@ -222,12 +308,14 @@ serve(async (req) => {
       model_used: 'autonomous'
     });
 
-    console.log(`✅ Quality audit complete: ${issues.length} issues found, ${fixedItemsCount} auto-fixed`);
+    console.log(`✅ Quality audit complete: ${issues.length} issues, ${fixedItemsCount} fixed, ${archivedCount} archived, ${boostedCount} boosted`);
 
     return new Response(JSON.stringify({
       success: true,
       issues_found: issues.length,
       auto_fixed: fixedItemsCount,
+      auto_archived: archivedCount,
+      confidence_boosted: boostedCount,
       details: issues,
       items_marked_for_review: (outdated?.length || 0) + (lowConfidence?.length || 0) + unvalidatedItems.length
     }), {
