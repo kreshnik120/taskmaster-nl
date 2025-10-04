@@ -23,6 +23,7 @@ serve(async (req) => {
     let regio: string | undefined;
     let vanaf_datum: string | undefined;
     let tot_datum: string | undefined;
+    let client_id: string | undefined;
     let aantal = 10;
 
     if (isRealUserAuth) {
@@ -66,6 +67,7 @@ serve(async (req) => {
         regio = body.regio;
         vanaf_datum = body.vanaf_datum;
         tot_datum = body.tot_datum;
+        client_id = body.client_id;
         aantal = body.aantal || 10;
       }
     } else {
@@ -80,9 +82,38 @@ serve(async (req) => {
       userId = orgId;
     }
 
-    console.log('Searching professionals:', { functie, regio, vanaf_datum, tot_datum, aantal, org_id: orgId });
+    console.log('Searching professionals:', { functie, regio, vanaf_datum, tot_datum, client_id, aantal, org_id: orgId });
 
-    // Build query
+    // Build query with optional client filter
+    let professionalIds: string[] | undefined;
+    
+    if (client_id) {
+      // First get professionals linked to this client
+      const { data: clientProfessionals, error: clientProfError } = await supabase
+        .from('professional_clients')
+        .select('professional_id')
+        .eq('is_active', true)
+        .or(`client_id.eq.${client_id}`);
+      
+      if (clientProfError) {
+        console.error('Client professional query error:', clientProfError);
+      } else if (clientProfessionals && clientProfessionals.length > 0) {
+        professionalIds = clientProfessionals.map((pc: any) => pc.professional_id);
+        console.log(`Found ${professionalIds.length} professionals for client ${client_id}`);
+      } else {
+        console.log(`No professionals found for client ${client_id}`);
+        // Return empty result if client has no professionals
+        return new Response(JSON.stringify({
+          professionals: [],
+          filters_used: { functie, regio, vanaf_datum, tot_datum, client_id },
+          total_found: 0
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    // Build base query
     let query = supabase
       .from('professionals')
       .select('id, full_name, functie_niveau, regio, skills, rating, tags, beschikbaarheidsnotities')
@@ -90,6 +121,11 @@ serve(async (req) => {
       .eq('status', 'actief')
       .order('rating', { ascending: false, nullsFirst: false })
       .limit(aantal);
+
+    // Apply client filter if we have professional IDs
+    if (professionalIds && professionalIds.length > 0) {
+      query = query.in('id', professionalIds);
+    }
 
     if (functie) {
       query = query.eq('functie_niveau', functie);
@@ -135,7 +171,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({
       professionals: filteredProfessionals,
-      filters_used: { functie, regio, vanaf_datum, tot_datum },
+      filters_used: { functie, regio, vanaf_datum, tot_datum, client_id },
       total_found: filteredProfessionals.length
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
