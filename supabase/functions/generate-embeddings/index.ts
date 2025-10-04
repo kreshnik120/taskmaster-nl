@@ -25,18 +25,33 @@ serve(async (req) => {
     console.log('🔄 Starting embedding generation batch...');
 
     // STEP 1: Find knowledge items without embeddings
-    const { data: itemsWithoutEmbeddings, error: fetchError } = await supabase
+    const { data: allItems, error: fetchError } = await supabase
       .from('ai_knowledge_base')
       .select('id, category, key, value')
       .is('deleted_at', null)
-      .not('id', 'in', `(
-        SELECT knowledge_id FROM knowledge_embeddings
-      )`)
-      .limit(BATCH_SIZE);
+      .limit(500); // Fetch larger batch for client-side filtering
 
     if (fetchError) {
       throw fetchError;
     }
+
+    // Fetch existing embedding IDs
+    const { data: existingEmbeddings, error: embError } = await supabase
+      .from('knowledge_embeddings')
+      .select('knowledge_id');
+
+    if (embError) {
+      throw embError;
+    }
+
+    // Create Set for O(1) lookup
+    const existingIds = new Set(existingEmbeddings?.map(e => e.knowledge_id) || []);
+
+    // Filter client-side and take first BATCH_SIZE
+    const itemsWithoutEmbeddings = allItems
+      ?.filter(item => !existingIds.has(item.id))
+      .slice(0, BATCH_SIZE);
+
 
     if (!itemsWithoutEmbeddings || itemsWithoutEmbeddings.length === 0) {
       console.log('✅ No items need embeddings');
