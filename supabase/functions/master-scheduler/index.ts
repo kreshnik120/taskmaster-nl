@@ -28,6 +28,7 @@ const SCHEDULES = {
   'client-intelligence': '45 */8 * * *',        // Every 8 hours at :45
   'compliance-extractor': '10 */4 * * *',       // Every 4 hours at :10
   'generate-embeddings': '*/10 * * * *',        // Every 10 minutes (NEW: semantic search embeddings)
+  'feedback-processor': '*/5 * * * *',          // Every 5 minutes (feedback loop activation)
 };
 
 // Simple cron expression matcher (minute hour dayOfMonth month dayOfWeek)
