@@ -1105,6 +1105,36 @@ export type Database = {
           },
         ]
       }
+      scheduler_runs: {
+        Row: {
+          duration_ms: number | null
+          error: string | null
+          id: string
+          org_id: string
+          results: Json | null
+          run_at: string
+          triggered_functions: Json
+        }
+        Insert: {
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          org_id?: string
+          results?: Json | null
+          run_at?: string
+          triggered_functions?: Json
+        }
+        Update: {
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          org_id?: string
+          results?: Json | null
+          run_at?: string
+          triggered_functions?: Json
+        }
+        Relationships: []
+      }
       share_links: {
         Row: {
           can_comment: boolean

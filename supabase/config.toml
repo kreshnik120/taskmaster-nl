@@ -132,3 +132,7 @@ schedule = "35 * * * *"
 [functions.client-communication-coach]
 verify_jwt = false
 schedule = "55 * * * *"
+
+[functions.master-scheduler]
+verify_jwt = false
+schedule = "* * * * *"
