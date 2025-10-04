@@ -1653,6 +1653,30 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          granted_at: string | null
+          granted_by: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          granted_at?: string | null
+          granted_by?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          granted_at?: string | null
+          granted_by?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       watches: {
         Row: {
           created_at: string
@@ -1702,12 +1726,20 @@ export type Database = {
       }
     }
     Functions: {
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       user_is_org_member: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
       }
     }
     Enums: {
+      app_role: "admin" | "manager" | "user"
       dependency_type: "BLOCKS" | "RELATES" | "DUPLICATE"
       priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
       reminder_channel: "IN_APP" | "EMAIL"
@@ -1841,6 +1873,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["admin", "manager", "user"],
       dependency_type: ["BLOCKS", "RELATES", "DUPLICATE"],
       priority: ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
       reminder_channel: ["IN_APP", "EMAIL"],
