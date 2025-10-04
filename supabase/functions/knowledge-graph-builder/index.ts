@@ -163,6 +163,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: 'google/gemini-2.5-pro',
+        response_format: { type: "json_object" },
         messages: [
           {
             role: 'system',
@@ -197,17 +198,20 @@ Voor elke relatie, geef:
 4. context (gedetailleerde uitleg, max 200 chars)
 5. strength ("weak"/"medium"/"strong")
 
-Output ALLEEN valid JSON array:
-[
-  {
-    "source_id": "uuid",
-    "target_id": "uuid",
-    "relationship_type": "type",
-    "confidence": 0.8,
-    "context": "explanation",
-    "strength": "medium"
-  }
-]`
+⚠️ CRITICAL: Return ONLY a JSON object with a "relationships" array. No markdown, no extra text.
+Format:
+{
+  "relationships": [
+    {
+      "source_id": "uuid",
+      "target_id": "uuid",
+      "relationship_type": "type",
+      "confidence": 0.8,
+      "context": "explanation",
+      "strength": "medium"
+    }
+  ]
+}`
           },
           {
             role: 'user',
@@ -233,18 +237,41 @@ Output ALLEEN valid JSON array:
 
     console.log('🤖 AI Response received, parsing relationships...');
 
-    // Parse AI response
+    // Parse AI response with robust JSON mode handling
     let relationships = [];
     try {
-      // Extract JSON from response (sometimes AI adds markdown formatting)
-      const jsonMatch = aiContent.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        relationships = JSON.parse(jsonMatch[0]);
-      } else {
-        relationships = JSON.parse(aiContent);
+      const parsedResponse = JSON.parse(aiContent);
+      
+      // JSON mode returns object with "relationships" key
+      if (parsedResponse.relationships && Array.isArray(parsedResponse.relationships)) {
+        relationships = parsedResponse.relationships;
+        console.log(`✅ Successfully parsed ${relationships.length} relationships from JSON object`);
+      } 
+      // Fallback: if AI still returns array directly (legacy support)
+      else if (Array.isArray(parsedResponse)) {
+        relationships = parsedResponse;
+        console.log(`✅ Successfully parsed ${relationships.length} relationships from array (legacy format)`);
       }
+      else {
+        console.error('❌ Unexpected JSON structure:', Object.keys(parsedResponse));
+        relationships = [];
+      }
+      
     } catch (parseError) {
-      console.error('Failed to parse AI response:', parseError);
+      console.error('❌ Failed to parse AI response:', parseError);
+      console.error('Raw response (first 500 chars):', aiContent.slice(0, 500));
+      
+      // Log failure to function_call_logs for monitoring
+      await supabase.from('function_call_logs').insert({
+        function_name: 'knowledge-graph-builder',
+        org_id: orgId,
+        user_id: userId,
+        error_message: `JSON parse failed: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
+        success: false,
+        execution_time_ms: Date.now() - startTime,
+        model_used: 'google/gemini-2.5-pro'
+      });
+      
       relationships = [];
     }
 
