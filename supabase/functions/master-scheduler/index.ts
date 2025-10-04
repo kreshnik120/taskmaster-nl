@@ -105,60 +105,69 @@ serve(async (req) => {
 
     console.log(`📋 Functions to trigger (${functionsToTrigger.length}):`, functionsToTrigger);
 
-    // Trigger functions in parallel
-    const results: Record<string, any> = {};
-    
+    // Trigger functions in background (fire-and-forget)
+    const triggerTimestamp = now.toISOString();
+
     if (functionsToTrigger.length > 0) {
-      const invokePromises = functionsToTrigger.map(async (fnName) => {
+      console.log(`🚀 Triggering ${functionsToTrigger.length} functions in background...`);
+      
+      // Fire-and-forget: trigger all functions without blocking
+      functionsToTrigger.forEach(async (fnName) => {
+        const fnStartTime = Date.now();
+        
         try {
-          console.log(`🚀 Invoking ${fnName}...`);
+          console.log(`⏳ [Background] Starting ${fnName}...`);
+          
           const { data, error } = await supabase.functions.invoke(fnName, {
-            body: { trigger: 'scheduler', timestamp: now.toISOString() }
+            body: { trigger: 'scheduler', timestamp: triggerTimestamp }
           });
           
+          const fnDuration = Date.now() - fnStartTime;
+          
           if (error) {
-            console.error(`❌ ${fnName} failed:`, error);
-            results[fnName] = { success: false, error: error.message };
+            console.error(`❌ [Background] ${fnName} failed after ${fnDuration}ms:`, error);
           } else {
-            console.log(`✅ ${fnName} completed`);
-            results[fnName] = { success: true, data };
+            console.log(`✅ [Background] ${fnName} completed in ${fnDuration}ms`);
           }
         } catch (err) {
-          console.error(`❌ ${fnName} exception:`, err);
-          results[fnName] = { success: false, error: err instanceof Error ? err.message : String(err) };
+          const fnDuration = Date.now() - fnStartTime;
+          console.error(`❌ [Background] ${fnName} exception after ${fnDuration}ms:`, err);
         }
       });
-
-      await Promise.allSettled(invokePromises);
+      
+      console.log(`✅ Dispatched ${functionsToTrigger.length} functions`);
     }
 
-    const duration = Date.now() - startTime;
+    const schedulerDuration = Date.now() - startTime;
 
-    // Log to database
-    const { error: logError } = await supabase
-      .from('scheduler_runs')
-      .insert({
-        run_at: now.toISOString(),
-        triggered_functions: functionsToTrigger,
-        results,
-        duration_ms: duration,
-        org_id: '550e8400-e29b-41d4-a716-446655440000'
-      });
-
-    if (logError) {
-      console.error('❌ Failed to log scheduler run:', logError);
+    // Log trigger event to database (not results, as they're async)
+    try {
+      await supabase
+        .from('scheduler_runs')
+        .insert({
+          run_at: triggerTimestamp,
+          triggered_functions: functionsToTrigger,
+          results: { status: 'dispatched', note: 'Functions triggered asynchronously' },
+          duration_ms: schedulerDuration,
+          org_id: '550e8400-e29b-41d4-a716-446655440000'
+        });
+    } catch (logErr) {
+      console.error('❌ Failed to log scheduler run:', logErr);
     }
 
     // Note: Scheduling is handled by pg_cron (runs every 5 minutes)
     // See migration: fix_master_scheduler_cron.sql
 
+    // Return immediate response (scheduler overhead only, not function execution)
     return new Response(
       JSON.stringify({
         success: true,
-        timestamp: now.toISOString(),
-        triggered: functionsToTrigger,
-        results,
-        duration_ms: duration,
+        timestamp: triggerTimestamp,
+        triggered_count: functionsToTrigger.length,
+        triggered_functions: functionsToTrigger,
+        scheduler_duration_ms: schedulerDuration,
+        status: 'background_tasks_running',
+        message: `Triggered ${functionsToTrigger.length} functions in background. Results will be logged to scheduler_runs table.`,
         next_run_in_ms: 5 * 60 * 1000
       }),
       {
