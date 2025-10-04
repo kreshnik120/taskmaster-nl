@@ -18,7 +18,7 @@ const SCHEDULES = {
   'professional-enricher': '55 */8 * * *',      // Every 8 hours at :55
   'knowledge-graph-builder': '15 * * * *',      // Every hour at :15
   'auto-knowledge-harvester': '5 * * * *',      // Every hour at :05
-  'self-trainer': '10 * * * *',                 // Every hour at :10
+  'self-trainer': '*/2 * * * *',                // Every 2 minutes (Guest AI Expert)
   'prioritizer': '18 */6 * * *',                // Every 6 hours at :18
   'ai-task-scorer': '0 */12 * * *',             // Every 12 hours at :00
   'review-knowledge': '0 2 * * 0',              // Weekly Sunday 02:00

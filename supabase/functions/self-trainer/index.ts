@@ -9,112 +9,102 @@ const corsHeaders = {
 const CUTOFF_DATE = new Date('2025-10-06T23:59:59Z');
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
-// ULTRA SELF-TRAINING QUESTIONS (52 vragen + PLANNING & MATCHING FOCUS)
-const SELF_TRAINING_QUESTIONS = [
-  // NIVEAU 1: Basis Knowledge Check (5)
-  "Wat zijn de belangrijkste CAO VVT bepalingen voor 2025?",
-  "Welke diploma's zijn vereist voor een Verzorgende IG functie?",
-  "Wat is het verschil tussen Wlz en Zvw?",
-  "Wat zijn de basiseisen voor ZZP'ers in de zorg?",
-  "Welke registraties zijn verplicht voor zorgverleners?",
+// GUEST AI EXPERT TEACHING TOPICS (50+ essential knowledge areas)
+const GUEST_AI_TEACHING_TOPICS = [
+  // CAO Essentials (15 topics - 30%)
+  'CAO VVT 2025 loonschalen per functie niveau 1-5',
+  'CAO VVT overwerk regelingen en toeslagen nachtdienst weekend',
+  'CAO VVT vakantiedagen opbouw en aanspraken per FTE',
+  'CAO VVT werktijden roosters en wettelijke rusttijden',
+  'CAO VVT functioneringsgesprekken en beoordeling',
+  'CAO VVT scholing en ontwikkelbudget per medewerker',
+  'CAO VVT reis en onkosten vergoedingen',
+  'CAO VVT arbeidsvoorwaarden ZZP vs loondienst',
+  'CAO VVT verlofrechten bijzonder verlof en calamiteiten',
+  'CAO VVT proeftijd opzegtermijnen en ontslag',
+  'CAO VVT ADV dagen en arbeidsmarkttoelage',
+  'CAO VVT pensioenopbouw en premieverdeling',
+  'CAO VVT functiewaardering en inschaling criteria',
+  'CAO VVT gestandaardiseerde functieprofielen',
+  'CAO VVT wijzigingen 2025 vs 2024',
   
-  // NIVEAU 2: Applied Knowledge (11 vragen - 6 NEW)
-  "Hoe bereken ik het correcte uurtarief voor een Verpleegkundige niveau 4 volgens CAO?",
-  "Welke stappen moet ik volgen om een ZZP'er compliant in te zetten?",
-  "Wat zijn de juridische risico's bij inzet van tijdelijke krachten?",
-  "Hoe controleer ik of een professional voldoet aan alle compliance eisen?",
-  "Welke verzekeringen moet een ZZP'er minimaal hebben?",
-  // NEW PLANNING/MATCHING BASICS:
-  "Wat zijn basis criteria voor professional-client matching?",
-  "Hoe werkt beschikbaarheid planning voor ZZP'ers?",
-  "Wat is optimale shift lengte voor Verzorgende IG?",
-  "Welke kwalificaties zijn vereist voor functie niveau 4?",
-  "Hoe check ik beschikbaarheid van een professional?",
-  "Wat zijn typische planning constraints in de zorg?",
+  // Wlz/Zvw Compliance (15 topics - 30%)
+  'Wlz zorgzwaartepakketten VV1-VV10 criteria en indicaties',
+  'Zvw wijkverpleging prestaties en verrichtingen codes',
+  'Wlz cliëntprofielen en zorgkenmerken per ZZP',
+  'Zvw indicatiecriteria thuiszorg en persoonlijke verzorging',
+  'Wlz verantwoordingsplicht en dossiervorming vereisten',
+  'Zvw kwaliteitseisen en HKZ certificering',
+  'Wlz MDO verplichtingen multidisciplinair overleg',
+  'Zvw zorgplannen en evaluatie frequentie',
+  'Wlz eigen bijdrage berekening 2025 tarieven',
+  'Zvw verplicht eigen risico en maximum 2025',
+  'Wlz contractering en zorginkoop per regio',
+  'Zvw prestatiebeschrijvingen en normatieve tijden',
+  'Wlz ICT systemen en digitale gegevensuitwisseling',
+  'Zvw klachtenprocedures en geschillenregeling',
+  'Wlz/Zvw verschil in verantwoordelijkheden en financiering',
   
-  // NIVEAU 3: Complex Scenarios (15 vragen - 10 NEW)
-  "Een ZZP'er wil 32 uur per week werken bij Stichting X. Wat zijn alle juridische, financiële en compliance aspecten die ik moet checken?",
-  "Hoe ga ik om met een situatie waarbij een professional niet BIG-geregistreerd is maar wel relevante ervaring heeft?",
-  "Wat is het verschil in aansprakelijkheid tussen een ZZP'er met BAV en zonder BAV?",
-  "Welke CAO bepalingen zijn van toepassing bij overwerk in de nachtdienst?",
-  "Hoe combineer ik Wlz tarieven met CAO schalen voor een juiste prijsstelling?",
-  // NEW PLANNING/MATCHING SCENARIOS:
-  "Welke factoren bepalen een succesvolle professional-client match?",
-  "Wat zijn typische planningsconflicten en hoe los je die op?",
-  "Hoe bepaal je optimale shift lengte per functie niveau?",
-  "Welke rol speelt reistijd in planning optimalisatie?",
-  "Hoe combineer je ZZP en loondienst personeel effectief?",
-  "Wat zijn early warning signals voor planning problemen?",
-  "Hoe balanceer je client voorkeuren met professional beschikbaarheid?",
-  "Welke metrics gebruik je voor match quality?",
-  "Hoe optimaliseer je capacity utilization?",
-  "Wat zijn best practices voor last-minute vervangingen?",
+  // ZZP Vereisten en Compliance (10 topics - 20%)
+  'ZZP BAV beroepsaansprakelijkheidsverzekering minimale dekking zorg',
+  'ZZP VOG Verklaring Omtrent Gedrag aanvraag en geldigheid',
+  'Wet DBA 2025 handhaving en modelovereenkomsten',
+  'ZZP BIG registratie verplichtingen per beroepsgroep',
+  'ZZP kwaliteitsregister V&V inschrijving en herbeoordeling',
+  'ZZP AVG compliance en verwerkersovereenkomsten',
+  'ZZP fiscale verplichtingen BTW en inkomstenbelasting',
+  'ZZP arbeidsongeschiktheidsverzekering AOV advisering',
+  'ZZP pensioenopbouw en lijfrente aftrek mogelijkheden',
+  'ZZP administratieve verplichtingen en archivering termijnen',
   
-  // NIVEAU 4: Strategic Thinking (15 vragen - 10 NEW)
-  "Analyseer de belangrijkste compliance risico's voor CitoZorg en geef concrete mitigatie strategieën.",
-  "Wat zijn de financiële implicaties van de nieuwe Wet DBA voor ons bedrijfsmodel?",
-  "Hoe kunnen we onze matching algoritme optimaliseren op basis van CAO schalen en client budgets?",
-  "Welke trends zie je in de zorgarbeidsmarkt en hoe moeten we daarop anticiperen?",
-  "Wat zijn de 3 grootste knowledge gaps in onze huidige database?",
-  // NEW PLANNING/MATCHING STRATEGY:
-  "Hoe optimaliseer je reistijd tussen opeenvolgende opdrachten?",
-  "Wanneer automatisch toewijzen vs. handmatig reviewen?",
-  "Welke early warning signals voor professional burnout?",
-  "Hoe voorkom je onder-/overbezetting bij clients?",
-  "Strategieën voor capacity planning bij onverwachte pieken?",
-  "Hoe balanceer je workload over verschillende functieniveaus?",
-  "Welke data points zijn kritiek voor accurate planning?",
-  "Hoe optimaliseer je professional satisfaction vs. business efficiency?",
-  "Wat zijn de trade-offs tussen verschillende staffing modellen?",
-  "Hoe meet je en verbeter je matching accuracy over tijd?",
+  // Planning Intelligence (5 topics - 10%)
+  'Optimale shift lengte per functie niveau en zorgzwaarte',
+  'Reistijd compensatie regelgeving en maximale afstanden',
+  'Capacity planning forecasting methoden healthcare',
+  'Roostering wettelijke rusttijden en Arbeidstijdenwet compliance',
+  'Planning efficiency metrics en KPIs zorgorganisaties',
   
-  // NIVEAU 5: Meta-Learning (6 vragen - 4 NEW)
-  "Welke informatie zou ik MOETEN weten maar momenteel NIET weet?",
-  "Op welke vragen geef ik momenteel suboptimale antwoorden?",
-  "Welke nieuwe regelgeving komt eraan waar we nu al op moeten anticiperen?",
-  "Hoe kan ik mijn confidence scores beter kalibreren?",
-  "Welke bronnen zou ik moeten monitoren voor proactieve updates?",
-  // NEW META-LEARNING PLANNING:
-  "Ontwerp een self-learning matching algoritme dat verbetert met elke assignment",
-  "Hoe anticipeer je op toekomstige workforce trends en skill gaps?",
-  "Welke onzichtbare patronen in onze data kunnen planning optimaliseren?",
-  "Hoe balanceer je korte termijn efficiency met lange termijn talent development?"
+  // Professional Matching (5 topics - 10%)
+  'Client voorkeuren matching criteria en compatibiliteit scoring',
+  'Professional-client fit indicatoren en succesvoorspellers',
+  'Match quality metrics en evaluatie criteria care sector',
+  'Continuïteit van zorg planning en vaste gezichten beleid',
+  'Professional satisfaction vs client needs balancering',
 ];
 
-// Helper function to extract category from question
-function extractCategoryFromQuestion(question: string): string {
-  const lowerQ = question.toLowerCase();
+// Helper function to extract category from topic
+function extractCategoryFromTopic(topic: string): string {
+  const lowerT = topic.toLowerCase();
   
   // Planning/Matching related
-  if (lowerQ.includes('planning') || lowerQ.includes('shift') || lowerQ.includes('beschikbaarheid')) {
+  if (lowerT.includes('planning') || lowerT.includes('shift') || lowerT.includes('roostering')) {
+    return 'processen';
+  }
+  if (lowerT.includes('matching') || lowerT.includes('fit indicator')) {
     return 'processen';
   }
   
-  // Compliance/Legal
-  if (lowerQ.includes('cao') || lowerQ.includes('schaal')) {
+  // CAO
+  if (lowerT.includes('cao')) {
     return 'cao';
   }
-  if (lowerQ.includes('compliance') || lowerQ.includes('big') || lowerQ.includes('registratie')) {
+  
+  // Compliance/Legal
+  if (lowerT.includes('compliance') || lowerT.includes('big') || lowerT.includes('registratie')) {
     return 'compliance';
   }
-  if (lowerQ.includes('zzp') || lowerQ.includes('zelfstandige')) {
-    return 'zzp_vereisten';
-  }
-  if (lowerQ.includes('wetgeving') || lowerQ.includes('wet ') || lowerQ.includes('juridisch')) {
+  if (lowerT.includes('wlz') || lowerT.includes('zvw') || lowerT.includes('zorgzwaarte')) {
     return 'wetgeving';
   }
   
-  // Financial
-  if (lowerQ.includes('tarief') || lowerQ.includes('uurtarief') || lowerQ.includes('prijsstelling')) {
-    return 'tarieven';
+  // ZZP
+  if (lowerT.includes('zzp') || lowerT.includes('zelfstandige')) {
+    return 'zzp_vereisten';
   }
   
-  // Insurance/Contracts
-  if (lowerQ.includes('verzekering') || lowerQ.includes('aansprakelijkheid')) {
+  // Insurance
+  if (lowerT.includes('verzekering') || lowerT.includes('bav') || lowerT.includes('aov')) {
     return 'verzekeringen';
-  }
-  if (lowerQ.includes('contract')) {
-    return 'contracten';
   }
   
   // Default fallback
@@ -222,14 +212,14 @@ serve(async (req) => {
       console.log('🤖 Running in autonomous mode for org:', orgId);
     }
 
-    const { question_index, mode } = await req.json();
+    const { topic_index, mode } = await req.json();
 
-    // Select question based on index or random
-    const questionIdx = question_index ?? Math.floor(Math.random() * SELF_TRAINING_QUESTIONS.length);
-    const question = SELF_TRAINING_QUESTIONS[questionIdx];
-    const complexity = Math.floor(questionIdx / 5) + 1; // 1-5 based on index
+    // Select topic based on index or random
+    const topicIdx = topic_index ?? Math.floor(Math.random() * GUEST_AI_TEACHING_TOPICS.length);
+    const topic = GUEST_AI_TEACHING_TOPICS[topicIdx];
+    const priority = topicIdx < 30 ? 'high' : 'medium'; // First 30 topics are high priority
 
-    console.log(`🧠 Self-Training Question (Complexity ${complexity}/5): ${question}`);
+    console.log(`👨‍🏫 Guest AI Teaching Topic (${priority} priority): ${topic}`);
 
     // Fetch relevant knowledge for context
     const { data: knowledgeContext } = await supabase
@@ -251,29 +241,43 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-pro',
         messages: [
           {
             role: 'system',
-            content: `Je bent een CitoZorg AI die zichzelf aan het trainen is.
+            content: `Je bent een EXPERT AI leraar die CitoZorg AI onderwijst.
 
-Beantwoord de vraag zo goed mogelijk met de beschikbare kennis.
-Indien je kennis tekortschiet, geef dat EXPLICIET aan.
+DOEL: Geef DIRECT high-quality facts over het gegeven topic.
+GEBRUIK: Je volledige Gemini training + web search access.
+VALIDATIE: Gebruik alleen Tier 1+2 bronnen (overheid.nl, nza.nl, caovvt.nl).
 
-Output ALLEEN valid JSON:
+Output ALLEEN valid JSON met dit formaat:
 {
-  "answer": "detailed answer to the question",
-  "confidence": 0.0-1.0,
-  "knowledge_used": ["knowledge_id1", "knowledge_id2"],
-  "knowledge_gaps": ["specific gap 1", "specific gap 2"],
-  "needs_research": true/false,
-  "research_topics": ["topic to research 1", "topic 2"],
-  "self_critique": "what could be improved in this answer"
-}`
+  "facts": [
+    {
+      "content": "Concrete fact met alle details",
+      "category": "cao/compliance/wetgeving/zzp_vereisten/tarieven",
+      "confidence": 0.95,
+      "sources": ["https://overheid.nl/...", "https://nza.nl/..."],
+      "last_updated": "2025-01",
+      "cross_validated": true
+    }
+  ],
+  "total_facts": 3,
+  "average_confidence": 0.95,
+  "quality_tier": "tier1"
+}
+
+REGELS:
+1. Minimaal 3-5 facts per topic
+2. Confidence >= 0.85 voor elke fact
+3. Tier 2 bronnen MOETEN cross-validated zijn
+4. Laatste update datum verplicht
+5. Concrete cijfers/bedragen/percentages waar mogelijk`
           },
           {
             role: 'user',
-            content: `Beschikbare kennis:\n${contextStr}\n\nVraag: ${question}`
+            content: `Leer me ALLES over: ${topic}\n\nBeschikbare context (ter referentie):\n${contextStr}`
           }
         ],
       }),
@@ -292,63 +296,71 @@ Output ALLEEN valid JSON:
       result = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(aiContent);
     } catch {
       result = {
-        answer: aiContent,
-        confidence: 0.5,
-        knowledge_gaps: ['Could not parse structured output'],
-        needs_research: true
+        facts: [],
+        total_facts: 0,
+        average_confidence: 0,
+        quality_tier: 'failed'
       };
     }
 
-    // Save high-confidence answers to knowledge base (>= 85%)
+    // Save all high-quality facts directly (Guest AI = Expert)
     let savedItemsCount = 0;
-    if (result.confidence >= 0.85 && result.answer) {
-      try {
-        // Extract category from question context
-        const category = extractCategoryFromQuestion(question);
-        
-        // Check for existing similar knowledge to prevent duplicates
-        const questionSnippet = question.substring(0, 30);
-        const { data: existing } = await supabase
-          .from('ai_knowledge_base')
-          .select('id')
-          .eq('category', category)
-          .ilike('key', `%${questionSnippet}%`)
-          .is('deleted_at', null)
-          .maybeSingle();
-        
-        if (existing) {
-          console.log('⚠️ Duplicate detected, skipping save');
-        } else {
-          const key = `self_trained_${category}_${Date.now()}`;
-          
-          const { error: insertError } = await supabase
-            .from('ai_knowledge_base')
-            .insert({
-              org_id: orgId,
-              user_id: userId,
-              category: category,
-              key: key,
-              value: {
-                answer: result.answer,
-                question: question,
-                confidence: result.confidence,
-                source: 'self_training',
-                learned_at: new Date().toISOString()
-              },
-              confidence_score: result.confidence,
-              source: `self_training_q${questionIdx}_complexity_${complexity}`,
-              needs_review: result.confidence < 0.9 // Flag for manual review if confidence < 0.9
-            });
-          
-          if (!insertError) {
-            savedItemsCount++;
-            console.log(`✅ Saved high-confidence answer to knowledge base (confidence: ${result.confidence})`);
-          } else {
-            console.error('❌ Failed to save to knowledge base:', insertError);
+    if (result.facts && Array.isArray(result.facts) && result.facts.length > 0) {
+      for (const fact of result.facts) {
+        if (fact.confidence >= 0.85) {
+          try {
+            const category = fact.category || extractCategoryFromTopic(topic);
+            
+            // Check for duplicates
+            const factSnippet = fact.content.substring(0, 30);
+            const { data: existing } = await supabase
+              .from('ai_knowledge_base')
+              .select('id')
+              .eq('category', category)
+              .ilike('key', `%${factSnippet}%`)
+              .is('deleted_at', null)
+              .maybeSingle();
+            
+            if (existing) {
+              console.log('⚠️ Duplicate fact detected, skipping');
+            } else {
+              const key = `guest_ai_${category}_${Date.now()}_${savedItemsCount}`;
+              
+              const { error: insertError } = await supabase
+                .from('ai_knowledge_base')
+                .insert({
+                  org_id: orgId,
+                  user_id: userId,
+                  category: category,
+                  key: key,
+                  value: {
+                    content: fact.content,
+                    topic: topic,
+                    confidence: fact.confidence,
+                    sources: fact.sources || [],
+                    last_updated: fact.last_updated,
+                    cross_validated: fact.cross_validated,
+                    source: 'guest_ai_expert',
+                    learned_at: new Date().toISOString()
+                  },
+                  confidence_score: fact.confidence,
+                  source: `guest_ai_topic_${topicIdx}_${result.quality_tier}`,
+                  needs_review: fact.confidence < 0.9
+                });
+              
+              if (!insertError) {
+                savedItemsCount++;
+                console.log(`✅ Saved Guest AI fact (confidence: ${fact.confidence})`);
+              } else {
+                console.error('❌ Failed to save fact:', insertError);
+              }
+            }
+          } catch (saveError) {
+            console.error('❌ Error saving fact:', saveError);
           }
+        } else {
+          console.log(`⚠️ Skipping low-confidence fact (${fact.confidence})`);
         }
-      } catch (saveError) {
-        console.error('❌ Error saving to knowledge base:', saveError);
       }
     }
 
@@ -358,16 +370,17 @@ Output ALLEEN valid JSON:
       .insert({
         org_id: orgId,
         user_id: userId,
-        event_type: 'self_training',
+        event_type: 'guest_ai_teaching',
         context: {
-          question,
-          question_index: questionIdx,
-          complexity_level: complexity,
+          topic,
+          topic_index: topicIdx,
+          priority: priority,
+          quality_tier: result.quality_tier,
           knowledge_context_count: knowledgeContext?.length || 0
         },
         ai_response: result,
-        learning_score: result.confidence,
-        outcome: result.needs_research ? 'needs_research' : 'learned',
+        learning_score: result.average_confidence || 0,
+        outcome: savedItemsCount > 0 ? 'facts_learned' : 'no_facts',
         applied_to_knowledge_base: savedItemsCount > 0
       });
 
@@ -375,16 +388,14 @@ Output ALLEEN valid JSON:
       console.error('Error storing learning event:', learningError);
     }
 
-    // If low confidence or needs research, trigger auto-harvester
-    if (result.confidence < 0.7 || result.needs_research) {
-      console.log('🔍 Low confidence detected, triggering auto-research...');
+    // If quality is low, trigger auto-harvester for verification
+    if (result.average_confidence < 0.7 || result.quality_tier === 'tier2' || savedItemsCount === 0) {
+      console.log('🔍 Low quality/confidence detected, triggering verification...');
       
-      if (result.research_topics && result.research_topics.length > 0) {
-        // Trigger auto-knowledge-harvester with specific topics (don't await)
-        supabase.functions.invoke('auto-knowledge-harvester', {
-          body: { search_topics: result.research_topics }
-        }).catch(err => console.error('Auto-harvest trigger failed:', err));
-      }
+      // Trigger auto-knowledge-harvester for additional validation
+      supabase.functions.invoke('auto-knowledge-harvester', {
+        body: { search_topics: [topic] }
+      }).catch(err => console.error('Auto-harvest trigger failed:', err));
     }
 
     // Log function call
@@ -404,12 +415,13 @@ Output ALLEEN valid JSON:
 
     return new Response(JSON.stringify({
       success: true,
-      question,
-      complexity_level: complexity,
+      topic,
+      priority,
       result,
-      knowledge_items_saved: savedItemsCount,
-      auto_research_triggered: result.confidence < 0.7 || result.needs_research,
-      next_question_index: (questionIdx + 1) % SELF_TRAINING_QUESTIONS.length
+      facts_saved: savedItemsCount,
+      quality_tier: result.quality_tier,
+      auto_verification_triggered: result.average_confidence < 0.7 || savedItemsCount === 0,
+      next_topic_index: (topicIdx + 1) % GUEST_AI_TEACHING_TOPICS.length
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
