@@ -12,11 +12,9 @@ import { SeedClientKnowledge } from "@/components/AITraining/SeedClientKnowledge
 import { LearningDashboard } from "@/components/AITraining/LearningDashboard";
 import { SmartKnowledgeSearch } from "@/components/AITraining/SmartKnowledgeSearch";
 import { ConflictResolutionPanel } from "@/components/AITraining/ConflictResolutionPanel";
-import { PerformanceMetrics } from "@/components/AITraining/PerformanceMetrics";
 import { SystemMonitor } from "@/components/SystemMonitor";
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { AdminOnly } from "@/components/auth/AdminOnly";
-import { AIPerformanceDashboard } from "@/components/AITraining/AIPerformanceDashboard";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -73,64 +71,44 @@ const AiTraining = () => {
             </div>
 
             <Tabs defaultValue="dashboard" className="w-full">
-              <TabsList className="grid w-full grid-cols-9">
-                <AdminOnly>
-                  <TabsTrigger value="monitor">🚀 Monitor</TabsTrigger>
-                </AdminOnly>
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
                 <AdminOnly>
-                  <TabsTrigger value="performance">📈 Performance</TabsTrigger>
-                </AdminOnly>
-                <AdminOnly>
-                  <TabsTrigger value="metrics">⚙️ Metrics</TabsTrigger>
+                  <TabsTrigger value="system">🔧 Systeem</TabsTrigger>
                 </AdminOnly>
                 <TabsTrigger value="conflicts">⚠️ Conflicten</TabsTrigger>
-                <TabsTrigger value="search">🔍 Zoeken</TabsTrigger>
-                <TabsTrigger value="chat">💬 Training</TabsTrigger>
-                <TabsTrigger value="documents">📄 Docs</TabsTrigger>
-                <TabsTrigger value="knowledge">🗄️ Kennis</TabsTrigger>
+                <TabsTrigger value="training">💬 Training</TabsTrigger>
+                <TabsTrigger value="knowledge">🗄️ Kennisbank</TabsTrigger>
               </TabsList>
-
-              <TabsContent value="monitor" className="mt-6">
-                <div className="space-y-6">
-                  <ManualFunctionTrigger />
-                  <SystemMonitor />
-                </div>
-              </TabsContent>
 
               <TabsContent value="dashboard" className="mt-6">
                 <LearningDashboard />
               </TabsContent>
 
               <AdminOnly>
-                <TabsContent value="performance" className="mt-6">
-                  <AIPerformanceDashboard />
+                <TabsContent value="system" className="mt-6">
+                  <div className="space-y-6">
+                    <ManualFunctionTrigger />
+                    <SystemMonitor />
+                  </div>
                 </TabsContent>
               </AdminOnly>
-
-              <TabsContent value="metrics" className="mt-6">
-                <PerformanceMetrics />
-              </TabsContent>
 
               <TabsContent value="conflicts" className="mt-6">
                 <ConflictResolutionPanel />
               </TabsContent>
 
-              <TabsContent value="search" className="mt-6">
-                <SmartKnowledgeSearch />
-              </TabsContent>
-
-              <TabsContent value="chat" className="mt-6">
-                <TrainingChat />
-              </TabsContent>
-
-              <TabsContent value="documents" className="mt-6">
-                <DocumentUpload />
+              <TabsContent value="training" className="mt-6">
+                <div className="space-y-6">
+                  <TrainingChat />
+                  <DocumentUpload />
+                  <SeedClientKnowledge />
+                </div>
               </TabsContent>
 
               <TabsContent value="knowledge" className="mt-6">
                 <div className="space-y-6">
-                  <SeedClientKnowledge />
+                  <SmartKnowledgeSearch />
                   <KnowledgeOverview />
                 </div>
               </TabsContent>
