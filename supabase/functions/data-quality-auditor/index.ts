@@ -43,7 +43,7 @@ serve(async (req) => {
     const orgId = orgs[0].id;
     console.log('🔍 Data Quality Auditor scanning org:', orgId);
 
-    const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
+    const twelveMonthsAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
     const issues: string[] = [];
     let fixedItemsCount = 0;
     let archivedCount = 0;
@@ -67,13 +67,13 @@ serve(async (req) => {
       }
     });
 
-    // SCAN 1: Outdated information (> 6 months) + AUTO-ARCHIVE
+    // SCAN 1: Outdated information (> 12 months) + AUTO-ARCHIVE
     const { data: outdated } = await supabase
       .from('ai_knowledge_base')
-      .select('id, key, category, updated_at, last_used_at, usage_count, created_at')
+      .select('id, key, category, updated_at, last_used_at, usage_count, created_at, confidence_score')
       .eq('org_id', orgId)
       .is('deleted_at', null)
-      .lt('updated_at', sixMonthsAgo)
+      .lt('updated_at', twelveMonthsAgo)
       .limit(100);
 
     if (outdated && outdated.length > 0) {
@@ -85,7 +85,12 @@ serve(async (req) => {
           ? (Date.now() - lastUsed.getTime()) / (1000 * 60 * 60 * 24 * 30)
           : 999; // Never used
         
-        // AUTO-ARCHIVE: If >6 months old AND >3 months unused
+        // Skip high-confidence items that were recently used
+        if (item.confidence_score > 0.90 && lastUsed && monthsUnused < 1) {
+          continue; // Don't flag as needs_review
+        }
+        
+        // AUTO-ARCHIVE: If >12 months old AND >3 months unused
         if (monthsUnused > 3) {
           await supabase
             .from('ai_knowledge_base')

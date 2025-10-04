@@ -133,6 +133,13 @@ schedule = "*/30 * * * *"
 verify_jwt = false
 schedule = "*/30 * * * *"
 
+[functions.feedback-processor]
+verify_jwt = false
+schedule = "*/30 * * * *"
+
+[functions.source-fixer]
+verify_jwt = false
+
 [functions.master-scheduler]
 verify_jwt = false
 schedule = "* * * * *"

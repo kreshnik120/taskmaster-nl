@@ -299,24 +299,28 @@ Output ALLEEN valid JSON:
       };
     }
 
-    // Save high-confidence answers to knowledge base
+    // Save high-confidence answers to knowledge base (>= 85%)
     let savedItemsCount = 0;
-    if (result.confidence >= 0.8 && result.answer) {
+    if (result.confidence >= 0.85 && result.answer) {
       try {
         // Extract category from question context
         const category = extractCategoryFromQuestion(question);
-        const key = `self_trained_${category}_${Date.now()}`;
         
         // Check for existing similar knowledge to prevent duplicates
+        const questionSnippet = question.substring(0, 30);
         const { data: existing } = await supabase
           .from('ai_knowledge_base')
           .select('id')
           .eq('category', category)
-          .eq('key', key)
+          .ilike('key', `%${questionSnippet}%`)
           .is('deleted_at', null)
           .maybeSingle();
         
-        if (!existing) {
+        if (existing) {
+          console.log('⚠️ Duplicate detected, skipping save');
+        } else {
+          const key = `self_trained_${category}_${Date.now()}`;
+          
           const { error: insertError } = await supabase
             .from('ai_knowledge_base')
             .insert({
