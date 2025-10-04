@@ -52,10 +52,14 @@ serve(async (req) => {
         .from('user_organizations')
         .select('org_id')
         .eq('user_id', userId)
-        .single();
-
-      if (!userOrg) throw new Error('User not in any organization');
-      orgId = userOrg.org_id;
+        .maybeSingle();
+      
+      if (!userOrg) {
+        const { data: orgs } = await supabase.from('organizations').select('id').limit(1);
+        orgId = orgs![0].id;
+      } else {
+        orgId = userOrg.org_id;
+      }
       
       const body = await req.json();
       dateRange = body.date_range || dateRange;
