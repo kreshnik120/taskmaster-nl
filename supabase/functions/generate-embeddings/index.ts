@@ -86,13 +86,13 @@ async function generateEmbeddingGemini(text: string, apiKey: string): Promise<nu
 
   console.log(`🔍 Extracted concepts: ${concepts.slice(0, 5).join(', ')}...`);
 
-  // Create hash-based feature vector (1536 dimensions)
-  const embedding = new Array(1536).fill(0);
+  // Create hash-based feature vector (768 dimensions to match database)
+  const embedding = new Array(768).fill(0);
   concepts.forEach((concept: string) => {
     const hash = simpleHash(concept);
-    // Spread each concept across 10 dimensions for better distribution
-    for (let i = 0; i < 10; i++) {
-      const pos = (hash + i * 153) % 1536;
+    // Spread each concept across 8 dimensions for better distribution
+    for (let i = 0; i < 8; i++) {
+      const pos = (hash + i * 97) % 768;
       embedding[pos] += (1 / (i + 1)) * 0.1;
     }
   });
