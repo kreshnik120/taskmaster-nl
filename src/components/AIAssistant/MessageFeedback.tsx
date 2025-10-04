@@ -7,9 +7,10 @@ import { useToast } from "@/hooks/use-toast";
 interface MessageFeedbackProps {
   messageContent: string;
   messageIndex: number;
+  usedKnowledge?: string[]; // Knowledge IDs that were used for this message
 }
 
-export const MessageFeedback = ({ messageContent, messageIndex }: MessageFeedbackProps) => {
+export const MessageFeedback = ({ messageContent, messageIndex, usedKnowledge }: MessageFeedbackProps) => {
   const [feedback, setFeedback] = useState<'positive' | 'negative' | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -43,7 +44,8 @@ export const MessageFeedback = ({ messageContent, messageIndex }: MessageFeedbac
           context: {
             message_content: messageContent.substring(0, 500),
             message_index: messageIndex,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            usedKnowledge: usedKnowledge || [] // ✅ CRITICAL FIX: Include knowledge IDs
           },
           outcome: type === 'positive' ? 'success' : 'failure',
           learning_score: type === 'positive' ? 0.8 : 0.3,

@@ -1661,12 +1661,24 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
             }
           }
 
-          controller.close();
+          // Track knowledge usage BEFORE closing stream (blocking)
+          const usedKnowledgeIds = await trackKnowledgeUsage(fullResponse, fullKnowledgeBase, supabaseClient, user.id, messages);
           
-          // Track knowledge usage asynchronously (no blocking) with messages for client validation
-          trackKnowledgeUsage(fullResponse, fullKnowledgeBase, supabaseClient, user.id, messages).catch(err => {
-            console.error("Knowledge tracking error:", err);
-          });
+          // Send usedKnowledge metadata to client for feedback tracking
+          if (usedKnowledgeIds.length > 0) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              choices: [{
+                delta: { 
+                  metadata: { 
+                    usedKnowledge: usedKnowledgeIds 
+                  } 
+                },
+                index: 0
+              }]
+            })}\n\n`));
+          }
+          
+          controller.close();
         } catch (error) {
           console.error("Stream processing error:", error);
           controller.error(error);

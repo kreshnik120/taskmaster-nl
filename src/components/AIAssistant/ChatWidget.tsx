@@ -35,6 +35,7 @@ interface Message {
   interactive?: InteractiveElement;
   showInteractive?: boolean;
   image?: string; // Base64 image data
+  usedKnowledge?: string[]; // Knowledge IDs used for this response
 }
 
 const QUICK_ACTIONS = [
@@ -519,9 +520,10 @@ export const ChatWidget = () => {
       let assistantMessage = '';
       let textBuffer = '';
       let chunkCount = 0;
+      let usedKnowledge: string[] = [];
 
       // Add empty assistant message that we'll update
-      setMessages(prev => [...prev, { role: 'assistant', content: '', showInteractive: false }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: '', showInteractive: false, usedKnowledge: [] }]);
 
       console.log('📡 Starting stream...');
 
@@ -551,6 +553,14 @@ export const ChatWidget = () => {
             try {
               const parsed = JSON.parse(jsonStr);
               const content = parsed.choices?.[0]?.delta?.content;
+              const metadata = parsed.choices?.[0]?.delta?.metadata;
+              
+              // Capture usedKnowledge metadata
+              if (metadata?.usedKnowledge) {
+                usedKnowledge = metadata.usedKnowledge;
+                console.log('📚 Knowledge used:', usedKnowledge.length, 'items');
+              }
+              
               if (content) {
                 assistantMessage += content;
                 const parsedResponse = parseAssistantResponse(assistantMessage);
@@ -562,6 +572,7 @@ export const ChatWidget = () => {
                     content: assistantMessage,
                     interactive: parsedResponse.interactive,
                     showInteractive: !!parsedResponse.interactive,
+                    usedKnowledge: usedKnowledge.length > 0 ? usedKnowledge : undefined,
                   };
                   return updated;
                 });
@@ -917,7 +928,11 @@ export const ChatWidget = () => {
                         <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                       </div>
                       {msg.role === 'assistant' && msg.content && !isLoading && (
-                        <MessageFeedback messageContent={msg.content} messageIndex={idx} />
+                        <MessageFeedback 
+                          messageContent={msg.content} 
+                          messageIndex={idx}
+                          usedKnowledge={msg.usedKnowledge}
+                        />
                       )}
                     </div>
                     
