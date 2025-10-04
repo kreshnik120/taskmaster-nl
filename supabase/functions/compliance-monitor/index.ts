@@ -7,29 +7,83 @@ const corsHeaders = {
 };
 
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+const CUTOFF_DATE = new Date('2025-10-06T23:59:59Z');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Check cutoff date
+  if (new Date() > CUTOFF_DATE) {
+    return new Response(JSON.stringify({ 
+      error: 'Service cutoff date reached',
+      cutoff_date: CUTOFF_DATE.toISOString() 
+    }), {
+      status: 403,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    // Detect mode: authenticated (manual) vs autonomous (scheduler)
+    const authHeader = req.headers.get('Authorization');
+    let orgId: string;
+    let userId: string;
+    let supabase: any;
 
-    const { data: orgs } = await supabase
-      .from('organizations')
-      .select('id')
-      .limit(1);
+    if (authHeader) {
+      // AUTHENTICATED MODE (manual trigger)
+      console.log('🔐 Running in authenticated mode');
+      supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        { global: { headers: { Authorization: authHeader } } }
+      );
 
-    if (!orgs || orgs.length === 0) {
-      throw new Error('No organizations found');
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error('Authentication failed');
+      }
+      userId = user.id;
+
+      const { data: userOrg } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', userId)
+        .single();
+
+      if (!userOrg) throw new Error('User not in any organization');
+      orgId = userOrg.org_id;
+
+    } else {
+      // AUTONOMOUS MODE (scheduler)
+      console.log('🤖 Running in autonomous mode');
+      supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+
+      const { data: orgs } = await supabase
+        .from('organizations')
+        .select('id')
+        .limit(1);
+
+      if (!orgs || orgs.length === 0) {
+        throw new Error('No organizations found');
+      }
+
+      orgId = orgs[0].id;
+      userId = orgId; // Use orgId as userId for system operations
     }
 
-    const orgId = orgs[0].id;
+    const startTime = Date.now();
     console.log('🔎 Compliance Monitor checking for updates...');
+    
+    // Initialize token counters
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let totalTokensUsed = 0;
 
     // Official sources to monitor
     const monitoringSources = [
@@ -117,12 +171,47 @@ Focus op:
     });
 
       if (!aiResponse.ok) {
-        console.error(`AI check failed for ${source.name}`);
+        // Handle specific error codes
+        if (aiResponse.status === 429) {
+          console.error(`⚠️ Rate limit exceeded for ${source.name}`);
+          return new Response(JSON.stringify({ 
+            error: 'Rate limit exceeded, please try again later.',
+            status: 429 
+          }), {
+            status: 429,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        if (aiResponse.status === 402) {
+          console.error(`💳 Credits exhausted for ${source.name}`);
+          return new Response(JSON.stringify({ 
+            error: 'AI credits exhausted, please add funds.',
+            status: 402 
+          }), {
+            status: 402,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Generic error
+        console.error(`❌ AI check failed for ${source.name}: ${aiResponse.status}`);
         continue;
       }
 
       const aiData = await aiResponse.json();
       const content = aiData.choices[0].message.content;
+      
+      // Extract token usage
+      const usage = aiData.usage || {};
+      const inputTokens = usage.prompt_tokens || 0;
+      const outputTokens = usage.completion_tokens || 0;
+      const tokensUsed = usage.total_tokens || inputTokens + outputTokens;
+      
+      // Accumulate tokens
+      totalInputTokens += inputTokens;
+      totalOutputTokens += outputTokens;
+      totalTokensUsed += tokensUsed;
 
       let checkResult;
       try {
@@ -179,14 +268,23 @@ Focus op:
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
-    // Log function call
+    // Calculate execution time and cost
+    const endTime = Date.now();
+    const executionTimeMs = endTime - startTime;
+    const estimatedCostEur = 0; // Free during Oct 2025 promo
+
+    // Log function call with complete metrics
     await supabase.from('function_call_logs').insert({
       org_id: orgId,
-      user_id: orgId,
+      user_id: userId,
       function_name: 'compliance-monitor',
       success: true,
-      execution_time_ms: Date.now(),
-      model_used: 'google/gemini-2.5-flash'
+      execution_time_ms: executionTimeMs,
+      model_used: 'google/gemini-2.5-flash',
+      input_tokens: totalInputTokens,
+      output_tokens: totalOutputTokens,
+      total_tokens: totalTokensUsed,
+      estimated_cost_eur: estimatedCostEur
     });
 
     console.log(`✅ Compliance monitoring complete: ${changesDetected.length} changes detected`);
