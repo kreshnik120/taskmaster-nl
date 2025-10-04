@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Upload, Search } from "lucide-react";
+import { Plus, Upload, Search, Pencil, Trash2 } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import {
   Dialog,
@@ -338,6 +338,33 @@ const Professionals = () => {
                               +{professional.skills.length - 3}
                             </Badge>
                           )}
+                        </div>
+                      )}
+                      {canEdit() && (
+                        <div className="flex gap-2 mt-4 pt-4 border-t">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => {
+                              toast({ title: "Edit functionaliteit komt binnenkort" });
+                            }}
+                          >
+                            <Pencil className="w-3 h-3 mr-1" />
+                            Bewerken
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="destructive"
+                            onClick={() => {
+                              toast({ 
+                                title: "Delete functionaliteit komt binnenkort",
+                                variant: "destructive" 
+                              });
+                            }}
+                          >
+                            <Trash2 className="w-3 h-3 mr-1" />
+                            Verwijderen
+                          </Button>
                         </div>
                       )}
                     </CardContent>
