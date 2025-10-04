@@ -24,11 +24,62 @@ serve(async (req) => {
       });
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Detect mode: authenticated vs autonomous
+    const authHeader = req.headers.get('Authorization');
+    let orgId: string;
+    let userId: string;
+    let supabase: any;
 
-    const orgId = '550e8400-e29b-41d4-a716-446655440000';
+    if (authHeader) {
+      // AUTHENTICATED MODE
+      console.log('🔐 Running in authenticated mode');
+      supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        { global: { headers: { Authorization: authHeader } } }
+      );
+
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error('Authentication failed');
+      }
+      userId = user.id;
+
+      const { data: userOrg } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', userId)
+        .single();
+
+      if (!userOrg) throw new Error('User not in any organization');
+      orgId = userOrg.org_id;
+    } else {
+      // AUTONOMOUS MODE
+      console.log('🤖 Running in autonomous mode');
+      supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+
+      const { data: orgs } = await supabase
+        .from('organizations')
+        .select('id')
+        .limit(1);
+
+      if (!orgs || orgs.length === 0) {
+        throw new Error('No organizations found');
+      }
+
+      orgId = orgs[0].id;
+      userId = orgId;
+    }
+
+    // Token tracking
+    const startTime = Date.now();
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let totalTokensUsed = 0;
+
     console.log(`🏢 Client Intelligence Deep Dive for org: ${orgId}`);
 
     const { data: clients } = await supabase
@@ -89,7 +140,7 @@ Genereer 20-40 knowledge items per client.`;
     const knowledgeItems: any[] = [];
     
     for (const client of clients) {
-      const clientTasks = tasksPerClient?.filter(t => t.client_id === client.id) || [];
+      const clientTasks = tasksPerClient?.filter((t: any) => t.client_id === client.id) || [];
       
       console.log(`🔍 Analyzing: ${client.name} (${clientTasks.length} tasks)`);
 
@@ -113,11 +164,39 @@ Genereer 20-40 knowledge items per client.`;
       });
 
       if (!response.ok) {
+        if (response.status === 429) {
+          console.error('⚠️ Rate limit exceeded');
+          return new Response(JSON.stringify({ 
+            error: 'Rate limits exceeded' 
+          }), {
+            status: 429,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        if (response.status === 402) {
+          console.error('💳 Credits exhausted');
+          return new Response(JSON.stringify({ 
+            error: 'Credits exhausted' 
+          }), {
+            status: 402,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
         console.error(`AI API error for ${client.name}:`, response.status);
         continue;
       }
 
       const aiResponse = await response.json();
+      
+      // Extract token usage
+      if (aiResponse.usage) {
+        totalInputTokens += aiResponse.usage.prompt_tokens || 0;
+        totalOutputTokens += aiResponse.usage.completion_tokens || 0;
+        totalTokensUsed += aiResponse.usage.total_tokens || 0;
+      }
+      
       const content = aiResponse.choices[0].message.content;
 
       try {
@@ -157,14 +236,19 @@ Genereer 20-40 knowledge items per client.`;
       }
     }
 
+    // Log function execution
+    const endTime = Date.now();
     await supabase.from('function_call_logs').insert({
       org_id: orgId,
-      user_id: orgId,
+      user_id: userId,
       function_name: 'client-intelligence',
       success: true,
-      execution_time_ms: Date.now(),
+      execution_time_ms: endTime - startTime,
       model_used: 'google/gemini-2.5-flash',
-      estimated_cost_eur: 0,
+      input_tokens: totalInputTokens,
+      output_tokens: totalOutputTokens,
+      total_tokens: totalTokensUsed,
+      estimated_cost_eur: 0
     });
 
     console.log(`✅ Stored ${insertedCount} client intelligence items`);

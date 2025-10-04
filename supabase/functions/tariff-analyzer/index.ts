@@ -22,39 +22,49 @@ serve(async (req) => {
       });
     }
 
-    // Support both authenticated and autonomous modes
+    // Detect mode: authenticated vs autonomous
     const authHeader = req.headers.get('Authorization');
-    
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      authHeader ? Deno.env.get('SUPABASE_ANON_KEY') ?? '' : Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      authHeader ? { global: { headers: { Authorization: authHeader } } } : {}
-    );
-
     let orgId: string;
+    let userId: string;
+    let supabase: any;
     let question: string;
     let context: string = '';
 
     if (authHeader) {
-      // Authenticated mode
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Unauthorized');
+      // AUTHENTICATED MODE
+      console.log('🔐 Running in authenticated mode');
+      supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        { global: { headers: { Authorization: authHeader } } }
+      );
+
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error('Authentication failed');
+      }
+      userId = user.id;
 
       const { data: userOrg } = await supabase
         .from('user_organizations')
         .select('org_id')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .single();
 
-      orgId = userOrg!.org_id;
+      if (!userOrg) throw new Error('User not in any organization');
+      orgId = userOrg.org_id;
       
       const body = await req.json();
       question = body.question;
       context = body.context || '';
-      
-      console.log('🔐 Authenticated mode');
     } else {
-      // Autonomous mode - analyze all clients
+      // AUTONOMOUS MODE
+      console.log('🤖 Running in autonomous mode');
+      supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+
       const { data: orgs } = await supabase
         .from('organizations')
         .select('id')
@@ -65,9 +75,16 @@ serve(async (req) => {
       }
 
       orgId = orgs[0].id;
+      userId = orgId;
       question = 'Analyseer tariefstructuur en geef optimalisatie suggesties';
-      console.log('🤖 Autonomous mode: analyzing tariffs');
+      console.log('🤖 Autonomous mode: analyzing tariffs for org:', orgId);
     }
+
+    // Token tracking
+    const startTime = Date.now();
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let totalTokensUsed = 0;
 
     console.log('💰 Tariff Analyzer processing request...');
 
@@ -108,11 +125,11 @@ serve(async (req) => {
       .select('*')
       .eq('org_id', orgId);
 
-    const knowledgeContext = tariffKnowledge?.map(k => 
+    const knowledgeContext = tariffKnowledge?.map((k: any) => 
       `[${k.category}] ${k.key}: ${typeof k.value === 'string' ? k.value : JSON.stringify(k.value)}`
     ).join('\n\n') || '';
 
-    const clientsContext = clients?.map(c => 
+    const clientsContext = clients?.map((c: any) => 
       `Client: ${c.name} (${c.company}) - €${c.revenue_per_hour || 'unknown'}/uur - ${c.weekly_hours || 'unknown'} uur/week - Tier ${c.tier}`
     ).join('\n') || '';
 
@@ -160,13 +177,55 @@ ${clientsContext}`
     });
 
     if (!aiResponse.ok) {
-      if (aiResponse.status === 429) throw new Error('Rate limit exceeded');
-      if (aiResponse.status === 402) throw new Error('AI credits exhausted');
+      if (aiResponse.status === 429) {
+        console.error('⚠️ Rate limit exceeded');
+        return new Response(JSON.stringify({ 
+          error: 'Rate limits exceeded' 
+        }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      if (aiResponse.status === 402) {
+        console.error('💳 Credits exhausted');
+        return new Response(JSON.stringify({ 
+          error: 'Credits exhausted' 
+        }), {
+          status: 402,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      console.error('❌ AI API error:', aiResponse.status);
       throw new Error(`AI API error: ${aiResponse.status}`);
     }
 
     const aiData = await aiResponse.json();
+    
+    // Extract token usage
+    if (aiData.usage) {
+      totalInputTokens += aiData.usage.prompt_tokens || 0;
+      totalOutputTokens += aiData.usage.completion_tokens || 0;
+      totalTokensUsed += aiData.usage.total_tokens || 0;
+    }
+    
     const answer = aiData.choices[0].message.content;
+
+    // Log function execution
+    const endTime = Date.now();
+    await supabase.from('function_call_logs').insert({
+      org_id: orgId,
+      user_id: userId,
+      function_name: 'tariff-analyzer',
+      success: true,
+      execution_time_ms: endTime - startTime,
+      model_used: 'google/gemini-2.5-flash',
+      input_tokens: totalInputTokens,
+      output_tokens: totalOutputTokens,
+      total_tokens: totalTokensUsed,
+      estimated_cost_eur: 0
+    });
 
     return new Response(JSON.stringify({
       success: true,

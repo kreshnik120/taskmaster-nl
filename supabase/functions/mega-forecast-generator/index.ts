@@ -26,41 +26,63 @@ serve(async (req) => {
       });
     }
 
+    // Detect mode: authenticated vs autonomous
     const authHeader = req.headers.get('Authorization');
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    let orgId = '550e8400-e29b-41d4-a716-446655440000';
-    let userId = '550e8400-e29b-41d4-a716-446655440000';
-    let autonomousMode = true;
+    let orgId: string;
+    let userId: string;
+    let supabase: any;
 
     if (authHeader) {
-      const supabaseClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
-        global: { headers: { Authorization: authHeader } }
-      });
+      // AUTHENTICATED MODE
+      console.log('🔐 Running in authenticated mode');
+      supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        { global: { headers: { Authorization: authHeader } } }
+      );
 
-      const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-      
-      if (user) {
-        const { data: orgData } = await supabase
-          .from('user_organizations')
-          .select('org_id')
-          .eq('user_id', user.id)
-          .single();
-
-        if (orgData) {
-          orgId = orgData.org_id;
-          userId = user.id;
-          autonomousMode = false;
-        }
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error('Authentication failed');
       }
+      userId = user.id;
+
+      const { data: userOrg } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', userId)
+        .single();
+
+      if (!userOrg) throw new Error('User not in any organization');
+      orgId = userOrg.org_id;
+    } else {
+      // AUTONOMOUS MODE
+      console.log('🤖 Running in autonomous mode');
+      supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+
+      const { data: orgs } = await supabase
+        .from('organizations')
+        .select('id')
+        .limit(1);
+
+      if (!orgs || orgs.length === 0) {
+        throw new Error('No organizations found');
+      }
+
+      orgId = orgs[0].id;
+      userId = orgId;
     }
 
-    if (autonomousMode) {
-      console.log(`🤖 Running in autonomous mode for org: ${orgId}`);
-    }
+    // Token tracking
+    const startTime = Date.now();
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let totalTokensUsed = 0;
+
+    console.log(`🤖 Mega Forecast Generator for org: ${orgId}`);
 
     const { count: taskCount } = await supabase
       .from('tasks')
@@ -181,6 +203,14 @@ BELANGRIJK:
       }
 
       const aiResponse = await response.json();
+      
+      // Extract token usage
+      if (aiResponse.usage) {
+        totalInputTokens += aiResponse.usage.prompt_tokens || 0;
+        totalOutputTokens += aiResponse.usage.completion_tokens || 0;
+        totalTokensUsed += aiResponse.usage.total_tokens || 0;
+      }
+      
       const content = aiResponse.choices[0].message.content;
 
       let generatedTasks;
@@ -235,14 +265,19 @@ BELANGRIJK:
       }
     }
 
+    // Log function execution
+    const endTime = Date.now();
     await supabase.from('function_call_logs').insert({
       org_id: orgId,
       user_id: userId,
       function_name: 'mega-forecast-generator',
       success: true,
-      execution_time_ms: Date.now(),
+      execution_time_ms: endTime - startTime,
       model_used: 'google/gemini-2.5-flash',
-      estimated_cost_eur: 0,
+      input_tokens: totalInputTokens,
+      output_tokens: totalOutputTokens,
+      total_tokens: totalTokensUsed,
+      estimated_cost_eur: 0
     });
 
     console.log(`🎉 Total generated: ${totalGenerated} forecast tasks`);

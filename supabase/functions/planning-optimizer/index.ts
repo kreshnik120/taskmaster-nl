@@ -22,16 +22,11 @@ serve(async (req) => {
       });
     }
 
-    // Support both authenticated and autonomous modes
+    // Detect mode: authenticated (manual) vs autonomous (scheduler)
     const authHeader = req.headers.get('Authorization');
-    
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      authHeader ? Deno.env.get('SUPABASE_ANON_KEY') ?? '' : Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      authHeader ? { global: { headers: { Authorization: authHeader } } } : {}
-    );
-
     let orgId: string;
+    let userId: string;
+    let supabase: any;
     let dateRange: any = {
       start: new Date().toISOString(),
       end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
@@ -39,25 +34,40 @@ serve(async (req) => {
     let optimizationGoal = 'efficiency';
 
     if (authHeader) {
-      // Authenticated mode
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Unauthorized');
+      // AUTHENTICATED MODE
+      console.log('🔐 Running in authenticated mode');
+      supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        { global: { headers: { Authorization: authHeader } } }
+      );
+
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error('Authentication failed');
+      }
+      userId = user.id;
 
       const { data: userOrg } = await supabase
         .from('user_organizations')
         .select('org_id')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .single();
 
-      orgId = userOrg!.org_id;
+      if (!userOrg) throw new Error('User not in any organization');
+      orgId = userOrg.org_id;
       
       const body = await req.json();
       dateRange = body.date_range || dateRange;
       optimizationGoal = body.optimization_goal || 'efficiency';
-      
-      console.log('🔐 Authenticated mode');
     } else {
-      // Autonomous mode
+      // AUTONOMOUS MODE
+      console.log('🤖 Running in autonomous mode');
+      supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+
       const { data: orgs } = await supabase
         .from('organizations')
         .select('id')
@@ -68,8 +78,15 @@ serve(async (req) => {
       }
 
       orgId = orgs[0].id;
-      console.log('🤖 Autonomous mode: optimizing planning');
+      userId = orgId;
+      console.log('🤖 Autonomous mode: optimizing planning for org:', orgId);
     }
+
+    // Token tracking
+    const startTime = Date.now();
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let totalTokensUsed = 0;
 
     console.log('📅 Planning Optimizer analyzing schedule...');
 
@@ -92,11 +109,11 @@ serve(async (req) => {
     const { data: availability } = await supabase
       .from('professional_availability')
       .select('*, professionals(*)')
-      .in('professional_id', professionals?.map(p => p.id) || [])
+      .in('professional_id', professionals?.map((p: any) => p.id) || [])
       .gte('date', dateRange.start)
       .lte('date', dateRange.end);
 
-    const tasksContext = tasks?.map(t => ({
+    const tasksContext = tasks?.map((t: any) => ({
       id: t.id,
       title: t.title,
       start_at: t.start_at,
@@ -107,14 +124,14 @@ serve(async (req) => {
       client_id: t.client_id
     })) || [];
 
-    const professionalsContext = professionals?.map(p => ({
+    const professionalsContext = professionals?.map((p: any) => ({
       id: p.id,
       name: p.full_name,
       functie_niveau: p.functie_niveau,
       regio: p.regio
     })) || [];
 
-    const availabilityContext = availability?.map(a => ({
+    const availabilityContext = availability?.map((a: any) => ({
       professional_id: a.professional_id,
       professional_name: a.professionals?.full_name,
       date: a.date,
@@ -169,12 +186,39 @@ ${JSON.stringify(availabilityContext, null, 2)}`
     });
 
     if (!aiResponse.ok) {
-      if (aiResponse.status === 429) throw new Error('Rate limit exceeded');
-      if (aiResponse.status === 402) throw new Error('AI credits exhausted');
+      if (aiResponse.status === 429) {
+        console.error('⚠️ Rate limit exceeded');
+        return new Response(JSON.stringify({ 
+          error: 'Rate limits exceeded' 
+        }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      if (aiResponse.status === 402) {
+        console.error('💳 Credits exhausted');
+        return new Response(JSON.stringify({ 
+          error: 'Credits exhausted' 
+        }), {
+          status: 402,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      console.error('❌ AI API error:', aiResponse.status);
       throw new Error(`AI API error: ${aiResponse.status}`);
     }
 
     const aiData = await aiResponse.json();
+    
+    // Extract token usage
+    if (aiData.usage) {
+      totalInputTokens += aiData.usage.prompt_tokens || 0;
+      totalOutputTokens += aiData.usage.completion_tokens || 0;
+      totalTokensUsed += aiData.usage.total_tokens || 0;
+    }
+    
     const content = aiData.choices[0].message.content;
 
     let analysis;
@@ -189,6 +233,21 @@ ${JSON.stringify(availabilityContext, null, 2)}`
         summary: 'Analysis failed'
       };
     }
+
+    // Log function execution
+    const endTime = Date.now();
+    await supabase.from('function_call_logs').insert({
+      org_id: orgId,
+      user_id: userId,
+      function_name: 'planning-optimizer',
+      success: true,
+      execution_time_ms: endTime - startTime,
+      model_used: 'google/gemini-2.5-flash',
+      input_tokens: totalInputTokens,
+      output_tokens: totalOutputTokens,
+      total_tokens: totalTokensUsed,
+      estimated_cost_eur: 0
+    });
 
     return new Response(JSON.stringify({
       success: true,
