@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Calendar, CheckCircle2, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, ListTodo, User } from "lucide-react";
+import { Plus, Calendar, CheckCircle2, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, ListTodo, User, Zap } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
@@ -76,6 +76,7 @@ const Dashboard = () => {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const lastUserActionRef = useRef<number>(0);
+  const [activatingFunctions, setActivatingFunctions] = useState(false);
 
   useEffect(() => {
     loadTasks();
@@ -497,6 +498,49 @@ const Dashboard = () => {
     CRITICAL: "Kritiek",
   };
 
+  const activateAllFunctions = async () => {
+    setActivatingFunctions(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('function-activator', {
+        body: { trigger: 'manual_dashboard' }
+      });
+
+      if (error) throw error;
+
+      const result = data as {
+        success: boolean;
+        statistics: {
+          successful: number;
+          failed: number;
+          total_functions: number;
+        };
+        successful_functions: string[];
+        failed_functions: { name: string; error: string }[];
+      };
+
+      if (result.success) {
+        toast.success(`${result.statistics.successful}/${result.statistics.total_functions} edge functions geactiveerd! 🚀`);
+      } else {
+        toast.warning(
+          `${result.statistics.successful}/${result.statistics.total_functions} gelukt. ${result.statistics.failed} mislukt.`,
+          {
+            description: result.failed_functions.map(f => f.name).join(', ')
+          }
+        );
+      }
+
+      console.log('Activation results:', result);
+    } catch (error) {
+      console.error('Function activation error:', error);
+      toast.error('Kon edge functions niet activeren', {
+        description: error instanceof Error ? error.message : 'Onbekende fout'
+      });
+    } finally {
+      setActivatingFunctions(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -553,6 +597,47 @@ const Dashboard = () => {
 
       {/* Active Process Steps Widget */}
       <ActiveProcessWidget />
+
+      {/* Function Activator Card */}
+      <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-background">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="h-5 w-5 text-primary" />
+                Systeem Activatie
+              </CardTitle>
+              <CardDescription>
+                Activeer alle geplande edge functions om de automatische processen te starten
+              </CardDescription>
+            </div>
+            <Button 
+              onClick={activateAllFunctions}
+              disabled={activatingFunctions}
+              size="lg"
+              className="min-w-[180px]"
+            >
+              {activatingFunctions ? (
+                <>
+                  <Clock className="h-4 w-4 mr-2 animate-spin" />
+                  Activeren...
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4 mr-2" />
+                  Activeer Nu
+                </>
+              )}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          <p>
+            Deze actie triggert 8 geplande edge functions die verantwoordelijk zijn voor:
+            AI training, kennisbeheer, compliance monitoring, data kwaliteit en meer.
+          </p>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
