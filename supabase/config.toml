@@ -133,6 +133,10 @@ schedule = "*/30 * * * *"
 verify_jwt = false
 schedule = "*/30 * * * *"
 
+[functions.generate-embeddings]
+verify_jwt = false
+schedule = "*/10 * * * *"
+
 [functions.feedback-processor]
 verify_jwt = false
 schedule = "*/30 * * * *"
