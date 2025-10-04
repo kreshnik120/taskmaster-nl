@@ -149,22 +149,8 @@ serve(async (req) => {
       console.error('❌ Failed to log scheduler run:', logError);
     }
 
-    // Self-loop: schedule next run in 5 minutes
-    setTimeout(async () => {
-      try {
-        console.log('🔄 Self-loop: triggering next run in 5 minutes...');
-        await fetch(`${supabaseUrl}/functions/v1/master-scheduler`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${supabaseAnonKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ trigger: 'self-loop', timestamp: new Date().toISOString() })
-        });
-      } catch (err) {
-        console.error('❌ Self-loop failed:', err);
-      }
-    }, 5 * 60 * 1000); // 5 minutes
+    // Note: Scheduling is handled by pg_cron (runs every 5 minutes)
+    // See migration: fix_master_scheduler_cron.sql
 
     return new Response(
       JSON.stringify({
