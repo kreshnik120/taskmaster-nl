@@ -99,7 +99,7 @@ serve(async (req) => {
         console.error('Client professional query error:', clientProfError);
       } else if (clientProfessionals && clientProfessionals.length > 0) {
         professionalIds = clientProfessionals.map((pc: any) => pc.professional_id);
-        console.log(`Found ${professionalIds.length} professionals for client ${client_id}`);
+        console.log(`Found ${professionalIds?.length || 0} professionals for client ${client_id}`);
       } else {
         console.log(`No professionals found for client ${client_id}`);
         // Return empty result if client has no professionals
