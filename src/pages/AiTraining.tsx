@@ -16,6 +16,7 @@ import { PerformanceMetrics } from "@/components/AITraining/PerformanceMetrics";
 import { SystemMonitor } from "@/components/SystemMonitor";
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { AdminOnly } from "@/components/auth/AdminOnly";
+import { AIPerformanceDashboard } from "@/components/AITraining/AIPerformanceDashboard";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -72,13 +73,16 @@ const AiTraining = () => {
             </div>
 
             <Tabs defaultValue="dashboard" className="w-full">
-              <TabsList className="grid w-full grid-cols-8">
+              <TabsList className="grid w-full grid-cols-9">
                 <AdminOnly>
                   <TabsTrigger value="monitor">🚀 Monitor</TabsTrigger>
                 </AdminOnly>
                 <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
                 <AdminOnly>
-                  <TabsTrigger value="metrics">📈 Metrics</TabsTrigger>
+                  <TabsTrigger value="performance">📈 Performance</TabsTrigger>
+                </AdminOnly>
+                <AdminOnly>
+                  <TabsTrigger value="metrics">⚙️ Metrics</TabsTrigger>
                 </AdminOnly>
                 <TabsTrigger value="conflicts">⚠️ Conflicten</TabsTrigger>
                 <TabsTrigger value="search">🔍 Zoeken</TabsTrigger>
@@ -97,6 +101,12 @@ const AiTraining = () => {
               <TabsContent value="dashboard" className="mt-6">
                 <LearningDashboard />
               </TabsContent>
+
+              <AdminOnly>
+                <TabsContent value="performance" className="mt-6">
+                  <AIPerformanceDashboard />
+                </TabsContent>
+              </AdminOnly>
 
               <TabsContent value="metrics" className="mt-6">
                 <PerformanceMetrics />
