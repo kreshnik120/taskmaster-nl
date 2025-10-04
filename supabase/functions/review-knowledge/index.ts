@@ -57,7 +57,7 @@ serve(async (req) => {
 
     console.log('🔍 Starting automated knowledge review for org:', userOrg.org_id);
 
-    // STEP 1: Review items that need review
+    // STEP 1: Review items that need review (ULTRA-AUTONOMOUS: Increased to 100 items)
     const { data: needsReviewItems } = await supabaseClient
       .from('ai_knowledge_base')
       .select('*')
@@ -65,7 +65,7 @@ serve(async (req) => {
       .eq('needs_review', true)
       .is('deleted_at', null)
       .order('created_at', { ascending: true })
-      .limit(50);
+      .limit(100);
 
     let reviewedCount = 0;
     let autoResolvedCount = 0;

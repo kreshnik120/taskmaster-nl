@@ -113,13 +113,15 @@ serve(async (req) => {
       console.log('🤖 Running in autonomous mode for org:', orgId);
     }
 
-    const { batch_size, parallel_mode } = await req.json();
+    // ULTRA-AUTONOMOUS CONFIG: Higher batch size and parallel mode enabled by default
+    const { batch_size, parallel_mode } = await req.json().catch(() => ({}));
 
-    // ULTRA MODE: Process 200 items per batch (was 50)
-    const effectiveBatchSize = batch_size || 200;
+    // ULTRA MODE: Process 300 items per batch (was 200)
+    const effectiveBatchSize = batch_size || 300;
+    const parallelMode = parallel_mode !== false; // Default to true
 
     console.log(`🧠 ULTRA Knowledge Graph Builder for org ${orgId}`);
-    console.log(`📊 Processing batch of ${effectiveBatchSize} items (parallel: ${parallel_mode})`);
+    console.log(`📊 Processing batch of ${effectiveBatchSize} items (parallel: ${parallelMode})`);
 
     // Fetch knowledge items
     const { data: knowledgeItems, error: fetchError } = await supabase

@@ -111,6 +111,10 @@ serve(async (req) => {
       console.log('🤖 Running in autonomous mode for org:', orgId);
     }
 
+    // ULTRA-AUTONOMOUS CONFIG: Parallel processing settings
+    const MAX_CONCURRENT_SEARCHES = parseInt(Deno.env.get('MAX_CONCURRENT_SEARCHES') || '10');
+    const BATCH_SIZE = parseInt(Deno.env.get('BATCH_SIZE') || '5');
+    
     // Token tracking for all AI calls
     const startTime = Date.now();
     let totalInputTokens = 0;
@@ -120,6 +124,7 @@ serve(async (req) => {
     const { search_topics } = await req.json();
 
     console.log('🌐 Auto Knowledge Harvester starting search...');
+    console.log(`⚡ Parallel processing enabled: ${MAX_CONCURRENT_SEARCHES} concurrent searches, batch size ${BATCH_SIZE}`);
 
     // ULTRA TOPICS: ABCzorg/CitoZorg specifiek + Maximale data kwaliteit
     const defaultTopics = [
