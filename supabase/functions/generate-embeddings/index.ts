@@ -49,32 +49,8 @@ async function retryWithBackoff<T>(
   throw lastError;
 }
 
-async function generateEmbeddingOpenAI(text: string, apiKey: string): Promise<number[]> {
-  const response = await fetch('https://api.openai.com/v1/embeddings', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'text-embedding-3-small',
-      input: text,
-      dimensions: 1536
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`OpenAI API error: ${response.status} ${error}`);
-  }
-
-  const data = await response.json();
-  return data.data[0].embedding;
-}
-
-async function generateEmbeddingLovableAI(text: string, apiKey: string): Promise<number[]> {
-  // Fallback: use Lovable AI to generate a semantic representation
-  // This is a creative workaround - we ask the model to extract semantic features
+async function generateEmbeddingGemini(text: string, apiKey: string): Promise<number[]> {
+  // Use Gemini to extract semantic concepts for hash-based embedding
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -92,15 +68,13 @@ async function generateEmbeddingLovableAI(text: string, apiKey: string): Promise
           role: 'user',
           content: `Text: ${text.substring(0, 1000)}`
         }
-      ],
-      temperature: 0.3,
-      max_tokens: 200
+      ]
     }),
   });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Lovable AI error: ${response.status} ${error}`);
+    throw new Error(`Gemini API error: ${response.status} ${error}`);
   }
 
   const data = await response.json();
@@ -110,17 +84,20 @@ async function generateEmbeddingLovableAI(text: string, apiKey: string): Promise
     .map((c: string) => c.trim())
     .filter((c: string) => c.length > 0);
 
-  // Create a simple embedding: hash-based feature vector
+  console.log(`🔍 Extracted concepts: ${concepts.slice(0, 5).join(', ')}...`);
+
+  // Create hash-based feature vector (1536 dimensions)
   const embedding = new Array(1536).fill(0);
-  concepts.forEach((concept: string, idx: number) => {
+  concepts.forEach((concept: string) => {
     const hash = simpleHash(concept);
+    // Spread each concept across 10 dimensions for better distribution
     for (let i = 0; i < 10; i++) {
       const pos = (hash + i * 153) % 1536;
       embedding[pos] += (1 / (i + 1)) * 0.1;
     }
   });
 
-  // Normalize
+  // L2 normalization
   const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
   return embedding.map(val => val / (magnitude || 1));
 }
@@ -135,31 +112,14 @@ function simpleHash(str: string): number {
 }
 
 async function generateEmbedding(text: string): Promise<number[]> {
-  const openaiKey = Deno.env.get('OPENAI_API_KEY');
   const lovableKey = Deno.env.get('LOVABLE_API_KEY');
 
-  // Strategy 1: Try OpenAI embeddings (best quality)
-  if (openaiKey) {
-    try {
-      console.log('🔹 Attempting OpenAI embeddings...');
-      return await retryWithBackoff(() => generateEmbeddingOpenAI(text, openaiKey));
-    } catch (error) {
-      console.error('OpenAI embeddings failed:', error);
-    }
+  if (!lovableKey) {
+    throw new Error('LOVABLE_API_KEY not configured');
   }
 
-  // Strategy 2: Fallback to Lovable AI creative approach
-  if (lovableKey) {
-    try {
-      console.log('🔹 Falling back to Lovable AI semantic extraction...');
-      return await retryWithBackoff(() => generateEmbeddingLovableAI(text, lovableKey));
-    } catch (error) {
-      console.error('Lovable AI fallback failed:', error);
-      throw new Error('All embedding strategies failed');
-    }
-  }
-
-  throw new Error('No API keys configured for embeddings');
+  console.log('🤖 Generating Gemini-based embedding...');
+  return await retryWithBackoff(() => generateEmbeddingGemini(text, lovableKey));
 }
 
 serve(async (req) => {
