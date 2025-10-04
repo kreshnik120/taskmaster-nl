@@ -12,6 +12,7 @@ import { SeedClientKnowledge } from "@/components/AITraining/SeedClientKnowledge
 import { LearningDashboard } from "@/components/AITraining/LearningDashboard";
 import { SmartKnowledgeSearch } from "@/components/AITraining/SmartKnowledgeSearch";
 import { ConflictResolutionPanel } from "@/components/AITraining/ConflictResolutionPanel";
+import { ProfessionalClientLinks } from "@/components/AITraining/ProfessionalClientLinks";
 import { SystemMonitor } from "@/components/SystemMonitor";
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { AdminOnly } from "@/components/auth/AdminOnly";
@@ -71,11 +72,12 @@ const AiTraining = () => {
             </div>
 
             <Tabs defaultValue="dashboard" className="w-full">
-              <TabsList className="grid w-full grid-cols-5">
+              <TabsList className="grid w-full grid-cols-6">
                 <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
                 <AdminOnly>
                   <TabsTrigger value="system">🔧 Systeem</TabsTrigger>
                 </AdminOnly>
+                <TabsTrigger value="links">🔗 Links</TabsTrigger>
                 <TabsTrigger value="conflicts">⚠️ Conflicten</TabsTrigger>
                 <TabsTrigger value="training">💬 Training</TabsTrigger>
                 <TabsTrigger value="knowledge">🗄️ Kennisbank</TabsTrigger>
@@ -93,6 +95,10 @@ const AiTraining = () => {
                   </div>
                 </TabsContent>
               </AdminOnly>
+
+              <TabsContent value="links" className="mt-6">
+                <ProfessionalClientLinks />
+              </TabsContent>
 
               <TabsContent value="conflicts" className="mt-6">
                 <ConflictResolutionPanel />

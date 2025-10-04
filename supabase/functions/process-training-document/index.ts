@@ -436,6 +436,157 @@ async function processLargeFileInBackground(
   }
 }
 
+// Helper: Detect professional-client relationships from knowledge items
+async function detectProfessionalClientRelationships(
+  supabase: any,
+  knowledgeItems: any[],
+  fileName: string,
+  userId: string,
+  orgId: string,
+  lovableApiKey: string
+): Promise<void> {
+  console.log(`[DETECT] Analyzing ${knowledgeItems.length} items for professional-client relationships`);
+  
+  const context = knowledgeItems.map(item => ({
+    key: item.key,
+    value: item.value,
+    category: item.category
+  }));
+  
+  const prompt = `Analyseer deze kennis items uit "${fileName}" en zoek naar relaties tussen professionals en clients.
+
+CONTEXT:
+${JSON.stringify(context, null, 2)}
+
+ZOEK NAAR PATRONEN ZOALS:
+1. "Ali Budak werkt bij SWZ als VP4"
+2. Tabel rijen: "Ali Budak | SWZ | VP4 | vanaf 01-01-2025"
+3. Excel kolommen: "Naam | Client | Functie"
+4. Contract vermeldingen: "Professional: Jan de Vries, Client: Prisma"
+5. Facturatie: "Ali Budak - SWZ - uur declaratie"
+
+LET OP VARIATIES:
+- Client namen: "SWZ", "Stichting SWZ", "CitoZorg", "Prisma", "ABC Zorg", etc.
+- Functieniveaus: "VP4", "VIG", "begeleider", "verpleegkundige"
+- Namen: Voor- en achternaam variaties
+
+Return JSON array (leeg [] als geen matches):
+[{
+  "professional_name": "Ali Budak",
+  "client_name": "SWZ",
+  "functie_niveau": "VP4",
+  "start_date": "2025-01-01",
+  "confidence": 0.92,
+  "reasoning": "Duidelijk vermeld in tabel kolom"
+}]
+
+ALLEEN professionals die EXPLICIET gekoppeld zijn aan een client!`;
+
+  try {
+    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${lovableApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!aiResponse.ok) {
+      console.error(`[DETECT] AI error: ${aiResponse.status}`);
+      return;
+    }
+
+    const aiData = await aiResponse.json();
+    const content = aiData.choices?.[0]?.message?.content || "[]";
+    
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      console.log(`[DETECT] No relationships found in ${fileName}`);
+      return;
+    }
+
+    const detectedRelationships = JSON.parse(jsonMatch[0]);
+    console.log(`[DETECT] Found ${detectedRelationships.length} potential relationships`);
+
+    for (const rel of detectedRelationships) {
+      if (rel.confidence < 0.7) {
+        console.log(`[DETECT] Skipping low confidence (${rel.confidence}): ${rel.professional_name} - ${rel.client_name}`);
+        continue;
+      }
+
+      const { data: professionals } = await supabase
+        .from('professionals')
+        .select('id, full_name, functie_niveau')
+        .eq('org_id', orgId)
+        .ilike('full_name', `%${rel.professional_name}%`);
+
+      if (!professionals || professionals.length === 0) {
+        console.log(`[DETECT] Professional not found: ${rel.professional_name}`);
+        continue;
+      }
+
+      const professional = professionals[0];
+
+      const { data: clients } = await supabase
+        .from('clients')
+        .select('id, name')
+        .eq('org_id', orgId)
+        .or(`name.ilike.%${rel.client_name}%,company.ilike.%${rel.client_name}%`);
+
+      if (!clients || clients.length === 0) {
+        console.log(`[DETECT] Client not found: ${rel.client_name}`);
+        continue;
+      }
+
+      const client = clients[0];
+
+      const { data: existing } = await supabase
+        .from('professional_clients')
+        .select('id')
+        .eq('professional_id', professional.id)
+        .eq('client_id', client.id)
+        .eq('is_active', true);
+
+      if (existing && existing.length > 0) {
+        console.log(`[DETECT] Relationship already exists: ${professional.full_name} - ${client.name}`);
+        continue;
+      }
+
+      const insertData = {
+        professional_id: professional.id,
+        client_id: client.id,
+        start_date: rel.start_date || new Date().toISOString().split('T')[0],
+        notes: `Auto-detected from ${fileName} (confidence: ${rel.confidence.toFixed(2)}) - ${rel.reasoning}${rel.confidence < 0.85 ? ' [NEEDS REVIEW]' : ''}`,
+        is_active: true
+      };
+
+      await supabase.from('professional_clients').insert(insertData);
+      console.log(`[DETECT] ${rel.confidence >= 0.85 ? '✅ Auto-approved' : '⏳ Needs review'}: ${professional.full_name} - ${client.name}`);
+
+      await supabase.from('ai_learning_events').insert({
+        user_id: userId,
+        org_id: orgId,
+        event_type: 'professional_client_detected',
+        context: {
+          professional_name: professional.full_name,
+          client_name: client.name,
+          source_file: fileName,
+          confidence: rel.confidence,
+          reasoning: rel.reasoning
+        },
+        outcome: 'pending_verification'
+      });
+    }
+
+  } catch (error: any) {
+    console.error(`[DETECT] Error processing relationships:`, error.message);
+  }
+}
+
 async function processWithText(
   supabase: any,
   filePath: string,
@@ -609,6 +760,18 @@ Geef je antwoord als gestructureerde kennis items.`,
     
     // Auto-detect conflicts for newly uploaded content
     await autoDetectConflictsAfterUpload(supabase, fileName);
+    
+    // NIEUW: Detect professional-client relationships
+    if (LOVABLE_API_KEY && knowledgeItems.length > 0) {
+      await detectProfessionalClientRelationships(
+        supabase,
+        knowledgeItems,
+        fileName,
+        userId,
+        orgId,
+        LOVABLE_API_KEY
+      );
+    }
   }
 
   return knowledgeItems;
