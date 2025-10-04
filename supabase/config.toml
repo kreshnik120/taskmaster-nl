@@ -133,6 +133,13 @@ schedule = "*/30 * * * *"
 verify_jwt = false
 schedule = "*/30 * * * *"
 
+[functions.ai-chat-with-cache]
+verify_jwt = true
+
+[functions.generate-embeddings]
+verify_jwt = false
+schedule = "*/10 * * * *"
+
 [functions.master-scheduler]
 verify_jwt = false
 schedule = "* * * * *"

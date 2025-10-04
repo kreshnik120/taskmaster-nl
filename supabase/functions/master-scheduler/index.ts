@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Schedule map: all 22 edge functions with their cron expressions
+// Schedule map: all 23 edge functions with their cron expressions
 const SCHEDULES = {
   'compliance-monitor': '25 * * * *',           // Every hour at :25
   'smart-deduplicator': '30 * * * *',           // Every hour at :30
@@ -27,6 +27,7 @@ const SCHEDULES = {
   'planning-optimizer': '0 */12 * * *',         // Every 12 hours at :00
   'client-intelligence': '45 */8 * * *',        // Every 8 hours at :45
   'compliance-extractor': '10 */4 * * *',       // Every 4 hours at :10
+  'generate-embeddings': '*/10 * * * *',        // Every 10 minutes (NEW: semantic search embeddings)
 };
 
 // Simple cron expression matcher (minute hour dayOfMonth month dayOfWeek)

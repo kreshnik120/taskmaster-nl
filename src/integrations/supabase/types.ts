@@ -243,6 +243,42 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_response_cache: {
+        Row: {
+          created_at: string
+          expires_at: string
+          hit_count: number
+          id: string
+          knowledge_ids: string[]
+          org_id: string
+          question: string
+          question_hash: string
+          response: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          hit_count?: number
+          id?: string
+          knowledge_ids?: string[]
+          org_id: string
+          question: string
+          question_hash: string
+          response: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          hit_count?: number
+          id?: string
+          knowledge_ids?: string[]
+          org_id?: string
+          question?: string
+          question_hash?: string
+          response?: string
+        }
+        Relationships: []
+      }
       application_conversations: {
         Row: {
           application_id: string
@@ -359,6 +395,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      cache_analytics: {
+        Row: {
+          avg_query_time_ms: number
+          cache_hits: number
+          cache_misses: number
+          date: string
+          id: string
+          org_id: string
+          total_cost_saved_eur: number
+          total_tokens_saved: number
+        }
+        Insert: {
+          avg_query_time_ms?: number
+          cache_hits?: number
+          cache_misses?: number
+          date?: string
+          id?: string
+          org_id: string
+          total_cost_saved_eur?: number
+          total_tokens_saved?: number
+        }
+        Update: {
+          avg_query_time_ms?: number
+          cache_hits?: number
+          cache_misses?: number
+          date?: string
+          id?: string
+          org_id?: string
+          total_cost_saved_eur?: number
+          total_tokens_saved?: number
+        }
+        Relationships: []
       }
       chat_messages: {
         Row: {
@@ -706,6 +775,38 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      knowledge_embeddings: {
+        Row: {
+          created_at: string
+          embedding: string
+          id: string
+          knowledge_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          embedding: string
+          id?: string
+          knowledge_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          embedding?: string
+          id?: string
+          knowledge_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_embeddings_knowledge_id_fkey"
+            columns: ["knowledge_id"]
+            isOneToOne: true
+            referencedRelation: "ai_knowledge_base"
             referencedColumns: ["id"]
           },
         ]
@@ -1726,6 +1827,26 @@ export type Database = {
       }
     }
     Functions: {
+      binary_quantize: {
+        Args: { "": string } | { "": unknown }
+        Returns: unknown
+      }
+      halfvec_avg: {
+        Args: { "": number[] }
+        Returns: unknown
+      }
+      halfvec_out: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      halfvec_send: {
+        Args: { "": unknown }
+        Returns: string
+      }
+      halfvec_typmod_in: {
+        Args: { "": unknown[] }
+        Returns: number
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1733,9 +1854,97 @@ export type Database = {
         }
         Returns: boolean
       }
+      hnsw_bit_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      hnsw_halfvec_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      hnsw_sparsevec_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      hnswhandler: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      ivfflat_bit_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      ivfflat_halfvec_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      ivfflathandler: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      l2_norm: {
+        Args: { "": unknown } | { "": unknown }
+        Returns: number
+      }
+      l2_normalize: {
+        Args: { "": string } | { "": unknown } | { "": unknown }
+        Returns: string
+      }
+      match_knowledge: {
+        Args: {
+          filter_org_id?: string
+          match_count?: number
+          match_threshold?: number
+          query_embedding: string
+        }
+        Returns: {
+          category: string
+          confidence_score: number
+          key: string
+          knowledge_id: string
+          similarity: number
+          value: Json
+        }[]
+      }
+      sparsevec_out: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      sparsevec_send: {
+        Args: { "": unknown }
+        Returns: string
+      }
+      sparsevec_typmod_in: {
+        Args: { "": unknown[] }
+        Returns: number
+      }
       user_is_org_member: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
+      }
+      vector_avg: {
+        Args: { "": number[] }
+        Returns: string
+      }
+      vector_dims: {
+        Args: { "": string } | { "": unknown }
+        Returns: number
+      }
+      vector_norm: {
+        Args: { "": string }
+        Returns: number
+      }
+      vector_out: {
+        Args: { "": string }
+        Returns: unknown
+      }
+      vector_send: {
+        Args: { "": string }
+        Returns: string
+      }
+      vector_typmod_in: {
+        Args: { "": unknown[] }
+        Returns: number
       }
     }
     Enums: {
