@@ -607,21 +607,54 @@ async function processWithText(
       Authorization: `Bearer ${LOVABLE_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
+  body: JSON.stringify({
       model: "google/gemini-2.5-flash",
       messages: [
         {
           role: "system",
-          content: `Analyseer dit bedrijfsdocument en extraheer belangrijke kennis zoals:
-- Bedrijfsprocessen
-- Standaard procedures
-- Klantinformatie
-- Regels en richtlijnen
-- Workflow stappen
+          content: `Je bent een kennisextractie expert voor bedrijfsdocumenten. 
 
-Geef je antwoord als gestructureerde kennis items.`,
+VOOR EXCEL/CSV BESTANDEN (met pipe separators |):
+1. **Detecteer tabelstructuur**: Eerste rij = headers, volgende rijen = data
+2. **Extraheer per rij**: Maak voor ELKE datarij een apart knowledge item
+3. **Bewaar details**: Alle kolommen → gestructureerde value object
+4. **Categoriseer slim**: 
+   - Organisatie namen → "organisatie_intel"
+   - Professionals → "professional_info"
+   - Financieel → "markt_financieel"
+   - Compliance → "compliance"
+
+VOOR GEWONE DOCUMENTEN:
+- Extraheer key facts als aparte items
+- Categoriseer logisch
+
+OUTPUT FORMAT voor Excel/CSV (JSON array):
+[
+  {
+    "category": "organisatie_intel",
+    "key": "organisatie_kwintes_details",
+    "value": {
+      "organisatie": "Kwintes",
+      "regio": "Zuid-Holland",
+      "aantal_locaties": 12,
+      "afdelingen": ["Zorg", "Ondersteuning"],
+      "details": "..."
+    },
+    "confidence": 0.95
+  }
+]
+
+ALLEEN facts die EXPLICIET in de data staan!`,
         },
-        { role: "user", content: `Document: ${fileName}\n\n${text}` },
+        { 
+          role: "user", 
+          content: `Document: ${fileName}
+
+${text.includes('|') ? 'DIT IS TABELLAIRE DATA (Excel/CSV). Verwerk ELKE rij als apart knowledge item.' : 'Regulier document, extraheer key facts.'}
+
+CONTENT:
+${text}` 
+        },
       ],
     }),
   });
@@ -639,8 +672,50 @@ Geef je antwoord als gestructureerde kennis items.`,
     return [];
   }
 
-  const knowledgeItems = [
-    {
+  // Parse AI response - expect structured JSON array for Excel files
+  let knowledgeItems = [];
+
+  try {
+    // Try to parse as JSON array first (for Excel files)
+    const jsonMatch = extractedInfo.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      const parsedItems = JSON.parse(jsonMatch[0]);
+      
+      // Transform AI output to database format
+      knowledgeItems = parsedItems.map((item: any, index: number) => ({
+        user_id: userId,
+        org_id: orgId,
+        category: item.category || "documenten",
+        key: item.key || `document_${fileName}_${Date.now()}_${index}`,
+        value: item.value || { content: extractedInfo, source_file: fileName },
+        source: `document:${fileName}`,
+        confidence_score: item.confidence || 0.9,
+        needs_review: false,
+        last_validation_error: null,
+      }));
+      
+      console.log(`[EXCEL-PARSE] Extracted ${knowledgeItems.length} structured items from AI response`);
+    } else {
+      // Fallback: treat as single generic item
+      knowledgeItems = [{
+        user_id: userId,
+        org_id: orgId,
+        category: "documenten",
+        key: `document_${fileName}_${Date.now()}`,
+        value: { content: extractedInfo, source_file: fileName },
+        source: `document:${fileName}`,
+        confidence_score: 0.9,
+        needs_review: false,
+        last_validation_error: null,
+      }];
+      
+      console.log(`[EXCEL-PARSE] Using fallback format (no JSON structure found)`);
+    }
+  } catch (parseError) {
+    console.error(`[EXCEL-PARSE] JSON parse failed, using fallback:`, parseError);
+    
+    // Absolute fallback
+    knowledgeItems = [{
       user_id: userId,
       org_id: orgId,
       category: "documenten",
@@ -650,8 +725,8 @@ Geef je antwoord als gestructureerde kennis items.`,
       confidence_score: 0.9,
       needs_review: false,
       last_validation_error: null,
-    },
-  ];
+    }];
+  }
 
   // SPRINT 2: Enhanced duplicate detection with semantic analysis
   const itemsToInsert = [];
