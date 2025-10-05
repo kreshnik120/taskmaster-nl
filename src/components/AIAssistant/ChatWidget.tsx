@@ -630,7 +630,13 @@ export const ChatWidget = () => {
         console.log('💾 Saving conversation to database (session:', conversationId, ')');
         const { error: insertError } = await supabase.from('chat_messages').insert([
           { role: 'user', content: userMessage, user_id: user.id, conversation_id: conversationId },
-          { role: 'assistant', content: assistantMessage, user_id: user.id, conversation_id: conversationId },
+          { 
+            role: 'assistant', 
+            content: assistantMessage, 
+            user_id: user.id, 
+            conversation_id: conversationId,
+            metadata: { usedKnowledge: usedKnowledge.length > 0 ? usedKnowledge : [] }
+          },
         ]);
         
         if (insertError) {
