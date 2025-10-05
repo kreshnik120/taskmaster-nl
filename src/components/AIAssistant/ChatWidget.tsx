@@ -107,6 +107,39 @@ export const ChatWidget = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Load conversation history from database
+  useEffect(() => {
+    const loadConversationHistory = async () => {
+      if (!isAuthenticated) return;
+      
+      const conversationId = getConversationId();
+      
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('role, content')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true })
+        .limit(20);
+      
+      if (error) {
+        console.error('Error loading conversation history:', error);
+        return;
+      }
+      
+      if (data && data.length > 0) {
+        console.log(`📚 Loaded ${data.length} messages from history`);
+        setMessages(data.map(m => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+          showInteractive: false
+        })));
+        setShowWelcome(false);
+      }
+    };
+    
+    loadConversationHistory();
+  }, [isAuthenticated]);
+
   // Sync resizeRef with dimensions state
   useEffect(() => {
     resizeRef.current = { width: dimensions.width, height: dimensions.height };

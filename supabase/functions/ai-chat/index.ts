@@ -935,11 +935,45 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
       weekday: 'long'
     });
 
-    // Get conversation history (reverse order for chronological display)
-    const historyMessages = chatHistory ? [...chatHistory].reverse().slice(0, 10) : [];
-    const conversationHistory = historyMessages.length > 0
-      ? historyMessages.map(m => `${m.role === 'user' ? '👤' : '🤖'} ${m.content}`).join('\n')
-      : 'Eerste conversatie';
+    // Extract key facts from conversation history
+    const extractKeyFacts = (history: any[]): string | null => {
+      if (!history || history.length === 0) return null;
+      
+      const facts: string[] = [];
+      const recentMessages = [...history].reverse().slice(0, 10);
+      
+      recentMessages.forEach(msg => {
+        if (msg.role === 'user') {
+          const content = msg.content.toLowerCase();
+          
+          // Detect preferences
+          if (content.includes('mijn voorkeur') || content.includes('ik wil altijd') || content.includes('standaard')) {
+            facts.push(`👤 Voorkeur: ${msg.content.substring(0, 150)}`);
+          }
+          
+          // Detect context switches (client/project names)
+          if (content.includes('klant') || content.includes('client')) {
+            const clientMatch = msg.content.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/);
+            if (clientMatch) {
+              facts.push(`🏢 Context: Bezig met ${clientMatch[0]}`);
+            }
+          }
+          
+          // Detect important facts
+          if (content.includes('belangrijk') || content.includes('let op') || content.includes('onthoud')) {
+            facts.push(`⚠️ ${msg.content.substring(0, 150)}`);
+          }
+        }
+      });
+      
+      const uniqueFacts = [...new Set(facts)].slice(0, 5);
+      return uniqueFacts.length > 0 ? uniqueFacts.join('\n') : null;
+    };
+
+    const keyFacts = extractKeyFacts(chatHistory);
+    const conversationSummary = keyFacts 
+      ? `\n📋 BELANGRIJKE CONTEXT UIT EERDERE GESPREKKEN:\n${keyFacts}\n`
+      : '';
 
     const systemPrompt = `Je bent een efficiënte AI-assistent voor TaskFlow. Focus: kort, effectief, direct.
 
@@ -948,6 +982,7 @@ Vandaag is: ${dutchDateTime}
 Je werkt in Nederlandse tijd (Europe/Amsterdam, CET/CEST tijdzone).
 Alle datum/tijd referenties moeten in Nederlandse tijd zijn.
 Bij "vandaag", "morgen", "deze week" gebruik je de Nederlandse datum hierboven.
+${conversationSummary}
 Bij planning: houd rekening met Nederlandse werkdagen en werktijden (ma-vr, 09:00-17:00).
 
 ⚡ SLIMME ANTWOORDLENGTE:
