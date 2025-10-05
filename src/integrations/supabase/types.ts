@@ -435,6 +435,7 @@ export type Database = {
           conversation_id: string | null
           created_at: string | null
           id: string
+          metadata: Json | null
           role: string
           user_id: string
         }
@@ -443,6 +444,7 @@ export type Database = {
           conversation_id?: string | null
           created_at?: string | null
           id?: string
+          metadata?: Json | null
           role: string
           user_id: string
         }
@@ -451,6 +453,7 @@ export type Database = {
           conversation_id?: string | null
           created_at?: string | null
           id?: string
+          metadata?: Json | null
           role?: string
           user_id?: string
         }

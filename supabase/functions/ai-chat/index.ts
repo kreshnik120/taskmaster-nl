@@ -1727,6 +1727,20 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
           // Track knowledge usage BEFORE closing stream (blocking)
           const usedKnowledgeIds = await trackKnowledgeUsage(fullResponse, fullKnowledgeBase, supabaseClient, user.id, messages);
           
+          // ✅ Send knowledge metadata to client for feedback tracking
+          if (usedKnowledgeIds.length > 0) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              choices: [{
+                delta: { 
+                  content: '',
+                  metadata: { usedKnowledge: usedKnowledgeIds }
+                },
+                index: 0
+              }]
+            })}\n\n`));
+            console.log('📤 Sent knowledge metadata to client:', usedKnowledgeIds.length, 'items');
+          }
+          
           // ✅ AUTONOMOUS LEARNING: Save chat messages to trigger continuous-learner (non-blocking)
           const conversationId = crypto.randomUUID();
           (async () => {

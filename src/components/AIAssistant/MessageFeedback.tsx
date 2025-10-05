@@ -22,47 +22,23 @@ export const MessageFeedback = ({ messageContent, messageIndex, usedKnowledge }:
     setFeedback(type);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      // Get user's org
-      const { data: userOrg } = await supabase
-        .from('user_organizations')
-        .select('org_id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (!userOrg?.org_id) throw new Error('No organization found');
-
-      // Log the feedback as a learning event
-      const { error } = await supabase
-        .from('ai_learning_events')
-        .insert({
-          user_id: user.id,
-          org_id: userOrg.org_id,
-          event_type: type === 'positive' ? 'feedback_positive' : 'feedback_negative',
+      // Call process-feedback edge function instead of direct DB insert
+      const { data, error } = await supabase.functions.invoke('process-feedback', {
+        body: {
+          messageId: `msg_${messageIndex}`,
+          feedback: type,
           context: {
-            message_content: messageContent.substring(0, 500),
-            message_index: messageIndex,
-            timestamp: new Date().toISOString(),
-            usedKnowledge: usedKnowledge || [] // ✅ CRITICAL FIX: Include knowledge IDs
-          },
-          outcome: type === 'positive' ? 'success' : 'failure',
-          learning_score: type === 'positive' ? 0.8 : 0.3,
-          ai_response: {
-            content: messageContent
-          },
-          user_action: {
-            feedback_type: type,
-            provided_at: new Date().toISOString()
+            message: messageContent,
+            usedKnowledge: usedKnowledge || []
           }
-        });
+        }
+      });
 
       if (error) throw error;
 
       toast({
-        title: type === 'positive' ? '👍 Bedankt voor je feedback!' : '👎 Feedback ontvangen',
-        description: 'De AI leert van je feedback om beter te worden.',
+        title: type === 'positive' ? '👍 Bedankt!' : '👎 Feedback ontvangen',
+        description: data?.message || 'De AI leert van je feedback.',
       });
     } catch (error) {
       console.error('Failed to save feedback:', error);
