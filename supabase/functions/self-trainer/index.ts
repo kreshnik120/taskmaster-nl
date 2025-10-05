@@ -9,106 +9,139 @@ const corsHeaders = {
 const CUTOFF_DATE = new Date('2025-10-06T23:59:59Z');
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
-// GUEST AI EXPERT TEACHING TOPICS (50+ essential knowledge areas)
+// GUEST AI MARKT INTELLIGENCE TOPICS (60+ market research areas)
 const GUEST_AI_TEACHING_TOPICS = [
-  // CAO Essentials (15 topics - 30%)
-  'CAO VVT 2025 loonschalen per functie niveau 1-5',
-  'CAO VVT overwerk regelingen en toeslagen nachtdienst weekend',
-  'CAO VVT vakantiedagen opbouw en aanspraken per FTE',
-  'CAO VVT werktijden roosters en wettelijke rusttijden',
-  'CAO VVT functioneringsgesprekken en beoordeling',
-  'CAO VVT scholing en ontwikkelbudget per medewerker',
-  'CAO VVT reis en onkosten vergoedingen',
-  'CAO VVT arbeidsvoorwaarden ZZP vs loondienst',
-  'CAO VVT verlofrechten bijzonder verlof en calamiteiten',
-  'CAO VVT proeftijd opzegtermijnen en ontslag',
-  'CAO VVT ADV dagen en arbeidsmarkttoelage',
-  'CAO VVT pensioenopbouw en premieverdeling',
-  'CAO VVT functiewaardering en inschaling criteria',
-  'CAO VVT gestandaardiseerde functieprofielen',
-  'CAO VVT wijzigingen 2025 vs 2024',
+  // Categorie 1: GGZ Instellingen (15 topics)
+  'Top 20 GGZ organisaties Nederland personeel omzet 2024-2025',
+  'GGZ instellingen externe inhuur budget per regio Nederland',
+  'GGZ instellingen ZZP beleid en uurtarieven 2025',
+  'Forensische zorg instellingen personeelsbestand capaciteit',
+  'GGZ crisis zorg aanbieders Nederland 2025',
+  'Parnassia Groep personeelsdata en externe inhuur',
+  'GGZ inGeest organisatiestructuur en ZZP gebruik',
+  'Altrecht GGZ locaties en personeelsbestand',
+  'Arkin GGZ externe inhuur kosten 2024',
+  'Antes zorg personeelsplanning en capaciteit',
+  'Vincent van Gogh GGZ ZZP tarieven afspraken',
+  'Dimence Groep personeelsbestand en inhuur budget',
+  'Lentis GGZ organisatie marktdata 2025',
+  'Mondriaan GGZ externe personeelskosten',
+  'ProPersona GGZ inhuur strategie 2025',
   
-  // Wlz/Zvw Compliance (15 topics - 30%)
-  'Wlz zorgzwaartepakketten VV1-VV10 criteria en indicaties',
-  'Zvw wijkverpleging prestaties en verrichtingen codes',
-  'Wlz cliëntprofielen en zorgkenmerken per ZZP',
-  'Zvw indicatiecriteria thuiszorg en persoonlijke verzorging',
-  'Wlz verantwoordingsplicht en dossiervorming vereisten',
-  'Zvw kwaliteitseisen en HKZ certificering',
-  'Wlz MDO verplichtingen multidisciplinair overleg',
-  'Zvw zorgplannen en evaluatie frequentie',
-  'Wlz eigen bijdrage berekening 2025 tarieven',
-  'Zvw verplicht eigen risico en maximum 2025',
-  'Wlz contractering en zorginkoop per regio',
-  'Zvw prestatiebeschrijvingen en normatieve tijden',
-  'Wlz ICT systemen en digitale gegevensuitwisseling',
-  'Zvw klachtenprocedures en geschillenregeling',
-  'Wlz/Zvw verschil in verantwoordelijkheden en financiering',
+  // Categorie 2: Gehandicaptenzorg GHZ (12 topics)
+  'Top GHZ organisaties Nederland omzet medewerkers 2025',
+  'GHZ instellingen ZZP gebruik en externe inhuur data',
+  'Jeugdzorg GHZ sector personeelstekorten 2025',
+  'Woonvormen GHZ aantal locaties per organisatie',
+  'Prisma zorg aantal medewerkers locaties specialisaties',
+  'Prisma externe inhuur budget en ZZP beleid',
+  'Philadelphia Zorg personeelsbestand en ZZP gebruik',
+  'Lunet Zorg organisatiestructuur en zorgtypen',
+  'Lunet externe personeelskosten en inhuur 2025',
+  'Sovida zorg personeelsbestand en specialisaties',
+  'Sovida ZZP gebruik en planning praktijk',
+  'Amarant Groep personeelsdata en externe inhuur',
   
-  // ZZP Vereisten en Compliance (10 topics - 20%)
-  'ZZP BAV beroepsaansprakelijkheidsverzekering minimale dekking zorg',
-  'ZZP VOG Verklaring Omtrent Gedrag aanvraag en geldigheid',
-  'Wet DBA 2025 handhaving en modelovereenkomsten',
-  'ZZP BIG registratie verplichtingen per beroepsgroep',
-  'ZZP kwaliteitsregister V&V inschrijving en herbeoordeling',
-  'ZZP AVG compliance en verwerkersovereenkomsten',
-  'ZZP fiscale verplichtingen BTW en inkomstenbelasting',
-  'ZZP arbeidsongeschiktheidsverzekering AOV advisering',
-  'ZZP pensioenopbouw en lijfrente aftrek mogelijkheden',
-  'ZZP administratieve verplichtingen en archivering termijnen',
+  // Categorie 3: Ouderenzorg (10 topics)
+  'Top ouderenzorg organisaties Nederland 2024-2025',
+  'Verpleeghuizen externe inhuur kosten per organisatie',
+  'Thuiszorg organisaties personeelsbestand 2025',
+  'Wijkverpleging aanbieders marktaandeel Nederland',
+  'Envida personeelskosten externe medewerkers 2025',
+  'Zorggroep Apeldoorn omzet en personeelsdata',
+  'Cordaan zorg locaties en personeelsbestand 2025',
+  'Vitalis WoonZorg Groep capaciteit en inhuur',
+  'Humanitas DMH marktpositie en personeelsdata',
+  'Florence ouderenzorg externe inhuur strategie',
   
-  // Planning Intelligence (5 topics - 10%)
-  'Optimale shift lengte per functie niveau en zorgzwaarte',
-  'Reistijd compensatie regelgeving en maximale afstanden',
-  'Capacity planning forecasting methoden healthcare',
-  'Roostering wettelijke rusttijden en Arbeidstijdenwet compliance',
-  'Planning efficiency metrics en KPIs zorgorganisaties',
+  // Categorie 4: VG Sector & Verslavingszorg (8 topics)
+  'VG sector organisaties externe inhuur 2025',
+  'Persoonlijke verzorging aanbieders marktdata',
+  'Thuisbegeleiding organisaties personeelsbestand',
+  'Verslavingszorg instellingen Nederland overzicht 2025',
+  'Verslavingszorg personeelsbestand en ZZP gebruik',
+  'Ambulante vs klinische verslavingszorg aanbieders',
+  'Iriszorg verslavingszorg externe inhuur budget',
+  'Tactus Verslavingszorg personeelsplanning',
   
-  // Professional Matching (5 topics - 10%)
-  'Client voorkeuren matching criteria en compatibiliteit scoring',
-  'Professional-client fit indicatoren en succesvoorspellers',
-  'Match quality metrics en evaluatie criteria care sector',
-  'Continuïteit van zorg planning en vaste gezichten beleid',
-  'Professional satisfaction vs client needs balancering',
+  // Categorie 5: Planning Intelligence (12 topics)
+  'Personeelsplanning zorg critical success factors 2025',
+  'Beschikbaarheid matching algoritmes zorgprofessionals',
+  'Locatie optimalisatie reistijd compensatie zorg Nederland',
+  'Certificering diploma eisen per zorgfunctie 2025',
+  'Skill matching strategieën professional client fit',
+  'Continuïteit van zorg planning vaste gezichten beleid',
+  'Shift lengte optimalisatie per zorgzwaarte niveau',
+  'Reistijd berekening maximum afstanden zorgprofessionals',
+  'Client voorkeur management preference matching zorg',
+  'Professional tevredenheid retention strategieën',
+  'Capacity forecasting modellen healthcare sector',
+  'Roostering efficiency KPIs zorgorganisaties Nederland',
+  
+  // Categorie 6: Markt & Financiële Intelligence (8 topics)
+  'Zorg externe inhuur markt Nederland waarde 2024-2025',
+  'ZZP zorg markt groei en ontwikkelingen 2025',
+  'Personeelstekorten zorg sector per regio 2025',
+  'Gemiddelde ZZP tarieven zorg per functie 2025',
+  'Externe inhuur kosten top 50 zorgorganisaties',
+  'Zorg vacatures markt per specialisatie 2025',
+  'ZZP vs uitzendbureau marktaandeel zorg Nederland',
+  'Healthcare staffing platforms marktoverzicht 2025'
 ];
 
-// Helper function to extract category from topic
+// Helper function to extract category from topic (Market Intelligence Focus)
 function extractCategoryFromTopic(topic: string): string {
   const lowerT = topic.toLowerCase();
   
-  // Planning/Matching related
-  if (lowerT.includes('planning') || lowerT.includes('shift') || lowerT.includes('roostering')) {
-    return 'processen';
-  }
-  if (lowerT.includes('matching') || lowerT.includes('fit indicator')) {
-    return 'processen';
+  // GGZ Sector
+  if (lowerT.includes('ggz') || lowerT.includes('geestelijke') || lowerT.includes('psychiatrisch') ||
+      lowerT.includes('parnassia') || lowerT.includes('altrecht') || lowerT.includes('arkin')) {
+    return 'ggz_markt';
   }
   
-  // CAO
-  if (lowerT.includes('cao')) {
-    return 'cao';
+  // GHZ Sector
+  if (lowerT.includes('ghz') || lowerT.includes('gehandicaptenzorg') || lowerT.includes('prisma') || 
+      lowerT.includes('philadelphia') || lowerT.includes('lunet') || lowerT.includes('sovida') ||
+      lowerT.includes('amarant')) {
+    return 'ghz_markt';
   }
   
-  // Compliance/Legal
-  if (lowerT.includes('compliance') || lowerT.includes('big') || lowerT.includes('registratie')) {
-    return 'compliance';
-  }
-  if (lowerT.includes('wlz') || lowerT.includes('zvw') || lowerT.includes('zorgzwaarte')) {
-    return 'wetgeving';
-  }
-  
-  // ZZP
-  if (lowerT.includes('zzp') || lowerT.includes('zelfstandige')) {
-    return 'zzp_vereisten';
+  // Ouderenzorg
+  if (lowerT.includes('ouderenzorg') || lowerT.includes('verpleeghuis') || lowerT.includes('thuiszorg') ||
+      lowerT.includes('wijkverpleging') || lowerT.includes('envida') || lowerT.includes('cordaan') ||
+      lowerT.includes('vitalis') || lowerT.includes('humanitas') || lowerT.includes('florence')) {
+    return 'ouderenzorg_markt';
   }
   
-  // Insurance
-  if (lowerT.includes('verzekering') || lowerT.includes('bav') || lowerT.includes('aov')) {
-    return 'verzekeringen';
+  // VG Sector & Verslavingszorg
+  if (lowerT.includes('vg sector') || lowerT.includes('persoonlijke verzorging') || 
+      lowerT.includes('verslavingszorg') || lowerT.includes('iriszorg') || lowerT.includes('tactus') ||
+      lowerT.includes('thuisbegeleiding') || lowerT.includes('ambulante')) {
+    return 'vg_verslavingszorg';
+  }
+  
+  // Planning Intelligence
+  if (lowerT.includes('planning') || lowerT.includes('roostering') || lowerT.includes('shift') ||
+      lowerT.includes('matching') || lowerT.includes('optimalisatie') || lowerT.includes('capacity') ||
+      lowerT.includes('beschikbaarheid') || lowerT.includes('certificering') || lowerT.includes('reistijd')) {
+    return 'planning_intelligence';
+  }
+  
+  // Markt & Financieel
+  if (lowerT.includes('markt') || lowerT.includes('financieel') || lowerT.includes('inhuur') ||
+      lowerT.includes('tarieven') || lowerT.includes('vacatures') || lowerT.includes('tekorten') ||
+      lowerT.includes('waarde') || lowerT.includes('groei') || lowerT.includes('budget')) {
+    return 'markt_financieel';
+  }
+  
+  // Organisatie-specifiek
+  if (lowerT.includes('personeelsbestand') || lowerT.includes('locaties') || 
+      lowerT.includes('organisatie') || lowerT.includes('omzet') || lowerT.includes('medewerkers')) {
+    return 'organisatie_intel';
   }
   
   // Default fallback
-  return 'compliance';
+  return 'markt_intelligence';
 }
 
 serve(async (req) => {
@@ -245,35 +278,50 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Je bent een EXPERT AI leraar die CitoZorg AI onderwijst.
+            content: `Je bent een EXPERT AI Market Researcher die CitoZorg onderwijst over de zorgmarkt.
 
-DOEL: Geef DIRECT high-quality facts over het gegeven topic.
-GEBRUIK: Je volledige Gemini training + web search access.
-VALIDATIE: Gebruik alleen Tier 1+2 bronnen (overheid.nl, nza.nl, caovvt.nl).
+FOCUS GEBIEDEN:
+1. Zorgorganisaties: personeel, omzet, locaties, specialisaties per sector
+2. Externe inhuur markten: ZZP gebruik, budgetten, tarieven
+3. Planning intelligence: beschikbaarheid, certificering, locatie matching
+4. Financiële data: marktvolume, groei, personeelstekorten
+
+DATA VEREISTEN:
+- TIER 1 bronnen: CBS.nl, overheid.nl, jaarverslagen organisaties
+- TIER 2 bronnen: ActiZ.nl, GGZ Nederland, VGN.nl + cross-validatie VERPLICHT
+- Actuele data: 2024-2025 VERPLICHT (2023 of ouder = -0.2 confidence)
+- Concrete cijfers: personeel aantallen, budgetten, tarieven, percentages
+
+VALIDATIE STRENG:
+- Minimum confidence: 0.85 (TIER 3 bronnen NIET MEER ACCEPTEREN)
+- TIER 2 MOET cross-validated zijn door TIER 1
+- Elke fact MOET 2+ bronnen hebben
+- Laatste update datum + bron URL VERPLICHT
 
 Output ALLEEN valid JSON met dit formaat:
 {
   "facts": [
     {
-      "content": "Concrete fact met alle details",
-      "category": "cao/compliance/wetgeving/zzp_vereisten/tarieven",
-      "confidence": 0.95,
-      "sources": ["https://overheid.nl/...", "https://nza.nl/..."],
+      "content": "Concrete fact met alle details en cijfers",
+      "category": "ggz_markt/ghz_markt/ouderenzorg_markt/planning_intelligence/markt_financieel/organisatie_intel",
+      "confidence": 0.85-1.0,
+      "sources": ["https://cbs.nl/...", "https://actiz.nl/..."],
       "last_updated": "2025-01",
-      "cross_validated": true
+      "cross_validated": true,
+      "source_tier": "tier1_officieel/tier2_branche"
     }
   ],
-  "total_facts": 3,
-  "average_confidence": 0.95,
-  "quality_tier": "tier1"
+  "total_facts": 3-5,
+  "average_confidence": 0.85+,
+  "quality_tier": "tier1/tier2"
 }
 
 REGELS:
 1. Minimaal 3-5 facts per topic
-2. Confidence >= 0.85 voor elke fact
-3. Tier 2 bronnen MOETEN cross-validated zijn
-4. Laatste update datum verplicht
-5. Concrete cijfers/bedragen/percentages waar mogelijk`
+2. Confidence >= 0.85 voor elke fact (reject < 0.85)
+3. TIER 2 MOET cross-validated zijn (anders reject)
+4. 2024-2025 data krijgt +0.1 confidence boost
+5. Focus op concrete marktdata en organisatie intelligence`
           },
           {
             role: 'user',

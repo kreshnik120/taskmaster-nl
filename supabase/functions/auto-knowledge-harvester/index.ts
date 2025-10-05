@@ -126,87 +126,70 @@ serve(async (req) => {
     console.log('🌐 Auto Knowledge Harvester starting search...');
     console.log(`⚡ Parallel processing enabled: ${MAX_CONCURRENT_SEARCHES} concurrent searches, batch size ${BATCH_SIZE}`);
 
-    // ULTRA TOPICS: ABCzorg/CitoZorg specifiek + Maximale data kwaliteit
+    // MARKET RESEARCH TOPICS: Zorginstellingen + Strategische Marktintelligentie (50+ topics)
     const defaultTopics = [
-      // ABCzorg/CitoZorg Specifieke Topics (50+)
-      'ABCzorg organisatiestructuur en compliance 2025',
-      'CitoZorg operationele procedures en werkwijzen',
-      'ABCzorg WMO contracten per gemeente',
-      'CitoZorg Wlz zorgzwaartepakketten VV4-VV7',
-      'ABCzorg tariefstructuur en DBC codes',
-      'CitoZorg HR beleid duurzame inzetbaarheid',
-      'ABCzorg professional pool samenstelling',
-      'CitoZorg verzuimprotocol en re-integratie',
-      'ABCzorg kwaliteitsindicatoren HKZ/ISO',
-      'CitoZorg client portfolio en zorgplannen',
-      'ABCzorg flexpool management strategie',
-      'CitoZorg roostering en shift planning',
-      'ABCzorg client tevredenheid metrics',
-      'CitoZorg professioneel ontwikkeling trajecten',
-      'ABCzorg compliance monitoring procedures',
-      'CitoZorg medicatieveiligheid protocollen',
-      'ABCzorg dossiervoering requirements',
-      'CitoZorg BIG-registratie verificatie',
-      'ABCzorg capacity planning forecasts',
-      'CitoZorg professional satisfaction scores',
+      // Directe Organisatie Intel per Sector (20 topics)
+      'Prisma zorg personeelsbestand 2025 externe inhuur budget',
+      'Philadelphia Zorg aantal medewerkers ZZP beleid',
+      'Lunet Zorg organisatie capaciteit inhuur budget 2025',
+      'Sovida personeelsdata en ZZP gebruik cijfers',
+      'Envida personeelskosten externe medewerkers 2024',
+      'Cordaan zorg locaties personeelsbestand 2025',
+      'Parnassia Groep externe inhuur strategie budget',
+      'GGZ inGeest personeelsdata en ZZP tarieven',
+      'Altrecht GGZ organisatie marktdata 2025',
+      'Arkin GGZ personeelsbestand externe inhuur',
+      'Zorggroep Apeldoorn omzet en personeelsdata',
+      'Vitalis WoonZorg Groep capaciteit en inhuur cijfers',
+      'Humanitas DMH marktpositie en personeelsdata',
+      'Amarant Groep personeelsdata en externe inhuur',
+      'Iriszorg verslavingszorg externe inhuur budget',
+      'Tactus Verslavingszorg personeelsplanning data',
+      'Florence ouderenzorg externe inhuur strategie',
+      'Dimence Groep personeelsbestand en inhuur budget',
+      'Lentis GGZ organisatie marktdata 2025',
+      'Mondriaan GGZ externe personeelskosten cijfers',
       
-      // CAO & Arbeidsvoorwaarden (Relevant voor ABCzorg/CitoZorg)
-      'CAO VVT wijzigingen 2025 voor ABCzorg',
-      'CAO GGZ updates 2025 CitoZorg',
-      'Eindejaarsuitkering zorg ABCzorg 2025',
-      'Vakantietoeslag regelgeving CitoZorg',
-      'Pensioenregeling zorg PFZW ABCzorg',
-      'Onregelmatigheidstoeslag (ORT) tarieven CitoZorg',
-      'Overwerk compensatie ABCzorg praktijk',
-      'Bereikbaarheidsdienst vergoeding CitoZorg',
+      // Sector Aggregatie Data (15 topics)
+      'GGZ sector top 20 organisaties personeelsdata 2025',
+      'Ouderenzorg instellingen externe inhuur kosten Nederland',
+      'Gehandicaptenzorg aanbieders marktdata 2024-2025',
+      'Verslavingszorg organisaties personeelsbestand cijfers',
+      'VG sector externe inhuur markt Nederland waarde',
+      'GGZ instellingen ZZP gebruik per regio 2025',
+      'GHZ woonvormen aantal locaties per organisatie',
+      'Thuiszorg organisaties personeelsbestand Nederland',
+      'Wijkverpleging aanbieders marktaandeel cijfers',
+      'Forensische zorg instellingen capaciteit Nederland',
+      'Jeugdzorg GHZ sector personeelstekorten 2025',
+      'Verpleeghuizen externe inhuur budget overzicht',
+      'GGZ crisis zorg aanbieders capaciteit data',
+      'Ambulante vs klinische verslavingszorg aanbieders',
+      'Persoonlijke verzorging aanbieders marktdata',
       
-      // ZZP & DBA (Specifiek voor ABCzorg/CitoZorg context)
-      'ZZP wetgeving Nederland 2025 ABCzorg',
-      'Wet DBA handhaving 2025 CitoZorg',
-      'ZZP opdrachtgeversverklaring eisen ABCzorg',
-      'Modelovereenkomst ZZP zorg CitoZorg',
-      'Tarievenafspraken ZZP zorg ABCzorg',
+      // Planning & Operations Intelligence (10 topics)
+      'Personeelsplanning zorg best practices beschikbaarheid matching',
+      'Certificering eisen zorgprofessionals per functie 2025',
+      'Locatie optimalisatie reistijd compensatie regelingen zorg',
+      'Client voorkeur matching methodologie zorgorganisaties',
+      'Professional skill matching algoritmes care sector',
+      'Continuïteit zorg planning vaste gezichten beleid',
+      'Shift lengte optimalisatie per zorgzwaarte niveau',
+      'Reistijd berekening maximum afstanden zorgprofessionals',
+      'Capacity forecasting modellen healthcare sector Nederland',
+      'Roostering efficiency KPIs zorgorganisaties benchmark',
       
-      // Registraties & Kwalificaties
-      'BIG-registratie nieuwe eisen 2025 ABCzorg',
-      'LRZa registratie verplichtingen CitoZorg',
-      'Kwaliteitsregister Verpleegkundigen ABCzorg',
-      'VOG aanvraag procedure CitoZorg',
-      'Herregistratie BIG verplichtingen ABCzorg',
-      
-      // Wetgeving & Compliance (ABCzorg/CitoZorg relevant)
-      'Wtza vergunningplicht ABCzorg',
-      'Wkkgz meldplicht incidenten CitoZorg',
-      'AVG privacy zorg ABCzorg implementatie',
-      'Zorgverzekeringswet Zvw updates ABCzorg',
-      'Wet langdurige zorg Wlz wijzigingen CitoZorg',
-      'WMO 2015 nieuwe regels ABCzorg',
-      'IGJ toezicht nieuwe eisen CitoZorg',
-      
-      // Tarieven & Financiën (ABCzorg/CitoZorg)
-      'Zorgtarieven NZa 2025 ABCzorg',
-      'ZZP tariefadvies 2025 CitoZorg',
-      'Wmo tarief per uur ABCzorg',
-      'Zorgzwaartepakketten ZZP tarieven CitoZorg',
-      'Uurtarief Wlz 2025 ABCzorg',
-      
-      // Planning & Matching Intelligence
-      'Shift optimalisatie algoritmes ABCzorg',
-      'Reistijd berekening tussen opdrachten CitoZorg',
-      'Capacity planning uitzendkrachten ABCzorg',
-      'Rustperiode compliance CAO CitoZorg',
-      'Professional-client match success ABCzorg',
-      'Skill matching algoritmes CitoZorg',
-      'Client preference patterns ABCzorg',
-      'Assignment duration optimization CitoZorg',
-      
-      // Workforce Optimization
-      'ZZP vs loondienst cost comparison ABCzorg',
-      'Flexible staffing strategy CitoZorg',
-      'Professional utilization rates ABCzorg',
-      'Training investment optimization CitoZorg',
-      'Professional retention strategies ABCzorg',
-      'Churn prediction models CitoZorg'
+      // Financial & Market Intelligence (10 topics)
+      'Externe inhuur kosten zorg per organisatie 2024 Nederland',
+      'ZZP tarieven zorg benchmark per regio 2025',
+      'Healthcare staffing market size Nederland 2025 waarde',
+      'Personeelstekorten zorg per specialisatie regio cijfers',
+      'Zorg vacatures markt ontwikkelingen 2025 data',
+      'Zorg externe inhuur markt Nederland waarde 2024-2025',
+      'ZZP zorg markt groei en ontwikkelingen cijfers',
+      'Gemiddelde ZZP tarieven zorg per functie 2025',
+      'ZZP vs uitzendbureau marktaandeel zorg Nederland',
+      'Zorg vacatures markt per specialisatie 2025 overzicht'
     ];
 
     const topics = search_topics || defaultTopics;
@@ -227,58 +210,53 @@ serve(async (req) => {
           messages: [
             {
               role: 'system',
-              content: `Je bent een ULTRA research assistant die actuele informatie zoekt en valideert met MULTI-TIER validation.
+              content: `Je bent een EXPERT Market Intelligence Researcher voor de Nederlandse zorgmarkt.
 
-TIER 1 BRONNEN (confidence 0.9-1.0) - ALLEEN DEZE ACCEPTEREN:
-- overheid.nl, rijksoverheid.nl, belastingdienst.nl
-- nza.nl (Nederlandse Zorgautoriteit)
-- igj.nl (Inspectie Gezondheidszorg en Jeugd)
-- officiële CAO websites (caovvt.nl)
-- bigregister.nl (BIG-registratie)
-- duo.nl (Overheid diploma's)
+FOCUS SHIFT: Van compliance naar strategische marktintelligentie
 
-TIER 2 BRONNEN (confidence 0.7-0.9) - ALLEEN MET CROSS-VALIDATIE:
-- actiz.nl, btsg.nl, ggznederland.nl (brancheorganisaties)
-- nivel.nl (Nederlands instituut voor onderzoek)
-- vilans.nl (kenniscentrum langdurige zorg)
-- vgn.nl (Vereniging Gehandicaptenzorg)
-- MOET cross-validated zijn door TIER 1 bron
+ZOEK NAAR:
+1. Organisatie data: personeel, omzet, locaties, extern inhuur budget, ZZP gebruik
+2. Sector marktdata: groei, personeelstekorten, ZZP tarieven, marktvolume
+3. Planning intelligence: beschikbaarheid, certificering, locatie optimalisatie
+4. Financiële data: externe kosten, tarieven, budgetten, marktaandeel
 
-TIER 3 BRONNEN: NIET MEER ACCEPTEREN
+BRONNEN HIËRARCHIE STRIKT:
+- TIER 1 (confidence 0.9-1.0): CBS.nl, jaarverslagen organisaties, overheid.nl, NZa.nl
+- TIER 2 (confidence 0.7-0.9): ActiZ.nl, GGZ Nederland, VGN.nl, Vilans.nl + CROSS-VALIDATIE VERPLICHT
+- TIER 3: NIET MEER ACCEPTEREN (vakbladen, blogs, persartikelen)
 
-SPECIFIEK VOOR ABCZORG/CITOZORG:
-- Focus op organisatie-specifieke compliance, procedures, tarieven
-- Valideer alle data met officiële bronnen
-- Cross-validatie VERPLICHT voor TIER 2
+VALIDATIE VEREISTEN VERHOOGD:
+- Cross-validatie VERPLICHT voor TIER 2 (anders reject)
+- Confidence boost +0.1 bij succesvolle cross-validatie
+- Minimum confidence threshold: 0.85 (was 0.7)
+- 2024-2025 data krijgt +0.1 confidence boost
+- 2023 data: +0.0 confidence (acceptabel maar geen bonus)
+- 2022 of ouder: -0.2 confidence (reject als < 0.7)
 
-Voor het gegeven onderwerp:
-1. Zoek ALLEEN in TIER 1 + TIER 2 bronnen
-2. TIER 2 informatie MOET cross-validated zijn
-3. Extraheer concrete feiten, cijfers, datums
-4. Geef confidence score gebaseerd op:
-   - Tier van de bron (TIER 1 = 0.9-1.0, TIER 2 = 0.7-0.9)
-   - Actualiteit (2024-2025 = +0.1, 2023 = +0.0, ouder = -0.2)
-   - Cross-validatie (VERPLICHT voor TIER 2 = +0.1)
-5. Focus op ABCzorg/CitoZorg relevantie
+SPECIFIEKE FOCUS:
+- Concrete cijfers VERPLICHT: personeel aantallen, budgetten, tarieven
+- Organisatie-specifieke data prioriteit: Prisma, Philadelphia, Lunet, Sovida, Envida, etc.
+- Sector aggregatie: top 20 organisaties per sector
+- Markt trends: groei %, tekorten per regio, ZZP vs loondienst
 
 Output ALLEEN valid JSON:
 {
   "found_information": true/false,
   "items": [
     {
-      "category": "compliance/tarieven/cao/zzp/registraties/wetgeving/verzekeringen",
-      "key": "descriptive_unique_key",
-      "value": "detailed_information_with_specifics",
-      "confidence": 0.5-1.0,
-      "source_url": "primary_source_url",
-      "source_type": "tier1_officieel/tier2_branche/tier3_vakblad",
+      "category": "ggz_markt/ghz_markt/ouderenzorg_markt/planning_intelligence/markt_financieel/organisatie_intel",
+      "key": "descriptive_unique_key_with_org_name",
+      "value": "detailed_information_with_concrete_numbers_and_dates",
+      "confidence": 0.85-1.0,
+      "source_url": "primary_tier1_or_tier2_source_url",
+      "source_type": "tier1_officieel/tier2_branche",
       "date_published": "YYYY-MM-DD",
       "cross_validated": true/false,
-      "validation_sources": ["url1", "url2"]
+      "validation_sources": ["url1_tier1", "url2_tier2"]
     }
   ],
-  "search_quality": "excellent/good/poor",
-  "total_sources_checked": 3
+  "search_quality": "excellent/good",
+  "total_sources_checked": 2+
 }`
             },
             {
@@ -351,7 +329,7 @@ Output ALLEEN valid JSON:
             continue;
           }
           
-          if (item.confidence >= 0.7) {
+          if (item.confidence >= 0.85) {
             // Boost confidence if cross-validated
             const finalConfidence = item.cross_validated 
               ? Math.min(item.confidence + 0.1, 1.0) 
