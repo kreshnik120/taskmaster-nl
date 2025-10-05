@@ -970,7 +970,7 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
       return uniqueFacts.length > 0 ? uniqueFacts.join('\n') : null;
     };
 
-    const keyFacts = extractKeyFacts(chatHistory);
+    const keyFacts = extractKeyFacts(chatHistory || []);
     const conversationSummary = keyFacts 
       ? `\n📋 BELANGRIJKE CONTEXT UIT EERDERE GESPREKKEN:\n${keyFacts}\n`
       : '';
@@ -1095,8 +1095,7 @@ ${contextSummary}
 📚 KENNISBANK (${fullKnowledgeBase.length} items):
 ${formatKnowledgeBase()}
 
-CONVERSATIE GESCHIEDENIS:
-${conversationHistory}
+${conversationSummary || ''}
 
 🎯 GEBRUIK DE KENNISBANK ACTIEF:
 - Bij vragen over contracten, tarieven, compliance → Verwijs naar de specifieke kennis hierboven
