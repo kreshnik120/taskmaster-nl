@@ -29,6 +29,7 @@ const SCHEDULES = {
   'compliance-extractor': '10 */4 * * *',       // Every 4 hours at :10
   'generate-embeddings': '*/10 * * * *',        // Every 10 minutes (NEW: semantic search embeddings)
   'feedback-processor': '*/5 * * * *',          // Every 5 minutes (feedback loop activation)
+  'document-intelligence-analyzer': '0 6 * * *', // Daily at 06:00 (Deep document analysis)
 };
 
 // Simple cron expression matcher (minute hour dayOfMonth month dayOfWeek)

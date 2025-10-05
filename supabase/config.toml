@@ -147,3 +147,7 @@ verify_jwt = false
 [functions.master-scheduler]
 verify_jwt = false
 schedule = "* * * * *"
+
+[functions.document-intelligence-analyzer]
+verify_jwt = false
+schedule = "0 6 * * *"
