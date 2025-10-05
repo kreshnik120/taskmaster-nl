@@ -603,6 +603,26 @@ export const ChatWidget = () => {
         if (insertError) {
           console.error('Failed to save chat history:', insertError);
           // Non-fatal - continue anyway
+        } else {
+          // ✅ Trigger continuous learning (fire-and-forget)
+          console.log('🧠 Triggering continuous-learner...');
+          supabase.functions.invoke('continuous-learner', {
+            body: {
+              user_question: userMessage,
+              ai_response: assistantMessage,
+              trigger: 'frontend_direct',
+              conversation_id: conversationId,
+              used_knowledge: usedKnowledge.length > 0 ? usedKnowledge : undefined
+            }
+          }).then(({ data, error }) => {
+            if (error) {
+              console.error('⚠️ Continuous learner failed:', error);
+            } else {
+              console.log('✅ Continuous learner completed:', data);
+            }
+          }).catch((err) => {
+            console.error('⚠️ Continuous learner exception:', err);
+          });
         }
       }
 
