@@ -119,6 +119,68 @@ export const ManualFunctionTrigger = () => {
 
   return (
     <div className="space-y-6">
+      {/* GUEST AI MARKTONDERZOEKER TEST */}
+      <Card className="border-primary/20 bg-primary/5">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            🔬 GUEST AI MARKTONDERZOEKER - TEST NU
+          </CardTitle>
+          <CardDescription>
+            Test de nieuwe Guest AI transformatie: van compliance expert naar marktonderzoeker
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <Button
+              onClick={() => triggerValidationFunction('self-trainer')}
+              disabled={triggeringFunction === 'self-trainer'}
+              variant="default"
+              className="w-full"
+              size="lg"
+            >
+              {triggeringFunction === 'self-trainer' ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="mr-2 h-4 w-4" />
+              )}
+              Test Self-Trainer (Markt Intel)
+            </Button>
+
+            <Button
+              onClick={() => triggerValidationFunction('auto-knowledge-harvester')}
+              disabled={triggeringFunction === 'auto-knowledge-harvester'}
+              variant="default"
+              className="w-full"
+              size="lg"
+            >
+              {triggeringFunction === 'auto-knowledge-harvester' ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="mr-2 h-4 w-4" />
+              )}
+              Test Knowledge Harvester (Web Search)
+            </Button>
+          </div>
+
+          <div className="rounded-lg bg-background/50 p-4 space-y-2 text-sm">
+            <p className="font-semibold">✨ Nieuwe Focus Gebieden:</p>
+            <ul className="space-y-1 text-muted-foreground">
+              <li>• 🏥 <strong>GGZ Markt:</strong> Parnassia, GGZ inGeest, Altrecht - personeel, budgetten, ZZP beleid</li>
+              <li>• 🏠 <strong>GHZ Markt:</strong> Prisma, Philadelphia, Lunet, Sovida - organisatiedata & externe inhuur</li>
+              <li>• 👴 <strong>Ouderenzorg:</strong> Envida, Cordaan, Vitalis - marktdata & personeelsbestand</li>
+              <li>• 📊 <strong>Planning Intelligence:</strong> Beschikbaarheid, certificering, locatie matching</li>
+              <li>• 💰 <strong>Financiële Data:</strong> Tarieven, marktvolume, groei cijfers, personeelstekorten</li>
+            </ul>
+            <div className="pt-2 border-t mt-3">
+              <p className="text-xs font-medium">Kwaliteitscontrole (NIEUW):</p>
+              <p className="text-xs text-muted-foreground">
+                ✓ Min confidence 0.85 (was 0.7) • TIER 3 bronnen REJECT • TIER 2 cross-validatie VERPLICHT
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* VALIDATION & FEEDBACK CONTROL */}
       <Card>
         <CardHeader>
