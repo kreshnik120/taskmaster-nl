@@ -12,6 +12,7 @@ serve(async (req) => {
   }
 
   try {
+    const startTime = Date.now();
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -164,7 +165,7 @@ serve(async (req) => {
       user_id: orgId,
       function_name: 'source-validator',
       success: true,
-      execution_time_ms: Date.now(),
+      execution_time_ms: Math.floor(Date.now() - startTime),
       model_used: 'autonomous'
     });
 

@@ -15,6 +15,7 @@ serve(async (req) => {
   }
 
   try {
+    const startTime = Date.now();
     if (new Date() > CUTOFF_DATE) {
       return new Response(JSON.stringify({ 
         message: 'Free period ended' 
@@ -151,7 +152,7 @@ Genereer 10-15 regels per onderwerp. Focus op PRAKTISCHE toepassing.`;
       user_id: orgId,
       function_name: 'compliance-extractor',
       success: true,
-      execution_time_ms: Date.now(),
+      execution_time_ms: Math.floor(Date.now() - startTime),
       model_used: 'google/gemini-2.5-flash',
       estimated_cost_eur: 0,
     });
