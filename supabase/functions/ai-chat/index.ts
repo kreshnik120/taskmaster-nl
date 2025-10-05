@@ -1763,20 +1763,6 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
           }
           
           controller.close();
-          if (usedKnowledgeIds.length > 0) {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
-              choices: [{
-                delta: { 
-                  metadata: { 
-                    usedKnowledge: usedKnowledgeIds 
-                  } 
-                },
-                index: 0
-              }]
-            })}\n\n`));
-          }
-          
-          controller.close();
           
           // Log function call for analytics
           const executionTime = Date.now() - startTime;
