@@ -87,7 +87,8 @@ serve(async (req) => {
       user_question, 
       ai_response, 
       knowledge_used,
-      user_feedback 
+      user_feedback,
+      auto_apply = true  // ✅ NIEUW: backward compatible, default TRUE
     } = await req.json();
 
     console.log('🎓 Continuous Learner analyzing interaction...');
@@ -173,6 +174,90 @@ USER FEEDBACK: ${user_feedback || 'none'}`
       };
     }
 
+    // ✅ NIEUW: Auto-create high-confidence knowledge suggestions
+    let suggestionsCreated = 0;
+    if (auto_apply && analysis.new_knowledge_suggestions?.length > 0) {
+      console.log(`💡 Processing ${analysis.new_knowledge_suggestions.length} knowledge suggestions...`);
+      
+      for (const suggestion of analysis.new_knowledge_suggestions) {
+        if (suggestion.confidence >= 0.85) {
+          // Check for duplicates
+          const { data: existingDup } = await supabase
+            .from('ai_knowledge_base')
+            .select('id')
+            .eq('key', suggestion.key)
+            .eq('org_id', orgId)
+            .is('deleted_at', null)
+            .limit(1);
+          
+          if (!existingDup || existingDup.length === 0) {
+            const { error: insertError } = await supabase
+              .from('ai_knowledge_base')
+              .insert({
+                user_id: userId,
+                org_id: orgId,
+                category: suggestion.category || 'learned_from_chat',
+                key: suggestion.key,
+                value: suggestion.value,
+                confidence_score: suggestion.confidence,
+                source: 'continuous_learner_auto_suggestion',
+                auto_reviewed_at: new Date().toISOString(),
+                review_count: 1
+              });
+            
+            if (!insertError) {
+              suggestionsCreated++;
+              console.log(`✅ Created new knowledge: ${suggestion.key}`);
+            }
+          }
+        }
+      }
+    }
+
+    // Apply confidence updates (✅ VERBETERD: met validatie en safety checks)
+    let updatesApplied = 0;
+    if (auto_apply && analysis.confidence_updates?.length > 0) {
+      console.log(`🔄 Applying ${analysis.confidence_updates.length} confidence updates...`);
+      
+      for (const update of analysis.confidence_updates) {
+        // ✅ VALIDATION: Check if knowledge_id exists
+        const { data: existingKb } = await supabase
+          .from('ai_knowledge_base')
+          .select('id, confidence_score, review_count')
+          .eq('id', update.knowledge_id)
+          .eq('org_id', orgId)
+          .is('deleted_at', null)
+          .maybeSingle();
+        
+        if (!existingKb) {
+          console.warn(`⚠️ Knowledge ${update.knowledge_id} not found, skipping update`);
+          continue;
+        }
+        
+        // ✅ SAFETY: Cap confidence between 0.3 and 1.0
+        const newConfidence = Math.max(0.3, Math.min(1.0, update.new_confidence));
+        
+        const { error } = await supabase
+          .from('ai_knowledge_base')
+          .update({ 
+            confidence_score: newConfidence,
+            updated_at: new Date().toISOString(),
+            auto_reviewed_at: new Date().toISOString(),
+            review_count: (existingKb.review_count || 0) + 1,
+            last_validation_error: null
+          })
+          .eq('id', update.knowledge_id)
+          .eq('org_id', orgId);
+
+        if (!error) {
+          updatesApplied++;
+          console.log(`✅ Updated ${update.knowledge_id}: ${existingKb.confidence_score} → ${newConfidence}`);
+        } else {
+          console.error(`❌ Failed to update ${update.knowledge_id}:`, error);
+        }
+      }
+    }
+
     // Store learning event
     const { data: learningEvent } = await supabase
       .from('ai_learning_events')
@@ -189,25 +274,10 @@ USER FEEDBACK: ${user_feedback || 'none'}`
         ai_response: analysis,
         outcome: analysis.completeness === 'yes' && analysis.accuracy === 'yes' ? 'success' : 'needs_improvement',
         learning_score: analysis.learning_score,
-        applied_to_knowledge_base: false
+        applied_to_knowledge_base: auto_apply && (updatesApplied > 0 || suggestionsCreated > 0)  // ✅ DYNAMISCH: alleen TRUE als daadwerkelijk toegepast
       })
       .select()
       .single();
-
-    // Apply confidence updates
-    let updatesApplied = 0;
-    for (const update of analysis.confidence_updates || []) {
-      const { error } = await supabase
-        .from('ai_knowledge_base')
-        .update({ 
-          confidence_score: update.new_confidence,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', update.knowledge_id)
-        .eq('org_id', orgId);
-
-      if (!error) updatesApplied++;
-    }
 
     // Mark contradictions for review
     if (analysis.contradictions_found) {
@@ -245,7 +315,9 @@ USER FEEDBACK: ${user_feedback || 'none'}`
       analysis: analysis,
       learning_event_id: learningEvent?.id,
       confidence_updates_applied: updatesApplied,
+      suggestions_created: suggestionsCreated,  // ✅ NIEUW
       contradictions_marked: analysis.contradictions_found,
+      auto_apply_enabled: auto_apply,  // ✅ NIEUW
       execution_time_ms: executionTime
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
