@@ -8,16 +8,34 @@ const corsHeaders = {
 
 // Helper: Extract client name from knowledge item
 function extractClientFromKnowledge(kb: any): string | null {
+  // Check kb.value.client_name first (most direct)
+  if (kb.value?.client_name) {
+    const clientLower = kb.value.client_name.toLowerCase();
+    if (clientLower.includes('swz') || clientLower.includes('stichting swz') || clientLower.includes('citozorg')) return 'swz';
+    if (clientLower.includes('prisma')) return 'prisma';
+    if (clientLower.includes('lunet')) return 'lunet';
+    if (clientLower.includes('evb')) return 'evb';
+  }
+  
+  // Check source (document names)
+  if (kb.source) {
+    const sourceLower = kb.source.toLowerCase();
+    if (sourceLower.includes('swz') || sourceLower.includes('citozorg') || sourceLower.includes('stichting_swz')) return 'swz';
+    if (sourceLower.includes('prisma')) return 'prisma';
+    if (sourceLower.includes('lunet')) return 'lunet';
+    if (sourceLower.includes('evb')) return 'evb';
+  }
+  
   // Check key
   const keyLower = kb.key.toLowerCase();
-  if (keyLower.includes('swz') || keyLower.includes('stichting_swz')) return 'swz';
+  if (keyLower.includes('swz') || keyLower.includes('stichting_swz') || keyLower.includes('citozorg')) return 'swz';
   if (keyLower.includes('prisma')) return 'prisma';
   if (keyLower.includes('lunet')) return 'lunet';
   if (keyLower.includes('evb')) return 'evb';
   
-  // Check value
+  // Check value (last resort)
   const valueStr = JSON.stringify(kb.value).toLowerCase();
-  if (valueStr.includes('stichting swz') || valueStr.includes('swz')) return 'swz';
+  if (valueStr.includes('stichting swz') || valueStr.includes('citozorg') || valueStr.includes('swz')) return 'swz';
   if (valueStr.includes('prisma')) return 'prisma';
   if (valueStr.includes('lunet')) return 'lunet';
   if (valueStr.includes('evb')) return 'evb';
@@ -485,11 +503,16 @@ async function trackKnowledgeUsage(
     if (matchScore >= 3) {
       const kbClient = extractClientFromKnowledge(kb);
       
-      // CLIENT MISMATCH DETECTION
+      // CLIENT VALIDATION - Only penalize EXPLICIT mismatches
+      // Accept knowledge if:
+      // - kbClient is null (general knowledge)
+      // - questionClient is null (no client filter in question)
+      // - Both match
+      // Only skip if BOTH are known AND different
       if (questionClient && kbClient && kbClient !== questionClient) {
-        console.warn(`⚠️ Client mismatch detected: KB="${kbClient}", Question="${questionClient}"`);
+        console.warn(`⚠️ Explicit client mismatch: KB="${kbClient}", Question="${questionClient}"`);
         
-        // Lower confidence instead of incrementing usage
+        // Lower confidence and flag for review
         await supabase
           .from('ai_knowledge_base')
           .update({
@@ -516,10 +539,14 @@ async function trackKnowledgeUsage(
           impact_score: 0.8
         });
         
-        continue; // Skip usage increment
+        continue; // Skip usage increment for explicit mismatches
       }
       
-      // Valid usage: increment normally
+      // Valid usage: accept and track
+      // This now includes:
+      // - General knowledge (kbClient = null)
+      // - Client-specific knowledge matching the question
+      // - Knowledge used in non-client-specific questions
       usedKnowledgeIds.push(kb.id);
       
       const { error } = await supabase
@@ -544,6 +571,8 @@ async function trackKnowledgeUsage(
 }
 
 serve(async (req) => {
+  const startTime = Date.now(); // Track execution time
+  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -1679,6 +1708,39 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
           }
           
           controller.close();
+          
+          // Log function call for analytics
+          const executionTime = Date.now() - startTime;
+          const inputTokens = Math.floor(JSON.stringify(messages).length / 4);
+          const outputTokens = Math.floor(fullResponse.length / 4);
+          const totalTokens = inputTokens + outputTokens;
+          const estimatedCost = (inputTokens * 0.000001) + (outputTokens * 0.000002); // EUR for gemini-2.5-flash
+          
+          try {
+            const { data: orgData } = await supabaseClient
+              .from('user_organizations')
+              .select('org_id')
+              .eq('user_id', user.id)
+              .single();
+            
+            if (orgData?.org_id) {
+              await supabaseClient.from('function_call_logs').insert({
+                org_id: orgData.org_id,
+                user_id: user.id,
+                function_name: 'ai-chat',
+                success: true,
+                execution_time_ms: executionTime,
+                model_used: 'google/gemini-2.5-flash',
+                input_tokens: inputTokens,
+                output_tokens: outputTokens,
+                total_tokens: totalTokens,
+                estimated_cost_eur: estimatedCost
+              });
+            }
+          } catch (logError) {
+            console.error('Failed to log function call:', logError);
+            // Don't fail the request if logging fails
+          }
         } catch (error) {
           console.error("Stream processing error:", error);
           controller.error(error);
