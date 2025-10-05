@@ -27,6 +27,7 @@ export const FeedbackButton = ({ messageId, messageContent, context }: FeedbackB
           feedback: type,
           context: {
             message: messageContent,
+            usedKnowledge: context?.knowledge_ids_for_feedback || [],
             ...context
           }
         }

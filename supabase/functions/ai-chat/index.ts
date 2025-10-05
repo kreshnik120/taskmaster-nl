@@ -1757,7 +1757,11 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                 user_id: user.id,
                 conversation_id: conversationId,
                 role: 'assistant',
-                content: fullResponse
+                content: fullResponse,
+                metadata: {
+                  feedback_enabled: true,
+                  knowledge_ids_for_feedback: usedKnowledgeIds
+                }
               });
 
               // Optional: Save conversation context for FASE 2 (usage validation)
