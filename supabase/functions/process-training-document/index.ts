@@ -607,7 +607,7 @@ async function processWithText(
       Authorization: `Bearer ${LOVABLE_API_KEY}`,
       "Content-Type": "application/json",
     },
-  body: JSON.stringify({
+    body: JSON.stringify({
       model: "google/gemini-2.5-flash",
       messages: [
         {
