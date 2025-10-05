@@ -116,7 +116,7 @@ export const ChatWidget = () => {
       
       const { data, error } = await supabase
         .from('chat_messages')
-        .select('role, content')
+        .select('role, content, metadata')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true })
         .limit(20);
@@ -131,7 +131,8 @@ export const ChatWidget = () => {
         setMessages(data.map(m => ({
           role: m.role as 'user' | 'assistant',
           content: m.content,
-          showInteractive: false
+          showInteractive: false,
+          usedKnowledge: (m.metadata as { usedKnowledge?: string[] })?.usedKnowledge || []
         })));
         setShowWelcome(false);
       }
@@ -171,7 +172,7 @@ export const ChatWidget = () => {
 
       const { data: history } = await supabase
         .from('chat_messages')
-        .select('role, content')
+        .select('role, content, metadata')
         .eq('user_id', user.id)
         .or(`conversation_id.eq.${conversationId},conversation_id.is.null`)
         .order('created_at', { ascending: false })
