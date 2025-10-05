@@ -1693,7 +1693,76 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
           // Track knowledge usage BEFORE closing stream (blocking)
           const usedKnowledgeIds = await trackKnowledgeUsage(fullResponse, fullKnowledgeBase, supabaseClient, user.id, messages);
           
+          // ✅ AUTONOMOUS LEARNING: Save chat messages to trigger continuous-learner (non-blocking)
+          const conversationId = crypto.randomUUID();
+          (async () => {
+            try {
+              // Get org_id for the user
+              const { data: orgData } = await supabaseClient
+                .from('user_organizations')
+                .select('org_id')
+                .eq('user_id', user.id)
+                .single();
+
+              if (!orgData?.org_id) {
+                console.warn('⚠️ No org_id found for user, skipping chat persistence');
+                return;
+              }
+
+              // Save user message
+              const userMessage = messages[messages.length - 1];
+              await supabaseClient.from('chat_messages').insert({
+                user_id: user.id,
+                conversation_id: conversationId,
+                role: 'user',
+                content: userMessage.content
+              });
+
+              // Save assistant message (triggers continuous-learner via database trigger)
+              await supabaseClient.from('chat_messages').insert({
+                user_id: user.id,
+                conversation_id: conversationId,
+                role: 'assistant',
+                content: fullResponse
+              });
+
+              // Optional: Save conversation context for FASE 2 (usage validation)
+              if (usedKnowledgeIds.length > 0) {
+                await supabaseClient.from('conversation_context').insert({
+                  conversation_id: conversationId,
+                  user_id: user.id,
+                  category: 'task_management_chat',
+                  summary: userMessage.content.substring(0, 500),
+                  key_points: {
+                    used_knowledge_ids: usedKnowledgeIds,
+                    response_length: fullResponse.length,
+                    user_question: userMessage.content
+                  }
+                });
+              }
+
+              console.log(`✅ Chat messages saved, conversation_id: ${conversationId}, knowledge used: ${usedKnowledgeIds.length}`);
+            } catch (persistError) {
+              console.error('❌ Chat persistence error (non-blocking):', persistError);
+              // Don't fail the request if persistence fails
+            }
+          })();
+          
           // Send usedKnowledge metadata to client for feedback tracking
+          if (usedKnowledgeIds.length > 0) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              choices: [{
+                delta: { 
+                  metadata: { 
+                    usedKnowledge: usedKnowledgeIds 
+                  } 
+                },
+                index: 0
+              }]
+            })}\n\n`));
+          }
+          
+          controller.close();
           if (usedKnowledgeIds.length > 0) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({
               choices: [{
