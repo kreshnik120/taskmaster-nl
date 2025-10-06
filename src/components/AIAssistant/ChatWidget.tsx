@@ -608,7 +608,7 @@ export const ChatWidget = () => {
                     content: assistantMessage,
                     interactive: parsedResponse.interactive,
                     showInteractive: !!parsedResponse.interactive,
-                    usedKnowledge: usedKnowledge.length > 0 ? usedKnowledge : undefined,
+                    usedKnowledge: usedKnowledge.length > 0 ? usedKnowledge : [],
                   };
                   return updated;
                 });
