@@ -66,6 +66,38 @@ export const ConflictResolutionPanel = () => {
     },
   });
 
+  // Query voor auto-resolve statistics (persistent data uit database)
+  const { data: autoResolveStats, refetch: refetchStats } = useQuery({
+    queryKey: ["auto-resolve-stats"],
+    queryFn: async () => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const { data, error } = await supabase
+        .from("ai_learning_events")
+        .select("*")
+        .eq("event_type", "conflict_resolution")
+        .gte("created_at", today.toISOString());
+      
+      if (error) throw error;
+      
+      const autoResolved = data?.filter(e => {
+        const context = e.context as any;
+        return context?.auto_resolved === true || context?.auto_resolved === "true";
+      }).length || 0;
+      
+      const totalResolved = data?.length || 0;
+      const accuracy = totalResolved > 0 ? (autoResolved / totalResolved) * 100 : 0;
+      
+      return {
+        autoResolved,
+        totalResolved,
+        accuracy: Math.round(accuracy)
+      };
+    },
+    refetchInterval: 30000 // Refresh elke 30 seconden
+  });
+
   const resolveConflictMutation = useMutation({
     mutationFn: async ({
       conflictId,
@@ -374,6 +406,11 @@ export const ConflictResolutionPanel = () => {
         title: "🤖 Auto-Resolved",
         description: `${toResolve.length} "geen conflict" items automatisch verwerkt`,
       });
+      
+      // Refresh statistics na auto-resolve
+      setTimeout(() => {
+        refetchStats?.();
+      }, 1000);
     }
   }, [conflicts, autoResolveEnabled]);
 
@@ -395,43 +432,87 @@ export const ConflictResolutionPanel = () => {
 
   return (
     <div className="space-y-6">
-      {/* Auto-Resolve Statistics */}
-      {autoResolvedToday > 0 && (
-        <Card className="p-6 border-green-200 bg-green-50 dark:bg-green-950/20">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-green-600" />
-              Auto-Resolve Status
-            </h3>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setAutoResolveEnabled(!autoResolveEnabled)}
-            >
-              {autoResolveEnabled ? "⏸️ Pauzeer" : "▶️ Herstart"}
-            </Button>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
+      {/* Auto-Resolve Control - ALTIJD ZICHTBAAR */}
+      <Card className="p-6 bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <Lightbulb className="h-6 w-6 text-blue-600" />
             <div>
-              <p className="text-sm text-muted-foreground">Auto-Resolved Vandaag</p>
-              <p className="text-3xl font-bold text-green-600">{autoResolvedToday}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">AI Accuraatheid</p>
-              <p className="text-3xl font-bold text-green-600">
-                {(() => {
-                  const manuallyReviewedCount = conflicts.filter((c: any) => c.data?.manually_reviewed).length;
-                  const totalResolved = autoResolvedToday + manuallyReviewedCount;
-                  const accuracy = totalResolved > 0 
-                    ? Math.round((autoResolvedToday / totalResolved) * 100)
-                    : 100;
-                  return accuracy;
-                })()}%
+              <h3 className="font-semibold text-lg">Auto-Resolve Systeem</h3>
+              <p className="text-sm text-muted-foreground">
+                Automatische afhandeling van complementaire kennisitems
               </p>
             </div>
           </div>
-        </Card>
-      )}
+          
+          <div className="flex items-center gap-4">
+            {/* Real-time statistics uit database */}
+            <div className="text-right">
+              <div className="text-2xl font-bold text-blue-600">
+                {autoResolveStats?.autoResolved || 0}
+              </div>
+              <div className="text-xs text-muted-foreground">vandaag verwerkt</div>
+            </div>
+            
+            {/* Toggle button - werkt met bestaande state */}
+            <Button
+              variant={autoResolveEnabled ? "default" : "outline"}
+              onClick={() => setAutoResolveEnabled(!autoResolveEnabled)}
+              className="min-w-[100px]"
+            >
+              {autoResolveEnabled ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  AAN
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-4 w-4 mr-2" />
+                  UIT
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+        
+        {/* Uitgebreide statistics - alleen tonen als er data is */}
+        {autoResolveStats && autoResolveStats.totalResolved > 0 && (
+          <div className="grid grid-cols-3 gap-4 pt-4 border-t mt-4">
+            <div>
+              <div className="text-sm text-muted-foreground">Totaal Verwerkt</div>
+              <div className="text-xl font-semibold">{autoResolveStats.totalResolved}</div>
+              <div className="text-xs text-muted-foreground mt-1">Vandaag</div>
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">Automatisch</div>
+              <div className="text-xl font-semibold text-blue-600">
+                {autoResolveStats.autoResolved}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Door AI afgehandeld
+              </div>
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">AI Accuracy</div>
+              <div className="text-xl font-semibold text-green-600">
+                {autoResolveStats.accuracy}%
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Succesvolle beslissingen
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Hulptekst */}
+        <div className="mt-4 p-3 bg-blue-100 dark:bg-blue-950/30 rounded-lg">
+          <p className="text-xs text-muted-foreground">
+            💡 <strong>Hoe werkt het?</strong> Auto-Resolve detecteert automatisch wanneer conflicterende items 
+            <strong>complementair</strong> zijn (elkaar aanvullen) en markeert ze als "Geen Conflict". 
+            Items met redenering zoals "vullen elkaar aan" worden automatisch verwerkt.
+          </p>
+        </div>
+      </Card>
 
       {/* SPRINT 2: AI Suggestions (Tier 2) */}
       {suggestions && suggestions.length > 0 && (
@@ -542,7 +623,10 @@ export const ConflictResolutionPanel = () => {
                           variant={isComplementary ? "default" : "outline"}
                           size="sm"
                           className={isComplementary ? "bg-green-600 hover:bg-green-700" : ""}
-                          onClick={() => noConflictMutation.mutate(suggestion.id)}
+                          onClick={() => noConflictMutation.mutate({ 
+                            conflictId: suggestion.id, 
+                            isAutoResolved: false 
+                          })}
                           disabled={noConflictMutation.isPending}
                         >
                           🤝 Geen Conflict
