@@ -5,17 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Play, CheckCircle2, AlertCircle, AlertTriangle, RefreshCw, Mail } from "lucide-react";
+import { Loader2, Play, CheckCircle2, AlertCircle, AlertTriangle, RefreshCw } from "lucide-react";
 
 export const ManualFunctionTrigger = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [status, setStatus] = useState<"idle" | "running" | "success" | "error">("idle");
   const [result, setResult] = useState<any>(null);
   const [triggeringFunction, setTriggeringFunction] = useState<string | null>(null);
-  
-  // Resend setup states
-  const [setupStatus, setSetupStatus] = useState<"idle" | "configuring" | "success" | "error">("idle");
-  const [routeInfo, setRouteInfo] = useState<any>(null);
 
   // Fetch validation metrics - simplified version
   const { data: validationMetrics, refetch: refetchMetrics } = useQuery({
@@ -80,31 +76,6 @@ export const ManualFunctionTrigger = () => {
     }
   };
 
-  const triggerResendSetup = async () => {
-    setSetupStatus("configuring");
-    setRouteInfo(null);
-
-    try {
-      toast.info("📧 Configureren van Resend inbound route...");
-      
-      const { data, error } = await supabase.functions.invoke('setup-resend-inbound', {
-        body: {}
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      console.log('[ResendSetup] Route created:', data);
-      setSetupStatus("success");
-      setRouteInfo(data?.route);
-      toast.success("✅ Resend inbound route succesvol geconfigureerd!");
-    } catch (error: any) {
-      console.error('[ResendSetup] Error:', error);
-      setSetupStatus("error");
-      toast.error(`❌ Setup failed: ${error.message || 'Unknown error'}`);
-    }
-  };
 
   const triggerValidationFunction = async (functionName: string) => {
     setTriggeringFunction(functionName);
@@ -149,80 +120,6 @@ export const ManualFunctionTrigger = () => {
 
   return (
     <div className="space-y-6">
-      {/* RESEND EMAIL INBOUND SETUP */}
-      <Card className="border-blue-500/20 bg-blue-500/5">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5" />
-            📧 EMAIL INBOUND SETUP
-          </CardTitle>
-          <CardDescription>
-            Configureer automatisch de inbound email route voor sollicitaties
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Button
-            onClick={triggerResendSetup}
-            disabled={setupStatus === "configuring"}
-            variant={setupStatus === "success" ? "outline" : "default"}
-            size="lg"
-            className="w-full"
-          >
-            {setupStatus === "configuring" ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Configureren...
-              </>
-            ) : setupStatus === "success" ? (
-              <>
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                ✅ Route Active - Re-run Setup
-              </>
-            ) : (
-              <>
-                <Mail className="mr-2 h-4 w-4" />
-                Setup Resend Inbound Route
-              </>
-            )}
-          </Button>
-
-          {setupStatus === "success" && routeInfo && (
-            <div className="rounded-lg border border-green-500/20 bg-green-500/10 p-4">
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
-                <div className="space-y-2 flex-1">
-                  <p className="font-medium text-green-500">✅ Inbound Route Actief</p>
-                  <div className="space-y-1 text-sm">
-                    <p><strong>Route ID:</strong> <code className="text-xs bg-background/50 px-1 py-0.5 rounded">{routeInfo.id}</code></p>
-                    <p><strong>Domain:</strong> {routeInfo.domain}</p>
-                    <p><strong>Email Pattern:</strong> <code className="text-xs bg-background/50 px-1 py-0.5 rounded">{routeInfo.pattern}</code></p>
-                    <p><strong>Webhook URL:</strong> <code className="text-xs bg-background/50 px-1 py-0.5 rounded break-all">{routeInfo.webhook}</code></p>
-                  </div>
-                  <div className="pt-2 border-t mt-3">
-                    <p className="text-xs font-medium">✅ Je kunt nu een test email sturen naar:</p>
-                    <p className="text-sm font-mono font-bold mt-1">personeel@apply.citozorg.nl</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {setupStatus === "error" && (
-            <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
-                <div className="space-y-1">
-                  <p className="font-medium text-destructive">Setup Failed</p>
-                  <p className="text-sm text-muted-foreground">
-                    Check de function logs voor meer details. Zorg dat RESEND_API_KEY is geconfigureerd.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {/* GUEST AI MARKTONDERZOEKER TEST */}
       <Card className="border-primary/20 bg-primary/5">
         <CardHeader>
