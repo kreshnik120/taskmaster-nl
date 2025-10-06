@@ -54,6 +54,10 @@ Deno.serve(async (req) => {
     } = body;
 
     console.log('📝 Logging conflict resolution:', { user_action, conflict_type });
+    console.log('📝 Auto-resolved status:', { 
+      received: auto_resolved, 
+      will_store: auto_resolved === true 
+    });
 
     // Fetch involved knowledge items for context
     const itemIds = items_affected?.map((a: any) => a.item_id) || 
@@ -233,7 +237,7 @@ Geef JSON output met deze exacte structuur:
           conflict_id: conflict_id || suggestion_id,
           items_involved: knowledgeItems.map((i: any) => i.id),
           ai_reasoning: ai_reasoning || suggestion_data?.reasoning,
-          auto_resolved
+          auto_resolved: auto_resolved === true
         },
         ai_response: {
           analysis: aiAnalysis,
@@ -271,7 +275,7 @@ Geef JSON output met deze exacte structuur:
         success: true,
         ai_analysis: aiAnalysis,
         adjustments_applied: adjustments.length,
-        learning_score: learningScore
+        learning_score: adjustedLearningScore
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
