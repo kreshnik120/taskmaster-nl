@@ -19,6 +19,20 @@ interface TransIPDNSEntry {
   content: string
 }
 
+interface MailgunDNSRecord {
+  record_type: string
+  valid: string
+  name: string
+  value: string
+  priority?: number
+}
+
+interface MailgunDomainData {
+  sending_dns_records: MailgunDNSRecord[]
+  receiving_dns_records: MailgunDNSRecord[]
+  state: string
+}
+
 async function generateTransIPToken(privateKey: string): Promise<string> {
   const header = { alg: 'RS256', typ: 'JWT' }
   const now = Math.floor(Date.now() / 1000)
@@ -64,7 +78,7 @@ async function generateTransIPToken(privateKey: string): Promise<string> {
   return `${dataToSign}.${encodedSignature}`
 }
 
-async function getMailgunDNSRequirements(domain: string, apiKey: string) {
+async function getMailgunDNSRequirements(domain: string, apiKey: string): Promise<MailgunDomainData> {
   console.log(`📋 Getting Mailgun DNS requirements for ${domain}`)
   
   const response = await fetch(`https://api.mailgun.net/v3/domains/${domain}`, {
@@ -83,7 +97,7 @@ async function getMailgunDNSRequirements(domain: string, apiKey: string) {
   return {
     sending_dns_records: data.domain?.sending_dns_records || [],
     receiving_dns_records: data.domain?.receiving_dns_records || [],
-    state: data.domain?.state
+    state: data.domain?.state || 'unverified'
   }
 }
 
