@@ -136,6 +136,29 @@ Als er GEEN duplicates zijn, return: []`
         // Process detected duplicates
         for (const dup of duplicates) {
           if (dup.similarity_score >= 0.8) {
+            // Find winner and loser items to check confidence
+            const winner = batch.find(b => b.id === dup.winner_id);
+            const loser = batch.find(b => b.id === dup.loser_id);
+            
+            // If BOTH items have high confidence (≥0.95), mark as complementary instead of merging
+            if (winner && loser && winner.confidence >= 0.95 && loser.confidence >= 0.95) {
+              console.log(`🤝 Skipping merge: both items have high confidence (${winner.confidence}, ${loser.confidence})`);
+              
+              // Create complementary relationship instead
+              await supabase
+                .from('knowledge_relationships')
+                .insert({
+                  source_knowledge_id: winner.id,
+                  target_knowledge_id: loser.id,
+                  relationship_type: 'complementary',
+                  confidence_score: dup.similarity_score,
+                  detected_by: 'smart-deduplicator',
+                  context: `High confidence items (${winner.confidence}, ${loser.confidence}) with ${Math.round(dup.similarity_score * 100)}% similarity`
+                });
+              
+              continue; // Skip merge
+            }
+
             console.log(`🔄 Merging duplicate: ${dup.loser_id} -> ${dup.winner_id}`);
 
             // Soft delete the loser

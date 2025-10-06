@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle, CheckCircle2, Trash2, XCircle, Lightbulb } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -513,6 +514,22 @@ export const ConflictResolutionPanel = () => {
                     </Badge>
                   </div>
 
+                  {/* High Confidence Hint */}
+                  {items.every((item: any) => item.confidence >= 0.95) && (
+                    <Alert className="border-green-500 bg-green-50 dark:bg-green-950/30">
+                      <Lightbulb className="h-4 w-4 text-green-600" />
+                      <AlertDescription className="text-sm">
+                        💡 <strong>Beide items hebben hoge kwaliteit (≥95%).</strong>
+                        <br />
+                        Overweeg <strong>"Geen Conflict"</strong> als ze elkaar aanvullen in plaats van tegenspreken.
+                        <br />
+                        <span className="text-xs text-muted-foreground">
+                          Tip: Kijk naar de bron en datum om de meest actuele te kiezen, of behoud beide als ze complementair zijn.
+                        </span>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
                   {/* AI Redenering */}
                   {aiReasoning && (
                     <div className="rounded-lg p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200">
@@ -536,12 +553,33 @@ export const ConflictResolutionPanel = () => {
                         <div key={item.id} className="flex items-start gap-2 text-sm">
                           <span className="font-medium min-w-[60px]">Item {String.fromCharCode(65 + idx)}:</span>
                           <div className="flex-1">
-                            <div className="flex items-center gap-2 flex-wrap mb-1">
-                              <Badge variant="outline" className="text-xs">{item.category}</Badge>
-                              <span className="text-xs text-muted-foreground">→ {item.key}</span>
-                              {getScoreBadge(item.confidence || 0.5, "Z")}
-                              <Badge variant="outline" className="text-xs">{item.usage_count || 0}x</Badge>
-                              {isRecommended && <Badge className="text-xs bg-blue-600">⭐ AI keuze</Badge>}
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {getScoreBadge(item.confidence || 0.5, "Z")}
+                                
+                                {item.value?.source_type && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {item.value.source_type === 'tier1_officieel' && '🏛️ Officieel'}
+                                    {item.value.source_type === 'tier2_branche' && '🏢 Branche'}
+                                    {item.value.source_type?.includes('tier3') && '📚 Intern'}
+                                    {!item.value.source_type.includes('tier') && item.value.source_type}
+                                  </Badge>
+                                )}
+                                
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(item.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                </span>
+                                
+                                <Badge variant="outline" className="text-xs">{item.usage_count || 0}x gebruikt</Badge>
+                                
+                                {isRecommended && <Badge className="text-xs bg-blue-600">⭐ AI keuze</Badge>}
+                              </div>
+                              
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Badge variant="outline" className="text-xs">{item.category}</Badge>
+                                <span>→</span>
+                                <span className="font-mono">{item.key}</span>
+                              </div>
                             </div>
                             <div className={`text-xs bg-muted/30 rounded p-2 font-mono whitespace-pre-wrap break-words ${!expandedItems[itemExpandKey] ? 'max-h-20 overflow-hidden' : 'max-h-60 overflow-y-auto'}`}>
                               {expandedItems[itemExpandKey] 
