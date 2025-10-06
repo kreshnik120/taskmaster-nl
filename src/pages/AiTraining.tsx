@@ -17,6 +17,7 @@ import { SystemMonitor } from "@/components/SystemMonitor";
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { AdminOnly } from "@/components/auth/AdminOnly";
 import { MailgunDNSSetup } from "@/components/AITraining/MailgunDNSSetup";
+import { TransipDNSAuditCard } from "@/components/AITraining/TransipDNSAuditCard";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -98,8 +99,9 @@ const AiTraining = () => {
                 </TabsContent>
               </AdminOnly>
 
-              <TabsContent value="links" className="mt-6">
+              <TabsContent value="links" className="mt-6 space-y-6">
                 <ProfessionalClientLinks />
+                <TransipDNSAuditCard />
               </TabsContent>
 
               <TabsContent value="conflicts" className="mt-6">
