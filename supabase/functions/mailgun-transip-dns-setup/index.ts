@@ -1,15 +1,8 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-interface DNSRecord {
-  name: string
-  type: string
-  content: string
-  ttl?: number
 }
 
 interface TransIPDNSEntry {
@@ -163,7 +156,7 @@ async function verifyMailgunDomain(domain: string, apiKey: string) {
   return data
 }
 
-Deno.serve(async (req) => {
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -330,9 +323,10 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('❌ Error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     return new Response(JSON.stringify({
       status: 'error',
-      error: error.message,
+      error: errorMessage,
       details: 'Check edge function logs for more information'
     }, null, 2), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
