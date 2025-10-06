@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { AdminOnly } from "@/components/auth/AdminOnly";
+import { LearningProgressCharts } from "./LearningProgressCharts";
 
 export const LearningDashboard = () => {
   const { toast } = useToast();
@@ -218,6 +219,15 @@ export const LearningDashboard = () => {
           </div>
         </Card>
       </AdminOnly>
+
+      {/* Learning Progress Section */}
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-2xl font-bold">🚀 Learning Progress</h2>
+          <p className="text-muted-foreground">Laatste 30 dagen AI verbetering en trends</p>
+        </div>
+        <LearningProgressCharts />
+      </div>
 
       {/* Overview Stats */}
       <div className="grid gap-4 md:grid-cols-4">
