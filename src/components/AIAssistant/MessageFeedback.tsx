@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ThumbsUp, ThumbsDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,30 +6,52 @@ import { useToast } from "@/hooks/use-toast";
 
 interface MessageFeedbackProps {
   messageContent: string;
-  messageIndex: number;
-  usedKnowledge?: string[]; // Knowledge IDs that were used for this message
+  messageId?: string;
+  usedKnowledge?: string[];
 }
 
-export const MessageFeedback = ({ messageContent, messageIndex, usedKnowledge }: MessageFeedbackProps) => {
+export const MessageFeedback = ({ messageContent, messageId, usedKnowledge }: MessageFeedbackProps) => {
   const [feedback, setFeedback] = useState<'positive' | 'negative' | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
+  // Check if feedback already exists for this message
+  useEffect(() => {
+    const checkExistingFeedback = async () => {
+      if (!messageId) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('message_feedback')
+          .select('feedback_type')
+          .eq('message_id', messageId)
+          .maybeSingle();
+        
+        if (!error && data) {
+          setFeedback(data.feedback_type as 'positive' | 'negative');
+        }
+      } catch (error) {
+        console.error('Error checking existing feedback:', error);
+      }
+    };
+    
+    checkExistingFeedback();
+  }, [messageId]);
+
   const handleFeedback = async (type: 'positive' | 'negative') => {
-    if (feedback || isLoading) return;
+    if (feedback || isLoading || !messageId) return;
     
     setIsLoading(true);
     setFeedback(type);
 
     try {
-      // Call process-feedback edge function instead of direct DB insert
+      // Call process-feedback edge function with messageId
       const { data, error } = await supabase.functions.invoke('process-feedback', {
         body: {
-          messageId: `msg_${messageIndex}`,
+          messageId: messageId,
           feedback: type,
           context: {
-            message: messageContent,
-            usedKnowledge: usedKnowledge || []
+            message: messageContent
           }
         }
       });

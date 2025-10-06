@@ -14,6 +14,14 @@ serve(async (req) => {
   try {
     const { messageId, feedback, context } = await req.json();
     
+    // Validate messageId is a UUID
+    if (!messageId || typeof messageId !== 'string') {
+      return new Response(JSON.stringify({ error: 'Ongeldig bericht ID' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Authenticatie vereist' }), {
@@ -49,19 +57,56 @@ serve(async (req) => {
       .eq('user_id', user.id)
       .single();
 
+    // Fetch the chat message to get knowledge_ids_for_feedback
+    const { data: chatMessage, error: messageError } = await supabaseClient
+      .from('chat_messages')
+      .select('metadata')
+      .eq('id', messageId)
+      .single();
+
+    if (messageError || !chatMessage) {
+      console.error('Could not fetch chat message:', messageError);
+    }
+
+    // Extract usedKnowledge from message metadata
+    let usedKnowledge: string[] = [];
+    if (chatMessage?.metadata) {
+      const metadata = chatMessage.metadata as any;
+      usedKnowledge = Array.isArray(metadata.knowledge_ids_for_feedback) 
+        ? metadata.knowledge_ids_for_feedback 
+        : (Array.isArray(metadata.usedKnowledge) ? metadata.usedKnowledge : []);
+    }
+
     const isPositive = feedback === 'positive';
     const eventType = isPositive ? 'feedback_positive' : 'feedback_negative';
     const outcome = isPositive ? 'success' : 'failure';
     const learningScore = isPositive ? 0.8 : 0.3;
 
-    // Log learning event
+    // Save to message_feedback table (prevents duplicate feedback)
+    const { error: feedbackError } = await supabaseClient
+      .from('message_feedback')
+      .insert({
+        user_id: user.id,
+        message_id: messageId,
+        feedback_type: feedback
+      });
+
+    // Ignore duplicate key errors (user already gave feedback)
+    if (feedbackError && !feedbackError.message?.includes('duplicate')) {
+      console.error('Error saving feedback:', feedbackError);
+    }
+
+    // Log learning event with correct usedKnowledge
     const { error: eventError } = await supabaseClient
       .from('ai_learning_events')
       .insert({
         user_id: user.id,
         org_id: userOrg?.org_id,
         event_type: eventType,
-        context: context || {},
+        context: {
+          message: context?.message,
+          usedKnowledge: usedKnowledge
+        },
         outcome,
         learning_score: learningScore,
         applied_to_knowledge_base: false
@@ -72,10 +117,10 @@ serve(async (req) => {
     }
 
     // Update confidence scores of related knowledge items
-    if (context?.usedKnowledge && Array.isArray(context.usedKnowledge)) {
+    if (usedKnowledge.length > 0) {
       const confidenceAdjustment = isPositive ? 0.05 : -0.05;
       
-      for (const knowledgeId of context.usedKnowledge) {
+      for (const knowledgeId of usedKnowledge) {
         // Get current item
         const { data: currentItem } = await supabaseClient
           .from('ai_knowledge_base')

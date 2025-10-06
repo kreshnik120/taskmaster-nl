@@ -36,6 +36,7 @@ interface Message {
   showInteractive?: boolean;
   image?: string; // Base64 image data
   usedKnowledge?: string[]; // Knowledge IDs used for this response
+  messageId?: string; // UUID from chat_messages table for feedback persistence
 }
 
 const QUICK_ACTIONS = [
@@ -116,7 +117,7 @@ export const ChatWidget = () => {
       
       const { data, error } = await supabase
         .from('chat_messages')
-        .select('role, content, metadata')
+        .select('id, role, content, metadata')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true })
         .limit(20);
@@ -132,6 +133,7 @@ export const ChatWidget = () => {
           role: m.role as 'user' | 'assistant',
           content: m.content,
           showInteractive: false,
+          messageId: m.id,
           usedKnowledge: Array.isArray((m.metadata as any)?.knowledge_ids_for_feedback) 
             ? (m.metadata as any).knowledge_ids_for_feedback 
             : (Array.isArray((m.metadata as any)?.usedKnowledge) 
@@ -633,21 +635,41 @@ export const ChatWidget = () => {
       if (user && assistantMessage) {
         const conversationId = getConversationId();
         console.log('💾 Saving conversation to database (session:', conversationId, ')');
-        const { error: insertError } = await supabase.from('chat_messages').insert([
-          { role: 'user', content: userMessage, user_id: user.id, conversation_id: conversationId },
-          { 
-            role: 'assistant', 
-            content: assistantMessage, 
-            user_id: user.id, 
-            conversation_id: conversationId,
-            metadata: { usedKnowledge: usedKnowledge.length > 0 ? usedKnowledge : [] }
-          },
-        ]);
+        
+        // Insert and get the returned IDs for feedback tracking
+        const { data: insertedMessages, error: insertError } = await supabase
+          .from('chat_messages')
+          .insert([
+            { role: 'user', content: userMessage, user_id: user.id, conversation_id: conversationId },
+            { 
+              role: 'assistant', 
+              content: assistantMessage, 
+              user_id: user.id, 
+              conversation_id: conversationId,
+              metadata: { knowledge_ids_for_feedback: usedKnowledge.length > 0 ? usedKnowledge : [] }
+            },
+          ])
+          .select('id, role');
         
         if (insertError) {
           console.error('Failed to save chat history:', insertError);
           // Non-fatal - continue anyway
         } else {
+          // Update messages with messageId for feedback tracking
+          if (insertedMessages && insertedMessages.length === 2) {
+            const assistantMessageId = insertedMessages.find(m => m.role === 'assistant')?.id;
+            if (assistantMessageId) {
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                  ...updated[updated.length - 1],
+                  messageId: assistantMessageId
+                };
+                return updated;
+              });
+            }
+          }
+          
           // ✅ Trigger continuous learning (fire-and-forget)
           console.log('🧠 Triggering continuous-learner...');
           supabase.functions.invoke('continuous-learner', {
@@ -994,7 +1016,7 @@ export const ChatWidget = () => {
                       {msg.role === 'assistant' && msg.content && !isLoading && (
                         <MessageFeedback 
                           messageContent={msg.content} 
-                          messageIndex={idx}
+                          messageId={msg.messageId}
                           usedKnowledge={msg.usedKnowledge}
                         />
                       )}
