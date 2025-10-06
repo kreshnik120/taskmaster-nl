@@ -83,7 +83,10 @@ export const ConflictResolutionPanel = () => {
       // Mark conflict as resolved
       const { error: updateError } = await supabase
         .from("business_intelligence")
-        .update({ status: "resolved" })
+        .update({ 
+          status: "resolved",
+          last_updated_at: new Date().toISOString()
+        })
         .eq("id", conflictId);
 
       if (updateError) throw updateError;
@@ -109,7 +112,10 @@ export const ConflictResolutionPanel = () => {
     mutationFn: async (conflictId: string) => {
       const { error } = await supabase
         .from("business_intelligence")
-        .update({ status: "dismissed" })
+        .update({ 
+          status: "dismissed",
+          last_updated_at: new Date().toISOString()
+        })
         .eq("id", conflictId);
 
       if (error) throw error;
@@ -179,7 +185,10 @@ export const ConflictResolutionPanel = () => {
       // Mark suggestion as resolved
       const { error: updateError } = await supabase
         .from('business_intelligence')
-        .update({ status: 'resolved' })
+        .update({ 
+          status: 'resolved',
+          last_updated_at: new Date().toISOString()
+        })
         .eq('id', suggestionId);
       
       if (updateError) throw updateError;
@@ -207,7 +216,10 @@ export const ConflictResolutionPanel = () => {
     mutationFn: async (suggestionId: string) => {
       const { error } = await supabase
         .from('business_intelligence')
-        .update({ status: 'dismissed' })
+        .update({ 
+          status: 'dismissed',
+          last_updated_at: new Date().toISOString()
+        })
         .eq('id', suggestionId);
       
       if (error) throw error;
