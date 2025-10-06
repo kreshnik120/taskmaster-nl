@@ -16,6 +16,7 @@ import { ProfessionalClientLinks } from "@/components/AITraining/ProfessionalCli
 import { SystemMonitor } from "@/components/SystemMonitor";
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { AdminOnly } from "@/components/auth/AdminOnly";
+import { MailgunDNSSetup } from "@/components/AITraining/MailgunDNSSetup";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -90,6 +91,7 @@ const AiTraining = () => {
               <AdminOnly>
                 <TabsContent value="system" className="mt-6">
                   <div className="space-y-6">
+                    <MailgunDNSSetup />
                     <ManualFunctionTrigger />
                     <SystemMonitor />
                   </div>
