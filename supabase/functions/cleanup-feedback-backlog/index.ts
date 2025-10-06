@@ -18,6 +18,11 @@ serve(async (req) => {
       throw new Error('No authorization header');
     }
 
+    console.log('🔑 Auth header present:', !!authHeader, 'length:', authHeader?.length);
+
+    // Extract JWT from Bearer token
+    const jwt = authHeader.replace('Bearer ', '');
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -28,11 +33,20 @@ serve(async (req) => {
       }
     );
 
-    // Get current user
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user) {
+    // Get current user - explicitly pass JWT
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(jwt);
+    
+    if (userError) {
+      console.error('❌ User error:', userError.message);
+      throw new Error(`User not authenticated: ${userError.message}`);
+    }
+    
+    if (!user) {
+      console.error('❌ No user returned');
       throw new Error('User not authenticated');
     }
+
+    console.log('✅ User authenticated:', user.id);
 
     // Verify user is admin
     const { data: isAdmin, error: roleError } = await supabaseClient

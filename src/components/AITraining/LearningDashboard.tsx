@@ -43,11 +43,15 @@ export const LearningDashboard = () => {
 
       // Refresh learning events
       window.location.reload();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error cleaning up backlog:', error);
+      
+      // Extract detailed error message
+      const errorMessage = error?.message || error?.error || "Er is een fout opgetreden bij het opschonen";
+      
       toast({
         title: "Fout",
-        description: "Er is een fout opgetreden bij het opschonen",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
