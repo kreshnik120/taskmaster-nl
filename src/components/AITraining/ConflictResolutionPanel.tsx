@@ -129,6 +129,27 @@ export const ConflictResolutionPanel = () => {
     },
   });
 
+  const noConflictMutation = useMutation({
+    mutationFn: async (conflictId: string) => {
+      const { error } = await supabase
+        .from("business_intelligence")
+        .update({ 
+          status: "no_conflict",
+          last_updated_at: new Date().toISOString()
+        })
+        .eq("id", conflictId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Geen conflict",
+        description: "Beide items worden behouden - geen echt conflict",
+      });
+      queryClient.invalidateQueries({ queryKey: ["conflict-resolution"] });
+    },
+  });
+
   // Restore mutation
   const restoreMutation = useMutation({
     mutationFn: async (itemId: string) => {
@@ -239,10 +260,23 @@ export const ConflictResolutionPanel = () => {
     return <Badge variant="outline">{label}: {Math.round(score * 100)}%</Badge>;
   };
 
-  const getRecommendationBadge = (isRecommended: boolean) => {
-    return isRecommended ? (
-      <Badge variant="default" className="bg-blue-600">⭐ AI Aanbevolen</Badge>
-    ) : null;
+  const isComplementaryConflict = (reasoning: string) => {
+    const keywords = [
+      "geen sprake van een conflict",
+      "complementaire",
+      "geen conflict in de inhoud",
+      "verschillend maar beide correct",
+      "beide items zijn betrouwbaar",
+      "geen conflict",
+      "complementair"
+    ];
+    return keywords.some(keyword => reasoning.toLowerCase().includes(keyword.toLowerCase()));
+  };
+
+  const truncateJson = (obj: any, maxLength = 100) => {
+    const str = JSON.stringify(obj, null, 2);
+    if (str.length <= maxLength) return str;
+    return str.substring(0, maxLength) + "...";
   };
 
   if (isLoading) {
@@ -360,7 +394,7 @@ export const ConflictResolutionPanel = () => {
         </>
       )}
 
-      {/* Bestaande conflicts sectie (Tier 3) */}
+      {/* Kennisconflicten sectie (Tier 3) - Verbeterde presentatie */}
       {conflicts && conflicts.length > 0 && (
         <>
           <div className="flex items-center gap-2">
@@ -369,170 +403,113 @@ export const ConflictResolutionPanel = () => {
           </div>
 
           <ScrollArea className="h-[600px]">
-            <div className="space-y-4 pr-4">
+            <div className="space-y-3 pr-4">
               {conflicts.map((conflict) => {
             const conflictData = conflict.data as any;
             const items = conflictData?.conflicting_items || [];
-            const aiRec = conflictData?.ai_recommendation;
-            const suggestedDocs = conflictData?.suggested_documents || [];
+            const aiReasoning = conflictData?.ai_reasoning || conflictData?.reasoning || "";
+            const isComplementary = isComplementaryConflict(aiReasoning);
 
             return (
-              <Card key={conflict.id} className="p-6 border-2 border-amber-500/50">
-                <div className="space-y-4">
+              <Card key={conflict.id} className={`p-4 ${isComplementary ? 'border-green-500/50' : 'border-amber-500/50'}`}>
+                <div className="space-y-3">
+                  {/* Header - Compact */}
                   <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="text-lg font-semibold flex items-center gap-2">
-                        <AlertTriangle className="h-5 w-5 text-amber-500" />
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-base flex items-center gap-2">
+                        {isComplementary ? '🤝' : <AlertTriangle className="h-4 w-4 text-amber-500" />}
                         {conflict.title}
-                      </h3>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {conflict.description}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Gedetecteerd: {format(new Date(conflict.detected_at), "PPp", { locale: nl })}
-                      </p>
+                      </h4>
+                      {conflict.description && (
+                        <p className="text-sm text-muted-foreground mt-1">{conflict.description}</p>
+                      )}
                     </div>
-                    <Badge variant="destructive">Prioriteit: {conflict.priority}</Badge>
+                    <Badge variant={isComplementary ? "outline" : "destructive"} className="ml-2">
+                      {conflict.priority}
+                    </Badge>
                   </div>
 
-                  {/* Conflicting Items Comparison */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                    {items.map((item: any, index: number) => {
+                  {/* AI Redenering - Prominent zoals bij suggesties */}
+                  {aiReasoning && (
+                    <div className={`rounded-lg p-3 ${isComplementary ? 'bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800' : 'bg-blue-50 dark:bg-blue-950/20 border border-blue-200'}`}>
+                      <div className="flex items-start gap-2">
+                        <Lightbulb className="h-4 w-4 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-xs font-medium text-muted-foreground mb-1">AI Redenering:</p>
+                          <p className="text-sm italic">"{aiReasoning}"</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Side-by-side Items Comparison - Compact */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {items.map((item: any, idx: number) => {
+                      const aiRec = conflictData?.ai_recommendation;
                       const isRecommended = item.id === aiRec?.recommended_id;
-                      const ageInDays = item.created_at
-                        ? Math.floor(
-                            (Date.now() - new Date(item.created_at).getTime()) /
-                              (1000 * 60 * 60 * 24)
-                          )
-                        : null;
-
                       return (
-                        <Card
-                          key={item.id}
-                          className={`p-4 ${
-                            isRecommended ? "border-2 border-blue-500" : ""
-                          }`}
-                        >
-                          <div className="space-y-3">
-                            <div className="flex items-start justify-between">
-                              <h4 className="font-semibold text-sm">
-                                Item {String.fromCharCode(65 + index)}
-                              </h4>
-                              {getRecommendationBadge(isRecommended)}
+                        <div key={item.id} className={`border rounded-lg p-3 ${isRecommended ? 'border-blue-500 border-2' : 'bg-background'}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-medium text-sm">Item {String.fromCharCode(65 + idx)}</span>
+                            <div className="flex gap-1">
+                              {getScoreBadge(item.confidence || 0.5, "Z")}
+                              <Badge variant="outline" className="text-xs">
+                                {item.usage_count || 0}x
+                              </Badge>
+                              {isRecommended && <Badge className="text-xs bg-blue-600">⭐</Badge>}
                             </div>
-
-                            <div className="space-y-2 text-sm">
-                              <div>
-                                <span className="text-muted-foreground">Waarde:</span>
-                                <pre className="mt-1 p-2 bg-muted rounded text-xs overflow-x-auto">
-                                  {typeof item.value === "string"
-                                    ? item.value
-                                    : JSON.stringify(item.value, null, 2)}
-                                </pre>
-                              </div>
-
-                              <div className="flex flex-wrap gap-2">
-                                {getScoreBadge(item.confidence || 0.5, "Zekerheid")}
-                                <Badge variant="outline">
-                                  Gebruikt: {item.usage_count || 0}x
-                                </Badge>
-                                {ageInDays !== null && (
-                                  <Badge variant="outline">
-                                    {ageInDays === 0
-                                      ? "Vandaag"
-                                      : `${ageInDays} dag${ageInDays > 1 ? "en" : ""} oud`}
-                                  </Badge>
-                                )}
-                              </div>
-
-                              <div className="text-xs text-muted-foreground">
-                                <p>Key: {item.key}</p>
-                              </div>
-                            </div>
-
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              className="w-full"
-                              onClick={() => {
-                                const keepId = items.find((i: any) => i.id !== item.id)?.id;
-                                if (keepId) {
-                                  resolveConflictMutation.mutate({
-                                    conflictId: conflict.id,
-                                    keepItemId: keepId,
-                                    deleteItemIds: [item.id],
-                                  });
-                                }
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Verwijder dit item
-                            </Button>
                           </div>
-                        </Card>
+                          <div className="text-xs text-muted-foreground mb-1">
+                            {item.category} → {item.key}
+                          </div>
+                          <div className="text-xs bg-muted/30 rounded p-2 font-mono max-h-20 overflow-y-auto">
+                            {truncateJson(item.value, 150)}
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
 
-                  {/* AI Recommendation */}
-                  {aiRec && (
-                    <Card className="p-4 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="h-4 w-4 text-blue-600" />
-                          <span className="font-semibold text-sm">AI Aanbeveling</span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{aiRec.reason}</p>
-                        <Button
-                          variant="default"
-                          size="sm"
-                          className="mt-2"
-                          onClick={() => {
-                            const deleteIds = items
-                              .filter((i: any) => i.id !== aiRec.recommended_id)
-                              .map((i: any) => i.id);
+                  {/* Action Buttons - Improved Layout */}
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {isComplementary && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700"
+                        onClick={() => noConflictMutation.mutate(conflict.id)}
+                        disabled={noConflictMutation.isPending}
+                      >
+                        🤝 Geen Conflict - Beide Behouden
+                      </Button>
+                    )}
+                    {!isComplementary && items.map((item: any, idx: number) => (
+                      <Button
+                        key={item.id}
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => {
+                          const otherItems = items.filter((i: any) => i.id !== item.id);
+                          if (otherItems.length > 0 && confirm(`Item ${String.fromCharCode(65 + idx)} verwijderen?`)) {
                             resolveConflictMutation.mutate({
                               conflictId: conflict.id,
-                              keepItemId: aiRec.recommended_id,
-                              deleteItemIds: deleteIds,
+                              keepItemId: otherItems[0].id,
+                              deleteItemIds: [item.id],
                             });
-                          }}
-                        >
-                          Accepteer AI Aanbeveling
-                        </Button>
-                      </div>
-                    </Card>
-                  )}
-
-                  {/* Suggested Documents */}
-                  {suggestedDocs.length > 0 && (
-                    <Card className="p-4 bg-muted">
-                      <div className="space-y-2">
-                        <h5 className="font-semibold text-sm">Brondocumenten:</h5>
-                        <ul className="text-sm space-y-1">
-                          {suggestedDocs.map((doc: any, idx: number) => (
-                            <li key={idx} className="flex items-center gap-2">
-                              <span className="text-muted-foreground">•</span>
-                              <span>{doc.document_name}</span>
-                              <Badge variant="outline" className="text-xs">
-                                {doc.kb_count} item{doc.kb_count > 1 ? "s" : ""}
-                              </Badge>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </Card>
-                  )}
-
-                  {/* Actions */}
-                  <div className="flex gap-2 pt-2">
+                          }
+                        }}
+                        disabled={resolveConflictMutation.isPending}
+                      >
+                        ❌ Verwijder {String.fromCharCode(65 + idx)}
+                      </Button>
+                    ))}
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => ignoreConflictMutation.mutate(conflict.id)}
+                      disabled={ignoreConflictMutation.isPending}
                     >
-                      <XCircle className="h-4 w-4 mr-2" />
-                      Negeren (niet een conflict)
+                      ⏩ Negeren
                     </Button>
                   </div>
                 </div>
