@@ -248,11 +248,16 @@ export const LearningDashboard = () => {
         <Card className="p-6">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-green-500/10 rounded-lg">
-              <TrendingUp className="h-6 w-6 text-green-600" />
+              <Activity className="h-6 w-6 text-green-600" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Totaal Gebruik</p>
-              <p className="text-2xl font-bold">{knowledgeStats?.totalUsage || 0}x</p>
+              <p className="text-sm text-muted-foreground">Learning Events Vandaag</p>
+              <p className="text-2xl font-bold">
+                {learningEvents?.filter((e: any) => {
+                  const today = new Date().toDateString();
+                  return new Date(e.created_at).toDateString() === today;
+                }).length || 0}
+              </p>
             </div>
           </div>
         </Card>
@@ -260,11 +265,11 @@ export const LearningDashboard = () => {
         <Card className="p-6">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-purple-500/10 rounded-lg">
-              <Lightbulb className="h-6 w-6 text-purple-600" />
+              <TrendingUp className="h-6 w-6 text-purple-600" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Leer Events</p>
-              <p className="text-2xl font-bold">{learningEvents?.length || 0}</p>
+              <p className="text-sm text-muted-foreground">Totaal Gebruik</p>
+              <p className="text-2xl font-bold">{knowledgeStats?.totalUsage || 0}</p>
             </div>
           </div>
         </Card>

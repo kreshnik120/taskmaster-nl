@@ -142,11 +142,27 @@ export const ConflictResolutionPanel = () => {
 
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: async (data, conflictId) => {
       toast({
         title: "Geen conflict",
         description: "Beide items worden behouden - geen echt conflict",
       });
+      
+      // Log to continuous learner - zeer waardevolle feedback!
+      const conflict = [...(conflicts || []), ...(suggestions || [])].find((c: any) => c.id === conflictId);
+      if (conflict) {
+        const conflictData = conflict.data as any;
+        await supabase.functions.invoke('log-conflict-resolution', {
+          body: {
+            user_action: 'marked_as_complementary',
+            conflict_type: conflict.intelligence_type,
+            conflict_id: conflictId,
+            ai_reasoning: conflictData?.reasoning,
+            items: conflictData?.conflicting_items || conflictData?.suggested_actions,
+          }
+        });
+      }
+      
       queryClient.invalidateQueries({ queryKey: ["conflict-resolution"] });
       queryClient.invalidateQueries({ queryKey: ["ai-suggestions"] });
     },
@@ -216,11 +232,28 @@ export const ConflictResolutionPanel = () => {
       
       if (updateError) throw updateError;
     },
-    onSuccess: () => {
+    onSuccess: async (data, variables) => {
       toast({
         title: "Suggestie goedgekeurd",
         description: "AI suggestie is geaccepteerd en uitgevoerd"
       });
+      
+      // Log to continuous learner
+      const suggestion = suggestions?.find((s: any) => s.id === variables.suggestionId);
+      if (suggestion) {
+        await supabase.functions.invoke('log-conflict-resolution', {
+          body: {
+            user_action: 'approved',
+            conflict_type: 'ai_suggestion',
+            suggestion_id: variables.suggestionId,
+            suggestion_data: suggestion.data,
+            items_affected: variables.actions,
+            chosen_item_ids: variables.actions.filter((a: any) => a.action === 'keep').map((a: any) => a.item_id),
+            deleted_item_ids: variables.actions.filter((a: any) => a.action === 'delete').map((a: any) => a.item_id),
+          }
+        });
+      }
+      
       queryClient.invalidateQueries({ queryKey: ["ai-suggestions"] });
       queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
       queryClient.invalidateQueries({ queryKey: ["ai-deleted-items"] });
@@ -247,11 +280,27 @@ export const ConflictResolutionPanel = () => {
       
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: async (data, suggestionId) => {
       toast({
         title: "Suggestie afgewezen",
         description: "AI suggestie is afgewezen en verwijderd"
       });
+      
+      // Log rejection als negatieve feedback
+      const suggestion = suggestions?.find((s: any) => s.id === suggestionId);
+      if (suggestion) {
+        const suggestionData = suggestion.data as any;
+        await supabase.functions.invoke('log-conflict-resolution', {
+          body: {
+            user_action: 'rejected',
+            conflict_type: 'ai_suggestion',
+            suggestion_id: suggestionId,
+            suggestion_data: suggestion.data,
+            items_affected: suggestionData?.suggested_actions,
+          }
+        });
+      }
+      
       queryClient.invalidateQueries({ queryKey: ["ai-suggestions"] });
     },
   });

@@ -1,5 +1,8 @@
 project_id = "oelmsmcgryeoryhonexw"
 
+[functions.log-conflict-resolution]
+verify_jwt = true
+
 [functions.function-activator]
 verify_jwt = false
 
