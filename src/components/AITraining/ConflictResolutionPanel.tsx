@@ -388,24 +388,34 @@ export const ConflictResolutionPanel = () => {
 
   // Auto-resolve complementary conflicts
   useEffect(() => {
-    if (!conflicts || conflicts.length === 0 || !autoResolveEnabled) return;
+    // Combineer conflicts en suggestions
+    const allItems = [
+      ...(conflicts || []).map((c: any) => ({ ...c, type: 'conflict' })),
+      ...(suggestions || []).map((s: any) => ({ ...s, type: 'suggestion' }))
+    ];
     
-    const complementaryConflicts = conflicts.filter((conflict: any) => {
-      const reasoning = (conflict.data as any)?.ai_reasoning || 
-                       (conflict.data as any)?.reasoning || "";
+    if (allItems.length === 0 || !autoResolveEnabled) return;
+    
+    const complementaryItems = allItems.filter((item: any) => {
+      const reasoning = (item.data as any)?.ai_reasoning || 
+                       (item.data as any)?.reasoning || "";
       return isComplementaryConflict(reasoning);
     });
     
-    if (complementaryConflicts.length === 0) return;
+    if (complementaryItems.length === 0) return;
     
     // Rate limit: max 10 per batch
-    const toResolve = complementaryConflicts.slice(0, 10);
+    const toResolve = complementaryItems.slice(0, 10);
     
-    console.log(`🤖 Auto-resolving ${toResolve.length} complementary conflicts`);
+    console.log(`🤖 Auto-resolving ${toResolve.length} complementary items (Conflicts + Suggestions)`);
     
-    // Resolve each asynchronously
-    toResolve.forEach((conflict: any) => {
-      noConflictMutation.mutate({ conflictId: conflict.id, isAutoResolved: true });
+    // Resolve each with correct mutation based on type
+    toResolve.forEach((item: any) => {
+      if (item.type === 'conflict') {
+        noConflictMutation.mutate({ conflictId: item.id, isAutoResolved: true });
+      } else {
+        rejectSuggestionMutation.mutate(item.id);
+      }
     });
     
     setAutoResolvedToday(prev => prev + toResolve.length);
@@ -421,7 +431,7 @@ export const ConflictResolutionPanel = () => {
         refetchStats?.();
       }, 1000);
     }
-  }, [conflicts, autoResolveEnabled]);
+  }, [conflicts, suggestions, autoResolveEnabled]);
 
   if (isLoading) {
     return <div className="text-center py-8">Laden...</div>;
