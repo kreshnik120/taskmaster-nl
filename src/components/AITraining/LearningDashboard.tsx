@@ -2,12 +2,59 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Brain, TrendingUp, Target, Database, Lightbulb, AlertCircle, Activity, DollarSign, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Brain, TrendingUp, Target, Database, Lightbulb, AlertCircle, Activity, DollarSign, Zap, Trash2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
+import { AdminOnly } from "@/components/auth/AdminOnly";
 
 export const LearningDashboard = () => {
+  const { toast } = useToast();
+  const [isCleaningUp, setIsCleaningUp] = useState(false);
+
+  const handleCleanupBacklog = async () => {
+    setIsCleaningUp(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: "Niet ingelogd",
+          description: "Je moet ingelogd zijn om deze actie uit te voeren",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('cleanup-feedback-backlog', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Opschoning voltooid",
+        description: `${data.updated_count} feedback events zijn opgeschoond`,
+      });
+
+      // Refresh learning events
+      window.location.reload();
+    } catch (error) {
+      console.error('Error cleaning up backlog:', error);
+      toast({
+        title: "Fout",
+        description: "Er is een fout opgetreden bij het opschonen",
+        variant: "destructive"
+      });
+    } finally {
+      setIsCleaningUp(false);
+    }
+  };
+
   // Fetch knowledge base stats
   const { data: knowledgeStats } = useQuery({
     queryKey: ['ai-knowledge-stats'],
@@ -140,6 +187,29 @@ export const LearningDashboard = () => {
 
   return (
     <div className="space-y-6">
+      {/* Admin Actions */}
+      <AdminOnly>
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold">Feedback Backlog Opschonen</h3>
+              <p className="text-sm text-muted-foreground">
+                Verwijder feedback events zonder knowledge IDs die de scheduler blokkeren
+              </p>
+            </div>
+            <Button
+              onClick={handleCleanupBacklog}
+              disabled={isCleaningUp}
+              variant="outline"
+              className="gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              {isCleaningUp ? "Bezig..." : "Opschonen"}
+            </Button>
+          </div>
+        </Card>
+      </AdminOnly>
+
       {/* Overview Stats */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card className="p-6">

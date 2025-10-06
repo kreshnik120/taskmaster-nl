@@ -151,3 +151,6 @@ schedule = "* * * * *"
 [functions.document-intelligence-analyzer]
 verify_jwt = false
 schedule = "0 6 * * *"
+
+[functions.cleanup-feedback-backlog]
+verify_jwt = true
