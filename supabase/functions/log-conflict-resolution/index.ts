@@ -48,7 +48,9 @@ Deno.serve(async (req) => {
       chosen_item_ids,
       deleted_item_ids,
       suggestion_id,
-      conflict_id
+      conflict_id,
+      auto_resolved,
+      learning_score: providedLearningScore
     } = body;
 
     console.log('📝 Logging conflict resolution:', { user_action, conflict_type });
@@ -73,6 +75,7 @@ Deno.serve(async (req) => {
 
 USER ACTIE: ${user_action}
 CONFLICT TYPE: ${conflict_type}
+AUTO-RESOLVED: ${auto_resolved ? 'JA - AI suggestie was automatisch geaccepteerd' : 'NEE - handmatige gebruiker keuze'}
 AI REDENERING: ${ai_reasoning || suggestion_data?.reasoning || 'Niet beschikbaar'}
 
 BETROKKEN ITEMS:
@@ -83,6 +86,7 @@ Bepaal:
 2. Moet de confidence score van items aangepast worden?
 3. Welke patronen moet de AI leren hiervan?
 4. Learning score (0.0-1.0) - hoe nuttig is deze feedback?
+   ${auto_resolved ? '(Hint: auto-resolved betekent zeer hoge zekerheid, boost learning score)' : ''}
 
 Geef JSON output met deze exacte structuur:
 {
@@ -208,9 +212,14 @@ Geef JSON output met deze exacte structuur:
     }
 
     // Create learning event
-    const learningScore = aiAnalysis.learning_score || 
+    const finalLearningScore = providedLearningScore || aiAnalysis.learning_score || 
       (user_action === 'marked_as_complementary' ? 0.95 : 
        user_action === 'rejected' ? 0.90 : 0.85);
+
+    // Boost learning score voor auto-resolved items
+    const adjustedLearningScore = auto_resolved 
+      ? Math.min(1.0, finalLearningScore * 1.1) // 10% boost, max 1.0
+      : finalLearningScore;
 
     const { error: learningError } = await supabase
       .from('ai_learning_events')
@@ -223,14 +232,15 @@ Geef JSON output met deze exacte structuur:
           conflict_type,
           conflict_id: conflict_id || suggestion_id,
           items_involved: knowledgeItems.map((i: any) => i.id),
-          ai_reasoning: ai_reasoning || suggestion_data?.reasoning
+          ai_reasoning: ai_reasoning || suggestion_data?.reasoning,
+          auto_resolved
         },
         ai_response: {
           analysis: aiAnalysis,
           adjustments_applied: adjustments,
           raw_response: aiAnalysisText
         },
-        learning_score: learningScore,
+        learning_score: adjustedLearningScore,
         applied_to_knowledge_base: adjustments.length > 0
       });
 
