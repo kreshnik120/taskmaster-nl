@@ -319,7 +319,10 @@ export const ConflictResolutionPanel = () => {
 
   // SPRINT 2: Reject AI suggestion mutation
   const rejectSuggestionMutation = useMutation({
-    mutationFn: async (suggestionId: string) => {
+    mutationFn: async ({ suggestionId, isAutoResolved = false }: { 
+      suggestionId: string; 
+      isAutoResolved?: boolean 
+    }) => {
       const { error } = await supabase
         .from('business_intelligence')
         .update({ 
@@ -330,7 +333,8 @@ export const ConflictResolutionPanel = () => {
       
       if (error) throw error;
     },
-    onSuccess: async (data, suggestionId) => {
+    onSuccess: async (data, variables) => {
+      const { suggestionId, isAutoResolved } = variables;
       toast({
         title: "Suggestie afgewezen",
         description: "AI suggestie is afgewezen en verwijderd"
@@ -340,15 +344,17 @@ export const ConflictResolutionPanel = () => {
       const suggestion = suggestions?.find((s: any) => s.id === suggestionId);
       if (suggestion) {
         const suggestionData = suggestion.data as any;
-        await supabase.functions.invoke('log-conflict-resolution', {
-          body: {
-            user_action: 'rejected',
-            conflict_type: 'ai_suggestion',
-            suggestion_id: suggestionId,
-            suggestion_data: suggestion.data,
-            items_affected: suggestionData?.suggested_actions,
-          }
-        });
+      await supabase.functions.invoke('log-conflict-resolution', {
+        body: {
+          user_action: 'rejected',
+          conflict_type: 'ai_suggestion',
+          suggestion_id: suggestionId,
+          suggestion_data: suggestion.data,
+          items_affected: suggestionData?.suggested_actions,
+          auto_resolved: isAutoResolved,
+          learning_score: isAutoResolved ? 1.0 : 0.0,
+        }
+      });
       }
       
       queryClient.invalidateQueries({ queryKey: ["ai-suggestions"] });
@@ -414,7 +420,7 @@ export const ConflictResolutionPanel = () => {
       if (item.type === 'conflict') {
         noConflictMutation.mutate({ conflictId: item.id, isAutoResolved: true });
       } else {
-        rejectSuggestionMutation.mutate(item.id);
+        rejectSuggestionMutation.mutate({ suggestionId: item.id, isAutoResolved: true });
       }
     });
     
@@ -631,7 +637,7 @@ export const ConflictResolutionPanel = () => {
                             <Button 
                               variant="outline" 
                               size="sm"
-                              onClick={() => rejectSuggestionMutation.mutate(suggestion.id)}
+                              onClick={() => rejectSuggestionMutation.mutate({ suggestionId: suggestion.id, isAutoResolved: false })}
                               disabled={rejectSuggestionMutation.isPending}
                             >
                               ❌ Afwijzen
