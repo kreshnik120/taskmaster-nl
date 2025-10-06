@@ -15,7 +15,16 @@ export const ConflictResolutionPanel = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [autoResolvedToday, setAutoResolvedToday] = useState(0);
-  const [autoResolveEnabled, setAutoResolveEnabled] = useState(true);
+  // Lees initiële waarde uit localStorage, default = true
+  const [autoResolveEnabled, setAutoResolveEnabled] = useState(() => {
+    const saved = localStorage.getItem('autoResolveEnabled');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  // Sla toggle status op in localStorage bij elke wijziging
+  useEffect(() => {
+    localStorage.setItem('autoResolveEnabled', String(autoResolveEnabled));
+  }, [autoResolveEnabled]);
 
   const { data: conflicts, isLoading } = useQuery({
     queryKey: ["conflict-resolution"],
