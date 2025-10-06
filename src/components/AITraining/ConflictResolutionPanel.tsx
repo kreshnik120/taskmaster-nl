@@ -134,7 +134,7 @@ export const ConflictResolutionPanel = () => {
   });
 
   const noConflictMutation = useMutation({
-    mutationFn: async (conflictId: string) => {
+    mutationFn: async ({ conflictId, isAutoResolved = false }: { conflictId: string; isAutoResolved?: boolean }) => {
       const { error } = await supabase
         .from("business_intelligence")
         .update({ 
@@ -145,7 +145,9 @@ export const ConflictResolutionPanel = () => {
 
       if (error) throw error;
     },
-    onSuccess: async (data, conflictId) => {
+    onSuccess: async (_, variables) => {
+      const { conflictId, isAutoResolved = false } = variables;
+      
       toast({
         title: "Geen conflict",
         description: "Beide items worden behouden - geen echt conflict",
@@ -156,7 +158,6 @@ export const ConflictResolutionPanel = () => {
       if (conflict) {
         const conflictData = conflict.data as any;
         const reasoning = conflictData?.ai_reasoning || conflictData?.reasoning || "";
-        const isAutoResolved = isComplementaryConflict(reasoning);
         
         await supabase.functions.invoke('log-conflict-resolution', {
           body: {
@@ -363,7 +364,7 @@ export const ConflictResolutionPanel = () => {
     
     // Resolve each asynchronously
     toResolve.forEach((conflict: any) => {
-      noConflictMutation.mutate(conflict.id);
+      noConflictMutation.mutate({ conflictId: conflict.id, isAutoResolved: true });
     });
     
     setAutoResolvedToday(prev => prev + toResolve.length);
@@ -418,9 +419,14 @@ export const ConflictResolutionPanel = () => {
             <div>
               <p className="text-sm text-muted-foreground">AI Accuraatheid</p>
               <p className="text-3xl font-bold text-green-600">
-                {conflicts && conflicts.length > 0 
-                  ? Math.round((autoResolvedToday / (autoResolvedToday + conflicts.length)) * 100)
-                  : 100}%
+                {(() => {
+                  const manuallyReviewedCount = conflicts.filter((c: any) => c.data?.manually_reviewed).length;
+                  const totalResolved = autoResolvedToday + manuallyReviewedCount;
+                  const accuracy = totalResolved > 0 
+                    ? Math.round((autoResolvedToday / totalResolved) * 100)
+                    : 100;
+                  return accuracy;
+                })()}%
               </p>
             </div>
           </div>
@@ -699,7 +705,7 @@ export const ConflictResolutionPanel = () => {
                       variant={isComplementary ? "default" : "outline"}
                       size="sm"
                       className={isComplementary ? "bg-green-600 hover:bg-green-700" : ""}
-                      onClick={() => noConflictMutation.mutate(conflict.id)}
+                      onClick={() => noConflictMutation.mutate({ conflictId: conflict.id, isAutoResolved: false })}
                       disabled={noConflictMutation.isPending}
                     >
                       🤝 Geen Conflict

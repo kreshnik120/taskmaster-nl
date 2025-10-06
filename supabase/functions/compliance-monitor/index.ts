@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -157,7 +157,7 @@ Output JSON:
             },
             {
               role: 'user',
-          content: `Check ${source.name} voor updates sinds ${new Date(lastCheckDate).toLocaleDateString('nl-NL')}.
+              content: `Check ${source.name} voor updates sinds ${new Date(lastCheckDate).toLocaleDateString('nl-NL')}.
 
 Focus op:
 - Nieuwe tarieven of wijzigingen
@@ -165,10 +165,10 @@ Focus op:
 - Wetgeving updates
 - Compliance requirements
 - Specifiek relevant voor ABCzorg en CitoZorg`
-          }
-        ],
-      }),
-    });
+            }
+          ],
+        }),
+      });
 
       if (!aiResponse.ok) {
         // Handle specific error codes
