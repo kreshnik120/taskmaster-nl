@@ -30,7 +30,7 @@ async function generateTransIPToken(privateKey: string): Promise<string> {
   const header = { alg: 'RS256', typ: 'JWT' }
   const now = Math.floor(Date.now() / 1000)
   const payload = {
-    iss: 'lovable-dns-manager',
+    iss: 'atashi',
     aud: 'https://api.transip.nl',
     iat: now,
     exp: now + 3600,

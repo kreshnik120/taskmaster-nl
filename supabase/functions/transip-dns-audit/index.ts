@@ -38,7 +38,7 @@ async function generateTransIPToken(privateKey: string): Promise<string> {
   };
 
   const payload = {
-    iss: "citozorg",
+    iss: "atashi",
     aud: "https://api.transip.nl",
     nbf: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 3600,
