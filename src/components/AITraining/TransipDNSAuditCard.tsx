@@ -60,11 +60,23 @@ export function TransipDNSAuditCard() {
           toast.warning("Sommige DNS records ontbreken of zijn incorrect");
         }
       } else {
-        toast.error(data.error || "Audit mislukt");
+        const errorMsg = data.error || "Audit mislukt";
+        toast.error(errorMsg);
+        
+        // Extra hints voor 401 errors
+        if (errorMsg.includes('401') || errorMsg.includes('authentication')) {
+          console.error('💡 TransIP Auth Hint: Controleer 1) issuer="atashi", 2) private key format (PKCS#8), 3) key is niet verlopen');
+        }
       }
     } catch (error: any) {
       console.error('❌ Audit error:', error);
-      toast.error(`Fout bij controleren: ${error.message}`);
+      const errorMsg = error.message || 'Onbekende fout';
+      toast.error(`Fout bij controleren: ${errorMsg}`);
+      
+      // Extra hints voor auth problemen
+      if (errorMsg.includes('401') || errorMsg.includes('authentication')) {
+        toast.error('Authenticatie mislukt. Check: 1) Issuer moet "atashi" zijn, 2) Private key formaat moet PKCS#8 zijn, 3) Key moet geldig zijn');
+      }
     } finally {
       setIsChecking(false);
     }

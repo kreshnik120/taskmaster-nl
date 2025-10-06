@@ -5,6 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle2, XCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 interface DNSSetupResponse {
   success: boolean;
@@ -26,13 +29,22 @@ export function MailgunDNSSetup() {
   const [isRunning, setIsRunning] = useState(false);
   const [response, setResponse] = useState<DNSSetupResponse | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [addDmarc, setAddDmarc] = useState(true);
+  const [dmarcValue, setDmarcValue] = useState(
+    'v=DMARC1; p=none; pct=100; fo=1; ri=3600; rua=mailto:fa9f1045@dmarc.mailgun.org,mailto:e0604c4b@inbox.ondmarc.com; ruf=mailto:fa9f1045@dmarc.mailgun.org,mailto:e0604c4b@inbox.ondmarc.com;'
+  );
 
   const handleSetup = async () => {
     setIsRunning(true);
     setResponse(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke('mailgun-transip-dns-setup');
+      const { data, error } = await supabase.functions.invoke('mailgun-transip-dns-setup', {
+        body: {
+          add_dmarc: addDmarc,
+          dmarc_value: dmarcValue
+        }
+      });
 
       if (error) throw error;
 
@@ -73,6 +85,37 @@ export function MailgunDNSSetup() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="space-y-4 p-4 border rounded-lg">
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="dmarc-toggle"
+              checked={addDmarc}
+              onCheckedChange={setAddDmarc}
+            />
+            <Label htmlFor="dmarc-toggle" className="cursor-pointer">
+              🛡️ DMARC record toevoegen
+            </Label>
+          </div>
+          
+          {addDmarc && (
+            <div className="space-y-2">
+              <Label htmlFor="dmarc-value" className="text-sm">
+                DMARC waarde:
+              </Label>
+              <Textarea
+                id="dmarc-value"
+                value={dmarcValue}
+                onChange={(e) => setDmarcValue(e.target.value)}
+                className="font-mono text-xs"
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground">
+                Dit record wordt toegevoegd als _dmarc.apply.citozorg.nl
+              </p>
+            </div>
+          )}
+        </div>
+
         <Button
           onClick={handleSetup}
           disabled={isRunning}

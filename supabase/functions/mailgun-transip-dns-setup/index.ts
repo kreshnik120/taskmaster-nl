@@ -26,7 +26,7 @@ interface MailgunDomainData {
   state: string
 }
 
-async function generateTransIPToken(privateKey: string): Promise<string> {
+async function generateTransIPJWT(privateKey: string): Promise<string> {
   const header = { alg: 'RS256', typ: 'JWT' }
   const now = Math.floor(Date.now() / 1000)
   const payload = {
@@ -43,7 +43,6 @@ async function generateTransIPToken(privateKey: string): Promise<string> {
   const encodedPayload = btoa(JSON.stringify(payload)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
   const dataToSign = `${encodedHeader}.${encodedPayload}`
 
-  // Import the private key
   const pemKey = privateKey.replace(/\\n/g, '\n')
   const pemContents = pemKey.replace('-----BEGIN PRIVATE KEY-----', '')
     .replace('-----END PRIVATE KEY-----', '')
@@ -69,6 +68,37 @@ async function generateTransIPToken(privateKey: string): Promise<string> {
     .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
 
   return `${dataToSign}.${encodedSignature}`
+}
+
+async function getTransIPAccessToken(privateKey: string): Promise<string> {
+  console.log('🔐 Requesting access token from TransIP /v6/auth')
+  
+  const jwt = await generateTransIPJWT(privateKey)
+  
+  const response = await fetch('https://api.transip.nl/v6/auth', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      login: 'atashi',
+      nonce: Math.random().toString(36).substring(2, 15),
+      read_only: false,
+      expiration_time: '30 minutes',
+      label: 'Mailgun DNS Setup',
+      global_key: true
+    })
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error(`❌ TransIP auth failed: ${response.status} - ${errorText}`)
+    throw new Error(`TransIP authentication failed: ${response.status}. Check: 1) issuer is "atashi", 2) private key format (PKCS#8), 3) key is valid`)
+  }
+
+  const data = await response.json()
+  console.log('✅ Access token received from TransIP')
+  return data.token
 }
 
 async function getMailgunDNSRequirements(domain: string, apiKey: string): Promise<MailgunDomainData> {
@@ -173,6 +203,8 @@ serve(async (req) => {
       throw new Error('TRANSIP_API_KEY not configured')
     }
 
+    const { add_dmarc = false, dmarc_value = 'v=DMARC1; p=none; pct=100; fo=1; ri=3600; rua=mailto:fa9f1045@dmarc.mailgun.org,mailto:e0604c4b@inbox.ondmarc.com; ruf=mailto:fa9f1045@dmarc.mailgun.org,mailto:e0604c4b@inbox.ondmarc.com;' } = await req.json()
+    
     const mailgunDomain = 'apply.citozorg.nl'
     const baseDomain = 'citozorg.nl'
     const subdomain = 'apply'
@@ -180,13 +212,14 @@ serve(async (req) => {
     console.log('🚀 Starting Mailgun + TransIP DNS Setup')
     console.log(`📧 Mailgun domain: ${mailgunDomain}`)
     console.log(`🌐 Base domain: ${baseDomain}`)
+    console.log(`🛡️ DMARC toevoegen: ${add_dmarc}`)
 
     // Step 1: Get Mailgun DNS requirements
     const mailgunData = await getMailgunDNSRequirements(mailgunDomain, mailgunApiKey)
     
-    // Step 2: Generate TransIP token
-    console.log('🔑 Generating TransIP authentication token')
-    const transipToken = await generateTransIPToken(transipApiKey)
+    // Step 2: Get TransIP access token via /v6/auth
+    console.log('🔑 Getting TransIP access token')
+    const transipToken = await getTransIPAccessToken(transipApiKey)
     
     // Step 3: Get current DNS records
     const currentDNS = await getCurrentTransIPDNS(baseDomain, transipToken)
@@ -267,6 +300,26 @@ serve(async (req) => {
         } else {
           actionsTaken.push(`ℹ️ CNAME record ${recordName} was al correct`)
         }
+      }
+    }
+
+    // Add DMARC record if requested
+    if (add_dmarc) {
+      const dmarcName = `_dmarc.${subdomain}`
+      const existingDMARC = currentDNS.find(
+        r => r.type === 'TXT' && r.name === dmarcName
+      )
+      
+      if (!existingDMARC) {
+        requiredRecords.push({
+          name: dmarcName,
+          expire: 3600,
+          type: 'TXT',
+          content: dmarc_value
+        })
+        actionsTaken.push(`✅ DMARC record toegevoegd voor ${dmarcName}.${baseDomain}`)
+      } else {
+        actionsTaken.push(`ℹ️ DMARC record ${dmarcName} was al aanwezig`)
       }
     }
 

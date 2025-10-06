@@ -29,8 +29,8 @@ interface AuditResult {
   error?: string;
 }
 
-async function generateTransIPToken(privateKey: string): Promise<string> {
-  console.log('🔑 Generating TransIP authentication token');
+async function generateTransIPJWT(privateKey: string): Promise<string> {
+  console.log('🔑 Generating TransIP JWT for authentication');
   
   const header = {
     alg: "RS256",
@@ -86,6 +86,37 @@ async function generateTransIPToken(privateKey: string): Promise<string> {
   return `${dataToSign}.${signatureB64}`;
 }
 
+async function getTransIPAccessToken(privateKey: string): Promise<string> {
+  console.log('🔐 Requesting access token from TransIP /v6/auth');
+  
+  const jwt = await generateTransIPJWT(privateKey);
+  
+  const response = await fetch('https://api.transip.nl/v6/auth', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      login: 'atashi',
+      nonce: Math.random().toString(36).substring(2, 15),
+      read_only: true,
+      expiration_time: '30 minutes',
+      label: 'DNS Audit Tool',
+      global_key: false
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`❌ TransIP auth failed: ${response.status} - ${errorText}`);
+    throw new Error(`TransIP authentication failed: ${response.status}. Check: 1) issuer is "atashi", 2) private key format (PKCS#8), 3) key is valid and not expired`);
+  }
+
+  const data = await response.json();
+  console.log('✅ Access token received from TransIP');
+  return data.token;
+}
+
 async function getCurrentTransIPDNS(domain: string, token: string): Promise<TransIPDNSEntry[]> {
   console.log(`📡 Fetching current DNS records from TransIP for ${domain}`);
   
@@ -123,8 +154,8 @@ serve(async (req) => {
     const { base_domain = 'citozorg.nl', filter_subdomain = 'apply' } = await req.json();
     console.log(`📋 Auditing domain: ${base_domain}, subdomain: ${filter_subdomain}`);
 
-    // Generate TransIP token
-    const token = await generateTransIPToken(transipApiKey);
+    // Get TransIP access token via /v6/auth
+    const token = await getTransIPAccessToken(transipApiKey);
 
     // Get all DNS records
     const allEntries = await getCurrentTransIPDNS(base_domain, token);
@@ -199,6 +230,18 @@ serve(async (req) => {
     quick_checks.tracking_ok = !!trackingRecord;
     if (!quick_checks.tracking_ok) {
       notes.push(`⚠️ Missing tracking CNAME (expected: email.${subdomain} -> eu.mailgun.org)`);
+    }
+
+    // Check DMARC record
+    const dmarcRecord = filteredEntries.find(e =>
+      e.type === 'TXT' &&
+      e.name === `_dmarc.${subdomain}` &&
+      e.content.includes('v=DMARC1')
+    );
+    if (dmarcRecord) {
+      notes.push(`✅ DMARC record found at _dmarc.${subdomain}`);
+    } else {
+      notes.push(`⚠️ DMARC record not found (optional but recommended for _dmarc.${subdomain})`);
     }
 
     if (notes.length === 0) {
