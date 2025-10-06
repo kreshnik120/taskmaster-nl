@@ -1,5 +1,8 @@
 project_id = "oelmsmcgryeoryhonexw"
 
+[functions.mailgun-transip-dns-setup]
+verify_jwt = false
+
 [functions.log-conflict-resolution]
 verify_jwt = true
 
