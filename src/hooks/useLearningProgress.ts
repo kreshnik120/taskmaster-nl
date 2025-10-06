@@ -53,7 +53,10 @@ export const useLearningProgress = () => {
 
         const totalEvents = dayEvents.length;
         const successfulEvents = dayEvents.filter(e => 
-          e.outcome === 'approved' || e.outcome === 'applied'
+          e.outcome === 'success' || 
+          e.outcome === 'applied' || 
+          e.outcome === 'facts_learned' || 
+          e.outcome === 'learned'
         ).length;
         const autoResolved = dayEvents.filter(e => {
           if (e.event_type !== 'conflict_resolution') return false;
