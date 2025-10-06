@@ -300,7 +300,7 @@ export const LearningDashboard = () => {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {Object.entries(knowledgeStats?.categories || {}).map(([category, count]) => (
-                    <div key={category} className="p-4 bg-muted rounded-lg">
+                    <div key={`category-${category}`} className="p-4 bg-muted rounded-lg">
                       <div className="flex items-center gap-2 mb-1">
                         {getCategoryIcon(category)}
                         <span className="text-xs font-medium capitalize">
@@ -317,7 +317,7 @@ export const LearningDashboard = () => {
                   <ScrollArea className="h-[200px]">
                     <div className="space-y-2">
                       {knowledgeStats?.recentItems?.map((item: any) => (
-                        <div key={item.id} className="p-3 bg-muted/50 rounded-lg text-sm">
+                        <div key={`recent-${item.id}`} className="p-3 bg-muted/50 rounded-lg text-sm">
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
@@ -359,7 +359,7 @@ export const LearningDashboard = () => {
               <ScrollArea className="h-[400px]">
                 <div className="space-y-3">
                   {learningEvents.map((event) => (
-                    <div key={event.id} className="p-4 bg-muted/50 rounded-lg">
+                    <div key={`event-${event.id}`} className="p-4 bg-muted/50 rounded-lg">
                       <div className="flex items-start justify-between mb-2">
                         {getEventTypeBadge(event.event_type)}
                         <span className="text-xs text-muted-foreground">
@@ -413,7 +413,7 @@ export const LearningDashboard = () => {
               <ScrollArea className="h-[400px]">
                 <div className="space-y-4">
                   {businessIntel.map((intel) => (
-                    <div key={intel.id} className="p-4 border rounded-lg">
+                    <div key={`intel-${intel.id}`} className="p-4 border rounded-lg">
                       <div className="flex items-start justify-between mb-2">
                         <h4 className="font-semibold">{intel.title}</h4>
                         {getIntelTypeBadge(intel.intelligence_type)}

@@ -371,13 +371,26 @@ export const ConflictResolutionPanel = () => {
     const keywords = [
       "geen sprake van een conflict",
       "complementaire",
+      "complementair",
+      "aanvullend",
+      "aanvult",
       "geen conflict in de inhoud",
       "verschillend maar beide correct",
       "beide items zijn betrouwbaar",
+      "beide behouden",
       "geen conflict",
-      "complementair"
+      "beide correct",
+      "beide juist",
+      "geen tegenstrijdigheid"
     ];
     return keywords.some(keyword => reasoning.toLowerCase().includes(keyword.toLowerCase()));
+  };
+
+  // Check if AI suggestion only advises keeping items (= no real conflict)
+  const isKeepOnlySuggestion = (suggestionData: any) => {
+    const actions = suggestionData?.suggested_actions || [];
+    if (actions.length === 0) return false;
+    return actions.every((action: any) => action.action === 'keep');
   };
 
   const truncateJson = (obj: any, maxLength = 100) => {
@@ -392,51 +405,87 @@ export const ConflictResolutionPanel = () => {
     setExpandedItems(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Auto-resolve complementary conflicts
+  // Auto-resolve complementary conflicts with batch processing
   useEffect(() => {
-    // Combineer conflicts en suggestions
-    const allItems = [
-      ...(conflicts || []).map((c: any) => ({ ...c, type: 'conflict' })),
-      ...(suggestions || []).map((s: any) => ({ ...s, type: 'suggestion' }))
-    ];
+    if (!autoResolveEnabled) return;
     
-    if (allItems.length === 0 || !autoResolveEnabled) return;
-    
-    const complementaryItems = allItems.filter((item: any) => {
-      const reasoning = (item.data as any)?.ai_reasoning || 
-                       (item.data as any)?.reasoning || "";
-      return isComplementaryConflict(reasoning);
-    });
-    
-    if (complementaryItems.length === 0) return;
-    
-    // Rate limit: max 10 per batch
-    const toResolve = complementaryItems.slice(0, 10);
-    
-    console.log(`🤖 Auto-resolving ${toResolve.length} complementary items (Conflicts + Suggestions)`);
-    
-    // Resolve each with correct mutation based on type
-    toResolve.forEach((item: any) => {
-      if (item.type === 'conflict') {
-        noConflictMutation.mutate({ conflictId: item.id, isAutoResolved: true });
-      } else {
-        rejectSuggestionMutation.mutate({ suggestionId: item.id, isAutoResolved: true });
-      }
-    });
-    
-    setAutoResolvedToday(prev => prev + toResolve.length);
-    
-    if (toResolve.length > 0) {
-      toast({
-        title: "🤖 Auto-Resolved",
-        description: `${toResolve.length} "geen conflict" items automatisch verwerkt`,
-      });
+    const processAutoResolve = async () => {
+      const maxIterations = 5;
+      const batchSize = 25;
+      const pauseBetweenBatches = 1000; // 1 second
       
-      // Refresh statistics na auto-resolve
-      setTimeout(() => {
-        refetchStats?.();
-      }, 1000);
-    }
+      let iteration = 0;
+      let totalProcessed = 0;
+      
+      while (iteration < maxIterations) {
+        // Combineer conflicts en suggestions
+        const allItems = [
+          ...(conflicts || []).map((c: any) => ({ ...c, type: 'conflict' })),
+          ...(suggestions || []).map((s: any) => ({ ...s, type: 'suggestion' }))
+        ];
+        
+        if (allItems.length === 0) break;
+        
+        // Filter complementary items met uitgebreide checks
+        const complementaryItems = allItems.filter((item: any) => {
+          const itemData = item.data as any;
+          const reasoning = itemData?.ai_reasoning || itemData?.reasoning || "";
+          
+          // Check 1: Keywords in reasoning
+          const hasKeyword = isComplementaryConflict(reasoning);
+          
+          // Check 2: Voor suggestions - check of alleen "keep" acties
+          const isKeepOnly = item.type === 'suggestion' && isKeepOnlySuggestion(itemData);
+          
+          return hasKeyword || isKeepOnly;
+        });
+        
+        if (complementaryItems.length === 0) break;
+        
+        const toResolve = complementaryItems.slice(0, batchSize);
+        
+        console.log(`🤖 [Auto-Resolve Batch ${iteration + 1}/${maxIterations}] Processing ${toResolve.length} items (${toResolve.filter(i => i.type === 'conflict').length} conflicts, ${toResolve.filter(i => i.type === 'suggestion').length} suggestions)`);
+        
+        // Resolve each with correct mutation based on type
+        toResolve.forEach((item: any) => {
+          if (item.type === 'conflict') {
+            noConflictMutation.mutate({ conflictId: item.id, isAutoResolved: true });
+          } else {
+            rejectSuggestionMutation.mutate({ suggestionId: item.id, isAutoResolved: true });
+          }
+        });
+        
+        totalProcessed += toResolve.length;
+        iteration++;
+        
+        // Als er meer items zijn, wacht dan kort en herhaal
+        if (complementaryItems.length > batchSize && iteration < maxIterations) {
+          await new Promise(resolve => setTimeout(resolve, pauseBetweenBatches));
+        } else {
+          break;
+        }
+      }
+      
+      if (totalProcessed > 0) {
+        console.log(`✅ [Auto-Resolve Complete] ${totalProcessed} items processed in ${iteration} batch(es)`);
+        setAutoResolvedToday(prev => prev + totalProcessed);
+        
+        toast({
+          title: "🤖 Auto-Resolve Compleet",
+          description: `${totalProcessed} complementaire items verwerkt in ${iteration} batch(es)`,
+        });
+        
+        // Update last run timestamp in localStorage
+        localStorage.setItem('autoResolveLastRun', new Date().toISOString());
+        
+        // Refresh statistics na auto-resolve
+        setTimeout(() => {
+          refetchStats?.();
+        }, 1500);
+      }
+    };
+    
+    processAutoResolve();
   }, [conflicts, suggestions, autoResolveEnabled]);
 
   if (isLoading) {
@@ -467,6 +516,19 @@ export const ConflictResolutionPanel = () => {
               <p className="text-sm text-muted-foreground">
                 Automatische afhandeling van complementaire kennisitems
               </p>
+              {(() => {
+                const lastRun = localStorage.getItem('autoResolveLastRun');
+                if (lastRun) {
+                  const date = new Date(lastRun);
+                  const timeAgo = Math.floor((Date.now() - date.getTime()) / 60000);
+                  return (
+                    <p className="text-xs text-blue-600 mt-1">
+                      Laatste run: {timeAgo < 1 ? 'zojuist' : `${timeAgo} min geleden`}
+                    </p>
+                  );
+                }
+                return null;
+              })()}
             </div>
           </div>
           
