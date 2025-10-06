@@ -15,6 +15,12 @@ export const MessageFeedback = ({ messageContent, messageId, usedKnowledge }: Me
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
+  // Don't render if messageId is missing
+  if (!messageId) {
+    console.warn('[MessageFeedback] No messageId provided, hiding feedback buttons');
+    return null;
+  }
+
   // Check if feedback already exists for this message
   useEffect(() => {
     const checkExistingFeedback = async () => {
@@ -39,13 +45,14 @@ export const MessageFeedback = ({ messageContent, messageId, usedKnowledge }: Me
   }, [messageId]);
 
   const handleFeedback = async (type: 'positive' | 'negative') => {
-    if (feedback || isLoading || !messageId) return;
+    if (feedback || isLoading) return;
+    
+    console.log('[MessageFeedback] Submitting feedback:', { type, messageId, hasAuth: !!supabase.auth });
     
     setIsLoading(true);
     setFeedback(type);
 
     try {
-      // Call process-feedback edge function with messageId
       const { data, error } = await supabase.functions.invoke('process-feedback', {
         body: {
           messageId: messageId,
@@ -57,18 +64,24 @@ export const MessageFeedback = ({ messageContent, messageId, usedKnowledge }: Me
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[MessageFeedback] Edge function error:', error);
+        throw error;
+      }
 
+      console.log('[MessageFeedback] Feedback saved successfully:', data);
       toast({
-        title: type === 'positive' ? '👍 Bedankt!' : '👎 Feedback ontvangen',
-        description: data?.message || 'De AI leert van je feedback.',
+        title: type === 'positive' ? '👍 Bedankt voor je positieve feedback!' : '👎 Bedankt voor je feedback',
+        description: type === 'positive' 
+          ? 'Dit helpt de AI om beter te worden.' 
+          : 'We gebruiken dit om de AI te verbeteren.',
       });
-    } catch (error) {
-      console.error('Failed to save feedback:', error);
+    } catch (error: any) {
+      console.error('[MessageFeedback] Failed to save feedback:', error);
       setFeedback(null);
       toast({
-        title: 'Fout bij opslaan feedback',
-        description: 'Probeer het opnieuw',
+        title: 'Feedback kon niet worden opgeslagen',
+        description: error.message || 'Controleer je internetverbinding en probeer het opnieuw.',
         variant: 'destructive',
       });
     } finally {

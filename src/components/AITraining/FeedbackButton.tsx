@@ -16,12 +16,20 @@ export const FeedbackButton = ({ messageId, messageContent, context }: FeedbackB
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
+  // Don't render if messageId is missing
+  if (!messageId) {
+    console.warn('[FeedbackButton] No messageId provided, hiding feedback buttons');
+    return null;
+  }
+
   const handleFeedback = async (type: 'positive' | 'negative') => {
-    if (feedback === type) return; // Already submitted this feedback
+    if (feedback === type) return;
+    
+    console.log('[FeedbackButton] Submitting feedback:', { type, messageId, hasAuth: !!supabase.auth });
     
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.functions.invoke('process-feedback', {
+      const { data, error } = await supabase.functions.invoke('process-feedback', {
         body: {
           messageId,
           feedback: type,
@@ -33,20 +41,24 @@ export const FeedbackButton = ({ messageId, messageContent, context }: FeedbackB
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[FeedbackButton] Edge function error:', error);
+        throw error;
+      }
 
+      console.log('[FeedbackButton] Feedback saved successfully:', data);
       setFeedback(type);
       toast({
-        title: type === 'positive' ? '👍 Bedankt!' : '👎 Bedankt voor je feedback',
+        title: type === 'positive' ? '👍 Bedankt voor je positieve feedback!' : '👎 Bedankt voor je feedback',
         description: type === 'positive' 
-          ? 'De AI leert van je positieve feedback'
-          : 'We gebruiken dit om de AI te verbeteren',
+          ? 'Dit helpt de AI om beter te worden.'
+          : 'We gebruiken dit om de AI te verbeteren.',
       });
     } catch (error: any) {
-      console.error('Error submitting feedback:', error);
+      console.error('[FeedbackButton] Failed to save feedback:', error);
       toast({
-        title: 'Feedback niet verstuurd',
-        description: error.message,
+        title: 'Feedback kon niet worden opgeslagen',
+        description: error.message || 'Controleer je internetverbinding en probeer het opnieuw.',
         variant: 'destructive',
       });
     } finally {
