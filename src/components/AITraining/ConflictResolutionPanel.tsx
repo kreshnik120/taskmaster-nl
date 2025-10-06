@@ -427,27 +427,27 @@ export const ConflictResolutionPanel = () => {
             const isComplementary = isComplementaryConflict(aiReasoning);
 
             return (
-              <Card key={conflict.id} className={`p-4 ${isComplementary ? 'border-green-500/50' : 'border-amber-500/50'}`}>
+              <Card key={conflict.id} className={`p-4 ${isComplementary ? 'border-green-500/50 bg-green-50 dark:bg-green-950/20' : 'border-blue-200 bg-blue-50 dark:bg-blue-950'}`}>
                 <div className="space-y-3">
                   {/* Header - Compact */}
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <h4 className="font-semibold text-base flex items-center gap-2">
-                        {isComplementary ? '🤝' : <AlertTriangle className="h-4 w-4 text-amber-500" />}
+                      <h4 className="font-semibold flex items-center gap-2">
+                        {isComplementary ? '🤝' : <Lightbulb className="h-4 w-4" />}
                         {conflict.title}
                       </h4>
                       {conflict.description && (
                         <p className="text-sm text-muted-foreground mt-1">{conflict.description}</p>
                       )}
                     </div>
-                    <Badge variant={isComplementary ? "outline" : "destructive"} className="ml-2">
+                    <Badge variant="outline" className="ml-2">
                       {conflict.priority}
                     </Badge>
                   </div>
 
-                  {/* AI Redenering - Prominent zoals bij suggesties */}
+                  {/* AI Redenering */}
                   {aiReasoning && (
-                    <div className={`rounded-lg p-3 ${isComplementary ? 'bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800' : 'bg-blue-50 dark:bg-blue-950/20 border border-blue-200'}`}>
+                    <div className="rounded-lg p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200">
                       <div className="flex items-start gap-2">
                         <Lightbulb className="h-4 w-4 mt-0.5" />
                         <div className="flex-1">
@@ -458,37 +458,34 @@ export const ConflictResolutionPanel = () => {
                     </div>
                   )}
 
-                  {/* Side-by-side Items Comparison - Compact */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Conflicterende Items - Compacte lijst */}
+                  <div className="space-y-2">
                     {items.map((item: any, idx: number) => {
                       const aiRec = conflictData?.ai_recommendation;
                       const isRecommended = item.id === aiRec?.recommended_id;
                       return (
-                        <div key={item.id} className={`border rounded-lg p-3 ${isRecommended ? 'border-blue-500 border-2' : 'bg-background'}`}>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-sm">Item {String.fromCharCode(65 + idx)}</span>
-                            <div className="flex gap-1">
+                        <div key={item.id} className="flex items-start gap-2 text-sm">
+                          <span className="font-medium min-w-[60px]">Item {String.fromCharCode(65 + idx)}:</span>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <Badge variant="outline" className="text-xs">{item.category}</Badge>
+                              <span className="text-xs text-muted-foreground">→ {item.key}</span>
                               {getScoreBadge(item.confidence || 0.5, "Z")}
-                              <Badge variant="outline" className="text-xs">
-                                {item.usage_count || 0}x
-                              </Badge>
-                              {isRecommended && <Badge className="text-xs bg-blue-600">⭐</Badge>}
+                              <Badge variant="outline" className="text-xs">{item.usage_count || 0}x</Badge>
+                              {isRecommended && <Badge className="text-xs bg-blue-600">⭐ AI keuze</Badge>}
                             </div>
-                          </div>
-                          <div className="text-xs text-muted-foreground mb-1">
-                            {item.category} → {item.key}
-                          </div>
-                          <div className="text-xs bg-muted/30 rounded p-2 font-mono max-h-20 overflow-y-auto">
-                            {truncateJson(item.value, 150)}
+                            <div className="text-xs bg-muted/30 rounded p-2 font-mono max-h-16 overflow-hidden">
+                              {truncateJson(item.value, 100)}
+                            </div>
                           </div>
                         </div>
                       );
                     })}
                   </div>
 
-                  {/* Action Buttons - Improved Layout */}
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    {isComplementary && (
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 pt-2">
+                    {isComplementary ? (
                       <Button
                         variant="default"
                         size="sm"
@@ -498,27 +495,27 @@ export const ConflictResolutionPanel = () => {
                       >
                         🤝 Geen Conflict - Beide Behouden
                       </Button>
+                    ) : (
+                      <>
+                        {items.slice(0, 2).map((item: any, idx: number) => (
+                          <Button
+                            key={item.id}
+                            size="sm"
+                            onClick={() => {
+                              const otherItems = items.filter((i: any) => i.id !== item.id);
+                              resolveConflictMutation.mutate({
+                                conflictId: conflict.id,
+                                keepItemId: item.id,
+                                deleteItemIds: otherItems.map((i: any) => i.id),
+                              });
+                            }}
+                            disabled={resolveConflictMutation.isPending}
+                          >
+                            ✅ Behoud {String.fromCharCode(65 + idx)}
+                          </Button>
+                        ))}
+                      </>
                     )}
-                    {!isComplementary && items.map((item: any, idx: number) => (
-                      <Button
-                        key={item.id}
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => {
-                          const otherItems = items.filter((i: any) => i.id !== item.id);
-                          if (otherItems.length > 0 && confirm(`Item ${String.fromCharCode(65 + idx)} verwijderen?`)) {
-                            resolveConflictMutation.mutate({
-                              conflictId: conflict.id,
-                              keepItemId: otherItems[0].id,
-                              deleteItemIds: [item.id],
-                            });
-                          }
-                        }}
-                        disabled={resolveConflictMutation.isPending}
-                      >
-                        ❌ Verwijder {String.fromCharCode(65 + idx)}
-                      </Button>
-                    ))}
                     <Button
                       variant="outline"
                       size="sm"
