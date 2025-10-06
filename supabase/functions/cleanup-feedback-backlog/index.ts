@@ -20,7 +20,7 @@ serve(async (req) => {
 
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       {
         global: {
           headers: { Authorization: authHeader },
@@ -32,6 +32,14 @@ serve(async (req) => {
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
     if (userError || !user) {
       throw new Error('User not authenticated');
+    }
+
+    // Verify user is admin
+    const { data: isAdmin, error: roleError } = await supabaseClient
+      .rpc('has_role', { _user_id: user.id, _role: 'admin' });
+    
+    if (roleError || !isAdmin) {
+      throw new Error('Unauthorized: Admin role required');
     }
 
     console.log('🧹 Starting feedback backlog cleanup for user:', user.id);
