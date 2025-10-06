@@ -1109,13 +1109,28 @@ Als specifieke CAO-schalen ontbreken voor een client:
 2. ⚠️ VERMELD ALTIJD:
    "Dit is een indicatie op basis van [bron]. Ik heb de exacte [Client] CAO-data opgevraagd voor een precieze berekening."
 
-3. 🚨 LOG DE KNOWLEDGE GAP via create_business_intelligence:
+3. 🚨 LOG DE KNOWLEDGE GAP & TRIGGER AUTO-HARVESTER:
+   
+   Gebruik ALTIJD create_business_intelligence EN roep daarna auto_harvest_knowledge aan:
+   
+   A. Log de gap:
    {
      intelligence_type: "knowledge_gap",
      title: "Ontbrekende CAO data: [Client] - [CAO type]",
      description: "Gebruiker vroeg om [specifieke info], maar kennisbank mist: [details]",
      priority: "high",
      impact_score: 0.8
+   }
+   
+   B. Trigger harvester met specifieke search terms:
+   {
+     search_topics: [
+       "[Client] CAO [type] salarisschalen 2025",
+       "[Functie] FWG schaaltabel [Client]",
+       "CAO [type] periodieken en tredes actueel"
+     ],
+     autonomous: true,
+     reason: "Auto-triggered door knowledge gap: [korte omschrijving]"
    }
 
 ❌ VERBODEN ANTWOORDEN:
@@ -1258,14 +1273,14 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
         type: "function",
         function: {
           name: "create_business_intelligence",
-          description: "Creëer een business intelligence insight (workflow pattern, bottleneck, optimalisatie mogelijkheid)",
+          description: "Creëer een business intelligence insight. Gebruik dit ALTIJD bij knowledge gaps om de gap te loggen. NA het loggen van een knowledge_gap, gebruik DIRECT auto_harvest_knowledge.",
           parameters: {
             type: "object",
             properties: {
               intelligence_type: {
                 type: "string",
-                enum: ["workflow_pattern", "productivity_insight", "bottleneck", "optimization_opportunity"],
-                description: "Type insight"
+                enum: ["workflow_pattern", "productivity_insight", "bottleneck", "optimization_opportunity", "knowledge_gap", "market_insight"],
+                description: "Type insight. Gebruik 'knowledge_gap' wanneer ontbrekende kennis wordt gedetecteerd."
               },
               title: { type: "string", description: "Korte titel van het insight" },
               description: { type: "string", description: "Gedetailleerde beschrijving" },
@@ -1274,6 +1289,28 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
               impact_score: { type: "number", description: "Verwachte impact (0.0 - 10.0)", minimum: 0, maximum: 10 }
             },
             required: ["intelligence_type", "title", "data"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "auto_harvest_knowledge",
+          description: "Trigger de Auto-Knowledge-Harvester om online informatie te verzamelen. Gebruik dit DIRECT na het detecteren van een knowledge gap.",
+          parameters: {
+            type: "object",
+            properties: {
+              search_topics: {
+                type: "array",
+                items: { type: "string" },
+                description: "Specifieke zoektermen (bijv. 'Kwintes CAO GGZ salarisschalen 2025')"
+              },
+              reason: {
+                type: "string",
+                description: "Waarom wordt harvester getriggerd?"
+              }
+            },
+            required: ["search_topics", "reason"]
           }
         }
       },
@@ -1611,6 +1648,44 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             insight_id: biInsight.id, 
                             message: `💡 Business Intelligence insight gecreëerd: ${args.title}` 
                           };
+                          break;
+
+                        case "auto_harvest_knowledge":
+                          console.log("🤖 Triggering Auto-Knowledge-Harvester:", args);
+                          
+                          try {
+                            const harvesterResponse = await fetch(
+                              `${Deno.env.get("SUPABASE_URL")}/functions/v1/auto-knowledge-harvester`,
+                              {
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  "Authorization": req.headers.get("Authorization") || ""
+                                },
+                                body: JSON.stringify({
+                                  search_topics: args.search_topics,
+                                  autonomous: true,
+                                  triggered_by: "ai_chat_knowledge_gap",
+                                  reason: args.reason
+                                })
+                              }
+                            );
+
+                            const harvesterResult = await harvesterResponse.json();
+                            
+                            result = {
+                              success: true,
+                              message: `🤖 Auto-Knowledge-Harvester gestart voor ${args.search_topics.length} onderwerpen`,
+                              topics: args.search_topics,
+                              harvester_status: harvesterResult
+                            };
+                          } catch (harvesterError) {
+                            console.error("❌ Harvester trigger failed:", harvesterError);
+                            result = {
+                              success: false,
+                              message: "⚠️ Harvester kon niet worden gestart, maar knowledge gap is wel gelogd"
+                            };
+                          }
                           break;
 
                         case "search_professionals":
