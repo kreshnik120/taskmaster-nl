@@ -41,8 +41,13 @@ export const LearningDashboard = () => {
         description: `${data.updated_count} feedback events zijn opgeschoond`,
       });
 
-      // Refresh learning events
-      window.location.reload();
+      // Refresh all data without page reload
+      await Promise.all([
+        refetchKnowledgeStats(),
+        refetchLearningEvents(),
+        refetchBusinessIntel(),
+        refetchPerformanceMetrics()
+      ]);
     } catch (error: any) {
       console.error('Error cleaning up backlog:', error);
       
@@ -60,7 +65,7 @@ export const LearningDashboard = () => {
   };
 
   // Fetch knowledge base stats
-  const { data: knowledgeStats } = useQuery({
+  const { data: knowledgeStats, refetch: refetchKnowledgeStats } = useQuery({
     queryKey: ['ai-knowledge-stats'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -88,7 +93,7 @@ export const LearningDashboard = () => {
   });
 
   // Fetch learning events
-  const { data: learningEvents } = useQuery({
+  const { data: learningEvents, refetch: refetchLearningEvents } = useQuery({
     queryKey: ['learning-events'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -103,7 +108,7 @@ export const LearningDashboard = () => {
   });
 
   // Fetch business intelligence
-  const { data: businessIntel } = useQuery({
+  const { data: businessIntel, refetch: refetchBusinessIntel } = useQuery({
     queryKey: ['business-intelligence'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -118,7 +123,7 @@ export const LearningDashboard = () => {
   });
 
   // Fetch 24H performance metrics
-  const { data: performanceMetrics } = useQuery({
+  const { data: performanceMetrics, refetch: refetchPerformanceMetrics } = useQuery({
     queryKey: ['performance-metrics-24h'],
     queryFn: async () => {
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
