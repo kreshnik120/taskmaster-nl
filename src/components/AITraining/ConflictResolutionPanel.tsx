@@ -317,14 +317,16 @@ export const ConflictResolutionPanel = () => {
                 const deleteItems = conflictingItems.filter((item: any) => 
                   actions.find((a: any) => a.item_id === item.id && a.action === 'delete')
                 );
+                const aiReasoning = data?.reasoning || "";
+                const isComplementary = isComplementaryConflict(aiReasoning);
 
                 return (
-                  <Card key={suggestion.id} className="p-4 border-blue-200 bg-blue-50 dark:bg-blue-950">
+                  <Card key={suggestion.id} className={`p-4 ${isComplementary ? 'border-green-500/50 bg-green-50 dark:bg-green-950/20' : 'border-blue-200 bg-blue-50 dark:bg-blue-950'}`}>
                     <div className="space-y-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <h4 className="font-semibold flex items-center gap-2">
-                            <Lightbulb className="h-4 w-4" />
+                            {isComplementary ? '🤝' : <Lightbulb className="h-4 w-4" />}
                             {suggestion.title}
                           </h4>
                           <p className="text-sm text-muted-foreground mt-1">
@@ -366,24 +368,38 @@ export const ConflictResolutionPanel = () => {
                       </div>
 
                       <div className="flex gap-2 pt-2">
-                        <Button
-                          size="sm"
-                          onClick={() => approveSuggestionMutation.mutate({
-                            suggestionId: suggestion.id,
-                            actions: data.recommended_actions
-                          })}
-                          disabled={approveSuggestionMutation.isPending}
-                        >
-                          ✅ Goedkeuren
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => rejectSuggestionMutation.mutate(suggestion.id)}
-                          disabled={rejectSuggestionMutation.isPending}
-                        >
-                          ❌ Afwijzen
-                        </Button>
+                        {isComplementary ? (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700"
+                            onClick={() => noConflictMutation.mutate(suggestion.id)}
+                            disabled={noConflictMutation.isPending}
+                          >
+                            🤝 Geen Conflict - Beide Behouden
+                          </Button>
+                        ) : (
+                          <>
+                            <Button
+                              size="sm"
+                              onClick={() => approveSuggestionMutation.mutate({
+                                suggestionId: suggestion.id,
+                                actions: data.recommended_actions
+                              })}
+                              disabled={approveSuggestionMutation.isPending}
+                            >
+                              ✅ Goedkeuren
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => rejectSuggestionMutation.mutate(suggestion.id)}
+                              disabled={rejectSuggestionMutation.isPending}
+                            >
+                              ❌ Afwijzen
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </Card>
