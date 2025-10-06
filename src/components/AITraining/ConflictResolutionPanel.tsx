@@ -8,6 +8,7 @@ import { AlertTriangle, CheckCircle2, Trash2, XCircle, Lightbulb } from "lucide-
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import { useState } from "react";
 
 export const ConflictResolutionPanel = () => {
   const { toast } = useToast();
@@ -147,6 +148,7 @@ export const ConflictResolutionPanel = () => {
         description: "Beide items worden behouden - geen echt conflict",
       });
       queryClient.invalidateQueries({ queryKey: ["conflict-resolution"] });
+      queryClient.invalidateQueries({ queryKey: ["ai-suggestions"] });
     },
   });
 
@@ -279,6 +281,12 @@ export const ConflictResolutionPanel = () => {
     return str.substring(0, maxLength) + "...";
   };
 
+  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+  
+  const toggleExpand = (id: string) => {
+    setExpandedItems(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
   if (isLoading) {
     return <div className="text-center py-8">Laden...</div>;
   }
@@ -351,9 +359,19 @@ export const ConflictResolutionPanel = () => {
                           <div className="bg-green-50 dark:bg-green-950 p-3 rounded border border-green-200">
                             <p className="text-xs font-semibold text-green-700 dark:text-green-400 mb-2">✅ Behouden:</p>
                             <p className="text-xs font-mono">{keepItem.key}</p>
-                            <pre className="text-xs mt-1 overflow-x-auto">
-                              {JSON.stringify(keepItem.value, null, 2).substring(0, 100)}...
-                            </pre>
+                            <div className={`text-xs mt-1 whitespace-pre-wrap break-words ${!expandedItems[`sugg-keep-${suggestion.id}`] ? 'max-h-20 overflow-hidden' : 'max-h-60 overflow-y-auto'}`}>
+                              {expandedItems[`sugg-keep-${suggestion.id}`] 
+                                ? JSON.stringify(keepItem.value, null, 2)
+                                : JSON.stringify(keepItem.value, null, 2).substring(0, 100) + '...'}
+                            </div>
+                            <Button
+                              variant="link"
+                              size="sm"
+                              className="h-auto p-0 text-xs"
+                              onClick={() => toggleExpand(`sugg-keep-${suggestion.id}`)}
+                            >
+                              {expandedItems[`sugg-keep-${suggestion.id}`] ? '▲ Toon minder' : '▼ Toon meer'}
+                            </Button>
                           </div>
                         )}
                         
@@ -361,24 +379,16 @@ export const ConflictResolutionPanel = () => {
                           <div className="bg-red-50 dark:bg-red-950 p-3 rounded border border-red-200">
                             <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-2">❌ Verwijderen ({deleteItems.length}):</p>
                             {deleteItems.map((item: any, idx: number) => (
-                              <p key={idx} className="text-xs font-mono">{item.key}</p>
+                              <div key={idx}>
+                                <p className="text-xs font-mono">{item.key}</p>
+                              </div>
                             ))}
                           </div>
                         )}
                       </div>
 
                       <div className="flex gap-2 pt-2">
-                        {isComplementary ? (
-                          <Button
-                            variant="default"
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700"
-                            onClick={() => noConflictMutation.mutate(suggestion.id)}
-                            disabled={noConflictMutation.isPending}
-                          >
-                            🤝 Geen Conflict - Beide Behouden
-                          </Button>
-                        ) : (
+                        {!isComplementary && (
                           <>
                             <Button
                               size="sm"
@@ -400,6 +410,15 @@ export const ConflictResolutionPanel = () => {
                             </Button>
                           </>
                         )}
+                        <Button
+                          variant={isComplementary ? "default" : "outline"}
+                          size="sm"
+                          className={isComplementary ? "bg-green-600 hover:bg-green-700" : ""}
+                          onClick={() => noConflictMutation.mutate(suggestion.id)}
+                          disabled={noConflictMutation.isPending}
+                        >
+                          🤝 Geen Conflict
+                        </Button>
                       </div>
                     </div>
                   </Card>
@@ -463,6 +482,7 @@ export const ConflictResolutionPanel = () => {
                     {items.map((item: any, idx: number) => {
                       const aiRec = conflictData?.ai_recommendation;
                       const isRecommended = item.id === aiRec?.recommended_id;
+                      const itemExpandKey = `conflict-${conflict.id}-item-${item.id}`;
                       return (
                         <div key={item.id} className="flex items-start gap-2 text-sm">
                           <span className="font-medium min-w-[60px]">Item {String.fromCharCode(65 + idx)}:</span>
@@ -474,9 +494,19 @@ export const ConflictResolutionPanel = () => {
                               <Badge variant="outline" className="text-xs">{item.usage_count || 0}x</Badge>
                               {isRecommended && <Badge className="text-xs bg-blue-600">⭐ AI keuze</Badge>}
                             </div>
-                            <div className="text-xs bg-muted/30 rounded p-2 font-mono max-h-16 overflow-hidden">
-                              {truncateJson(item.value, 100)}
+                            <div className={`text-xs bg-muted/30 rounded p-2 font-mono whitespace-pre-wrap break-words ${!expandedItems[itemExpandKey] ? 'max-h-20 overflow-hidden' : 'max-h-60 overflow-y-auto'}`}>
+                              {expandedItems[itemExpandKey] 
+                                ? JSON.stringify(item.value, null, 2)
+                                : truncateJson(item.value, 100)}
                             </div>
+                            <Button
+                              variant="link"
+                              size="sm"
+                              className="h-auto p-0 text-xs"
+                              onClick={() => toggleExpand(itemExpandKey)}
+                            >
+                              {expandedItems[itemExpandKey] ? '▲ Toon minder' : '▼ Toon meer'}
+                            </Button>
                           </div>
                         </div>
                       );
@@ -485,17 +515,7 @@ export const ConflictResolutionPanel = () => {
 
                   {/* Action Buttons */}
                   <div className="flex gap-2 pt-2">
-                    {isComplementary ? (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="bg-green-600 hover:bg-green-700"
-                        onClick={() => noConflictMutation.mutate(conflict.id)}
-                        disabled={noConflictMutation.isPending}
-                      >
-                        🤝 Geen Conflict - Beide Behouden
-                      </Button>
-                    ) : (
+                    {!isComplementary && (
                       <>
                         {items.slice(0, 2).map((item: any, idx: number) => (
                           <Button
@@ -516,6 +536,15 @@ export const ConflictResolutionPanel = () => {
                         ))}
                       </>
                     )}
+                    <Button
+                      variant={isComplementary ? "default" : "outline"}
+                      size="sm"
+                      className={isComplementary ? "bg-green-600 hover:bg-green-700" : ""}
+                      onClick={() => noConflictMutation.mutate(conflict.id)}
+                      disabled={noConflictMutation.isPending}
+                    >
+                      🤝 Geen Conflict
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
