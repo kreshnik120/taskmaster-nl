@@ -74,7 +74,7 @@ async function generateTransIPToken(privateKey: string): Promise<string> {
 async function getMailgunDNSRequirements(domain: string, apiKey: string): Promise<MailgunDomainData> {
   console.log(`📋 Getting Mailgun DNS requirements for ${domain}`)
   
-  const response = await fetch(`https://api.mailgun.net/v3/domains/${domain}`, {
+  const response = await fetch(`https://api.eu.mailgun.net/v3/domains/${domain}`, {
     headers: {
       'Authorization': `Basic ${btoa(`api:${apiKey}`)}`
     }
@@ -139,7 +139,7 @@ async function updateTransIPDNS(domain: string, token: string, dnsEntries: Trans
 async function verifyMailgunDomain(domain: string, apiKey: string) {
   console.log(`✅ Requesting Mailgun to verify ${domain}`)
   
-  const response = await fetch(`https://api.mailgun.net/v3/domains/${domain}/verify`, {
+  const response = await fetch(`https://api.eu.mailgun.net/v3/domains/${domain}/verify`, {
     method: 'PUT',
     headers: {
       'Authorization': `Basic ${btoa(`api:${apiKey}`)}`
