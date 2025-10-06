@@ -64,6 +64,10 @@ export const useLearningProgress = () => {
           return context?.auto_resolved === true;
         }).length;
 
+        const conflictEvents = dayEvents.filter(e => 
+          e.event_type === 'conflict_resolution'
+        ).length;
+
         // Calculate confidence for items created/updated on this day
         const dayConfidenceItems = confidenceData?.filter(c => {
           const itemDate = format(new Date(c.updated_at || c.created_at), 'yyyy-MM-dd');
@@ -77,12 +81,12 @@ export const useLearningProgress = () => {
         return {
           date: dateStr,
           accuracy: totalEvents > 0 ? (successfulEvents / totalEvents) * 100 : 0,
-          autoResolveRate: totalEvents > 0 ? (autoResolved / totalEvents) * 100 : 0,
+          autoResolveRate: conflictEvents > 0 ? (autoResolved / conflictEvents) * 100 : 0,
           avgConfidence: avgConfidence,
           totalEvents,
           eventsByType: {
             feedback: dayEvents.filter(e => e.event_type === 'feedback').length,
-            conflict_resolution: dayEvents.filter(e => e.event_type === 'conflict_resolution').length,
+            conflict_resolution: conflictEvents,
             auto_resolved: autoResolved,
           }
         };
