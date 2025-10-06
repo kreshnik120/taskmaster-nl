@@ -51,7 +51,8 @@ export const MessageFeedback = ({ messageContent, messageId, usedKnowledge }: Me
           messageId: messageId,
           feedback: type,
           context: {
-            message: messageContent
+            message: messageContent,
+            usedKnowledge: usedKnowledge || []
           }
         }
       });
