@@ -11,15 +11,15 @@ interface MessageFeedbackProps {
 }
 
 export const MessageFeedback = ({ messageContent, messageId, usedKnowledge }: MessageFeedbackProps) => {
-  const [feedback, setFeedback] = useState<'positive' | 'negative' | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const { toast } = useToast();
-
-  // Don't render if messageId is missing
+  // Don't render if messageId is missing - MUST be before any hooks
   if (!messageId) {
     console.warn('[MessageFeedback] No messageId provided, hiding feedback buttons');
     return null;
   }
+
+  const [feedback, setFeedback] = useState<'positive' | 'negative' | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
 
   // Check if feedback already exists for this message
   useEffect(() => {
