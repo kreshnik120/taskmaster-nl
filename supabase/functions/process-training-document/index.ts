@@ -310,6 +310,20 @@ Geef je antwoord als gestructureerde kennis items in helder Nederlands.`
     },
   ];
 
+  // ✅ FASE 2: Extract customer entities for better retrieval
+  const customerEntities = await extractCustomerEntities(
+    extractedInfo,
+    fileName,
+    userId,
+    orgId,
+    LOVABLE_API_KEY
+  );
+  
+  if (customerEntities.length > 0) {
+    console.log(`[ENTITY-EXTRACT] Found ${customerEntities.length} customer entities in vision document`);
+    knowledgeItems.push(...customerEntities);
+  }
+
   await supabase.from("ai_knowledge_base").insert(knowledgeItems);
 
   await supabase
@@ -433,6 +447,109 @@ async function processLargeFileInBackground(
         processing_method: "text"
       })
       .eq("file_path", filePath);
+  }
+}
+
+// ✅ FASE 2: Extract customer/client entities from document text
+async function extractCustomerEntities(
+  text: string,
+  fileName: string,
+  userId: string,
+  orgId: string,
+  lovableApiKey: string
+): Promise<any[]> {
+  console.log(`[ENTITY-EXTRACT] Analyzing text for customer entities (${text.length} chars)`);
+  
+  const prompt = `Analyseer deze tekst uit "${fileName}" en zoek naar klant/organisatie vermeldingen.
+
+TEKST:
+${text.substring(0, 10000)} ${text.length > 10000 ? '...(afgekort)' : ''}
+
+ZOEK NAAR:
+1. Klant/client namen: "Kwintes", "Prisma", "SWZ", "CitoZorg", "ABCzorg", etc.
+2. Relaties met organisaties: "ABCzorg levert bij Kwintes"
+3. Contract/facturatie vermeldingen met klant namen
+4. Tabel vermeldingen: "Client: Kwintes | Contact: ..."
+
+LET OP:
+- Alleen EXPLICIETE vermeldingen van klant namen
+- Geen afleidingen of aannames
+- Focus op zakelijke relaties
+
+Return JSON array (leeg [] als geen matches):
+[{
+  "customer_name": "Kwintes",
+  "organization": "ABCzorg",
+  "relationship_type": "active_customer",
+  "context": "Korte omschrijving waar/hoe gevonden",
+  "confidence": 0.92
+}]`;
+
+  try {
+    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${lovableApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!aiResponse.ok) {
+      console.error(`[ENTITY-EXTRACT] AI error: ${aiResponse.status}`);
+      return [];
+    }
+
+    const aiData = await aiResponse.json();
+    const content = aiData.choices?.[0]?.message?.content || "[]";
+    
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      console.log(`[ENTITY-EXTRACT] No customer entities found in ${fileName}`);
+      return [];
+    }
+
+    const entities = JSON.parse(jsonMatch[0]);
+    console.log(`[ENTITY-EXTRACT] Found ${entities.length} potential customer entities`);
+
+    const knowledgeItems = [];
+    
+    for (const entity of entities) {
+      if (entity.confidence < 0.7) {
+        console.log(`[ENTITY-EXTRACT] Skipping low confidence (${entity.confidence}): ${entity.customer_name}`);
+        continue;
+      }
+
+      const key = `client_${entity.organization.toLowerCase().replace(/\s+/g, '_')}_${entity.customer_name.toLowerCase().replace(/\s+/g, '_')}`;
+      
+      knowledgeItems.push({
+        user_id: userId,
+        org_id: orgId,
+        category: "client_relationship",
+        key: key,
+        value: {
+          client: entity.organization,
+          customer: entity.customer_name,
+          relationship_type: entity.relationship_type,
+          context: entity.context,
+          extracted_from: fileName
+        },
+        source: `document:${fileName}`,
+        confidence_score: entity.confidence,
+        needs_review: entity.confidence < 0.85,
+      });
+      
+      console.log(`[ENTITY-EXTRACT] ✅ Created entity: ${entity.customer_name} (confidence: ${entity.confidence})`);
+    }
+
+    return knowledgeItems;
+
+  } catch (error: any) {
+    console.error(`[ENTITY-EXTRACT] Error extracting entities:`, error.message);
+    return [];
   }
 }
 
@@ -726,6 +843,20 @@ ${text}`
       needs_review: false,
       last_validation_error: null,
     }];
+  }
+
+  // ✅ FASE 2: Extract customer entities for better retrieval
+  const customerEntities = await extractCustomerEntities(
+    extractedInfo,
+    fileName,
+    userId,
+    orgId,
+    LOVABLE_API_KEY
+  );
+  
+  if (customerEntities.length > 0) {
+    console.log(`[ENTITY-EXTRACT] Found ${customerEntities.length} customer entities in text document`);
+    knowledgeItems.push(...customerEntities);
   }
 
   // SPRINT 2: Enhanced duplicate detection with semantic analysis

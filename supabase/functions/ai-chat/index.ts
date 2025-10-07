@@ -1178,6 +1178,29 @@ OF bij lagere confidence:
 - STATUS VRAGEN: "wat zijn mijn taken", "wat staat er open", "overzicht" 
   → Toon huidige taken/projecten, GEEN taak aanmaken
 
+⚠️ FASE 4: TRANSPARANTIE BIJ RETRIEVAL FAILURE - VERBODEN GEDRAG:
+🚫 NOOIT verzonnen excuses bij retrieval failure:
+  ❌ "client vs customer verwarring" 
+  ❌ "verkeerde interpretatie van de term"
+  ❌ "onderscheid tussen klant en organisatie"
+  ❌ Andere fabricaties om gezichtsverlies te voorkomen
+
+✅ WEL doen bij retrieval failure:
+  1. **Eerlijke communicatie**: "Ik vind [specifieke info zoals 'Kwintes'] niet terug in mijn kennisbank systeem"
+  2. **Bij herhaalde vraag**: Erken dat je het eerder ook niet had: "Je hebt gelijk, ik had deze informatie al eerder moeten vinden maar die staat niet in mijn systeem"
+  3. **Bij user correctie** ("maar ik HEB je dat verteld!"):
+     → Directe erkenning: "Je hebt gelijk, dit had ik moeten opslaan"
+     → Gebruik save_knowledge NU met confidence 0.95
+     → Log learning event: event_type="user_correction_after_retrieval_failure"
+  4. **Verhoog vertrouwen**: Transparantie > gezichtsverlies
+  5. **Trigger harvester**: Als info ontbreekt, gebruik auto_harvest_knowledge
+
+⚠️ VOORBEELD CORRECTE FLOW:
+User: "Bij welke klanten levert ABCzorg zzp'ers?"
+AI (na verify_answer_confidence): "Ik vind expliciete klant namen voor ABCzorg niet terug in mijn kennisbank systeem. Ik ga dit nu onderzoeken..."
+[trigger auto_harvest_knowledge]
+AI (na harvester): "✅ Na onderzoek: ABCzorg levert bij Kwintes (gevonden in document X)"
+
 🔄 ITERATIEVE ANTWOORD STRATEGIE:
 
 EERSTE ANTWOORD:
@@ -1811,10 +1834,37 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             .single();
 
                           if (knowledgeError) throw knowledgeError;
+                          
+                          // ✅ FASE 3: Wait for embedding to be created
+                          let embeddingReady = false;
+                          let retries = 0;
+                          const maxRetries = 10; // 5 seconds max (10 x 500ms)
+                          
+                          while (!embeddingReady && retries < maxRetries) {
+                            await new Promise(r => setTimeout(r, 500)); // 0.5s wait
+                            
+                            const { data: embedding } = await supabaseClient
+                              .from('knowledge_embeddings')
+                              .select('id')
+                              .eq('knowledge_id', knowledge.id)
+                              .maybeSingle();
+                            
+                            if (embedding) {
+                              embeddingReady = true;
+                              console.log(`✅ [FASE 3] Embedding ready for ${args.key} after ${(retries + 1) * 0.5}s`);
+                            }
+                            retries++;
+                          }
+                          
+                          if (!embeddingReady) {
+                            console.warn(`⚠️ [FASE 3] Embedding not ready after ${maxRetries * 0.5}s for ${args.key} - will be available shortly`);
+                          }
+                          
                           result = { 
                             success: true, 
                             knowledge_id: knowledge.id, 
-                            message: `📚 Kennis opgeslagen: ${args.key} (${args.category})` 
+                            embedding_ready: embeddingReady,
+                            message: `📚 Kennis opgeslagen: ${args.key} (${args.category})${embeddingReady ? ' ✅ direct beschikbaar' : ' ⏳ wordt verwerkt'}` 
                           };
                           break;
 
