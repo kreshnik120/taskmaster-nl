@@ -85,7 +85,7 @@ async function generateTransIPJWT(privateKey: string): Promise<string> {
   
   const cryptoKey = await crypto.subtle.importKey(
     'pkcs8',
-    binaryKey,
+    binaryKey as BufferSource,
     { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
     false,
     ['sign']
