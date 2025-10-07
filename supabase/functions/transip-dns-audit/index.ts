@@ -50,19 +50,45 @@ async function generateTransIPJWT(privateKey: string): Promise<string> {
   const payloadB64 = btoa(JSON.stringify(payload)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
   const dataToSign = `${headerB64}.${payloadB64}`;
 
-  const privateKeyFormatted = privateKey
-    .replace(/\\n/g, '\n')
-    .replace(/-----BEGIN (RSA )?PRIVATE KEY-----/, '-----BEGIN PRIVATE KEY-----')
-    .replace(/-----END (RSA )?PRIVATE KEY-----/, '-----END PRIVATE KEY-----');
-
-  const pemHeader = "-----BEGIN PRIVATE KEY-----";
-  const pemFooter = "-----END PRIVATE KEY-----";
-  const pemContents = privateKeyFormatted
-    .replace(pemHeader, '')
-    .replace(pemFooter, '')
-    .replace(/\s/g, '');
-
-  const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+  // Handle different key formats and normalize
+  let pemKey = privateKey.trim()
+  
+  // Replace literal \n with actual newlines
+  pemKey = pemKey.replace(/\\n/g, '\n')
+  
+  // Ensure proper PEM headers
+  if (!pemKey.includes('-----BEGIN')) {
+    throw new Error('Invalid private key format: Missing PEM headers. Key must start with -----BEGIN PRIVATE KEY-----')
+  }
+  
+  // Normalize PEM headers to standard format
+  pemKey = pemKey.replace(/-----BEGIN (RSA )?PRIVATE KEY-----/, '-----BEGIN PRIVATE KEY-----')
+  pemKey = pemKey.replace(/-----END (RSA )?PRIVATE KEY-----/, '-----END PRIVATE KEY-----')
+  
+  // Extract base64 content (remove headers and all whitespace)
+  const pemContents = pemKey
+    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+    .replace(/-----END PRIVATE KEY-----/g, '')
+    .replace(/\s+/g, '')
+    .trim()
+  
+  // Validate base64 content
+  if (!pemContents || pemContents.length === 0) {
+    throw new Error('Invalid private key: No key content found after removing PEM headers')
+  }
+  
+  // Validate base64 characters
+  const base64Regex = /^[A-Za-z0-9+/]+=*$/
+  if (!base64Regex.test(pemContents)) {
+    throw new Error('Invalid private key: Contains invalid base64 characters. Ensure key is properly formatted.')
+  }
+  
+  let binaryDer: Uint8Array
+  try {
+    binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0))
+  } catch (e) {
+    throw new Error(`Failed to decode private key: ${e instanceof Error ? e.message : 'Invalid base64'}. Ensure key is in PKCS#8 PEM format.`)
+  }
 
   const cryptoKey = await crypto.subtle.importKey(
     "pkcs8",
