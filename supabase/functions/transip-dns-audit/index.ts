@@ -51,6 +51,8 @@ async function generateTransIPJWT(privateKey: string): Promise<string> {
   };
 
   const encoder = new TextEncoder();
+  // Log only safe parts (no signature)
+  console.log('🧾 JWT header/payload', { header, payload });
   const headerB64 = btoa(JSON.stringify(header)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
   const payloadB64 = btoa(JSON.stringify(payload)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
   const dataToSign = `${headerB64}.${payloadB64}`;
@@ -122,9 +124,16 @@ async function generateTransIPJWT(privateKey: string): Promise<string> {
 
 async function getTransIPAccessToken(privateKey: string): Promise<string> {
   console.log('🔐 Requesting access token from TransIP /v6/auth');
-  
+
+  const fallbackToken = Deno.env.get('TRANSIP_ACCESS_TOKEN');
+  if (fallbackToken) {
+    console.log('⚠️ Using TRANSIP_ACCESS_TOKEN from secret (bypass /v6/auth)');
+    return fallbackToken;
+  }
+
   const jwt = await generateTransIPJWT(privateKey);
-  
+  const login = Deno.env.get('TRANSIP_LOGIN') || 'atashi';
+
   const response = await fetch('https://api.transip.nl/v6/auth', {
     method: 'POST',
     headers: {
@@ -132,7 +141,7 @@ async function getTransIPAccessToken(privateKey: string): Promise<string> {
       'Signature': jwt
     },
     body: JSON.stringify({
-      login: 'atashi',
+      login,
       nonce: Math.random().toString(36).substring(2, 15),
       read_only: true,
       expiration_time: '30 minutes',
@@ -141,10 +150,10 @@ async function getTransIPAccessToken(privateKey: string): Promise<string> {
     })
   });
 
+  const errorText = !response.ok ? await response.text() : '';
   if (!response.ok) {
-    const errorText = await response.text();
     console.error(`❌ TransIP auth failed: ${response.status} - ${errorText}`);
-    throw new Error(`TransIP authentication failed: ${response.status}. Check: 1) issuer is "atashi", 2) private key format (PKCS#8), 3) key is valid and not expired`);
+    throw new Error(`TransIP authentication failed: ${response.status}. Hint: login="${login}". Raw: ${errorText}`);
   }
 
   const data = await response.json();

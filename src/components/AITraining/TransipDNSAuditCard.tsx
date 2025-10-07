@@ -31,7 +31,9 @@ interface AuditResult {
 
 export function TransipDNSAuditCard() {
   const [isChecking, setIsChecking] = useState(false);
+  const [isAuthTesting, setIsAuthTesting] = useState(false);
   const [result, setResult] = useState<AuditResult | null>(null);
+  const [authResult, setAuthResult] = useState<any | null>(null);
 
   const handleAudit = async () => {
     setIsChecking(true);
@@ -64,8 +66,8 @@ export function TransipDNSAuditCard() {
         toast.error(errorMsg);
         
         // Extra hints voor 401 errors
-        if (errorMsg.includes('401') || errorMsg.includes('authentication')) {
-          console.error('💡 TransIP Auth Hint: Controleer 1) issuer="atashi", 2) private key format (PKCS#8), 3) key is niet verlopen');
+        if (errorMsg.includes('401') || errorMsg.toLowerCase().includes('auth')) {
+          console.error('💡 TransIP Auth Hint: Controleer 1) login="atashi" (of TRANSIP_LOGIN secret), 2) private key formaat PKCS#8, 3) key niet verlopen / API enabled');
         }
       }
     } catch (error: any) {
@@ -74,14 +76,33 @@ export function TransipDNSAuditCard() {
       toast.error(`Fout bij controleren: ${errorMsg}`);
       
       // Extra hints voor auth problemen
-      if (errorMsg.includes('401') || errorMsg.includes('authentication')) {
-        toast.error('Authenticatie mislukt. Check: 1) Issuer moet "atashi" zijn, 2) Private key formaat moet PKCS#8 zijn, 3) Key moet geldig zijn');
+      if (errorMsg.includes('401') || errorMsg.toLowerCase().includes('auth')) {
+        toast.error('Authenticatie mislukt. Check: login (TRANSIP_LOGIN), PKCS#8 key, API enabled in TransIP');
       }
     } finally {
       setIsChecking(false);
     }
   };
 
+  const handleAuthTest = async () => {
+    setIsAuthTesting(true);
+    setAuthResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('transip-auth-test');
+      if (error) throw error;
+      setAuthResult(data);
+      if (data.success) {
+        toast.success('Auth test geslaagd');
+      } else {
+        toast.error(`Auth test faalde: ${data.status}`);
+      }
+    } catch (e: any) {
+      console.error('❌ Auth test error:', e);
+      toast.error(e.message || 'Auth test mislukt');
+    } finally {
+      setIsAuthTesting(false);
+    }
+  };
   const getCheckIcon = (isOk: boolean) => {
     return isOk ? (
       <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -102,21 +123,51 @@ export function TransipDNSAuditCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Button 
-          onClick={handleAudit} 
-          disabled={isChecking}
-          className="w-full"
-        >
-          {isChecking ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              DNS records controleren...
-            </>
-          ) : (
-            'Check TransIP DNS'
-          )}
-        </Button>
+        <div className="grid grid-cols-1 gap-2">
+          <Button 
+            onClick={handleAudit} 
+            disabled={isChecking}
+            className="w-full"
+          >
+            {isChecking ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                DNS records controleren...
+              </>
+            ) : (
+              'Check TransIP DNS'
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleAuthTest}
+            disabled={isAuthTesting}
+            className="w-full"
+          >
+            {isAuthTesting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                TransIP auth testen...
+              </>
+            ) : (
+              'Test TransIP Auth'
+            )}
+          </Button>
+        </div>
 
+        {authResult && (
+          <div className="p-3 bg-muted rounded">
+            <h3 className="text-sm font-semibold mb-1">Auth Test Resultaat</h3>
+            <p className="text-sm">Status: {authResult.status ?? (authResult.success ? '200' : '500')}</p>
+            <p className="text-sm">Token aanwezig: {authResult.token_present ? 'ja' : 'nee'}</p>
+            {authResult.bypass && (
+              <p className="text-xs text-muted-foreground">Bypass actief: gebruikt TRANSIP_ACCESS_TOKEN</p>
+            )}
+            {authResult.raw && (
+              <pre className="mt-2 text-xs font-mono max-h-40 overflow-auto whitespace-pre-wrap break-all">{authResult.raw}</pre>
+            )}
+          </div>
+        )}
         {result && (
           <div className="space-y-4 mt-4">
             {/* Quick Checks */}
