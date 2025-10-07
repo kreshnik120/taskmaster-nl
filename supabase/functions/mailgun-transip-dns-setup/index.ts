@@ -135,7 +135,7 @@ async function getTransIPAccessToken(privateKey: string): Promise<string> {
       read_only: false,
       expiration_time: '30 minutes',
       label: 'Mailgun DNS Setup',
-      global_key: true
+      global_key: false
     })
   })
 
