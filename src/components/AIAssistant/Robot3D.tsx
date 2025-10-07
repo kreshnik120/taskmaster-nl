@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Sphere, Box, RoundedBox } from '@react-three/drei';
+import { Sphere, Box, RoundedBox, Cylinder } from '@react-three/drei';
 import * as THREE from 'three';
 
 interface Robot3DProps {
@@ -66,85 +66,106 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
     <group ref={robotRef} position={[0, 0, 0]}>
       {/* Antenna */}
       <group position={[0, 1.2, 0]}>
-        <Box args={[0.05, 0.3, 0.05]} position={[0, 0, 0]}>
-          <meshStandardMaterial color="#4A90E2" />
-        </Box>
+        <Cylinder args={[0.03, 0.03, 0.4, 16]} position={[0, 0, 0]}>
+          <meshStandardMaterial color="#1e5a8e" roughness={0.2} metalness={0.1} />
+        </Cylinder>
         <Sphere ref={antennaRef} args={[0.12, 16, 16]} position={[0, 0.2, 0]}>
-          <meshStandardMaterial color="#FF6B35" emissive="#FF6B35" emissiveIntensity={0.5} />
+          <meshStandardMaterial color="#FF6B35" emissive="#FF6B35" emissiveIntensity={0.7} />
         </Sphere>
       </group>
 
-      {/* Main body/head */}
-      <RoundedBox args={[1.2, 1.2, 1]} radius={0.2} position={[0, 0, 0]}>
+      {/* Main body/head - Two-tone blue effect */}
+      {/* Dark blue left side */}
+      <RoundedBox args={[0.6, 1.2, 1]} radius={0.3} position={[-0.3, 0, 0]}>
         <meshStandardMaterial 
-          color="#4A90E2" 
-          metalness={0.3}
-          roughness={0.4}
+          color="#1e5a8e" 
+          metalness={0.1}
+          roughness={0.2}
+        />
+      </RoundedBox>
+      {/* Light blue right side */}
+      <RoundedBox args={[0.6, 1.2, 1]} radius={0.3} position={[0.3, 0, 0]}>
+        <meshStandardMaterial 
+          color="#4a9fd8" 
+          metalness={0.1}
+          roughness={0.2}
         />
       </RoundedBox>
 
       {/* Eyes */}
-      <group ref={leftEyeRef} position={[-0.25, 0.15, 0.5]}>
-        <Sphere args={[0.18, 16, 16]}>
-          <meshStandardMaterial color="white" />
+      <group ref={leftEyeRef} position={[-0.3, 0.2, 0.5]}>
+        {/* Grey border */}
+        <Sphere args={[0.28, 16, 16]} position={[0, 0, -0.05]}>
+          <meshStandardMaterial color="#8a8a8a" roughness={0.3} />
         </Sphere>
-        <Sphere args={[0.08, 16, 16]} position={[0, 0, 0.15]}>
+        {/* White eyeball */}
+        <Sphere args={[0.25, 16, 16]}>
+          <meshStandardMaterial color="white" roughness={0.1} />
+        </Sphere>
+        {/* Black pupil */}
+        <Sphere args={[0.12, 16, 16]} position={[0, 0, 0.15]}>
           <meshStandardMaterial color="#1a1a1a" />
         </Sphere>
       </group>
 
-      <group ref={rightEyeRef} position={[0.25, 0.15, 0.5]}>
-        <Sphere args={[0.18, 16, 16]}>
-          <meshStandardMaterial color="white" />
+      <group ref={rightEyeRef} position={[0.3, 0.2, 0.5]}>
+        {/* Grey border */}
+        <Sphere args={[0.28, 16, 16]} position={[0, 0, -0.05]}>
+          <meshStandardMaterial color="#8a8a8a" roughness={0.3} />
         </Sphere>
-        <Sphere args={[0.08, 16, 16]} position={[0, 0, 0.15]}>
+        {/* White eyeball */}
+        <Sphere args={[0.25, 16, 16]}>
+          <meshStandardMaterial color="white" roughness={0.1} />
+        </Sphere>
+        {/* Black pupil */}
+        <Sphere args={[0.12, 16, 16]} position={[0, 0, 0.15]}>
           <meshStandardMaterial color="#1a1a1a" />
         </Sphere>
       </group>
 
       {/* Mouth */}
       <group position={[0, -0.2, 0.5]}>
-        <Box args={[0.4, 0.08, 0.05]} position={[0, 0, 0]} rotation={[0, 0, 0.1]}>
-          <meshStandardMaterial color="#FF6B35" />
+        <Box args={[0.5, 0.1, 0.05]} position={[0, 0, 0]} rotation={[0, 0, 0.15]}>
+          <meshStandardMaterial color="#FF6B35" roughness={0.2} />
         </Box>
-        <Box args={[0.4, 0.08, 0.05]} position={[0, 0, 0]} rotation={[0, 0, -0.1]}>
-          <meshStandardMaterial color="#FF6B35" />
+        <Box args={[0.5, 0.1, 0.05]} position={[0, 0, 0]} rotation={[0, 0, -0.15]}>
+          <meshStandardMaterial color="#FF6B35" roughness={0.2} />
         </Box>
       </group>
 
       {/* Chest panel */}
-      <RoundedBox args={[0.4, 0.35, 0.05]} radius={0.05} position={[0, -0.4, 0.48]}>
+      <RoundedBox args={[0.5, 0.4, 0.05]} radius={0.05} position={[0, -0.4, 0.48]}>
         <meshStandardMaterial 
-          color="#2C5AA0" 
-          metalness={0.6}
-          roughness={0.3}
-          emissive="#2C5AA0"
-          emissiveIntensity={isActive ? 0.3 : 0.1}
+          color="#FFFFFF" 
+          metalness={0.1}
+          roughness={0.2}
+          emissive="#FFFFFF"
+          emissiveIntensity={isActive ? 0.2 : 0.05}
         />
       </RoundedBox>
 
       {/* Arms */}
       <RoundedBox args={[0.2, 0.6, 0.2]} radius={0.1} position={[-0.7, -0.1, 0]}>
-        <meshStandardMaterial color="#4A90E2" metalness={0.3} roughness={0.4} />
+        <meshStandardMaterial color="#1e5a8e" metalness={0.1} roughness={0.2} />
       </RoundedBox>
       <RoundedBox args={[0.2, 0.6, 0.2]} radius={0.1} position={[0.7, -0.1, 0]}>
-        <meshStandardMaterial color="#4A90E2" metalness={0.3} roughness={0.4} />
+        <meshStandardMaterial color="#4a9fd8" metalness={0.1} roughness={0.2} />
       </RoundedBox>
 
       {/* Hands */}
-      <Sphere args={[0.15, 16, 16]} position={[-0.7, -0.5, 0]}>
-        <meshStandardMaterial color="#FF6B35" />
+      <Sphere args={[0.18, 16, 16]} position={[-0.7, -0.5, 0]}>
+        <meshStandardMaterial color="#FF6B35" roughness={0.2} metalness={0.1} />
       </Sphere>
-      <Sphere args={[0.15, 16, 16]} position={[0.7, -0.5, 0]}>
-        <meshStandardMaterial color="#FF6B35" />
+      <Sphere args={[0.18, 16, 16]} position={[0.7, -0.5, 0]}>
+        <meshStandardMaterial color="#FF6B35" roughness={0.2} metalness={0.1} />
       </Sphere>
 
       {/* Legs */}
       <RoundedBox args={[0.25, 0.3, 0.25]} radius={0.08} position={[-0.25, -0.9, 0]}>
-        <meshStandardMaterial color="#4A90E2" metalness={0.3} roughness={0.4} />
+        <meshStandardMaterial color="#1e5a8e" metalness={0.1} roughness={0.2} />
       </RoundedBox>
       <RoundedBox args={[0.25, 0.3, 0.25]} radius={0.08} position={[0.25, -0.9, 0]}>
-        <meshStandardMaterial color="#4A90E2" metalness={0.3} roughness={0.4} />
+        <meshStandardMaterial color="#1e5a8e" metalness={0.1} roughness={0.2} />
       </RoundedBox>
     </group>
   );

@@ -189,10 +189,10 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
           <Canvas 
             gl={{ 
               alpha: true, 
-              antialias: false, // Disable for performance
+              antialias: true,
               powerPreference: 'low-power'
             }}
-            frameloop="demand" // Only render when needed
+            frameloop="always"
             style={{ background: 'transparent' }}
             onCreated={({ gl }) => {
               // Context loss recovery
@@ -211,9 +211,10 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
             <Suspense fallback={null}>
               <PerspectiveCamera makeDefault position={[0, 0, 4]} />
               
-              {/* Simplified lighting for performance */}
-              <ambientLight intensity={0.6} />
-              <directionalLight position={[3, 3, 3]} intensity={0.8} />
+              {/* Enhanced lighting for glossy plastic look */}
+              <ambientLight intensity={0.8} />
+              <directionalLight position={[5, 5, 5]} intensity={1.2} color="#ffffff" />
+              <pointLight position={[-3, 2, -2]} intensity={0.4} color="#4a9fd8" />
               
               {/* 3D Robot */}
               <Robot3D isActive={isActive} />
