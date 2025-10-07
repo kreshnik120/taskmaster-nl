@@ -3,8 +3,6 @@ project_id = "oelmsmcgryeoryhonexw"
 [functions.log-conflict-resolution]
 verify_jwt = true
 
-[functions.generate-task-explanation]
-verify_jwt = true
 
 [functions.ai-task-scorer]
 verify_jwt = true
@@ -22,8 +20,6 @@ verify_jwt = true
 [functions.seed-client-knowledge]
 verify_jwt = true
 
-[functions.talent-search]
-verify_jwt = true
 
 [functions.send-reminder-email]
 verify_jwt = true
