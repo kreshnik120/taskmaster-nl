@@ -90,9 +90,12 @@ async function generateTransIPJWT(privateKey: string): Promise<string> {
     throw new Error(`Failed to decode private key: ${e instanceof Error ? e.message : 'Invalid base64'}. Ensure key is in PKCS#8 PEM format.`)
   }
 
+  // Create a proper ArrayBuffer for crypto.subtle.importKey
+  const keyBuffer = new Uint8Array(binaryDer)
+
   const cryptoKey = await crypto.subtle.importKey(
     "pkcs8",
-    binaryDer as BufferSource,
+    keyBuffer,
     { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
     false,
     ["sign"]
