@@ -1167,8 +1167,16 @@ OF bij lagere confidence:
 🚫 WANNEER GEEN TAAK AANMAKEN:
 - INFORMATIEVRAGEN: "welke", "hoeveel", "wanneer", "waar", "hoe", "waarom", "wat zijn", "wie", "toon", "laat zien", "geef overzicht"
   → Antwoord met beschikbare data, GEEN taak aanmaken
-- CLIENT VRAGEN: "welke klanten", "klantenoverzicht" 
-  → Antwoord met CitöZorg klanten (Prisma, Lunet, SWZ, SIZA), GEEN taak aanmaken
+- CLIENT VRAGEN: "welke klanten", "klantenoverzicht"
+  → ⚠️ KRITIEK: NOOIT aannemen dat ABCzorg en CitoZorg dezelfde klanten hebben!
+  → Voor CitoZorg: gebruik kennisbank (Prisma, Lunet, SWZ, SIZA)
+  → Voor ABCzorg: als klanten ONBEKEND zijn in kennisbank:
+     1. Antwoord transparant: "Voor ABCzorg zijn expliciete klantnamen momenteel niet in mijn kennisbank"
+     2. Trigger DIRECT auto_harvest_knowledge met search_topics: ["ABCzorg klanten", "ABCzorg opdrachtgevers", "ABCzorg organisaties"]
+     3. Wacht max 20 seconden op resultaten (wait_for_results: true)
+     4. Herbereken confidence met verify_answer_confidence
+     5. Update antwoord met nieuwe kennis of communiceer transparant wat je WEL weet
+  → GEEN taak aanmaken
 - STATUS VRAGEN: "wat zijn mijn taken", "wat staat er open", "overzicht" 
   → Toon huidige taken/projecten, GEEN taak aanmaken
 
@@ -1494,12 +1502,12 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
           }
         }
       },
-      {
-        type: "function",
-        function: {
-          name: "search_professionals",
-          description: "Zoek beschikbare ZZP'ers/professionals op basis van filters. Gebruik dit wanneer gebruiker vraagt om namen van ZZP'ers, wie beschikbaar is, of een lijst van professionals wil. Gebruik dit ALTIJD als de gebruiker vraagt naar specifieke namen of een lijst.",
-          parameters: {
+        {
+          type: "function",
+          function: {
+            name: "search_professionals",
+            description: "⚠️ ALLEEN VOOR PERSONEN/ZZP'ERS - NIET VOOR KLANTEN/ORGANISATIES! Zoek beschikbare ZZP'ers/professionals/freelancers op basis van filters. Gebruik dit wanneer gebruiker vraagt om NAMEN VAN ZZP'ERS, WIE BESCHIKBAAR IS, of een lijst van PROFESSIONALS/PERSONEN wil. 🚫 GEBRUIK NOOIT voor vragen over 'klanten', 'klantenoverzicht', 'opdrachtgevers', 'organisaties' - dit zijn GEEN professionals maar client bedrijven!",
+            parameters: {
             type: "object",
             properties: {
               functie: {
