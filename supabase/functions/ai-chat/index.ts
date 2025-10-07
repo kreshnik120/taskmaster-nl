@@ -1960,9 +1960,11 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             
                             // 🔄 RETRY DETECTION: Check if harvester found new knowledge
                             if (result.should_retry_answer && result.new_knowledge_count > 0) {
-                              console.log(`🔄 Harvester found ${result.new_knowledge_count} new items, will retry answer after tool execution`);
+                              console.log(`🔄 RETRY TRIGGERED: Harvester found ${result.new_knowledge_count} new items`);
+                              console.log(`📊 Retry count: ${retryCount}, New knowledge count: ${result.new_knowledge_count}`);
                               needsRetryWithNewKnowledge = true;
                               newKnowledgeMessage = `\n\n✅ Nieuwe data verzameld! ${result.new_knowledge_count} kennisitems toegevoegd. Ik herbereken nu mijn antwoord...\n\n`;
+                              console.log(`✅ Retry flag set: ${needsRetryWithNewKnowledge}`);
                             }
                           } catch (harvesterError) {
                             console.error("❌ Harvester trigger failed:", harvesterError);
@@ -2221,7 +2223,17 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                     });
 
                     if (!retryResponse.ok) {
-                      console.error("❌ Retry AI call failed:", retryResponse.status);
+                      const errorText = await retryResponse.text();
+                      console.error(`❌ Retry AI call failed: ${retryResponse.status} - ${errorText}`);
+                      
+                      // Stuur user-friendly error naar client
+                      controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                        choices: [{
+                          delta: { content: "\n\n⚠️ Fout bij het verwerken van nieuwe data. Probeer het opnieuw." },
+                          index: 0
+                        }]
+                      })}\n\n`));
+                      
                       controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
                       break;
                     }
@@ -2243,9 +2255,11 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                     console.log("✅ Retry stream started, processing retry response...");
                     
                     // Process retry stream (same logic as main stream)
-                    while (true) {
+                    let retryStreamComplete = false;
+                    while (true && !retryStreamComplete) {
                       const { done: retryDone, value: retryValue } = await retryReader.read();
                       if (retryDone) {
+                        retryStreamComplete = true;
                         controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
                         break;
                       }
@@ -2271,8 +2285,10 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
                           }
 
-                          // If retry stream finishes, exit
+                          // If retry stream finishes, exit both loops
                           if (parsed.choices?.[0]?.finish_reason === "stop") {
+                            console.log("✅ Retry stream completed");
+                            retryStreamComplete = true;
                             controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
                             break;
                           }
@@ -2281,7 +2297,8 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                         }
                       }
 
-                      if (buffer.includes("[DONE]")) break;
+                      // Exit outer loop if retry stream complete
+                      if (retryStreamComplete) break;
                     }
                     
                     break; // Exit main tool execution loop
