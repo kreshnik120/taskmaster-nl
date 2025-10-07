@@ -161,6 +161,7 @@ export type Database = {
         Row: {
           ai_response: Json | null
           applied_to_knowledge_base: boolean | null
+          confidence_score: number | null
           context: Json
           created_at: string | null
           event_type: string
@@ -174,6 +175,7 @@ export type Database = {
         Insert: {
           ai_response?: Json | null
           applied_to_knowledge_base?: boolean | null
+          confidence_score?: number | null
           context: Json
           created_at?: string | null
           event_type: string
@@ -187,6 +189,7 @@ export type Database = {
         Update: {
           ai_response?: Json | null
           applied_to_knowledge_base?: boolean | null
+          confidence_score?: number | null
           context?: Json
           created_at?: string | null
           event_type?: string
@@ -579,6 +582,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      confidence_tracking: {
+        Row: {
+          created_at: string
+          final_confidence: number
+          harvester_triggered: boolean
+          id: string
+          initial_confidence: number
+          iterations_count: number
+          org_id: string
+          question: string
+          used_knowledge_ids: string[]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          final_confidence: number
+          harvester_triggered?: boolean
+          id?: string
+          initial_confidence: number
+          iterations_count?: number
+          org_id: string
+          question: string
+          used_knowledge_ids?: string[]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          final_confidence?: number
+          harvester_triggered?: boolean
+          id?: string
+          initial_confidence?: number
+          iterations_count?: number
+          org_id?: string
+          question?: string
+          used_knowledge_ids?: string[]
+          user_id?: string
+        }
+        Relationships: []
       }
       conversation_context: {
         Row: {

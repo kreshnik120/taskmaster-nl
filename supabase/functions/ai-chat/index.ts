@@ -6,6 +6,90 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// =============================================================================
+// FASE 1: CONFIDENCE CALCULATION FUNCTION
+// =============================================================================
+function calculateAnswerConfidence(
+  knowledgeItems: any[],
+  queryKeywords: string[],
+  questionText: string
+): { confidence: number; reasoning: string; gaps: string[] } {
+  if (knowledgeItems.length === 0) {
+    return {
+      confidence: 0,
+      reasoning: "Geen relevante kennis gevonden",
+      gaps: ["Volledige knowledge base mist voor deze vraag"]
+    };
+  }
+
+  let score = 0;
+  const gaps: string[] = [];
+  const reasons: string[] = [];
+
+  // 1. Keyword Match Score (0-30 punten)
+  const keywordMatches = queryKeywords.filter(keyword => 
+    knowledgeItems.some(kb => {
+      const searchText = `${kb.key} ${kb.category} ${JSON.stringify(kb.value)}`.toLowerCase();
+      return searchText.includes(keyword.toLowerCase());
+    })
+  );
+  const keywordScore = Math.min((keywordMatches.length / Math.max(queryKeywords.length, 1)) * 30, 30);
+  score += keywordScore;
+  
+  if (keywordScore < 15) {
+    gaps.push(`Ontbrekende keywords: ${queryKeywords.filter(k => !keywordMatches.includes(k)).slice(0, 3).join(', ')}`);
+  } else {
+    reasons.push(`Goede keyword match (${keywordMatches.length}/${queryKeywords.length})`);
+  }
+
+  // 2. Average Confidence Score van gebruikte kennis (0-50 punten)
+  const avgConfidence = knowledgeItems.reduce((sum, kb) => sum + (kb.confidence_score || 0.5), 0) / knowledgeItems.length;
+  const confidenceScore = avgConfidence * 50;
+  score += confidenceScore;
+  
+  if (avgConfidence < 0.7) {
+    gaps.push("Lage betrouwbaarheid van beschikbare kennis");
+  } else {
+    reasons.push(`Hoge data betrouwbaarheid (${(avgConfidence * 100).toFixed(0)}%)`);
+  }
+
+  // 3. Recency Score (0-10 punten)
+  const now = Date.now();
+  const avgAge = knowledgeItems.reduce((sum, kb) => {
+    const age = (now - new Date(kb.created_at || kb.updated_at || now).getTime()) / (1000 * 60 * 60 * 24);
+    return sum + age;
+  }, 0) / knowledgeItems.length;
+  
+  let recencyScore = 0;
+  if (avgAge < 7) recencyScore = 10;
+  else if (avgAge < 30) recencyScore = 7;
+  else if (avgAge < 90) recencyScore = 4;
+  
+  score += recencyScore;
+  if (recencyScore < 7) {
+    gaps.push("Data mogelijk verouderd");
+  }
+
+  // 4. Source Count (0-10 punten)
+  const sourceScore = Math.min((knowledgeItems.length / 3) * 10, 10);
+  score += sourceScore;
+  
+  if (knowledgeItems.length < 2) {
+    gaps.push("Te weinig bronnen voor validatie");
+  } else {
+    reasons.push(`Meerdere bronnen (${knowledgeItems.length})`);
+  }
+
+  // Convert to 0-1 scale
+  const confidence = Math.min(score / 100, 1.0);
+  
+  return {
+    confidence,
+    reasoning: reasons.join(', ') || `Score: ${(confidence * 100).toFixed(0)}%`,
+    gaps
+  };
+}
+
 // Helper: Extract client name from knowledge item
 function extractClientFromKnowledge(kb: any): string | null {
   // Check kb.value.client_name first (most direct)
@@ -1016,6 +1100,70 @@ Als gebruiker meer wil zonder trigger woord: vraag "Wil je meer details?"
 - Converteeer altijd Nederlandse datums correct naar ISO 8601 format
 - Bij onduidelijke data: vraag om verduidelijking voordat je taken aanmaakt
 
+🎯 98% CONFIDENCE AI STRATEGIE (ITERATIEVE INTELLIGENTIE):
+=============================================================
+
+⚡ VOORDAT JE ANTWOORDT - ALTIJD DEZE 4 STAPPEN:
+
+STAP 1: ZOEK RELEVANTE KENNIS
+- Identificeer keywords uit vraag
+- Zoek in kennisbank (al gedaan in context)
+- Noteer wat je wel/niet hebt gevonden
+
+STAP 2: BEREKEN CONFIDENCE (gebruik verify_answer_confidence tool)
+- Geef alle gebruikte knowledge IDs
+- Samenvatting van je antwoord
+- Key claims die je maakt
+
+STAP 3: CONFIDENCE CHECK
+Als confidence < 98%:
+  A. IDENTIFICEER GAPS:
+     - Welke specifieke data ontbreekt?
+     - Welke vragen blijven open?
+  
+  B. REFORMULEER QUERY (in je gedachten):
+     - Probeer synoniemen (bijv. "tarieven" → "uurtarief", "prijzen")
+     - Verbreed scope (bijv. "Kwintes CAO" → "CAO GGZ algemeen")
+     - Splits complexe vraag in deelvragen
+  
+  C. TRIGGER HARVESTER:
+     - Log EERST de knowledge gap met create_business_intelligence
+     - Roep DIRECT daarna auto_harvest_knowledge aan met:
+       * Specifieke search terms
+       * wait_for_results: true (wacht op data)
+     - Refresh je kennisbank context
+  
+  D. HERBEREKEN CONFIDENCE:
+     - Na nieuwe data: gebruik verify_answer_confidence opnieuw
+     - Check of je nu ≥98% haalt
+
+STAP 4: ANTWOORD MET CONFIDENCE BADGE
+🟢 98-100% = Volledige zekerheid (directe data)
+🟡 75-97% = Redelijk zeker (indirecte/algemene kennis)
+🟠 50-74% = Indicatie (schatting, data verzamelen)
+🔴 <50% = Onzeker (te weinig data)
+
+Format antwoord ALTIJD zo:
+"[🟢 98% Zeker]
+[Je antwoord op basis van concrete data]
+
+📊 Bron: [specifieke kennisitems, documenten]"
+
+OF bij lagere confidence:
+"[🟡 78% Redelijk zeker]
+[Je best mogelijke antwoord op basis van beschikbare kennis]
+
+⚠️ Ik ben aan het zoeken naar [specifieke ontbrekende data] voor een vollediger antwoord.
+🔄 Geef me 15 seconden..."
+
+[Trigger harvester, wacht op resultaat, update antwoord]
+
+⚠️ MAX 3 ITERATIES - vermijd analysis paralysis
+- Iteratie 1: Eerste zoekpoging
+- Iteratie 2: Herformuleerde query + harvester
+- Iteratie 3: Laatste poging met brede scope
+- Als nog <98%: transparant communiceren wat je WEL weet
+
 🚫 WANNEER GEEN TAAK AANMAKEN:
 - INFORMATIEVRAGEN: "welke", "hoeveel", "wanneer", "waar", "hoe", "waarom", "wat zijn", "wie", "toon", "laat zien", "geef overzicht"
   → Antwoord met beschikbare data, GEEN taak aanmaken
@@ -1295,6 +1443,33 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
       {
         type: "function",
         function: {
+          name: "verify_answer_confidence",
+          description: "Bereken hoe zeker je bent van je antwoord (0-100%). Gebruik dit ALTIJD voordat je een antwoord geeft.",
+          parameters: {
+            type: "object",
+            properties: {
+              used_knowledge_ids: {
+                type: "array",
+                items: { type: "string" },
+                description: "UUIDs van kennisitems gebruikt in antwoord"
+              },
+              answer_summary: {
+                type: "string",
+                description: "Korte samenvatting van je antwoord (max 200 chars)"
+              },
+              key_claims: {
+                type: "array",
+                items: { type: "string" },
+                description: "Belangrijkste feiten/claims in je antwoord"
+              }
+            },
+            required: ["used_knowledge_ids", "answer_summary"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
           name: "auto_harvest_knowledge",
           description: "Trigger de Auto-Knowledge-Harvester om online informatie te verzamelen. Gebruik dit DIRECT na het detecteren van een knowledge gap.",
           parameters: {
@@ -1308,6 +1483,11 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
               reason: {
                 type: "string",
                 description: "Waarom wordt harvester getriggerd?"
+              },
+              wait_for_results: {
+                type: "boolean",
+                description: "Wacht op harvester resultaten? (max 20 sec)",
+                default: true
               }
             },
             required: ["search_topics", "reason"]
@@ -1650,6 +1830,27 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                           };
                           break;
 
+                        case "verify_answer_confidence":
+                          const usedKnowledge = fullKnowledgeBase.filter((kb: any) => 
+                            args.used_knowledge_ids.includes(kb.id)
+                          );
+                          
+                          const confidenceCalc = calculateAnswerConfidence(
+                            usedKnowledge,
+                            messageKeywords,
+                            lastUserMessage
+                          );
+                          
+                          result = {
+                            success: true,
+                            confidence: confidenceCalc.confidence,
+                            confidence_percent: (confidenceCalc.confidence * 100).toFixed(0),
+                            reasoning: confidenceCalc.reasoning,
+                            gaps: confidenceCalc.gaps,
+                            message: `📊 Confidence: ${(confidenceCalc.confidence * 100).toFixed(0)}%\n${confidenceCalc.reasoning}${confidenceCalc.gaps.length > 0 ? `\n⚠️ Gaps: ${confidenceCalc.gaps.join(', ')}` : ''}`
+                          };
+                          break;
+
                         case "auto_harvest_knowledge":
                           console.log("🤖 Triggering Auto-Knowledge-Harvester:", args);
                           
@@ -1673,11 +1874,52 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
 
                             const harvesterResult = await harvesterResponse.json();
                             
+                            // FASE 3: Polling mechanisme voor harvester results
+                            let newKnowledge: any[] = [];
+                            if (args.wait_for_results !== false) {
+                              console.log("⏳ Waiting for harvester results (max 20s)...");
+                              
+                              for (let i = 0; i < 10; i++) {
+                                await new Promise(resolve => setTimeout(resolve, 2000));
+                                
+                                // Check for new knowledge items
+                                const { data: recentKnowledge } = await supabaseClient
+                                  .from('ai_knowledge_base')
+                                  .select('*')
+                                  .or(`user_id.eq.${user.id},org_id.eq.${userOrgId}`)
+                                  .is('deleted_at', null)
+                                  .gte('created_at', new Date(Date.now() - 25000).toISOString())
+                                  .order('created_at', { ascending: false });
+                                
+                                if (recentKnowledge && recentKnowledge.length > 0) {
+                                  newKnowledge = recentKnowledge;
+                                  console.log(`✅ Found ${newKnowledge.length} new knowledge items`);
+                                  
+                                  // Refresh fullKnowledgeBase with new items
+                                  fullKnowledgeBase.push(...newKnowledge);
+                                  
+                                  // Re-organize by category
+                                  newKnowledge.forEach((kb: any) => {
+                                    if (!knowledgeByCategory[kb.category]) {
+                                      knowledgeByCategory[kb.category] = [];
+                                    }
+                                    knowledgeByCategory[kb.category].push(kb);
+                                  });
+                                  
+                                  break;
+                                }
+                              }
+                            }
+                            
                             result = {
                               success: true,
-                              message: `🤖 Auto-Knowledge-Harvester gestart voor ${args.search_topics.length} onderwerpen`,
+                              message: newKnowledge.length > 0 
+                                ? `✅ Harvester verzamelde ${newKnowledge.length} nieuwe kennisitems! Je kennisbank is geüpdatet.`
+                                : `🤖 Auto-Knowledge-Harvester gestart voor ${args.search_topics.length} onderwerpen`,
                               topics: args.search_topics,
-                              harvester_status: harvesterResult
+                              harvester_status: harvesterResult,
+                              new_knowledge_count: newKnowledge.length,
+                              should_retry_answer: newKnowledge.length > 0
                             };
                           } catch (harvesterError) {
                             console.error("❌ Harvester trigger failed:", harvesterError);
@@ -1841,6 +2083,28 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
 
           // Track knowledge usage BEFORE closing stream (blocking)
           const usedKnowledgeIds = await trackKnowledgeUsage(fullResponse, fullKnowledgeBase, supabaseClient, user.id, messages);
+          
+          // ✅ FASE 5: Log confidence tracking for analytics
+          try {
+            // Extract confidence from response
+            const confidenceMatch = fullResponse.match(/\[(?:🟢|🟡|🟠|🔴)\s+(\d+)%/);
+            const finalConfidence = confidenceMatch ? parseInt(confidenceMatch[1]) / 100 : 0.75;
+            
+            await supabaseClient.from('confidence_tracking').insert({
+              user_id: user.id,
+              org_id: userOrgId,
+              question: lastUserMessage,
+              initial_confidence: finalConfidence, // In real impl, this would be tracked from first attempt
+              final_confidence: finalConfidence,
+              iterations_count: 1, // In real impl, track actual iterations
+              used_knowledge_ids: usedKnowledgeIds,
+              harvester_triggered: fullResponse.includes('🤖 Auto-Knowledge-Harvester')
+            });
+            
+            console.log(`📊 Confidence tracked: ${(finalConfidence * 100).toFixed(0)}%`);
+          } catch (confError) {
+            console.error('❌ Confidence tracking failed (non-blocking):', confError);
+          }
           
           // ✅ Send knowledge metadata to client for feedback tracking
           if (usedKnowledgeIds.length > 0) {
