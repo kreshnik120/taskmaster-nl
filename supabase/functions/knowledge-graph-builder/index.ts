@@ -6,8 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Safety: Hard stop date after free period
-const CUTOFF_DATE = new Date('2025-10-06T23:59:59Z');
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
 serve(async (req) => {
@@ -18,19 +16,6 @@ serve(async (req) => {
   const startTime = Date.now();
 
   try {
-    // Safety check: Stop after free period
-    if (new Date() > CUTOFF_DATE) {
-      console.log('⛔ Knowledge Graph Builder stopped: Free period ended');
-      return new Response(JSON.stringify({ 
-        stopped: true, 
-        reason: 'Free AI period ended on October 6th, 2025',
-        message: 'Knowledge graph builder is disabled to prevent costs'
-      }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     // Support both authenticated (Test Nu) and autonomous (cron) modes
     const authHeader = req.headers.get('Authorization');
     
@@ -373,8 +358,7 @@ Format:
     console.error('❌ Knowledge Graph Builder error:', error);
     
     return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stopped_safely: new Date() > CUTOFF_DATE
+      error: error instanceof Error ? error.message : 'Unknown error'
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -3,19 +3,6 @@ project_id = "oelmsmcgryeoryhonexw"
 [functions.log-conflict-resolution]
 verify_jwt = true
 
-[functions.function-activator]
-verify_jwt = false
-
-[functions.process-application-email]
-verify_jwt = false
-
-[functions.handle-application-reply]
-verify_jwt = false
-
-[functions.prioritizer]
-verify_jwt = true
-schedule = "*/6 * * * *"
-
 [functions.generate-task-explanation]
 verify_jwt = true
 
@@ -38,122 +25,48 @@ verify_jwt = true
 [functions.talent-search]
 verify_jwt = true
 
-[functions.import-professionals]
-verify_jwt = true
-
 [functions.send-reminder-email]
 verify_jwt = true
-
-[functions.setup-resend-inbound]
-verify_jwt = false
 
 [functions.process-feedback]
 verify_jwt = true
 
-[functions.review-knowledge]
-verify_jwt = false
-schedule = "*/30 * * * *"
-
 [functions.rollback-knowledge]
-verify_jwt = true
-
-[functions.knowledge-graph-builder]
-verify_jwt = false
-schedule = "*/10 * * * *"
-
-[functions.continuous-learner]
-verify_jwt = true
-
-[functions.compliance-expert]
 verify_jwt = true
 
 [functions.tariff-analyzer]
 verify_jwt = false
-schedule = "*/20 * * * *"
+schedule = "45 * * * *"
 
-[functions.professional-matcher]
-verify_jwt = false
-schedule = "*/20 * * * *"
-
-[functions.planning-optimizer]
-verify_jwt = false
-schedule = "0 */12 * * *"
-
-[functions.agent-orchestrator]
+[functions.continuous-learner]
 verify_jwt = true
-
-[functions.auto-knowledge-harvester]
-verify_jwt = false
-schedule = "*/5 * * * *"
-
-[functions.vision-document-processor]
-verify_jwt = true
-
-[functions.self-trainer]
-verify_jwt = false
-schedule = "*/5 * * * *"
-
-[functions.batch-vision-processor]
-verify_jwt = false
-
-[functions.category-classifier]
-verify_jwt = false
-schedule = "*/30 * * * *"
-
-[functions.mega-forecast-generator]
-verify_jwt = false
-schedule = "50 * * * *"
-
-[functions.professional-enricher]
-verify_jwt = false
-schedule = "55 */8 * * *"
-
-[functions.client-intelligence]
-verify_jwt = false
-schedule = "45 */8 * * *"
-
-[functions.compliance-extractor]
-verify_jwt = false
-schedule = "*/20 * * * *"
 
 [functions.data-quality-auditor]
 verify_jwt = false
-schedule = "*/15 * * * *"
-
-[functions.compliance-monitor]
-verify_jwt = false
-schedule = "*/20 * * * *"
+schedule = "20 * * * *"
 
 [functions.smart-deduplicator]
 verify_jwt = false
-schedule = "*/20 * * * *"
+schedule = "30 * * * *"
 
 [functions.source-validator]
 verify_jwt = false
-schedule = "*/30 * * * *"
-
-[functions.client-communication-coach]
-verify_jwt = false
-schedule = "*/30 * * * *"
-
-[functions.generate-embeddings]
-verify_jwt = false
-schedule = "*/10 * * * *"
+schedule = "35 * * * *"
 
 [functions.feedback-processor]
 verify_jwt = false
-schedule = "*/30 * * * *"
-
-[functions.source-fixer]
-verify_jwt = false
+schedule = "*/5 * * * *"
 
 [functions.master-scheduler]
 verify_jwt = false
 schedule = "* * * * *"
 
-[functions.document-intelligence-analyzer]
+[functions.knowledge-graph-builder]
 verify_jwt = false
-schedule = "0 6 * * *"
+schedule = "15 * * * *"
 
-[functions.cleanup-feedback-backlog]
-verify_jwt = true
+[functions.process-application-email]
+verify_jwt = false
+
+[functions.handle-application-reply]
+verify_jwt = false

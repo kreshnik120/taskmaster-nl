@@ -6,7 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const CUTOFF_DATE = new Date('2025-10-06T23:59:59Z');
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
 serve(async (req) => {
@@ -17,16 +16,6 @@ serve(async (req) => {
   const startTime = Date.now();
 
   try {
-    if (new Date() > CUTOFF_DATE) {
-      return new Response(JSON.stringify({ 
-        stopped: true, 
-        reason: 'Free AI period ended' 
-      }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     // Detect mode: authenticated vs autonomous with graceful fallback
     const authHeader = req.headers.get('Authorization');
     const isRealUserAuth = authHeader && !authHeader.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9lbG1zbWNncnllb3J5aG9uZXh3');

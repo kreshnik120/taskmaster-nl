@@ -6,30 +6,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Schedule map: all 23 edge functions with their cron expressions
+// Active scheduled functions (7 schedules for 5 learning loops + 2 support)
 const SCHEDULES = {
-  'compliance-monitor': '25 * * * *',           // Every hour at :25
-  'smart-deduplicator': '30 * * * *',           // Every hour at :30
-  'category-classifier': '0 3 * * *',           // Daily at 03:00
-  'data-quality-auditor': '20 * * * *',         // Every hour at :20
-  'source-validator': '35 * * * *',             // Every hour at :35
-  'client-communication-coach': '55 * * * *',   // Every hour at :55
-  'mega-forecast-generator': '50 * * * *',      // Every hour at :50
-  'professional-enricher': '55 */8 * * *',      // Every 8 hours at :55
-  'knowledge-graph-builder': '15 * * * *',      // Every hour at :15
-  'auto-knowledge-harvester': '5 * * * *',      // Every hour at :05
-  'self-trainer': '*/2 * * * *',                // Every 2 minutes (Guest AI Expert)
-  'prioritizer': '18 */6 * * *',                // Every 6 hours at :18
-  'ai-task-scorer': '0 */12 * * *',             // Every 12 hours at :00
-  'review-knowledge': '0 2 * * 0',              // Weekly Sunday 02:00
-  'tariff-analyzer': '45 * * * *',              // Every hour at :45
-  'professional-matcher': '40 * * * *',         // Every hour at :40
-  'planning-optimizer': '0 */12 * * *',         // Every 12 hours at :00
-  'client-intelligence': '45 */8 * * *',        // Every 8 hours at :45
-  'compliance-extractor': '10 */4 * * *',       // Every 4 hours at :10
-  'generate-embeddings': '*/10 * * * *',        // Every 10 minutes (NEW: semantic search embeddings)
-  'feedback-processor': '*/5 * * * *',          // Every 5 minutes (feedback loop activation)
-  'document-intelligence-analyzer': '0 6 * * *', // Daily at 06:00 (Deep document analysis)
+  'smart-deduplicator': '30 * * * *',           // Every hour at :30 (Learning Loop 5)
+  'data-quality-auditor': '20 * * * *',         // Every hour at :20 (Learning Loop 4)
+  'source-validator': '35 * * * *',             // Every hour at :35 (Support)
+  'knowledge-graph-builder': '15 * * * *',      // Every hour at :15 (Learning Loop 3)
+  'tariff-analyzer': '45 * * * *',              // Every hour at :45 (Support)
+  'feedback-processor': '*/5 * * * *',          // Every 5 minutes (Learning Loop 2)
+  // Note: continuous-learner (Loop 1) runs via database trigger, not scheduler
 };
 
 // Simple cron expression matcher (minute hour dayOfMonth month dayOfWeek)
