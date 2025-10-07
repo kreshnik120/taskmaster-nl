@@ -1174,7 +1174,7 @@ OF bij lagere confidence:
      1. Antwoord transparant: "Voor ABCzorg zijn expliciete klantnamen momenteel niet in mijn kennisbank"
      2. Trigger DIRECT auto_harvest_knowledge met search_topics: ["ABCzorg klanten", "ABCzorg opdrachtgevers", "ABCzorg organisaties"]
      3. System zal automatisch je antwoord opnieuw genereren met de nieuwe kennis
-  → GEEN taak aanmaken
+  → ⚠️ NOOIT AUTOMATISCH TAKEN AANMAKEN in deze flow, tenzij gebruiker expliciet vraagt om een taak/herinnering
 - STATUS VRAGEN: "wat zijn mijn taken", "wat staat er open", "overzicht" 
   → Toon huidige taken/projecten, GEEN taak aanmaken
 
@@ -1646,6 +1646,7 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
         let newKnowledgeMessage = "";
         let retryCount = 0;
         const MAX_RETRIES = 3;
+        let noResultsAfterHarvest = false; // Track if harvester found 0 results after waiting
         
         try {
           while (true) {
@@ -1947,15 +1948,27 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                               }
                             }
                             
+                            // Bepaal message op basis van wait_for_results en resultaten
+                            let harvesterMessage: string;
+                            if (args.wait_for_results !== false && newKnowledge.length === 0) {
+                              // Wachttijd afgelopen, geen resultaten
+                              harvesterMessage = `⏳ Geen betrouwbare openbare bronnen gevonden binnen 15s. Ik blijf monitoren en kom erop terug zodra er verifieerbare data is.`;
+                              console.log(`⚠️ Harvester: Geen nieuwe kennis gevonden binnen wachttijd`);
+                              noResultsAfterHarvest = true; // Set flag for closing message
+                            } else if (newKnowledge.length > 0) {
+                              harvesterMessage = `✅ Harvester verzamelde ${newKnowledge.length} nieuwe kennisitems! Je kennisbank is geüpdatet.`;
+                            } else {
+                              harvesterMessage = `🤖 Auto-Knowledge-Harvester gestart voor ${args.search_topics.length} onderwerpen`;
+                            }
+                            
                             result = {
                               success: true,
-                              message: newKnowledge.length > 0 
-                                ? `✅ Harvester verzamelde ${newKnowledge.length} nieuwe kennisitems! Je kennisbank is geüpdatet.`
-                                : `🤖 Auto-Knowledge-Harvester gestart voor ${args.search_topics.length} onderwerpen`,
+                              message: harvesterMessage,
                               topics: args.search_topics,
                               harvester_status: harvesterResult,
                               new_knowledge_count: newKnowledge.length,
-                              should_retry_answer: newKnowledge.length > 0
+                              should_retry_answer: newKnowledge.length > 0,
+                              waited_for_results: args.wait_for_results !== false
                             };
                             
                             // 🔄 RETRY DETECTION: Check if harvester found new knowledge
@@ -1965,6 +1978,8 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                               needsRetryWithNewKnowledge = true;
                               newKnowledgeMessage = `\n\n✅ Nieuwe data verzameld! ${result.new_knowledge_count} kennisitems toegevoegd. Ik herbereken nu mijn antwoord...\n\n`;
                               console.log(`✅ Retry flag set: ${needsRetryWithNewKnowledge}`);
+                            } else if (result.waited_for_results && result.new_knowledge_count === 0) {
+                              console.log(`⚠️ Retry niet gestart: Geen nieuwe kennis gevonden na wachttijd`);
                             }
                           } catch (harvesterError) {
                             console.error("❌ Harvester trigger failed:", harvesterError);
@@ -2110,6 +2125,20 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
 
                   // 🔄 CONDITIONAL [DONE]: Only send if we're NOT retrying with new knowledge
                   if (!needsRetryWithNewKnowledge) {
+                    // Check if we just executed auto_harvest_knowledge with 0 results after waiting
+                    if (noResultsAfterHarvest) {
+                      // Send explicit closing message for failed harvester
+                      console.log(`⚠️ Sending closing message: No results found after wait`);
+                      controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                        choices: [{
+                          delta: { 
+                            content: `\n\n⚠️ Ik heb binnen de wachttijd niets gevonden dat ik met hoge zekerheid kan bevestigen. Geef me meer context (bijv. regio/jaar of opdrachtgeverstype), of ik probeer het later opnieuw.` 
+                          },
+                          index: 0
+                        }]
+                      })}\n\n`));
+                      noResultsAfterHarvest = false; // Reset flag
+                    }
                     controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
                     break;
                   }
