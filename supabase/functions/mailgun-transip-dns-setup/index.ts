@@ -29,13 +29,16 @@ interface MailgunDomainData {
 async function generateTransIPJWT(privateKey: string): Promise<string> {
   const header = { alg: 'RS256', typ: 'JWT' }
   const now = Math.floor(Date.now() / 1000)
+  const jti = crypto.randomUUID()
+  
   const payload = {
-    iss: 'atashi',
-    aud: 'https://api.transip.nl',
+    iss: 'api.transip.nl',
+    aud: 'api.transip.nl',
+    jti: jti,
     iat: now,
+    nbf: now,
     exp: now + 3600,
-    readonly: false,
-    global_key: true
+    readonly: false
   }
 
   const encoder = new TextEncoder()
