@@ -210,7 +210,7 @@ export const DocumentUpload = () => {
       const { data: failedDocs, error } = await supabase
         .from("training_documents")
         .select("*")
-        .eq("status", "processing")
+        .in("status", ["failed", "processing"])
         .is("processed_at", null);
 
       if (error) throw error;
@@ -228,6 +228,15 @@ export const DocumentUpload = () => {
       });
 
       for (const doc of failedDocs) {
+        // Reset status to "processing" before reprocessing
+        await supabase
+          .from("training_documents")
+          .update({ 
+            status: "processing",
+            processing_progress: 0 
+          })
+          .eq("id", doc.id);
+          
         await supabase.functions.invoke("process-training-document", {
           body: { filePath: doc.file_path, fileName: doc.file_name },
         });
@@ -369,7 +378,7 @@ export const DocumentUpload = () => {
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Geüploade Documenten</h3>
-          {documents && documents.some(doc => doc.status === "processing" && !doc.processed_at) && (
+          {documents && documents.some(doc => ["failed", "processing"].includes(doc.status) && !doc.processed_at) && (
             <Button 
               onClick={reprocessFailedDocuments} 
               disabled={reprocessing}
@@ -384,7 +393,7 @@ export const DocumentUpload = () => {
               ) : (
                 <>
                   <AlertCircle className="h-4 w-4 mr-2" />
-                  Herverwerk Documenten
+                  Herverwerk Gefaalde ({documents.filter(doc => ["failed", "processing"].includes(doc.status) && !doc.processed_at).length})
                 </>
               )}
             </Button>
