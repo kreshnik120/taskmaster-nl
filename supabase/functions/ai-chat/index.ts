@@ -1173,12 +1173,34 @@ OF bij lagere confidence:
   → Voor ABCzorg: als klanten ONBEKEND zijn in kennisbank:
      1. Antwoord transparant: "Voor ABCzorg zijn expliciete klantnamen momenteel niet in mijn kennisbank"
      2. Trigger DIRECT auto_harvest_knowledge met search_topics: ["ABCzorg klanten", "ABCzorg opdrachtgevers", "ABCzorg organisaties"]
-     3. Wacht max 20 seconden op resultaten (wait_for_results: true)
-     4. Herbereken confidence met verify_answer_confidence
-     5. Update antwoord met nieuwe kennis of communiceer transparant wat je WEL weet
+     3. System zal automatisch je antwoord opnieuw genereren met de nieuwe kennis
   → GEEN taak aanmaken
 - STATUS VRAGEN: "wat zijn mijn taken", "wat staat er open", "overzicht" 
   → Toon huidige taken/projecten, GEEN taak aanmaken
+
+🔄 ITERATIEVE ANTWOORD STRATEGIE:
+
+EERSTE ANTWOORD:
+1. Zoek kennisbank met relevante match_knowledge query
+2. Bereken confidence met verify_answer_confidence
+3. Als confidence < 98% EN er zijn duidelijke knowledge gaps:
+   → Trigger auto_harvest_knowledge met specifieke search_topics
+   → System wacht automatisch op nieuwe data (max 20 sec)
+   → Je antwoord wordt automatisch opnieuw gegenereerd
+
+RETRY ANTWOORD (na auto_harvest_knowledge):
+Je krijgt automatisch een tweede kans om te antwoorden met verse kennisbank data.
+1. Gebruik verify_answer_confidence OPNIEUW - kennisbank bevat nu nieuwe items
+2. Geef een VOLLEDIG NIEUW, ZELFSTANDIG ANTWOORD met:
+   - Nieuwe confidence badge (bijv. [🟢 96% Zeker] ipv [🟠 50%])
+   - Concrete info uit de nieuwe kennisitems
+   - Expliciete vermelding: "✅ Op basis van nieuw verzamelde data:" of "✅ Na herberekening:"
+3. Als nog steeds <98%: wees transparant over wat je WEL weet en wat nog ontbreekt
+
+⚠️ RETRY ANTWOORD REGELS:
+- MOET zelfstandig leesbaar zijn (geen "zie hierboven" of verwijzingen naar eerste antwoord)
+- TOON duidelijk verschil tussen eerste poging en retry (nieuwe confidence + nieuwe data)
+- GEEN herhaling van "ik ga zoeken" - je hebt al gezocht, geef nu het resultaat
 
 ✅ WANNEER WEL TAAK AANMAKEN:
 - TAAK-VERZOEKEN: "maak een taak", "plan", "herinner mij", "zet op de lijst", "voeg toe", "ik moet", "help mij met"
@@ -1619,6 +1641,12 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
         let toolCalls: any[] = [];
         let fullResponse = ""; // Collect complete AI response for usage tracking
         
+        // 🔄 Retry loop state tracking
+        let needsRetryWithNewKnowledge = false;
+        let newKnowledgeMessage = "";
+        let retryCount = 0;
+        const MAX_RETRIES = 3;
+        
         try {
           while (true) {
             const { done, value } = await reader!.read();
@@ -1929,6 +1957,13 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                               new_knowledge_count: newKnowledge.length,
                               should_retry_answer: newKnowledge.length > 0
                             };
+                            
+                            // 🔄 RETRY DETECTION: Check if harvester found new knowledge
+                            if (result.should_retry_answer && result.new_knowledge_count > 0) {
+                              console.log(`🔄 Harvester found ${result.new_knowledge_count} new items, will retry answer after tool execution`);
+                              needsRetryWithNewKnowledge = true;
+                              newKnowledgeMessage = `\n\n✅ Nieuwe data verzameld! ${result.new_knowledge_count} kennisitems toegevoegd. Ik herbereken nu mijn antwoord...\n\n`;
+                            }
                           } catch (harvesterError) {
                             console.error("❌ Harvester trigger failed:", harvesterError);
                             result = {
@@ -2071,7 +2106,191 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                     }
                   }
 
-                  // Send done after tool execution
+                  // 🔄 CONDITIONAL [DONE]: Only send if we're NOT retrying with new knowledge
+                  if (!needsRetryWithNewKnowledge) {
+                    controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+                    break;
+                  }
+
+                  // 🔄 RETRY LOOP: Trigger second AI completion with new knowledge
+                  if (needsRetryWithNewKnowledge && retryCount < MAX_RETRIES) {
+                    retryCount++;
+                    console.log(`🔄 Starting retry ${retryCount}/${MAX_RETRIES} with new knowledge...`);
+
+                    // Send retry status to client
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                      choices: [{
+                        delta: { content: newKnowledgeMessage },
+                        index: 0
+                      }]
+                    })}\n\n`));
+
+                    // Re-fetch updated knowledge base (harvester has added new items)
+                    const { data: updatedKnowledgeData } = await supabaseClient
+                      .from("ai_knowledge_base")
+                      .select("*")
+                      .is("deleted_at", null)
+                      .order("confidence_score", { ascending: false });
+
+                    const updatedFullKnowledgeBase = (updatedKnowledgeData || []).map((kb: any) => ({
+                      id: kb.id,
+                      category: kb.category,
+                      key: kb.key,
+                      value: kb.value,
+                      confidence_score: kb.confidence_score,
+                      source: kb.source,
+                      client: kb.client,
+                      usage_count: kb.usage_count,
+                      last_used_at: kb.last_used_at,
+                    }));
+
+                    console.log(`📚 Updated knowledge base: ${updatedFullKnowledgeBase.length} items (was ${fullKnowledgeBase.length})`);
+
+                    // Get last user message for retry context
+                    const lastUserMessage = messages
+                      .filter((m: any) => m.role === "user")
+                      .pop()?.content || "de vraag";
+
+                    // Rebuild system prompt with updated knowledge
+                    const retrySystemPrompt = `Je bent een efficiënte AI-assistent voor TaskFlow. Focus: kort, effectief, direct.
+
+🕐 HUIDIGE NEDERLANDSE TIJD:
+Vandaag is: ${dutchDateTime}
+Je werkt in Nederlandse tijd (Europe/Amsterdam, CET/CEST tijdzone).
+
+⚡ SLIMME ANTWOORDLENGTE:
+- STANDAARD: 2-3 korte zinnen (efficiënt & direct)
+- UITGEBREID: Bij trigger woorden zoals "uitgebreid", "volledig", "gedetailleerd", "leg uit", "vertel meer" → geef complete, gestructureerde uitleg
+- KORT: Bij "samenvatting", "kort", "overzicht" → extra beknopt
+
+🎯 TOOLS: Je hebt zojuist auto_harvest_knowledge uitgevoerd en nieuwe data verzameld.
+
+🔄 RETRY INSTRUCTIE - DIT IS BELANGRIJK:
+Je krijgt een TWEEDE KANS om de vraag te beantwoorden met VERSE KENNISBANK DATA.
+
+1. Gebruik verify_answer_confidence OPNIEUW - de kennisbank bevat nu ${updatedFullKnowledgeBase.length} items (was ${fullKnowledgeBase.length})
+2. Geef een VOLLEDIG NIEUW, ZELFSTANDIG LEESBAAR antwoord met:
+   - Nieuwe confidence badge (bijv. [🟢 96% Zeker] ipv [🟠 50%])
+   - Concrete info uit de nieuwe kennisitems
+   - Expliciete vermelding: "✅ Op basis van nieuw verzamelde data:" of "✅ Na herberekening:"
+3. Als nog steeds <98%: wees transparant over wat je WEL weet en wat nog ontbreekt
+
+⚠️ RETRY ANTWOORD REGELS:
+- MOET zelfstandig leesbaar zijn (geen "zie hierboven" of verwijzingen naar eerste antwoord)
+- TOON duidelijk verschil tussen eerste poging en retry (nieuwe confidence + nieuwe data)
+- GEEN herhaling van "ik ga zoeken" - je hebt al gezocht, geef nu het RESULTAAT
+
+📚 UPDATED KENNISBANK (${updatedFullKnowledgeBase.length} items):
+${updatedFullKnowledgeBase.slice(0, 50).map(kb => `- ${kb.category}: ${kb.key} = ${JSON.stringify(kb.value).substring(0, 100)}`).join('\n')}
+`;
+
+                    const retryMessages = [
+                      { role: "system", content: retrySystemPrompt },
+                      ...messages,
+                      { 
+                        role: "assistant", 
+                        content: fullResponse.trim()
+                      },
+                      {
+                        role: "user",
+                        content: `Je hebt zojuist nieuwe kennisitems verzameld via auto_harvest_knowledge. Beantwoord mijn originele vraag ("${lastUserMessage}") nu opnieuw met:
+
+1. verify_answer_confidence om je NIEUWE confidence te berekenen
+2. Een volledig, geüpdatet, ZELFSTANDIG LEESBAAR antwoord
+3. Nieuwe confidence badge
+4. Expliciete vermelding van nieuwe data
+
+BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je vorige antwoord.`
+                      }
+                    ];
+
+                    // 🔄 RECURSIVE AI CALL: Make new fetch with updated context
+                    console.log("🤖 Making retry AI call with updated knowledge...");
+                    const retryResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                      method: "POST",
+                      headers: {
+                        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        model: "google/gemini-2.5-flash",
+                        messages: retryMessages,
+                        tools: tools,
+                        stream: true,
+                      }),
+                    });
+
+                    if (!retryResponse.ok) {
+                      console.error("❌ Retry AI call failed:", retryResponse.status);
+                      controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+                      break;
+                    }
+
+                    // Reset tracking variables for retry stream
+                    needsRetryWithNewKnowledge = false;
+                    fullResponse = "";
+                    buffer = "";
+                    toolCalls = [];
+                    
+                    // Get new reader for retry stream
+                    const retryReader = retryResponse.body?.getReader();
+                    if (!retryReader) {
+                      console.error("❌ No retry reader available");
+                      controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+                      break;
+                    }
+
+                    console.log("✅ Retry stream started, processing retry response...");
+                    
+                    // Process retry stream (same logic as main stream)
+                    while (true) {
+                      const { done: retryDone, value: retryValue } = await retryReader.read();
+                      if (retryDone) {
+                        controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+                        break;
+                      }
+
+                      buffer += decoder.decode(retryValue, { stream: true });
+                      const lines = buffer.split("\n");
+                      buffer = lines.pop() || "";
+
+                      for (const line of lines) {
+                        if (!line.trim() || line.startsWith(":")) continue;
+                        if (!line.startsWith("data: ")) continue;
+
+                        const data = line.slice(6);
+                        if (data === "[DONE]") continue;
+
+                        try {
+                          const parsed = JSON.parse(data);
+                          const delta = parsed.choices?.[0]?.delta;
+
+                          // Stream retry content
+                          if (delta?.content) {
+                            fullResponse += delta.content;
+                            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+                          }
+
+                          // If retry stream finishes, exit
+                          if (parsed.choices?.[0]?.finish_reason === "stop") {
+                            controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+                            break;
+                          }
+                        } catch (e) {
+                          console.error("Error parsing retry SSE data:", e);
+                        }
+                      }
+
+                      if (buffer.includes("[DONE]")) break;
+                    }
+                    
+                    break; // Exit main tool execution loop
+                  }
+
+                  // Max retries reached or no retry needed
+                  if (retryCount >= MAX_RETRIES) {
+                    console.log(`⚠️ Max retries (${MAX_RETRIES}) reached, stopping`);
+                  }
                   controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
                   break;
                 }
