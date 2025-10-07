@@ -658,47 +658,6 @@ export type Database = {
           },
         ]
       }
-      email_events: {
-        Row: {
-          created_at: string | null
-          event_type: string
-          id: string
-          message_id: string
-          metadata: Json | null
-          org_id: string
-          recipient: string
-          timestamp: string
-        }
-        Insert: {
-          created_at?: string | null
-          event_type: string
-          id?: string
-          message_id: string
-          metadata?: Json | null
-          org_id: string
-          recipient: string
-          timestamp: string
-        }
-        Update: {
-          created_at?: string | null
-          event_type?: string
-          id?: string
-          message_id?: string
-          metadata?: Json | null
-          org_id?: string
-          recipient?: string
-          timestamp?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "email_events_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       function_call_logs: {
         Row: {
           created_at: string | null
