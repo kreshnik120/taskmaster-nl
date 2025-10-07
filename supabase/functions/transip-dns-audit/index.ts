@@ -123,7 +123,8 @@ async function getTransIPAccessToken(privateKey: string): Promise<string> {
   const response = await fetch('https://api.transip.nl/v6/auth', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'Signature': jwt
     },
     body: JSON.stringify({
       login: 'atashi',
