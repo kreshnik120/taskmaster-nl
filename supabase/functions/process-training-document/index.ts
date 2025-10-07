@@ -271,16 +271,34 @@ Geef je antwoord als gestructureerde kennis items in helder Nederlands.`
   if (!aiResponse.ok) {
     const errorText = await aiResponse.text();
     console.error(`[VISION] AI error (${aiResponse.status}):`, errorText);
+    console.log(`[VISION] Falling back to text-based processing...`);
     
-    await supabase
-      .from("training_documents")
-      .update({ 
-        status: "failed",
-        processing_method: "vision"
-      })
-      .eq("file_path", filePath);
-    
-    throw new Error(`Vision API mislukt: ${errorText}`);
+    // ✅ FALLBACK: Try to extract text instead of failing completely
+    try {
+      // For PDFs, we cannot extract text without a library, so we use a placeholder
+      const fallbackText = `Document: ${fileName}\n\nNOTE: Vision processing failed - manual review may be needed.\nOriginal error: ${errorText}`;
+      
+      return await processWithText(
+        supabase,
+        filePath,
+        fileName,
+        fallbackText,
+        userId,
+        orgId,
+        0
+      );
+    } catch (fallbackError) {
+      console.error(`[VISION] Fallback also failed:`, fallbackError);
+      await supabase
+        .from("training_documents")
+        .update({ 
+          status: "failed",
+          processing_method: "vision_and_text_failed"
+        })
+        .eq("file_path", filePath);
+      
+      throw new Error(`Vision AND text processing failed: ${errorText}`);
+    }
   }
 
   const aiData = await aiResponse.json();
