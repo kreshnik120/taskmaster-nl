@@ -19,32 +19,34 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
   useFrame((state, delta) => {
     if (!robotRef.current) return;
     
+    // Reduce update frequency for better performance (every 2nd frame)
     timeRef.current += delta;
-    blinkTimeRef.current += delta;
+    if (timeRef.current % 0.033 > delta) return;
     
+    blinkTimeRef.current += delta;
     const time = timeRef.current;
     const blinkTime = blinkTimeRef.current;
 
-    // Subtle floating animation
-    robotRef.current.position.y = Math.sin(time * 2) * 0.05;
+    // Subtle floating animation (reduced intensity)
+    robotRef.current.position.y = Math.sin(time * 1.5) * 0.03;
     
-    // Gentle rotation
-    robotRef.current.rotation.y = Math.sin(time * 0.5) * 0.1;
+    // Gentle rotation (reduced frequency)
+    robotRef.current.rotation.y = Math.sin(time * 0.3) * 0.08;
     
     // Active state - more energetic movement
     if (isActive) {
-      robotRef.current.rotation.z = Math.sin(time * 4) * 0.05;
+      robotRef.current.rotation.z = Math.sin(time * 3) * 0.04;
     }
 
-    // Antenna pulse
+    // Antenna pulse (reduced frequency)
     if (antennaRef.current) {
-      const scale = 1 + Math.sin(time * 3) * 0.2;
+      const scale = 1 + Math.sin(time * 2) * 0.15;
       antennaRef.current.scale.set(scale, scale, scale);
     }
 
-    // Blinking animation
-    if (blinkTime > 3) {
-      const blinkProgress = (blinkTime - 3) * 10;
+    // Blinking animation (less frequent)
+    if (blinkTime > 4) {
+      const blinkProgress = (blinkTime - 4) * 10;
       const scaleY = blinkProgress < 1 ? 1 - blinkProgress : blinkProgress - 1;
       
       if (leftEyeRef.current) {
@@ -54,7 +56,7 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
         rightEyeRef.current.scale.y = Math.max(0.1, scaleY);
       }
       
-      if (blinkTime > 3.2) {
+      if (blinkTime > 4.2) {
         blinkTimeRef.current = 0;
       }
     }

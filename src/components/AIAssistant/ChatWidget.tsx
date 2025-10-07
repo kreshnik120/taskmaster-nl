@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Loader2, Sparkles, Calendar, ListTodo, Clock, RotateCcw, Image as ImageIcon, X as XIcon, GripVertical } from 'lucide-react';
+import { X, Send, Loader2, Sparkles, Calendar, ListTodo, Clock, RotateCcw, Image as ImageIcon, X as XIcon, GripVertical, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -17,7 +17,6 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { RobotIcon } from './RobotIcon';
-import { MiniRobotIcon } from './MiniRobotIcon';
 import { ChatDatePicker, ChatTimePicker, ChatSelect, ChatButtonGroup } from './InteractiveChatElements';
 import { MessageFeedback } from './MessageFeedback';
 import { format } from 'date-fns';
@@ -906,8 +905,8 @@ export const ChatWidget = () => {
               className="flex items-center gap-3 flex-1 cursor-move select-none"
               onPointerDown={startDrag}
             >
-              <div className="shrink-0">
-                <MiniRobotIcon isActive={isLoading} />
+              <div className={`shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border border-primary/30 transition-all ${isLoading ? 'animate-pulse' : ''}`}>
+                <Bot className="w-5 h-5 text-primary" />
               </div>
               <div>
                 <h3 className="font-semibold text-sm">TaskFlow Assistent</h3>
