@@ -8,6 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { MailgunWebhookStatus } from "./MailgunWebhookStatus";
 
 interface DNSSetupResponse {
   success: boolean;
@@ -75,6 +76,7 @@ export function MailgunDNSSetup() {
   };
 
   return (
+    <div className="space-y-6">
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
@@ -237,5 +239,12 @@ export function MailgunDNSSetup() {
         </div>
       </CardContent>
     </Card>
+
+    {response && response.success && (
+      <div className="mt-6">
+        <MailgunWebhookStatus />
+      </div>
+    )}
+  </div>
   );
 }

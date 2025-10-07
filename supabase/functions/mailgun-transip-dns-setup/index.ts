@@ -101,10 +101,10 @@ async function getTransIPAccessToken(privateKey: string): Promise<string> {
   return data.token
 }
 
-async function getMailgunDNSRequirements(domain: string, apiKey: string): Promise<MailgunDomainData> {
+async function getMailgunDNSRequirements(domain: string, apiKey: string, baseUrl: string = 'https://api.eu.mailgun.net/v3'): Promise<MailgunDomainData> {
   console.log(`📋 Getting Mailgun DNS requirements for ${domain}`)
   
-  const response = await fetch(`https://api.eu.mailgun.net/v3/domains/${domain}`, {
+  const response = await fetch(`${baseUrl}/domains/${domain}`, {
     headers: {
       'Authorization': `Basic ${btoa(`api:${apiKey}`)}`
     }
@@ -166,10 +166,10 @@ async function updateTransIPDNS(domain: string, token: string, dnsEntries: Trans
   console.log('✅ DNS records updated successfully')
 }
 
-async function verifyMailgunDomain(domain: string, apiKey: string) {
+async function verifyMailgunDomain(domain: string, apiKey: string, baseUrl: string = 'https://api.eu.mailgun.net/v3') {
   console.log(`✅ Requesting Mailgun to verify ${domain}`)
   
-  const response = await fetch(`https://api.eu.mailgun.net/v3/domains/${domain}/verify`, {
+  const response = await fetch(`${baseUrl}/domains/${domain}/verify`, {
     method: 'PUT',
     headers: {
       'Authorization': `Basic ${btoa(`api:${apiKey}`)}`
@@ -214,8 +214,30 @@ serve(async (req) => {
     console.log(`🌐 Base domain: ${baseDomain}`)
     console.log(`🛡️ DMARC toevoegen: ${add_dmarc}`)
 
+    // Auto-detect Mailgun region
+    let mailgunRegion = 'EU'
+    let mailgunBaseUrl = 'https://api.eu.mailgun.net/v3'
+    
+    try {
+      const testResponse = await fetch(`${mailgunBaseUrl}/domains/${mailgunDomain}`, {
+        headers: {
+          'Authorization': `Basic ${btoa(`api:${mailgunApiKey}`)}`,
+        },
+      })
+      
+      if (!testResponse.ok && testResponse.status === 401) {
+        mailgunRegion = 'US'
+        mailgunBaseUrl = 'https://api.mailgun.net/v3'
+        console.log('🌎 Using US region for Mailgun API')
+      } else {
+        console.log('🇪🇺 Using EU region for Mailgun API')
+      }
+    } catch (error) {
+      console.log('⚠️ Region detection failed, defaulting to EU')
+    }
+
     // Step 1: Get Mailgun DNS requirements
-    const mailgunData = await getMailgunDNSRequirements(mailgunDomain, mailgunApiKey)
+    const mailgunData = await getMailgunDNSRequirements(mailgunDomain, mailgunApiKey, mailgunBaseUrl)
     
     // Step 2: Get TransIP access token via /v6/auth
     console.log('🔑 Getting TransIP access token')
@@ -339,21 +361,23 @@ serve(async (req) => {
     console.log('⏳ Waiting 5 seconds for DNS propagation...')
     await new Promise(resolve => setTimeout(resolve, 5000))
     
-    const verificationResult = await verifyMailgunDomain(mailgunDomain, mailgunApiKey)
+    const verificationResult = await verifyMailgunDomain(mailgunDomain, mailgunApiKey, mailgunBaseUrl)
 
     // Step 7: Get updated domain status
-    const finalStatus = await getMailgunDNSRequirements(mailgunDomain, mailgunApiKey)
+    const finalStatus = await getMailgunDNSRequirements(mailgunDomain, mailgunApiKey, mailgunBaseUrl)
 
     const report = {
+      success: true,
       status: 'success',
       domain: mailgunDomain,
       base_domain: baseDomain,
+      mailgun_region: mailgunRegion,
       mailgun_state: finalStatus.state,
       mailgun_verified: finalStatus.state === 'active',
       actions_taken: actionsTaken,
       dns_records_added: requiredRecords.length,
       verification_result: verificationResult,
-      next_steps: finalStatus.state === 'active' 
+      next_steps: finalStatus.state === 'active'
         ? [
             '✅ Alle DNS records zijn correct!',
             '✅ Mailgun domein is geverifieerd!',

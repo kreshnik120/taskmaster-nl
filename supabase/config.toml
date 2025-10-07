@@ -3,6 +3,12 @@ project_id = "oelmsmcgryeoryhonexw"
 [functions.mailgun-transip-dns-setup]
 verify_jwt = false
 
+[functions.mailgun-webhook-handler]
+verify_jwt = false
+
+[functions.setup-mailgun-webhooks]
+verify_jwt = true
+
 [functions.log-conflict-resolution]
 verify_jwt = true
 
