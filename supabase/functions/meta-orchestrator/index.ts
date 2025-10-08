@@ -22,7 +22,23 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    const { trigger, org_id, batch_size = 500 } = await req.json();
+    let { trigger, org_id, batch_size = 500 } = await req.json();
+    
+    // ✅ FALLBACK: Haal eerste org op als org_id ontbreekt
+    if (!org_id) {
+      const { data: firstOrg } = await supabase
+        .from('organizations')
+        .select('id')
+        .limit(1)
+        .single();
+      
+      org_id = firstOrg?.id;
+      console.log(`⚠️ No org_id provided, using first org: ${org_id}`);
+    }
+    
+    if (!org_id) {
+      throw new Error('No organization found');
+    }
     
     console.log(`🎯 Meta-Orchestrator gestart: trigger=${trigger}, org_id=${org_id}`);
 

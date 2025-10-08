@@ -2503,6 +2503,35 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
               }
 
               console.log(`✅ Chat messages saved, conversation_id: ${conversationId}, knowledge used: ${usedKnowledgeIds.length}`);
+              
+              // ✅ FIX: Insert ai_learning_event voor feedback-processor
+              if (usedKnowledgeIds.length > 0) {
+                // Extract confidence from response
+                const responseConfidenceMatch = fullResponse.match(/\[(?:🟢|🟡|🟠|🔴)\s+(\d+)%/);
+                const responseConfidence = responseConfidenceMatch ? parseInt(responseConfidenceMatch[1]) / 100 : 0.75;
+                
+                const { error: learningError } = await supabaseClient.from('ai_learning_events').insert({
+                  user_id: user.id,
+                  org_id: orgData.org_id,
+                  event_type: 'ai_response_generated',
+                  context: {
+                    question: userMessage.content,
+                    knowledge_ids: usedKnowledgeIds,
+                    conversation_id: conversationId,
+                    confidence: responseConfidence
+                  },
+                  ai_response: { 
+                    content: fullResponse.substring(0, 1000) // Eerste 1000 chars
+                  },
+                  outcome: 'success'
+                });
+                
+                if (learningError) {
+                  console.error('❌ Learning event insert failed:', learningError);
+                } else {
+                  console.log(`✅ Learning event created with ${usedKnowledgeIds.length} knowledge IDs`);
+                }
+              }
             } catch (persistError) {
               console.error('❌ Chat persistence error (non-blocking):', persistError);
               // Don't fail the request if persistence fails

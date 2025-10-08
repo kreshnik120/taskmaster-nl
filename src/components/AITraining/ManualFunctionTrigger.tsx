@@ -83,8 +83,23 @@ export const ManualFunctionTrigger = () => {
     try {
       toast.info(`🚀 Starting ${functionName}...`);
       
+      // ✅ Haal org_id op voor meta-orchestrator
+      let body: any = { trigger: 'manual' };
+      
+      if (functionName === 'meta-orchestrator') {
+        const { data: { user } } = await supabase.auth.getUser();
+        const { data: orgData } = await supabase
+          .from('user_organizations')
+          .select('org_id')
+          .eq('user_id', user?.id)
+          .single();
+        
+        body.org_id = orgData?.org_id;
+        body.batch_size = 500;
+      }
+      
       const { data, error } = await supabase.functions.invoke(functionName, {
-        body: { trigger: 'manual' }
+        body
       });
 
       if (error) throw error;
