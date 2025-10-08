@@ -872,104 +872,64 @@ serve(async (req) => {
     const highPriorityTasks = activeTasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL');
     const revenueImpactTasks = activeTasks.filter(t => t.revenue_impact_eur && t.revenue_impact_eur > 0);
     
-    // SMART CONTEXT RETRIEVAL: Match keywords from user message with knowledge base
+    // 🤖 FASE 3: Smart Context Builder - Gebruik Meta-Orchestrator categorieën
     const lastUserMessage = messages[messages.length - 1]?.content?.toLowerCase() || '';
-    const messageKeywords = lastUserMessage.split(' ').filter((w: string) => w.length > 3);
+    const messageKeywords = lastUserMessage.split(' ').filter((w: string) => w.length > 3); // Voor confidence calc
     
-    // Fetch ALL knowledge base items with relevance scoring (INCLUDING role_tags and validity)
-    const { data: allKnowledgeBase } = await supabaseClient
-      .from('ai_knowledge_base')
-      .select('id, category, key, value, confidence_score, source, usage_count, role_tags, valid_from, valid_to')
-      .or(`user_id.eq.${user.id},org_id.eq.${userOrgId}`)
-      .is('deleted_at', null)
-      .order('confidence_score', { ascending: false })
-      .order('usage_count', { ascending: false });
+    console.log('🤖 Smart Context Builder: Zoek relevante categorieën...');
     
     // Detect user's role from the question for role-based knowledge filtering
     const detectedRole = detectRoleFromQuestion(lastUserMessage);
     
-    // 🎯 STAP 1: CLIENT-VRAAG DETECTIE
+    // 🎯 CLIENT-VRAAG DETECTIE
     const isClientQuestion = /\b(klant|client|opdrachtgever|customer|organisatie)\b/i.test(lastUserMessage);
     
-    // 🔍 SEMANTIC KEYWORD EXPANSION: breid keywords uit met synoniemen
-    const expandedKeywords = new Set<string>();
-    messageKeywords.forEach((kw: string) => {
-      expandedKeywords.add(kw);
-      // Synoniemen toevoegen
-      if (kw === 'klant') {
-        expandedKeywords.add('client');
-        expandedKeywords.add('customer');
-        expandedKeywords.add('opdrachtgever');
-      }
-      if (kw === 'client') {
-        expandedKeywords.add('klant');
-        expandedKeywords.add('customer');
-        expandedKeywords.add('opdrachtgever');
-      }
-      if (kw === 'opdrachtgever') {
-        expandedKeywords.add('klant');
-        expandedKeywords.add('client');
-        expandedKeywords.add('customer');
-      }
-      if (kw === 'professional') {
-        expandedKeywords.add('medewerker');
-        expandedKeywords.add('zzp');
-        expandedKeywords.add('werknemer');
-      }
-      if (kw === 'medewerker') {
-        expandedKeywords.add('professional');
-        expandedKeywords.add('zzp');
-        expandedKeywords.add('werknemer');
-      }
-    });
-    
-    // Score and rank knowledge items by relevance to current query (VERBETERDE SCORING v2)
-    const rankedKnowledge = (allKnowledgeBase || []).map((kb: any) => {
-      let relevanceScore = 0;
-      const searchText = `${kb.key} ${kb.category} ${JSON.stringify(kb.value)}`.toLowerCase();
-      
-      // 🚀 ENHANCED KEYWORD MATCHING: gebruik expanded keywords
-      Array.from(expandedKeywords).forEach((keyword: string) => {
-        if (searchText.includes(keyword)) relevanceScore += 3; // verhoogd van 2 naar 3
+    // Haal relevante AI categorieën op via Meta-Orchestrator
+    const { data: relevantCategories } = await supabaseClient
+      .rpc('get_relevant_categories', { 
+        user_question: lastUserMessage,
+        org_id_param: userOrgId 
       });
+
+    console.log(`📂 Gevonden categorieën: ${relevantCategories?.length || 0}`);
+
+    let fullKnowledgeBase: any[] = [];
+
+    if (relevantCategories && relevantCategories.length > 0) {
+      // Haal ALLE items uit relevante categorieën (geen limit!)
+      const categoryNames = relevantCategories.map((c: any) => c.category_name);
       
-      // 💎 CLIENT QUESTION BOOST: +20 voor client-gerelateerde items bij client-vragen
-      if (isClientQuestion) {
-        const clientTerms = ['client', 'klant', 'opdrachtgever', 'customer', 'kwintes', 'organisatie'];
-        const hasClientTerm = clientTerms.some(term => searchText.includes(term));
-        if (hasClientTerm) relevanceScore += 20;
-        
-        // Extra boost voor business_rule category bij client-vragen
-        if (kb.category === 'business_rule') relevanceScore += 10;
+      const { data: categoryItems } = await supabaseClient
+        .from('ai_knowledge_base')
+        .select('id, category, key, value, confidence_score, usage_count, source, created_at, role_tags, valid_from, valid_to')
+        .or(`user_id.eq.${user.id},org_id.eq.${userOrgId}`)
+        .is('deleted_at', null)
+        .in('category', categoryNames)
+        .order('confidence_score', { ascending: false });
+
+      if (categoryItems) {
+        fullKnowledgeBase = categoryItems;
+        console.log(`✅ Smart Context: ${fullKnowledgeBase.length} items uit ${categoryNames.length} categorieën`);
       }
-      
-      // Boost by confidence and usage (baseline scoring)
-      relevanceScore += (kb.confidence_score || 0) * 10;
-      relevanceScore += Math.min((kb.usage_count || 0) * 0.1, 5);
-      
-      // 🆕 ROLE_TAGS MATCHING: +15 punten als het knowledge item matcht met de gedetecteerde rol
-      if (kb.role_tags && Array.isArray(kb.role_tags) && kb.role_tags.length > 0) {
-        if (kb.role_tags.includes(detectedRole)) {
-          relevanceScore += 15;
-        }
+    }
+
+    // Fallback: Als geen categorieën gevonden, gebruik standaard query met verhoogd limit
+    if (fullKnowledgeBase.length === 0) {
+      console.log('⚠️ Geen categorieën gevonden, fallback naar standaard query (300 items)...');
+      const { data: fallbackKnowledge } = await supabaseClient
+        .from('ai_knowledge_base')
+        .select('id, category, key, value, confidence_score, usage_count, source, created_at, role_tags, valid_from, valid_to')
+        .or(`user_id.eq.${user.id},org_id.eq.${userOrgId}`)
+        .is('deleted_at', null)
+        .gte('confidence_score', 0.3)
+        .order('usage_count', { ascending: false })
+        .order('confidence_score', { ascending: false })
+        .limit(300);
+
+      if (fallbackKnowledge) {
+        fullKnowledgeBase = fallbackKnowledge;
       }
-      
-      // 🆕 VALIDITY WINDOW FILTERING: +10 punten voor tijdgevoelige kennis binnen geldigheidsperiode
-      if (kb.valid_from && kb.valid_to) {
-        const now = new Date();
-        const validFrom = new Date(kb.valid_from);
-        const validTo = new Date(kb.valid_to);
-        if (now >= validFrom && now <= validTo) {
-          relevanceScore += 10;
-        }
-      }
-      
-      return { ...kb, relevanceScore };
-    })
-    .sort((a, b) => b.relevanceScore - a.relevanceScore)
-    .slice(0, 100); // ⚡ VERHOOGD NAAR 100 items (was 20)
-    
-    const fullKnowledgeBase = rankedKnowledge;
+    }
     
     // Get Lovable API Key for deep analysis
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -1138,6 +1098,9 @@ ${keyFacts ? `📋 BELANGRIJKE CONTEXT UIT EERDERE GESPREKKEN:\n${keyFacts}\n` :
 
 HUIDIGE CONTEXT:
 ${contextSummary}
+
+📋 **KLANTEN DATABASE** (${clients?.length || 0} actieve klanten):
+${clients?.map(c => `- **${c.name}** (${c.company}) - Tier ${c.tier}${c.weekly_hours ? `, ${c.weekly_hours}u/week` : ''}${c.revenue_per_hour ? `, €${c.revenue_per_hour}/u` : ''}`).join('\n') || 'Geen klanten'}
 
 📚 KENNISBANK (${fullKnowledgeBase.length} relevante items voor jouw rol: ${detectedRole}):
 ${formatKnowledgeBase()}

@@ -61,6 +61,10 @@ schedule = "* * * * *"
 verify_jwt = false
 schedule = "15 * * * *"
 
+[functions.meta-orchestrator]
+verify_jwt = false
+schedule = "0 2 * * *"
+
 [functions.process-application-email]
 verify_jwt = false
 

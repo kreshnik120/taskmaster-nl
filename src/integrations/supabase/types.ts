@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_categories: {
+        Row: {
+          auto_generated: boolean | null
+          confidence_score: number | null
+          created_at: string | null
+          description: string | null
+          id: string
+          item_count: number | null
+          keywords: string[] | null
+          name: string
+          org_id: string
+          parent_category: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          auto_generated?: boolean | null
+          confidence_score?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          item_count?: number | null
+          keywords?: string[] | null
+          name: string
+          org_id: string
+          parent_category?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          auto_generated?: boolean | null
+          confidence_score?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          item_count?: number | null
+          keywords?: string[] | null
+          name?: string
+          org_id?: string
+          parent_category?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_categories_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_categories_parent_category_fkey"
+            columns: ["parent_category"]
+            isOneToOne: false
+            referencedRelation: "ai_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_knowledge_base: {
         Row: {
           acl: Json | null
@@ -977,6 +1034,53 @@ export type Database = {
             columns: ["message_id"]
             isOneToOne: false
             referencedRelation: "chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orchestrator_state: {
+        Row: {
+          categories_created: number | null
+          created_at: string | null
+          current_batch: number | null
+          error_message: string | null
+          id: string
+          last_run_at: string | null
+          metadata: Json | null
+          org_id: string
+          status: string | null
+          total_items_processed: number | null
+        }
+        Insert: {
+          categories_created?: number | null
+          created_at?: string | null
+          current_batch?: number | null
+          error_message?: string | null
+          id?: string
+          last_run_at?: string | null
+          metadata?: Json | null
+          org_id: string
+          status?: string | null
+          total_items_processed?: number | null
+        }
+        Update: {
+          categories_created?: number | null
+          created_at?: string | null
+          current_batch?: number | null
+          error_message?: string | null
+          id?: string
+          last_run_at?: string | null
+          metadata?: Json | null
+          org_id?: string
+          status?: string | null
+          total_items_processed?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orchestrator_state_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -2033,6 +2137,13 @@ export type Database = {
       binary_quantize: {
         Args: { "": string } | { "": unknown }
         Returns: unknown
+      }
+      get_relevant_categories: {
+        Args: { org_id_param?: string; user_question: string }
+        Returns: {
+          category_name: string
+          confidence: number
+        }[]
       }
       halfvec_avg: {
         Args: { "": number[] }
