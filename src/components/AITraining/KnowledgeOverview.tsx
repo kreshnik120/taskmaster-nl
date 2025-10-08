@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Search, Trash2, FileText, MessageSquare, Brain, AlertTriangle, XCircle, Filter } from "lucide-react";
+import { Search, Trash2, FileText, MessageSquare, Brain, AlertTriangle, XCircle, Filter, Lock, Users, Clock, GraduationCap, ClipboardCheck } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +12,7 @@ import { VersionHistory } from "./VersionHistory";
 export const KnowledgeOverview = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -79,6 +80,29 @@ export const KnowledgeOverview = () => {
     return <Brain className="h-4 w-4" />;
   };
 
+  const getCategoryIcon = (category: string) => {
+    if (category.startsWith('hr_')) {
+      switch (category) {
+        case 'hr_verlof': return <Clock className="h-4 w-4" />;
+        case 'hr_arbeidsvoorwaarden': return <Users className="h-4 w-4" />;
+        case 'hr_onboarding': return <GraduationCap className="h-4 w-4" />;
+        case 'hr_evaluatie': return <ClipboardCheck className="h-4 w-4" />;
+        default: return <Users className="h-4 w-4" />;
+      }
+    }
+    return null;
+  };
+
+  const getCategoryLabel = (category: string) => {
+    const labels: Record<string, string> = {
+      'hr_verlof': 'HR Verlof',
+      'hr_arbeidsvoorwaarden': 'HR Arbeidsvoorwaarden',
+      'hr_onboarding': 'HR Onboarding',
+      'hr_evaluatie': 'HR Evaluatie'
+    };
+    return labels[category] || category;
+  };
+
   const filteredKnowledge = knowledge?.filter(
     (item) => {
       // Text search filter
@@ -90,7 +114,10 @@ export const KnowledgeOverview = () => {
       // Source filter
       const matchesSource = !sourceFilter || item.source?.includes(sourceFilter);
       
-      return matchesSearch && matchesSource;
+      // Category filter
+      const matchesCategory = !categoryFilter || item.category === categoryFilter;
+      
+      return matchesSearch && matchesSource && matchesCategory;
     }
   );
 
@@ -115,30 +142,78 @@ export const KnowledgeOverview = () => {
             />
           </div>
 
-          <div className="flex gap-2 flex-wrap">
-            <Button
-              variant={sourceFilter === null ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSourceFilter(null)}
-            >
-              Alle bronnen
-            </Button>
-            <Button
-              variant={sourceFilter === "document" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSourceFilter("document")}
-            >
-              <FileText className="h-4 w-4 mr-2" />
-              Documenten
-            </Button>
-            <Button
-              variant={sourceFilter === "chat" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSourceFilter("chat")}
-            >
-              <MessageSquare className="h-4 w-4 mr-2" />
-              Chat
-            </Button>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Filter op bron:</p>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant={sourceFilter === null ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSourceFilter(null)}
+              >
+                Alle bronnen
+              </Button>
+              <Button
+                variant={sourceFilter === "document" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSourceFilter("document")}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Documenten
+              </Button>
+              <Button
+                variant={sourceFilter === "chat" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSourceFilter("chat")}
+              >
+                <MessageSquare className="h-4 w-4 mr-2" />
+                Chat
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Filter op categorie:</p>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant={categoryFilter === null ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCategoryFilter(null)}
+              >
+                Alle categorieën
+              </Button>
+              <Button
+                variant={categoryFilter === "hr_verlof" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCategoryFilter("hr_verlof")}
+              >
+                <Clock className="h-4 w-4 mr-2" />
+                HR Verlof
+              </Button>
+              <Button
+                variant={categoryFilter === "hr_arbeidsvoorwaarden" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCategoryFilter("hr_arbeidsvoorwaarden")}
+              >
+                <Users className="h-4 w-4 mr-2" />
+                HR Arbeidsvoorwaarden
+              </Button>
+              <Button
+                variant={categoryFilter === "hr_onboarding" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCategoryFilter("hr_onboarding")}
+              >
+                <GraduationCap className="h-4 w-4 mr-2" />
+                HR Onboarding
+              </Button>
+              <Button
+                variant={categoryFilter === "hr_evaluatie" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCategoryFilter("hr_evaluatie")}
+              >
+                <ClipboardCheck className="h-4 w-4 mr-2" />
+                HR Evaluatie
+              </Button>
+            </div>
           </div>
         </div>
       </Card>
@@ -151,8 +226,15 @@ export const KnowledgeOverview = () => {
                 <div className="flex-1 space-y-2">
                   <div className="flex items-center gap-2">
                     {getSourceIcon(item.source)}
+                    {getCategoryIcon(item.category)}
                     <h3 className="font-semibold">{item.key}</h3>
-                    <Badge variant="secondary">{item.category}</Badge>
+                    <Badge variant="secondary">{getCategoryLabel(item.category)}</Badge>
+                    {item.confidentiality === 'vertrouwelijk' && (
+                      <Badge variant="outline" className="text-orange-600 border-orange-600">
+                        <Lock className="h-3 w-3 mr-1" />
+                        Vertrouwelijk
+                      </Badge>
+                    )}
                     {item.needs_review && (
                       <Badge variant="outline" className="text-yellow-600 border-yellow-600">
                         <AlertTriangle className="h-3 w-3 mr-1" />
@@ -177,7 +259,7 @@ export const KnowledgeOverview = () => {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
                     <span>
                       Confidence: {((item.confidence_score || 0) * 100).toFixed(0)}%
                     </span>
@@ -188,6 +270,17 @@ export const KnowledgeOverview = () => {
                     {item.last_reviewed_at && (
                       <span>
                         Gereviewed: {new Date(item.last_reviewed_at).toLocaleDateString("nl-NL")}
+                      </span>
+                    )}
+                    {item.role_tags && item.role_tags.length > 0 && (
+                      <span className="flex items-center gap-1">
+                        Rollen: {item.role_tags.join(', ')}
+                      </span>
+                    )}
+                    {item.acl && Array.isArray(item.acl) && item.acl.length > 0 && (
+                      <span className="flex items-center gap-1">
+                        <Lock className="h-3 w-3" />
+                        Toegang: {item.acl.join(', ')}
                       </span>
                     )}
                   </div>

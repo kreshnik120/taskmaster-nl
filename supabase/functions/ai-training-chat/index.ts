@@ -15,7 +15,12 @@ function detectRoleTags(category: string): string[] {
     'processen': ['Planning', 'HR'],
     'compliance': ['Compliance', 'HR'],
     'zzp_vereisten': ['HR', 'Compliance'],
-    'klantinfo': ['Sales']
+    'klantinfo': ['Sales'],
+    // HR-specifieke categorieën
+    'hr_verlof': ['HR'],
+    'hr_arbeidsvoorwaarden': ['HR', 'Facturatie'],
+    'hr_onboarding': ['HR', 'Planning'],
+    'hr_evaluatie': ['HR']
   };
   return mapping[category] || ['Compliance'];
 }
@@ -82,6 +87,13 @@ BELANGRIJKE INSTRUCTIES:
    - processen: workflows, procedures, governance, planning, facturatie
    - compliance: wetgeving, verzekeringen, VOG, diploma's, registraties
    - zzp_vereisten: kwalificaties, documenten, gedragsregels voor zzp'ers
+   - klantinfo: klantgegevens, voorkeuren, historie
+   
+   HR CATEGORIEËN (vertrouwelijk):
+   - hr_verlof: vakantiedagen, verlofregeling, verzuimbeleid
+   - hr_arbeidsvoorwaarden: salarissen, cao, secundaire voorwaarden
+   - hr_onboarding: inwerkprocedures, training, instructies
+   - hr_evaluatie: beoordelingen, functioneringsgesprekken, KPI's
 
 3. Voor ELKE categorie die je detecteert, gebruik save_training_knowledge
 4. Splits complexe informatie in meerdere kennisitems met unieke keys
@@ -102,7 +114,7 @@ ${isChunk ? 'LET OP: Dit is een deel van een groter document. Verwerk alles in d
                 properties: {
                   category: {
                     type: "string",
-                    enum: ["bedrijfsgegevens", "tarieven", "contracten", "processen", "compliance", "zzp_vereisten", "klantinfo"],
+                    enum: ["bedrijfsgegevens", "tarieven", "contracten", "processen", "compliance", "zzp_vereisten", "klantinfo", "hr_verlof", "hr_arbeidsvoorwaarden", "hr_onboarding", "hr_evaluatie"],
                   },
                   key: { type: "string" },
                   value: { type: "object" },
@@ -151,6 +163,16 @@ ${isChunk ? 'LET OP: Dit is een deel van een groter document. Verwerk alles in d
             // Detect role_tags from category
             const roleTags = detectRoleTags(args.category);
             
+            // Determine confidentiality and ACL based on category
+            const isHrCategory = args.category.startsWith('hr_');
+            const confidentiality = isHrCategory 
+              ? 'vertrouwelijk'  // HR data is altijd vertrouwelijk
+              : (args.category.includes('contract') || args.category.includes('tarief') ? 'vertrouwelijk' : 'intern');
+            
+            const acl = isHrCategory
+              ? ['admin', 'manager']  // HR data alleen voor admins/managers
+              : [];  // Andere data toegankelijk voor iedereen in org
+            
             const { error: insertError } = await supabase.from("ai_knowledge_base").insert({
               user_id: user.id,
               org_id: orgData.org_id,
@@ -163,10 +185,10 @@ ${isChunk ? 'LET OP: Dit is een deel van een groter document. Verwerk alles in d
               confidence_score: 0.95,
               // Week 1-2: New metadata fields
               role_tags: roleTags,
-              confidentiality: args.category.includes('contract') || args.category.includes('tarief') ? 'vertrouwelijk' : 'intern',
+              confidentiality: confidentiality,
               valid_from: new Date().toISOString().split('T')[0],
               jurisdiction: 'NL',
-              acl: []
+              acl: acl
             });
 
             if (!insertError) {
