@@ -152,6 +152,10 @@ async function extractPdfText(fileBlob: ArrayBuffer, fileName: string): Promise<
     // Import pdfjs-dist dynamically
     const pdfjsLib = await import("https://esm.sh/pdfjs-dist@4.0.379");
     
+    // Configure worker source
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 
+      'https://esm.sh/pdfjs-dist@4.0.379/build/pdf.worker.min.js';
+    
     // Load PDF document
     const loadingTask = pdfjsLib.getDocument({ data: fileBlob });
     const pdfDocument = await loadingTask.promise;
@@ -676,7 +680,13 @@ async function processWithVision(
       console.log('[PDF-FALLBACK] Vision API failed, attempting PDF text extraction...');
       
       try {
-        const extractedText = await extractPdfText(fileBlob, fileName);
+        // Add 30-second timeout to PDF extraction
+        const extractedText = await Promise.race([
+          extractPdfText(fileBlob, fileName),
+          new Promise<string>((_, reject) => 
+            setTimeout(() => reject(new Error('PDF extraction timeout after 30s')), 30000)
+          )
+        ]);
         
         // 🔍 FIX 3: Check if extracted text is insufficient
         if (!extractedText || extractedText.length < 100) {
