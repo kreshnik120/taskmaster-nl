@@ -212,8 +212,11 @@ export const DocumentUpload = () => {
       const { data: failedDocs, error } = await supabase
         .from("training_documents")
         .select("*")
-        .in("status", ["failed", "processing"])
-        .is("processed_at", null);
+        .or(
+          'and(status.eq.failed,processed_at.is.null)',
+          'and(status.eq.processing,processed_at.is.null)',
+          'and(status.eq.completed,extracted_knowledge_count.eq.0)'
+        );
 
       if (error) throw error;
       if (!failedDocs || failedDocs.length === 0) {
