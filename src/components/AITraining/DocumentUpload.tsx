@@ -36,10 +36,12 @@ export const DocumentUpload = () => {
     },
   });
 
-  // Auto-refresh for processing documents
+  // Auto-refresh for processing or failed documents
   useEffect(() => {
-    const hasProcessing = documents?.some(doc => doc.status === "processing");
-    if (!hasProcessing) return;
+    const hasActiveProcessing = documents?.some(doc => 
+      ["failed", "processing"].includes(doc.status) && !doc.processed_at
+    );
+    if (!hasActiveProcessing) return;
 
     const interval = setInterval(() => {
       refetch();
@@ -271,6 +273,11 @@ export const DocumentUpload = () => {
     }
   };
 
+  // Calculate failed/processing documents count (single source of truth)
+  const failedDocsCount = documents?.filter(doc => 
+    ["failed", "processing"].includes(doc.status) && !doc.processed_at
+  ).length || 0;
+
   return (
     <div className="space-y-6">
       <Card className="p-6">
@@ -378,7 +385,7 @@ export const DocumentUpload = () => {
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Geüploade Documenten</h3>
-          {documents && documents.some(doc => ["failed", "processing"].includes(doc.status) && !doc.processed_at) && (
+          {failedDocsCount > 0 && (
             <Button 
               onClick={reprocessFailedDocuments} 
               disabled={reprocessing}
@@ -393,7 +400,7 @@ export const DocumentUpload = () => {
               ) : (
                 <>
                   <AlertCircle className="h-4 w-4 mr-2" />
-                  Herverwerk Gefaalde ({documents.filter(doc => ["failed", "processing"].includes(doc.status) && !doc.processed_at).length})
+                  Herverwerk Gefaalde ({failedDocsCount})
                 </>
               )}
             </Button>
