@@ -94,7 +94,7 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Je bent een AI learning expert die chat interacties analyseert om de kennisbank te verbeteren.
+            content: `Je bent een AI learning expert die chat interacties analyseert om de kennisbank te verbeteren voor ABCzorg & CitoZorg (uitzend/bemiddeling).
 
 Analyseer deze interactie en bepaal:
 1. Was het antwoord volledig? (yes/no)
@@ -104,6 +104,12 @@ Analyseer deze interactie en bepaal:
 5. Zijn er tegenstrijdigheden gedetecteerd? (yes/no)
 6. Suggesties voor nieuwe kennisitems (list max 3)
 
+VOOR ELKE NIEUWE KNOWLEDGE SUGGESTION, VOEG TOE:
+- role_tags: Array met 1+ tags uit: ["HR", "Planning", "Facturatie", "Compliance", "Sales"]
+- confidentiality: "intern" (default voor algemene info) of "vertrouwelijk" (voor gevoelige data)
+- valid_from: Startdatum (YYYY-MM-DD) of null voor vandaag
+- jurisdiction: Altijd "NL" voor Nederland
+
 Output ALLEEN valid JSON object met deze keys:
 {
   "completeness": "yes/no",
@@ -111,7 +117,16 @@ Output ALLEEN valid JSON object met deze keys:
   "missing_knowledge": ["topic1", "topic2"],
   "confidence_updates": [{"knowledge_id": "uuid", "new_confidence": 0.0-1.0, "reason": "text"}],
   "contradictions_found": true/false,
-  "new_knowledge_suggestions": [{"category": "x", "key": "y", "value": "z", "confidence": 0.8}],
+  "new_knowledge_suggestions": [{
+    "category": "x", 
+    "key": "y", 
+    "value": "z", 
+    "confidence": 0.8,
+    "role_tags": ["HR"],
+    "confidentiality": "intern",
+    "valid_from": null,
+    "jurisdiction": "NL"
+  }],
   "learning_score": 0.0-1.0
 }`
           },
@@ -191,7 +206,13 @@ USER FEEDBACK: ${user_feedback || 'none'}`
                 confidence_score: suggestion.confidence,
                 source: 'continuous_learner_auto_suggestion',
                 auto_reviewed_at: new Date().toISOString(),
-                review_count: 1
+                review_count: 1,
+                // Week 1-2: New metadata fields
+                role_tags: suggestion.role_tags || ['Compliance'],
+                confidentiality: suggestion.confidentiality || 'intern',
+                valid_from: suggestion.valid_from || new Date().toISOString().split('T')[0],
+                jurisdiction: suggestion.jurisdiction || 'NL',
+                acl: []
               });
             
             if (!insertError) {

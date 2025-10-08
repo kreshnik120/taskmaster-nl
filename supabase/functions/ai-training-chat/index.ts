@@ -6,6 +6,20 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Helper: Detect role tags from category
+function detectRoleTags(category: string): string[] {
+  const mapping: Record<string, string[]> = {
+    'bedrijfsgegevens': ['Compliance', 'HR'],
+    'tarieven': ['Facturatie', 'Sales'],
+    'contracten': ['Facturatie', 'Compliance'],
+    'processen': ['Planning', 'HR'],
+    'compliance': ['Compliance', 'HR'],
+    'zzp_vereisten': ['HR', 'Compliance'],
+    'klantinfo': ['Sales']
+  };
+  return mapping[category] || ['Compliance'];
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -129,14 +143,30 @@ ${isChunk ? 'LET OP: Dit is een deel van een groter document. Verwerk alles in d
             .maybeSingle();
 
           if (!existing) {
+            // Apply PII redaction to value before storing
+            const originalValue = JSON.stringify(args.value);
+            const { data: redactedData } = await supabase.rpc('redact_pii', { input_text: originalValue });
+            const redactedValue = redactedData ? JSON.parse(redactedData) : args.value;
+            
+            // Detect role_tags from category
+            const roleTags = detectRoleTags(args.category);
+            
             const { error: insertError } = await supabase.from("ai_knowledge_base").insert({
               user_id: user.id,
               org_id: orgData.org_id,
               category: args.category,
               key: args.key,
-              value: args.value,
+              value: args.value, // Store original (will be redacted in embeddings)
+              redacted_text: redactedData || null,
+              original_text: originalValue,
               source: isChunk ? "training_chat_batch" : "training_chat",
-              confidence_score: 0.95, // Hoge score voor handmatige training
+              confidence_score: 0.95,
+              // Week 1-2: New metadata fields
+              role_tags: roleTags,
+              confidentiality: args.category.includes('contract') || args.category.includes('tarief') ? 'vertrouwelijk' : 'intern',
+              valid_from: new Date().toISOString().split('T')[0],
+              jurisdiction: 'NL',
+              acl: []
             });
 
             if (!insertError) {
