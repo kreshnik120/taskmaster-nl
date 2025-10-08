@@ -286,68 +286,123 @@ Geef je antwoord als gestructureerde kennis items in helder Nederlands.`
   }
 
   const aiData = await aiResponse.json();
-  const extractedInfo = aiData.choices?.[0]?.message?.content || "";
+  let extractedInfo = aiData.choices?.[0]?.message?.content || "";
 
-  if (!extractedInfo) {
+  // 🔧 ROBUST JSON PARSING: Try to extract JSON from markdown code blocks
+  let knowledgeItems: any[] = [];
+  try {
+    knowledgeItems = JSON.parse(extractedInfo);
+  } catch (parseError) {
+    console.error('[VISION-PARSE-ERROR] Failed to parse AI response:', parseError);
+    console.log('[VISION-RAW] First 1000 chars:', extractedInfo.substring(0, 1000));
+    
+    // Try to extract JSON from markdown code blocks
+    const jsonMatch = extractedInfo.match(/```json\s*(\[.*?\])\s*```/s);
+    if (jsonMatch) {
+      try {
+        knowledgeItems = JSON.parse(jsonMatch[1]);
+        console.log('[VISION-RECOVER] Successfully extracted JSON from markdown');
+      } catch {
+        console.error('[VISION] Could not recover JSON from markdown');
+        await supabase
+          .from("training_documents")
+          .update({ 
+            status: "failed",
+            processing_method: "vision",
+            last_validation_error: `Could not parse AI response. Raw: ${extractedInfo.substring(0, 200)}...`
+          })
+          .eq("file_path", filePath);
+        return [];
+      }
+    } else {
+      console.error('[VISION] No JSON found in response');
+      await supabase
+        .from("training_documents")
+        .update({ 
+          status: "failed",
+          processing_method: "vision",
+          last_validation_error: `AI response was not valid JSON. Raw: ${extractedInfo.substring(0, 200)}...`
+        })
+        .eq("file_path", filePath);
+      return [];
+    }
+  }
+
+  if (!knowledgeItems || knowledgeItems.length === 0) {
     console.log(`[VISION] No content extracted from document`);
     await supabase
       .from("training_documents")
       .update({ 
         status: "failed",
-        processing_method: "vision"
+        processing_method: "vision",
+        last_validation_error: "No knowledge items extracted from document"
       })
       .eq("file_path", filePath);
     return [];
   }
 
-  // Quality filter check on extracted info
-  const textToCheck = extractedInfo.toLowerCase();
-  const dutchPatterns = [
-    'kan niet openen',
-    'kan het bestand niet',
-    'kan het document niet',
-    'geen inhoud',
-    'foutmelding',
-    'mislukt',
+  // 🧹 COMPREHENSIVE QUALITY FILTER
+  const apologeticPhrases = [
+    // Nederlands
+    'kan niet', 'kan geen', 'kan de', 'kan het',
+    'niet lezen', 'niet openen', 'niet verwerken',
+    'geen inhoud', 'geen tekst', 'geen data',
+    'foutmelding', 'mislukt', 'failed',
+    'helaas', 'sorry', 'excuses',
+    'als je de tekst', 'plak de tekst',
+    'ik heb de inhoud nodig',
+    'aangezien het een pdf',
     'bestand niet lezen',
     'niet mogelijk om',
-    'aangezien het een',
-    'ik kan geen'
+    'ik kan geen',
+    
+    // English
+    'cannot read', 'cannot open', 'cannot process',
+    'no content', 'no text', 'no data',
+    'error message', 'failed', 'unfortunately',
+    'as a language model', 'i apologize', 'i cannot',
+    'unable to', 'failed to',
+    'please provide the text',
+    'i need the content',
+    'since this is a pdf'
   ];
-  const englishPatterns = [
-    'cannot open',
-    'cannot read',
-    'no content',
-    'as a language model',
-    'i cannot',
-    'unable to',
-    'failed to'
-  ];
-  const allPatterns = [...dutchPatterns, ...englishPatterns];
-  const isApologetic = allPatterns.some(pattern => textToCheck.includes(pattern));
-  
-  if (isApologetic) {
-    console.log(`[VISION-QUALITY] ❌ Apologetic content detected, marking as failed`);
+
+  const usefulItems = knowledgeItems.filter((item: any) => {
+    const itemText = JSON.stringify(item).toLowerCase();
+    const hasApologetic = apologeticPhrases.some(phrase => itemText.includes(phrase));
+    
+    if (hasApologetic) {
+      console.log(`[QUALITY-FILTER] Blocked apologetic item: ${item.key}`);
+      return false;
+    }
+    
+    // Block if value is too short (< 3 chars) or just whitespace
+    const valueText = typeof item.value === 'string' ? item.value : JSON.stringify(item.value);
+    if (valueText.trim().length < 3) {
+      console.log(`[QUALITY-FILTER] Blocked empty/short item: ${item.key}`);
+      return false;
+    }
+    
+    return true;
+  });
+
+  // Als ALLE items geblokkeerd zijn, fail het document
+  if (usefulItems.length === 0 && knowledgeItems.length > 0) {
+    console.error(`[QUALITY-FILTER] All ${knowledgeItems.length} items were apologetic/useless`);
     await supabase
       .from("training_documents")
-      .update({
+      .update({ 
         status: "failed",
         processing_method: "vision",
-        last_validation_error: "Vision extractie bevatte apologetic/waardeloze content"
+        last_validation_error: "AI kon geen bruikbare informatie uit het document halen. Mogelijk is het document niet leesbaar of bevat het geen tekst."
       })
       .eq("file_path", filePath);
     return [];
   }
 
-  const knowledgeItems = [
-    {
-      user_id: userId,
-      org_id: orgId,
-      category: "documenten",
-      key: `document_${fileName}_${Date.now()}`,
-      value: { content: extractedInfo, source_file: fileName },
-      source: `document:${fileName}`,
-      confidence_score: 0.95,
+  // Use filtered items
+  const finalKnowledgeItems = usefulItems.length > 0 ? usefulItems : knowledgeItems;
+  console.log(`[VISION-QUALITY] ✅ ${finalKnowledgeItems.length} useful items (filtered ${knowledgeItems.length - finalKnowledgeItems.length})`);
     },
   ];
 

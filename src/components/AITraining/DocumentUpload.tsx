@@ -138,9 +138,15 @@ export const DocumentUpload = () => {
         if (dbError) throw dbError;
         successCount++;
 
-        await supabase.functions.invoke("process-training-document", {
+        const invokeResult = await supabase.functions.invoke("process-training-document", {
           body: { filePath, fileName: file.name },
         });
+        
+        if (invokeResult.data?.filePath) {
+          uploadedPaths.push(invokeResult.data.filePath);
+        } else {
+          uploadedPaths.push(filePath);
+        }
       }
 
       toast({
@@ -150,7 +156,37 @@ export const DocumentUpload = () => {
           : `${successCount} document(en) worden verwerkt`,
       });
       
-      // Refresh both documents and knowledge base
+      // 🔄 POLL FOR COMPLETION & FORCE REFRESH
+      console.log('[UPLOAD] Waiting for processing to complete...');
+      let pollAttempts = 0;
+      const maxPollAttempts = 30;
+
+      while (pollAttempts < maxPollAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 sec
+        
+        const { data: docs } = await supabase
+          .from("training_documents")
+          .select("file_path, status")
+          .in("file_path", uploadedPaths);
+        
+        const allCompleted = docs?.every(d => d.status === 'completed' || d.status === 'failed');
+        
+        if (allCompleted) {
+          console.log('[UPLOAD] All documents processed, refreshing knowledge base...');
+          // Force refresh knowledge base
+          queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
+          refetch();
+          break;
+        }
+        
+        pollAttempts++;
+      }
+
+      if (pollAttempts >= maxPollAttempts) {
+        console.warn('[UPLOAD] Polling timeout, knowledge base may not be refreshed yet');
+      }
+      
+      // Initial refresh
       refetch();
       queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
     } catch (error: any) {

@@ -21,6 +21,7 @@ export const KnowledgeOverview = () => {
       const { data, error } = await supabase
         .from("ai_knowledge_base")
         .select("*")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
