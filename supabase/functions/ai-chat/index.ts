@@ -1101,6 +1101,13 @@ ${formatKnowledgeBase()}
 
 🎯 SPECIFIEKE TOOLS & ACTIES (gebruik actief):
 
+📊 KRITIEKE TRACKING TOOL:
+- **declare_knowledge_usage**: 🎯 ROEP ALTIJD AAN NA ELKE ANTWOORD DIE GEBASEERD IS OP KENNISBANK DATA
+  → Geef ALLE knowledge base item UUIDs door die je hebt gebruikt in je antwoord
+  → Dit zorgt voor accurate tracking en verbetert mijn leerloop
+  → Format: declare_knowledge_usage(knowledge_ids: ["uuid1", "uuid2", ...])
+  → Voorbeeld: Als je antwoord geeft over "vakantiedagen" en je gebruikt knowledge items met IDs abc-123 en def-456, roep dan aan: declare_knowledge_usage(knowledge_ids: ["abc-123", "def-456"])
+
 ⚡ SLIMME ANTWOORDLENGTE:
 - STANDAARD: 2-3 korte zinnen (efficiënt & direct)
 - UITGEBREID: Bij trigger woorden zoals "uitgebreid", "volledig", "gedetailleerd", "leg uit", "vertel meer" → geef complete, gestructureerde uitleg
@@ -1422,6 +1429,31 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
             required: ["tasks"]
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "declare_knowledge_usage",
+          description: "🎯 CRITICAL: Declareer expliciet welke knowledge base items je hebt gebruikt in je antwoord. Dit zorgt voor accurate tracking en verbetert mijn learning loop. Roep deze tool ALTIJD aan nadat je een antwoord hebt gegeven dat gebaseerd is op de kennisbank.",
+          parameters: {
+            type: "object",
+            properties: {
+              knowledge_ids: {
+                type: "array",
+                description: "Array van knowledge base item UUIDs die je hebt gebruikt in je antwoord",
+                items: {
+                  type: "string",
+                  description: "UUID van een knowledge base item"
+                }
+              },
+              usage_context: {
+                type: "string",
+                description: "Korte beschrijving van hoe je deze kennis hebt toegepast (optioneel)"
+              }
+            },
+            required: ["knowledge_ids"]
+          }
+        }
       }
     ];
 
@@ -1474,6 +1506,7 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
         let buffer = "";
         let toolCalls: any[] = [];
         let fullResponse = ""; // Collect complete AI response for usage tracking
+        let declaredKnowledgeIds: string[] = []; // 🎯 NEW: Store explicitly declared knowledge IDs
         
         // 🔄 Retry loop state tracking
         let needsRetryWithNewKnowledge = false;
@@ -1961,6 +1994,18 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                           }
                           break;
 
+                        case "declare_knowledge_usage":
+                          // Store declared knowledge IDs for accurate tracking
+                          declaredKnowledgeIds.push(...args.knowledge_ids);
+                          console.log(`📊 AI declared usage of ${args.knowledge_ids.length} knowledge items${args.usage_context ? `: ${args.usage_context}` : ''}`);
+                          
+                          result = {
+                            success: true,
+                            message: `📊 Tracking: ${args.knowledge_ids.length} knowledge items geregistreerd`,
+                            tracked_ids: args.knowledge_ids
+                          };
+                          break;
+
                         default:
                           result = { success: false, message: `Onbekende tool: ${toolCall.function.name}` };
                       }
@@ -2216,7 +2261,42 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
           }
 
           // Track knowledge usage BEFORE closing stream (blocking)
-          const usedKnowledgeIds = await trackKnowledgeUsage(fullResponse, fullKnowledgeBase, supabaseClient, user.id, messages);
+          // 🎯 Use declared IDs if available, otherwise fallback to keyword matching
+          let usedKnowledgeIds: string[] = [];
+          if (declaredKnowledgeIds.length > 0) {
+            console.log(`✅ Using DECLARED knowledge IDs for tracking: ${declaredKnowledgeIds.length} items`);
+            
+            // Direct tracking using declared IDs
+            for (const knowledgeId of declaredKnowledgeIds) {
+              // Fetch current usage_count
+              const { data: currentKb } = await supabaseClient
+                .from('ai_knowledge_base')
+                .select('usage_count')
+                .eq('id', knowledgeId)
+                .single();
+              
+              if (currentKb) {
+                const { error: updateError } = await supabaseClient
+                  .from('ai_knowledge_base')
+                  .update({
+                    usage_count: (currentKb.usage_count || 0) + 1,
+                    last_used_at: new Date().toISOString()
+                  })
+                  .eq('id', knowledgeId);
+                
+                if (!updateError) {
+                  usedKnowledgeIds.push(knowledgeId);
+                } else {
+                  console.error(`Failed to track knowledge ${knowledgeId}:`, updateError);
+                }
+              }
+            }
+            
+            console.log(`📊 Knowledge tracking complete: ${usedKnowledgeIds.length} items updated`);
+          } else {
+            console.log(`⚠️ No declared knowledge IDs, falling back to keyword matching`);
+            usedKnowledgeIds = await trackKnowledgeUsage(fullResponse, fullKnowledgeBase, supabaseClient, user.id, messages);
+          }
           
           // ✅ FASE 5: Log confidence tracking for analytics
           try {
