@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { getFullInstructions, detectRoleFromCategory } from "../_shared/abczorg-instructions.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -94,9 +95,12 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `Je bent een AI learning expert die chat interacties analyseert om de kennisbank te verbeteren voor ABCzorg & CitoZorg (uitzend/bemiddeling).
+            content: `${getFullInstructions(`
+⚠️ SPECIFIEKE INSTRUCTIES VOOR CONTINUOUS LEARNER:
+Je rol is nu om als learning expert te fungeren. Je analyseert chat interacties om de kennisbank continu te verbeteren volgens de ABCzorg & CitoZorg standaarden. Al je suggesties moeten passen binnen de organisatiecultuur en professionele richtlijnen zoals beschreven in de hoofdinstructies.`)}
 
-Analyseer deze interactie en bepaal:
+ANALYSE OPDRACHT:
+Analyseer deze chat interactie en bepaal:
 1. Was het antwoord volledig? (yes/no)
 2. Was het antwoord accuraat? (yes/no)
 3. Welke kennis ontbreekt? (list missing topics)
@@ -105,10 +109,16 @@ Analyseer deze interactie en bepaal:
 6. Suggesties voor nieuwe kennisitems (list max 3)
 
 VOOR ELKE NIEUWE KNOWLEDGE SUGGESTION, VOEG TOE:
-- role_tags: Array met 1+ tags uit: ["HR", "Planning", "Facturatie", "Compliance", "Sales"]
-- confidentiality: "intern" (default voor algemene info) of "vertrouwelijk" (voor gevoelige data)
+- category: Gebruik correcte categorie (bedrijfsgegevens, tarieven, contracten, processen, compliance, zzp_vereisten, klantinfo, hr_verlof, hr_arbeidsvoorwaarden, hr_onboarding, hr_evaluatie)
+- role_tags: Array met 1+ tags uit: ["HR", "Planning", "Facturatie", "Compliance", "Sales", "Directie", "Klantenservice", "Media", "IT", "Juridisch"]
+- confidentiality: "intern" (default voor algemene info) of "vertrouwelijk" (voor HR/gevoelige data)
 - valid_from: Startdatum (YYYY-MM-DD) of null voor vandaag
 - jurisdiction: Altijd "NL" voor Nederland
+
+⚠️ BELANGRIJK: Voor HR-categorieën (hr_*), stel ALTIJD:
+- confidentiality: "vertrouwelijk"
+- acl: ["admin", "manager"]
+- role_tags: moet minimaal ["HR"] bevatten
 
 Output ALLEEN valid JSON object met deze keys:
 {
@@ -120,10 +130,10 @@ Output ALLEEN valid JSON object met deze keys:
   "new_knowledge_suggestions": [{
     "category": "x", 
     "key": "y", 
-    "value": "z", 
+    "value": {}, 
     "confidence": 0.8,
     "role_tags": ["HR"],
-    "confidentiality": "intern",
+    "confidentiality": "vertrouwelijk",
     "valid_from": null,
     "jurisdiction": "NL"
   }],
@@ -195,6 +205,34 @@ USER FEEDBACK: ${user_feedback || 'none'}`
             .limit(1);
           
           if (!existingDup || existingDup.length === 0) {
+            // ✅ PII REDACTION: Redact suggestion.value before storing
+            let redactedValue = suggestion.value;
+            if (typeof redactedValue === 'object') {
+              const { data: redactedResult } = await supabase.rpc('redact_pii', {
+                input_text: JSON.stringify(redactedValue)
+              });
+              
+              if (redactedResult) {
+                try {
+                  redactedValue = JSON.parse(redactedResult);
+                } catch {
+                  redactedValue = { redacted: redactedResult };
+                }
+              }
+            }
+            
+            // Detect role tags from category if not provided
+            const roleTags = suggestion.role_tags || detectRoleFromCategory(suggestion.category);
+            
+            // Auto-set confidentiality for HR categories
+            let confidentiality = suggestion.confidentiality || 'intern';
+            let acl = suggestion.acl || [];
+            
+            if (suggestion.category?.startsWith('hr_')) {
+              confidentiality = 'vertrouwelijk';
+              acl = ['admin', 'manager'];
+            }
+            
             const { error: insertError } = await supabase
               .from('ai_knowledge_base')
               .insert({

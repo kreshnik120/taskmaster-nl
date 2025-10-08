@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getFullInstructions, detectRoleFromCategory } from "../_shared/abczorg-instructions.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -74,11 +75,13 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `Je bent een geavanceerde AI training assistent voor CitoZorg. Je verwerkt bedrijfsinformatie in een kennisbank.
+            content: `${getFullInstructions(`
+⚠️ SPECIFIEKE INSTRUCTIES VOOR TRAINING CHAT:
+Je rol is nu om als kennisextractie-expert te fungeren. Je analyseert documenten en gesprekken om belangrijke bedrijfsinformatie te identificeren en op te slaan in de kennisbank van ABCzorg & CitoZorg.`)}
 
 ${isChunk ? `⚠️ DIT IS DEEL ${chunkIndex}/${totalChunks} VAN EEN GROOT DOCUMENT - VERWERK ALLES ZONDER UITZONDERINGEN!` : ''}
 
-BELANGRIJKE INSTRUCTIES:
+BELANGRIJKE EXTRACTIE INSTRUCTIES:
 1. Extraheer ALLE relevante informatie - mis niets!
 2. Verdeel informatie over deze categorieën:
    - bedrijfsgegevens: KvK, adressen, contacten, structuur, directie
@@ -89,7 +92,7 @@ BELANGRIJKE INSTRUCTIES:
    - zzp_vereisten: kwalificaties, documenten, gedragsregels voor zzp'ers
    - klantinfo: klantgegevens, voorkeuren, historie
    
-   HR CATEGORIEËN (vertrouwelijk):
+   HR CATEGORIEËN (vertrouwelijk, volg HR-gedrag uit hoofdinstructies):
    - hr_verlof: vakantiedagen, verlofregeling, verzuimbeleid
    - hr_arbeidsvoorwaarden: salarissen, cao, secundaire voorwaarden
    - hr_onboarding: inwerkprocedures, training, instructies
@@ -98,6 +101,7 @@ BELANGRIJKE INSTRUCTIES:
 3. Voor ELKE categorie die je detecteert, gebruik save_training_knowledge
 4. Splits complexe informatie in meerdere kennisitems met unieke keys
 5. Wees extreem grondig - elke regel, elk tarief, elke eis moet opgeslagen worden
+6. Voor HR-categorieën: stel automatisch confidentiality op 'vertrouwelijk' en acl op ['admin', 'manager']
 
 ${isChunk ? 'LET OP: Dit is een deel van een groter document. Verwerk alles in dit deel volledig!' : ''}`,
           },
