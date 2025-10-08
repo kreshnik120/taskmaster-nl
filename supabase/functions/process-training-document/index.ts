@@ -641,8 +641,39 @@ async function processWithVision(
     knowledgeItems.push(...customerEntities);
   }
 
-  await supabase.from("ai_knowledge_base").insert(knowledgeItems);
+  // ✅ FIX: Enrich knowledge items with required fields before insert
+  console.log(`[VISION] Inserting ${knowledgeItems.length} items for user ${userId}, org ${orgId}`);
+  
+  const enrichedItems = knowledgeItems.map(item => ({
+    ...item,
+    user_id: userId,
+    org_id: orgId,
+    source: item.source || `document:${fileName}`,
+    confidence_score: item.confidence_score || 0.85,
+  }));
 
+  // Insert with error handling
+  const { error: insertError } = await supabase
+    .from("ai_knowledge_base")
+    .insert(enrichedItems);
+
+  if (insertError) {
+    console.error("[VISION] Failed to insert knowledge items:", insertError);
+    
+    // Update document status to failed
+    await supabase
+      .from("training_documents")
+      .update({
+        status: "failed",
+        error_message: `Insert failed: ${insertError.message}`,
+        processing_progress: 100
+      })
+      .eq("file_path", filePath);
+    
+    throw insertError;
+  }
+
+  // Only update to completed if insert was successful
   await supabase
     .from("training_documents")
     .update({
