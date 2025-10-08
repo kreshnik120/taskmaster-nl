@@ -186,11 +186,11 @@ Als er GEEN duplicates zijn, return: []`
                 reason: dup.reason
               });
 
-              // Log learning event
+              // Log learning event (system user for automated deduplication)
               await supabase
                 .from('ai_learning_events')
                 .insert({
-                  user_id: orgId,
+                  user_id: '00000000-0000-0000-0000-000000000000', // System user for automated processes
                   org_id: orgId,
                   event_type: 'deduplication',
                   context: {

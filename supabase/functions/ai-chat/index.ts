@@ -896,11 +896,31 @@ serve(async (req) => {
     messageKeywords.forEach((kw: string) => {
       expandedKeywords.add(kw);
       // Synoniemen toevoegen
-      if (kw === 'klant') expandedKeywords.add('client').add('customer').add('opdrachtgever');
-      if (kw === 'client') expandedKeywords.add('klant').add('customer').add('opdrachtgever');
-      if (kw === 'opdrachtgever') expandedKeywords.add('klant').add('client').add('customer');
-      if (kw === 'professional') expandedKeywords.add('medewerker').add('zzp').add('werknemer');
-      if (kw === 'medewerker') expandedKeywords.add('professional').add('zzp').add('werknemer');
+      if (kw === 'klant') {
+        expandedKeywords.add('client');
+        expandedKeywords.add('customer');
+        expandedKeywords.add('opdrachtgever');
+      }
+      if (kw === 'client') {
+        expandedKeywords.add('klant');
+        expandedKeywords.add('customer');
+        expandedKeywords.add('opdrachtgever');
+      }
+      if (kw === 'opdrachtgever') {
+        expandedKeywords.add('klant');
+        expandedKeywords.add('client');
+        expandedKeywords.add('customer');
+      }
+      if (kw === 'professional') {
+        expandedKeywords.add('medewerker');
+        expandedKeywords.add('zzp');
+        expandedKeywords.add('werknemer');
+      }
+      if (kw === 'medewerker') {
+        expandedKeywords.add('professional');
+        expandedKeywords.add('zzp');
+        expandedKeywords.add('werknemer');
+      }
     });
     
     // Score and rank knowledge items by relevance to current query (VERBETERDE SCORING v2)
