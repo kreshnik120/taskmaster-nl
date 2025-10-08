@@ -75,6 +75,7 @@ export const DocumentUpload = () => {
       if (!orgData) throw new Error("Geen organisatie gevonden");
 
       let successCount = 0;
+      const uploadedPaths: string[] = [];
       for (let i = 0; i < fileArray.length; i++) {
         const file = fileArray[i];
         // Validate file size

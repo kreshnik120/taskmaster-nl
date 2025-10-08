@@ -403,8 +403,6 @@ Geef je antwoord als gestructureerde kennis items in helder Nederlands.`
   // Use filtered items
   const finalKnowledgeItems = usefulItems.length > 0 ? usefulItems : knowledgeItems;
   console.log(`[VISION-QUALITY] ✅ ${finalKnowledgeItems.length} useful items (filtered ${knowledgeItems.length - finalKnowledgeItems.length})`);
-    },
-  ];
 
   // ✅ FASE 2: Extract customer entities for better retrieval
   const customerEntities = await extractCustomerEntities(
