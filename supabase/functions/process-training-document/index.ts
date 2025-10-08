@@ -245,7 +245,7 @@ async function processWithVision(
           content: [
             {
               type: "text",
-              content: `Analyseer dit bedrijfsdocument (${fileName}) en extraheer belangrijke kennis zoals:
+              text: `Analyseer dit bedrijfsdocument (${fileName}) en extraheer belangrijke kennis zoals:
 - Bedrijfsprocessen en workflows
 - Standaard procedures en protocollen
 - Klantinformatie (namen, adressen, contactgegevens)
@@ -257,8 +257,8 @@ async function processWithVision(
 Geef je antwoord als gestructureerde kennis items in helder Nederlands.`
             },
             {
-              type: "image_url",
-              image_url: {
+              type: "input_image",
+              input_image: {
                 url: `data:${mimeType};base64,${base64}`
               }
             }
@@ -783,12 +783,19 @@ ALLEEN facts die EXPLICIET in de data staan!`,
         },
         { 
           role: "user", 
-          content: `Document: ${fileName}
+          content: `GEËXTRAHEERDE TEKST uit document: ${fileName}
 
-${text.includes('|') ? 'DIT IS TABELLAIRE DATA (Excel/CSV). Verwerk ELKE rij als apart knowledge item.' : 'Regulier document, extraheer key facts.'}
+${text.includes('|') ? 'DIT IS TABELLAIRE DATA (Excel/CSV met pipe separators). Verwerk ELKE datarij als apart knowledge item.' : 'Dit is de volledige tekstuele inhoud van het document. Extraheer alle belangrijke feiten, procedures, regels en processen.'}
 
-CONTENT:
-${text}` 
+=== BEGIN TEKST ===
+${text}
+=== EINDE TEKST ===
+
+BELANGRIJK: 
+- Dit is NIET een bestandsnaam om te openen
+- Dit is de VOLLEDIGE GEËXTRAHEERDE TEKST uit het document
+- Analyseer deze tekst DIRECT en extraheer alle relevante kennis
+- Return een JSON array met knowledge items zoals beschreven in het system prompt` 
         },
       ],
     }),
@@ -1087,8 +1094,8 @@ async function autoDetectConflictsAfterUpload(
     const { data: newItems, error: fetchError } = await supabaseClient
       .from('ai_knowledge_base')
       .select('*')
-      .eq('source', documentName)
-      .is('soft_deleted_at', null);
+      .eq('source', `document:${documentName}`)
+      .is('deleted_at', null);
 
     if (fetchError || !newItems || newItems.length === 0) {
       console.log(`[AUTO-DETECT] No new items found for ${documentName}`);
@@ -1115,7 +1122,7 @@ async function detectConflictsForItem(supabaseClient: any, item: any): Promise<v
       .from('ai_knowledge_base')
       .select('*')
       .neq('id', item.id)
-      .is('soft_deleted_at', null);
+      .is('deleted_at', null);
 
     if (error || !allItems) return;
 
@@ -1282,9 +1289,9 @@ async function handleTier1AutoResolve(
     await supabaseClient
       .from('ai_knowledge_base')
       .update({
-        soft_deleted_at: new Date().toISOString(),
-        soft_deleted_by: 'ai_auto_cleanup',
-        soft_delete_reason: `Auto-resolved: ${analysis.reasoning}`
+        deleted_at: new Date().toISOString(),
+        deleted_by: 'ai_auto_cleanup',
+        deletion_reason: { auto_resolved: analysis.reasoning }
       })
       .eq('id', id);
   }
