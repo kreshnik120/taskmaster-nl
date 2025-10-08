@@ -888,15 +888,40 @@ serve(async (req) => {
     // Detect user's role from the question for role-based knowledge filtering
     const detectedRole = detectRoleFromQuestion(lastUserMessage);
     
-    // Score and rank knowledge items by relevance to current query (VERBETERDE SCORING)
+    // 🎯 STAP 1: CLIENT-VRAAG DETECTIE
+    const isClientQuestion = /\b(klant|client|opdrachtgever|customer|organisatie)\b/i.test(lastUserMessage);
+    
+    // 🔍 SEMANTIC KEYWORD EXPANSION: breid keywords uit met synoniemen
+    const expandedKeywords = new Set<string>();
+    messageKeywords.forEach((kw: string) => {
+      expandedKeywords.add(kw);
+      // Synoniemen toevoegen
+      if (kw === 'klant') expandedKeywords.add('client').add('customer').add('opdrachtgever');
+      if (kw === 'client') expandedKeywords.add('klant').add('customer').add('opdrachtgever');
+      if (kw === 'opdrachtgever') expandedKeywords.add('klant').add('client').add('customer');
+      if (kw === 'professional') expandedKeywords.add('medewerker').add('zzp').add('werknemer');
+      if (kw === 'medewerker') expandedKeywords.add('professional').add('zzp').add('werknemer');
+    });
+    
+    // Score and rank knowledge items by relevance to current query (VERBETERDE SCORING v2)
     const rankedKnowledge = (allKnowledgeBase || []).map((kb: any) => {
       let relevanceScore = 0;
       const searchText = `${kb.key} ${kb.category} ${JSON.stringify(kb.value)}`.toLowerCase();
       
-      // Keyword matching (baseline scoring)
-      messageKeywords.forEach((keyword: string) => {
-        if (searchText.includes(keyword)) relevanceScore += 2;
+      // 🚀 ENHANCED KEYWORD MATCHING: gebruik expanded keywords
+      Array.from(expandedKeywords).forEach((keyword: string) => {
+        if (searchText.includes(keyword)) relevanceScore += 3; // verhoogd van 2 naar 3
       });
+      
+      // 💎 CLIENT QUESTION BOOST: +20 voor client-gerelateerde items bij client-vragen
+      if (isClientQuestion) {
+        const clientTerms = ['client', 'klant', 'opdrachtgever', 'customer', 'kwintes', 'organisatie'];
+        const hasClientTerm = clientTerms.some(term => searchText.includes(term));
+        if (hasClientTerm) relevanceScore += 20;
+        
+        // Extra boost voor business_rule category bij client-vragen
+        if (kb.category === 'business_rule') relevanceScore += 10;
+      }
       
       // Boost by confidence and usage (baseline scoring)
       relevanceScore += (kb.confidence_score || 0) * 10;
