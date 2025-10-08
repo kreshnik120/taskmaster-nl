@@ -460,6 +460,36 @@ async function processWithVision(
   );
 
   const aiData = await aiResponse.json();
+
+  // 🔍 FIX 1: Detect Vision API errors explicitly
+  if (aiData.error) {
+    console.error('[VISION-API] ❌ Vision API returned error:', aiData.error);
+    await supabase
+      .from("training_documents")
+      .update({ 
+        status: "failed",
+        error_message: `Vision API error: ${JSON.stringify(aiData.error)}`,
+        processing_progress: 100,
+        processing_method: "vision_api_error"
+      })
+      .eq("file_path", filePath);
+    return [];
+  }
+
+  // 🔍 FIX 1: Detect empty or invalid response
+  if (!aiData.choices || aiData.choices.length === 0) {
+    console.error('[VISION-API] ❌ Vision API returned no choices');
+    await supabase
+      .from("training_documents")
+      .update({ 
+        status: "failed",
+        error_message: "Vision API returned empty response (no choices)",
+        processing_progress: 100,
+        processing_method: "vision_empty_response"
+      })
+      .eq("file_path", filePath);
+    return [];
+  }
   
   // 🔧 TRIPLE-LAYER PARSING: Tool calling → Direct JSON → Markdown fallback
   let knowledgeItems: any[] = [];
@@ -519,36 +549,72 @@ async function processWithVision(
     console.error('[VISION] ❌ All parsing layers failed');
     console.log('[VISION-RAW] First 1000 chars:', extractedInfo.substring(0, 1000));
     
-    // 🔄 FALLBACK: Try PDF text extraction if Vision API returned nothing useful
+    // 🔄 FIX 3: FALLBACK with improved error handling
     if (fileName.toLowerCase().endsWith('.pdf')) {
       console.log('[PDF-FALLBACK] Vision API failed, attempting PDF text extraction...');
       
       try {
         const extractedText = await extractPdfText(fileBlob, fileName);
         
-        if (extractedText.length > 100) {
-          console.log('[PDF-FALLBACK] ✅ Text extracted, processing with AI...');
-          
-          // Process extracted text with processWithText
-          const textItems = await processWithText(
-            supabase,
-            filePath,
-            fileName,
-            extractedText,
-            userId,
-            orgId,
-            0
-          );
-          
-          if (textItems.length > 0) {
-            console.log(`[PDF-FALLBACK] ✅ Successfully extracted ${textItems.length} items via text processing`);
-            return textItems;
-          }
+        // 🔍 FIX 3: Check if extracted text is insufficient
+        if (!extractedText || extractedText.length < 100) {
+          console.error('[PDF-FALLBACK] ❌ Extracted text too short or empty');
+          await supabase
+            .from("training_documents")
+            .update({ 
+              status: "failed",
+              error_message: "PDF text extraction yielded insufficient text (< 100 chars). Document might be image-based or corrupted.",
+              processing_progress: 100,
+              processing_method: "pdf_extraction_insufficient"
+            })
+            .eq("file_path", filePath);
+          return [];
         }
         
-        console.log('[PDF-FALLBACK] ⚠️ Text extraction succeeded but yielded no items');
+        console.log('[PDF-FALLBACK] ✅ Text extracted, processing with AI...');
+        
+        // Process extracted text with processWithText
+        const textItems = await processWithText(
+          supabase,
+          filePath,
+          fileName,
+          extractedText,
+          userId,
+          orgId,
+          0
+        );
+        
+        // 🔍 FIX 3: Check if text processing yielded zero items
+        if (!textItems || textItems.length === 0) {
+          console.error('[PDF-FALLBACK] ❌ Text processing yielded zero items');
+          await supabase
+            .from("training_documents")
+            .update({ 
+              status: "failed",
+              error_message: "PDF text extraction succeeded, but AI could not extract any knowledge items. Document content might not contain structured information.",
+              processing_progress: 100,
+              processing_method: "pdf_fallback_zero_items"
+            })
+            .eq("file_path", filePath);
+          return [];
+        }
+        
+        console.log(`[PDF-FALLBACK] ✅ Successfully extracted ${textItems.length} items via text processing`);
+        return textItems;
+        
       } catch (pdfError) {
         console.error('[PDF-FALLBACK] ❌ PDF text extraction failed:', pdfError);
+        const errorMessage = pdfError instanceof Error ? pdfError.message : String(pdfError);
+        await supabase
+          .from("training_documents")
+          .update({ 
+            status: "failed",
+            error_message: `PDF text extraction threw error: ${errorMessage}`,
+            processing_progress: 100,
+            processing_method: "pdf_extraction_error"
+          })
+          .eq("file_path", filePath);
+        return [];
       }
     }
     
@@ -673,7 +739,22 @@ async function processWithVision(
     throw insertError;
   }
 
-  // Only update to completed if insert was successful
+  // 🔍 FIX 2: Fail if no knowledge items were extracted
+  if (knowledgeItems.length === 0) {
+    console.error('[VISION] ❌ Zero knowledge items extracted after all processing');
+    await supabase
+      .from("training_documents")
+      .update({
+        status: "failed",
+        error_message: "No knowledge items could be extracted from this document. The document might be unreadable, contain only images, or have no parseable text.",
+        processing_progress: 100,
+        processing_method: "vision_zero_items"
+      })
+      .eq("file_path", filePath);
+    return [];
+  }
+
+  // Only update to completed if insert was successful AND we have items
   await supabase
     .from("training_documents")
     .update({
