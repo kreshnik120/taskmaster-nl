@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
 const LARGE_FILE_THRESHOLD = 100 * 1024 * 1024; // 100MB
@@ -46,10 +47,18 @@ export const DocumentUpload = () => {
 
     const interval = setInterval(() => {
       refetch();
-    }, 5000); // Poll every 5 seconds
+    }, 10000); // Poll every 10 seconds
 
     return () => clearInterval(interval);
   }, [documents, refetch]);
+
+  // Calculate elapsed time in minutes
+  const getElapsedTime = (createdAt: string) => {
+    const now = new Date().getTime();
+    const created = new Date(createdAt).getTime();
+    const diffMs = now - created;
+    return Math.floor(diffMs / 60000);
+  };
 
   const processFiles = async (files: FileList | File[], folderName?: string) => {
     if (!files || files.length === 0) return;
@@ -247,6 +256,73 @@ export const DocumentUpload = () => {
     await processFiles(files);
   };
 
+  const forceStopStuckDocuments = async () => {
+    setReprocessing(true);
+    try {
+      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+      
+      const { data: stuckDocs, error } = await supabase
+        .from("training_documents")
+        .select("*")
+        .eq("status", "processing")
+        .is("processed_at", null)
+        .lt("created_at", twoMinutesAgo);
+
+      if (error) throw error;
+      if (!stuckDocs || stuckDocs.length === 0) {
+        toast({
+          title: "Geen vastgelopen documenten",
+          description: "Alle documenten worden normaal verwerkt.",
+        });
+        return;
+      }
+
+      // Update status to failed first
+      const { error: updateError } = await supabase
+        .from("training_documents")
+        .update({ 
+          status: "failed",
+          error_message: "Manually failed (stuck watchdog)",
+          processing_progress: 100
+        })
+        .in("id", stuckDocs.map(d => d.id));
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: "Forceer stoppen gestart",
+        description: `${stuckDocs.length} vastgelopen document(en) worden gestopt en herverwerkt`,
+      });
+
+      // Now reprocess them
+      for (const doc of stuckDocs) {
+        await supabase
+          .from("training_documents")
+          .update({ 
+            status: "processing",
+            processing_progress: 0,
+            error_message: null
+          })
+          .eq("id", doc.id);
+          
+        await supabase.functions.invoke("process-training-document", {
+          body: { filePath: doc.file_path, fileName: doc.file_name },
+        });
+      }
+
+      refetch();
+    } catch (error: any) {
+      console.error("Force stop error:", error);
+      toast({
+        title: "Forceer stoppen mislukt",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setReprocessing(false);
+    }
+  };
+
   const reprocessFailedDocuments = async () => {
     setReprocessing(true);
     try {
@@ -317,6 +393,12 @@ export const DocumentUpload = () => {
   const failedDocsCount = documents?.filter(doc => 
     ["failed", "processing"].includes(doc.status) && !doc.processed_at
   ).length || 0;
+
+  // Calculate stuck documents count
+  const stuckDocsCount = documents?.filter(doc => {
+    const elapsedMin = getElapsedTime(doc.created_at);
+    return doc.status === "processing" && !doc.processed_at && elapsedMin > 2;
+  }).length || 0;
 
   return (
     <div className="space-y-6">
@@ -425,61 +507,102 @@ export const DocumentUpload = () => {
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Geüploade Documenten</h3>
-          {failedDocsCount > 0 && (
-            <Button 
-              onClick={reprocessFailedDocuments} 
-              disabled={reprocessing}
-              variant="outline"
-              size="sm"
-            >
-              {reprocessing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Herverwerken...
-                </>
-              ) : (
-                <>
-                  <AlertCircle className="h-4 w-4 mr-2" />
-                  Herverwerk Gefaalde ({failedDocsCount})
-                </>
+          {(failedDocsCount > 0 || stuckDocsCount > 0) && (
+            <div className="flex gap-2">
+              {stuckDocsCount > 0 && (
+                <Button 
+                  onClick={forceStopStuckDocuments} 
+                  disabled={reprocessing}
+                  variant="destructive"
+                  size="sm"
+                >
+                  {reprocessing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Stoppen...
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="h-4 w-4 mr-2" />
+                      Forceer Stoppen ({stuckDocsCount})
+                    </>
+                  )}
+                </Button>
               )}
-            </Button>
+              {failedDocsCount > 0 && (
+                <Button 
+                  onClick={reprocessFailedDocuments} 
+                  disabled={reprocessing}
+                  variant="outline"
+                  size="sm"
+                >
+                  {reprocessing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Herverwerken...
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="h-4 w-4 mr-2" />
+                      Herverwerk Gefaalde ({failedDocsCount})
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
           )}
         </div>
         <div className="space-y-2">
           {documents && documents.length > 0 ? (
-            documents.map((doc) => (
-              <div
-                key={doc.id}
-                className="flex items-center justify-between p-3 border rounded-lg"
-              >
-                <div className="flex items-center gap-3 flex-1">
-                  <FileText className="h-5 w-5 text-muted-foreground" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{doc.file_name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(doc.created_at).toLocaleDateString("nl-NL")}
-                      {doc.extracted_knowledge_count > 0 &&
-                        ` • ${doc.extracted_knowledge_count} kennis items`}
-                    </p>
-                    {doc.status === "processing" && doc.processing_progress > 0 && (
-                      <div className="mt-2 space-y-1">
-                        <Progress value={doc.processing_progress} className="h-1" />
-                        <p className="text-xs text-muted-foreground">
-                          {doc.processing_progress}% verwerkt
-                        </p>
-                      </div>
-                    )}
+            documents.map((doc) => {
+              const elapsedMin = getElapsedTime(doc.created_at);
+              const isStuck = doc.status === "processing" && !doc.processed_at && elapsedMin > 2;
+              
+              return (
+                <div
+                  key={doc.id}
+                  className="flex items-center justify-between p-3 border rounded-lg"
+                >
+                  <div className="flex items-center gap-3 flex-1">
+                    <FileText className="h-5 w-5 text-muted-foreground" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{doc.file_name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(doc.created_at).toLocaleDateString("nl-NL")}
+                        {doc.extracted_knowledge_count > 0 &&
+                          ` • ${doc.extracted_knowledge_count} kennis items`}
+                      </p>
+                      {doc.status === "processing" && (
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-muted-foreground">
+                            Processing sinds {elapsedMin} min
+                          </span>
+                          {isStuck && (
+                            <Badge variant="destructive" className="text-xs">
+                              mogelijk vastgelopen
+                            </Badge>
+                          )}
+                        </div>
+                      )}
+                      {doc.status === "processing" && doc.processing_progress > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <Progress value={doc.processing_progress} className="h-1" />
+                          <p className="text-xs text-muted-foreground">
+                            {doc.processing_progress}% verwerkt
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {getStatusIcon(doc.status)}
+                    <span className="text-xs text-muted-foreground capitalize">
+                      {doc.status}
+                    </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {getStatusIcon(doc.status)}
-                  <span className="text-xs text-muted-foreground capitalize">
-                    {doc.status}
-                  </span>
-                </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <p className="text-sm text-muted-foreground text-center py-8">
               Nog geen documenten geüpload
