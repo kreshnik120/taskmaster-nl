@@ -338,6 +338,110 @@ Format:
       console.log(`⚠️ ${errors.length} errors occurred during insertion`);
     }
 
+    // FASE 4: Self-Supervised Pattern Discovery
+    // Analyze ALL relationships to discover meta-patterns
+    if (insertedCount > 10) { // Only run if we have enough data
+      console.log('🔬 FASE 4: Discovering meta-patterns...');
+      
+      // Fetch ALL relationships for this org for pattern analysis
+      const { data: allRelationships } = await supabase
+        .from('knowledge_relationships')
+        .select(`
+          *,
+          source:ai_knowledge_base!source_knowledge_id(category, key),
+          target:ai_knowledge_base!target_knowledge_id(category, key)
+        `)
+        .limit(1000); // Analyze last 1000 relationships
+
+      if (allRelationships && allRelationships.length > 50) {
+        // Call AI to discover patterns
+        const patternResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-pro',
+            response_format: { type: "json_object" },
+            messages: [
+              {
+                role: 'system',
+                content: `Je bent een meta-pattern discovery expert die patronen ontdekt in knowledge graph relationships.
+
+Analyseer deze relationships en ontdek HERHALENDE PATRONEN zoals:
+- "Alle items met category 'tarieven' + keyword 'client_X' hebben relationship met CAO items"
+- "Items over 'verlof' hebben vaak contradicts-relaties (regelwijzigingen)"
+- "Client-vragen triggeren vaak 5+ related business_rule items"
+- "Items met 'zzp' + 'btw' hebben altijd 'requires' relatie naar 'kvk' items"
+
+Voor elk ontdekt pattern, geef:
+1. pattern_description (duidelijke beschrijving)
+2. confidence (0.6-1.0)
+3. occurrences (hoe vaak gezien)
+4. suggested_category (nieuwe category suggestie)
+
+⚠️ CRITICAL: Return ONLY a JSON object with a "patterns" array.
+Format:
+{
+  "patterns": [
+    {
+      "pattern_description": "string",
+      "confidence": 0.85,
+      "occurrences": 42,
+      "suggested_category": "string"
+    }
+  ]
+}`
+              },
+              {
+                role: 'user',
+                content: `Analyseer deze ${allRelationships.length} relationships en ontdek meta-patterns:\n\n${JSON.stringify(allRelationships.slice(0, 200), null, 2)}`
+              }
+            ],
+            temperature: 0.4,
+          }),
+        });
+
+        if (patternResponse.ok) {
+          const patternData = await patternResponse.json();
+          const patternContent = patternData.choices[0].message.content;
+          
+          try {
+            const parsedPatterns = JSON.parse(patternContent);
+            const patterns = parsedPatterns.patterns || [];
+            
+            if (patterns.length > 0) {
+              // Store discovered patterns
+              const patternsToInsert = patterns.map((p: any) => ({
+                org_id: orgId,
+                pattern_description: p.pattern_description,
+                confidence: p.confidence,
+                occurrences: p.occurrences,
+                suggested_category: p.suggested_category,
+                pattern_data: { 
+                  source: 'knowledge-graph-builder',
+                  relationship_count: allRelationships.length,
+                  discovered_at: new Date().toISOString()
+                }
+              }));
+
+              const { data: insertedPatterns, error: patternError } = await supabase
+                .from('ai_meta_patterns')
+                .insert(patternsToInsert)
+                .select();
+
+              if (!patternError && insertedPatterns) {
+                console.log(`🔬 Discovered and stored ${insertedPatterns.length} meta-patterns`);
+              }
+            }
+          } catch (parseError) {
+            console.error('⚠️ Failed to parse pattern discovery:', parseError);
+          }
+        }
+      }
+    }
+
     return new Response(JSON.stringify({
       success: true,
       mode: 'ultra',

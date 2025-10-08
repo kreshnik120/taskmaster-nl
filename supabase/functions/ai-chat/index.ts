@@ -893,6 +893,57 @@ serve(async (req) => {
 
     console.log(`📂 Gevonden categorieën: ${relevantCategories?.length || 0}`);
 
+    // FASE 2: Graph Traversal Helper Function (Neural Brain)
+    async function expandViaRelationships(coreItems: any[], maxDepth = 2) {
+      if (coreItems.length === 0) return coreItems;
+      
+      let expanded = [...coreItems];
+      let currentIds = coreItems.map((i: any) => i.id);
+      
+      for (let depth = 0; depth < maxDepth; depth++) {
+        // Fetch relationships where source is one of our current items
+        const { data: connectedRels } = await supabaseClient
+          .from('knowledge_relationships')
+          .select(`
+            id, 
+            target_knowledge_id, 
+            relationship_type, 
+            confidence_score,
+            usage_count
+          `)
+          .in('source_knowledge_id', currentIds)
+          .gte('usage_count', 3)
+          .order('usage_count', { ascending: false })
+          .limit(20);
+        
+        if (!connectedRels || connectedRels.length === 0) break;
+        
+        // Fetch the actual target knowledge items
+        const targetIds = connectedRels.map((r: any) => r.target_knowledge_id);
+        const { data: targetItems } = await supabaseClient
+          .from('ai_knowledge_base')
+          .select('id, category, key, value, confidence_score, usage_count, source, created_at, role_tags, valid_from, valid_to')
+          .in('id', targetIds)
+          .is('deleted_at', null);
+        
+        if (!targetItems || targetItems.length === 0) break;
+        
+        // Filter out items we already have
+        const newItems = targetItems.filter((t: any) => 
+          !expanded.some((e: any) => e.id === t.id)
+        );
+        
+        if (newItems.length === 0) break;
+        
+        expanded.push(...newItems);
+        currentIds = newItems.map((i: any) => i.id);
+        
+        console.log(`🔗 Graph depth ${depth + 1}: Added ${newItems.length} related items via neural connections`);
+      }
+      
+      return expanded;
+    }
+
     let fullKnowledgeBase: any[] = [];
 
     if (relevantCategories && relevantCategories.length > 0) {
@@ -910,6 +961,10 @@ serve(async (req) => {
       if (categoryItems) {
         fullKnowledgeBase = categoryItems;
         console.log(`✅ Smart Context: ${fullKnowledgeBase.length} items uit ${categoryNames.length} categorieën`);
+        
+        // FASE 2: Expand via relationships (Neural Graph Traversal)
+        fullKnowledgeBase = await expandViaRelationships(fullKnowledgeBase, 2);
+        console.log(`🧠 After neural graph expansion: ${fullKnowledgeBase.length} total items`);
       }
     }
 
@@ -928,6 +983,34 @@ serve(async (req) => {
 
       if (fallbackKnowledge) {
         fullKnowledgeBase = fallbackKnowledge;
+      }
+    }
+
+    // FASE 1: Track which relationships were used (Synaptic Reinforcement)
+    if (fullKnowledgeBase.length > 0) {
+      const relevantIds = fullKnowledgeBase.map((i: any) => i.id);
+      
+      // Fetch relationships that involve any of our knowledge items (with current usage_count)
+      const { data: usedRelationships } = await supabaseClient
+        .from('knowledge_relationships')
+        .select('id, usage_count')
+        .or(`source_knowledge_id.in.(${relevantIds.join(',')}),target_knowledge_id.in.(${relevantIds.join(',')})`)
+        .limit(100);
+      
+      if (usedRelationships && usedRelationships.length > 0) {
+        // Update each relationship with incremented usage_count
+        const updatePromises = usedRelationships.map((rel: any) => 
+          supabaseClient
+            .from('knowledge_relationships')
+            .update({ 
+              usage_count: (rel.usage_count || 0) + 1,
+              last_used_at: new Date().toISOString()
+            })
+            .eq('id', rel.id)
+        );
+        
+        await Promise.all(updatePromises);
+        console.log(`✅ Strengthened ${usedRelationships.length} synaptic connections`);
       }
     }
     

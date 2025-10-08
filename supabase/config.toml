@@ -65,6 +65,10 @@ schedule = "15 * * * *"
 verify_jwt = false
 schedule = "0 2 * * *"
 
+[functions.synapse-pruner]
+verify_jwt = false
+schedule = "0 3 * * *"
+
 [functions.process-application-email]
 verify_jwt = false
 

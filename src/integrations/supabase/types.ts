@@ -306,6 +306,50 @@ export type Database = {
           },
         ]
       }
+      ai_meta_patterns: {
+        Row: {
+          applied_at: string | null
+          confidence: number | null
+          created_at: string | null
+          id: string
+          occurrences: number | null
+          org_id: string
+          pattern_data: Json | null
+          pattern_description: string
+          suggested_category: string | null
+        }
+        Insert: {
+          applied_at?: string | null
+          confidence?: number | null
+          created_at?: string | null
+          id?: string
+          occurrences?: number | null
+          org_id: string
+          pattern_data?: Json | null
+          pattern_description: string
+          suggested_category?: string | null
+        }
+        Update: {
+          applied_at?: string | null
+          confidence?: number | null
+          created_at?: string | null
+          id?: string
+          occurrences?: number | null
+          org_id?: string
+          pattern_data?: Json | null
+          pattern_description?: string
+          suggested_category?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_meta_patterns_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_performance_metrics: {
         Row: {
           created_at: string | null
@@ -959,11 +1003,13 @@ export type Database = {
           created_at: string | null
           detected_by: string
           id: string
+          last_used_at: string | null
           metadata: Json | null
           relationship_type: string
           source_knowledge_id: string
           target_knowledge_id: string
           updated_at: string | null
+          usage_count: number | null
         }
         Insert: {
           confidence_score?: number
@@ -971,11 +1017,13 @@ export type Database = {
           created_at?: string | null
           detected_by?: string
           id?: string
+          last_used_at?: string | null
           metadata?: Json | null
           relationship_type: string
           source_knowledge_id: string
           target_knowledge_id: string
           updated_at?: string | null
+          usage_count?: number | null
         }
         Update: {
           confidence_score?: number
@@ -983,11 +1031,13 @@ export type Database = {
           created_at?: string | null
           detected_by?: string
           id?: string
+          last_used_at?: string | null
           metadata?: Json | null
           relationship_type?: string
           source_knowledge_id?: string
           target_knowledge_id?: string
           updated_at?: string | null
+          usage_count?: number | null
         }
         Relationships: [
           {
