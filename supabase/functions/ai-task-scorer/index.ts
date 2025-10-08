@@ -56,7 +56,8 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[AI-SCORER] Analyseren van ${tasks.length} taken`);
+    console.log(`[AI-SCORER] ⚡ START: Analyseren van ${tasks.length} taken`);
+    const startTime = Date.now();
 
     // Build context for AI
     const now = new Date();
@@ -172,17 +173,17 @@ Geef ALLEEN het JSON object terug, geen andere tekst.`;
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('[AI-SCORER] AI Gateway error:', response.status, errorText);
+        console.error(`[AI-SCORER] ❌ AI Gateway error: ${response.status}`, errorText);
         
         if (response.status === 429) {
-          throw new Error("Te veel verzoeken. Probeer later opnieuw.");
+          throw new Error("429: Te veel verzoeken. Wacht 1 minuut en probeer opnieuw.");
         }
         
         if (response.status === 402) {
-          throw new Error("Onvoldoende credits. Voeg credits toe aan je workspace.");
+          throw new Error("402: Onvoldoende credits. Voeg credits toe aan je workspace.");
         }
 
-        throw new Error(`AI Gateway fout: ${response.status}`);
+        throw new Error(`AI Gateway fout: ${response.status} - ${errorText.substring(0, 100)}`);
       }
 
       const data = await response.json();
@@ -222,7 +223,8 @@ Geef ALLEEN het JSON object terug, geen andere tekst.`;
       (r as any).rank = i + 1;
     });
 
-    console.log(`[AI-SCORER] Totaal ${results.length} taken geanalyseerd en gescoord`);
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`[AI-SCORER] ✅ KLAAR: ${results.length} taken geanalyseerd in ${duration}s`);
 
     return new Response(
       JSON.stringify({

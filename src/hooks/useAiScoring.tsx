@@ -107,26 +107,63 @@ export const useAiScoring = (tasks: Task[], enableAutoScoring: boolean = false) 
       });
 
       if (uncachedTasks.length > 0) {
-        console.log(`🤖 AI Scoring ${uncachedTasks.length} tasks...`);
+        console.log(`🤖 AI Scoring ${uncachedTasks.length} tasks (dit kan 30-60 seconden duren)...`);
         
-        const { data, error } = await supabase.functions.invoke('ai-task-scorer', {
-          body: { tasks: uncachedTasks }
-        });
-
-        if (error) {
-          console.error('AI scoring error:', error);
-          throw error;
-        }
-
-        if (data?.results) {
-          const newCache = new Map(cache);
-          data.results.forEach((score: PriorityScore) => {
-            newScores.set(score.task_id, score);
-            newCache.set(score.task_id, { score, timestamp: now });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 second timeout
+        
+        try {
+          const { data, error } = await supabase.functions.invoke('ai-task-scorer', {
+            body: { tasks: uncachedTasks }
           });
-          setCache(newCache);
-          saveCacheToStorage(newCache);
-          console.log(`✅ AI scoring completed for ${data.results.length} tasks`);
+
+          clearTimeout(timeoutId);
+
+          if (error) {
+            console.error('AI scoring error:', error);
+            
+            // Check for specific error types
+            if (error.message?.includes('429')) {
+              toast.error('Te veel verzoeken. Wacht 1 minuut en probeer opnieuw.');
+              return;
+            }
+            if (error.message?.includes('402')) {
+              toast.error('Onvoldoende credits. Voeg credits toe via Settings.');
+              return;
+            }
+            if (error.message?.includes('timeout') || error.message?.includes('aborted')) {
+              toast.error('AI scoring duurt te lang. Probeer met minder taken tegelijk.');
+              return;
+            }
+            
+            throw error;
+          }
+
+          if (data?.error) {
+            console.error('AI scoring backend error:', data.error);
+            toast.error(`AI scoring fout: ${data.error}`);
+            return;
+          }
+
+          if (data?.results) {
+            const newCache = new Map(cache);
+            data.results.forEach((score: PriorityScore) => {
+              newScores.set(score.task_id, score);
+              newCache.set(score.task_id, { score, timestamp: now });
+            });
+            setCache(newCache);
+            saveCacheToStorage(newCache);
+            console.log(`✅ AI scoring completed for ${data.results.length} tasks`);
+            toast.success(`✅ ${data.results.length} taken gescoord door AI`);
+          }
+        } catch (abortError) {
+          clearTimeout(timeoutId);
+          if (abortError instanceof Error && abortError.name === 'AbortError') {
+            console.error('AI scoring timeout after 90s');
+            toast.error('AI scoring timeout. Probeer met minder taken.');
+          } else {
+            throw abortError;
+          }
         }
       } else {
         console.log(`✅ Using cached scores for all ${tasksToScore.length} tasks`);
