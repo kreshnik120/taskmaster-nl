@@ -8,14 +8,15 @@ const corsHeaders = {
 };
 
 // =============================================================================
-// FASE 1: CONFIDENCE CALCULATION FUNCTION
+// FASE 1: CONFIDENCE CALCULATION FUNCTION (MET CLIENTS DATA BOOST)
 // =============================================================================
 function calculateAnswerConfidence(
   knowledgeItems: any[],
   queryKeywords: string[],
-  questionText: string
+  questionText: string,
+  clientsContext: any[] = [] // ✅ Nieuwe parameter voor clients data
 ): { confidence: number; reasoning: string; gaps: string[] } {
-  if (knowledgeItems.length === 0) {
+  if (knowledgeItems.length === 0 && clientsContext.length === 0) {
     return {
       confidence: 0,
       reasoning: "Geen relevante kennis gevonden",
@@ -26,12 +27,25 @@ function calculateAnswerConfidence(
   let score = 0;
   const gaps: string[] = [];
   const reasons: string[] = [];
+  
+  // 🆕 Check of vraag gaat over clients data (tarieven, contracten, etc.)
+  const clientsRelatedKeywords = ['tarief', 'prijs', 'kostprijs', 'tariev', 'contract', 'overeenkomst', 'afspraak'];
+  const isClientsQuery = queryKeywords.some(keyword => 
+    clientsRelatedKeywords.some(clientTerm => 
+      keyword.toLowerCase().includes(clientTerm) || clientTerm.includes(keyword.toLowerCase())
+    )
+  );
+  
+  const hasClientsData = clientsContext.length > 0 && isClientsQuery;
 
-  // 1. Keyword Match Score (0-30 punten)
+  // 1. Keyword Match Score (0-30 punten) - NU OOK CLIENTS DATA
   const keywordMatches = queryKeywords.filter(keyword => 
     knowledgeItems.some(kb => {
       const searchText = `${kb.key} ${kb.category} ${JSON.stringify(kb.value)}`.toLowerCase();
       return searchText.includes(keyword.toLowerCase());
+    }) || clientsContext.some(client => {
+      const clientText = `${client.name} ${client.company}`.toLowerCase();
+      return clientText.includes(keyword.toLowerCase());
     })
   );
   const keywordScore = Math.min((keywordMatches.length / Math.max(queryKeywords.length, 1)) * 30, 30);
@@ -71,18 +85,26 @@ function calculateAnswerConfidence(
     gaps.push("Data mogelijk verouderd");
   }
 
-  // 4. Source Count (0-10 punten)
-  const sourceScore = Math.min((knowledgeItems.length / 3) * 10, 10);
+  // 4. Source Count (0-10 punten) - NU OOK CLIENTS DATA
+  const totalSources = knowledgeItems.length + (hasClientsData ? clientsContext.length : 0);
+  const sourceScore = Math.min((totalSources / 3) * 10, 10);
   score += sourceScore;
   
-  if (knowledgeItems.length < 2) {
+  if (totalSources < 2) {
     gaps.push("Te weinig bronnen voor validatie");
   } else {
-    reasons.push(`Meerdere bronnen (${knowledgeItems.length})`);
+    reasons.push(`Meerdere bronnen (${totalSources}${hasClientsData ? ' incl. clients data' : ''})`);
+  }
+  
+  // 🆕 5. Clients Data Boost (0-20 punten extra bij relevante clients queries)
+  if (hasClientsData) {
+    const clientsBoost = 20;
+    score += clientsBoost;
+    reasons.push(`📋 Relevante clients data gevonden (+${clientsBoost}%)`);
   }
 
-  // Convert to 0-1 scale
-  const confidence = Math.min(score / 100, 1.0);
+  // Convert to 0-1 scale (max 120 punten mogelijk nu met clients boost)
+  const confidence = Math.min(score / 120, 1.0);
   
   return {
     confidence,
@@ -664,7 +686,7 @@ serve(async (req) => {
 
   try {
     const requestBody = await req.json();
-    const { messages } = requestBody;
+    const { messages, conversation_id } = requestBody; // ✅ Ontvang conversation_id
     
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -801,11 +823,12 @@ serve(async (req) => {
         .eq('user_id', user.id)
         .maybeSingle(),
       
-      // 5 meest recente chat berichten
+      // 5 meest recente chat berichten VAN HUIDIGE CONVERSATIE
       supabaseClient
         .from('chat_messages')
         .select('role, content, created_at')
         .eq('user_id', user.id)
+        .eq('conversation_id', conversation_id || '') // ✅ Filter op conversation_id
         .order('created_at', { ascending: false })
         .limit(5),
       
@@ -1857,10 +1880,12 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             args.used_knowledge_ids.includes(kb.id)
                           );
                           
+                          // ✅ Pass clients data to confidence calculator
                           const confidenceCalc = calculateAnswerConfidence(
                             usedKnowledge,
                             messageKeywords,
-                            lastUserMessage
+                            lastUserMessage,
+                            clients || [] // ✅ Include clients context
                           );
                           
                           result = {

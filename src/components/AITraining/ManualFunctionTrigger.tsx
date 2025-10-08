@@ -180,6 +180,20 @@ export const ManualFunctionTrigger = () => {
             
             <div className="grid gap-3 md:grid-cols-2">
               <Button
+                onClick={() => triggerValidationFunction('meta-orchestrator')}
+                disabled={triggeringFunction === 'meta-orchestrator'}
+                variant="default"
+                className="w-full"
+              >
+                {triggeringFunction === 'meta-orchestrator' ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="mr-2 h-4 w-4" />
+                )}
+                🧠 Trigger Meta-Orchestrator
+              </Button>
+
+              <Button
                 onClick={() => triggerValidationFunction('feedback-processor')}
                 disabled={triggeringFunction === 'feedback-processor'}
                 variant="outline"

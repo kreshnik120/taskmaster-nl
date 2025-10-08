@@ -508,6 +508,9 @@ export const ChatWidget = () => {
         timestamp: new Date().toISOString()
       });
       
+      const conversationId = getConversationId(); // ✅ Haal huidige conversation_id op
+      console.log('🔑 Sending conversation_id to ai-chat:', conversationId);
+      
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`,
         {
@@ -530,6 +533,7 @@ export const ChatWidget = () => {
               }
               return { role: m.role, content: m.content };
             }),
+            conversation_id: conversationId, // ✅ Stuur conversation_id mee
           }),
         }
       );
