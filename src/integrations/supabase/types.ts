@@ -1790,6 +1790,7 @@ export type Database = {
       training_documents: {
         Row: {
           created_at: string | null
+          error_message: string | null
           extracted_knowledge_count: number | null
           file_name: string
           file_path: string
@@ -1804,10 +1805,12 @@ export type Database = {
           processing_progress: number | null
           relative_path: string | null
           status: string
+          updated_at: string | null
           user_id: string
         }
         Insert: {
           created_at?: string | null
+          error_message?: string | null
           extracted_knowledge_count?: number | null
           file_name: string
           file_path: string
@@ -1822,10 +1825,12 @@ export type Database = {
           processing_progress?: number | null
           relative_path?: string | null
           status?: string
+          updated_at?: string | null
           user_id: string
         }
         Update: {
           created_at?: string | null
+          error_message?: string | null
           extracted_knowledge_count?: number | null
           file_name?: string
           file_path?: string
@@ -1840,6 +1845,7 @@ export type Database = {
           processing_progress?: number | null
           relative_path?: string | null
           status?: string
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: [
