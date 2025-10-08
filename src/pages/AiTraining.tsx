@@ -16,6 +16,7 @@ import { ProfessionalClientLinks } from "@/components/AITraining/ProfessionalCli
 import { SystemMonitor } from "@/components/SystemMonitor";
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { AdminOnly } from "@/components/auth/AdminOnly";
+import { Week1To2TestPanel } from "@/components/AITraining/Week1To2TestPanel";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -72,8 +73,9 @@ const AiTraining = () => {
             </div>
 
             <Tabs defaultValue="dashboard" className="w-full">
-              <TabsList className="grid w-full grid-cols-6">
+              <TabsList className="grid w-full grid-cols-7">
                 <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
+                <TabsTrigger value="week1-2">🧪 Week 1-2</TabsTrigger>
                 <AdminOnly>
                   <TabsTrigger value="system">🔧 Systeem</TabsTrigger>
                 </AdminOnly>
@@ -85,6 +87,10 @@ const AiTraining = () => {
 
               <TabsContent value="dashboard" className="mt-6">
                 <LearningDashboard />
+              </TabsContent>
+
+              <TabsContent value="week1-2" className="mt-6">
+                <Week1To2TestPanel />
               </TabsContent>
 
               <AdminOnly>
