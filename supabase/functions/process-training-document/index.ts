@@ -349,6 +349,128 @@ function parseMarkdownToKnowledge(markdownText: string, fileName: string): any[]
   return items;
 }
 
+/**
+ * Smart Upsert: Insert with duplicate handling
+ * Merges duplicate items instead of failing the entire insert
+ */
+async function insertWithDuplicateHandling(
+  supabase: any,
+  items: any[],
+  userId: string,
+  orgId: string
+): Promise<{ inserted: number; updated: number; failed: number; details: string[] }> {
+  const results = {
+    inserted: 0,
+    updated: 0,
+    failed: 0,
+    details: [] as string[]
+  };
+
+  console.log(`[SMART-UPSERT] Processing ${items.length} items with duplicate detection...`);
+
+  for (const item of items) {
+    try {
+      // Check if item already exists
+      const { data: existing, error: checkError } = await supabase
+        .from("ai_knowledge_base")
+        .select("id, value, confidence_score, source")
+        .eq("user_id", userId)
+        .eq("org_id", orgId)
+        .eq("category", item.category)
+        .eq("key", item.key)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (checkError) {
+        console.error(`[SMART-UPSERT] ❌ Check failed for ${item.key}:`, checkError);
+        results.failed++;
+        results.details.push(`❌ ${item.key}: check failed`);
+        continue;
+      }
+
+      if (existing) {
+        // DUPLICATE FOUND - Merge with existing
+        console.log(`[SMART-UPSERT] 🔄 Duplicate found: ${item.key}, merging...`);
+
+        // Prepare merged value with additional_sources
+        const existingValue = typeof existing.value === 'string' 
+          ? existing.value 
+          : JSON.stringify(existing.value);
+        
+        const newValue = typeof item.value === 'string'
+          ? item.value
+          : JSON.stringify(item.value);
+
+        // Build additional_sources array
+        const additionalSources = existing.value?.additional_sources || [];
+        additionalSources.push({
+          value: existingValue,
+          source: existing.source,
+          confidence: existing.confidence_score
+        });
+
+        // Merge source field
+        const existingSources = existing.source?.split(', ') || [];
+        const newSources = item.source?.split(', ') || [];
+        const mergedSources = [...new Set([...existingSources, ...newSources])];
+
+        // Choose highest confidence
+        const newConfidence = Math.max(
+          item.confidence_score || 0.85,
+          existing.confidence_score || 0.85
+        );
+
+        // Update existing item
+        const { error: updateError } = await supabase
+          .from("ai_knowledge_base")
+          .update({
+            value: {
+              primary: newValue,
+              additional_sources: additionalSources
+            },
+            source: mergedSources.join(', '),
+            confidence_score: newConfidence,
+            updated_at: new Date().toISOString(),
+            usage_count: (existing.usage_count || 0) + 1
+          })
+          .eq("id", existing.id);
+
+        if (updateError) {
+          console.error(`[SMART-UPSERT] ❌ Update failed for ${item.key}:`, updateError);
+          results.failed++;
+          results.details.push(`❌ ${item.key}: update failed`);
+        } else {
+          results.updated++;
+          results.details.push(`🔄 ${item.key}: merged (confidence: ${newConfidence.toFixed(2)})`);
+          console.log(`[SMART-UPSERT] ✅ Merged ${item.key} (new confidence: ${newConfidence.toFixed(2)})`);
+        }
+      } else {
+        // NEW ITEM - Insert normally
+        const { error: insertError } = await supabase
+          .from("ai_knowledge_base")
+          .insert([item]);
+
+        if (insertError) {
+          console.error(`[SMART-UPSERT] ❌ Insert failed for ${item.key}:`, insertError);
+          results.failed++;
+          results.details.push(`❌ ${item.key}: insert failed`);
+        } else {
+          results.inserted++;
+          results.details.push(`✅ ${item.key}: new item`);
+          console.log(`[SMART-UPSERT] ✅ Inserted new item: ${item.key}`);
+        }
+      }
+    } catch (itemError) {
+      console.error(`[SMART-UPSERT] ❌ Processing error for ${item.key}:`, itemError);
+      results.failed++;
+      results.details.push(`❌ ${item.key}: exception`);
+    }
+  }
+
+  console.log(`[SMART-UPSERT] ✅ Complete: ${results.inserted} inserted, ${results.updated} updated, ${results.failed} failed`);
+  return results;
+}
+
 async function processWithVision(
   supabase: any,
   filePath: string,
@@ -704,13 +826,13 @@ async function processWithVision(
   
   if (customerEntities.length > 0) {
     console.log(`[ENTITY-EXTRACT] Found ${customerEntities.length} customer entities in vision document`);
-    knowledgeItems.push(...customerEntities);
+    finalKnowledgeItems.push(...customerEntities);
   }
 
   // ✅ FIX: Enrich knowledge items with required fields before insert
-  console.log(`[VISION] Inserting ${knowledgeItems.length} items for user ${userId}, org ${orgId}`);
+  console.log(`[VISION] Inserting ${finalKnowledgeItems.length} items for user ${userId}, org ${orgId}`);
   
-  const enrichedItems = knowledgeItems.map(item => ({
+  const enrichedItems = finalKnowledgeItems.map(item => ({
     ...item,
     user_id: userId,
     org_id: orgId,
@@ -718,29 +840,8 @@ async function processWithVision(
     confidence_score: item.confidence_score || 0.85,
   }));
 
-  // Insert with error handling
-  const { error: insertError } = await supabase
-    .from("ai_knowledge_base")
-    .insert(enrichedItems);
-
-  if (insertError) {
-    console.error("[VISION] Failed to insert knowledge items:", insertError);
-    
-    // Update document status to failed
-    await supabase
-      .from("training_documents")
-      .update({
-        status: "failed",
-        error_message: `Insert failed: ${insertError.message}`,
-        processing_progress: 100
-      })
-      .eq("file_path", filePath);
-    
-    throw insertError;
-  }
-
   // 🔍 FIX 2: Fail if no knowledge items were extracted
-  if (knowledgeItems.length === 0) {
+  if (enrichedItems.length === 0) {
     console.error('[VISION] ❌ Zero knowledge items extracted after all processing');
     await supabase
       .from("training_documents")
@@ -754,13 +855,50 @@ async function processWithVision(
     return [];
   }
 
-  // Only update to completed if insert was successful AND we have items
+  // 🚀 SMART UPSERT: Insert with duplicate handling
+  const result = await insertWithDuplicateHandling(
+    supabase,
+    enrichedItems,
+    userId,
+    orgId
+  );
+
+  // Log detailed results
+  console.log(`[VISION] 📊 Smart Upsert Results:`);
+  console.log(`  ✅ Inserted: ${result.inserted}`);
+  console.log(`  🔄 Updated (merged): ${result.updated}`);
+  console.log(`  ❌ Failed: ${result.failed}`);
+  result.details.forEach(detail => console.log(`    ${detail}`));
+
+  // Determine document status based on results
+  let status: string;
+  let errorMessage: string | null = null;
+  let extractedCount: number;
+
+  if (result.failed > 0 && result.inserted === 0 && result.updated === 0) {
+    // ALL items failed
+    status = "failed";
+    errorMessage = `All ${result.failed} items failed to process. Check logs for details.`;
+    extractedCount = 0;
+  } else if (result.failed > 0) {
+    // PARTIAL success
+    status = "completed";
+    errorMessage = `⚠️ Partial success: ${result.inserted} nieuwe items, ${result.updated} samengevoegd, ${result.failed} gefaald`;
+    extractedCount = result.inserted + result.updated;
+  } else {
+    // FULL success
+    status = "completed";
+    extractedCount = result.inserted + result.updated;
+  }
+
+  // Update document status
   await supabase
     .from("training_documents")
     .update({
-      status: "completed",
+      status: status,
+      error_message: errorMessage,
       processed_at: new Date().toISOString(),
-      extracted_knowledge_count: knowledgeItems.length,
+      extracted_knowledge_count: extractedCount,
       processing_progress: 100,
       processing_method: "vision"
     })
@@ -1422,10 +1560,20 @@ BELANGRIJK:
     return true;
   });
   
-  // Insert only quality-filtered, non-duplicate items
+  // 🚀 SMART UPSERT: Insert quality-filtered items with duplicate handling
   if (qualityFilteredItems.length > 0) {
-    await supabase.from("ai_knowledge_base").insert(qualityFilteredItems);
-    console.log(`[QUALITY-FILTER] ✅ Inserted ${qualityFilteredItems.length} quality items (${itemsToInsert.length - qualityFilteredItems.length} filtered out)`);
+    const result = await insertWithDuplicateHandling(
+      supabase,
+      qualityFilteredItems,
+      userId,
+      orgId
+    );
+    
+    console.log(`[TEXT] 📊 Smart Upsert Results:`);
+    console.log(`  ✅ Inserted: ${result.inserted}`);
+    console.log(`  🔄 Updated (merged): ${result.updated}`);
+    console.log(`  ❌ Failed: ${result.failed}`);
+    console.log(`  📝 Filtered out: ${itemsToInsert.length - qualityFilteredItems.length}`);
   } else if (itemsToInsert.length > 0) {
     console.log(`[QUALITY-FILTER] ⚠️ All ${itemsToInsert.length} items were filtered out as low quality`);
     
