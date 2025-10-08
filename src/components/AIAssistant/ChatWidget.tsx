@@ -633,67 +633,7 @@ export const ChatWidget = () => {
       clearTimeout(timeoutId);
       setIsLoading(false);
 
-      // Save to database for learning and context
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user && assistantMessage) {
-        const conversationId = getConversationId();
-        console.log('💾 Saving conversation to database (session:', conversationId, ')');
-        
-        // Insert and get the returned IDs for feedback tracking
-        const { data: insertedMessages, error: insertError } = await supabase
-          .from('chat_messages')
-          .insert([
-            { role: 'user', content: userMessage, user_id: user.id, conversation_id: conversationId },
-            { 
-              role: 'assistant', 
-              content: assistantMessage, 
-              user_id: user.id, 
-              conversation_id: conversationId,
-              metadata: { knowledge_ids_for_feedback: usedKnowledge.length > 0 ? usedKnowledge : [] }
-            },
-          ])
-          .select('id, role');
-        
-        if (insertError) {
-          console.error('Failed to save chat history:', insertError);
-          // Non-fatal - continue anyway
-        } else {
-          // Update messages with messageId for feedback tracking
-          if (insertedMessages && insertedMessages.length === 2) {
-            const assistantMessageId = insertedMessages.find(m => m.role === 'assistant')?.id;
-            if (assistantMessageId) {
-              setMessages(prev => {
-                const updated = [...prev];
-                updated[updated.length - 1] = {
-                  ...updated[updated.length - 1],
-                  messageId: assistantMessageId
-                };
-                return updated;
-              });
-            }
-          }
-          
-          // ✅ Trigger continuous learning (fire-and-forget)
-          console.log('🧠 Triggering continuous-learner...');
-          supabase.functions.invoke('continuous-learner', {
-            body: {
-              user_question: userMessage,
-              ai_response: assistantMessage,
-              trigger: 'frontend_direct',
-              conversation_id: conversationId,
-              used_knowledge: usedKnowledge.length > 0 ? usedKnowledge : undefined
-            }
-          }).then(({ data, error }) => {
-            if (error) {
-              console.error('⚠️ Continuous learner failed:', error);
-            } else {
-              console.log('✅ Continuous learner completed:', data);
-            }
-          }).catch((err) => {
-            console.error('⚠️ Continuous learner exception:', err);
-          });
-        }
-      }
+      // ✅ FIX 3: Removed duplicate storage - backend handles persistence via ai-chat function
 
     } catch (error) {
       clearTimeout(timeoutId);

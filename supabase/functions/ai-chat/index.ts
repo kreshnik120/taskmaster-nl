@@ -58,7 +58,9 @@ function calculateAnswerConfidence(
   }
 
   // 2. Average Confidence Score van gebruikte kennis (0-50 punten)
-  const avgConfidence = knowledgeItems.reduce((sum, kb) => sum + (kb.confidence_score || 0.5), 0) / knowledgeItems.length;
+  const avgConfidence = knowledgeItems.length > 0 
+    ? knowledgeItems.reduce((sum, kb) => sum + (kb.confidence_score || 0.5), 0) / knowledgeItems.length 
+    : 0.75; // ✅ FIX: Fallback bij lege lijst
   const confidenceScore = avgConfidence * 50;
   score += confidenceScore;
   
@@ -70,15 +72,19 @@ function calculateAnswerConfidence(
 
   // 3. Recency Score (0-10 punten)
   const now = Date.now();
-  const avgAge = knowledgeItems.reduce((sum, kb) => {
-    const age = (now - new Date(kb.created_at || kb.updated_at || now).getTime()) / (1000 * 60 * 60 * 24);
-    return sum + age;
-  }, 0) / knowledgeItems.length;
+  const avgAge = knowledgeItems.length > 0
+    ? knowledgeItems.reduce((sum, kb) => {
+        const age = (now - new Date(kb.created_at || kb.updated_at || now).getTime()) / (1000 * 60 * 60 * 24);
+        return sum + age;
+      }, 0) / knowledgeItems.length
+    : Infinity; // ✅ FIX: Fallback bij lege lijst
   
-  let recencyScore = 0;
-  if (avgAge < 7) recencyScore = 10;
-  else if (avgAge < 30) recencyScore = 7;
-  else if (avgAge < 90) recencyScore = 4;
+  let recencyScore = avgAge === Infinity ? 0 : 0; // ✅ FIX: Check op Infinity
+  if (avgAge !== Infinity) {
+    if (avgAge < 7) recencyScore = 10;
+    else if (avgAge < 30) recencyScore = 7;
+    else if (avgAge < 90) recencyScore = 4;
+  }
   
   score += recencyScore;
   if (recencyScore < 7) {
@@ -2450,8 +2456,8 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
             console.log('📤 Sent knowledge metadata to client:', usedKnowledgeIds.length, 'items');
           }
           
-          // ✅ AUTONOMOUS LEARNING: Save chat messages to trigger continuous-learner (non-blocking)
-          const conversationId = crypto.randomUUID();
+          // ✅ FIX 1: Use conversation_id from frontend (unify conversation tracking)
+          const conversationId = conversation_id || crypto.randomUUID();
           (async () => {
             try {
               // Get org_id for the user
@@ -2516,7 +2522,7 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                   event_type: 'ai_response_generated',
                   context: {
                     question: userMessage.content,
-                    knowledge_ids: usedKnowledgeIds,
+                    usedKnowledge: usedKnowledgeIds.map(id => ({ id })), // ✅ FIX 4: Use usedKnowledge format
                     conversation_id: conversationId,
                     confidence: responseConfidence
                   },
