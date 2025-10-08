@@ -109,6 +109,74 @@ serve(async (req) => {
   }
 });
 
+/**
+ * Retry helper with exponential backoff
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 2000,
+  taskName: string = 'operation'
+): Promise<T> {
+  let lastError: Error;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[RETRY] ${taskName} - Attempt ${attempt}/${maxRetries}`);
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      
+      if (attempt === maxRetries) {
+        console.error(`[RETRY] ❌ ${taskName} failed after ${maxRetries} attempts:`, lastError);
+        throw lastError;
+      }
+      
+      // Calculate delay with exponential backoff
+      const delay = baseDelay * Math.pow(2, attempt - 1);
+      console.log(`[RETRY] ⏳ ${taskName} failed, retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError!;
+}
+
+/**
+ * Extract text from PDF using pdfjs-dist as fallback
+ */
+async function extractPdfText(fileBlob: ArrayBuffer, fileName: string): Promise<string> {
+  try {
+    console.log(`[PDF-TEXT] Extracting text from ${fileName}...`);
+    
+    // Import pdfjs-dist dynamically
+    const pdfjsLib = await import("https://esm.sh/pdfjs-dist@4.0.379");
+    
+    // Load PDF document
+    const loadingTask = pdfjsLib.getDocument({ data: fileBlob });
+    const pdfDocument = await loadingTask.promise;
+    console.log(`[PDF-TEXT] PDF loaded: ${pdfDocument.numPages} pages`);
+    
+    // Extract text from all pages
+    let fullText = "";
+    for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
+      const page = await pdfDocument.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(" ");
+      
+      fullText += `\n=== Pagina ${pageNum} ===\n${pageText}\n`;
+    }
+    
+    console.log(`[PDF-TEXT] ✅ Extracted ${fullText.length} characters from ${pdfDocument.numPages} pages`);
+    return fullText.trim();
+  } catch (error) {
+    console.error(`[PDF-TEXT] ❌ Failed to extract text:`, error);
+    throw error;
+  }
+}
+
 // Helper function: Convert ArrayBuffer to base64 in chunks to prevent call stack overflow
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -304,87 +372,92 @@ async function processWithVision(
     ? 'application/pdf' 
     : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-  const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-pro",
-      messages: [
-        {
-          role: "user",
-          content: [
+  const aiResponse = await retryWithBackoff(
+    async () => {
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-pro",
+          messages: [
             {
-              type: "text",
-              text: `Analyseer dit bedrijfsdocument (${fileName}) en extraheer belangrijke kennis in gestructureerd formaat.`
-            },
-            {
-              type: "input_image",
-              input_image: {
-                url: `data:${mimeType};base64,${base64}`
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: `Analyseer dit bedrijfsdocument (${fileName}) en extraheer belangrijke kennis in gestructureerd formaat.`
+                },
+                {
+                  type: "input_image",
+                  input_image: {
+                    url: `data:${mimeType};base64,${base64}`
+                  }
+                }
+              ]
+            }
+          ],
+          tools: [{
+            type: "function",
+            function: {
+              name: "save_knowledge_items",
+              description: "Save extracted knowledge items from the document",
+              parameters: {
+                type: "object",
+                properties: {
+                  items: {
+                    type: "array",
+                    description: "Array of knowledge items extracted from the document",
+                    items: {
+                      type: "object",
+                      properties: {
+                        category: { 
+                          type: "string",
+                          enum: ["bedrijfsprocessen", "klantinformatie", "tarieven", "contractvoorwaarden", "regels", "facturatie"],
+                          description: "De categorie van het kennis item"
+                        },
+                        key: { 
+                          type: "string",
+                          description: "Korte identificerende sleutel voor dit item (snake_case)"
+                        },
+                        value: { 
+                          type: "string",
+                          description: "De eigenlijke kennis waarde in helder Nederlands"
+                        }
+                      },
+                      required: ["category", "key", "value"]
+                    }
+                  }
+                },
+                required: ["items"]
               }
             }
-          ]
+          }],
+          tool_choice: { type: "function", function: { name: "save_knowledge_items" } }
+        }),
+      });
+      
+      // Check if response is valid
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[VISION] HTTP ${response.status}: ${errorText.substring(0, 200)}`);
+        
+        // Check for rate limit
+        if (response.status === 429) {
+          throw new Error(`Rate limit hit (429)`);
         }
-      ],
-      tools: [{
-        type: "function",
-        function: {
-          name: "save_knowledge_items",
-          description: "Save extracted knowledge items from the document",
-          parameters: {
-            type: "object",
-            properties: {
-              items: {
-                type: "array",
-                description: "Array of knowledge items extracted from the document",
-                items: {
-                  type: "object",
-                  properties: {
-                    category: { 
-                      type: "string",
-                      enum: ["bedrijfsprocessen", "klantinformatie", "tarieven", "contractvoorwaarden", "regels", "facturatie"],
-                      description: "De categorie van het kennis item"
-                    },
-                    key: { 
-                      type: "string",
-                      description: "Korte identificerende sleutel voor dit item (snake_case)"
-                    },
-                    value: { 
-                      type: "string",
-                      description: "De eigenlijke kennis waarde in helder Nederlands"
-                    }
-                  },
-                  required: ["category", "key", "value"]
-                }
-              }
-            },
-            required: ["items"]
-          }
-        }
-      }],
-      tool_choice: { type: "function", function: { name: "save_knowledge_items" } }
-    }),
-  });
-
-  if (!aiResponse.ok) {
-    const errorText = await aiResponse.text();
-    console.error(`[VISION] ❌ Vision processing failed for ${fileName} (${aiResponse.status}):`, errorText);
-    
-    // ❌ STRICT FAIL: Mark document as failed without fallback to prevent worthless knowledge items
-    await supabase
-      .from("training_documents")
-      .update({ 
-        status: "failed",
-        processing_method: "vision_failed",
-        last_validation_error: `Vision API error (${aiResponse.status}): ${errorText.substring(0, 500)}`
-      })
-      .eq("file_path", filePath);
-    
-    throw new Error(`Vision processing failed for ${fileName}: ${errorText}`);
-  }
+        
+        throw new Error(`Vision API error (${response.status}): ${errorText}`);
+      }
+      
+      return response;
+    },
+    3, // max 3 retries
+    5000, // start with 5 second delay
+    `Vision API for ${fileName}`
+  );
 
   const aiData = await aiResponse.json();
   
@@ -444,27 +517,48 @@ async function processWithVision(
   // Final validation
   if (!knowledgeItems || knowledgeItems.length === 0) {
     console.error('[VISION] ❌ All parsing layers failed');
-    console.log('[VISION-RAW] First 500 chars:', extractedInfo.substring(0, 500));
+    console.log('[VISION-RAW] First 1000 chars:', extractedInfo.substring(0, 1000));
     
+    // 🔄 FALLBACK: Try PDF text extraction if Vision API returned nothing useful
+    if (fileName.toLowerCase().endsWith('.pdf')) {
+      console.log('[PDF-FALLBACK] Vision API failed, attempting PDF text extraction...');
+      
+      try {
+        const extractedText = await extractPdfText(fileBlob, fileName);
+        
+        if (extractedText.length > 100) {
+          console.log('[PDF-FALLBACK] ✅ Text extracted, processing with AI...');
+          
+          // Process extracted text with processWithText
+          const textItems = await processWithText(
+            supabase,
+            filePath,
+            fileName,
+            extractedText,
+            userId,
+            orgId,
+            0
+          );
+          
+          if (textItems.length > 0) {
+            console.log(`[PDF-FALLBACK] ✅ Successfully extracted ${textItems.length} items via text processing`);
+            return textItems;
+          }
+        }
+        
+        console.log('[PDF-FALLBACK] ⚠️ Text extraction succeeded but yielded no items');
+      } catch (pdfError) {
+        console.error('[PDF-FALLBACK] ❌ PDF text extraction failed:', pdfError);
+      }
+    }
+    
+    // If all fallbacks fail, mark as failed
     await supabase
       .from("training_documents")
       .update({ 
         status: "failed",
-        processing_method: "vision",
-        last_validation_error: `All parsing methods failed. Raw response: ${extractedInfo.substring(0, 200)}...`
-      })
-      .eq("file_path", filePath);
-    return [];
-  }
-
-  if (!knowledgeItems || knowledgeItems.length === 0) {
-    console.log(`[VISION] No content extracted from document`);
-    await supabase
-      .from("training_documents")
-      .update({ 
-        status: "failed",
-        processing_method: "vision",
-        last_validation_error: "No knowledge items extracted from document"
+        processing_method: "vision_all_failed",
+        last_validation_error: `All parsing methods failed including PDF text extraction. Vision response: ${extractedInfo.substring(0, 300)}...`
       })
       .eq("file_path", filePath);
     return [];
