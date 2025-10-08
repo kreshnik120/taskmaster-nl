@@ -300,6 +300,45 @@ Geef je antwoord als gestructureerde kennis items in helder Nederlands.`
     return [];
   }
 
+  // Quality filter check on extracted info
+  const textToCheck = extractedInfo.toLowerCase();
+  const dutchPatterns = [
+    'kan niet openen',
+    'kan het bestand niet',
+    'kan het document niet',
+    'geen inhoud',
+    'foutmelding',
+    'mislukt',
+    'bestand niet lezen',
+    'niet mogelijk om',
+    'aangezien het een',
+    'ik kan geen'
+  ];
+  const englishPatterns = [
+    'cannot open',
+    'cannot read',
+    'no content',
+    'as a language model',
+    'i cannot',
+    'unable to',
+    'failed to'
+  ];
+  const allPatterns = [...dutchPatterns, ...englishPatterns];
+  const isApologetic = allPatterns.some(pattern => textToCheck.includes(pattern));
+  
+  if (isApologetic) {
+    console.log(`[VISION-QUALITY] ❌ Apologetic content detected, marking as failed`);
+    await supabase
+      .from("training_documents")
+      .update({
+        status: "failed",
+        processing_method: "vision",
+        last_validation_error: "Vision extractie bevatte apologetic/waardeloze content"
+      })
+      .eq("file_path", filePath);
+    return [];
+  }
+
   const knowledgeItems = [
     {
       user_id: userId,
@@ -952,9 +991,64 @@ BELANGRIJK:
     }
   }
 
-  // Insert only non-duplicate items
-  if (itemsToInsert.length > 0) {
-    await supabase.from("ai_knowledge_base").insert(itemsToInsert);
+  // Quality filter: Block apologetic/worthless knowledge items
+  const qualityFilteredItems = itemsToInsert.filter((item: any) => {
+    const textToCheck = (
+      item.key + ' ' + 
+      JSON.stringify(item.value)
+    ).toLowerCase();
+    
+    // Dutch apologetic patterns
+    const dutchPatterns = [
+      'kan niet openen',
+      'kan het bestand niet',
+      'kan het document niet',
+      'geen inhoud',
+      'foutmelding',
+      'mislukt',
+      'bestand niet lezen',
+      'niet mogelijk om',
+      'aangezien het een',
+      'ik kan geen'
+    ];
+    
+    // English apologetic patterns
+    const englishPatterns = [
+      'cannot open',
+      'cannot read',
+      'no content',
+      'as a language model',
+      'i cannot',
+      'unable to',
+      'failed to'
+    ];
+    
+    const allPatterns = [...dutchPatterns, ...englishPatterns];
+    const isApologetic = allPatterns.some(pattern => textToCheck.includes(pattern));
+    
+    if (isApologetic) {
+      console.log(`[QUALITY-FILTER] ❌ Blocked apologetic item: ${item.key}`);
+      return false;
+    }
+    
+    return true;
+  });
+  
+  // Insert only quality-filtered, non-duplicate items
+  if (qualityFilteredItems.length > 0) {
+    await supabase.from("ai_knowledge_base").insert(qualityFilteredItems);
+    console.log(`[QUALITY-FILTER] ✅ Inserted ${qualityFilteredItems.length} quality items (${itemsToInsert.length - qualityFilteredItems.length} filtered out)`);
+  } else if (itemsToInsert.length > 0) {
+    console.log(`[QUALITY-FILTER] ⚠️ All ${itemsToInsert.length} items were filtered out as low quality`);
+    
+    // Update document status with validation error
+    await supabase
+      .from("training_documents")
+      .update({
+        status: "failed",
+        last_validation_error: "Alle geëxtraheerde items werden gefilterd als waardeloze/apologetic content"
+      })
+      .eq("file_path", filePath);
   }
 
   // Update status for small files only

@@ -1795,6 +1795,7 @@ export type Database = {
           file_path: string
           file_size: number
           id: string
+          last_validation_error: string | null
           mime_type: string
           org_id: string
           original_folder: string | null
@@ -1812,6 +1813,7 @@ export type Database = {
           file_path: string
           file_size: number
           id?: string
+          last_validation_error?: string | null
           mime_type: string
           org_id: string
           original_folder?: string | null
@@ -1829,6 +1831,7 @@ export type Database = {
           file_path?: string
           file_size?: number
           id?: string
+          last_validation_error?: string | null
           mime_type?: string
           org_id?: string
           original_folder?: string | null

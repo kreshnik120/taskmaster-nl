@@ -1,17 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Search, Trash2, FileText, MessageSquare, Brain, AlertTriangle, XCircle } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { Search, Trash2, FileText, MessageSquare, Brain, AlertTriangle, XCircle, Filter } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { VersionHistory } from "./VersionHistory";
 
 export const KnowledgeOverview = () => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<string | null>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: knowledge, refetch } = useQuery({
     queryKey: ["ai-knowledge"],
@@ -25,6 +27,29 @@ export const KnowledgeOverview = () => {
       return data;
     },
   });
+
+  // Realtime subscription for knowledge base updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('knowledge-base-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'ai_knowledge_base'
+        },
+        () => {
+          console.log('[KNOWLEDGE] Realtime update detected, refreshing...');
+          queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   const handleDelete = async (id: string) => {
     try {
@@ -54,10 +79,18 @@ export const KnowledgeOverview = () => {
   };
 
   const filteredKnowledge = knowledge?.filter(
-    (item) =>
-      item.key.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      JSON.stringify(item.value).toLowerCase().includes(searchQuery.toLowerCase())
+    (item) => {
+      // Text search filter
+      const matchesSearch = 
+        item.key.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        JSON.stringify(item.value).toLowerCase().includes(searchQuery.toLowerCase());
+      
+      // Source filter
+      const matchesSource = !sourceFilter || item.source?.includes(sourceFilter);
+      
+      return matchesSearch && matchesSource;
+    }
   );
 
   return (
@@ -79,6 +112,32 @@ export const KnowledgeOverview = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
             />
+          </div>
+
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant={sourceFilter === null ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSourceFilter(null)}
+            >
+              Alle bronnen
+            </Button>
+            <Button
+              variant={sourceFilter === "document" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSourceFilter("document")}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Documenten
+            </Button>
+            <Button
+              variant={sourceFilter === "chat" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSourceFilter("chat")}
+            >
+              <MessageSquare className="h-4 w-4 mr-2" />
+              Chat
+            </Button>
           </div>
         </div>
       </Card>

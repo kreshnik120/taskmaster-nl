@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Upload, FileText, Loader2, CheckCircle, XCircle, AlertCircle, FolderOpen } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -17,6 +17,7 @@ export const DocumentUpload = () => {
   const [isFirefox, setIsFirefox] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     // Detect Firefox browser
@@ -148,7 +149,10 @@ export const DocumentUpload = () => {
           ? `${successCount} document(en) uit map "${folderName}" worden verwerkt`
           : `${successCount} document(en) worden verwerkt`,
       });
+      
+      // Refresh both documents and knowledge base
       refetch();
+      queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
     } catch (error: any) {
       console.error("Upload error:", error);
       toast({
