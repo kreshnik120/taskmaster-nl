@@ -16,74 +16,113 @@ export type Database = {
     Tables: {
       ai_knowledge_base: {
         Row: {
+          acl: Json | null
+          assignment_id: string | null
           auto_reviewed_at: string | null
           category: string
+          chunk_id: string | null
+          chunk_index: number | null
           client_id: string | null
           confidence_score: number | null
+          confidentiality:
+            | Database["public"]["Enums"]["confidentiality_level"]
+            | null
           created_at: string | null
           deleted_at: string | null
           deleted_by: string | null
           deletion_reason: Json | null
           id: string
+          jurisdiction: string | null
           key: string
           last_reviewed_at: string | null
           last_used_at: string | null
           last_validation_error: string | null
           needs_review: boolean | null
           org_id: string
+          original_text: string | null
+          redacted_text: string | null
           review_count: number | null
+          role_tags: string[] | null
           source: string | null
           updated_at: string | null
           usage_count: number | null
           user_id: string
+          valid_from: string | null
+          valid_to: string | null
           validation_failures: number | null
           value: Json
         }
         Insert: {
+          acl?: Json | null
+          assignment_id?: string | null
           auto_reviewed_at?: string | null
           category: string
+          chunk_id?: string | null
+          chunk_index?: number | null
           client_id?: string | null
           confidence_score?: number | null
+          confidentiality?:
+            | Database["public"]["Enums"]["confidentiality_level"]
+            | null
           created_at?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
           deletion_reason?: Json | null
           id?: string
+          jurisdiction?: string | null
           key: string
           last_reviewed_at?: string | null
           last_used_at?: string | null
           last_validation_error?: string | null
           needs_review?: boolean | null
           org_id: string
+          original_text?: string | null
+          redacted_text?: string | null
           review_count?: number | null
+          role_tags?: string[] | null
           source?: string | null
           updated_at?: string | null
           usage_count?: number | null
           user_id: string
+          valid_from?: string | null
+          valid_to?: string | null
           validation_failures?: number | null
           value: Json
         }
         Update: {
+          acl?: Json | null
+          assignment_id?: string | null
           auto_reviewed_at?: string | null
           category?: string
+          chunk_id?: string | null
+          chunk_index?: number | null
           client_id?: string | null
           confidence_score?: number | null
+          confidentiality?:
+            | Database["public"]["Enums"]["confidentiality_level"]
+            | null
           created_at?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
           deletion_reason?: Json | null
           id?: string
+          jurisdiction?: string | null
           key?: string
           last_reviewed_at?: string | null
           last_used_at?: string | null
           last_validation_error?: string | null
           needs_review?: boolean | null
           org_id?: string
+          original_text?: string | null
+          redacted_text?: string | null
           review_count?: number | null
+          role_tags?: string[] | null
           source?: string | null
           updated_at?: string | null
           usage_count?: number | null
           user_id?: string
+          valid_from?: string | null
+          valid_to?: string | null
           validation_failures?: number | null
           value?: Json
         }
@@ -957,6 +996,33 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+        }
+        Relationships: []
+      }
+      pii_patterns: {
+        Row: {
+          created_at: string | null
+          enabled: boolean | null
+          id: string
+          pattern_type: string
+          regex_pattern: string
+          replacement_template: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string
+          pattern_type: string
+          regex_pattern: string
+          replacement_template?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string
+          pattern_type?: string
+          regex_pattern?: string
+          replacement_template?: string | null
         }
         Relationships: []
       }
@@ -1984,6 +2050,10 @@ export type Database = {
         Args: { "": unknown[] }
         Returns: number
       }
+      has_acl_access: {
+        Args: { _acl: Json; _user_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -2007,6 +2077,10 @@ export type Database = {
         Args: { "": unknown }
         Returns: unknown
       }
+      is_knowledge_valid: {
+        Args: { _valid_from: string; _valid_to: string }
+        Returns: boolean
+      }
       ivfflat_bit_support: {
         Args: { "": unknown }
         Returns: unknown
@@ -2028,12 +2102,22 @@ export type Database = {
         Returns: string
       }
       match_knowledge: {
-        Args: {
-          filter_org_id?: string
-          match_count?: number
-          match_threshold?: number
-          query_embedding: string
-        }
+        Args:
+          | {
+              filter_customer_id?: string
+              filter_jurisdiction?: string
+              filter_org_id?: string
+              filter_role_tags?: string[]
+              match_count?: number
+              match_threshold?: number
+              query_embedding: string
+            }
+          | {
+              filter_org_id?: string
+              match_count?: number
+              match_threshold?: number
+              query_embedding: string
+            }
         Returns: {
           category: string
           confidence_score: number
@@ -2042,6 +2126,10 @@ export type Database = {
           similarity: number
           value: Json
         }[]
+      }
+      redact_pii: {
+        Args: { input_text: string }
+        Returns: string
       }
       sparsevec_out: {
         Args: { "": unknown }
@@ -2086,6 +2174,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "manager" | "user"
+      confidentiality_level: "intern" | "vertrouwelijk"
       dependency_type: "BLOCKS" | "RELATES" | "DUPLICATE"
       priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
       reminder_channel: "IN_APP" | "EMAIL"
@@ -2220,6 +2309,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "manager", "user"],
+      confidentiality_level: ["intern", "vertrouwelijk"],
       dependency_type: ["BLOCKS", "RELATES", "DUPLICATE"],
       priority: ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
       reminder_channel: ["IN_APP", "EMAIL"],
