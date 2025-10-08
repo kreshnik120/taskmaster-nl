@@ -8,7 +8,54 @@ const corsHeaders = {
 };
 
 const LARGE_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-const CHUNK_SIZE = 50000; // 50k characters per chunk
+const TARGET_TOKENS = 1000;        // ~4000 chars per chunk
+const OVERLAP_TOKENS = 150;        // 15% overlap between chunks
+const CHARS_PER_TOKEN = 4;         // Heuristic: 1 token ≈ 4 chars
+
+/**
+ * ✨ WEEK 1-2: Smart Chunking with Stable IDs
+ * Splits text into ~1000 token chunks with 15% overlap
+ */
+function smartChunk(text: string, fileName: string): Array<{
+  text: string;
+  chunk_id: string;
+  chunk_index: number;
+  overlap_prev: string;
+  overlap_next: string;
+}> {
+  const targetChars = TARGET_TOKENS * CHARS_PER_TOKEN;  // ~4000 chars
+  const overlapChars = OVERLAP_TOKENS * CHARS_PER_TOKEN; // ~600 chars
+  
+  // Generate stable version hash from filename + length
+  const versionHash = btoa(fileName + text.length).substring(0, 8);
+  
+  const chunks = [];
+  let chunkIndex = 0;
+  let pos = 0;
+  
+  while (pos < text.length) {
+    const start = Math.max(0, pos - overlapChars);
+    const end = Math.min(text.length, pos + targetChars);
+    const chunkText = text.slice(start, end);
+    
+    const overlapPrev = pos > 0 ? text.slice(Math.max(0, start - overlapChars), start) : '';
+    const overlapNext = end < text.length ? text.slice(end, Math.min(text.length, end + overlapChars)) : '';
+    
+    chunks.push({
+      text: chunkText,
+      chunk_id: `doc:${fileName}:v${versionHash}:chunk${chunkIndex}`,
+      chunk_index: chunkIndex,
+      overlap_prev: overlapPrev,
+      overlap_next: overlapNext
+    });
+    
+    pos += targetChars;
+    chunkIndex++;
+  }
+  
+  console.log(`[SMART-CHUNK] Split ${text.length} chars into ${chunks.length} chunks (~${TARGET_TOKENS} tokens each)`);
+  return chunks;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -740,6 +787,14 @@ async function processWithVision(
     org_id: orgId,
     source: item.source || `document:${fileName}`,
     confidence_score: item.confidence_score || 0.85,
+    
+    // ✨ WEEK 1-2: Validity & Access Control
+    valid_from: new Date().toISOString().split('T')[0],
+    valid_to: null,
+    jurisdiction: 'NL',
+    confidentiality: 'intern',
+    role_tags: item.role_tags || [],
+    acl: item.acl || []
   }));
 
   // 🔍 FIX 2: Fail if no knowledge items were extracted
@@ -858,28 +913,28 @@ async function processLargeFileInBackground(
   orgId: string
 ) {
   try {
-    const chunks = Math.ceil(text.length / CHUNK_SIZE);
-    console.log(`[PROCESS-DOC] Processing ${chunks} text chunks for ${fileName}`);
+    // ✨ WEEK 1-2: Use smart chunking (800-1200 tokens, 15% overlap)
+    const chunks = smartChunk(text, fileName);
+    console.log(`[PROCESS-DOC] Processing ${chunks.length} smart chunks for ${fileName}`);
 
     let allKnowledgeItems: any[] = [];
 
-    for (let i = 0; i < chunks; i++) {
-      const start = i * CHUNK_SIZE;
-      const end = Math.min((i + 1) * CHUNK_SIZE, text.length);
-      const chunk = text.slice(start, end);
-      
-      console.log(`[PROCESS-DOC] Processing chunk ${i + 1}/${chunks} (${chunk.length} chars)`);
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      console.log(`[PROCESS-DOC] Processing chunk ${i + 1}/${chunks.length} (${chunk.text.length} chars, ID: ${chunk.chunk_id})`);
 
-      const progress = Math.round(((i + 1) / chunks) * 100);
+      const progress = Math.round(((i + 1) / chunks.length) * 100);
       
       const knowledgeItems = await processWithText(
         supabase,
         filePath,
         fileName,
-        chunk,
+        chunk.text,
         userId,
         orgId,
-        progress
+        progress,
+        chunk.chunk_id,      // ✨ NEW: chunk ID
+        chunk.chunk_index    // ✨ NEW: chunk index
       );
       
       allKnowledgeItems = allKnowledgeItems.concat(knowledgeItems);
@@ -1009,6 +1064,14 @@ Return JSON array (leeg [] als geen matches):
         source: `document:${fileName}`,
         confidence_score: entity.confidence,
         needs_review: entity.confidence < 0.85,
+        
+        // ✨ WEEK 1-2: Validity & Access Control
+        valid_from: new Date().toISOString().split('T')[0],
+        valid_to: null,
+        jurisdiction: 'NL',
+        confidentiality: 'intern',
+        role_tags: [],
+        acl: []
       });
       
       console.log(`[ENTITY-EXTRACT] ✅ Created entity: ${entity.customer_name} (confidence: ${entity.confidence})`);
@@ -1180,12 +1243,28 @@ async function processWithText(
   text: string,
   userId: string,
   orgId: string,
-  currentProgress: number
+  currentProgress: number,
+  chunkId?: string,      // ✨ WEEK 1-2: chunk ID
+  chunkIndex?: number    // ✨ WEEK 1-2: chunk index
 ): Promise<any[]> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
     throw new Error("LOVABLE_API_KEY niet geconfigureerd");
   }
+
+  // ✨ WEEK 1-2: PII Redaction BEFORE AI processing
+  console.log(`[PII-REDACT] Redacting PII from ${text.length} chars`);
+  const { data: redactedText, error: redactError } = await supabase.rpc('redact_pii', { 
+    input_text: text 
+  });
+
+  if (redactError) {
+    console.error(`[PII-REDACT] Error:`, redactError);
+    // Continue with original text if redaction fails
+  }
+
+  const textForAI = redactedText || text;
+  const originalText = text;
 
   const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -1199,6 +1278,7 @@ async function processWithText(
         {
           role: "system",
           content: `Je bent een kennisextractie expert voor bedrijfsdocumenten. 
+BELANGRIJK: De tekst die je ontvangt is GEREDACTEERD voor privacy (PII verwijderd).
 
 VOOR EXCEL/CSV BESTANDEN (met pipe separators |):
 1. **Detecteer tabelstructuur**: Eerste rij = headers, volgende rijen = data
@@ -1236,10 +1316,10 @@ ALLEEN facts die EXPLICIET in de data staan!`,
           role: "user", 
           content: `GEËXTRAHEERDE TEKST uit document: ${fileName}
 
-${text.includes('|') ? 'DIT IS TABELLAIRE DATA (Excel/CSV met pipe separators). Verwerk ELKE datarij als apart knowledge item.' : 'Dit is de volledige tekstuele inhoud van het document. Extraheer alle belangrijke feiten, procedures, regels en processen.'}
+${textForAI.includes('|') ? 'DIT IS TABELLAIRE DATA (Excel/CSV met pipe separators). Verwerk ELKE datarij als apart knowledge item.' : 'Dit is de volledige tekstuele inhoud van het document. Extraheer alle belangrijke feiten, procedures, regels en processen.'}
 
-=== BEGIN TEKST ===
-${text}
+=== BEGIN TEKST (PII GEREDACTEERD) ===
+${textForAI}
 === EINDE TEKST ===
 
 BELANGRIJK: 
@@ -1285,6 +1365,20 @@ BELANGRIJK:
         confidence_score: item.confidence || 0.9,
         needs_review: false,
         last_validation_error: null,
+        
+        // ✨ WEEK 1-2: PII & Chunking metadata
+        chunk_id: chunkId || null,
+        chunk_index: chunkIndex !== undefined ? chunkIndex : null,
+        original_text: originalText,    // Store original with PII
+        redacted_text: redactedText,    // Store redacted version (for embeddings)
+        
+        // ✨ WEEK 1-2: Validity & Access Control
+        valid_from: new Date().toISOString().split('T')[0],  // today
+        valid_to: null,                                       // no expiry
+        jurisdiction: 'NL',
+        confidentiality: 'intern',
+        role_tags: [],  // Empty = accessible to all
+        acl: []         // Empty = accessible to all
       }));
       
       console.log(`[EXCEL-PARSE] Extracted ${knowledgeItems.length} structured items from AI response`);
@@ -1300,6 +1394,20 @@ BELANGRIJK:
         confidence_score: 0.9,
         needs_review: false,
         last_validation_error: null,
+        
+        // ✨ WEEK 1-2: PII & Chunking metadata
+        chunk_id: chunkId || null,
+        chunk_index: chunkIndex !== undefined ? chunkIndex : null,
+        original_text: originalText,
+        redacted_text: redactedText,
+        
+        // ✨ WEEK 1-2: Validity & Access Control
+        valid_from: new Date().toISOString().split('T')[0],
+        valid_to: null,
+        jurisdiction: 'NL',
+        confidentiality: 'intern',
+        role_tags: [],
+        acl: []
       }];
       
       console.log(`[EXCEL-PARSE] Using fallback format (no JSON structure found)`);
@@ -1318,6 +1426,20 @@ BELANGRIJK:
       confidence_score: 0.9,
       needs_review: false,
       last_validation_error: null,
+      
+      // ✨ WEEK 1-2: PII & Chunking metadata
+      chunk_id: chunkId || null,
+      chunk_index: chunkIndex !== undefined ? chunkIndex : null,
+      original_text: originalText,
+      redacted_text: redactedText,
+      
+      // ✨ WEEK 1-2: Validity & Access Control
+      valid_from: new Date().toISOString().split('T')[0],
+      valid_to: null,
+      jurisdiction: 'NL',
+      confidentiality: 'intern',
+      role_tags: [],
+      acl: []
     }];
   }
 
