@@ -974,7 +974,7 @@ serve(async (req) => {
           formatted += `\n${categoryLabels[category] || category.toUpperCase()}:\n`;
           knowledgeByCategory[category].forEach((kb: any) => {
             const value = typeof kb.value === 'string' ? kb.value : JSON.stringify(kb.value, null, 2);
-            formatted += `  • ${kb.key}: ${value}`;
+            formatted += `  • [ID: ${kb.id}] ${kb.key}: ${value}`;
             if (kb.confidence_score) formatted += ` [Zekerheid: ${(kb.confidence_score * 100).toFixed(0)}%]`;
             if (kb.source) formatted += ` [Bron: ${kb.source}]`;
             formatted += `\n`;
