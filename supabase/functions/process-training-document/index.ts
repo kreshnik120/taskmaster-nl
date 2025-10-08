@@ -208,6 +208,79 @@ async function processExcelInBackground(
   }
 }
 
+/**
+ * Parse markdown analysis to structured knowledge items
+ * Handles formats like:
+ * - **Category:** content
+ * - * Key: Value
+ * - ### Section headers
+ */
+function parseMarkdownToKnowledge(markdownText: string, fileName: string): any[] {
+  const items: any[] = [];
+  const lines = markdownText.split('\n');
+  
+  let currentCategory = 'bedrijfsprocessen'; // default
+  const categoryKeywords: Record<string, string> = {
+    'klant': 'klantinformatie',
+    'tarief': 'tarieven',
+    'prijs': 'tarieven',
+    'contract': 'contractvoorwaarden',
+    'voorwaarde': 'contractvoorwaarden',
+    'regel': 'regels',
+    'procedure': 'bedrijfsprocessen',
+    'proces': 'bedrijfsprocessen',
+    'factuur': 'facturatie',
+    'betaling': 'facturatie'
+  };
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    
+    // Skip empty lines and headers
+    if (!line || line.startsWith('#')) continue;
+    
+    // Detect category from bold text: **Categorie:**
+    const categoryMatch = line.match(/\*\*([^*]+)\*\*:?/);
+    if (categoryMatch) {
+      const potentialCategory = categoryMatch[1].toLowerCase();
+      for (const [keyword, category] of Object.entries(categoryKeywords)) {
+        if (potentialCategory.includes(keyword)) {
+          currentCategory = category;
+          break;
+        }
+      }
+      continue;
+    }
+    
+    // Extract bullet points: * Key: Value or - Key: Value
+    if (line.startsWith('*') || line.startsWith('-')) {
+      const cleaned = line.substring(1).trim();
+      
+      // Try to extract key-value pair
+      const kvMatch = cleaned.match(/^([^:]+):\s*(.+)$/);
+      if (kvMatch) {
+        const [_, key, value] = kvMatch;
+        items.push({
+          category: currentCategory,
+          key: key.trim().toLowerCase().replace(/\s+/g, '_'),
+          value: value.trim()
+        });
+      } else if (cleaned.length > 10) {
+        // If no key-value, use first words as key
+        const words = cleaned.split(' ');
+        const key = words.slice(0, 3).join('_').toLowerCase();
+        items.push({
+          category: currentCategory,
+          key: key,
+          value: cleaned
+        });
+      }
+    }
+  }
+  
+  return items;
+}
+
 async function processWithVision(
   supabase: any,
   filePath: string,
@@ -245,25 +318,7 @@ async function processWithVision(
           content: [
             {
               type: "text",
-              text: `Analyseer dit bedrijfsdocument (${fileName}) en extraheer belangrijke kennis.
-
-BELANGRIJK: Je antwoord MOET een JSON array zijn met dit exacte format:
-[
-  {
-    "category": "bedrijfsprocessen",
-    "key": "aanvraagproces_stappen",
-    "value": "1. Kwintes dient aanvraag in, 2. ABC Zorg selecteert kandidaat, 3. ..."
-  },
-  {
-    "category": "contractvoorwaarden",
-    "key": "opzegtermijn",
-    "value": "14 dagen"
-  }
-]
-
-Categorieën: bedrijfsprocessen, klantinformatie, tarieven, contractvoorwaarden, regels, facturatie.
-
-GEEN markdown, GEEN uitleg, ALLEEN de JSON array. Start direct met [.`
+              text: `Analyseer dit bedrijfsdocument (${fileName}) en extraheer belangrijke kennis in gestructureerd formaat.`
             },
             {
               type: "input_image",
@@ -273,7 +328,44 @@ GEEN markdown, GEEN uitleg, ALLEEN de JSON array. Start direct met [.`
             }
           ]
         }
-      ]
+      ],
+      tools: [{
+        type: "function",
+        function: {
+          name: "save_knowledge_items",
+          description: "Save extracted knowledge items from the document",
+          parameters: {
+            type: "object",
+            properties: {
+              items: {
+                type: "array",
+                description: "Array of knowledge items extracted from the document",
+                items: {
+                  type: "object",
+                  properties: {
+                    category: { 
+                      type: "string",
+                      enum: ["bedrijfsprocessen", "klantinformatie", "tarieven", "contractvoorwaarden", "regels", "facturatie"],
+                      description: "De categorie van het kennis item"
+                    },
+                    key: { 
+                      type: "string",
+                      description: "Korte identificerende sleutel voor dit item (snake_case)"
+                    },
+                    value: { 
+                      type: "string",
+                      description: "De eigenlijke kennis waarde in helder Nederlands"
+                    }
+                  },
+                  required: ["category", "key", "value"]
+                }
+              }
+            },
+            required: ["items"]
+          }
+        }
+      }],
+      tool_choice: { type: "function", function: { name: "save_knowledge_items" } }
     }),
   });
 
@@ -295,46 +387,74 @@ GEEN markdown, GEEN uitleg, ALLEEN de JSON array. Start direct met [.`
   }
 
   const aiData = await aiResponse.json();
-  let extractedInfo = aiData.choices?.[0]?.message?.content || "";
-
-  // 🔧 ROBUST JSON PARSING: Try to extract JSON from markdown code blocks
+  
+  // 🔧 TRIPLE-LAYER PARSING: Tool calling → Direct JSON → Markdown fallback
   let knowledgeItems: any[] = [];
-  try {
-    knowledgeItems = JSON.parse(extractedInfo);
-  } catch (parseError) {
-    console.error('[VISION-PARSE-ERROR] Failed to parse AI response:', parseError);
-    console.log('[VISION-RAW] First 1000 chars:', extractedInfo.substring(0, 1000));
-    
-    // Try to extract JSON from markdown code blocks
-    const jsonMatch = extractedInfo.match(/```json\s*(\[.*?\])\s*```/s);
-    if (jsonMatch) {
-      try {
-        knowledgeItems = JSON.parse(jsonMatch[1]);
-        console.log('[VISION-RECOVER] Successfully extracted JSON from markdown');
-      } catch {
-        console.error('[VISION] Could not recover JSON from markdown');
-        await supabase
-          .from("training_documents")
-          .update({ 
-            status: "failed",
-            processing_method: "vision",
-            last_validation_error: `Could not parse AI response. Raw: ${extractedInfo.substring(0, 200)}...`
-          })
-          .eq("file_path", filePath);
-        return [];
-      }
-    } else {
-      console.error('[VISION] No JSON found in response');
-      await supabase
-        .from("training_documents")
-        .update({ 
-          status: "failed",
-          processing_method: "vision",
-          last_validation_error: `AI response was not valid JSON. Raw: ${extractedInfo.substring(0, 200)}...`
-        })
-        .eq("file_path", filePath);
-      return [];
+  let extractedInfo = aiData.choices?.[0]?.message?.content || "";
+  
+  // Layer 1: Check for tool calling response
+  const toolCalls = aiData.choices?.[0]?.message?.tool_calls;
+  if (toolCalls && toolCalls.length > 0) {
+    try {
+      const functionArgs = JSON.parse(toolCalls[0].function.arguments);
+      knowledgeItems = functionArgs.items || [];
+      console.log(`[VISION-TOOL] ✅ Extracted ${knowledgeItems.length} items via tool calling`);
+    } catch (toolError) {
+      console.error('[VISION-TOOL] Failed to parse tool call arguments:', toolError);
     }
+  }
+  
+  // Layer 2: Try direct JSON parsing from content
+  if (knowledgeItems.length === 0) {
+    try {
+      knowledgeItems = JSON.parse(extractedInfo);
+      console.log(`[VISION-JSON] ✅ Extracted ${knowledgeItems.length} items via direct JSON`);
+    } catch (parseError) {
+      console.log('[VISION-JSON] Direct JSON parsing failed, trying markdown extraction');
+      
+      // Try to extract JSON from markdown code blocks
+      const jsonMatch = extractedInfo.match(/```json\s*(\[.*?\])\s*```/s);
+      if (jsonMatch) {
+        try {
+          knowledgeItems = JSON.parse(jsonMatch[1]);
+          console.log(`[VISION-MARKDOWN-JSON] ✅ Extracted ${knowledgeItems.length} items from markdown JSON block`);
+        } catch {
+          console.log('[VISION-MARKDOWN-JSON] Failed to parse JSON from markdown');
+        }
+      }
+      
+      // Layer 3: Intelligent markdown-to-JSON conversion
+      if (knowledgeItems.length === 0) {
+        console.log('[VISION-FALLBACK] Attempting intelligent markdown-to-JSON conversion');
+        try {
+          const markdownItems = parseMarkdownToKnowledge(extractedInfo, fileName);
+          if (markdownItems.length > 0) {
+            knowledgeItems = markdownItems;
+            console.log(`[VISION-MARKDOWN] ✅ Converted ${markdownItems.length} items from markdown format`);
+          } else {
+            console.log('[VISION-MARKDOWN] No items extracted from markdown');
+          }
+        } catch (markdownError) {
+          console.error('[VISION-MARKDOWN] Markdown parsing failed:', markdownError);
+        }
+      }
+    }
+  }
+  
+  // Final validation
+  if (!knowledgeItems || knowledgeItems.length === 0) {
+    console.error('[VISION] ❌ All parsing layers failed');
+    console.log('[VISION-RAW] First 500 chars:', extractedInfo.substring(0, 500));
+    
+    await supabase
+      .from("training_documents")
+      .update({ 
+        status: "failed",
+        processing_method: "vision",
+        last_validation_error: `All parsing methods failed. Raw response: ${extractedInfo.substring(0, 200)}...`
+      })
+      .eq("file_path", filePath);
+    return [];
   }
 
   if (!knowledgeItems || knowledgeItems.length === 0) {
