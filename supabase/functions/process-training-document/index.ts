@@ -245,16 +245,25 @@ async function processWithVision(
           content: [
             {
               type: "text",
-              text: `Analyseer dit bedrijfsdocument (${fileName}) en extraheer belangrijke kennis zoals:
-- Bedrijfsprocessen en workflows
-- Standaard procedures en protocollen
-- Klantinformatie (namen, adressen, contactgegevens)
-- Tarieven en prijsafspraken
-- Contractvoorwaarden
-- Regels en richtlijnen
-- Facturatie details
+              text: `Analyseer dit bedrijfsdocument (${fileName}) en extraheer belangrijke kennis.
 
-Geef je antwoord als gestructureerde kennis items in helder Nederlands.`
+BELANGRIJK: Je antwoord MOET een JSON array zijn met dit exacte format:
+[
+  {
+    "category": "bedrijfsprocessen",
+    "key": "aanvraagproces_stappen",
+    "value": "1. Kwintes dient aanvraag in, 2. ABC Zorg selecteert kandidaat, 3. ..."
+  },
+  {
+    "category": "contractvoorwaarden",
+    "key": "opzegtermijn",
+    "value": "14 dagen"
+  }
+]
+
+Categorieën: bedrijfsprocessen, klantinformatie, tarieven, contractvoorwaarden, regels, facturatie.
+
+GEEN markdown, GEEN uitleg, ALLEEN de JSON array. Start direct met [.`
             },
             {
               type: "input_image",
