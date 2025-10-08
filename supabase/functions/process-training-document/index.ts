@@ -145,41 +145,6 @@ async function retryWithBackoff<T>(
 /**
  * Extract text from PDF using pdfjs-dist as fallback
  */
-async function extractPdfText(fileBlob: ArrayBuffer, fileName: string): Promise<string> {
-  try {
-    console.log(`[PDF-TEXT] Extracting text from ${fileName}...`);
-    
-    // Import pdfjs-dist dynamically
-    const pdfjsLib = await import("https://esm.sh/pdfjs-dist@4.0.379");
-    
-    // Configure worker source
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 
-      'https://esm.sh/pdfjs-dist@4.0.379/build/pdf.worker.min.js';
-    
-    // Load PDF document
-    const loadingTask = pdfjsLib.getDocument({ data: fileBlob });
-    const pdfDocument = await loadingTask.promise;
-    console.log(`[PDF-TEXT] PDF loaded: ${pdfDocument.numPages} pages`);
-    
-    // Extract text from all pages
-    let fullText = "";
-    for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
-      const page = await pdfDocument.getPage(pageNum);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(" ");
-      
-      fullText += `\n=== Pagina ${pageNum} ===\n${pageText}\n`;
-    }
-    
-    console.log(`[PDF-TEXT] ✅ Extracted ${fullText.length} characters from ${pdfDocument.numPages} pages`);
-    return fullText.trim();
-  } catch (error) {
-    console.error(`[PDF-TEXT] ❌ Failed to extract text:`, error);
-    throw error;
-  }
-}
 
 // Helper function: Convert ArrayBuffer to base64 in chunks to prevent call stack overflow
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -675,88 +640,15 @@ async function processWithVision(
     console.error('[VISION] ❌ All parsing layers failed');
     console.log('[VISION-RAW] First 1000 chars:', extractedInfo.substring(0, 1000));
     
-    // 🔄 FIX 3: FALLBACK with improved error handling
-    if (fileName.toLowerCase().endsWith('.pdf')) {
-      console.log('[PDF-FALLBACK] Vision API failed, attempting PDF text extraction...');
-      
-      try {
-        // Add 30-second timeout to PDF extraction
-        const extractedText = await Promise.race([
-          extractPdfText(fileBlob, fileName),
-          new Promise<string>((_, reject) => 
-            setTimeout(() => reject(new Error('PDF extraction timeout after 30s')), 30000)
-          )
-        ]);
-        
-        // 🔍 FIX 3: Check if extracted text is insufficient
-        if (!extractedText || extractedText.length < 100) {
-          console.error('[PDF-FALLBACK] ❌ Extracted text too short or empty');
-          await supabase
-            .from("training_documents")
-            .update({ 
-              status: "failed",
-              error_message: "PDF text extraction yielded insufficient text (< 100 chars). Document might be image-based or corrupted.",
-              processing_progress: 100,
-              processing_method: "pdf_extraction_insufficient"
-            })
-            .eq("file_path", filePath);
-          return [];
-        }
-        
-        console.log('[PDF-FALLBACK] ✅ Text extracted, processing with AI...');
-        
-        // Process extracted text with processWithText
-        const textItems = await processWithText(
-          supabase,
-          filePath,
-          fileName,
-          extractedText,
-          userId,
-          orgId,
-          0
-        );
-        
-        // 🔍 FIX 3: Check if text processing yielded zero items
-        if (!textItems || textItems.length === 0) {
-          console.error('[PDF-FALLBACK] ❌ Text processing yielded zero items');
-          await supabase
-            .from("training_documents")
-            .update({ 
-              status: "failed",
-              error_message: "PDF text extraction succeeded, but AI could not extract any knowledge items. Document content might not contain structured information.",
-              processing_progress: 100,
-              processing_method: "pdf_fallback_zero_items"
-            })
-            .eq("file_path", filePath);
-          return [];
-        }
-        
-        console.log(`[PDF-FALLBACK] ✅ Successfully extracted ${textItems.length} items via text processing`);
-        return textItems;
-        
-      } catch (pdfError) {
-        console.error('[PDF-FALLBACK] ❌ PDF text extraction failed:', pdfError);
-        const errorMessage = pdfError instanceof Error ? pdfError.message : String(pdfError);
-        await supabase
-          .from("training_documents")
-          .update({ 
-            status: "failed",
-            error_message: `PDF text extraction threw error: ${errorMessage}`,
-            processing_progress: 100,
-            processing_method: "pdf_extraction_error"
-          })
-          .eq("file_path", filePath);
-        return [];
-      }
-    }
-    
-    // If all fallbacks fail, mark as failed
+    // Mark document as failed with clear error message
+    console.error('[VISION] ❌ All parsing layers failed - could not extract knowledge items');
     await supabase
       .from("training_documents")
       .update({ 
         status: "failed",
-        processing_method: "vision_all_failed",
-        last_validation_error: `All parsing methods failed including PDF text extraction. Vision response: ${extractedInfo.substring(0, 300)}...`
+        error_message: 'Vision API could not extract any knowledge items. Please check document quality or try re-uploading.',
+        processing_progress: 100,
+        processing_method: "vision_failed"
       })
       .eq("file_path", filePath);
     return [];
