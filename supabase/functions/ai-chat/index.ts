@@ -7,6 +7,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// ============================================
+// PERSISTENCE CONTROL FLAGS
+// ============================================
+const ENABLE_SAFE_PERSISTENCE = Deno.env.get('ENABLE_SAFE_PERSISTENCE') !== 'false'; // Default: true
+
 // =============================================================================
 // FASE 1: CONFIDENCE CALCULATION FUNCTION (MET CLIENTS DATA BOOST)
 // =============================================================================
@@ -2456,9 +2461,12 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
             console.log('📤 Sent knowledge metadata to client:', usedKnowledgeIds.length, 'items');
           }
           
-          // ✅ FIX 1: Use conversation_id from frontend (unify conversation tracking)
+          // ============================================
+          // SAFE PERSISTENCE BEFORE STREAM CLOSE
+          // ============================================
           const conversationId = conversation_id || crypto.randomUUID();
-          (async () => {
+          
+          if (ENABLE_SAFE_PERSISTENCE) {
             try {
               // Get org_id for the user
               const { data: orgData } = await supabaseClient
@@ -2468,81 +2476,102 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                 .single();
 
               if (!orgData?.org_id) {
-                console.warn('⚠️ No org_id found for user, skipping chat persistence');
-                return;
+                throw new Error('No org_id found for user');
               }
 
-              // Save user message
+              // 1️⃣ CRITICAL: Persist user message
               const userMessage = messages[messages.length - 1];
-              await supabaseClient.from('chat_messages').insert({
-                user_id: user.id,
-                conversation_id: conversationId,
-                role: 'user',
-                content: userMessage.content
-              });
-
-              // Save assistant message (triggers continuous-learner via database trigger)
-              await supabaseClient.from('chat_messages').insert({
-                user_id: user.id,
-                conversation_id: conversationId,
-                role: 'assistant',
-                content: fullResponse,
-                metadata: {
-                  feedback_enabled: true,
-                  knowledge_ids_for_feedback: usedKnowledgeIds
-                }
-              });
-
-              // Optional: Save conversation context for FASE 2 (usage validation)
-              if (usedKnowledgeIds.length > 0) {
-                await supabaseClient.from('conversation_context').insert({
+              const { data: userMsgData, error: userMsgError } = await supabaseClient
+                .from('chat_messages')
+                .insert({
+                  user_id: user.id,
                   conversation_id: conversationId,
-                  user_id: user.id,
-                  category: 'task_management_chat',
-                  summary: userMessage.content.substring(0, 500),
-                  key_points: {
-                    used_knowledge_ids: usedKnowledgeIds,
-                    response_length: fullResponse.length,
-                    user_question: userMessage.content
-                  }
-                });
-              }
-
-              console.log(`✅ Chat messages saved, conversation_id: ${conversationId}, knowledge used: ${usedKnowledgeIds.length}`);
+                  role: 'user',
+                  content: userMessage.content
+                })
+                .select();
               
-              // ✅ FIX: Insert ai_learning_event voor feedback-processor
-              if (usedKnowledgeIds.length > 0) {
-                // Extract confidence from response
-                const responseConfidenceMatch = fullResponse.match(/\[(?:🟢|🟡|🟠|🔴)\s+(\d+)%/);
-                const responseConfidence = responseConfidenceMatch ? parseInt(responseConfidenceMatch[1]) / 100 : 0.75;
-                
-                const { error: learningError } = await supabaseClient.from('ai_learning_events').insert({
+              if (userMsgError) {
+                throw new Error(`User message insert failed: ${userMsgError.message}`);
+              }
+              console.log('✅ User message persisted');
+
+              // 2️⃣ CRITICAL: Persist assistant message
+              const { data: assistantMsgData, error: assistantMsgError } = await supabaseClient
+                .from('chat_messages')
+                .insert({
                   user_id: user.id,
-                  org_id: orgData.org_id,
-                  event_type: 'ai_response_generated',
-                  context: {
-                    question: userMessage.content,
-                    usedKnowledge: usedKnowledgeIds.map(id => ({ id })), // ✅ FIX 4: Use usedKnowledge format
+                  conversation_id: conversationId,
+                  role: 'assistant',
+                  content: fullResponse,
+                  metadata: {
+                    feedback_enabled: true,
+                    knowledge_ids_for_feedback: usedKnowledgeIds
+                  }
+                })
+                .select();
+              
+              if (assistantMsgError) {
+                throw new Error(`Assistant message insert failed: ${assistantMsgError.message}`);
+              }
+              console.log('✅ Assistant message persisted');
+
+              // 3️⃣ OPTIONAL: Conversation context (soft fail)
+              if (usedKnowledgeIds.length > 0) {
+                try {
+                  await supabaseClient.from('conversation_context').insert({
                     conversation_id: conversationId,
-                    confidence: responseConfidence
-                  },
-                  ai_response: { 
-                    content: fullResponse.substring(0, 1000) // Eerste 1000 chars
-                  },
-                  outcome: 'success'
-                });
-                
-                if (learningError) {
-                  console.error('❌ Learning event insert failed:', learningError);
-                } else {
-                  console.log(`✅ Learning event created with ${usedKnowledgeIds.length} knowledge IDs`);
+                    user_id: user.id,
+                    category: 'task_management_chat',
+                    summary: userMessage.content.substring(0, 500),
+                    key_points: {
+                      used_knowledge_ids: usedKnowledgeIds,
+                      response_length: fullResponse.length,
+                      user_question: userMessage.content
+                    }
+                  });
+                  console.log('✅ Conversation context saved');
+                } catch (contextError) {
+                  console.warn('⚠️ Conversation context insert failed (non-blocking):', contextError);
                 }
               }
+
+              // 4️⃣ OPTIONAL: Learning event (soft fail)
+              if (usedKnowledgeIds.length > 0) {
+                try {
+                  const responseConfidenceMatch = fullResponse.match(/\[(?:🟢|🟡|🟠|🔴)\s+(\d+)%/);
+                  const responseConfidence = responseConfidenceMatch ? parseInt(responseConfidenceMatch[1]) / 100 : 0.75;
+                  
+                  await supabaseClient.from('ai_learning_events').insert({
+                    user_id: user.id,
+                    org_id: orgData.org_id,
+                    event_type: 'ai_response_generated',
+                    context: {
+                      question: userMessage.content,
+                      usedKnowledge: usedKnowledgeIds.map(id => ({ id })),
+                      conversation_id: conversationId,
+                      confidence: responseConfidence
+                    },
+                    ai_response: { 
+                      content: fullResponse.substring(0, 1000)
+                    },
+                    outcome: 'success'
+                  });
+                  console.log(`✅ Learning event created with ${usedKnowledgeIds.length} knowledge IDs`);
+                } catch (learningError) {
+                  console.warn('⚠️ Learning event insert failed (non-blocking):', learningError);
+                }
+              }
+
+              console.log(`✅ All persistence complete for conversation ${conversationId}`);
+
             } catch (persistError) {
-              console.error('❌ Chat persistence error (non-blocking):', persistError);
-              // Don't fail the request if persistence fails
+              // Log error but don't break stream (graceful degradation)
+              console.error('❌ CRITICAL PERSIST ERROR (stream continues but no DB save):', persistError);
             }
-          })();
+          } else {
+            console.log('⚠️ ENABLE_SAFE_PERSISTENCE=false - skipping persistence');
+          }
           
           // Send usedKnowledge metadata to client for feedback tracking
           if (usedKnowledgeIds.length > 0) {

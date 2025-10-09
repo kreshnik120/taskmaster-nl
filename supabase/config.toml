@@ -11,6 +11,9 @@ schedule = "0 */12 * * *"
 [functions.ai-chat]
 verify_jwt = true
 
+[functions.ai-chat.env]
+ENABLE_SAFE_PERSISTENCE = "true"
+
 [functions.ai-training-chat]
 verify_jwt = true
 
