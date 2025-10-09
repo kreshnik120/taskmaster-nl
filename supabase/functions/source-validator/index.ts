@@ -141,20 +141,38 @@ serve(async (req) => {
 
     // Report broken sources to business intelligence
     if (brokenSources.length > 0) {
+      const brokenPercentage = (brokenSources.length / itemsWithSources.length) * 100;
+      const impactScore = Math.min(1.0, brokenPercentage / 100);
+      
+      // Classify severity based on percentage
+      let severity: string;
+      if (brokenPercentage > 50) {
+        severity = 'critical';
+      } else if (brokenPercentage > 25) {
+        severity = 'high';
+      } else if (brokenPercentage > 10) {
+        severity = 'medium';
+      } else {
+        severity = 'low';
+      }
+      
       await supabase
         .from('business_intelligence')
         .insert({
           org_id: orgId,
           intelligence_type: 'broken_sources',
+          type: 'data_quality',
+          severity: severity,
           title: `${brokenSources.length} broken external sources detected`,
-          description: `Weekly source validation found ${brokenSources.length} unreachable sources`,
-          priority: 'medium',
+          description: `Weekly source validation found ${brokenSources.length} unreachable sources (${brokenPercentage.toFixed(1)}%)`,
+          priority: brokenPercentage > 25 ? 'high' : 'medium',
           status: 'active',
+          impact_score: impactScore,
           data: {
             timestamp: new Date().toISOString(),
             broken_sources: brokenSources,
             total_validated: itemsWithSources.length,
-            broken_percentage: ((brokenSources.length / itemsWithSources.length) * 100).toFixed(1)
+            broken_percentage: brokenPercentage.toFixed(1)
           }
         });
     }

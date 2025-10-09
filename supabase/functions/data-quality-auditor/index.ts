@@ -279,17 +279,36 @@ serve(async (req) => {
       if (archivedCount > 0) summary.push(`${archivedCount} archived`);
       if (boostedCount > 0) summary.push(`${boostedCount} boosted`);
       
+      // Calculate impact score and classify
+      const totalIssues = issues.length;
+      const impactScore = totalIssues > 50 ? 0.9 : (totalIssues > 20 ? 0.7 : (totalIssues > 5 ? 0.5 : 0.3));
+      
+      // Determine severity based on impact
+      let severity: string;
+      if (impactScore > 0.8 || (totalIssues > 100 && fixedItemsCount === 0)) {
+        severity = 'critical';
+      } else if (impactScore > 0.6 || totalIssues > 50) {
+        severity = 'high';
+      } else if (impactScore > 0.4 || totalIssues > 10) {
+        severity = 'medium';
+      } else {
+        severity = 'low';
+      }
+      
       await supabase
         .from('business_intelligence')
         .insert({
           org_id: orgId,
           intelligence_type: 'data_quality_audit',
+          type: 'data_quality',
+          severity: severity,
           title: summary.length > 0
             ? `Data Quality Audit: ${issues.length} issues, ${summary.join(', ')}`
             : `Data Quality Audit: ${issues.length} issues found`,
           description: issues.join(', '),
           priority: (fixedItemsCount > 0 || archivedCount > 0 || boostedCount > 0) ? 'medium' : 'high',
           status: 'active',
+          impact_score: impactScore,
           data: {
             timestamp: new Date().toISOString(),
             outdated_count: outdated?.length || 0,

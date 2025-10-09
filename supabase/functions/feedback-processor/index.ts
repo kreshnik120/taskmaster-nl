@@ -142,17 +142,32 @@ serve(async (req) => {
 
     console.log(`✅ Processed: ${negativeProcessed} negative, ${positiveProcessed} positive, ${errors} errors`);
 
-    // Log to business intelligence
+    // Log to business intelligence with smart classification
+    const totalProcessed = negativeProcessed + positiveProcessed;
+    const impactScore = totalProcessed / 10;
+    
+    // Determine severity based on errors and volume
+    let severity: string;
+    if (errors > 5 || (negativeProcessed > 10 && totalProcessed > 0)) {
+      severity = 'high';
+    } else if (errors > 0 || negativeProcessed > 5) {
+      severity = 'medium';
+    } else {
+      severity = 'low';
+    }
+    
     const { error: biError } = await supabaseClient
       .from('business_intelligence')
       .insert({
         org_id: orgId,
         intelligence_type: 'feedback_processing',
+        type: 'knowledge',
+        severity: severity,
         title: 'Feedback Loop Results',
         description: `Processed ${negativeProcessed} negative and ${positiveProcessed} positive feedback events`,
-        priority: 'medium',
+        priority: errors > 5 ? 'high' : (errors > 0 ? 'medium' : 'low'),
         status: 'active',
-        impact_score: (negativeProcessed + positiveProcessed) / 5,
+        impact_score: impactScore,
         data: {
           negative_processed: negativeProcessed,
           positive_processed: positiveProcessed,

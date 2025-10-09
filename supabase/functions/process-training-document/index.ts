@@ -1944,11 +1944,19 @@ async function handleTier1AutoResolve(
   await supabaseClient
     .from('business_intelligence')
     .insert({
-      type: 'auto_cleanup',
-      confidence_score: analysis.confidence,
-      ai_reasoning: analysis.reasoning,
-      affected_item_ids: idsToDelete,
-      metadata: { trigger: 'document_upload', item_id: item.id }
+      intelligence_type: 'auto_cleanup',
+      type: 'knowledge',
+      severity: 'low',
+      priority: 'low',
+      title: 'Document Upload: Auto Cleanup',
+      description: `Automatically resolved conflicts (${(analysis.confidence * 100).toFixed(0)}% confidence)`,
+      impact_score: analysis.confidence * 0.3,
+      data: {
+        confidence_score: analysis.confidence,
+        ai_reasoning: analysis.reasoning,
+        affected_item_ids: idsToDelete,
+        metadata: { trigger: 'document_upload', item_id: item.id }
+      }
     });
 }
 
@@ -1962,12 +1970,20 @@ async function handleTier2Suggestion(
   await supabaseClient
     .from('business_intelligence')
     .insert({
-      type: 'ai_suggestion',
-      confidence_score: analysis.confidence,
-      ai_reasoning: analysis.reasoning,
-      recommended_action: analysis.action,
-      affected_item_ids: analysis.items_to_delete || [],
-      metadata: { trigger: 'document_upload', item_id: item.id }
+      intelligence_type: 'ai_suggestion',
+      type: 'knowledge',
+      severity: 'medium',
+      priority: 'medium',
+      title: 'Document Upload: AI Suggestion',
+      description: `AI suggests action based on document upload (${(analysis.confidence * 100).toFixed(0)}% confidence)`,
+      impact_score: analysis.confidence * 0.6,
+      data: {
+        confidence_score: analysis.confidence,
+        ai_reasoning: analysis.reasoning,
+        recommended_action: analysis.action,
+        affected_item_ids: analysis.items_to_delete || [],
+        metadata: { trigger: 'document_upload', item_id: item.id }
+      }
     });
 }
 
@@ -1986,10 +2002,18 @@ async function handleTier3Review(
   await supabaseClient
     .from('business_intelligence')
     .insert({
+      intelligence_type: 'data_quality',
       type: 'data_quality',
-      confidence_score: analysis.confidence,
-      ai_reasoning: `Low confidence conflict - needs human review: ${analysis.reasoning}`,
-      affected_item_ids: [item.id],
-      metadata: { trigger: 'document_upload' }
+      severity: 'high',
+      priority: 'high',
+      title: 'Document Upload: Manual Review Required',
+      description: `Low confidence conflict detected - needs human review (${(analysis.confidence * 100).toFixed(0)}% confidence)`,
+      impact_score: 0.9,
+      data: {
+        confidence_score: analysis.confidence,
+        ai_reasoning: `Low confidence conflict - needs human review: ${analysis.reasoning}`,
+        affected_item_ids: [item.id],
+        metadata: { trigger: 'document_upload' }
+      }
     });
 }

@@ -494,6 +494,8 @@ async function detectKnowledgeConflicts(
           await supabase.from('business_intelligence').insert({
             org_id: orgId,
             intelligence_type: 'auto_cleanup',
+            type: 'knowledge',
+            severity: 'low',
             priority: 'low',
             title: `Auto-resolved: ${groupKey}`,
             description: `AI heeft ${losers.length} item(s) verwijderd (${(aiRecommendation.confidence * 100).toFixed(0)}% zekerheid)`,
@@ -516,6 +518,8 @@ async function detectKnowledgeConflicts(
           await supabase.from('business_intelligence').insert({
             org_id: orgId,
             intelligence_type: 'ai_suggestion',
+            type: 'knowledge',
+            severity: 'medium',
             priority: 'medium',
             title: `AI Suggestie: ${groupKey}`,
             description: `AI stelt voor om ${aiRecommendation.actions?.filter(a => a.action === 'delete').length} item(s) te verwijderen (${(aiRecommendation.confidence * 100).toFixed(0)}% zekerheid)`,
@@ -553,6 +557,8 @@ async function detectKnowledgeConflicts(
           await supabase.from('business_intelligence').insert({
             org_id: orgId,
             intelligence_type: 'data_quality',
+            type: 'data_quality',
+            severity: 'high',
             priority: 'high',
             title: `Complex conflict: ${groupKey}`,
             description: `AI kan niet met zekerheid bepalen welk item correct is (${(aiRecommendation.confidence * 100).toFixed(0)}%). Menselijke review vereist.`,
@@ -659,6 +665,8 @@ async function trackKnowledgeUsage(
         await supabase.from('business_intelligence').insert({
           org_id: kb.org_id,
           intelligence_type: 'knowledge_quality',
+          type: 'knowledge',
+          severity: 'high',
           priority: 'high',
           title: `Kennisfout: ${kb.key}`,
           description: `Knowledge item "${kb.key}" bevat ${kbClient} data maar werd gebruikt voor ${questionClient} vraag`,

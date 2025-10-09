@@ -153,10 +153,12 @@ serve(async (req) => {
         .from('business_intelligence')
         .insert({
           org_id: userOrg?.org_id,
+          intelligence_type: 'optimization_opportunity',
+          type: 'knowledge',
+          severity: 'medium',
           title: 'AI Response Needs Improvement',
           description: `Negative feedback on message: "${context.message.substring(0, 100)}..."`,
-          intelligence_type: 'optimization_opportunity',
-          impact_score: 6,
+          impact_score: 0.6,
           priority: 'medium',
           status: 'active',
           data: {
