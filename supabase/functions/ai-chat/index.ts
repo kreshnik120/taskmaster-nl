@@ -713,6 +713,21 @@ serve(async (req) => {
     const requestBody = await req.json();
     const { messages, conversation_id } = requestBody; // ✅ Ontvang conversation_id
     
+    // ✅ CRITICAL: Validate conversation_id BEFORE any processing or stream creation
+    if (!conversation_id) {
+      console.error('❌ Missing conversation_id in request body');
+      return new Response(
+        JSON.stringify({ 
+          error: 'conversation_id is vereist. Start een nieuwe chat door de pagina te verversen.' 
+        }), 
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+    console.log(`🔑 Processing conversation: ${conversation_id}`);
+    
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       console.error('No authorization header provided');
@@ -2478,15 +2493,9 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
           // ============================================
           // PERSISTENCE AFTER STREAMING (IN BACKGROUND)
           // ============================================
-          const conversationId = conversation_id; // ✅ NOOIT fallback - frontend moet altijd ID sturen
-          if (!conversationId) {
-            console.error('❌ No conversation_id provided by client');
-            return new Response(
-              JSON.stringify({ error: 'conversation_id is vereist' }), 
-              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-          }
-          console.log(`🔑 Processing conversation: ${conversationId}`);
+          // ✅ conversation_id is already validated early - safe to use
+          const conversationId = conversation_id;
+          console.log(`💾 Starting background persistence for conversation: ${conversationId}`);
           
           // Start background persistence (non-blocking)
           (async () => {
