@@ -24,6 +24,7 @@ import { AlertTriageSystem } from "@/components/AITraining/AlertTriageSystem";
 import { AlertPriorityRanker } from "@/components/AITraining/AlertPriorityRanker";
 import { KnowledgeValidator } from "@/components/AITraining/KnowledgeValidator";
 import { ValidationWorkflowGuide } from "@/components/AITraining/ValidationWorkflowGuide";
+import { ValidationOnboardingWizard } from "@/components/AITraining/ValidationOnboardingWizard";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -83,6 +84,7 @@ const AiTraining = () => {
 
   return (
     <SidebarProvider>
+      <ValidationOnboardingWizard />
       <div className="flex min-h-screen w-full">
         <AppSidebar />
         <main className="flex-1 p-6 overflow-auto">

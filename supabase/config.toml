@@ -87,4 +87,9 @@ verify_jwt = true
 
 [functions.auto-resolve-alerts]
 verify_jwt = true
+schedule = "0 * * * *"
+
+[functions.retroactive-training-evaluator]
+verify_jwt = true
+schedule = "0 2 * * *"
 

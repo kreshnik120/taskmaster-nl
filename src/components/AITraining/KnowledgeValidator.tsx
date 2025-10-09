@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, CheckCircle, XCircle, AlertCircle, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import confetti from "canvas-confetti";
 
 interface KnowledgeItem {
   id: string;
@@ -168,6 +169,27 @@ export function KnowledgeValidator() {
       });
       return;
     }
+
+    // Track total validations for milestone celebrations
+    const previousCount = parseInt(localStorage.getItem('total_validations') || '0');
+    const newCount = previousCount + ids.length;
+    localStorage.setItem('total_validations', newCount.toString());
+
+    // Trigger celebration on milestones (every 10 validations)
+    if (Math.floor(newCount / 10) > Math.floor(previousCount / 10)) {
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+      
+      toast({
+        title: `🎉 Milestone: ${Math.floor(newCount / 10) * 10}+ Validations!`,
+        description: "Je bent op weg naar een ultra-accurate AI knowledge base!",
+        duration: 5000,
+      });
+    }
+
     validateMutation.mutate({ ids, status });
   };
 

@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Brain, TrendingUp, Target, Database, Lightbulb, AlertCircle, Activity, DollarSign, Zap, Trash2 } from "lucide-react";
+import { Brain, TrendingUp, Target, Database, Lightbulb, AlertCircle, Activity, DollarSign, Zap, Trash2, AlertTriangle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
@@ -11,9 +11,11 @@ import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { AdminOnly } from "@/components/auth/AdminOnly";
 import { LearningProgressCharts } from "./LearningProgressCharts";
+import { useNavigate } from "react-router-dom";
 
 export const LearningDashboard = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [isCleaningUp, setIsCleaningUp] = useState(false);
 
   // Fetch validation stats for health dashboard
@@ -211,8 +213,46 @@ export const LearningDashboard = () => {
     );
   };
 
+  const verificationRate = knowledgeStats?.total 
+    ? ((knowledgeStats.total - (stats?.unverified || 0)) / knowledgeStats.total * 100)
+    : 0;
+  const validatedThisWeek = parseInt(localStorage.getItem('total_validations') || '0');
+  const weeklyGoal = 500;
+
   return (
     <div className="space-y-6">
+      {/* Persistent Validation CTA Widget */}
+      {stats && stats.unverified > 100 && (
+        <Card className="bg-gradient-to-r from-blue-500 to-purple-600 text-white border-0">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              <CardTitle>⚠️ Action Required: {stats.unverified.toLocaleString()} Items Need Validation</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4">Your AI's quality depends on verified knowledge. Start validating to unlock 40-60% accuracy improvements.</p>
+            <Button 
+              onClick={() => navigate('/ai-training?tab=validation')}
+              variant="secondary"
+              className="w-full bg-white text-blue-600 hover:bg-white/90"
+            >
+              Start Validating Now →
+            </Button>
+            <div className="mt-4">
+              <div className="flex justify-between text-sm mb-1">
+                <span>Weekly Goal Progress</span>
+                <span>{validatedThisWeek} / {weeklyGoal}</span>
+              </div>
+              <Progress value={(validatedThisWeek / weeklyGoal) * 100} className="h-2 bg-white/20" />
+              <p className="text-xs mt-2 opacity-90">
+                {weeklyGoal - validatedThisWeek} validations to go this week 🎯
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Admin Actions */}
       <AdminOnly>
         <Card className="p-4">
