@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AlertTriangle, CheckCircle, X, TrendingUp, Loader2, AlertCircle, Info } from "lucide-react";
+import { AlertTriangle, CheckCircle, X, TrendingUp, Loader2, AlertCircle, Info, Database } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 
@@ -109,6 +109,25 @@ export function AlertTriageSystem() {
       alertIds,
       updates: { severity: newSeverity }
     });
+  };
+
+  const handleBulkResolveDataQuality = () => {
+    if (selectedAlerts.size === 0) {
+      toast.error("Geen alerts geselecteerd");
+      return;
+    }
+    
+    const dataQualityAlerts = alerts?.filter(a => 
+      selectedAlerts.has(a.id) && (a.type === 'data_quality' || a.data?.conflicting_items)
+    ) || [];
+    
+    if (dataQualityAlerts.length === 0) {
+      toast.error("Geen data quality alerts geselecteerd");
+      return;
+    }
+    
+    toast.info(`${dataQualityAlerts.length} data quality alerts worden opgelost...`);
+    handleResolve(dataQualityAlerts.map(a => a.id));
   };
 
   const toggleSelectAlert = (alertId: string) => {
@@ -265,6 +284,15 @@ export function AlertTriageSystem() {
                     <SelectItem value="low">Low</SelectItem>
                   </SelectContent>
                 </Select>
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={handleBulkResolveDataQuality}
+                  className="ml-auto"
+                >
+                  <Database className="h-4 w-4 mr-2" />
+                  Resolve Data Quality
+                </Button>
               </div>
             </>
           )}

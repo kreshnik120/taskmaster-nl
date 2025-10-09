@@ -19,6 +19,7 @@ import { AdminOnly } from "@/components/auth/AdminOnly";
 import { Week1To2TestPanel } from "@/components/AITraining/Week1To2TestPanel";
 import { AlertTriageSystem } from "@/components/AITraining/AlertTriageSystem";
 import { KnowledgeValidator } from "@/components/AITraining/KnowledgeValidator";
+import { ValidationWorkflowGuide } from "@/components/AITraining/ValidationWorkflowGuide";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -105,6 +106,7 @@ const AiTraining = () => {
 
               <AdminOnly>
                 <TabsContent value="validation" className="mt-6">
+                  <ValidationWorkflowGuide />
                   <KnowledgeValidator />
                 </TabsContent>
               </AdminOnly>

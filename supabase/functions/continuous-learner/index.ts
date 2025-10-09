@@ -188,13 +188,14 @@ USER FEEDBACK: ${user_feedback || 'none'}`
       };
     }
 
-    // ✅ NIEUW: Auto-create high-confidence knowledge suggestions
+    // ✅ OPTIMIZED: Auto-create high-confidence knowledge suggestions (P2-3)
     let suggestionsCreated = 0;
     if (auto_apply && analysis.new_knowledge_suggestions?.length > 0) {
       console.log(`💡 Processing ${analysis.new_knowledge_suggestions.length} knowledge suggestions...`);
       
       for (const suggestion of analysis.new_knowledge_suggestions) {
-        if (suggestion.confidence >= 0.85) {
+        // ✅ P2-3: Lowered threshold from 0.85 to 0.80 for better apply rate
+        if (suggestion.confidence >= 0.80) {
           // Check for duplicates
           const { data: existingDup } = await supabase
             .from('ai_knowledge_base')
@@ -205,19 +206,32 @@ USER FEEDBACK: ${user_feedback || 'none'}`
             .limit(1);
           
           if (!existingDup || existingDup.length === 0) {
-            // ✅ PII REDACTION: Redact suggestion.value before storing
+            // ✅ P2-3 ENHANCED: PII REDACTION with improved error handling
             let redactedValue = suggestion.value;
+            let originalText = '';
+            
             if (typeof redactedValue === 'object') {
-              const { data: redactedResult } = await supabase.rpc('redact_pii', {
-                input_text: JSON.stringify(redactedValue)
-              });
-              
-              if (redactedResult) {
-                try {
+              originalText = JSON.stringify(redactedValue);
+            } else {
+              originalText = String(redactedValue);
+            }
+            
+            const { data: redactedResult, error: redactError } = await supabase.rpc('redact_pii', {
+              input_text: originalText
+            });
+            
+            if (redactError) {
+              console.warn('⚠️ PII redaction failed, using original value:', redactError);
+            } else if (redactedResult && redactedResult !== originalText) {
+              console.log('🔒 PII redacted in suggestion:', suggestion.key);
+              try {
+                if (typeof redactedValue === 'object') {
                   redactedValue = JSON.parse(redactedResult);
-                } catch {
-                  redactedValue = { redacted: redactedResult };
+                } else {
+                  redactedValue = redactedResult;
                 }
+              } catch {
+                redactedValue = { redacted_content: redactedResult };
               }
             }
             
