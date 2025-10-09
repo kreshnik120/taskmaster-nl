@@ -18,6 +18,7 @@ import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTri
 import { AdminOnly } from "@/components/auth/AdminOnly";
 import { Week1To2TestPanel } from "@/components/AITraining/Week1To2TestPanel";
 import { AlertTriageSystem } from "@/components/AITraining/AlertTriageSystem";
+import { KnowledgeValidator } from "@/components/AITraining/KnowledgeValidator";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -74,9 +75,14 @@ const AiTraining = () => {
             </div>
 
             <Tabs defaultValue="dashboard" className="w-full">
-              <TabsList className="grid w-full grid-cols-8">
+              <TabsList className="grid w-full grid-cols-9">
                 <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
-                <TabsTrigger value="alerts">🚨 Alerts</TabsTrigger>
+                <AdminOnly>
+                  <TabsTrigger value="alerts">🚨 Alerts</TabsTrigger>
+                </AdminOnly>
+                <AdminOnly>
+                  <TabsTrigger value="validation">📋 Validation</TabsTrigger>
+                </AdminOnly>
                 <TabsTrigger value="week1-2">🧪 Week 1-2</TabsTrigger>
                 <AdminOnly>
                   <TabsTrigger value="system">🔧 Systeem</TabsTrigger>
@@ -91,9 +97,17 @@ const AiTraining = () => {
                 <LearningDashboard />
               </TabsContent>
 
-              <TabsContent value="alerts" className="mt-6">
-                <AlertTriageSystem />
-              </TabsContent>
+              <AdminOnly>
+                <TabsContent value="alerts" className="mt-6">
+                  <AlertTriageSystem />
+                </TabsContent>
+              </AdminOnly>
+
+              <AdminOnly>
+                <TabsContent value="validation" className="mt-6">
+                  <KnowledgeValidator />
+                </TabsContent>
+              </AdminOnly>
 
               <TabsContent value="week1-2" className="mt-6">
                 <Week1To2TestPanel />
