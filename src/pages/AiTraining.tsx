@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { Loader2 } from "lucide-react";
+import { Loader2, CheckCircle, Target, TrendingUp } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { TrainingChat } from "@/components/AITraining/TrainingChat";
 import { DocumentUpload } from "@/components/AITraining/DocumentUpload";
 import { KnowledgeOverview } from "@/components/AITraining/KnowledgeOverview";
@@ -18,6 +21,7 @@ import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTri
 import { AdminOnly } from "@/components/auth/AdminOnly";
 import { Week1To2TestPanel } from "@/components/AITraining/Week1To2TestPanel";
 import { AlertTriageSystem } from "@/components/AITraining/AlertTriageSystem";
+import { AlertPriorityRanker } from "@/components/AITraining/AlertPriorityRanker";
 import { KnowledgeValidator } from "@/components/AITraining/KnowledgeValidator";
 import { ValidationWorkflowGuide } from "@/components/AITraining/ValidationWorkflowGuide";
 
@@ -25,6 +29,22 @@ const AiTraining = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const navigate = useNavigate();
+
+  // Fetch validation stats for banner
+  const { data: stats } = useQuery({
+    queryKey: ["validation-stats-banner"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("ai_knowledge_base")
+        .select("validation_status")
+        .is("deleted_at", null);
+      
+      if (error) throw error;
+      
+      const unverified = data.filter(d => d.validation_status === "unverified").length;
+      return { unverified };
+    },
+  });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -100,12 +120,53 @@ const AiTraining = () => {
 
               <AdminOnly>
                 <TabsContent value="alerts" className="mt-6">
-                  <AlertTriageSystem />
+                  <Tabs defaultValue="triage" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="triage">Alert Triage</TabsTrigger>
+                      <TabsTrigger value="priority">Priority Ranker</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="triage" className="mt-4">
+                      <AlertTriageSystem />
+                    </TabsContent>
+                    <TabsContent value="priority" className="mt-4">
+                      <AlertPriorityRanker />
+                    </TabsContent>
+                  </Tabs>
                 </TabsContent>
               </AdminOnly>
 
               <AdminOnly>
                 <TabsContent value="validation" className="mt-6">
+                  {/* Validation Adoption Banner */}
+                  <Card className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-blue-500/20 mb-6">
+                    <CardContent className="p-6">
+                      <div className="flex items-start gap-4">
+                        <div className="p-3 bg-blue-500 rounded-full">
+                          <CheckCircle className="h-6 w-6 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-bold text-lg mb-2">
+                            🎯 Start met Valideren - Boost AI Kwaliteit!
+                          </h3>
+                          <p className="text-sm text-muted-foreground mb-3">
+                            Er zijn <strong>{stats?.unverified || 0} unverified items</strong> klaar voor review. 
+                            Begin met de "Quick Wins" filter voor items met 80%+ confidence - deze zijn het makkelijkst te valideren!
+                          </p>
+                          <div className="flex gap-2">
+                            <Badge variant="outline" className="gap-1">
+                              <Target className="h-3 w-3" />
+                              Doel: 100 validaties deze week
+                            </Badge>
+                            <Badge variant="outline" className="gap-1">
+                              <TrendingUp className="h-3 w-3" />
+                              Impact: Directe kwaliteitsverbetering
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
                   <ValidationWorkflowGuide />
                   <KnowledgeValidator />
                 </TabsContent>

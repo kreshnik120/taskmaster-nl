@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, AlertCircle, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface KnowledgeItem {
@@ -28,10 +28,15 @@ export function KnowledgeValidator() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("unverified");
+  const [validationStreak, setValidationStreak] = useState<number>(() => {
+    const stored = localStorage.getItem("validation_streak");
+    return stored ? parseInt(stored, 10) : 0;
+  });
+  const [showQuickWins, setShowQuickWins] = useState<boolean>(true);
 
   // Fetch knowledge items needing validation
   const { data: items, isLoading } = useQuery({
-    queryKey: ["knowledge-validation", filterCategory, filterStatus],
+    queryKey: ["knowledge-validation", filterCategory, filterStatus, showQuickWins],
     queryFn: async () => {
       let query = supabase
         .from("ai_knowledge_base")
@@ -40,11 +45,18 @@ export function KnowledgeValidator() {
         .order("created_at", { ascending: false })
         .limit(100);
 
-      if (filterStatus !== "all") {
-        query = query.eq("validation_status", filterStatus);
-      }
-      if (filterCategory !== "all") {
-        query = query.eq("category", filterCategory);
+      // Apply Quick Wins filter: high confidence + unverified
+      if (showQuickWins) {
+        query = query
+          .eq("validation_status", "unverified")
+          .gte("confidence_score", 0.80);
+      } else {
+        if (filterStatus !== "all") {
+          query = query.eq("validation_status", filterStatus);
+        }
+        if (filterCategory !== "all") {
+          query = query.eq("category", filterCategory);
+        }
       }
 
       const { data, error } = await query;
@@ -108,9 +120,15 @@ export function KnowledgeValidator() {
       queryClient.invalidateQueries({ queryKey: ["knowledge-validation"] });
       queryClient.invalidateQueries({ queryKey: ["validation-stats"] });
       setSelectedIds(new Set());
+      
+      // Update validation streak
+      const newStreak = validationStreak + data.updatedCount;
+      setValidationStreak(newStreak);
+      localStorage.setItem("validation_streak", newStreak.toString());
+      
       toast({
-        title: "Validatie succesvol",
-        description: `${data.updatedCount} items bijgewerkt naar status: ${data.status}`,
+        title: "Validatie succesvol! 🎉",
+        description: `${data.updatedCount} items bijgewerkt • Streak: ${newStreak} validaties`,
       });
     },
     onError: (error: any) => {
@@ -174,8 +192,45 @@ export function KnowledgeValidator() {
     );
   }
 
+  const getStreakBadge = () => {
+    if (validationStreak >= 100) return { icon: "🏆", label: "Master Validator", color: "bg-yellow-500" };
+    if (validationStreak >= 50) return { icon: "⭐", label: "Expert", color: "bg-blue-500" };
+    if (validationStreak >= 20) return { icon: "🎯", label: "Pro", color: "bg-green-500" };
+    if (validationStreak >= 10) return { icon: "🔥", label: "On Fire", color: "bg-orange-500" };
+    return { icon: "🌱", label: "Getting Started", color: "bg-gray-500" };
+  };
+
   return (
     <div className="space-y-6">
+      {/* Validation Streak Banner */}
+      {validationStreak > 0 && (
+        <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-full ${getStreakBadge().color} flex items-center justify-center text-2xl`}>
+                  {getStreakBadge().icon}
+                </div>
+                <div>
+                  <p className="font-bold text-lg">Validation Streak: {validationStreak}</p>
+                  <p className="text-sm text-muted-foreground">{getStreakBadge().label}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">Volgende milestone</p>
+                <p className="font-semibold">
+                  {validationStreak < 10 && `${10 - validationStreak} tot 🔥 On Fire`}
+                  {validationStreak >= 10 && validationStreak < 20 && `${20 - validationStreak} tot 🎯 Pro`}
+                  {validationStreak >= 20 && validationStreak < 50 && `${50 - validationStreak} tot ⭐ Expert`}
+                  {validationStreak >= 50 && validationStreak < 100 && `${100 - validationStreak} tot 🏆 Master`}
+                  {validationStreak >= 100 && "Max level bereikt!"}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats Cards */}
       <div className="grid grid-cols-5 gap-4">
         <Card>
@@ -231,30 +286,44 @@ export function KnowledgeValidator() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-4">
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Filter op status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alle statussen</SelectItem>
-                <SelectItem value="unverified">Unverified</SelectItem>
-                <SelectItem value="pending_review">Pending Review</SelectItem>
-                <SelectItem value="verified">Verified</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
+            <Button
+              variant={showQuickWins ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowQuickWins(!showQuickWins)}
+              className="gap-2"
+            >
+              <Zap className="h-4 w-4" />
+              Quick Wins (80%+ confidence)
+            </Button>
 
-            <Select value={filterCategory} onValueChange={setFilterCategory}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Filter op categorie" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alle categorieën</SelectItem>
-                {categories?.map(cat => (
-                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {!showQuickWins && (
+              <>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Filter op status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle statussen</SelectItem>
+                    <SelectItem value="unverified">Unverified</SelectItem>
+                    <SelectItem value="pending_review">Pending Review</SelectItem>
+                    <SelectItem value="verified">Verified</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={filterCategory} onValueChange={setFilterCategory}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Filter op categorie" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle categorieën</SelectItem>
+                    {categories?.map(cat => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
 
             <div className="flex-1" />
 

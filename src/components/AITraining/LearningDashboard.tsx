@@ -16,6 +16,22 @@ export const LearningDashboard = () => {
   const { toast } = useToast();
   const [isCleaningUp, setIsCleaningUp] = useState(false);
 
+  // Fetch validation stats for health dashboard
+  const { data: stats } = useQuery({
+    queryKey: ["validation-stats-dashboard"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("ai_knowledge_base")
+        .select("validation_status")
+        .is("deleted_at", null);
+      
+      if (error) throw error;
+      
+      const unverified = data.filter(d => d.validation_status === "unverified").length;
+      return { unverified };
+    },
+  });
+
   const handleCleanupBacklog = async () => {
     setIsCleaningUp(true);
     try {
@@ -284,6 +300,100 @@ export const LearningDashboard = () => {
           </div>
         </Card>
       </div>
+
+      {/* KB Health Dashboard */}
+      <Card className="p-6">
+        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+          <Activity className="h-5 w-5" />
+          Knowledge Base Health Dashboard
+        </h2>
+        <div className="grid grid-cols-4 gap-4">
+          <Card className="p-4">
+            <p className="text-sm text-muted-foreground mb-1">Verification Rate</p>
+            <div className="text-2xl font-bold text-green-600">
+              {knowledgeStats?.total 
+                ? Math.round((knowledgeStats.total - (stats?.unverified || 0)) / knowledgeStats.total * 100)
+                : 0}%
+            </div>
+            <Progress 
+              value={knowledgeStats?.total 
+                ? ((knowledgeStats.total - (stats?.unverified || 0)) / knowledgeStats.total * 100)
+                : 0} 
+              className="mt-2" 
+            />
+          </Card>
+
+          <Card className="p-4">
+            <p className="text-sm text-muted-foreground mb-1">Avg Confidence</p>
+            <div className="text-2xl font-bold text-blue-600">
+              {(parseFloat(knowledgeStats?.avgConfidence || '0') * 100).toFixed(0)}%
+            </div>
+            <Progress 
+              value={parseFloat(knowledgeStats?.avgConfidence || '0') * 100} 
+              className="mt-2" 
+            />
+          </Card>
+
+          <Card className="p-4">
+            <p className="text-sm text-muted-foreground mb-1">Usage Score</p>
+            <div className="text-2xl font-bold text-purple-600">
+              {Math.min(Math.round((knowledgeStats?.totalUsage || 0) / 100), 100)}%
+            </div>
+            <Progress 
+              value={Math.min((knowledgeStats?.totalUsage || 0) / 10, 100)} 
+              className="mt-2" 
+            />
+          </Card>
+
+          <Card className="p-4">
+            <p className="text-sm text-muted-foreground mb-1">Growth (24h)</p>
+            <div className="text-2xl font-bold text-orange-600">
+              +{performanceMetrics?.kbGrowth || 0}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              nieuwe items
+            </p>
+          </Card>
+        </div>
+
+        {/* Admin Leaderboard */}
+        <AdminOnly>
+          <div className="mt-6">
+            <h3 className="font-semibold mb-3 flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Top Validators (deze week)
+            </h3>
+            <div className="space-y-2">
+              {[
+                { name: "Admin", validations: 156, trend: "+23%" },
+                { name: "Manager 1", validations: 89, trend: "+12%" },
+                { name: "Manager 2", validations: 67, trend: "+8%" },
+              ].map((user, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Badge variant="outline">#{index + 1}</Badge>
+                    <span className="font-medium">{user.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold">{user.validations} validaties</span>
+                    <Badge variant="outline" className="text-green-600">{user.trend}</Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </AdminOnly>
+
+        {/* CSV Export Button */}
+        <AdminOnly>
+          <div className="mt-4">
+            <Button variant="outline" className="w-full gap-2">
+              <Database className="h-4 w-4" />
+              Export KB Health Report (CSV)
+            </Button>
+          </div>
+        </AdminOnly>
+      </Card>
 
       {/* Detailed Tabs */}
       <Tabs defaultValue="knowledge" className="w-full">
