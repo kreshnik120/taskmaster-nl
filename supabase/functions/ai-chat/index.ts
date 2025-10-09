@@ -15,15 +15,27 @@ async function persistMessage(
   message: { user_id: string; conversation_id: string; role: string; content: string; metadata?: any },
   retries: number = 3
 ): Promise<boolean> {
+  // ✅ NIEUWE STAP: Normaliseer content (trim whitespace voor consistent hashing)
+  const normalizedMessage = {
+    ...message,
+    content: message.content.trim()
+  };
+  
   for (let attempt = 1; attempt <= retries; attempt++) {
     const { data, error } = await supabase
       .from('chat_messages')
-      .insert(message)
+      .insert(normalizedMessage) // ✅ Use normalized version
       .select();
     
     if (!error && data) {
-      console.log(`✅ ${message.role} message persisted (attempt ${attempt}/${retries})`);
+      console.log(`✅ ${normalizedMessage.role} message persisted (attempt ${attempt}/${retries})`);
       return true;
+    }
+    
+    // ✅ NIEUWE LOGICA: Check of het een duplicate constraint error is
+    if (error?.code === '23505') { // PostgreSQL unique violation
+      console.log(`ℹ️ ${normalizedMessage.role} message already exists (deduplicated)`);
+      return true; // Treat as success - message is already there
     }
     
     console.warn(`⚠️ Persist retry ${attempt}/${retries}:`, error);
@@ -32,7 +44,7 @@ async function persistMessage(
     }
   }
   
-  console.error(`❌ Failed to persist ${message.role} message after ${retries} attempts`);
+  console.error(`❌ Failed to persist ${normalizedMessage.role} message after ${retries} attempts`);
   return false;
 }
 
@@ -43,13 +55,13 @@ function calculateAnswerConfidence(
   knowledgeItems: any[],
   queryKeywords: string[],
   questionText: string,
-  clientsContext: any[] = [] // ✅ Nieuwe parameter voor clients data
+  clientsContext: any[] = []
 ): { confidence: number; reasoning: string; gaps: string[] } {
   if (knowledgeItems.length === 0 && clientsContext.length === 0) {
     return {
       confidence: 0,
-      reasoning: "Geen relevante kennis gevonden",
-      gaps: ["Volledige knowledge base mist voor deze vraag"]
+      reasoning: "Geen relevante bronnen gevonden in de knowledge base",
+      gaps: ["Geen geldige bronnen beschikbaar voor deze vraag"]
     };
   }
 
@@ -57,94 +69,72 @@ function calculateAnswerConfidence(
   const gaps: string[] = [];
   const reasons: string[] = [];
   
-  // 🆕 Check of vraag gaat over clients data (tarieven, contracten, etc.)
-  const clientsRelatedKeywords = ['tarief', 'prijs', 'kostprijs', 'tariev', 'contract', 'overeenkomst', 'afspraak'];
-  const isClientsQuery = queryKeywords.some(keyword => 
-    clientsRelatedKeywords.some(clientTerm => 
-      keyword.toLowerCase().includes(clientTerm) || clientTerm.includes(keyword.toLowerCase())
-    )
-  );
+  // ✅ NIEUWE SCORING: Bron-gebaseerd, geen keyword bias
   
-  const hasClientsData = clientsContext.length > 0 && isClientsQuery;
-
-  // 1. Keyword Match Score (0-30 punten) - NU OOK CLIENTS DATA
-  const keywordMatches = queryKeywords.filter(keyword => 
-    knowledgeItems.some(kb => {
-      const searchText = `${kb.key} ${kb.category} ${JSON.stringify(kb.value)}`.toLowerCase();
-      return searchText.includes(keyword.toLowerCase());
-    }) || clientsContext.some(client => {
-      const clientText = `${client.name} ${client.company}`.toLowerCase();
-      return clientText.includes(keyword.toLowerCase());
-    })
-  );
-  const keywordScore = Math.min((keywordMatches.length / Math.max(queryKeywords.length, 1)) * 30, 30);
-  score += keywordScore;
+  // 1. SOURCE QUALITY (0-40 punten)
+  const sourceCount = knowledgeItems.length + clientsContext.length;
+  const sourceScore = Math.min((sourceCount / 3) * 40, 40);
+  score += sourceScore;
   
-  if (keywordScore < 15) {
-    gaps.push(`Ontbrekende keywords: ${queryKeywords.filter(k => !keywordMatches.includes(k)).slice(0, 3).join(', ')}`);
+  if (sourceCount === 0) {
+    gaps.push("❌ Geen bronnen gevonden");
+  } else if (sourceCount === 1) {
+    gaps.push("⚠️ Slechts 1 bron - niet gevalideerd");
+    reasons.push(`1 bron beschikbaar`);
   } else {
-    reasons.push(`Goede keyword match (${keywordMatches.length}/${queryKeywords.length})`);
+    reasons.push(`${sourceCount} bronnen geraadpleegd`);
   }
 
-  // 2. Average Confidence Score van gebruikte kennis (0-50 punten)
+  // 2. CONFIDENCE SCORE van bronnen (0-40 punten)
   const avgConfidence = knowledgeItems.length > 0 
     ? knowledgeItems.reduce((sum, kb) => sum + (kb.confidence_score || 0.5), 0) / knowledgeItems.length 
-    : 0.75; // ✅ FIX: Fallback bij lege lijst
-  const confidenceScore = avgConfidence * 50;
+    : 0.75;
+  const confidenceScore = avgConfidence * 40;
   score += confidenceScore;
   
-  if (avgConfidence < 0.7) {
-    gaps.push("Lage betrouwbaarheid van beschikbare kennis");
-  } else {
-    reasons.push(`Hoge data betrouwbaarheid (${(avgConfidence * 100).toFixed(0)}%)`);
+  if (avgConfidence < 0.6) {
+    gaps.push("⚠️ Lage betrouwbaarheid van bronnen");
+  } else if (avgConfidence >= 0.8) {
+    reasons.push(`Hoge bronbetrouwbaarheid (${(avgConfidence * 100).toFixed(0)}%)`);
   }
 
-  // 3. Recency Score (0-10 punten)
+  // 3. RECENCY (0-10 punten)
   const now = Date.now();
   const avgAge = knowledgeItems.length > 0
     ? knowledgeItems.reduce((sum, kb) => {
-        const age = (now - new Date(kb.created_at || kb.updated_at || now).getTime()) / (1000 * 60 * 60 * 24);
+        const age = (now - new Date(kb.updated_at || kb.created_at || now).getTime()) / (1000 * 60 * 60 * 24);
         return sum + age;
       }, 0) / knowledgeItems.length
-    : Infinity; // ✅ FIX: Fallback bij lege lijst
+    : 0;
   
-  let recencyScore = avgAge === Infinity ? 0 : 0; // ✅ FIX: Check op Infinity
-  if (avgAge !== Infinity) {
-    if (avgAge < 7) recencyScore = 10;
-    else if (avgAge < 30) recencyScore = 7;
-    else if (avgAge < 90) recencyScore = 4;
-  }
+  let recencyScore = 0;
+  if (avgAge < 7) recencyScore = 10;
+  else if (avgAge < 30) recencyScore = 7;
+  else if (avgAge < 90) recencyScore = 4;
   
   score += recencyScore;
-  if (recencyScore < 7) {
-    gaps.push("Data mogelijk verouderd");
+  if (avgAge > 90) {
+    gaps.push("⚠️ Bronnen mogelijk verouderd (>90 dagen)");
   }
 
-  // 4. Source Count (0-10 punten) - NU OOK CLIENTS DATA
-  const totalSources = knowledgeItems.length + (hasClientsData ? clientsContext.length : 0);
-  const sourceScore = Math.min((totalSources / 3) * 10, 10);
-  score += sourceScore;
+  // 4. CLIENTS DATA BOOST (0-10 punten)
+  const clientsRelatedKeywords = ['tarief', 'prijs', 'kostprijs', 'contract', 'overeenkomst'];
+  const isClientsQuery = queryKeywords.some(kw => 
+    clientsRelatedKeywords.some(ct => kw.toLowerCase().includes(ct))
+  );
   
-  if (totalSources < 2) {
-    gaps.push("Te weinig bronnen voor validatie");
-  } else {
-    reasons.push(`Meerdere bronnen (${totalSources}${hasClientsData ? ' incl. clients data' : ''})`);
-  }
-  
-  // 🆕 5. Clients Data Boost (0-20 punten extra bij relevante clients queries)
-  if (hasClientsData) {
-    const clientsBoost = 20;
-    score += clientsBoost;
-    reasons.push(`📋 Relevante clients data gevonden (+${clientsBoost}%)`);
+  if (clientsContext.length > 0 && isClientsQuery) {
+    score += 10;
+    reasons.push(`📋 Relevante cliëntdata beschikbaar`);
   }
 
-  // Convert to 0-1 scale (max 120 punten mogelijk nu met clients boost)
-  const confidence = Math.min(score / 120, 1.0);
+  // Convert to 0-1 scale (max 100 punten)
+  const confidence = Math.min(score / 100, 1.0);
   
   return {
     confidence,
-    reasoning: reasons.join(', ') || `Score: ${(confidence * 100).toFixed(0)}%`,
-    gaps
+    reasoning: reasons.length > 0 ? reasons.join(', ') : `Confidence: ${(confidence * 100).toFixed(0)}%`,
+    gaps: gaps.length > 0 ? gaps : []
   };
 }
 
@@ -858,12 +848,12 @@ serve(async (req) => {
         .eq('user_id', user.id)
         .maybeSingle(),
       
-      // 5 meest recente chat berichten VAN HUIDIGE CONVERSATIE
+      // 5 meest recente chat berichten - ALLEEN als conversation_id bestaat
       supabaseClient
         .from('chat_messages')
         .select('role, content, created_at')
         .eq('user_id', user.id)
-        .eq('conversation_id', conversation_id || '') // ✅ Filter op conversation_id
+        .eq('conversation_id', conversation_id || '__NEVER_MATCH__') // ✅ Fallback naar unmatchable ID
         .order('created_at', { ascending: false })
         .limit(5),
       
@@ -2488,7 +2478,15 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
           // ============================================
           // PERSISTENCE AFTER STREAMING (IN BACKGROUND)
           // ============================================
-          const conversationId = conversation_id || crypto.randomUUID();
+          const conversationId = conversation_id; // ✅ NOOIT fallback - frontend moet altijd ID sturen
+          if (!conversationId) {
+            console.error('❌ No conversation_id provided by client');
+            return new Response(
+              JSON.stringify({ error: 'conversation_id is vereist' }), 
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          console.log(`🔑 Processing conversation: ${conversationId}`);
           
           // Start background persistence (non-blocking)
           (async () => {

@@ -50,6 +50,7 @@ const getConversationId = (): string => {
   if (!conversationId) {
     conversationId = crypto.randomUUID();
     localStorage.setItem('chat_conversation_id', conversationId);
+    console.log('🆕 New conversation started:', conversationId);
   }
   return conversationId;
 };
@@ -57,6 +58,7 @@ const getConversationId = (): string => {
 const startNewConversation = (): string => {
   const newConversationId = crypto.randomUUID();
   localStorage.setItem('chat_conversation_id', newConversationId);
+  console.log('🔄 Conversation reset:', newConversationId);
   return newConversationId;
 };
 
@@ -213,29 +215,21 @@ export const ChatWidget = () => {
 
   const handleClearChat = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) {
-        toast({
-          title: "Fout",
-          description: "Je moet ingelogd zijn om de chat te wissen",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Start nieuwe conversatie sessie (geen database DELETE)
-      const newConversationId = startNewConversation();
+      const oldConversationId = localStorage.getItem('chat_conversation_id');
       
-      // Reset lokale state
+      // 1️⃣ Remove conversation_id EERST (voor nieuwe start)
+      localStorage.removeItem('chat_conversation_id');
+      console.log('🗑️ Cleared conversation:', oldConversationId);
+      
+      // 2️⃣ Clear UI state
       setMessages([]);
       setShowWelcome(true);
       setShowResetDialog(false);
-
-      console.log('🔄 Nieuwe conversatie gestart:', newConversationId);
+      
+      // 3️⃣ Genereer nieuwe ID (wordt automatisch gedaan bij volgende message via getConversationId)
       
       toast({
-        title: "✅ Chat gewist",
-        description: "Verse start - alle gesprekken blijven bewaard voor AI training",
+        description: '✅ Chat gewist - nieuwe conversatie gestart',
       });
     } catch (error) {
       console.error('Error clearing chat:', error);
