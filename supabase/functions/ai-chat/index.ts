@@ -8,9 +8,33 @@ const corsHeaders = {
 };
 
 // ============================================
-// PERSISTENCE CONTROL FLAGS
+// RETRY HELPER WITH EXPONENTIAL BACKOFF
 // ============================================
-const ENABLE_SAFE_PERSISTENCE = Deno.env.get('ENABLE_SAFE_PERSISTENCE') !== 'false'; // Default: true
+async function persistMessage(
+  supabase: any,
+  message: { user_id: string; conversation_id: string; role: string; content: string; metadata?: any },
+  retries: number = 3
+): Promise<boolean> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .insert(message)
+      .select();
+    
+    if (!error && data) {
+      console.log(`✅ ${message.role} message persisted (attempt ${attempt}/${retries})`);
+      return true;
+    }
+    
+    console.warn(`⚠️ Persist retry ${attempt}/${retries}:`, error);
+    if (attempt < retries) {
+      await new Promise(r => setTimeout(r, 100 * Math.pow(2, attempt - 1)));
+    }
+  }
+  
+  console.error(`❌ Failed to persist ${message.role} message after ${retries} attempts`);
+  return false;
+}
 
 // =============================================================================
 // FASE 1: CONFIDENCE CALCULATION FUNCTION (MET CLIENTS DATA BOOST)
@@ -2462,11 +2486,14 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
           }
           
           // ============================================
-          // SAFE PERSISTENCE BEFORE STREAM CLOSE
+          // PERSISTENCE AFTER STREAMING (IN BACKGROUND)
           // ============================================
           const conversationId = conversation_id || crypto.randomUUID();
           
-          if (ENABLE_SAFE_PERSISTENCE) {
+          // Start background persistence (non-blocking)
+          (async () => {
+            await new Promise(r => setTimeout(r, 500)); // Wait for stream to complete
+            
             try {
               // Get org_id for the user
               const { data: orgData } = await supabaseClient
@@ -2476,45 +2503,40 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                 .single();
 
               if (!orgData?.org_id) {
-                throw new Error('No org_id found for user');
+                console.error('❌ No org_id found for user - cannot persist');
+                return;
               }
 
-              // 1️⃣ CRITICAL: Persist user message
               const userMessage = messages[messages.length - 1];
-              const { data: userMsgData, error: userMsgError } = await supabaseClient
-                .from('chat_messages')
-                .insert({
-                  user_id: user.id,
-                  conversation_id: conversationId,
-                  role: 'user',
-                  content: userMessage.content
-                })
-                .select();
-              
-              if (userMsgError) {
-                throw new Error(`User message insert failed: ${userMsgError.message}`);
-              }
-              console.log('✅ User message persisted');
 
-              // 2️⃣ CRITICAL: Persist assistant message
-              const { data: assistantMsgData, error: assistantMsgError } = await supabaseClient
-                .from('chat_messages')
-                .insert({
-                  user_id: user.id,
-                  conversation_id: conversationId,
-                  role: 'assistant',
-                  content: fullResponse,
-                  metadata: {
-                    feedback_enabled: true,
-                    knowledge_ids_for_feedback: usedKnowledgeIds
-                  }
-                })
-                .select();
-              
-              if (assistantMsgError) {
-                throw new Error(`Assistant message insert failed: ${assistantMsgError.message}`);
+              // 1️⃣ CRITICAL: Persist user message with retry
+              const userPersisted = await persistMessage(supabaseClient, {
+                user_id: user.id,
+                conversation_id: conversationId,
+                role: 'user',
+                content: userMessage.content
+              });
+
+              if (!userPersisted) {
+                console.error('❌ CRITICAL: User message not persisted!');
               }
-              console.log('✅ Assistant message persisted');
+
+              // 2️⃣ CRITICAL: Persist assistant message with retry
+              const assistantPersisted = await persistMessage(supabaseClient, {
+                user_id: user.id,
+                conversation_id: conversationId,
+                role: 'assistant',
+                content: fullResponse,
+                metadata: {
+                  feedback_enabled: true,
+                  knowledge_ids_for_feedback: usedKnowledgeIds
+                }
+              });
+
+              if (!assistantPersisted) {
+                console.error('❌ CRITICAL: Assistant message not persisted!');
+                return;
+              }
 
               // 3️⃣ OPTIONAL: Conversation context (soft fail)
               if (usedKnowledgeIds.length > 0) {
@@ -2530,9 +2552,8 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                       user_question: userMessage.content
                     }
                   });
-                  console.log('✅ Conversation context saved');
-                } catch (contextError) {
-                  console.warn('⚠️ Conversation context insert failed (non-blocking):', contextError);
+                } catch (e) {
+                  console.warn('Conversation context failed:', e);
                 }
               }
 
@@ -2552,26 +2573,19 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                       conversation_id: conversationId,
                       confidence: responseConfidence
                     },
-                    ai_response: { 
-                      content: fullResponse.substring(0, 1000)
-                    },
+                    ai_response: { content: fullResponse.substring(0, 1000) },
                     outcome: 'success'
                   });
-                  console.log(`✅ Learning event created with ${usedKnowledgeIds.length} knowledge IDs`);
-                } catch (learningError) {
-                  console.warn('⚠️ Learning event insert failed (non-blocking):', learningError);
+                } catch (e) {
+                  console.warn('Learning event failed:', e);
                 }
               }
 
-              console.log(`✅ All persistence complete for conversation ${conversationId}`);
-
-            } catch (persistError) {
-              // Log error but don't break stream (graceful degradation)
-              console.error('❌ CRITICAL PERSIST ERROR (stream continues but no DB save):', persistError);
+              console.log(`✅ ALL PERSISTENCE COMPLETE for conversation ${conversationId}`);
+            } catch (error) {
+              console.error('❌ Background persistence error:', error);
             }
-          } else {
-            console.log('⚠️ ENABLE_SAFE_PERSISTENCE=false - skipping persistence');
-          }
+          })();
           
           // Send usedKnowledge metadata to client for feedback tracking
           if (usedKnowledgeIds.length > 0) {
