@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { getFullInstructions, detectRoleFromQuestion } from "../_shared/abczorg-instructions.ts";
 
 const corsHeaders = {
@@ -908,13 +908,13 @@ serve(async (req) => {
         .limit(5),
       
       // Top 5 business intelligence insights
-      supabaseClient
+      userOrgId ? supabaseClient
         .from('business_intelligence')
         .select('*')
-        .eq('org_id', userOrg.org_id)
+        .eq('org_id', userOrgId)
         .eq('status', 'active')
         .order('impact_score', { ascending: false })
-        .limit(5),
+        .limit(5) : Promise.resolve({ data: [], error: null }),
       
       // 3 meest recente conversatie contexten
       supabaseClient
@@ -2573,9 +2573,9 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                   const responseConfidenceMatch = fullResponse.match(/\[(?:🟢|🟡|🟠|🔴)\s+(\d+)%/);
                   const responseConfidence = responseConfidenceMatch ? parseInt(responseConfidenceMatch[1]) / 100 : 0.75;
                   
-                  await supabaseClient.from('ai_learning_events').insert({
-                    user_id: user.id,
-                    org_id: orgData.org_id,
+                  await supabaseServiceClient.from('ai_learning_events').insert({
+                    user_id: userId,
+                    org_id: userOrgId || userId,
                     event_type: 'ai_response_generated',
                     context: {
                       question: userMessage.content,

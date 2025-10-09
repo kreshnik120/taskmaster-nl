@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { Resend } from "https://esm.sh/resend@4.0.0";
-import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.0.379";
+// PDF parsing moved to separate parse-pdf-cv function
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -121,29 +121,29 @@ const handler = async (req: Request): Promise<Response> => {
 
         console.log("CV uploaded to:", cvFilePath);
 
-        // Extract text from PDF for AI analysis using PDF.js
+        // Extract text from PDF using parse-pdf-cv function
         if (cvAttachment.content_type === "application/pdf") {
           try {
-            console.log("Extracting text from PDF with PDF.js...");
+            console.log("📄 Calling parse-pdf-cv function...");
             
-            // Load PDF document
-            const loadingTask = pdfjsLib.getDocument({ data: cvBuffer });
-            const pdfDocument = await loadingTask.promise;
-            console.log(`PDF loaded: ${pdfDocument.numPages} pages`);
+            // Call the lightweight PDF parser function
+            const { data: pdfData, error: pdfError } = await supabase.functions.invoke(
+              'parse-pdf-cv',
+              {
+                body: {
+                  pdfBase64: cvAttachment.content,
+                  filename: cvAttachment.filename
+                }
+              }
+            );
             
-            // Extract text from all pages
-            let fullText = "";
-            for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
-              const page = await pdfDocument.getPage(pageNum);
-              const textContent = await page.getTextContent();
-              const pageText = textContent.items
-                .map((item: any) => item.str)
-                .join(" ");
-              fullText += pageText + "\n";
+            if (pdfError) {
+              console.error("❌ PDF parsing failed:", pdfError);
+              cvContent = emailBody; // Fallback to email body
+            } else {
+              cvContent = pdfData.text || emailBody;
+              console.log(`✅ PDF text extracted: ${cvContent.length} characters, first 200: ${cvContent.substring(0, 200)}...`);
             }
-            
-            cvContent = fullText.trim();
-            console.log(`PDF text extracted: ${cvContent.length} characters, first 200: ${cvContent.substring(0, 200)}...`);
           } catch (pdfError) {
             console.error("PDF parsing error:", pdfError);
             if (pdfError instanceof Error) {

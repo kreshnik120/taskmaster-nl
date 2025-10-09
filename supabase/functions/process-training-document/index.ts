@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
+// XLSX lazy loaded only for Excel files
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -106,7 +106,9 @@ serve(async (req) => {
       if (isPdf || isDocx) {
         processLargeFileWithVisionInBackground(supabase, filePath, fileName, fileBlob, docData.user_id, docData.org_id);
       } else if (isExcel) {
-        processExcelInBackground(supabase, filePath, fileName, fileBlob, docData.user_id, docData.org_id);
+        console.log('[EXCEL] Lazy loading XLSX library for large file...');
+        const XLSX = await import("https://esm.sh/xlsx@0.18.5");
+        processLargeExcelInBackground(supabase, filePath, fileName, fileBlob, docData.user_id, docData.org_id, XLSX);
       } else {
         const text = new TextDecoder().decode(fileBlob);
         processLargeFileInBackground(supabase, filePath, fileName, text, docData.user_id, docData.org_id);
@@ -123,7 +125,9 @@ serve(async (req) => {
     if (isPdf || isDocx) {
       await processWithVision(supabase, filePath, fileName, fileBlob, docData.user_id, docData.org_id);
     } else if (isExcel) {
-      await processExcelFile(supabase, filePath, fileName, fileBlob, docData.user_id, docData.org_id);
+      console.log('[EXCEL] Lazy loading XLSX library...');
+      const XLSX = await import("https://esm.sh/xlsx@0.18.5");
+      await extractKnowledgeFromExcel(supabase, filePath, fileName, fileBlob, docData.user_id, docData.org_id, XLSX);
     } else {
       const text = new TextDecoder().decode(fileBlob);
       await processWithText(supabase, filePath, fileName, text, docData.user_id, docData.org_id, 0);
@@ -207,13 +211,14 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-async function processExcelFile(
+async function extractKnowledgeFromExcel(
   supabase: any,
   filePath: string,
   fileName: string,
   fileBlob: ArrayBuffer,
   userId: string,
-  orgId: string
+  orgId: string,
+  XLSX: any  // ✅ Passed as parameter (lazy loaded)
 ): Promise<any[]> {
   console.log(`[EXCEL] Processing Excel file: ${fileName}`);
   
@@ -223,7 +228,7 @@ async function processExcelFile(
   // Convert alle sheets naar text
   let fullText = `Excel bestand: ${fileName}\n\n`;
   
-  workbook.SheetNames.forEach(sheetName => {
+  workbook.SheetNames.forEach((sheetName: string) => {
     const sheet = workbook.Sheets[sheetName];
     
     // Convert naar CSV met pipe separator voor betere AI parsing
@@ -249,13 +254,14 @@ async function processExcelFile(
   );
 }
 
-async function processExcelInBackground(
+async function processLargeExcelInBackground(
   supabase: any,
   filePath: string,
   fileName: string,
   fileBlob: ArrayBuffer,
   userId: string,
-  orgId: string
+  orgId: string,
+  XLSX: any  // ✅ Passed as parameter (lazy loaded)
 ) {
   try {
     console.log(`[EXCEL] Processing large Excel file in background: ${fileName}`);
@@ -266,7 +272,7 @@ async function processExcelInBackground(
     // Convert alle sheets naar text
     let fullText = `Excel bestand: ${fileName}\n\n`;
     
-    workbook.SheetNames.forEach(sheetName => {
+    workbook.SheetNames.forEach((sheetName: string) => {
       const sheet = workbook.Sheets[sheetName];
       const csv = XLSX.utils.sheet_to_csv(sheet, { 
         FS: ' | ',
