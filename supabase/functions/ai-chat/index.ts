@@ -760,6 +760,18 @@ serve(async (req) => {
       }
     });
 
+    // Service role client for background persistence (bypasses RLS)
+    const supabaseServiceClient = createClient(
+      supabaseUrl,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        }
+      }
+    );
+
     // Get user context with explicit access token
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser(accessToken);
     
@@ -2502,23 +2514,12 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
             await new Promise(r => setTimeout(r, 500)); // Wait for stream to complete
             
             try {
-              // Get org_id for the user
-              const { data: orgData } = await supabaseClient
-                .from('user_organizations')
-                .select('org_id')
-                .eq('user_id', user.id)
-                .single();
-
-              if (!orgData?.org_id) {
-                console.error('❌ No org_id found for user - cannot persist');
-                return;
-              }
-
+              const userId = user.id;
               const userMessage = messages[messages.length - 1];
 
-              // 1️⃣ CRITICAL: Persist user message with retry
-              const userPersisted = await persistMessage(supabaseClient, {
-                user_id: user.id,
+              // 1️⃣ CRITICAL: Persist user message with retry (using service role client)
+              const userPersisted = await persistMessage(supabaseServiceClient, {
+                user_id: userId,
                 conversation_id: conversationId,
                 role: 'user',
                 content: userMessage.content
@@ -2528,9 +2529,9 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                 console.error('❌ CRITICAL: User message not persisted!');
               }
 
-              // 2️⃣ CRITICAL: Persist assistant message with retry
-              const assistantPersisted = await persistMessage(supabaseClient, {
-                user_id: user.id,
+              // 2️⃣ CRITICAL: Persist assistant message with retry (using service role client)
+              const assistantPersisted = await persistMessage(supabaseServiceClient, {
+                user_id: userId,
                 conversation_id: conversationId,
                 role: 'assistant',
                 content: fullResponse,
@@ -2545,12 +2546,14 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                 return;
               }
 
+              console.log('✅ Both messages persisted successfully');
+
               // 3️⃣ OPTIONAL: Conversation context (soft fail)
               if (usedKnowledgeIds.length > 0) {
                 try {
-                  await supabaseClient.from('conversation_context').insert({
+                  await supabaseServiceClient.from('conversation_context').insert({
                     conversation_id: conversationId,
-                    user_id: user.id,
+                    user_id: userId,
                     category: 'task_management_chat',
                     summary: userMessage.content.substring(0, 500),
                     key_points: {
