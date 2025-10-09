@@ -14,6 +14,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useQuery } from "@tanstack/react-query";
+import { Badge } from "@/components/ui/badge";
 
 const menuItems = [
   { title: "Mijn dag", url: "/", icon: Home },
@@ -31,6 +33,21 @@ const menuItems = [
 export function AppSidebar() {
   const navigate = useNavigate();
   const { isAdmin, canEdit } = useUserRole();
+
+  // Fetch validation queue count
+  const { data: validationCount } = useQuery({
+    queryKey: ['validation-queue-count'],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('ai_knowledge_base')
+        .select('*', { count: 'exact', head: true })
+        .eq('validation_status', 'unverified')
+        .is('deleted_at', null);
+      return count || 0;
+    },
+    enabled: isAdmin(),
+    refetchInterval: 30000,
+  });
 
   const handleLogout = async () => {
     try {
@@ -66,6 +83,11 @@ export function AppSidebar() {
                     >
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
+                      {item.url === '/ai-training' && isAdmin() && validationCount && validationCount > 0 && (
+                        <Badge variant="destructive" className="ml-auto">
+                          {validationCount > 999 ? '999+' : validationCount}
+                        </Badge>
+                      )}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

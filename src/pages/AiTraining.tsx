@@ -95,7 +95,7 @@ const AiTraining = () => {
               </p>
             </div>
 
-            <Tabs defaultValue="dashboard" className="w-full">
+            <Tabs defaultValue="validation" className="w-full">
               <TabsList className="grid w-full grid-cols-9">
                 <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
                 <AdminOnly>

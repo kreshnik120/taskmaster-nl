@@ -104,7 +104,15 @@ export const ManualFunctionTrigger = () => {
 
       if (error) throw error;
 
-      toast.success(`✅ ${functionName} completed!`);
+      // Display results for retroactive-training-evaluator
+      if (functionName === 'retroactive-training-evaluator' && data) {
+        toast.success(`✅ Retroactive Training: ${data.reapplied_items || 0} items re-applied!`, {
+          description: `Evaluated ${data.evaluated_events || 0} events with 80-85% confidence`,
+          duration: 5000,
+        });
+      } else {
+        toast.success(`✅ ${functionName} completed!`);
+      }
       
       // Refresh metrics after function completes
       setTimeout(() => refetchMetrics(), 2000);
@@ -195,9 +203,37 @@ export const ManualFunctionTrigger = () => {
             
             <div className="grid gap-3 md:grid-cols-2">
               <Button
+                onClick={() => triggerValidationFunction('retroactive-training-evaluator')}
+                disabled={triggeringFunction === 'retroactive-training-evaluator'}
+                variant="default"
+                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+              >
+                {triggeringFunction === 'retroactive-training-evaluator' ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                🔥 Retroactive Self-Training
+              </Button>
+
+              <Button
+                onClick={() => triggerValidationFunction('auto-resolve-alerts')}
+                disabled={triggeringFunction === 'auto-resolve-alerts'}
+                variant="default"
+                className="w-full bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700"
+              >
+                {triggeringFunction === 'auto-resolve-alerts' ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                )}
+                🤖 Auto-Resolve Alerts
+              </Button>
+
+              <Button
                 onClick={() => triggerValidationFunction('meta-orchestrator')}
                 disabled={triggeringFunction === 'meta-orchestrator'}
-                variant="default"
+                variant="outline"
                 className="w-full"
               >
                 {triggeringFunction === 'meta-orchestrator' ? (
@@ -205,7 +241,7 @@ export const ManualFunctionTrigger = () => {
                 ) : (
                   <Play className="mr-2 h-4 w-4" />
                 )}
-                🧠 Trigger Meta-Orchestrator
+                🧠 Meta-Orchestrator
               </Button>
 
               <Button
@@ -237,8 +273,17 @@ export const ManualFunctionTrigger = () => {
               </Button>
             </div>
 
+            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
+                🔥 QUICK WINS: Run Retroactive + Auto-Resolve eerst!
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                Deze functies geven direct impact op self-training apply rate en alert backlog.
+              </p>
+            </div>
+
             <p className="text-xs text-muted-foreground">
-              Deze functies draaien automatisch elk uur. Gebruik manual triggers alleen bij urgente problemen.
+              Standaard functies draaien automatisch elk uur. Gebruik manual triggers alleen bij urgente problemen.
             </p>
           </div>
         </CardContent>

@@ -85,3 +85,6 @@ verify_jwt = false
 [functions.retroactive-training-evaluator]
 verify_jwt = true
 
+[functions.auto-resolve-alerts]
+verify_jwt = true
+
