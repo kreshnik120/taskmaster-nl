@@ -17,6 +17,7 @@ import { SystemMonitor } from "@/components/SystemMonitor";
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { AdminOnly } from "@/components/auth/AdminOnly";
 import { Week1To2TestPanel } from "@/components/AITraining/Week1To2TestPanel";
+import { AlertTriageSystem } from "@/components/AITraining/AlertTriageSystem";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -73,8 +74,9 @@ const AiTraining = () => {
             </div>
 
             <Tabs defaultValue="dashboard" className="w-full">
-              <TabsList className="grid w-full grid-cols-7">
+              <TabsList className="grid w-full grid-cols-8">
                 <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
+                <TabsTrigger value="alerts">🚨 Alerts</TabsTrigger>
                 <TabsTrigger value="week1-2">🧪 Week 1-2</TabsTrigger>
                 <AdminOnly>
                   <TabsTrigger value="system">🔧 Systeem</TabsTrigger>
@@ -87,6 +89,10 @@ const AiTraining = () => {
 
               <TabsContent value="dashboard" className="mt-6">
                 <LearningDashboard />
+              </TabsContent>
+
+              <TabsContent value="alerts" className="mt-6">
+                <AlertTriageSystem />
               </TabsContent>
 
               <TabsContent value="week1-2" className="mt-6">
