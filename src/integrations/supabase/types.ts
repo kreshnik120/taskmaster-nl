@@ -94,6 +94,7 @@ export type Database = {
           last_reviewed_at: string | null
           last_used_at: string | null
           last_validation_error: string | null
+          last_verified: string | null
           needs_review: boolean | null
           org_id: string
           original_text: string | null
@@ -107,6 +108,7 @@ export type Database = {
           valid_from: string | null
           valid_to: string | null
           validation_failures: number | null
+          validation_status: string | null
           value: Json
         }
         Insert: {
@@ -131,6 +133,7 @@ export type Database = {
           last_reviewed_at?: string | null
           last_used_at?: string | null
           last_validation_error?: string | null
+          last_verified?: string | null
           needs_review?: boolean | null
           org_id: string
           original_text?: string | null
@@ -144,6 +147,7 @@ export type Database = {
           valid_from?: string | null
           valid_to?: string | null
           validation_failures?: number | null
+          validation_status?: string | null
           value: Json
         }
         Update: {
@@ -168,6 +172,7 @@ export type Database = {
           last_reviewed_at?: string | null
           last_used_at?: string | null
           last_validation_error?: string | null
+          last_verified?: string | null
           needs_review?: boolean | null
           org_id?: string
           original_text?: string | null
@@ -181,6 +186,7 @@ export type Database = {
           valid_from?: string | null
           valid_to?: string | null
           validation_failures?: number | null
+          validation_status?: string | null
           value?: Json
         }
         Relationships: [
@@ -500,8 +506,10 @@ export type Database = {
           last_updated_at: string | null
           org_id: string
           priority: string | null
+          severity: string | null
           status: string | null
           title: string
+          type: string | null
         }
         Insert: {
           data: Json
@@ -513,8 +521,10 @@ export type Database = {
           last_updated_at?: string | null
           org_id: string
           priority?: string | null
+          severity?: string | null
           status?: string | null
           title: string
+          type?: string | null
         }
         Update: {
           data?: Json
@@ -526,8 +536,10 @@ export type Database = {
           last_updated_at?: string | null
           org_id?: string
           priority?: string | null
+          severity?: string | null
           status?: string | null
           title?: string
+          type?: string | null
         }
         Relationships: [
           {

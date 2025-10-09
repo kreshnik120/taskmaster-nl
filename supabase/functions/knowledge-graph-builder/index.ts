@@ -101,8 +101,21 @@ serve(async (req) => {
     // ULTRA-AUTONOMOUS CONFIG: Higher batch size and parallel mode enabled by default
     const { batch_size, parallel_mode } = await req.json().catch(() => ({}));
 
-    // ULTRA MODE: Process 300 items per batch (was 200)
-    const effectiveBatchSize = batch_size || 300;
+    // ADAPTIVE BATCH SIZE: Reduce for large orgs to prevent token overload
+    let effectiveBatchSize = batch_size || 100;
+    
+    // Fetch total count to determine adaptive sizing
+    const { count: totalCount } = await supabase
+      .from('ai_knowledge_base')
+      .select('*', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .is('deleted_at', null);
+    
+    if (totalCount && totalCount > 500) {
+      effectiveBatchSize = 50; // Extra small for large knowledge bases
+      console.log(`📉 Large org detected (${totalCount} items), reducing batch to ${effectiveBatchSize}`);
+    }
+    
     const parallelMode = parallel_mode !== false; // Default to true
 
     console.log(`🧠 ULTRA Knowledge Graph Builder for org ${orgId}`);
@@ -139,20 +152,27 @@ serve(async (req) => {
       confidence: item.confidence_score
     }));
 
-    // Call Lovable AI to detect relationships
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-pro',
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: 'system',
-            content: `Je bent een ULTRA knowledge graph expert die semantische relaties detecteert tussen kennisitems.
+    // Call Lovable AI with Retry Logic + Exponential Backoff
+    const MAX_RETRIES = 3;
+    let attempt = 0;
+    let aiData: any;
+    let aiContent: string = '';
+
+    while (attempt < MAX_RETRIES) {
+      try {
+        const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-pro',
+            response_format: { type: "json_object" },
+            messages: [
+              {
+                role: 'system',
+                content: `Je bent een ULTRA knowledge graph expert die semantische relaties detecteert tussen kennisitems.
             
 ULTRA MODE: Detecteer ook 2e-graads relaties en hiërarchieën.
 
@@ -197,32 +217,46 @@ Format:
     }
   ]
 }`
-          },
-          {
-            role: 'user',
-            content: `Detecteer alle semantische relaties tussen deze kennisitems:\n\n${JSON.stringify(knowledgeContext, null, 2)}`
+              },
+              {
+                role: 'user',
+                content: `Detecteer alle semantische relaties tussen deze kennisitems:\n\n${JSON.stringify(knowledgeContext, null, 2)}`
+              }
+            ],
+            temperature: 0.3,
+          }),
+        });
+
+        if (!aiResponse.ok) {
+          if (aiResponse.status === 429) {
+            throw new Error('Rate limit exceeded. Please try again later.');
           }
-        ],
-        temperature: 0.3,
-      }),
-    });
+          if (aiResponse.status === 402) {
+            throw new Error('AI credits exhausted. Please add funds to continue.');
+          }
+          throw new Error(`AI API error: ${aiResponse.status}`);
+        }
 
-    if (!aiResponse.ok) {
-      if (aiResponse.status === 429) {
-        throw new Error('Rate limit exceeded. Please try again later.');
+        aiData = await aiResponse.json();
+        aiContent = aiData.choices[0].message.content;
+        break; // Success - exit retry loop
+        
+      } catch (error) {
+        attempt++;
+        if (attempt >= MAX_RETRIES) {
+          console.error(`❌ All ${MAX_RETRIES} retry attempts failed`);
+          throw error;
+        }
+        
+        const waitTime = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s
+        console.log(`⏳ Retry ${attempt}/${MAX_RETRIES} in ${waitTime}ms due to: ${error instanceof Error ? error.message : String(error)}`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
       }
-      if (aiResponse.status === 402) {
-        throw new Error('AI credits exhausted. Please add funds to continue.');
-      }
-      throw new Error(`AI API error: ${aiResponse.status}`);
     }
-
-    const aiData = await aiResponse.json();
-    const aiContent = aiData.choices[0].message.content;
 
     console.log('🤖 AI Response received, parsing relationships...');
 
-    // Parse AI response with robust JSON mode handling
+    // Parse AI response with robust JSON mode handling + REPAIR FALLBACK
     let relationships = [];
     try {
       const parsedResponse = JSON.parse(aiContent);
@@ -246,18 +280,36 @@ Format:
       console.error('❌ Failed to parse AI response:', parseError);
       console.error('Raw response (first 500 chars):', aiContent.slice(0, 500));
       
-      // Log failure to function_call_logs for monitoring
-      await supabase.from('function_call_logs').insert({
-        function_name: 'knowledge-graph-builder',
-        org_id: orgId,
-        user_id: userId,
-        error_message: `JSON parse failed: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
-        success: false,
-        execution_time_ms: Date.now() - startTime,
-        model_used: 'google/gemini-2.5-pro'
-      });
+      // NEW: JSON REPAIR FALLBACK - Extract fragments from broken JSON
+      console.log('🔧 Attempting JSON repair from fragments...');
+      const jsonFragments = aiContent.match(/\{[^}]+\}/g) || [];
+      const repairedRelationships = jsonFragments
+        .map(fragment => {
+          try { 
+            return JSON.parse(fragment); 
+          } catch { 
+            return null; 
+          }
+        })
+        .filter(Boolean);
       
-      relationships = [];
+      if (repairedRelationships.length > 0) {
+        relationships = repairedRelationships;
+        console.log(`⚠️ Repaired ${relationships.length} relationships from JSON fragments`);
+      } else {
+        // Log failure to function_call_logs for monitoring
+        await supabase.from('function_call_logs').insert({
+          function_name: 'knowledge-graph-builder',
+          org_id: orgId,
+          user_id: userId,
+          error_message: `JSON parse failed + repair failed: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
+          success: false,
+          execution_time_ms: Date.now() - startTime,
+          model_used: 'google/gemini-2.5-pro'
+        });
+        
+        relationships = [];
+      }
     }
 
     console.log(`🔗 Detected ${relationships.length} relationships`);
