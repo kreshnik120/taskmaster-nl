@@ -87,6 +87,18 @@ export const TrainingChat = () => {
       };
       setMessages((prev) => [...prev, assistantMessage]);
 
+      // 🔄 Trigger embedding generation voor nieuwe knowledge items
+      if (data.knowledgeIds && Array.isArray(data.knowledgeIds)) {
+        setCurrentStatus("Embeddings genereren...");
+        for (const knowledgeId of data.knowledgeIds) {
+          supabase.functions
+            .invoke('generate-embedding', {
+              body: { knowledge_id: knowledgeId }
+            })
+            .catch(err => console.error('Embedding generation failed:', err));
+        }
+      }
+
       // Toon opgeslagen items met uitgebreide feedback
       if (data.savedCount && data.savedCount > 0) {
         setSavedItemsCount(prev => prev + data.savedCount);
@@ -171,6 +183,17 @@ export const TrainingChat = () => {
             Object.entries(data.categories).forEach(([cat, count]) => {
               allCategories[cat] = (allCategories[cat] || 0) + (count as number);
             });
+          }
+
+          // 🔄 Trigger embedding generation voor chunk knowledge items
+          if (data.knowledgeIds && Array.isArray(data.knowledgeIds)) {
+            for (const knowledgeId of data.knowledgeIds) {
+              supabase.functions
+                .invoke('generate-embedding', {
+                  body: { knowledge_id: knowledgeId }
+                })
+                .catch(err => console.error('Embedding generation failed:', err));
+            }
           }
         }
 

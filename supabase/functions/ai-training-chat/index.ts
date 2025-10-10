@@ -143,6 +143,7 @@ ${isChunk ? 'LET OP: Dit is een deel van een groter document. Verwerk alles in d
 
     let savedCount = 0;
     const categoryCounts: Record<string, number> = {};
+    const knowledgeIds: string[] = []; // 🔄 Track IDs voor embedding generation
 
     if (choice?.message?.tool_calls) {
       for (const toolCall of choice.message.tool_calls) {
@@ -177,7 +178,7 @@ ${isChunk ? 'LET OP: Dit is een deel van een groter document. Verwerk alles in d
               ? ['admin', 'manager']  // HR data alleen voor admins/managers
               : [];  // Andere data toegankelijk voor iedereen in org
             
-            const { error: insertError } = await supabase.from("ai_knowledge_base").insert({
+            const { data: inserted, error: insertError } = await supabase.from("ai_knowledge_base").insert({
               user_id: user.id,
               org_id: orgData.org_id,
               category: args.category,
@@ -193,12 +194,13 @@ ${isChunk ? 'LET OP: Dit is een deel van een groter document. Verwerk alles in d
               valid_from: new Date().toISOString().split('T')[0],
               jurisdiction: 'NL',
               acl: acl
-            });
+            }).select('id').single();
 
-            if (!insertError) {
+            if (!insertError && inserted) {
               savedCount++;
               categoryCounts[args.category] = (categoryCounts[args.category] || 0) + 1;
-              console.log(`✅ Saved: ${args.category}/${args.key}`);
+              knowledgeIds.push(inserted.id); // 🔄 Track ID
+              console.log(`✅ Saved: ${args.category}/${args.key} (ID: ${inserted.id})`);
             } else {
               console.error("❌ Insert error:", insertError);
             }
@@ -224,6 +226,7 @@ ${isChunk ? 'LET OP: Dit is een deel van een groter document. Verwerk alles in d
         response: responseContent,
         savedCount,
         categories: categoryCounts,
+        knowledgeIds, // 🔄 Return IDs voor application-level embedding generation
         isChunk,
         chunkIndex
       }),
