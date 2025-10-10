@@ -19,13 +19,15 @@ serve(async (req) => {
     console.log("🤖 Starting Auto-Resolution Engine...");
 
     // Fetch all active critical alerts
+    // FIXED: Removed .eq("intelligence_type", "alert") - that value doesn't exist in DB
+    // We want ALL intelligence types with critical/high severity
     const { data: alerts, error: fetchError } = await supabase
       .from("business_intelligence")
       .select("*")
-      .eq("intelligence_type", "alert")
       .in("severity", ["critical", "high"])
       .eq("status", "active")
-      .order("detected_at", { ascending: false });
+      .order("detected_at", { ascending: false })
+      .limit(1000); // Process max 1000 alerts per run
 
     if (fetchError) {
       console.error("❌ Error fetching alerts:", fetchError);
