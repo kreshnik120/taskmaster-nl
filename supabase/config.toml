@@ -93,3 +93,6 @@ schedule = "0 * * * *"
 verify_jwt = true
 schedule = "0 2 * * *"
 
+[functions.validate-knowledge]
+verify_jwt = true
+
