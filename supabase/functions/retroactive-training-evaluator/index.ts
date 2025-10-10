@@ -19,6 +19,7 @@ serve(async (req) => {
     console.log("🔄 Starting retroactive self-training evaluation...");
 
     // Get rejected self_training events with score between 0.80-0.85
+    // FIXED: Removed created_at filter that was blocking all results
     const { data: rejectedEvents, error: fetchError } = await supabase
       .from("ai_learning_events")
       .select("*")
@@ -26,7 +27,8 @@ serve(async (req) => {
       .eq("applied_to_knowledge_base", false)
       .gte("confidence_score", 0.80)
       .lt("confidence_score", 0.85)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(100);
 
     if (fetchError) {
       console.error("❌ Error fetching events:", fetchError);
