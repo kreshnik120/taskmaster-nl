@@ -7,9 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, CheckCircle, XCircle, AlertCircle, Zap } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, AlertCircle, Zap, Database } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import confetti from "canvas-confetti";
+import { Progress } from "@/components/ui/progress";
 
 interface KnowledgeItem {
   id: string;
@@ -34,6 +35,8 @@ export function KnowledgeValidator() {
     return stored ? parseInt(stored, 10) : 0;
   });
   const [showQuickWins, setShowQuickWins] = useState<boolean>(true);
+  const [isGeneratingEmbeddings, setIsGeneratingEmbeddings] = useState(false);
+  const [embeddingProgress, setEmbeddingProgress] = useState(0);
 
   // Fetch knowledge items needing validation
   const { data: items, isLoading } = useQuery({
@@ -105,6 +108,65 @@ export function KnowledgeValidator() {
         pending,
         verifiedPercentage: total > 0 ? Math.round((verified / total) * 100) : 0,
       };
+    },
+  });
+
+  // Fetch embedding stats
+  const { data: embeddingStats, refetch: refetchEmbeddings } = useQuery({
+    queryKey: ["embedding-stats"],
+    queryFn: async () => {
+      // Haal totaal aantal knowledge items op
+      const { count: totalKnowledge, error: totalError } = await supabase
+        .from("ai_knowledge_base")
+        .select("*", { count: "exact", head: true })
+        .is("deleted_at", null);
+
+      if (totalError) throw totalError;
+
+      // Haal aantal items met embeddings op
+      const { count: withEmbeddings, error: embeddingsError } = await supabase
+        .from("knowledge_embeddings")
+        .select("*", { count: "exact", head: true });
+
+      if (embeddingsError) throw embeddingsError;
+
+      const missing = (totalKnowledge || 0) - (withEmbeddings || 0);
+      const percentage = totalKnowledge && totalKnowledge > 0
+        ? Math.round((withEmbeddings || 0) / totalKnowledge * 100)
+        : 0;
+
+      return {
+        total: totalKnowledge || 0,
+        withEmbeddings: withEmbeddings || 0,
+        missing,
+        percentage
+      };
+    },
+  });
+
+  // Backfill embeddings mutation
+  const backfillMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("backfill-embeddings", {
+        body: { batch_size: 10 },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      refetchEmbeddings();
+      toast({
+        title: "Batch complete ✅",
+        description: `${data.processed}/${data.total_in_batch} embeddings gegenereerd`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Embedding generation failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      setIsGeneratingEmbeddings(false);
     },
   });
 
@@ -191,6 +253,45 @@ export function KnowledgeValidator() {
     }
 
     validateMutation.mutate({ ids, status });
+  };
+
+  const handleGenerateEmbeddings = async () => {
+    if (!embeddingStats || embeddingStats.missing === 0) {
+      toast({
+        title: "Geen embeddings nodig",
+        description: "Alle knowledge items hebben al embeddings",
+      });
+      return;
+    }
+
+    setIsGeneratingEmbeddings(true);
+    setEmbeddingProgress(0);
+
+    const totalMissing = embeddingStats.missing;
+    let processed = 0;
+
+    try {
+      // Process in batches of 10 until all are done
+      while (processed < totalMissing) {
+        await backfillMutation.mutateAsync();
+        processed += 10;
+        setEmbeddingProgress(Math.min(100, Math.round((processed / totalMissing) * 100)));
+
+        // Check if we're done
+        await refetchEmbeddings();
+        if (embeddingStats && embeddingStats.missing === 0) break;
+      }
+
+      toast({
+        title: "Alle embeddings gegenereerd! 🎉",
+        description: `${totalMissing} embeddings succesvol aangemaakt`,
+      });
+    } catch (error) {
+      console.error("Error generating embeddings:", error);
+    } finally {
+      setIsGeneratingEmbeddings(false);
+      setEmbeddingProgress(0);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -297,6 +398,74 @@ export function KnowledgeValidator() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Embeddings Card with Generate Button */}
+      <Card className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 border-purple-200 dark:border-purple-800">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="h-5 w-5" />
+                Embedding Coverage
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Vector embeddings voor semantic search
+              </CardDescription>
+            </div>
+            <Button
+              onClick={handleGenerateEmbeddings}
+              disabled={isGeneratingEmbeddings || (embeddingStats?.missing === 0)}
+              variant="default"
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              {isGeneratingEmbeddings ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Genereren... {embeddingProgress}%
+                </>
+              ) : (
+                <>
+                  <Zap className="mr-2 h-4 w-4" />
+                  Genereer Missing Embeddings ({embeddingStats?.missing || 0})
+                </>
+              )}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Met Embeddings</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {embeddingStats?.withEmbeddings || 0}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Zonder Embeddings</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {embeddingStats?.missing || 0}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Coverage</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {embeddingStats?.percentage || 0}%
+                </p>
+              </div>
+            </div>
+            
+            {isGeneratingEmbeddings && (
+              <div className="space-y-2">
+                <Progress value={embeddingProgress} className="h-2" />
+                <p className="text-xs text-muted-foreground text-center">
+                  Batch processing: {embeddingProgress}% complete
+                </p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Filters & Actions */}
       <Card>
