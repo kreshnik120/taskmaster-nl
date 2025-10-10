@@ -12,7 +12,13 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const startTime = Date.now();
     const { knowledge_id } = await req.json();
+    
+    console.log('🔍 generate-embedding invoked', {
+      knowledge_id,
+      timestamp: new Date().toISOString()
+    });
 
     if (!knowledge_id) {
       return new Response(
@@ -106,7 +112,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`✅ Generated embedding for knowledge item ${knowledge_id}`);
+    console.log('✅ Embedding stored', {
+      knowledge_id,
+      embedding_dimensions: embedding.length,
+      execution_time_ms: Date.now() - startTime
+    });
 
     return new Response(
       JSON.stringify({ success: true, knowledge_id }),

@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
     // Haal knowledge items op zonder embeddings
     const { data: knowledgeItems, error: fetchError } = await supabase
       .from('ai_knowledge_base')
-      .select('id, category, key, value')
+      .select('id, category, key, value, org_id')
       .is('deleted_at', null)
       .not('id', 'in', supabase
         .from('knowledge_embeddings')
@@ -50,6 +50,22 @@ Deno.serve(async (req) => {
     }
 
     console.log(`📦 Processing batch of ${knowledgeItems.length} items`);
+
+    // Track progress in orchestrator_state
+    if (knowledgeItems.length > 0 && knowledgeItems[0].org_id) {
+      await supabase
+        .from('orchestrator_state')
+        .upsert({
+          org_id: knowledgeItems[0].org_id,
+          component: 'backfill-embeddings',
+          status: 'running',
+          current_batch: 0,
+          metadata: {
+            batch_size,
+            started_at: new Date().toISOString()
+          }
+        });
+    }
 
     // Genereer embeddings voor elk item
     const results = {
@@ -110,6 +126,22 @@ Deno.serve(async (req) => {
     }
 
     console.log(`✅ Batch complete: ${results.processed}/${knowledgeItems.length} processed`);
+
+    // Update progress to completed
+    if (knowledgeItems.length > 0 && knowledgeItems[0].org_id) {
+      await supabase
+        .from('orchestrator_state')
+        .upsert({
+          org_id: knowledgeItems[0].org_id,
+          component: 'backfill-embeddings',
+          status: 'idle',
+          total_items_processed: results.processed,
+          metadata: {
+            completed_at: new Date().toISOString(),
+            errors: results.errors.length
+          }
+        });
+    }
 
     return new Response(
       JSON.stringify({
