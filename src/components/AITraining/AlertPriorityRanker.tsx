@@ -151,11 +151,23 @@ export function AlertPriorityRanker() {
 
   const topTenAlerts = rankedAlerts?.slice(0, 10) || [];
   const quickWins = rankedAlerts?.filter(a => a.frequency >= 5) || [];
+  
+  // Calculate category distribution
+  const categoryStats = rankedAlerts?.reduce((acc, alert) => {
+    const category = alert.data?.category || 'uncategorized';
+    acc[category] = (acc[category] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>) || {};
+
+  const totalCategorized = rankedAlerts?.filter(a => a.data?.category).length || 0;
+  const categorizationRate = rankedAlerts?.length 
+    ? ((totalCategorized / rankedAlerts.length) * 100).toFixed(1) 
+    : '0.0';
 
   return (
     <div className="space-y-6">
       {/* Summary Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">
@@ -195,7 +207,46 @@ export function AlertPriorityRanker() {
             </div>
           </CardContent>
         </Card>
+
+        <Card className={totalCategorized === rankedAlerts?.length ? "border-green-500" : "border-yellow-500"}>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              Categorisatie
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{categorizationRate}%</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {totalCategorized}/{rankedAlerts?.length || 0} alerts
+            </p>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Category Distribution */}
+      {Object.keys(categoryStats).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Category Distributie</CardTitle>
+            <CardDescription>
+              Verdeling van alerts per categorie
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {Object.entries(categoryStats)
+                .sort(([, a], [, b]) => b - a)
+                .map(([category, count]) => (
+                  <div key={category} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                    <span className="text-xs font-medium truncate">{category}</span>
+                    <Badge variant="secondary">{count}</Badge>
+                  </div>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick Actions */}
       <Card>
