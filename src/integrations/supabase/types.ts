@@ -99,9 +99,12 @@ export type Database = {
           org_id: string
           original_text: string | null
           redacted_text: string | null
+          retrieved_at: string | null
           review_count: number | null
           role_tags: string[] | null
           source: string | null
+          source_title: string | null
+          source_url: string | null
           updated_at: string | null
           usage_count: number | null
           user_id: string
@@ -138,9 +141,12 @@ export type Database = {
           org_id: string
           original_text?: string | null
           redacted_text?: string | null
+          retrieved_at?: string | null
           review_count?: number | null
           role_tags?: string[] | null
           source?: string | null
+          source_title?: string | null
+          source_url?: string | null
           updated_at?: string | null
           usage_count?: number | null
           user_id: string
@@ -177,9 +183,12 @@ export type Database = {
           org_id?: string
           original_text?: string | null
           redacted_text?: string | null
+          retrieved_at?: string | null
           review_count?: number | null
           role_tags?: string[] | null
           source?: string | null
+          source_title?: string | null
+          source_url?: string | null
           updated_at?: string | null
           usage_count?: number | null
           user_id?: string

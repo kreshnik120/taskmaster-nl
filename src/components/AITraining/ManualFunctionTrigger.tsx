@@ -456,6 +456,43 @@ export const ManualFunctionTrigger = () => {
             </div>
           </div>
 
+          {/* PRE-FLIGHT: Embeddings Backfill - MOET EERST */}
+          {validationMetrics && validationMetrics.embeddingStats.missing > 0 && (
+            <div className="p-4 border-2 border-orange-500 rounded-lg bg-orange-50 dark:bg-orange-950/20">
+              <h4 className="text-sm font-bold text-orange-700 dark:text-orange-400 mb-2 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" />
+                PRE-FLIGHT STAP VEREIST
+              </h4>
+              <p className="text-xs text-orange-600 dark:text-orange-300 mb-3">
+                Er zijn {validationMetrics.embeddingStats.missing} items zonder embeddings. 
+                Deze moeten eerst gegenereerd worden voordat web-validatie effectief kan werken.
+              </p>
+              <Button
+                onClick={runAutoBackfill}
+                disabled={isBackfilling}
+                variant="default"
+                size="lg"
+                className="w-full bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-bold"
+              >
+                {isBackfilling ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    {backfillProgress && (
+                      <span>
+                        Batch {backfillProgress.batch}: {backfillProgress.processed}/{backfillProgress.total}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Database className="mr-2 h-5 w-5" />
+                    🚀 START EMBEDDINGS BACKFILL ({validationMetrics.embeddingStats.missing} items)
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+
           {/* Manual Triggers */}
           <div className="space-y-3">
             <h4 className="text-sm font-semibold">Manual Validation Triggers</h4>
