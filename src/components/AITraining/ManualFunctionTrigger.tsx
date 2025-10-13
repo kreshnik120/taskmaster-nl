@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Play, CheckCircle2, AlertCircle, AlertTriangle, RefreshCw } from "lucide-react";
+import { Loader2, Play, CheckCircle2, AlertCircle, AlertTriangle, RefreshCw, Database } from "lucide-react";
 
 export const ManualFunctionTrigger = () => {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -45,10 +45,30 @@ export const ManualFunctionTrigger = () => {
 
       const feedbackApplyRate = totalEvents && totalEvents > 0 ? Math.round(((kbGrowth || 0) / totalEvents) * 100) : 0;
 
+      // Embedding stats
+      const { count: totalKnowledge } = await supabase
+        .from('ai_knowledge_base')
+        .select('*', { count: 'exact', head: true })
+        .is('deleted_at', null);
+
+      const { count: withEmbeddings } = await supabase
+        .from('knowledge_embeddings')
+        .select('*', { count: 'exact', head: true });
+
+      const embeddingStats = {
+        total: totalKnowledge || 0,
+        withEmbeddings: withEmbeddings || 0,
+        missing: (totalKnowledge || 0) - (withEmbeddings || 0),
+        percentage: totalKnowledge && totalKnowledge > 0 
+          ? Math.round((withEmbeddings || 0) / totalKnowledge * 100) 
+          : 0
+      };
+
       return {
         needsReview,
         brokenSources: 0,
-        feedbackApplyRate: Math.min(feedbackApplyRate, 100)
+        feedbackApplyRate: Math.min(feedbackApplyRate, 100),
+        embeddingStats
       };
     },
     refetchInterval: 30000
@@ -247,7 +267,7 @@ export const ManualFunctionTrigger = () => {
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Status Cards */}
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
             <div className="p-4 border rounded-lg">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-muted-foreground">Needs Review</span>
@@ -284,6 +304,23 @@ export const ManualFunctionTrigger = () => {
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 Target: {'>'}80%
+              </p>
+            </div>
+
+            <div className="p-4 border rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-muted-foreground">Embedding Coverage</span>
+                <Database className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <p className={`text-3xl font-bold ${
+                (validationMetrics?.embeddingStats?.percentage || 0) >= 90 ? 'text-green-600' : 
+                (validationMetrics?.embeddingStats?.percentage || 0) >= 50 ? 'text-yellow-600' : 
+                'text-red-600'
+              }`}>
+                {validationMetrics?.embeddingStats?.percentage || 0}%
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {validationMetrics?.embeddingStats?.withEmbeddings || 0} / {validationMetrics?.embeddingStats?.total || 0} items
               </p>
             </div>
           </div>
