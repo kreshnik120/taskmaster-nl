@@ -13,6 +13,11 @@ export const ManualFunctionTrigger = () => {
   const [result, setResult] = useState<any>(null);
   const [triggeringFunction, setTriggeringFunction] = useState<string | null>(null);
   const [isBackfilling, setIsBackfilling] = useState(false);
+  const [backfillProgress, setBackfillProgress] = useState<{
+    processed: number;
+    total: number;
+    batch: number;
+  } | null>(null);
 
   // Fetch validation metrics - simplified version
   const { data: validationMetrics, refetch: refetchMetrics } = useQuery({
@@ -122,6 +127,59 @@ export const ManualFunctionTrigger = () => {
       toast.error(`❌ Error: ${error.message || 'Failed to trigger function'}`);
     } finally {
       setTriggeringFunction(null);
+    }
+  };
+
+  const runAutoBackfill = async () => {
+    setIsBackfilling(true);
+    setBackfillProgress({ processed: 0, total: 0, batch: 0 });
+    
+    try {
+      let totalProcessed = 0;
+      let batchNumber = 0;
+      let hasMore = true;
+      
+      toast.info("🚀 Auto-backfill gestart - dit kan 15-20 minuten duren...", { duration: 5000 });
+      
+      while (hasMore) {
+        batchNumber++;
+        
+        const { data, error } = await supabase.functions.invoke('backfill-embeddings', {
+          body: { batch_size: 50 }
+        });
+        
+        if (error) {
+          throw new Error(error.message || 'Backfill failed');
+        }
+        
+        totalProcessed += data.processed || 0;
+        setBackfillProgress({
+          processed: totalProcessed,
+          total: data.total_missing || 0,
+          batch: batchNumber
+        });
+        
+        // Check if we're done
+        if (data.processed === 0 || data.reason === 'no_missing_embeddings') {
+          hasMore = false;
+          toast.success(
+            `✅ Auto-backfill voltooid! ${totalProcessed} embeddings gegenereerd`,
+            { duration: 5000 }
+          );
+        } else {
+          // Short delay between batches to prevent rate limiting
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+      
+      // Refresh metrics after completion
+      setTimeout(() => refetchMetrics(), 2000);
+    } catch (err: any) {
+      console.error('Auto-backfill error:', err);
+      toast.error(`❌ Auto-backfill gestopt: ${err.message}`);
+    } finally {
+      setIsBackfilling(false);
+      setBackfillProgress(null);
     }
   };
 
@@ -306,58 +364,26 @@ export const ManualFunctionTrigger = () => {
               </Button>
 
               <Button
-                onClick={async () => {
-                  setIsBackfilling(true);
-                  try {
-                    toast.info("🚀 Starting embedding backfill...");
-                    
-                    const { data, error } = await supabase.functions.invoke('backfill-embeddings', {
-                      body: { batch_size: 50 }
-                    });
-                    
-                    if (error) {
-                      // Parse structured error from edge function
-                      const errorMessage = error.message || 'Unknown error';
-                      const errorContext = data?.stage ? ` (stage: ${data.stage})` : '';
-                      throw new Error(errorMessage + errorContext);
-                    }
-                    
-                    if (data.processed === 0) {
-                      toast.success(
-                        data.reason === 'no_missing_embeddings' 
-                          ? `✅ Alle embeddings zijn up-to-date!` 
-                          : `✅ Geen items te verwerken`,
-                        { duration: 3000 }
-                      );
-                    } else {
-                      toast.success(
-                        `✅ Backfill voltooid: ${data.processed}/${data.total_in_batch} embeddings gegenereerd`,
-                        { 
-                          description: data.errors?.length > 0 ? `${data.errors.length} errors` : undefined,
-                          duration: 5000 
-                        }
-                      );
-                    }
-                    
-                    // Refresh metrics after completion
-                    setTimeout(() => refetchMetrics(), 2000);
-                  } catch (err: any) {
-                    console.error('Backfill error:', err);
-                    toast.error(`❌ Backfill mislukt: ${err.message}`);
-                  } finally {
-                    setIsBackfilling(false);
-                  }
-                }}
+                onClick={runAutoBackfill}
                 disabled={isBackfilling}
-                variant="outline"
-                className="w-full"
+                variant="default"
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
               >
                 {isBackfilling ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {backfillProgress && (
+                      <span className="text-xs">
+                        Batch {backfillProgress.batch}: {backfillProgress.processed}/{backfillProgress.total}
+                      </span>
+                    )}
+                  </>
                 ) : (
-                  <RefreshCw className="mr-2 h-4 w-4" />
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    🔄 Auto-Backfill Embeddings
+                  </>
                 )}
-                Backfill Embeddings
               </Button>
             </div>
 
