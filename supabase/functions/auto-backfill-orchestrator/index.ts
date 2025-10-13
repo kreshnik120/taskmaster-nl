@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { batch_size = 50 } = await req.json();
+    const { batch_size = 25 } = await req.json();
     
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -161,11 +161,12 @@ Deno.serve(async (req) => {
 
     // Start background task
     const backgroundTask = async () => {
+      const BATCH_SIZE = 25; // Kleinere batches voor stabiliteit
       let totalProcessed = 0;
       let batchNumber = 0;
       let hasMore = true;
       let currentMissingCount = missingCount;
-      let currentBatchSize = batch_size;
+      let currentBatchSize = BATCH_SIZE;
       let currentOffset = 0;
       const startTime = Date.now();
       const maxRuntimeMs = 45 * 60 * 1000; // 45 minutes
