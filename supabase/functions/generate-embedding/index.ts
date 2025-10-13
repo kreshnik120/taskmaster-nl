@@ -50,11 +50,21 @@ Deno.serve(async (req) => {
     // Creëer embedding text
     const embeddingText = `${knowledge.category}: ${knowledge.key}\n${JSON.stringify(knowledge.value)}`;
 
-    // Genereer embedding via OpenAI
-    const openaiResponse = await fetch('https://api.openai.com/v1/embeddings', {
+    // Genereer embedding via Lovable AI Gateway
+    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+    
+    if (!lovableApiKey) {
+      console.error('LOVABLE_API_KEY not found in environment');
+      return new Response(
+        JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const embeddingResponse = await fetch('https://ai.gateway.lovable.dev/v1/embeddings', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+        'Authorization': `Bearer ${lovableApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -64,16 +74,16 @@ Deno.serve(async (req) => {
       })
     });
 
-    if (!openaiResponse.ok) {
-      const error = await openaiResponse.text();
-      console.error('OpenAI API error:', error);
+    if (!embeddingResponse.ok) {
+      const error = await embeddingResponse.text();
+      console.error('Lovable AI Gateway error:', error);
       return new Response(
-        JSON.stringify({ error: 'Failed to generate embedding' }),
+        JSON.stringify({ error: 'Failed to generate embedding via Lovable AI' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const { data: [embeddingData] } = await openaiResponse.json();
+    const { data: [embeddingData] } = await embeddingResponse.json();
     const embedding = embeddingData.embedding;
 
     // Check of er al een embedding bestaat
