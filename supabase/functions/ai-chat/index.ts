@@ -1028,6 +1028,7 @@ serve(async (req) => {
     }
 
     let fullKnowledgeBase: any[] = [];
+    let semanticKnowledge: any[] = [];
 
     if (relevantCategories && relevantCategories.length > 0) {
       // Haal ALLE items uit relevante categorieën (geen limit!)
@@ -1068,6 +1069,20 @@ serve(async (req) => {
         fullKnowledgeBase = fallbackKnowledge;
       }
     }
+    
+    // 🎯 MERGE SEMANTIC + CATEGORY RESULTS
+    if (semanticKnowledge.length > 0) {
+      // Deduplicate: semantic results hebben voorrang
+      const existingIds = new Set(fullKnowledgeBase.map((kb: any) => kb.id));
+      const newSemanticItems = semanticKnowledge.filter((kb: any) => !existingIds.has(kb.id));
+      
+      // Voeg nieuwe semantic items toe aan het begin (hoogste prioriteit)
+      fullKnowledgeBase = [...semanticKnowledge, ...fullKnowledgeBase];
+      
+      console.log(`🎯 Final knowledge base: ${fullKnowledgeBase.length} items (${semanticKnowledge.length} from semantic search, ${fullKnowledgeBase.length - semanticKnowledge.length} from categories)`);
+    } else {
+      console.log(`📚 Using category-based search only: ${fullKnowledgeBase.length} items`);
+    }
 
     // FASE 1: Track which relationships were used (Synaptic Reinforcement)
     if (fullKnowledgeBase.length > 0) {
@@ -1097,10 +1112,77 @@ serve(async (req) => {
       }
     }
     
-    // Get Lovable API Key for deep analysis
+    // Get API Keys for AI operations
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY is not configured');
+    }
+    
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    
+    // 🧠 SEMANTIC SEARCH: Generate embedding and find relevant knowledge
+    if (OPENAI_API_KEY && lastUserMessage.length > 0) {
+      console.log('🧠 Generating embedding for semantic search...');
+      
+      try {
+        const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'text-embedding-3-small',
+            input: lastUserMessage,
+          }),
+        });
+
+        if (embeddingResponse.ok) {
+          const embeddingData = await embeddingResponse.json();
+          const queryEmbedding = embeddingData.data[0].embedding;
+          
+          console.log('✅ Embedding generated, calling match_knowledge...');
+          
+          // Call match_knowledge function
+          const { data: semanticMatches, error: matchError } = await supabaseClient
+            .rpc('match_knowledge', {
+              query_embedding: queryEmbedding,
+              match_threshold: 0.5,  // Ruimere threshold voor meer matches
+              match_count: 50,
+              filter_org_id: userOrgId,
+              filter_role_tags: [detectedRole],
+              filter_jurisdiction: 'NL'
+            });
+
+          if (matchError) {
+            console.error('❌ match_knowledge error:', matchError);
+          } else if (semanticMatches && semanticMatches.length > 0) {
+            semanticKnowledge = semanticMatches.map((m: any) => ({
+              id: m.knowledge_id,
+              category: m.category,
+              key: m.key,
+              value: m.value,
+              confidence_score: m.confidence_score,
+              similarity: m.similarity,
+              role_tags: m.role_tags,
+              valid_from: m.valid_from,
+              valid_to: m.valid_to,
+              usage_count: 0,
+              source: 'semantic_search',
+              created_at: new Date().toISOString()
+            }));
+            
+            console.log(`✅ Found ${semanticKnowledge.length} items via semantic search`);
+            console.log(`   Top 3 similarities: ${semanticMatches.slice(0,3).map((m: any) => m.similarity.toFixed(3)).join(', ')}`);
+          }
+        } else {
+          console.log('⚠️ Embedding generation failed:', await embeddingResponse.text());
+        }
+      } catch (error) {
+        console.error('❌ Semantic search error:', error);
+      }
+    } else {
+      console.log('⚠️ OPENAI_API_KEY not configured or empty message - falling back to category-based search only');
     }
     
     // PHASE 1.5: Detect knowledge conflicts before using (with SPRINT 2 deep analysis)
