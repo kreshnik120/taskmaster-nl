@@ -8,6 +8,17 @@ const corsHeaders = {
 };
 
 // ============================================
+// SHA256 HASH HELPER FOR CACHE KEYS
+// ============================================
+async function sha256Hash(text: string): Promise<string> {
+  const data = new TextEncoder().encode(text);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+// ============================================
 // RETRY HELPER WITH EXPONENTIAL BACKOFF
 // ============================================
 async function persistMessage(
@@ -809,6 +820,37 @@ serve(async (req) => {
       .single();
     
     const userOrgId = userOrg?.org_id;
+
+    // ============================================
+    // FASE 1: CACHE LOOKUP (SHA256 HASH)
+    // ============================================
+    const lastUserMessageForCache = messages[messages.length - 1]?.content || '';
+    const cacheKey = await sha256Hash(`${userOrgId}|${lastUserMessageForCache.trim()}`);
+    
+    const { data: cachedResponse } = await supabaseServiceClient
+      .from('ai_response_cache')
+      .select('response, knowledge_ids, hit_count, id')
+      .eq('org_id', userOrgId)
+      .eq('question_hash', cacheKey)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+    
+    if (cachedResponse) {
+      console.log('💰 CACHE HIT - Token saving!');
+      
+      // Update hit count
+      await supabaseServiceClient
+        .from('ai_response_cache')
+        .update({ hit_count: cachedResponse.hit_count + 1 })
+        .eq('id', cachedResponse.id);
+      
+      // Return cached response immediately
+      return new Response(cachedResponse.response, {
+        headers: { ...corsHeaders, 'Content-Type': 'text/event-stream' }
+      });
+    }
+    
+    console.log('⚡ CACHE MISS - Calling AI');
 
     // Smart context filtering - alleen relevante data
     const [
@@ -2556,24 +2598,93 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
             usedKnowledgeIds = await trackKnowledgeUsage(fullResponse, fullKnowledgeBase, supabaseClient, user.id, messages);
           }
           
-          // ✅ FASE 5: Log confidence tracking for analytics
+          // ============================================
+          // FASE 2 & 3: MULTI-ITERATION + CONFIDENCE TRACKING
+          // ============================================
+          let iterations = 1;
+          let initialConfidence = 0.75;
+          let finalConfidence = 0.75;
+          let harvesterTriggered = false;
+          
           try {
             // Extract confidence from response
             const confidenceMatch = fullResponse.match(/\[(?:🟢|🟡|🟠|🔴)\s+(\d+)%/);
-            const finalConfidence = confidenceMatch ? parseInt(confidenceMatch[1]) / 100 : 0.75;
+            initialConfidence = confidenceMatch ? parseInt(confidenceMatch[1]) / 100 : 0.75;
+            finalConfidence = initialConfidence;
             
+            // FASE 3: Multi-iteration logic - 2e poging bij lage confidence
+            if (initialConfidence < 0.70 && iterations < 2) {
+              console.log(`🔄 Low confidence (${(initialConfidence * 100).toFixed(0)}%), trying iteration 2...`);
+              harvesterTriggered = true;
+              
+              // Simply try to get more knowledge from the existing base
+              const { data: moreKnowledge } = await supabaseClient
+                .from('ai_knowledge_base')
+                .select('id, category, key, value, confidence_score')
+                .eq('org_id', userOrgId)
+                .is('deleted_at', null)
+                .order('confidence_score', { ascending: false })
+                .limit(20);
+              
+              if (moreKnowledge && moreKnowledge.length > 0) {
+                // Re-generate with expanded knowledge
+                const improvedKnowledgeBase = [...fullKnowledgeBase, ...moreKnowledge];
+                
+                // Format expanded knowledge
+                const expandedKnowledgeText = improvedKnowledgeBase
+                  .map(kb => `[ID: ${kb.knowledge_id || kb.id}] ${kb.key}: ${typeof kb.value === 'string' ? kb.value : JSON.stringify(kb.value)}`)
+                  .join('\n');
+                
+                // Make second AI call with expanded knowledge
+                const secondResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    model: 'google/gemini-2.5-flash', // Cheaper model for 2nd iteration
+                    messages: [
+                      { role: 'system', content: `Je bent een AI-assistent. Gebruik deze uitgebreide kennis:\n\n${expandedKnowledgeText}` },
+                      { role: 'user', content: lastUserMessage }
+                    ],
+                    stream: false,
+                  }),
+                });
+                
+                if (secondResponse.ok) {
+                  const secondData = await secondResponse.json();
+                  const improvedResponse = secondData.choices?.[0]?.message?.content || fullResponse;
+                  
+                  // Check improved confidence
+                  const improvedMatch = improvedResponse.match(/\[(?:🟢|🟡|🟠|🔴)\s+(\d+)%/);
+                  const improvedConfidence = improvedMatch ? parseInt(improvedMatch[1]) / 100 : initialConfidence;
+                  
+                  if (improvedConfidence > initialConfidence) {
+                    fullResponse = improvedResponse;
+                    finalConfidence = improvedConfidence;
+                    iterations = 2;
+                    console.log(`✅ Iteration 2 complete: ${(initialConfidence * 100).toFixed(0)}% → ${(finalConfidence * 100).toFixed(0)}%`);
+                  } else {
+                    console.log(`⚠️ Iteration 2 did not improve confidence, keeping original`);
+                  }
+                }
+              }
+            }
+            
+            // Log REAL confidence tracking
             await supabaseClient.from('confidence_tracking').insert({
               user_id: user.id,
               org_id: userOrgId,
               question: lastUserMessage,
-              initial_confidence: finalConfidence, // In real impl, this would be tracked from first attempt
+              initial_confidence: initialConfidence,
               final_confidence: finalConfidence,
-              iterations_count: 1, // In real impl, track actual iterations
+              iterations_count: iterations,
               used_knowledge_ids: usedKnowledgeIds,
-              harvester_triggered: fullResponse.includes('🤖 Auto-Knowledge-Harvester')
+              harvester_triggered: harvesterTriggered
             });
             
-            console.log(`📊 Confidence tracked: ${(finalConfidence * 100).toFixed(0)}%`);
+            console.log(`📊 Confidence tracked: ${(initialConfidence * 100).toFixed(0)}% → ${(finalConfidence * 100).toFixed(0)}% (${iterations} iterations)`);
           } catch (confError) {
             console.error('❌ Confidence tracking failed (non-blocking):', confError);
           }
@@ -2637,6 +2748,23 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
               }
 
               console.log('✅ Both messages persisted successfully');
+
+              // ============================================
+              // FASE 1: CACHE STORAGE (after streaming complete)
+              // ============================================
+              try {
+                await supabaseServiceClient.from('ai_response_cache').insert({
+                  org_id: userOrgId,
+                  question_hash: cacheKey,
+                  question: lastUserMessage,
+                  response: fullResponse,
+                  knowledge_ids: usedKnowledgeIds,
+                  expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+                });
+                console.log('✅ Response cached for 24h');
+              } catch (cacheError) {
+                console.warn('Cache insert failed (non-critical):', cacheError);
+              }
 
               // 3️⃣ OPTIONAL: Conversation context (soft fail)
               if (usedKnowledgeIds.length > 0) {
