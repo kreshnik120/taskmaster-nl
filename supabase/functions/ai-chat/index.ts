@@ -2756,7 +2756,7 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                 await supabaseServiceClient.from('ai_response_cache').insert({
                   org_id: userOrgId,
                   question_hash: cacheKey,
-                  question: lastUserMessage,
+                  question: lastUserMessageForCache,
                   response: fullResponse,
                   knowledge_ids: usedKnowledgeIds,
                   expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
