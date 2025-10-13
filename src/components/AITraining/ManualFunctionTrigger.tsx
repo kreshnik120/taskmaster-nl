@@ -192,15 +192,33 @@ export const ManualFunctionTrigger = () => {
           batch: batchNumber
         });
         
-        // Check if we're done
-        if (data.processed === 0 || data.reason === 'no_missing_embeddings') {
+        console.log(`Batch ${batchNumber} complete: ${data.processed} embeddings generated`);
+        
+        // Check if we should continue
+        if (data.reason === 'no_missing_embeddings') {
+          hasMore = false;
+          toast.success(
+            `✅ Auto-backfill voltooid! ${totalProcessed} embeddings gegenereerd`,
+            { duration: 5000 }
+          );
+        } else if (data.processed === 0 && data.total_missing > 0) {
+          toast.info(
+            "Venster overgeslagen",
+            { description: `Geen nieuwe items in dit venster, probeer volgende batch...` }
+          );
+          hasMore = true;
+        } else if (data.processed === 0) {
           hasMore = false;
           toast.success(
             `✅ Auto-backfill voltooid! ${totalProcessed} embeddings gegenereerd`,
             { duration: 5000 }
           );
         } else {
-          // Short delay between batches to prevent rate limiting
+          hasMore = data.processed > 0;
+        }
+        
+        // Rate limiting: wait 2 seconds between batches
+        if (hasMore) {
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
