@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
       .from('ai_knowledge_base')
       .select('id, category, key, value, org_id')
       .is('deleted_at', null)
-      .not('id', 'in', `(${existingIds.length > 0 ? existingIds.map(id => `'${id}'`).join(',') : "'00000000-0000-0000-0000-000000000000'"})`)
+      .not('id', 'in', `(${existingIds.length > 0 ? existingIds.join(',') : '00000000-0000-0000-0000-000000000000'})`)
       .order('created_at', { ascending: false })
       .limit(batch_size);
 
