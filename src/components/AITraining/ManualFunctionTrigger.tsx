@@ -315,16 +315,34 @@ export const ManualFunctionTrigger = () => {
                       body: { batch_size: 50 }
                     });
                     
-                    if (error) throw error;
+                    if (error) {
+                      // Parse structured error from edge function
+                      const errorMessage = error.message || 'Unknown error';
+                      const errorContext = data?.stage ? ` (stage: ${data.stage})` : '';
+                      throw new Error(errorMessage + errorContext);
+                    }
                     
-                    toast.success(
-                      `✅ Backfill voltooid: ${data.processed}/${data.total_in_batch} embeddings gegenereerd`,
-                      { duration: 5000 }
-                    );
+                    if (data.processed === 0) {
+                      toast.success(
+                        data.reason === 'no_missing_embeddings' 
+                          ? `✅ Alle embeddings zijn up-to-date!` 
+                          : `✅ Geen items te verwerken`,
+                        { duration: 3000 }
+                      );
+                    } else {
+                      toast.success(
+                        `✅ Backfill voltooid: ${data.processed}/${data.total_in_batch} embeddings gegenereerd`,
+                        { 
+                          description: data.errors?.length > 0 ? `${data.errors.length} errors` : undefined,
+                          duration: 5000 
+                        }
+                      );
+                    }
                     
                     // Refresh metrics after completion
                     setTimeout(() => refetchMetrics(), 2000);
                   } catch (err: any) {
+                    console.error('Backfill error:', err);
                     toast.error(`❌ Backfill mislukt: ${err.message}`);
                   } finally {
                     setIsBackfilling(false);

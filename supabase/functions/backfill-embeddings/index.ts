@@ -14,36 +14,94 @@ Deno.serve(async (req) => {
   try {
     const { batch_size = 10 } = await req.json();
 
+    // ✅ Check OpenAI API key
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!openaiApiKey) {
+      console.error('❌ OPENAI_API_KEY not configured');
+      return new Response(
+        JSON.stringify({ 
+          error: 'OPENAI_API_KEY not configured',
+          stage: 'config_check'
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Haal knowledge items op zonder embeddings
-    const { data: knowledgeItems, error: fetchError } = await supabase
+    console.log(`📦 Fetching candidates (batch_size: ${batch_size})...`);
+
+    // STAP A: Haal kandidaat knowledge items op (ruim iets meer dan batch_size)
+    const { data: candidates, error: fetchError } = await supabase
       .from('ai_knowledge_base')
       .select('id, category, key, value, org_id')
       .is('deleted_at', null)
-      .not('id', 'in', supabase
-        .from('knowledge_embeddings')
-        .select('knowledge_id')
-      )
-      .limit(batch_size);
+      .order('created_at', { ascending: false })
+      .limit(batch_size * 3);
 
     if (fetchError) {
-      console.error('Error fetching knowledge items:', fetchError);
+      console.error('❌ Error fetching knowledge items:', fetchError);
       return new Response(
-        JSON.stringify({ error: 'Failed to fetch knowledge items' }),
+        JSON.stringify({ 
+          error: 'Failed to fetch knowledge items',
+          stage: 'fetch_candidates',
+          details: fetchError
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    if (!knowledgeItems || knowledgeItems.length === 0) {
+    if (!candidates || candidates.length === 0) {
+      console.log('✅ No knowledge items found');
       return new Response(
         JSON.stringify({ 
           success: true, 
           processed: 0,
-          message: 'No items to process'
+          message: 'No knowledge items in database'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`📊 Found ${candidates.length} candidate items`);
+
+    // STAP B: Haal bestaande embeddings op voor deze kandidaten
+    const candidateIds = candidates.map(c => c.id);
+    const { data: existingEmbeddings, error: embeddingsError } = await supabase
+      .from('knowledge_embeddings')
+      .select('knowledge_id')
+      .in('knowledge_id', candidateIds);
+
+    if (embeddingsError) {
+      console.error('❌ Error fetching existing embeddings:', embeddingsError);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Failed to check existing embeddings',
+          stage: 'fetch_existing',
+          details: embeddingsError
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // STAP C: Filter client-side voor items zonder embedding
+    const existingSet = new Set(existingEmbeddings?.map(e => e.knowledge_id) || []);
+    const knowledgeItems = candidates
+      .filter(c => !existingSet.has(c.id))
+      .slice(0, batch_size);
+
+    console.log(`✅ Filtered to ${knowledgeItems.length} items without embeddings`);
+
+    if (knowledgeItems.length === 0) {
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          processed: 0,
+          message: 'No items missing embeddings',
+          reason: 'no_missing_embeddings'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -82,7 +140,7 @@ Deno.serve(async (req) => {
         const openaiResponse = await fetch('https://api.openai.com/v1/embeddings', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+            'Authorization': `Bearer ${openaiApiKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -93,9 +151,9 @@ Deno.serve(async (req) => {
         });
 
         if (!openaiResponse.ok) {
-          const error = await openaiResponse.text();
-          console.error(`OpenAI API error for item ${item.id}:`, error);
-          results.errors.push(`${item.id}: OpenAI API error`);
+          const errorText = await openaiResponse.text();
+          console.error(`❌ OpenAI API error for ${item.id}:`, errorText);
+          results.errors.push(`${item.id}: OpenAI API error - ${openaiResponse.status}`);
           continue;
         }
 
