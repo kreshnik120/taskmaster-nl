@@ -33,20 +33,14 @@ Deno.serve(async (req) => {
     );
 
     console.log(`📦 Fetching items without embeddings (batch_size: ${batch_size})...`);
+    console.log('Using left-join anti-filter to fetch candidates');
 
-    // DIRECTE QUERY: Haal alleen items zonder embeddings
-    // We gebruiken een NOT IN subquery om items te excluden die al een embedding hebben
-    const { data: existingEmbeddingIds } = await supabase
-      .from('knowledge_embeddings')
-      .select('knowledge_id');
-    
-    const existingIds = (existingEmbeddingIds || []).map(e => e.knowledge_id);
-    
+    // LEFT JOIN: Haal alleen items zonder embeddings (efficiënter dan NOT IN)
     const { data: knowledgeItems, error: fetchError } = await supabase
       .from('ai_knowledge_base')
-      .select('id, category, key, value, org_id')
+      .select('id, category, key, value, org_id, knowledge_embeddings!left(knowledge_id)')
       .is('deleted_at', null)
-      .not('id', 'in', `(${existingIds.length > 0 ? existingIds.join(',') : '00000000-0000-0000-0000-000000000000'})`)
+      .is('knowledge_embeddings.knowledge_id', null)
       .order('created_at', { ascending: false })
       .limit(batch_size);
 
@@ -75,7 +69,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`✅ Found ${knowledgeItems.length} items without embeddings`);
+    console.log(`✅ Fetched ${knowledgeItems.length} candidates for embedding`);
 
     console.log(`📦 Processing batch of ${knowledgeItems.length} items`);
 

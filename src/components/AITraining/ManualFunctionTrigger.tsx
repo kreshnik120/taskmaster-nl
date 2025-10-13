@@ -164,13 +164,26 @@ export const ManualFunctionTrigger = () => {
       while (hasMore) {
         batchNumber++;
         
-        const { data, error } = await supabase.functions.invoke('backfill-embeddings', {
-          body: { batch_size: 50 }
-        });
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/backfill-embeddings`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
+            },
+            body: JSON.stringify({ batch_size: 50 })
+          }
+        );
         
-        if (error) {
-          throw new Error(error.message || 'Backfill failed');
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          const stage = errorData.stage || 'unknown';
+          const details = errorData.details?.message || errorData.error || response.statusText;
+          throw new Error(`Backfill failed at ${stage}: ${details}`);
         }
+        
+        const data = await response.json();
         
         totalProcessed += data.processed || 0;
         setBackfillProgress({
