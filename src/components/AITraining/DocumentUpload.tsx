@@ -17,6 +17,8 @@ export const DocumentUpload = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isFirefox, setIsFirefox] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
+  const [activeJobs, setActiveJobs] = useState<{[jobId: string]: number}>({});
+  const [totalChunks, setTotalChunks] = useState(0);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -51,6 +53,60 @@ export const DocumentUpload = () => {
 
     return () => clearInterval(interval);
   }, [documents, refetch]);
+
+  // Real-time job progress tracking via Supabase Realtime
+  useEffect(() => {
+    if (!activeJobs || Object.keys(activeJobs).length === 0) return;
+
+    console.log(`[REALTIME] Subscribing to job progress for ${Object.keys(activeJobs).length} jobs`);
+    
+    const channel = supabase
+      .channel('job-progress')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'processing_jobs',
+        filter: `id=in.(${Object.keys(activeJobs).join(',')})`
+      }, (payload) => {
+        console.log('✅ Job update:', payload.new);
+        
+        setActiveJobs(prev => ({
+          ...prev,
+          [payload.new.id]: payload.new.progress_pct
+        }));
+        
+        if (payload.new.status === 'done') {
+          toast({
+            title: "Chunk verwerkt",
+            description: `Chunk ${payload.new.chunk_index + 1}/${totalChunks} voltooid · ${payload.new.items_processed} items gevonden`,
+          });
+          
+          // Check if all jobs are done
+          const allJobsDone = Object.values(activeJobs).every(pct => pct === 100);
+          if (allJobsDone) {
+            console.log('[REALTIME] All jobs completed, refreshing knowledge base');
+            queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
+            refetch();
+            setActiveJobs({});
+            setTotalChunks(0);
+          }
+        }
+        
+        if (payload.new.status === 'failed') {
+          toast({
+            title: "Chunk gefaald",
+            description: `Chunk ${payload.new.chunk_index + 1}: ${payload.new.error_message}`,
+            variant: "destructive",
+          });
+        }
+      })
+      .subscribe();
+      
+    return () => {
+      console.log('🔌 Unsubscribe van job progress channel');
+      supabase.removeChannel(channel);
+    };
+  }, [activeJobs, totalChunks, toast, queryClient, refetch]);
 
   // Calculate elapsed time in minutes
   const getElapsedTime = (createdAt: string) => {
@@ -161,19 +217,34 @@ export const DocumentUpload = () => {
             variant: "destructive",
           });
         } else {
-          const { queued, estimated_time, file_type } = invokeResult.data || {};
+          const { queued, estimated_time, file_type, job_ids, total_chunks } = invokeResult.data || {};
           console.log(`✅ Queued ${queued} chunks for ${file.name} (${file_type}, ~${estimated_time})`);
+          
+          // Initialize job tracking for real-time progress
+          if (job_ids && job_ids.length > 0) {
+            const initialProgress = Object.fromEntries(job_ids.map((id: string) => [id, 0]));
+            setActiveJobs(prev => ({ ...prev, ...initialProgress }));
+            setTotalChunks(total_chunks || 1);
+            
+            toast({
+              title: "Verwerking gestart",
+              description: `${queued} taken gepland · Geschatte tijd: ${estimated_time}`,
+            });
+          }
         }
         
         uploadedPaths.push(filePath);
       }
 
-      toast({
-        title: "Upload succesvol",
-        description: folderName 
-          ? `${successCount} document(en) uit map "${folderName}" worden verwerkt`
-          : `${successCount} document(en) worden verwerkt`,
-      });
+      // Only show generic success if no job tracking was initialized
+      if (Object.keys(activeJobs).length === 0) {
+        toast({
+          title: "Upload succesvol",
+          description: folderName 
+            ? `${successCount} document(en) uit map "${folderName}" worden verwerkt`
+            : `${successCount} document(en) worden verwerkt`,
+        });
+      }
       
       // 🔄 POLL FOR COMPLETION & FORCE REFRESH
       console.log('[UPLOAD] Waiting for processing to complete...');
@@ -427,6 +498,44 @@ export const DocumentUpload = () => {
                 Map upload wordt niet ondersteund in Firefox. Gebruik Chrome, Edge of Safari, of selecteer individuele bestanden.
               </AlertDescription>
             </Alert>
+          )}
+
+          {/* Real-time Progress Bar for Active Jobs */}
+          {Object.keys(activeJobs).length > 0 && (
+            <Card className="bg-primary/5 border-primary/20">
+              <div className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-sm flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Verwerking bezig...
+                  </h3>
+                  <span className="text-xs text-muted-foreground">
+                    {Object.values(activeJobs).filter(p => p === 100).length}/{Object.keys(activeJobs).length} chunks voltooid
+                  </span>
+                </div>
+                
+                <div className="space-y-2">
+                  {Object.entries(activeJobs).map(([jobId, pct], idx) => (
+                    <div key={jobId} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Chunk {idx + 1}/{totalChunks}</span>
+                        <span className="font-medium">{pct}%</span>
+                      </div>
+                      <Progress value={pct} className="h-2" />
+                    </div>
+                  ))}
+                </div>
+                
+                <div className="pt-2 border-t border-primary/20">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Gemiddelde voortgang</span>
+                    <span className="font-semibold text-primary">
+                      {Math.round(Object.values(activeJobs).reduce((a, b) => a + b, 0) / Object.keys(activeJobs).length)}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Card>
           )}
 
           <div

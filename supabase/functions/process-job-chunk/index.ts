@@ -53,15 +53,14 @@ serve(async (req) => {
       let result: any = {};
 
       if (job.file_type === 'pdf') {
-        // For PDF, we'll use a simplified extraction for now
-        // In production, this would call Vision API
-        result = await processPDFChunk(fileData, job.chunk_index, supabase, job.org_id, job.user_id);
+        // Process PDF with Vision API
+        result = await processPDFChunk(fileData, job.chunk_index, supabase, job.org_id, job.user_id, job.file_name);
         extractedItems = result.itemsExtracted || 0;
       } else if (job.file_type === 'excel') {
-        result = await processExcelChunk(fileData, job.chunk_index, supabase, job.org_id, job.user_id);
+        result = await processExcelChunk(fileData, job.chunk_index, supabase, job.org_id, job.user_id, job.file_name);
         extractedItems = result.itemsExtracted || 0;
       } else if (job.file_type === 'text') {
-        result = await processTextChunk(fileData, job.chunk_index, supabase, job.org_id, job.user_id);
+        result = await processTextChunk(fileData, job.chunk_index, supabase, job.org_id, job.user_id, job.file_name);
         extractedItems = result.itemsExtracted || 0;
       }
 
@@ -123,74 +122,266 @@ serve(async (req) => {
   }
 });
 
-async function processPDFChunk(fileData: Blob, chunkIndex: number, supabase: any, orgId: string, userId: string) {
-  // Simplified PDF processing - in production this would use Vision API
-  // For now, we'll extract basic metadata
-  const arrayBuffer = await fileData.arrayBuffer();
-  const text = new TextDecoder().decode(arrayBuffer);
+// Helper function: Convert ArrayBuffer to base64 in chunks to prevent call stack overflow
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 8192; // 8KB chunks
   
-  // Extract simple key-value pairs (placeholder logic)
-  const lines = text.split('\n').filter(l => l.trim().length > 0);
-  let itemsExtracted = 0;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  
+  return btoa(binary);
+}
 
-  // Store a sample item to demonstrate the flow
-  if (lines.length > 0) {
-    await supabase.from('ai_knowledge_base').insert({
-      org_id: orgId,
-      user_id: userId,
-      category: 'document_upload',
-      key: `pdf_chunk_${chunkIndex}`,
-      value: { content: lines.slice(0, 10).join('\n'), type: 'pdf_extract' },
-      confidence_score: 0.7,
-      source: `PDF chunk ${chunkIndex}`
-    });
-    itemsExtracted = 1;
+async function processPDFChunk(fileData: Blob, chunkIndex: number, supabase: any, orgId: string, userId: string, fileName: string) {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    throw new Error("LOVABLE_API_KEY niet geconfigureerd");
   }
 
+  console.log(`[PDF-CHUNK] Processing chunk ${chunkIndex} with Vision API`);
+
+  // Convert to base64
+  const arrayBuffer = await fileData.arrayBuffer();
+  const base64 = arrayBufferToBase64(arrayBuffer);
+
+  // Call Vision API
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-pro",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Analyseer dit bedrijfsdocument (${fileName}, chunk ${chunkIndex}) en extraheer belangrijke kennis in gestructureerd formaat.`
+            },
+            {
+              type: "input_image",
+              input_image: {
+                url: `data:application/pdf;base64,${base64}`
+              }
+            }
+          ]
+        }
+      ],
+      tools: [{
+        type: "function",
+        function: {
+          name: "save_knowledge_items",
+          description: "Save extracted knowledge items from the document",
+          parameters: {
+            type: "object",
+            properties: {
+              items: {
+                type: "array",
+                description: "Array of knowledge items extracted from the document",
+                items: {
+                  type: "object",
+                  properties: {
+                    category: { 
+                      type: "string",
+                      enum: ["bedrijfsprocessen", "klantinformatie", "tarieven", "contractvoorwaarden", "regels", "facturatie"],
+                      description: "De categorie van het kennis item"
+                    },
+                    key: { 
+                      type: "string",
+                      description: "Korte identificerende sleutel voor dit item (snake_case)"
+                    },
+                    value: { 
+                      type: "string",
+                      description: "De eigenlijke kennis waarde in helder Nederlands"
+                    }
+                  },
+                  required: ["category", "key", "value"]
+                }
+              }
+            },
+            required: ["items"]
+          }
+        }
+      }],
+      tool_choice: { type: "function", function: { name: "save_knowledge_items" } }
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[PDF-CHUNK] Vision API error: ${response.status} - ${errorText.substring(0, 200)}`);
+    throw new Error(`Vision API error: ${response.status}`);
+  }
+
+  const aiData = await response.json();
+
+  // Extract knowledge items from tool calling
+  let knowledgeItems: any[] = [];
+  const toolCalls = aiData.choices?.[0]?.message?.tool_calls;
+  
+  if (toolCalls && toolCalls.length > 0) {
+    const functionArgs = JSON.parse(toolCalls[0].function.arguments);
+    knowledgeItems = functionArgs.items || [];
+    console.log(`[PDF-CHUNK] ✅ Extracted ${knowledgeItems.length} items via Vision API`);
+  }
+
+  // Insert into ai_knowledge_base
+  let itemsExtracted = 0;
+  for (const item of knowledgeItems) {
+    try {
+      await supabase.from('ai_knowledge_base').insert({
+        org_id: orgId,
+        user_id: userId,
+        category: item.category,
+        key: item.key,
+        value: item.value,
+        confidence_score: 0.85,
+        source: `${fileName} (chunk ${chunkIndex})`,
+        valid_from: new Date().toISOString().split('T')[0],
+        valid_to: null,
+        jurisdiction: 'NL',
+        confidentiality: 'intern',
+        role_tags: [],
+        acl: []
+      });
+      itemsExtracted++;
+    } catch (insertError) {
+      console.error(`[PDF-CHUNK] Failed to insert item ${item.key}:`, insertError);
+    }
+  }
+
+  console.log(`[PDF-CHUNK] ✅ Inserted ${itemsExtracted} items from chunk ${chunkIndex}`);
   return { itemsExtracted, chunkIndex };
 }
 
-async function processExcelChunk(fileData: Blob, chunkIndex: number, supabase: any, orgId: string, userId: string) {
-  // Simplified Excel processing
-  const arrayBuffer = await fileData.arrayBuffer();
-  const text = new TextDecoder().decode(arrayBuffer);
+async function processExcelChunk(fileData: Blob, chunkIndex: number, supabase: any, orgId: string, userId: string, fileName: string) {
+  console.log(`[EXCEL-CHUNK] Processing Excel file with XLSX library`);
   
-  const lines = text.split('\n').filter(l => l.trim().length > 0);
-  let itemsExtracted = 0;
-
-  if (lines.length > 0) {
-    await supabase.from('ai_knowledge_base').insert({
-      org_id: orgId,
-      user_id: userId,
-      category: 'document_upload',
-      key: `excel_chunk_${chunkIndex}`,
-      value: { content: lines.slice(0, 10).join('\n'), type: 'excel_extract' },
-      confidence_score: 0.7,
-      source: `Excel chunk ${chunkIndex}`
+  // Lazy load XLSX library
+  const XLSX = await import("https://esm.sh/xlsx@0.18.5");
+  
+  const arrayBuffer = await fileData.arrayBuffer();
+  const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+  
+  // Convert all sheets to text
+  let fullText = `Excel bestand: ${fileName}\n\n`;
+  
+  workbook.SheetNames.forEach((sheetName: string) => {
+    const sheet = workbook.Sheets[sheetName];
+    const csv = XLSX.utils.sheet_to_csv(sheet, { 
+      FS: ' | ',
+      RS: '\n'
     });
-    itemsExtracted = 1;
-  }
-
-  return { itemsExtracted, chunkIndex };
+    fullText += `=== Sheet: "${sheetName}" ===\n${csv}\n\n`;
+  });
+  
+  console.log(`[EXCEL-CHUNK] Extracted ${fullText.length} characters from ${workbook.SheetNames.length} sheets`);
+  
+  // Process with text-based AI
+  const result = await processTextChunk(fileData, chunkIndex, supabase, orgId, userId, fileName);
+  
+  return result;
 }
 
-async function processTextChunk(fileData: Blob, chunkIndex: number, supabase: any, orgId: string, userId: string) {
+async function processTextChunk(fileData: Blob, chunkIndex: number, supabase: any, orgId: string, userId: string, fileName: string) {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    throw new Error("LOVABLE_API_KEY niet geconfigureerd");
+  }
+
   const text = await fileData.text();
-  const lines = text.split('\n').filter(l => l.trim().length > 0);
-  let itemsExtracted = 0;
+  console.log(`[TEXT-CHUNK] Processing ${text.length} characters with AI`);
 
-  if (lines.length > 0) {
-    await supabase.from('ai_knowledge_base').insert({
-      org_id: orgId,
-      user_id: userId,
-      category: 'document_upload',
-      key: `text_chunk_${chunkIndex}`,
-      value: { content: lines.join('\n'), type: 'text_extract' },
-      confidence_score: 0.8,
-      source: `Text chunk ${chunkIndex}`
-    });
-    itemsExtracted = 1;
+  // Call Lovable AI for structured extraction
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        {
+          role: "user",
+          content: `Analyseer deze tekst uit "${fileName}" (chunk ${chunkIndex}) en extraheer belangrijke kennis:\n\n${text.substring(0, 10000)}`
+        }
+      ],
+      tools: [{
+        type: "function",
+        function: {
+          name: "save_knowledge_items",
+          description: "Save extracted knowledge items",
+          parameters: {
+            type: "object",
+            properties: {
+              items: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    category: { 
+                      type: "string",
+                      enum: ["bedrijfsprocessen", "klantinformatie", "tarieven", "contractvoorwaarden", "regels", "facturatie"]
+                    },
+                    key: { type: "string" },
+                    value: { type: "string" }
+                  },
+                  required: ["category", "key", "value"]
+                }
+              }
+            },
+            required: ["items"]
+          }
+        }
+      }],
+      tool_choice: { type: "function", function: { name: "save_knowledge_items" } }
+    }),
+  });
+
+  if (!response.ok) {
+    console.error(`[TEXT-CHUNK] AI error: ${response.status}`);
+    throw new Error(`AI error: ${response.status}`);
   }
 
+  const aiData = await response.json();
+  let knowledgeItems: any[] = [];
+  
+  const toolCalls = aiData.choices?.[0]?.message?.tool_calls;
+  if (toolCalls && toolCalls.length > 0) {
+    const functionArgs = JSON.parse(toolCalls[0].function.arguments);
+    knowledgeItems = functionArgs.items || [];
+  }
+
+  // Insert items
+  let itemsExtracted = 0;
+  for (const item of knowledgeItems) {
+    try {
+      await supabase.from('ai_knowledge_base').insert({
+        org_id: orgId,
+        user_id: userId,
+        category: item.category,
+        key: item.key,
+        value: item.value,
+        confidence_score: 0.80,
+        source: `${fileName} (chunk ${chunkIndex})`,
+        valid_from: new Date().toISOString().split('T')[0],
+        jurisdiction: 'NL',
+        confidentiality: 'intern'
+      });
+      itemsExtracted++;
+    } catch (err) {
+      console.error(`[TEXT-CHUNK] Insert failed:`, err);
+    }
+  }
+
+  console.log(`[TEXT-CHUNK] ✅ Inserted ${itemsExtracted} items`);
   return { itemsExtracted, chunkIndex };
 }
