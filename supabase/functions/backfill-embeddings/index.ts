@@ -32,15 +32,23 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    console.log(`📦 Fetching candidates (batch_size: ${batch_size})...`);
+    console.log(`📦 Fetching items without embeddings (batch_size: ${batch_size})...`);
 
-    // STAP A: Haal kandidaat knowledge items op (ruim iets meer dan batch_size)
-    const { data: candidates, error: fetchError } = await supabase
+    // DIRECTE QUERY: Haal alleen items zonder embeddings
+    // We gebruiken een NOT IN subquery om items te excluden die al een embedding hebben
+    const { data: existingEmbeddingIds } = await supabase
+      .from('knowledge_embeddings')
+      .select('knowledge_id');
+    
+    const existingIds = (existingEmbeddingIds || []).map(e => e.knowledge_id);
+    
+    const { data: knowledgeItems, error: fetchError } = await supabase
       .from('ai_knowledge_base')
       .select('id, category, key, value, org_id')
       .is('deleted_at', null)
+      .not('id', 'in', `(${existingIds.length > 0 ? existingIds.map(id => `'${id}'`).join(',') : "'00000000-0000-0000-0000-000000000000'"})`)
       .order('created_at', { ascending: false })
-      .limit(batch_size * 3);
+      .limit(batch_size);
 
     if (fetchError) {
       console.error('❌ Error fetching knowledge items:', fetchError);
@@ -54,58 +62,20 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!candidates || candidates.length === 0) {
-      console.log('✅ No knowledge items found');
+    if (!knowledgeItems || knowledgeItems.length === 0) {
+      console.log('✅ No more items need embeddings');
       return new Response(
         JSON.stringify({ 
           success: true, 
           processed: 0,
-          message: 'No knowledge items in database'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log(`📊 Found ${candidates.length} candidate items`);
-
-    // STAP B: Haal bestaande embeddings op voor deze kandidaten
-    const candidateIds = candidates.map(c => c.id);
-    const { data: existingEmbeddings, error: embeddingsError } = await supabase
-      .from('knowledge_embeddings')
-      .select('knowledge_id')
-      .in('knowledge_id', candidateIds);
-
-    if (embeddingsError) {
-      console.error('❌ Error fetching existing embeddings:', embeddingsError);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Failed to check existing embeddings',
-          stage: 'fetch_existing',
-          details: embeddingsError
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // STAP C: Filter client-side voor items zonder embedding
-    const existingSet = new Set(existingEmbeddings?.map(e => e.knowledge_id) || []);
-    const knowledgeItems = candidates
-      .filter(c => !existingSet.has(c.id))
-      .slice(0, batch_size);
-
-    console.log(`✅ Filtered to ${knowledgeItems.length} items without embeddings`);
-
-    if (knowledgeItems.length === 0) {
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          processed: 0,
-          message: 'No items missing embeddings',
+          message: 'All items have embeddings',
           reason: 'no_missing_embeddings'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    console.log(`✅ Found ${knowledgeItems.length} items without embeddings`);
 
     console.log(`📦 Processing batch of ${knowledgeItems.length} items`);
 
