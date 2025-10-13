@@ -1222,6 +1222,83 @@ export type Database = {
         }
         Relationships: []
       }
+      processing_jobs: {
+        Row: {
+          chunk_index: number | null
+          completed_at: string | null
+          created_at: string | null
+          error_message: string | null
+          file_name: string
+          file_path: string
+          file_type: string
+          id: string
+          items_processed: number | null
+          items_total: number | null
+          metadata: Json | null
+          org_id: string
+          priority: number | null
+          progress_pct: number | null
+          result: Json | null
+          retry_count: number | null
+          started_at: string | null
+          status: string | null
+          total_chunks: number | null
+          user_id: string
+        }
+        Insert: {
+          chunk_index?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          file_name: string
+          file_path: string
+          file_type: string
+          id?: string
+          items_processed?: number | null
+          items_total?: number | null
+          metadata?: Json | null
+          org_id: string
+          priority?: number | null
+          progress_pct?: number | null
+          result?: Json | null
+          retry_count?: number | null
+          started_at?: string | null
+          status?: string | null
+          total_chunks?: number | null
+          user_id: string
+        }
+        Update: {
+          chunk_index?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          file_name?: string
+          file_path?: string
+          file_type?: string
+          id?: string
+          items_processed?: number | null
+          items_total?: number | null
+          metadata?: Json | null
+          org_id?: string
+          priority?: number | null
+          progress_pct?: number | null
+          result?: Json | null
+          retry_count?: number | null
+          started_at?: string | null
+          status?: string | null
+          total_chunks?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processing_jobs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       professional_applications: {
         Row: {
           completeness_score: number | null
@@ -2275,7 +2352,7 @@ export type Database = {
       }
       l2_normalize: {
         Args: { "": string } | { "": unknown } | { "": unknown }
-        Returns: string
+        Returns: unknown
       }
       match_knowledge: {
         Args:
@@ -2299,7 +2376,10 @@ export type Database = {
           confidence_score: number
           key: string
           knowledge_id: string
+          role_tags: string[]
           similarity: number
+          valid_from: string
+          valid_to: string
           value: Json
         }[]
       }

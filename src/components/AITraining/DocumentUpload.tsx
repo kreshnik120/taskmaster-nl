@@ -148,15 +148,24 @@ export const DocumentUpload = () => {
         if (dbError) throw dbError;
         successCount++;
 
-        const invokeResult = await supabase.functions.invoke("process-training-document", {
+        // Queue document processing via new background job system
+        const invokeResult = await supabase.functions.invoke("queue-document-processing", {
           body: { filePath, fileName: file.name },
         });
         
-        if (invokeResult.data?.filePath) {
-          uploadedPaths.push(invokeResult.data.filePath);
+        if (invokeResult.error) {
+          console.error('Queue error:', invokeResult.error);
+          toast({
+            title: "Fout bij verwerking",
+            description: `${file.name} kon niet worden toegevoegd aan de wachtrij`,
+            variant: "destructive",
+          });
         } else {
-          uploadedPaths.push(filePath);
+          const { queued, estimated_time, file_type } = invokeResult.data || {};
+          console.log(`✅ Queued ${queued} chunks for ${file.name} (${file_type}, ~${estimated_time})`);
         }
+        
+        uploadedPaths.push(filePath);
       }
 
       toast({

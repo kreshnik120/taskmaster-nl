@@ -102,3 +102,13 @@ verify_jwt = false
 [functions.backfill-embeddings]
 verify_jwt = true
 timeout = 300
+
+[functions.queue-document-processing]
+verify_jwt = true
+
+[functions.process-job-chunk]
+verify_jwt = false
+timeout = 300
+
+[functions.process-pending-jobs]
+verify_jwt = false

@@ -1,0 +1,121 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Get authenticated user
+    const authHeader = req.headers.get('Authorization')!;
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+
+    if (userError || !user) {
+      throw new Error('Unauthorized');
+    }
+
+    // Get user's org
+    const { data: userOrg, error: orgError } = await supabase
+      .from('user_organizations')
+      .select('org_id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (orgError || !userOrg) {
+      throw new Error('Organization not found');
+    }
+
+    const { filePath, fileName } = await req.json();
+
+    // Detect file type
+    const extension = fileName.toLowerCase().split('.').pop();
+    let fileType = 'text';
+    let totalChunks = 1;
+
+    if (extension === 'pdf') {
+      fileType = 'pdf';
+      // Get file metadata to estimate pages
+      const { data: fileData } = await supabase.storage
+        .from('training-documents')
+        .download(filePath);
+      
+      if (fileData) {
+        const sizeInMB = fileData.size / (1024 * 1024);
+        // Estimate: ~1 page = 100KB, 10 pages per chunk
+        const estimatedPages = Math.max(1, Math.floor(sizeInMB * 10));
+        totalChunks = Math.ceil(estimatedPages / 10);
+      }
+    } else if (['xls', 'xlsx'].includes(extension!)) {
+      fileType = 'excel';
+      totalChunks = 1; // Will be determined during processing
+    } else if (extension === 'docx') {
+      fileType = 'docx';
+      totalChunks = 1;
+    } else {
+      fileType = 'text';
+      totalChunks = 1;
+    }
+
+    // Create jobs for each chunk
+    const jobs = [];
+    for (let i = 0; i < totalChunks; i++) {
+      const { data: job, error: jobError } = await supabase
+        .from('processing_jobs')
+        .insert({
+          org_id: userOrg.org_id,
+          user_id: user.id,
+          file_path: filePath,
+          file_name: fileName,
+          file_type: fileType,
+          chunk_index: i,
+          total_chunks: totalChunks,
+          status: 'pending',
+          priority: 5,
+          metadata: { extension }
+        })
+        .select()
+        .single();
+
+      if (jobError) {
+        console.error('Error creating job:', jobError);
+      } else {
+        jobs.push(job);
+      }
+    }
+
+    const estimatedMinutes = Math.ceil(totalChunks * 0.5); // ~30 sec per chunk
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        queued: jobs.length,
+        job_ids: jobs.map(j => j.id),
+        estimated_time: `${estimatedMinutes} min`,
+        file_type: fileType,
+        total_chunks: totalChunks
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+  } catch (error: any) {
+    console.error('Error:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { 
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
+  }
+});
