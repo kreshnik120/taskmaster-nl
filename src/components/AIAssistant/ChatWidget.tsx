@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Progress } from '@/components/ui/progress';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +29,16 @@ interface InteractiveElement {
   options?: { value: string; label: string }[];
 }
 
+interface ProcessingJob {
+  id: string;
+  status: string;
+  progress_pct: number;
+  chunk_index: number;
+  total_chunks: number;
+  items_processed?: number;
+  error_message?: string;
+}
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -36,6 +47,8 @@ interface Message {
   image?: string; // Base64 image data
   usedKnowledge?: string[]; // Knowledge IDs used for this response
   messageId?: string; // UUID from chat_messages table for feedback persistence
+  isProcessing?: boolean; // Document verwerking actief
+  jobIds?: string[]; // Processing job IDs voor realtime tracking
 }
 
 const QUICK_ACTIONS = [
@@ -74,6 +87,7 @@ export const ChatWidget = () => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragCounter, setDragCounter] = useState(0);
+  const [processingJobs, setProcessingJobs] = useState<Record<string, ProcessingJob>>({});
   const [dimensions, setDimensions] = useState(() => ({
     width: parseInt(localStorage.getItem('chatWidth') || '384'),
     height: parseInt(localStorage.getItem('chatHeight') || '600')
@@ -451,7 +465,7 @@ export const ChatWidget = () => {
     }
   };
 
-  const streamChat = async (userMessage: string) => {
+  const streamChat = async (userMessage: string, retryCount = 0) => {
     const newMessage: Message = { 
       role: 'user' as const, 
       content: userMessage,
@@ -462,16 +476,11 @@ export const ChatWidget = () => {
     setIsLoading(true);
     setInput('');
     
-    // Show confirmation if image is included
+    // Document/afbeelding? → Queue
     if (uploadedImage) {
-      toast({
-        description: '🖼️ Afbeelding meegestuurd naar AI',
-      });
+      await handleDocumentProcessing(uploadedImage, userMessage);
+      return;
     }
-    
-    // Clear image after sending
-    const currentImage = uploadedImage;
-    removeImage();
 
     // Timeout mechanism for robustness
     const timeoutId = setTimeout(() => {
@@ -537,11 +546,29 @@ export const ChatWidget = () => {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
         console.error('AI response error:', response.status, errorData);
         
+        // Auto-retry voor missing conversation_id
+        if (response.status === 400 && errorData.error?.includes('conversation_id') && retryCount === 0) {
+          console.warn('⚠️ Missing conversation_id, regenerating and retrying...');
+          startNewConversation();
+          setMessages(prev => prev.slice(0, -1)); // Verwijder user message
+          return streamChat(userMessage, 1); // Retry 1x
+        }
+        
         // Enhanced error messages
         if (response.status === 429) {
-          throw new Error('🚦 Te veel verzoeken. Even wachten voordat je opnieuw probeert.');
+          toast({
+            title: '🚦 Te veel verzoeken',
+            description: 'Even wachten voordat je opnieuw probeert.',
+            variant: 'destructive',
+          });
+          throw new Error('Rate limit');
         } else if (response.status === 402) {
-          throw new Error('💳 AI credits op. Neem contact op met support.');
+          toast({
+            title: '💳 AI credits op',
+            description: 'Neem contact op met support.',
+            variant: 'destructive',
+          });
+          throw new Error('Credits');
         }
         
         throw new Error(errorData.error || `AI fout: ${response.status}`);
@@ -653,16 +680,209 @@ export const ChatWidget = () => {
 
     } catch (error) {
       clearTimeout(timeoutId);
-      console.error('Chat error:', error);
+      console.error('❌ Chat error:', error);
       setIsLoading(false);
-      const errorMessage = error instanceof Error ? error.message : 'Kon geen antwoord krijgen van AI-assistent';
-      toast({
-        title: 'Fout',
-        description: errorMessage,
-        variant: 'destructive',
-      });
+      
+      // Alleen toast als het niet rate-limit/credits is (die hebben al een toast)
+      if (!(error instanceof Error && (error.message === 'Rate limit' || error.message === 'Credits'))) {
+        const errorMessage = error instanceof Error ? error.message : 'Kon geen antwoord krijgen van AI-assistent';
+        toast({
+          title: 'Fout',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      }
+      
       // Remove the user message if we failed to get a response
       setMessages(prev => prev.slice(0, -1));
+    }
+  };
+
+  // ============================================
+  // NIEUWE FUNCTIE: Document Processing via Queue
+  // ============================================
+  const handleDocumentProcessing = async (base64Image: string, userMessage: string) => {
+    try {
+      console.log('📄 Starting document processing via queue...');
+      
+      // 1. Upload naar Storage
+      const fileName = `chat-upload-${Date.now()}.png`;
+      const filePath = `uploads/chat/${fileName}`;
+      
+      // Convert base64 to blob
+      const blob = await fetch(base64Image).then(r => r.blob());
+      
+      const { error: uploadError } = await supabase.storage
+        .from('training-documents')
+        .upload(filePath, blob);
+      
+      if (uploadError) {
+        console.error('❌ Storage upload error:', uploadError);
+        throw new Error('Kon document niet uploaden');
+      }
+      
+      console.log('✅ Uploaded to storage:', filePath);
+      removeImage();
+      
+      // 2. Queue processing job
+      const { data: queueData, error: queueError } = await supabase.functions.invoke('queue-document-processing', {
+        body: { filePath, fileName }
+      });
+      
+      if (queueError || !queueData?.success) {
+        console.error('❌ Queue error:', queueError);
+        throw new Error('Kon document niet in queue plaatsen');
+      }
+      
+      const jobIds = queueData.job_ids as string[];
+      const totalChunks = queueData.total_chunks as number;
+      
+      console.log(`✅ Queued ${jobIds.length} jobs, total chunks: ${totalChunks}`);
+      
+      // 3. Voeg placeholder-bericht toe
+      const placeholderMessage: Message = {
+        role: 'assistant',
+        content: `⏳ Je document wordt verwerkt (${totalChunks} ${totalChunks === 1 ? 'chunk' : 'chunks'})...`,
+        isProcessing: true,
+        jobIds
+      };
+      
+      setMessages(prev => [...prev, placeholderMessage]);
+      setIsLoading(false);
+      
+      // 4. Start realtime subscription
+      startJobProgressTracking(jobIds, totalChunks);
+      
+      toast({
+        description: `✅ Document in queue (${totalChunks} chunks)`,
+      });
+      
+    } catch (error) {
+      console.error('❌ Document processing error:', error);
+      setIsLoading(false);
+      toast({
+        title: 'Fout',
+        description: error instanceof Error ? error.message : 'Document verwerking mislukt',
+        variant: 'destructive',
+      });
+      setMessages(prev => prev.slice(0, -1)); // Verwijder user message
+    }
+  };
+
+  // ============================================
+  // REALTIME JOB TRACKING
+  // ============================================
+  const startJobProgressTracking = (jobIds: string[], totalChunks: number) => {
+    console.log('📡 Starting realtime tracking for jobs:', jobIds);
+    
+    const channel = supabase
+      .channel('job-progress')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'processing_jobs',
+          filter: `id=in.(${jobIds.join(',')})`
+        },
+        (payload) => {
+          console.log('📊 Job update:', payload.new);
+          
+          const job = payload.new as ProcessingJob;
+          
+          // Update local job state
+          setProcessingJobs(prev => ({
+            ...prev,
+            [job.id]: job
+          }));
+          
+          // Update placeholder message
+          setMessages(prev => {
+            const lastMsg = prev[prev.length - 1];
+            if (!lastMsg?.isProcessing || !lastMsg.jobIds?.includes(job.id)) return prev;
+            
+            const allJobs = Object.values({ ...processingJobs, [job.id]: job });
+            const avgProgress = allJobs.reduce((sum, j) => sum + (j.progress_pct || 0), 0) / totalChunks;
+            const completedChunks = allJobs.filter(j => j.status === 'done').length;
+            const failedChunks = allJobs.filter(j => j.status === 'failed').length;
+            
+            if (failedChunks > 0) {
+              toast({
+                title: '❌ Chunk failed',
+                description: job.error_message || 'Verwerking mislukt',
+                variant: 'destructive',
+              });
+            }
+            
+            // Alle chunks klaar?
+            if (completedChunks === totalChunks) {
+              // Haal nieuwe kennis op
+              fetchProcessedKnowledge(jobIds);
+              return prev;
+            }
+            
+            // Update placeholder
+            const updated = [...prev];
+            updated[updated.length - 1] = {
+              ...lastMsg,
+              content: `⏳ Verwerking: ${Math.round(avgProgress)}% (${completedChunks}/${totalChunks} chunks)\n${allJobs.filter(j => j.items_processed).reduce((sum, j) => sum + (j.items_processed || 0), 0)} items gevonden`
+            };
+            
+            return updated;
+          });
+        }
+      )
+      .subscribe();
+    
+    // Cleanup bij unmount of close
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  };
+
+  const fetchProcessedKnowledge = async (jobIds: string[]) => {
+    console.log('🧠 Fetching processed knowledge...');
+    
+    try {
+      // Haal laatste 10 knowledge items op die uit deze jobs komen
+      const { data, error } = await supabase
+        .from('ai_knowledge_base')
+        .select('key, category, value')
+        .in('chunk_id', jobIds)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      
+      if (error) throw error;
+      
+      const summaryLines = data?.map(item => `• **${item.category}**: ${item.key}`) || [];
+      const summary = summaryLines.length > 0 
+        ? `✅ Verwerking voltooid!\n\n**Gevonden kennis:**\n${summaryLines.join('\n')}\n\n💡 Bekijk meer in de Kennis-sectie`
+        : '✅ Verwerking voltooid (geen nieuwe kennis gevonden)';
+      
+      setMessages(prev => {
+        const updated = [...prev];
+        updated[updated.length - 1] = {
+          role: 'assistant',
+          content: summary,
+          isProcessing: false
+        };
+        return updated;
+      });
+      
+      // Cleanup
+      setProcessingJobs({});
+      
+    } catch (error) {
+      console.error('❌ Knowledge fetch error:', error);
+      setMessages(prev => {
+        const updated = [...prev];
+        updated[updated.length - 1] = {
+          role: 'assistant',
+          content: '✅ Verwerking voltooid (kon samenvatting niet ophalen)',
+          isProcessing: false
+        };
+        return updated;
+      });
     }
   };
 
@@ -953,8 +1173,28 @@ export const ChatWidget = () => {
                         <Sparkles className="h-4 w-4 text-primary" />
                       </AvatarFallback>
                     </Avatar>
-                  )}
+                   )}
                    <div className="flex flex-col gap-2 max-w-[85%]">
+                    {/* Processing Progress Bar */}
+                    {msg.isProcessing && msg.jobIds && (
+                      <div className="space-y-2">
+                        {msg.jobIds.map(jobId => {
+                          const job = processingJobs[jobId];
+                          return job ? (
+                            <div key={jobId} className="text-xs space-y-1">
+                              <div className="flex justify-between">
+                                <span>Chunk {job.chunk_index + 1}/{job.total_chunks}</span>
+                                <span>{job.progress_pct}%</span>
+                              </div>
+                              <Progress value={job.progress_pct} className="h-1" />
+                              {job.items_processed && (
+                                <span className="text-muted-foreground">{job.items_processed} items</span>
+                              )}
+                            </div>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
                     <div>
                       <div
                         className={`rounded-lg px-4 py-2.5 ${
