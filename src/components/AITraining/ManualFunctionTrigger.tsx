@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -150,85 +150,95 @@ export const ManualFunctionTrigger = () => {
     }
   };
 
+  // Poll for orchestrator status
+  useEffect(() => {
+    if (!isBackfilling) return;
+
+    let active = true;
+
+    const pollStatus = async () => {
+      try {
+        const userRes = await supabase.auth.getUser();
+        if (!active || !userRes.data.user) return;
+
+        const orgRes = await supabase
+          .from('user_organizations')
+          .select('org_id')
+          .eq('user_id', userRes.data.user.id)
+          .single();
+
+        if (!active || !orgRes.data?.org_id) return;
+
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/orchestrator_state?org_id=eq.${orgRes.data.org_id}&component=eq.auto-backfill-orchestrator&select=status,current_batch,total_items_processed,metadata&limit=1`,
+          {
+            headers: {
+              'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
+            }
+          }
+        );
+
+        if (!active || !response.ok) return;
+
+        const data = await response.json();
+        const state = data[0];
+
+        if (!active || !state) return;
+
+        const metadata = (state.metadata || {}) as Record<string, any>;
+        setBackfillProgress({
+          processed: Number(state.total_items_processed) || 0,
+          total: Number(metadata.total_missing) || 0,
+          batch: Number(state.current_batch) || 0
+        });
+
+        // Check if completed
+        if (state.status === 'idle') {
+          setIsBackfilling(false);
+          setBackfillProgress(null);
+          toast.success(`✅ Auto-backfill voltooid! ${state.total_items_processed} embeddings gegenereerd`);
+          refetchMetrics();
+        } else if (state.status === 'error') {
+          setIsBackfilling(false);
+          setBackfillProgress(null);
+          toast.error(`❌ Auto-backfill gestopt: ${metadata.error || 'Unknown error'}`);
+        }
+      } catch (error) {
+        if (active) {
+          console.error('Error polling orchestrator state:', error);
+        }
+      }
+    };
+
+    const pollInterval = setInterval(pollStatus, 5000);
+    pollStatus(); // Poll immediately
+
+    return () => {
+      active = false;
+      clearInterval(pollInterval);
+    };
+  }, [isBackfilling, refetchMetrics]);
+
   const runAutoBackfill = async () => {
     setIsBackfilling(true);
     setBackfillProgress({ processed: 0, total: 0, batch: 0 });
     
     try {
-      let totalProcessed = 0;
-      let batchNumber = 0;
-      let hasMore = true;
-      
-      toast.info("🚀 Auto-backfill gestart - dit kan 15-20 minuten duren...", { duration: 5000 });
-      
-      while (hasMore) {
-        batchNumber++;
-        
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/backfill-embeddings`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
-            },
-            body: JSON.stringify({ batch_size: 50 })
-          }
-        );
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          const stage = errorData.stage || 'unknown';
-          const details = errorData.details?.message || errorData.error || response.statusText;
-          throw new Error(`Backfill failed at ${stage}: ${details}`);
-        }
-        
-        const data = await response.json();
-        
-        totalProcessed += data.processed || 0;
-        setBackfillProgress({
-          processed: totalProcessed,
-          total: data.total_missing || 0,
-          batch: batchNumber
-        });
-        
-        console.log(`Batch ${batchNumber} complete: ${data.processed} embeddings generated`);
-        
-        // Check if we should continue
-        if (data.reason === 'no_missing_embeddings') {
-          hasMore = false;
-          toast.success(
-            `✅ Auto-backfill voltooid! ${totalProcessed} embeddings gegenereerd`,
-            { duration: 5000 }
-          );
-        } else if (data.processed === 0 && data.total_missing > 0) {
-          toast.info(
-            "Venster overgeslagen",
-            { description: `Geen nieuwe items in dit venster, probeer volgende batch...` }
-          );
-          hasMore = true;
-        } else if (data.processed === 0) {
-          hasMore = false;
-          toast.success(
-            `✅ Auto-backfill voltooid! ${totalProcessed} embeddings gegenereerd`,
-            { duration: 5000 }
-          );
-        } else {
-          hasMore = data.processed > 0;
-        }
-        
-        // Rate limiting: wait 2 seconds between batches
-        if (hasMore) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-      }
-      
-      // Refresh metrics after completion
-      setTimeout(() => refetchMetrics(), 2000);
+      // Start the orchestrator
+      const { data, error } = await supabase.functions.invoke('auto-backfill-orchestrator', {
+        body: { batch_size: 50 }
+      });
+
+      if (error) throw error;
+
+      toast.success("🚀 Auto-backfill gestart op de achtergrond! Je kunt nu naar andere pagina's navigeren.", {
+        duration: 5000
+      });
+
     } catch (err: any) {
       console.error('Auto-backfill error:', err);
-      toast.error(`❌ Auto-backfill gestopt: ${err.message}`);
-    } finally {
+      toast.error(`❌ Kon auto-backfill niet starten: ${err.message}`);
       setIsBackfilling(false);
       setBackfillProgress(null);
     }
