@@ -12,6 +12,7 @@ export const ManualFunctionTrigger = () => {
   const [status, setStatus] = useState<"idle" | "running" | "success" | "error">("idle");
   const [result, setResult] = useState<any>(null);
   const [triggeringFunction, setTriggeringFunction] = useState<string | null>(null);
+  const [isBackfilling, setIsBackfilling] = useState(false);
 
   // Fetch validation metrics - simplified version
   const { data: validationMetrics, refetch: refetchMetrics } = useQuery({
@@ -302,6 +303,43 @@ export const ManualFunctionTrigger = () => {
                   <RefreshCw className="mr-2 h-4 w-4" />
                 )}
                 Run Quality Audit
+              </Button>
+
+              <Button
+                onClick={async () => {
+                  setIsBackfilling(true);
+                  try {
+                    toast.info("🚀 Starting embedding backfill...");
+                    
+                    const { data, error } = await supabase.functions.invoke('backfill-embeddings', {
+                      body: { batch_size: 50 }
+                    });
+                    
+                    if (error) throw error;
+                    
+                    toast.success(
+                      `✅ Backfill voltooid: ${data.processed}/${data.total_in_batch} embeddings gegenereerd`,
+                      { duration: 5000 }
+                    );
+                    
+                    // Refresh metrics after completion
+                    setTimeout(() => refetchMetrics(), 2000);
+                  } catch (err: any) {
+                    toast.error(`❌ Backfill mislukt: ${err.message}`);
+                  } finally {
+                    setIsBackfilling(false);
+                  }
+                }}
+                disabled={isBackfilling}
+                variant="outline"
+                className="w-full"
+              >
+                {isBackfilling ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                Backfill Embeddings
               </Button>
             </div>
 

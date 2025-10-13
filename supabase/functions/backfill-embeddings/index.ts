@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             model: 'text-embedding-3-small',
             input: embeddingText,
-            dimensions: 1536
+            dimensions: 768
           })
         });
 
@@ -101,6 +101,15 @@ Deno.serve(async (req) => {
 
         const { data: [embeddingData] } = await openaiResponse.json();
         const embedding = embeddingData.embedding;
+
+        // Validate and log embedding dimensions
+        console.log(`✅ Processed ${item.id}: ${embedding.length} dimensions`);
+        if (embedding.length !== 768) {
+          const error = `Invalid embedding size: ${embedding.length}, expected 768`;
+          console.error(error);
+          results.errors.push(`${item.id}: ${error}`);
+          continue;
+        }
 
         // Insert embedding
         const { error: insertError } = await supabase

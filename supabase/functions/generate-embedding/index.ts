@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: 'text-embedding-3-small',
         input: embeddingText,
-        dimensions: 1536
+        dimensions: 768
       })
     });
 
@@ -85,6 +85,16 @@ Deno.serve(async (req) => {
 
     const { data: [embeddingData] } = await embeddingResponse.json();
     const embedding = embeddingData.embedding;
+
+    // Validate embedding dimensions
+    console.log('📐 Embedding dimensions:', embedding.length);
+    if (embedding.length !== 768) {
+      console.error(`Invalid embedding size: ${embedding.length}, expected 768`);
+      return new Response(
+        JSON.stringify({ error: `Invalid embedding size: ${embedding.length}, expected 768` }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Check of er al een embedding bestaat
     const { data: existingEmbedding } = await supabase
