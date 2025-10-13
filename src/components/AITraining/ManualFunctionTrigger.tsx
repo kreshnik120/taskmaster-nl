@@ -184,6 +184,13 @@ export const ManualFunctionTrigger = () => {
 
         if (state) {
           const metadata = (state.metadata || {}) as Record<string, any>;
+          
+          // Check if heartbeat is stale (>5 min old)
+          const lastHeartbeat = metadata.last_heartbeat;
+          const isHeartbeatStale = lastHeartbeat 
+            ? (Date.now() - new Date(lastHeartbeat).getTime()) > 5 * 60 * 1000
+            : true;
+          
           setBackfillProgress({
             processed: Number(state.total_items_processed) || 0,
             total: Number(metadata.total_missing) || 0,
@@ -193,7 +200,11 @@ export const ManualFunctionTrigger = () => {
           if (state.status === 'running') {
             if (!isBackfilling) {
               setIsBackfilling(true);
-              toast.info('🔄 Auto-backfill hersteld en loopt nog...');
+              if (isHeartbeatStale) {
+                toast.warning('⚠️ Auto-backfill mogelijk gestopt - heartbeat timeout');
+              } else {
+                toast.info('🔄 Auto-backfill hersteld en loopt nog...');
+              }
             }
           } else if (state.status === 'idle') {
             if (isBackfilling) {
@@ -201,6 +212,12 @@ export const ManualFunctionTrigger = () => {
               setBackfillProgress(null);
               toast.success(`✅ Auto-backfill voltooid! ${state.total_items_processed} embeddings gegenereerd`);
               refetchMetrics();
+            }
+          } else if (state.status === 'paused') {
+            if (isBackfilling) {
+              setIsBackfilling(false);
+              setBackfillProgress(null);
+              toast.warning(`⏸️ Auto-backfill gepauzeerd: ${metadata.pause_reason || 'Unknown reason'}`);
             }
           } else if (state.status === 'error') {
             if (isBackfilling) {
