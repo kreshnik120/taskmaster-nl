@@ -88,14 +88,56 @@ export const TrainingChat = () => {
       setMessages((prev) => [...prev, assistantMessage]);
 
       // 🔄 Trigger embedding generation voor nieuwe knowledge items
-      if (data.knowledgeIds && Array.isArray(data.knowledgeIds)) {
-        setCurrentStatus("Embeddings genereren...");
-        for (const knowledgeId of data.knowledgeIds) {
-          supabase.functions
-            .invoke('generate-embedding', {
-              body: { knowledge_id: knowledgeId }
+      if (data.knowledgeIds && Array.isArray(data.knowledgeIds) && data.knowledgeIds.length > 0) {
+        console.log(`🔄 Generating embeddings for ${data.knowledgeIds.length} items...`);
+        setCurrentStatus(`Embeddings genereren (${data.knowledgeIds.length} items)...`);
+        
+        // Parallel embedding generation (max 5 concurrent)
+        const batchSize = 5;
+        let successCount = 0;
+        let errorCount = 0;
+        
+        for (let i = 0; i < data.knowledgeIds.length; i += batchSize) {
+          const batch = data.knowledgeIds.slice(i, i + batchSize);
+          
+          const results = await Promise.allSettled(
+            batch.map(async (knowledgeId: string) => {
+              try {
+                const { error } = await supabase.functions.invoke('generate-embedding', {
+                  body: { knowledge_id: knowledgeId }
+                });
+                
+                if (error) {
+                  console.error(`❌ Embedding failed for ${knowledgeId}:`, error);
+                  throw error;
+                } else {
+                  console.log(`✅ Embedding voor ${knowledgeId} gegenereerd`);
+                }
+              } catch (err) {
+                console.error(`❌ Embedding error for ${knowledgeId}:`, err);
+                throw err;
+              }
             })
-            .catch(err => console.error('Embedding generation failed:', err));
+          );
+          
+          // Count successes and failures
+          results.forEach(result => {
+            if (result.status === 'fulfilled') successCount++;
+            else errorCount++;
+          });
+          
+          // Rate limiting pause
+          if (i + batchSize < data.knowledgeIds.length) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+        }
+        
+        if (successCount > 0) {
+          toast({
+            title: `✅ ${successCount} embeddings gegenereerd`,
+            description: errorCount > 0 ? `${errorCount} errors` : undefined,
+            duration: 3000,
+          });
         }
       }
 
@@ -186,13 +228,36 @@ export const TrainingChat = () => {
           }
 
           // 🔄 Trigger embedding generation voor chunk knowledge items
-          if (data.knowledgeIds && Array.isArray(data.knowledgeIds)) {
-            for (const knowledgeId of data.knowledgeIds) {
-              supabase.functions
-                .invoke('generate-embedding', {
-                  body: { knowledge_id: knowledgeId }
+          if (data.knowledgeIds && Array.isArray(data.knowledgeIds) && data.knowledgeIds.length > 0) {
+            console.log(`🔄 Chunk ${i + 1}: Generating ${data.knowledgeIds.length} embeddings...`);
+            
+            // Parallel embedding generation (max 5 concurrent)
+            const batchSize = 5;
+            for (let j = 0; j < data.knowledgeIds.length; j += batchSize) {
+              const batch = data.knowledgeIds.slice(j, j + batchSize);
+              
+              await Promise.allSettled(
+                batch.map(async (knowledgeId: string) => {
+                  try {
+                    const { error } = await supabase.functions.invoke('generate-embedding', {
+                      body: { knowledge_id: knowledgeId }
+                    });
+                    
+                    if (error) {
+                      console.error(`❌ Embedding failed for ${knowledgeId}:`, error);
+                    } else {
+                      console.log(`✅ Embedding voor ${knowledgeId} gegenereerd`);
+                    }
+                  } catch (err) {
+                    console.error(`❌ Embedding error for ${knowledgeId}:`, err);
+                  }
                 })
-                .catch(err => console.error('Embedding generation failed:', err));
+              );
+              
+              // Rate limiting pause between batches
+              if (j + batchSize < data.knowledgeIds.length) {
+                await new Promise(resolve => setTimeout(resolve, 200));
+              }
             }
           }
         }
