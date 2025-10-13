@@ -19,45 +19,126 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Get org_id from auth
-    const authHeader = req.headers.get('Authorization')!;
+    // Preflight: Get org_id from auth
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Not authenticated' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user } } = await supabase.auth.getUser(token);
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     
-    const { data: orgData } = await supabase
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid authentication' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { data: orgData, error: orgError } = await supabase
       .from('user_organizations')
       .select('org_id')
-      .eq('user_id', user?.id)
+      .eq('user_id', user.id)
       .single();
     
     const org_id = orgData?.org_id;
 
     if (!org_id) {
-      throw new Error('User organization not found');
+      return new Response(
+        JSON.stringify({ error: 'Organization not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     console.log(`🚀 Starting auto-backfill orchestrator for org: ${org_id}`);
 
-    // Initialize state
-    await supabase
+    // Preflight: Check if already running
+    const { data: existingRun } = await supabase
       .from('orchestrator_state')
-      .upsert({
+      .select('*')
+      .eq('org_id', org_id)
+      .eq('status', 'running')
+      .contains('metadata', { component: 'auto-backfill-orchestrator' })
+      .maybeSingle();
+
+    if (existingRun) {
+      console.log('⚠️ Auto-backfill already running');
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'Auto-backfill is already running',
+          status: 'running',
+          progress: {
+            batch: existingRun.current_batch,
+            processed: existingRun.total_items_processed,
+            total: existingRun.metadata?.total_missing || 0
+          }
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Preflight: Check if there are missing embeddings
+    const { count: totalKnowledge } = await supabase
+      .from('ai_knowledge_base')
+      .select('*', { count: 'exact', head: true })
+      .is('deleted_at', null);
+
+    const { count: totalEmbeddings } = await supabase
+      .from('knowledge_embeddings')
+      .select('*', { count: 'exact', head: true });
+
+    const missingCount = (totalKnowledge || 0) - (totalEmbeddings || 0);
+
+    if (missingCount <= 0) {
+      console.log('✅ No missing embeddings');
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'All embeddings are up to date',
+          status: 'idle',
+          total_knowledge: totalKnowledge,
+          total_embeddings: totalEmbeddings
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`📊 Missing embeddings: ${missingCount}`);
+
+    // Initialize state with metadata.component
+    const { data: stateRecord, error: stateError } = await supabase
+      .from('orchestrator_state')
+      .insert({
         org_id,
-        component: 'auto-backfill-orchestrator',
         status: 'running',
         current_batch: 0,
         total_items_processed: 0,
         metadata: {
+          component: 'auto-backfill-orchestrator',
           started_at: new Date().toISOString(),
-          batch_size
+          batch_size,
+          total_missing: missingCount
         }
-      });
+      })
+      .select()
+      .single();
+
+    if (stateError || !stateRecord) {
+      throw new Error(`Failed to create state record: ${stateError?.message}`);
+    }
+
+    const stateId = stateRecord.id;
 
     // Start background task
     const backgroundTask = async () => {
       let totalProcessed = 0;
       let batchNumber = 0;
       let hasMore = true;
+      let currentMissingCount = missingCount;
 
       console.log('📦 Starting background batches...');
 
@@ -72,24 +153,27 @@ Deno.serve(async (req) => {
           if (error) throw error;
 
           totalProcessed += data.processed || 0;
+          currentMissingCount = data.total_missing || 0;
 
-          // Update state
+          // Update state by id
           await supabase
             .from('orchestrator_state')
-            .upsert({
-              org_id,
-              component: 'auto-backfill-orchestrator',
+            .update({
               status: 'running',
               current_batch: batchNumber,
               total_items_processed: totalProcessed,
+              last_run_at: new Date().toISOString(),
               metadata: {
+                component: 'auto-backfill-orchestrator',
+                started_at: stateRecord.metadata?.started_at,
                 last_batch_at: new Date().toISOString(),
-                total_missing: data.total_missing || 0,
+                total_missing: currentMissingCount,
                 batch_size
               }
-            });
+            })
+            .eq('id', stateId);
 
-          console.log(`✅ Batch ${batchNumber}: ${data.processed} processed, ${data.total_missing} remaining`);
+          console.log(`✅ Batch ${batchNumber}: ${data.processed} processed, ${currentMissingCount} remaining`);
 
           // Check if done
           if (data.reason === 'no_missing_embeddings' || data.processed === 0) {
@@ -104,18 +188,19 @@ Deno.serve(async (req) => {
           console.error(`❌ Batch ${batchNumber} failed:`, err);
           await supabase
             .from('orchestrator_state')
-            .upsert({
-              org_id,
-              component: 'auto-backfill-orchestrator',
+            .update({
               status: 'error',
               current_batch: batchNumber,
               total_items_processed: totalProcessed,
               metadata: {
+                component: 'auto-backfill-orchestrator',
                 error: err instanceof Error ? err.message : 'Unknown error',
                 failed_at: new Date().toISOString(),
-                failed_at_batch: batchNumber
+                failed_at_batch: batchNumber,
+                batch_size
               }
-            });
+            })
+            .eq('id', stateId);
           break;
         }
       }
@@ -124,17 +209,18 @@ Deno.serve(async (req) => {
       console.log(`🎉 Backfill completed! Total processed: ${totalProcessed} across ${batchNumber} batches`);
       await supabase
         .from('orchestrator_state')
-        .upsert({
-          org_id,
-          component: 'auto-backfill-orchestrator',
+        .update({
           status: 'idle',
           current_batch: batchNumber,
           total_items_processed: totalProcessed,
           metadata: {
+            component: 'auto-backfill-orchestrator',
             completed_at: new Date().toISOString(),
-            total_batches: batchNumber
+            total_batches: batchNumber,
+            batch_size
           }
-        });
+        })
+        .eq('id', stateId);
     };
 
     // Start background processing using EdgeRuntime.waitUntil

@@ -150,92 +150,165 @@ export const ManualFunctionTrigger = () => {
     }
   };
 
-  // Poll for orchestrator status
+  // Auto-backfill polling and restore on page load
   useEffect(() => {
-    if (!isBackfilling) return;
-
+    let pollInterval: NodeJS.Timeout | null = null;
     let active = true;
 
     const pollStatus = async () => {
-      try {
-        const userRes = await supabase.auth.getUser();
-        if (!active || !userRes.data.user) return;
+      if (!active) return;
 
-        const orgRes = await supabase
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!active || !user) return;
+
+        const { data: orgData } = await supabase
           .from('user_organizations')
           .select('org_id')
-          .eq('user_id', userRes.data.user.id)
+          .eq('user_id', user.id)
           .single();
 
-        if (!active || !orgRes.data?.org_id) return;
+        if (!active || !orgData?.org_id) return;
 
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/orchestrator_state?org_id=eq.${orgRes.data.org_id}&component=eq.auto-backfill-orchestrator&select=status,current_batch,total_items_processed,metadata&limit=1`,
-          {
-            headers: {
-              'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
+        const { data: states } = await supabase
+          .from('orchestrator_state')
+          .select('*')
+          .eq('org_id', orgData.org_id)
+          .contains('metadata', { component: 'auto-backfill-orchestrator' })
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (!active) return;
+
+        const state = states?.[0];
+
+        if (state) {
+          const metadata = (state.metadata || {}) as Record<string, any>;
+          setBackfillProgress({
+            processed: Number(state.total_items_processed) || 0,
+            total: Number(metadata.total_missing) || 0,
+            batch: Number(state.current_batch) || 0
+          });
+
+          if (state.status === 'running') {
+            if (!isBackfilling) {
+              setIsBackfilling(true);
+              toast.info('🔄 Auto-backfill hersteld en loopt nog...');
+            }
+          } else if (state.status === 'idle') {
+            if (isBackfilling) {
+              setIsBackfilling(false);
+              setBackfillProgress(null);
+              toast.success(`✅ Auto-backfill voltooid! ${state.total_items_processed} embeddings gegenereerd`);
+              refetchMetrics();
+            }
+          } else if (state.status === 'error') {
+            if (isBackfilling) {
+              setIsBackfilling(false);
+              setBackfillProgress(null);
+              toast.error(`❌ Auto-backfill fout: ${metadata.error || 'Unknown error'}`);
             }
           }
-        );
-
-        if (!active || !response.ok) return;
-
-        const data = await response.json();
-        const state = data[0];
-
-        if (!active || !state) return;
-
-        const metadata = (state.metadata || {}) as Record<string, any>;
-        setBackfillProgress({
-          processed: Number(state.total_items_processed) || 0,
-          total: Number(metadata.total_missing) || 0,
-          batch: Number(state.current_batch) || 0
-        });
-
-        // Check if completed
-        if (state.status === 'idle') {
-          setIsBackfilling(false);
-          setBackfillProgress(null);
-          toast.success(`✅ Auto-backfill voltooid! ${state.total_items_processed} embeddings gegenereerd`);
-          refetchMetrics();
-        } else if (state.status === 'error') {
-          setIsBackfilling(false);
-          setBackfillProgress(null);
-          toast.error(`❌ Auto-backfill gestopt: ${metadata.error || 'Unknown error'}`);
         }
-      } catch (error) {
+      } catch (err) {
         if (active) {
-          console.error('Error polling orchestrator state:', error);
+          console.error('Polling error:', err);
         }
       }
     };
 
-    const pollInterval = setInterval(pollStatus, 5000);
-    pollStatus(); // Poll immediately
+    // Initial check on mount
+    pollStatus();
+
+    // Start polling if backfilling
+    if (isBackfilling) {
+      pollInterval = setInterval(pollStatus, 5000);
+    }
 
     return () => {
       active = false;
-      clearInterval(pollInterval);
+      if (pollInterval) clearInterval(pollInterval);
     };
   }, [isBackfilling, refetchMetrics]);
 
   const runAutoBackfill = async () => {
-    setIsBackfilling(true);
-    setBackfillProgress({ processed: 0, total: 0, batch: 0 });
-    
     try {
+      // Preflight: Check if user is authenticated
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("❌ Je moet ingelogd zijn om auto-backfill te starten");
+        return;
+      }
+
+      // Preflight: Get org_id
+      const { data: orgData } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!orgData?.org_id) {
+        toast.error("❌ Geen organisatie gevonden");
+        return;
+      }
+
+      // Preflight: Check if already running
+      const { data: existingRuns } = await supabase
+        .from('orchestrator_state')
+        .select('*')
+        .eq('org_id', orgData.org_id)
+        .eq('status', 'running')
+        .contains('metadata', { component: 'auto-backfill-orchestrator' });
+
+      if (existingRuns && existingRuns.length > 0) {
+        const state = existingRuns[0];
+        const metadata = (state.metadata || {}) as Record<string, any>;
+        setIsBackfilling(true);
+        setBackfillProgress({
+          processed: state.total_items_processed || 0,
+          total: metadata.total_missing || 0,
+          batch: state.current_batch || 0
+        });
+        toast.info("ℹ️ Auto-backfill loopt al op de achtergrond");
+        return;
+      }
+
+      // Preflight: Check if there are missing embeddings
+      const { count: totalKnowledge } = await supabase
+        .from('ai_knowledge_base')
+        .select('*', { count: 'exact', head: true })
+        .is('deleted_at', null);
+
+      const { count: totalEmbeddings } = await supabase
+        .from('knowledge_embeddings')
+        .select('*', { count: 'exact', head: true });
+
+      const missingCount = (totalKnowledge || 0) - (totalEmbeddings || 0);
+
+      if (missingCount <= 0) {
+        toast.success("✅ Alle embeddings zijn al up-to-date!");
+        return;
+      }
+
       // Start the orchestrator
+      setIsBackfilling(true);
+      setBackfillProgress({ processed: 0, total: missingCount, batch: 0 });
+
       const { data, error } = await supabase.functions.invoke('auto-backfill-orchestrator', {
         body: { batch_size: 50 }
       });
 
       if (error) throw error;
 
-      toast.success("🚀 Auto-backfill gestart op de achtergrond! Je kunt nu naar andere pagina's navigeren.", {
-        duration: 5000
-      });
-
+      if (data.success) {
+        toast.success(`🚀 Auto-backfill gestart! Ongeveer ${missingCount} embeddings te genereren`, {
+          duration: 5000
+        });
+      } else {
+        toast.info(data.message || "Auto-backfill kon niet starten");
+        setIsBackfilling(false);
+        setBackfillProgress(null);
+      }
     } catch (err: any) {
       console.error('Auto-backfill error:', err);
       toast.error(`❌ Kon auto-backfill niet starten: ${err.message}`);
