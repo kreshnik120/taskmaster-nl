@@ -121,10 +121,10 @@ serve(async (req) => {
       const confidenceAdjustment = isPositive ? 0.05 : -0.05;
       
       for (const knowledgeId of usedKnowledge) {
-        // Get current item
+        // Fetch current item WITH helpful_count and harmful_count
         const { data: currentItem } = await supabaseClient
           .from('ai_knowledge_base')
-          .select('confidence_score, usage_count')
+          .select('confidence_score, usage_count, helpful_count, harmful_count')
           .eq('id', knowledgeId)
           .single();
 
@@ -135,14 +135,89 @@ serve(async (req) => {
           
           const newUsageCount = (currentItem.usage_count || 0) + (isPositive ? 1 : 0);
 
+          // ACE PHASE 1: Update helpful_count or harmful_count
+          const newHelpfulCount = (currentItem.helpful_count || 0) + (isPositive ? 1 : 0);
+          const newHarmfulCount = (currentItem.harmful_count || 0) + (isPositive ? 0 : 1);
+
           await supabaseClient
             .from('ai_knowledge_base')
             .update({ 
               confidence_score: newConfidence,
               usage_count: newUsageCount,
+              helpful_count: newHelpfulCount,
+              harmful_count: newHarmfulCount,
               last_used_at: new Date().toISOString()
             })
             .eq('id', knowledgeId);
+          
+          console.log(`📊 [ACE] Updated ${knowledgeId}: helpful=${newHelpfulCount}, harmful=${newHarmfulCount}`);
+        }
+      }
+    }
+
+    // ACE AUTO-PRUNING: Check if any knowledge items should be soft-deleted
+    if (usedKnowledge.length > 0) {
+      const { data: itemsToCheck } = await supabaseClient
+        .from('ai_knowledge_base')
+        .select('id, key, helpful_count, harmful_count, deleted_at')
+        .in('id', usedKnowledge)
+        .is('deleted_at', null); // Only check active items
+
+      if (itemsToCheck) {
+        for (const item of itemsToCheck) {
+          const totalFeedback = (item.helpful_count || 0) + (item.harmful_count || 0);
+          const harmfulCount = item.harmful_count || 0;
+          
+          // ACE PRUNING CRITERIA:
+          // 1. At least 3 harmful votes
+          // 2. Harmful ratio >= 70%
+          if (harmfulCount >= 3 && totalFeedback > 0) {
+            const harmfulRatio = harmfulCount / totalFeedback;
+            
+            if (harmfulRatio >= 0.70) {
+              // Soft-delete the knowledge item
+              await supabaseClient
+                .from('ai_knowledge_base')
+                .update({
+                  deleted_at: new Date().toISOString(),
+                  deleted_by: 'ACE_AUTO_PRUNER',
+                  deletion_reason: {
+                    trigger: 'auto_pruning',
+                    harmful_count: harmfulCount,
+                    helpful_count: item.helpful_count || 0,
+                    harmful_ratio: Math.round(harmfulRatio * 100),
+                    threshold: '70%',
+                    pruned_at: new Date().toISOString()
+                  }
+                })
+                .eq('id', item.id);
+              
+              console.log(`🗑️ [ACE PRUNER] Auto-deleted knowledge item: ${item.key} (${Math.round(harmfulRatio * 100)}% harmful, ${harmfulCount}/${totalFeedback} votes)`);
+              
+              // Create business intelligence alert
+              await supabaseClient
+                .from('business_intelligence')
+                .insert({
+                  org_id: userOrg?.org_id,
+                  intelligence_type: 'data_quality',
+                  type: 'knowledge',
+                  severity: 'high',
+                  title: 'Knowledge Item Auto-Pruned (ACE)',
+                  description: `Knowledge item "${item.key}" was automatically deleted due to high harmful feedback ratio (${Math.round(harmfulRatio * 100)}%)`,
+                  impact_score: 0.8,
+                  priority: 'high',
+                  status: 'active',
+                  data: {
+                    knowledge_id: item.id,
+                    knowledge_key: item.key,
+                    harmful_count: harmfulCount,
+                    helpful_count: item.helpful_count || 0,
+                    harmful_ratio: harmfulRatio,
+                    pruned_by: 'ACE_AUTO_PRUNER'
+                  }
+                });
+            }
+          }
         }
       }
     }
