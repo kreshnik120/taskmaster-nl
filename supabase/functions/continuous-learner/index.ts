@@ -372,14 +372,93 @@ USER FEEDBACK: ${user_feedback || 'none'}`
 
     console.log(`✅ Learning analysis complete. ${updatesApplied} confidence scores updated.`);
 
+    // ✅ ACE PHASE 1: Process user feedback (helpful/harmful)
+    let feedbackProcessed = 0;
+    let itemsPruned = 0;
+    
+    if (user_feedback === 'helpful' || user_feedback === 'harmful') {
+      const feedbackColumn = user_feedback === 'helpful' ? 'helpful_count' : 'harmful_count';
+      console.log(`📊 Processing ${user_feedback} feedback for ${knowledge_used?.length || 0} knowledge items`);
+      
+      // Update alle gebruikte knowledge items
+      for (const knowledgeId of (knowledge_used || [])) {
+        const { error: feedbackError } = await supabase
+          .from('ai_knowledge_base')
+          .update({ 
+            [feedbackColumn]: supabase.raw(`${feedbackColumn} + 1`),
+            last_used_at: new Date().toISOString()
+          })
+          .eq('id', knowledgeId)
+          .eq('org_id', orgId);
+        
+        if (feedbackError) {
+          console.error(`❌ Failed to update ${feedbackColumn} for ${knowledgeId}:`, feedbackError);
+        } else {
+          feedbackProcessed++;
+          console.log(`✅ ${user_feedback} feedback recorded for knowledge ${knowledgeId}`);
+        }
+      }
+      
+      // ✅ ACE PRUNING: Auto-delete harmful knowledge (harmful ratio ≥ 70%)
+      const { data: allItems, error: queryError } = await supabase
+        .from('ai_knowledge_base')
+        .select('id, key, helpful_count, harmful_count')
+        .eq('org_id', orgId)
+        .is('deleted_at', null)
+        .gte('harmful_count', 3);  // Minimaal 3 harmful votes voor betrouwbaarheid
+      
+      if (queryError) {
+        console.error('❌ Failed to query harmful items:', queryError);
+      } else if (allItems && allItems.length > 0) {
+        // Filter in-memory (omdat Postgres geen computed columns in WHERE ondersteunt)
+        const harmfulItems = allItems.filter((item: any) => {
+          const total = item.helpful_count + item.harmful_count;
+          const harmfulRatio = item.harmful_count / total;
+          return harmfulRatio >= 0.70;
+        });
+        
+        if (harmfulItems.length > 0) {
+          const prunedIds = harmfulItems.map((item: any) => item.id);
+          
+          const { error: pruneError } = await supabase
+            .from('ai_knowledge_base')
+            .update({
+              deleted_at: new Date().toISOString(),
+              deleted_by: 'ACE_AUTO_PRUNER',
+              deletion_reason: {
+                trigger: 'harmful_ratio_threshold',
+                threshold: 0.70,
+                items: harmfulItems.map((item: any) => ({
+                  key: item.key,
+                  harmful_count: item.harmful_count,
+                  helpful_count: item.helpful_count,
+                  harmful_ratio: (item.harmful_count / (item.helpful_count + item.harmful_count) * 100).toFixed(1) + '%'
+                })),
+                pruned_at: new Date().toISOString()
+              }
+            })
+            .in('id', prunedIds);
+          
+          if (pruneError) {
+            console.error('❌ Failed to prune harmful items:', pruneError);
+          } else {
+            itemsPruned = prunedIds.length;
+            console.log(`🗑️ ACE PRUNED ${itemsPruned} harmful knowledge items:`, prunedIds);
+          }
+        }
+      }
+    }
+
     return new Response(JSON.stringify({
       success: true,
       analysis: analysis,
       learning_event_id: learningEvent?.id,
       confidence_updates_applied: updatesApplied,
-      suggestions_created: suggestionsCreated,  // ✅ NIEUW
+      suggestions_created: suggestionsCreated,
       contradictions_marked: analysis.contradictions_found,
-      auto_apply_enabled: auto_apply,  // ✅ NIEUW
+      auto_apply_enabled: auto_apply,
+      feedback_processed: feedbackProcessed,  // ✅ ACE TRACKING
+      items_pruned: itemsPruned,  // ✅ ACE PRUNING
       execution_time_ms: executionTime
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

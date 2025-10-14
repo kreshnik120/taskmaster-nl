@@ -88,6 +88,8 @@ export type Database = {
           deleted_at: string | null
           deleted_by: string | null
           deletion_reason: Json | null
+          harmful_count: number | null
+          helpful_count: number | null
           id: string
           jurisdiction: string | null
           key: string
@@ -130,6 +132,8 @@ export type Database = {
           deleted_at?: string | null
           deleted_by?: string | null
           deletion_reason?: Json | null
+          harmful_count?: number | null
+          helpful_count?: number | null
           id?: string
           jurisdiction?: string | null
           key: string
@@ -172,6 +176,8 @@ export type Database = {
           deleted_at?: string | null
           deleted_by?: string | null
           deletion_reason?: Json | null
+          harmful_count?: number | null
+          helpful_count?: number | null
           id?: string
           jurisdiction?: string | null
           key?: string
