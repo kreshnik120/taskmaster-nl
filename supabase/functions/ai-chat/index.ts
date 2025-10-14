@@ -25,7 +25,7 @@ async function persistMessage(
   supabase: any,
   message: { user_id: string; conversation_id: string; role: string; content: string; metadata?: any },
   retries: number = 3
-): Promise<boolean> {
+): Promise<{ success: boolean; messageId?: string }> {
   // ✅ NIEUWE STAP: Normaliseer content (trim whitespace voor consistent hashing)
   const normalizedMessage = {
     ...message,
@@ -35,18 +35,19 @@ async function persistMessage(
   for (let attempt = 1; attempt <= retries; attempt++) {
     const { data, error } = await supabase
       .from('chat_messages')
-      .insert(normalizedMessage) // ✅ Use normalized version
-      .select();
+      .insert(normalizedMessage)
+      .select('id')
+      .single();
     
     if (!error && data) {
-      console.log(`✅ ${normalizedMessage.role} message persisted (attempt ${attempt}/${retries})`);
-      return true;
+      console.log(`✅ ${normalizedMessage.role} message persisted (attempt ${attempt}/${retries}), id: ${data.id}`);
+      return { success: true, messageId: data.id };
     }
     
     // ✅ NIEUWE LOGICA: Check of het een duplicate constraint error is
     if (error?.code === '23505') { // PostgreSQL unique violation
       console.log(`ℹ️ ${normalizedMessage.role} message already exists (deduplicated)`);
-      return true; // Treat as success - message is already there
+      return { success: true }; // Treat as success - message is already there
     }
     
     console.warn(`⚠️ Persist retry ${attempt}/${retries}:`, error);
@@ -56,7 +57,7 @@ async function persistMessage(
   }
   
   console.error(`❌ Failed to persist ${normalizedMessage.role} message after ${retries} attempts`);
-  return false;
+  return { success: false };
 }
 
 // =============================================================================
@@ -2719,35 +2720,18 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
               const userMessage = messages[messages.length - 1];
 
               // 1️⃣ CRITICAL: Persist user message with retry (using service role client)
-              const userPersisted = await persistMessage(supabaseServiceClient, {
+              const userResult = await persistMessage(supabaseServiceClient, {
                 user_id: userId,
                 conversation_id: conversationId,
                 role: 'user',
                 content: userMessage.content
               });
 
-              if (!userPersisted) {
+              if (!userResult.success) {
                 console.error('❌ CRITICAL: User message not persisted!');
               }
 
-              // 2️⃣ CRITICAL: Persist assistant message with retry (using service role client)
-              const assistantPersisted = await persistMessage(supabaseServiceClient, {
-                user_id: userId,
-                conversation_id: conversationId,
-                role: 'assistant',
-                content: fullResponse,
-                metadata: {
-                  feedback_enabled: true,
-                  knowledge_ids_for_feedback: usedKnowledgeIds
-                }
-              });
-
-              if (!assistantPersisted) {
-                console.error('❌ CRITICAL: Assistant message not persisted!');
-                return;
-              }
-
-              console.log('✅ Both messages persisted successfully');
+              console.log('✅ User message persisted in background');
 
               // ============================================
               // FASE 1: CACHE STORAGE (after streaming complete)
@@ -2815,18 +2799,44 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
             }
           })();
           
-          // Send usedKnowledge metadata to client for feedback tracking
-          if (usedKnowledgeIds.length > 0) {
+          // ✅ IMMEDIATELY persist assistant message to get messageId
+          const userId = user.id;
+          let assistantMessageId: string | undefined;
+          
+          try {
+            const assistantResult = await persistMessage(supabaseServiceClient, {
+              user_id: userId,
+              conversation_id: conversation_id,
+              role: 'assistant',
+              content: fullResponse,
+              metadata: {
+                feedback_enabled: true,
+                knowledge_ids_for_feedback: usedKnowledgeIds
+              }
+            });
+            
+            if (assistantResult.success && assistantResult.messageId) {
+              assistantMessageId = assistantResult.messageId;
+              console.log('✅ Assistant message persisted immediately, id:', assistantMessageId);
+            }
+          } catch (e) {
+            console.error('❌ Failed to persist assistant message immediately:', e);
+          }
+          
+          // Send usedKnowledge + messageId metadata to client for feedback tracking
+          if (usedKnowledgeIds.length > 0 || assistantMessageId) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({
               choices: [{
                 delta: { 
                   metadata: { 
-                    usedKnowledge: usedKnowledgeIds 
+                    usedKnowledge: usedKnowledgeIds,
+                    messageId: assistantMessageId
                   } 
                 },
                 index: 0
               }]
             })}\n\n`));
+            console.log('📤 Sent metadata to client:', { knowledgeCount: usedKnowledgeIds.length, messageId: assistantMessageId });
           }
           
           controller.close();

@@ -585,6 +585,7 @@ export const ChatWidget = () => {
       let textBuffer = '';
       let chunkCount = 0;
       let usedKnowledge: string[] = [];
+      let messageId: string | undefined;
 
       // Add empty assistant message that we'll update
       setMessages(prev => [...prev, { role: 'assistant', content: '', showInteractive: false, usedKnowledge: [] }]);
@@ -625,6 +626,12 @@ export const ChatWidget = () => {
                 console.log('📚 Knowledge used:', usedKnowledge.length, 'items');
               }
               
+              // Capture messageId metadata
+              if (metadata?.messageId) {
+                messageId = metadata.messageId;
+                console.log('🆔 Message ID received:', messageId);
+              }
+              
               if (content) {
                 assistantMessage += content;
                 const parsedResponse = parseAssistantResponse(assistantMessage);
@@ -637,6 +644,7 @@ export const ChatWidget = () => {
                     interactive: parsedResponse.interactive,
                     showInteractive: !!parsedResponse.interactive,
                     usedKnowledge: usedKnowledge.length > 0 ? usedKnowledge : [],
+                    messageId: messageId || undefined,
                   };
                   return updated;
                 });
