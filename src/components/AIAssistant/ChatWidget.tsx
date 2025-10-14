@@ -183,35 +183,8 @@ export const ChatWidget = () => {
     };
   }, []);
 
-  // Load conversation history on mount
-  useEffect(() => {
-    const loadHistory = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const conversationId = getConversationId();
-
-      const { data: history } = await supabase
-        .from('chat_messages')
-        .select('role, content, metadata')
-        .eq('user_id', user.id)
-        .or(`conversation_id.eq.${conversationId},conversation_id.is.null`)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (history && history.length > 0) {
-        setMessages(history.reverse() as Message[]);
-        setShowWelcome(false);
-        console.log('📚 Loaded chat history:', history.length, 'messages for conversation:', conversationId);
-      } else {
-        setShowWelcome(true);
-      }
-    };
-
-    if (isOpen) {
-      loadHistory();
-    }
-  }, [isOpen]);
+  // ✅ REMOVED: Duplicate history loader that overwrote messageId
+  // History is loaded by the first useEffect (lines ~126-164) which properly includes id → messageId
 
   // Smooth auto-scroll to bottom
   const scrollToBottom = () => {
@@ -661,6 +634,43 @@ export const ChatWidget = () => {
 
       clearTimeout(timeoutId);
       setIsLoading(false);
+
+      // ============================================
+      // FALLBACK: Ensure messageId is set
+      // ============================================
+      if (!messageId) {
+        console.warn('⚠️ No messageId received during stream, fetching from DB...');
+        try {
+          const conversationId = getConversationId();
+          const { data: latestMessage } = await supabase
+            .from('chat_messages')
+            .select('id')
+            .eq('conversation_id', conversationId)
+            .eq('role', 'assistant')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (latestMessage) {
+            messageId = latestMessage.id;
+            console.log('✅ Fetched messageId from DB:', messageId);
+            
+            // Update the last message with the messageId
+            setMessages(prev => {
+              const updated = [...prev];
+              if (updated.length > 0 && updated[updated.length - 1].role === 'assistant') {
+                updated[updated.length - 1] = {
+                  ...updated[updated.length - 1],
+                  messageId: messageId || undefined,
+                };
+              }
+              return updated;
+            });
+          }
+        } catch (fallbackError) {
+          console.error('❌ Failed to fetch messageId fallback:', fallbackError);
+        }
+      }
 
       // ============================================
       // FASE 2: TRIGGER CONTINUOUS-LEARNER
