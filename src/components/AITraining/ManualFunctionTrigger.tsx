@@ -201,10 +201,19 @@ export const ManualFunctionTrigger = () => {
             if (!isBackfilling) {
               setIsBackfilling(true);
               if (isHeartbeatStale) {
-                toast.warning('⚠️ Auto-backfill mogelijk gestopt - heartbeat timeout');
+                toast.error(
+                  '⚠️ Auto-backfill VASTGELOPEN - heartbeat timeout! Klik "Reset & Herstart" om opnieuw te starten.',
+                  { duration: 15000 }
+                );
               } else {
                 toast.info('🔄 Auto-backfill hersteld en loopt nog...');
               }
+            } else if (isHeartbeatStale) {
+              // Show persistent warning every 5s while stale
+              toast.warning(
+                '⚠️ Auto-backfill heartbeat timeout gedetecteerd. Mogelijk vastgelopen.',
+                { duration: 10000 }
+              );
             }
           } else if (state.status === 'idle') {
             if (isBackfilling) {
@@ -248,7 +257,67 @@ export const ManualFunctionTrigger = () => {
     };
   }, [isBackfilling, refetchMetrics]);
 
-  const runAutoBackfill = async () => {
+  const resetAndRestartBackfill = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("❌ Je moet ingelogd zijn");
+        return;
+      }
+
+      const { data: orgData } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!orgData?.org_id) {
+        toast.error("❌ Geen organisatie gevonden");
+        return;
+      }
+
+      // First get the existing state
+      const { data: existingStates } = await supabase
+        .from('orchestrator_state')
+        .select('*')
+        .eq('org_id', orgData.org_id)
+        .eq('status', 'running')
+        .contains('metadata', { component: 'auto-backfill-orchestrator' });
+
+      if (existingStates && existingStates.length > 0) {
+        const state = existingStates[0];
+        const updatedMetadata = {
+          ...(state.metadata as Record<string, any>),
+          error: 'Handmatig gereset door gebruiker',
+          reset_at: new Date().toISOString()
+        };
+
+        // Update with the new metadata
+        const { error: resetError } = await supabase
+          .from('orchestrator_state')
+          .update({ 
+            status: 'error',
+            metadata: updatedMetadata as any
+          })
+          .eq('id', state.id);
+
+        if (resetError) {
+          console.error('Reset error:', resetError);
+          toast.error(`❌ Reset mislukt: ${resetError.message}`);
+          return;
+        }
+      }
+
+      setIsBackfilling(false);
+      setBackfillProgress(null);
+      toast.success('✅ Reset voltooid - je kunt nu opnieuw starten');
+    } catch (err: any) {
+      console.error('Reset error:', err);
+      toast.error(`❌ Reset mislukt: ${err.message}`);
+    }
+  };
+
+  const runAutoBackfill = async (forceRestart = false) => {
     try {
       // Preflight: Check if user is authenticated
       const { data: { user } } = await supabase.auth.getUser();
@@ -270,24 +339,35 @@ export const ManualFunctionTrigger = () => {
       }
 
       // Preflight: Check if already running
-      const { data: existingRuns } = await supabase
-        .from('orchestrator_state')
-        .select('*')
-        .eq('org_id', orgData.org_id)
-        .eq('status', 'running')
-        .contains('metadata', { component: 'auto-backfill-orchestrator' });
+      if (!forceRestart) {
+        const { data: existingRuns } = await supabase
+          .from('orchestrator_state')
+          .select('*')
+          .eq('org_id', orgData.org_id)
+          .eq('status', 'running')
+          .contains('metadata', { component: 'auto-backfill-orchestrator' });
 
-      if (existingRuns && existingRuns.length > 0) {
-        const state = existingRuns[0];
-        const metadata = (state.metadata || {}) as Record<string, any>;
-        setIsBackfilling(true);
-        setBackfillProgress({
-          processed: state.total_items_processed || 0,
-          total: metadata.total_missing || 0,
-          batch: state.current_batch || 0
-        });
-        toast.info("ℹ️ Auto-backfill loopt al op de achtergrond");
-        return;
+        if (existingRuns && existingRuns.length > 0) {
+          const state = existingRuns[0];
+          const metadata = (state.metadata || {}) as Record<string, any>;
+          const lastHeartbeat = metadata.last_heartbeat;
+          const isStale = lastHeartbeat 
+            ? (Date.now() - new Date(lastHeartbeat).getTime()) > 5 * 60 * 1000
+            : true;
+          
+          if (!isStale) {
+            setIsBackfilling(true);
+            setBackfillProgress({
+              processed: state.total_items_processed || 0,
+              total: metadata.total_missing || 0,
+              batch: state.current_batch || 0
+            });
+            toast.info("ℹ️ Auto-backfill loopt al op de achtergrond");
+            return;
+          } else {
+            toast.warning("⚠️ Gestopte run gedetecteerd - wordt opnieuw gestart...");
+          }
+        }
       }
 
       // Preflight: Check if there are missing embeddings
@@ -312,7 +392,7 @@ export const ManualFunctionTrigger = () => {
       setBackfillProgress({ processed: 0, total: missingCount, batch: 0 });
 
       const { data, error } = await supabase.functions.invoke('auto-backfill-orchestrator', {
-        body: { batch_size: 25 }
+        body: { batch_size: 10 } // Kleinere batches voor stabiliteit
       });
 
       if (error) throw error;
@@ -467,29 +547,65 @@ export const ManualFunctionTrigger = () => {
                 Er zijn {validationMetrics.embeddingStats.missing} items zonder embeddings. 
                 Deze moeten eerst gegenereerd worden voordat web-validatie effectief kan werken.
               </p>
-              <Button
-                onClick={runAutoBackfill}
-                disabled={isBackfilling}
-                variant="default"
-                size="lg"
-                className="w-full bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-bold"
-              >
-                {isBackfilling ? (
-                  <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    {backfillProgress && (
-                      <span>
-                        Batch {backfillProgress.batch}: {backfillProgress.processed}/{backfillProgress.total}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <Database className="mr-2 h-5 w-5" />
-                    🚀 START EMBEDDINGS BACKFILL ({validationMetrics.embeddingStats.missing} items)
-                  </>
+              
+              {isBackfilling && backfillProgress && (
+                <div className="space-y-2 mb-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      Batch #{backfillProgress.batch}
+                    </span>
+                    <span className="font-medium">
+                      {backfillProgress.processed} / {backfillProgress.total} items
+                    </span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                    <div 
+                      className="bg-orange-500 h-full transition-all duration-500"
+                      style={{ 
+                        width: `${Math.min((backfillProgress.processed / backfillProgress.total) * 100, 100)}%` 
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => runAutoBackfill(false)}
+                  disabled={isBackfilling}
+                  variant="default"
+                  size="lg"
+                  className="flex-1 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-bold"
+                >
+                  {isBackfilling ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      {backfillProgress && (
+                        <span>
+                          Batch {backfillProgress.batch}: {backfillProgress.processed}/{backfillProgress.total}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <Database className="mr-2 h-5 w-5" />
+                      START ({validationMetrics.embeddingStats.missing} items)
+                    </>
+                  )}
+                </Button>
+                
+                {isBackfilling && (
+                  <Button
+                    onClick={resetAndRestartBackfill}
+                    variant="outline"
+                    size="lg"
+                    className="border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950"
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Reset
+                  </Button>
                 )}
-              </Button>
+              </div>
             </div>
           )}
 
@@ -569,7 +685,7 @@ export const ManualFunctionTrigger = () => {
               </Button>
 
               <Button
-                onClick={runAutoBackfill}
+                onClick={() => runAutoBackfill(false)}
                 disabled={isBackfilling}
                 variant="default"
                 className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
