@@ -46,8 +46,28 @@ async function persistMessage(
     
     // ✅ NIEUWE LOGICA: Check of het een duplicate constraint error is
     if (error?.code === '23505') { // PostgreSQL unique violation
-      console.log(`ℹ️ ${normalizedMessage.role} message already exists (deduplicated)`);
-      return { success: true }; // Treat as success - message is already there
+      console.log(`ℹ️ ${normalizedMessage.role} message already exists (deduplicated), fetching existing ID...`);
+      
+      // Haal bestaande message ID op
+      const { data: existing } = await supabase
+        .from('chat_messages')
+        .select('id')
+        .eq('user_id', normalizedMessage.user_id)
+        .eq('conversation_id', normalizedMessage.conversation_id)
+        .eq('role', normalizedMessage.role)
+        .eq('content', normalizedMessage.content)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (existing?.id) {
+        console.log(`✅ Found existing message ID: ${existing.id}`);
+        return { success: true, messageId: existing.id };
+      }
+      
+      // Fallback zonder ID (edge case)
+      console.warn(`⚠️ Duplicate detected but could not fetch existing ID`);
+      return { success: true };
     }
     
     console.warn(`⚠️ Persist retry ${attempt}/${retries}:`, error);
