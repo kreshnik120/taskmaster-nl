@@ -422,6 +422,20 @@ export const ManualFunctionTrigger = () => {
       if (error) throw error;
 
       if (data.success) {
+        // Check if we should auto-restart
+        if (data.should_restart === true) {
+          console.log(`⏸️ Orchestrator paused after processing ${data.processed} items, auto-restarting in 2 seconds...`);
+          toast.info(`⏸️ Checkpoint bereikt (${data.processed} items verwerkt), herstart automatisch...`, {
+            duration: 2000
+          });
+          
+          // Wait 2 seconds before restarting
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // Recursively restart WITHOUT force_restart
+          return runAutoBackfill(false);
+        }
+        
         toast.success(`🚀 Auto-backfill gestart! Ongeveer ${missingCount} embeddings te genereren`, {
           duration: 5000
         });

@@ -55,63 +55,89 @@ Deno.serve(async (req) => {
 
     console.log(`🚀 Starting auto-backfill orchestrator for org: ${org_id}`);
 
-    // Preflight: Check if already running (allow restart if heartbeat is stale or force_restart)
+    // Check for existing runs (running or paused)
     const { data: existingRun } = await supabase
       .from('orchestrator_state')
       .select('*')
       .eq('org_id', org_id)
-      .eq('status', 'running')
+      .in('status', ['running', 'paused'])
       .contains('metadata', { component: 'auto-backfill-orchestrator' })
       .maybeSingle();
     
     if (existingRun) {
-      const lastHeartbeat = existingRun.metadata?.last_heartbeat;
-      const isStale = lastHeartbeat 
-        ? (Date.now() - new Date(lastHeartbeat).getTime()) > 2 * 60 * 1000 // 2 min threshold
-        : true;
-      
-      // Force restart if requested
-      if (force_restart) {
-        console.log('🔄 Force restart requested, resetting existing run');
+      // Resume from paused state
+      if (existingRun.status === 'paused') {
+        console.log('🔄 Resuming from paused state');
+        const metadata = existingRun.metadata || {};
+        const checkpoint = {
+          batch: metadata.checkpoint_batch || 0,
+          processed: metadata.checkpoint_processed || 0,
+          offset: metadata.checkpoint_offset || 0
+        };
+        console.log(`📍 Checkpoint: batch=${checkpoint.batch}, processed=${checkpoint.processed}, offset=${checkpoint.offset}`);
+        
+        // Update status to running and continue from checkpoint
         await supabase
           .from('orchestrator_state')
           .update({ 
-            status: 'error',
-            metadata: {
-              ...existingRun.metadata,
-              error: 'Force restart requested by user',
-              force_restarted_at: new Date().toISOString()
-            }
-          })
-          .eq('id', existingRun.id);
-      } else if (!isStale) {
-        console.log('⚠️ Auto-backfill already running with fresh heartbeat');
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            message: 'Auto-backfill is already running',
             status: 'running',
-            progress: {
-              batch: existingRun.current_batch,
-              processed: existingRun.total_items_processed,
-              total: existingRun.metadata?.total_missing || 0
-            }
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      } else {
-        console.log(`⚠️ Stale heartbeat detected (${lastHeartbeat}), auto-recovering stale run`);
-        await supabase
-          .from('orchestrator_state')
-          .update({ 
-            status: 'error',
             metadata: {
-              ...existingRun.metadata,
-              error: 'Heartbeat timeout - auto-recovered',
-              stalled_at: new Date().toISOString()
+              ...metadata,
+              resumed_at: new Date().toISOString(),
+              last_heartbeat: new Date().toISOString()
             }
           })
           .eq('id', existingRun.id);
+      } else {
+        // Existing running state - check heartbeat
+        const lastHeartbeat = existingRun.metadata?.last_heartbeat;
+        const isStale = lastHeartbeat 
+          ? (Date.now() - new Date(lastHeartbeat).getTime()) > 2 * 60 * 1000 // 2 min threshold
+          : true;
+        
+        // Force restart if requested
+        if (force_restart) {
+          console.log('🔄 Force restart requested, resetting existing run');
+          await supabase
+            .from('orchestrator_state')
+            .update({ 
+              status: 'error',
+              metadata: {
+                ...existingRun.metadata,
+                error: 'Force restart requested by user',
+                force_restarted_at: new Date().toISOString()
+              }
+            })
+            .eq('id', existingRun.id);
+        } else if (!isStale) {
+          console.log('⚠️ Auto-backfill already running with fresh heartbeat');
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              message: 'Auto-backfill is already running',
+              status: 'running',
+              progress: {
+                batch: existingRun.current_batch,
+                processed: existingRun.total_items_processed,
+                total: existingRun.metadata?.total_missing || 0
+              }
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } else {
+          console.log(`⚠️ Stale heartbeat detected (${lastHeartbeat}), auto-recovering stale run`);
+          await supabase
+            .from('orchestrator_state')
+            .update({ 
+              status: 'error',
+              metadata: {
+                ...existingRun.metadata,
+                error: 'Heartbeat timeout - auto-recovered',
+                stalled_at: new Date().toISOString()
+              }
+            })
+            .eq('id', existingRun.id);
+        }
       }
     }
 
@@ -173,26 +199,34 @@ Deno.serve(async (req) => {
 
     // Start background task
     const backgroundTask = async () => {
-      const BATCH_SIZE = batch_size; // Use requested batch size (default 10)
-      let totalProcessed = 0;
-      let batchNumber = 0;
+      const MAX_BATCHES_PER_RUN = 10; // ~3 min runtime per cycle
+      const BATCH_SIZE = batch_size;
+      
+      // Resume from checkpoint if available
+      let totalProcessed = existingRun?.total_items_processed || 0;
+      let batchNumber = existingRun?.current_batch || 0;
+      let currentOffset = existingRun?.metadata?.checkpoint_offset || 0;
+      let batchesThisRun = 0;
       let hasMore = true;
       let currentMissingCount = missingCount;
       let currentBatchSize = BATCH_SIZE;
-      let currentOffset = 0;
       const startTime = Date.now();
-      const maxRuntimeMs = 45 * 60 * 1000; // 45 minutes
 
-      console.log('📦 Starting background batches...');
+      if (existingRun?.status === 'paused') {
+        console.log(`🔄 Resuming from checkpoint: batch=${batchNumber}, processed=${totalProcessed}, offset=${currentOffset}`);
+      } else {
+        console.log('📦 Starting background batches...');
+      }
 
       try {
         while (hasMore) {
           batchNumber++;
+          batchesThisRun++;
           const batchStartTime = Date.now();
           
-          // Check max runtime
-          if (Date.now() - startTime > maxRuntimeMs) {
-            console.log(`⏱️ Max runtime (45 min) reached, pausing gracefully`);
+          // Check if we've hit the per-run batch limit
+          if (batchesThisRun >= MAX_BATCHES_PER_RUN) {
+            console.log(`⏸️ Pausing after ${batchesThisRun} batches (processed ${totalProcessed} items) to avoid runtime timeout`);
             await supabase
               .from('orchestrator_state')
               .update({
@@ -201,17 +235,21 @@ Deno.serve(async (req) => {
                 total_items_processed: totalProcessed,
                 metadata: {
                   component: 'auto-backfill-orchestrator',
-                  started_at: stateRecord.metadata?.started_at,
+                  started_at: stateRecord.metadata?.started_at || new Date().toISOString(),
                   paused_at: new Date().toISOString(),
-                  pause_reason: 'Max runtime reached (45 min)',
-                  current_offset: currentOffset,
+                  pause_reason: `Auto-pause after ${MAX_BATCHES_PER_RUN} batches to avoid runtime limits`,
+                  checkpoint_batch: batchNumber,
+                  checkpoint_processed: totalProcessed,
+                  checkpoint_offset: currentOffset,
                   total_missing: currentMissingCount,
                   batch_size: currentBatchSize,
                   last_heartbeat: new Date().toISOString()
                 }
               })
               .eq('id', stateId);
-            break;
+            
+            // Return with should_restart flag
+            return { should_restart: true, processed: totalProcessed, status: 'paused' };
           }
           
           try {
@@ -369,32 +407,22 @@ Deno.serve(async (req) => {
       }
     };
 
-    // Add beforeunload handler to mark run as crashed if runtime stops unexpectedly
-    addEventListener('beforeunload', async () => {
-      console.log('⚠️ Runtime stopping, marking backfill as crashed');
-      await supabase
-        .from('orchestrator_state')
-        .update({
-          status: 'error',
-          metadata: {
-            component: 'auto-backfill-orchestrator',
-            error: 'Runtime shutdown unexpectedly',
-            crashed_at: new Date().toISOString()
-          }
-        })
-        .eq('id', stateId)
-        .eq('status', 'running');
-    });
+    // No beforeunload handler - we pause gracefully instead
 
     // Start background processing using EdgeRuntime.waitUntil
-    EdgeRuntime.waitUntil(backgroundTask());
+    const taskResult = EdgeRuntime.waitUntil(backgroundTask());
 
-    // Return immediately
+    // Check if we need to signal for restart
+    const result = await taskResult;
+    
+    // Return immediately with restart signal if needed
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Auto-backfill started in background',
-        status: 'running'
+        message: existingRun?.status === 'paused' ? 'Auto-backfill resumed from checkpoint' : 'Auto-backfill started in background',
+        status: result?.status || 'running',
+        should_restart: result?.should_restart || false,
+        processed: result?.processed || 0
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
