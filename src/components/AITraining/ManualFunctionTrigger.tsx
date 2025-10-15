@@ -13,6 +13,7 @@ export const ManualFunctionTrigger = () => {
   const [result, setResult] = useState<any>(null);
   const [triggeringFunction, setTriggeringFunction] = useState<string | null>(null);
   const [isBackfilling, setIsBackfilling] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [backfillProgress, setBackfillProgress] = useState<{
     processed: number;
     total: number;
@@ -337,6 +338,7 @@ export const ManualFunctionTrigger = () => {
   };
 
   const runAutoBackfill = async (forceRestart = false) => {
+    setIsStarting(true);
     try {
       // Preflight: Check if user is authenticated
       const { data: { user } } = await supabase.auth.getUser();
@@ -433,6 +435,8 @@ export const ManualFunctionTrigger = () => {
       toast.error(`❌ Kon auto-backfill niet starten: ${err.message}`);
       setIsBackfilling(false);
       setBackfillProgress(null);
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -603,12 +607,17 @@ export const ManualFunctionTrigger = () => {
               <div className="flex gap-2">
                 <Button
                   onClick={() => runAutoBackfill(false)}
-                  disabled={isBackfilling}
+                  disabled={isBackfilling || isStarting}
                   variant="default"
                   size="lg"
                   className="flex-1 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-bold"
                 >
-                  {isBackfilling ? (
+                  {isStarting ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Starting...
+                    </>
+                  ) : isBackfilling ? (
                     <>
                       <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                       {backfillProgress && (
