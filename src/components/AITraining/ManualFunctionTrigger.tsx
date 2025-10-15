@@ -392,7 +392,7 @@ export const ManualFunctionTrigger = () => {
       setBackfillProgress({ processed: 0, total: missingCount, batch: 0 });
 
       const { data, error } = await supabase.functions.invoke('auto-backfill-orchestrator', {
-        body: { batch_size: 10 } // Kleinere batches voor stabiliteit
+        body: { batch_size: 25 } // Verhoogde batch_size voor snellere processing
       });
 
       if (error) throw error;

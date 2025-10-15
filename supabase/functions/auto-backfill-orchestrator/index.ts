@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { batch_size = 10 } = await req.json(); // Kleinere default voor stabiliteit
+    const { batch_size = 25 } = await req.json(); // Verhoogde default voor snellere processing
     
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
