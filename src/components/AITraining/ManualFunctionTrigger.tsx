@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,8 @@ export const ManualFunctionTrigger = () => {
     total: number;
     batch: number;
   } | null>(null);
+  const [isStaleHeartbeat, setIsStaleHeartbeat] = useState(false);
+  const lastStaleToastAt = useRef<number>(0);
 
   // Fetch validation metrics - simplified version
   const { data: validationMetrics, refetch: refetchMetrics } = useQuery({
@@ -310,10 +312,27 @@ export const ManualFunctionTrigger = () => {
 
       setIsBackfilling(false);
       setBackfillProgress(null);
+      setIsStaleHeartbeat(false);
       toast.success('✅ Reset voltooid - je kunt nu opnieuw starten');
     } catch (err: any) {
       console.error('Reset error:', err);
       toast.error(`❌ Reset mislukt: ${err.message}`);
+    }
+  };
+
+  const resetAndRestartBackfillAndStart = async () => {
+    try {
+      await resetAndRestartBackfill();
+      // Wait for reset to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await runAutoBackfill(true);
+      
+      toast.success("🚀 Herstart succesvol", {
+        description: "Backfill opnieuw gestart met verse configuratie.",
+      });
+    } catch (error: any) {
+      console.error('Reset & restart error:', error);
+      toast.error(`❌ Fout bij herstart: ${error.message}`);
     }
   };
 
@@ -392,7 +411,10 @@ export const ManualFunctionTrigger = () => {
       setBackfillProgress({ processed: 0, total: missingCount, batch: 0 });
 
       const { data, error } = await supabase.functions.invoke('auto-backfill-orchestrator', {
-        body: { batch_size: 25 } // Verhoogde batch_size voor snellere processing
+        body: { 
+          batch_size: 25,
+          force_restart: forceRestart === true 
+        }
       });
 
       if (error) throw error;
@@ -569,6 +591,15 @@ export const ManualFunctionTrigger = () => {
                 </div>
               )}
               
+              {isStaleHeartbeat && isBackfilling && (
+                <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-md mb-3">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                  <span className="text-sm text-destructive font-medium">
+                    Heartbeat timeout gedetecteerd - backfill mogelijk vastgelopen
+                  </span>
+                </div>
+              )}
+              
               <div className="flex gap-2">
                 <Button
                   onClick={() => runAutoBackfill(false)}
@@ -596,13 +627,16 @@ export const ManualFunctionTrigger = () => {
                 
                 {isBackfilling && (
                   <Button
-                    onClick={resetAndRestartBackfill}
-                    variant="outline"
+                    onClick={resetAndRestartBackfillAndStart}
+                    variant={isStaleHeartbeat ? "default" : "outline"}
                     size="lg"
-                    className="border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950"
+                    className={isStaleHeartbeat 
+                      ? "bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white font-bold"
+                      : "border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950"
+                    }
                   >
                     <RefreshCw className="mr-2 h-4 w-4" />
-                    Reset
+                    Reset & Herstart
                   </Button>
                 )}
               </div>

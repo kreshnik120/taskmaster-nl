@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { batch_size = 25 } = await req.json(); // Verhoogde default voor snellere processing
+    const { batch_size = 25, force_restart = false } = await req.json();
     
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
 
     console.log(`🚀 Starting auto-backfill orchestrator for org: ${org_id}`);
 
-    // Preflight: Check if already running (allow restart if heartbeat is stale)
+    // Preflight: Check if already running (allow restart if heartbeat is stale or force_restart)
     const { data: existingRun } = await supabase
       .from('orchestrator_state')
       .select('*')
@@ -64,14 +64,27 @@ Deno.serve(async (req) => {
       .contains('metadata', { component: 'auto-backfill-orchestrator' })
       .maybeSingle();
     
-    // Check if heartbeat is stale (>5 min old) - if so, allow restart
     if (existingRun) {
       const lastHeartbeat = existingRun.metadata?.last_heartbeat;
       const isStale = lastHeartbeat 
-        ? (Date.now() - new Date(lastHeartbeat).getTime()) > 5 * 60 * 1000
+        ? (Date.now() - new Date(lastHeartbeat).getTime()) > 2 * 60 * 1000 // 2 min threshold
         : true;
       
-      if (!isStale) {
+      // Force restart if requested
+      if (force_restart) {
+        console.log('🔄 Force restart requested, resetting existing run');
+        await supabase
+          .from('orchestrator_state')
+          .update({ 
+            status: 'error',
+            metadata: {
+              ...existingRun.metadata,
+              error: 'Force restart requested by user',
+              force_restarted_at: new Date().toISOString()
+            }
+          })
+          .eq('id', existingRun.id);
+      } else if (!isStale) {
         console.log('⚠️ Auto-backfill already running with fresh heartbeat');
         return new Response(
           JSON.stringify({ 
@@ -87,15 +100,14 @@ Deno.serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       } else {
-        console.log(`⚠️ Stale heartbeat detected (${lastHeartbeat}), allowing restart`);
-        // Reset the stale run
+        console.log(`⚠️ Stale heartbeat detected (${lastHeartbeat}), auto-recovering stale run`);
         await supabase
           .from('orchestrator_state')
           .update({ 
             status: 'error',
             metadata: {
               ...existingRun.metadata,
-              error: 'Heartbeat timeout - restarted by user',
+              error: 'Heartbeat timeout - auto-recovered',
               stalled_at: new Date().toISOString()
             }
           })
@@ -241,6 +253,8 @@ Deno.serve(async (req) => {
             currentMissingCount = data.total_missing || 0;
             currentOffset += data.processed || 0;
 
+            console.log(`✅ Batch ${batchNumber}: processed=${data.processed}, remaining=${currentMissingCount}, duration=${batchDuration}ms, batch_size=${currentBatchSize}`);
+
             // Adjust batch size based on performance
             if (batchDuration > 60000 && currentBatchSize > 25) {
               currentBatchSize = 25;
@@ -271,8 +285,6 @@ Deno.serve(async (req) => {
                 }
               })
               .eq('id', stateId);
-
-            console.log(`✅ Batch ${batchNumber}: ${data.processed} processed, ${currentMissingCount} remaining (${batchDuration}ms)`);
 
             // Check if done
             if (data.reason === 'no_missing_embeddings' || data.processed === 0) {
@@ -356,6 +368,23 @@ Deno.serve(async (req) => {
           .eq('id', stateId);
       }
     };
+
+    // Add beforeunload handler to mark run as crashed if runtime stops unexpectedly
+    addEventListener('beforeunload', async () => {
+      console.log('⚠️ Runtime stopping, marking backfill as crashed');
+      await supabase
+        .from('orchestrator_state')
+        .update({
+          status: 'error',
+          metadata: {
+            component: 'auto-backfill-orchestrator',
+            error: 'Runtime shutdown unexpectedly',
+            crashed_at: new Date().toISOString()
+          }
+        })
+        .eq('id', stateId)
+        .eq('status', 'running');
+    });
 
     // Start background processing using EdgeRuntime.waitUntil
     EdgeRuntime.waitUntil(backgroundTask());
