@@ -30,7 +30,8 @@ export const LearningProgressCharts = () => {
 
   const chartData = metrics?.map(m => ({
     ...m,
-    displayDate: format(new Date(m.date), 'dd MMM', { locale: nl })
+    displayDate: m.weekLabel,
+    dateRange: `${format(new Date(m.startDate), 'dd/MM')} - ${format(new Date(m.endDate), 'dd/MM')}`
   })) || [];
 
   const chartConfig = {
@@ -78,7 +79,20 @@ export const LearningProgressCharts = () => {
                   tick={{ fontSize: 12 }}
                   className="text-muted-foreground"
                 />
-                <ChartTooltip content={<ChartTooltipContent />} />
+          <ChartTooltip content={({ active, payload }) => {
+            if (!active || !payload?.length) return null;
+            return (
+              <div className="bg-background border rounded p-2">
+                <p className="font-bold">{payload[0].payload.date}</p>
+                <p className="text-xs text-muted-foreground">{payload[0].payload.dateRange}</p>
+                {payload.map((entry: any, idx: number) => (
+                  <p key={idx} className="text-sm">
+                    {entry.name}: {typeof entry.value === 'number' ? entry.value.toFixed(1) : entry.value}%
+                  </p>
+                ))}
+              </div>
+            );
+          }} />
                 <Line 
                   type="monotone" 
                   dataKey="accuracy" 
@@ -116,7 +130,20 @@ export const LearningProgressCharts = () => {
                   tick={{ fontSize: 12 }}
                   className="text-muted-foreground"
                 />
-                <ChartTooltip content={<ChartTooltipContent />} />
+          <ChartTooltip content={({ active, payload }) => {
+            if (!active || !payload?.length) return null;
+            return (
+              <div className="bg-background border rounded p-2">
+                <p className="font-bold">{payload[0].payload.date}</p>
+                <p className="text-xs text-muted-foreground">{payload[0].payload.dateRange}</p>
+                {payload.map((entry: any, idx: number) => (
+                  <p key={idx} className="text-sm">
+                    {entry.name}: {typeof entry.value === 'number' ? entry.value.toFixed(1) : entry.value}%
+                  </p>
+                ))}
+              </div>
+            );
+          }} />
                 <Area 
                   type="monotone" 
                   dataKey="autoResolveRate" 
@@ -161,7 +188,20 @@ export const LearningProgressCharts = () => {
                   tick={{ fontSize: 12 }}
                   className="text-muted-foreground"
                 />
-                <ChartTooltip content={<ChartTooltipContent />} />
+          <ChartTooltip content={({ active, payload }) => {
+            if (!active || !payload?.length) return null;
+            return (
+              <div className="bg-background border rounded p-2">
+                <p className="font-bold">{payload[0].payload.date}</p>
+                <p className="text-xs text-muted-foreground">{payload[0].payload.dateRange}</p>
+                {payload.map((entry: any, idx: number) => (
+                  <p key={idx} className="text-sm">
+                    {entry.name}: {typeof entry.value === 'number' ? entry.value.toFixed(2) : entry.value}
+                  </p>
+                ))}
+              </div>
+            );
+          }} />
                 <Line 
                   type="monotone" 
                   dataKey="avgConfidence" 
@@ -198,7 +238,20 @@ export const LearningProgressCharts = () => {
                   tick={{ fontSize: 12 }}
                   className="text-muted-foreground"
                 />
-                <ChartTooltip content={<ChartTooltipContent />} />
+          <ChartTooltip content={({ active, payload }) => {
+            if (!active || !payload?.length) return null;
+            return (
+              <div className="bg-background border rounded p-2">
+                <p className="font-bold">{payload[0].payload.date}</p>
+                <p className="text-xs text-muted-foreground">{payload[0].payload.dateRange}</p>
+                {payload.map((entry: any, idx: number) => (
+                  <p key={idx} className="text-sm">
+                    {entry.name}: {entry.value}
+                  </p>
+                ))}
+              </div>
+            );
+          }} />
                 <Bar 
                   dataKey="totalEvents" 
                   fill="var(--color-totalEvents)"

@@ -1560,21 +1560,27 @@ export type Database = {
           email: string | null
           id: string
           image: string | null
+          last_validation_date: string | null
           name: string | null
+          validation_streak: number | null
         }
         Insert: {
           created_at?: string
           email?: string | null
           id: string
           image?: string | null
+          last_validation_date?: string | null
           name?: string | null
+          validation_streak?: number | null
         }
         Update: {
           created_at?: string
           email?: string | null
           id?: string
           image?: string | null
+          last_validation_date?: string | null
           name?: string | null
+          validation_streak?: number | null
         }
         Relationships: []
       }

@@ -34,62 +34,15 @@ export const LearningDashboard = () => {
     },
   });
 
-  const handleCleanupBacklog = async () => {
-    setIsCleaningUp(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast({
-          title: "Niet ingelogd",
-          description: "Je moet ingelogd zijn om deze actie uit te voeren",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke('cleanup-feedback-backlog', {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`
-        }
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: "Opschoning voltooid",
-        description: `${data.updated_count} feedback events zijn opgeschoond`,
-      });
-
-      // Refresh all data without page reload
-      await Promise.all([
-        refetchKnowledgeStats(),
-        refetchLearningEvents(),
-        refetchBusinessIntel(),
-        refetchPerformanceMetrics()
-      ]);
-    } catch (error: any) {
-      console.error('Error cleaning up backlog:', error);
-      
-      // Extract detailed error message
-      const errorMessage = error?.message || error?.error || "Er is een fout opgetreden bij het opschonen";
-      
-      toast({
-        title: "Fout",
-        description: errorMessage,
-        variant: "destructive"
-      });
-    } finally {
-      setIsCleaningUp(false);
-    }
-  };
 
   // Fetch knowledge base stats
   const { data: knowledgeStats, refetch: refetchKnowledgeStats } = useQuery({
     queryKey: ['ai-knowledge-stats'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('ai_knowledge_base')
-        .select('category, confidence_score, usage_count, created_at');
+    const { data, error } = await supabase
+      .from('ai_knowledge_base')
+      .select('category, confidence_score, usage_count, created_at')
+      .is('deleted_at', null);
       
       if (error) throw error;
       
@@ -253,28 +206,6 @@ export const LearningDashboard = () => {
         </Card>
       )}
 
-      {/* Admin Actions */}
-      <AdminOnly>
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold">Feedback Backlog Opschonen</h3>
-              <p className="text-sm text-muted-foreground">
-                Verwijder feedback events zonder knowledge IDs die de scheduler blokkeren
-              </p>
-            </div>
-            <Button
-              onClick={handleCleanupBacklog}
-              disabled={isCleaningUp}
-              variant="outline"
-              className="gap-2"
-            >
-              <Trash2 className="h-4 w-4" />
-              {isCleaningUp ? "Bezig..." : "Opschonen"}
-            </Button>
-          </div>
-        </Card>
-      </AdminOnly>
 
       {/* Learning Progress Section */}
       <div className="space-y-4">

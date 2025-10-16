@@ -46,7 +46,27 @@ export function AlertTriageSystem() {
   const [selectedAlerts, setSelectedAlerts] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();
 
-  const { data: alerts, isLoading } = useQuery({
+  // Separate query for stats (unfiltered)
+  const { data: statsData } = useQuery({
+    queryKey: ['alert-stats'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('business_intelligence')
+        .select('severity, status')
+        .eq('status', 'active');
+      
+      if (error) throw error;
+      
+      return {
+        critical: data?.filter(a => a.severity === 'critical').length || 0,
+        high: data?.filter(a => a.severity === 'high').length || 0,
+        medium: data?.filter(a => a.severity === 'medium').length || 0,
+        low: data?.filter(a => a.severity === 'low').length || 0,
+      };
+    }
+  });
+
+  const { data: alerts, isLoading, refetch } = useQuery({
     queryKey: ['alert-triage', selectedSeverity, selectedStatus],
     queryFn: async () => {
       let query = supabase
@@ -111,7 +131,9 @@ export function AlertTriageSystem() {
     });
   };
 
-  const handleBulkResolveDataQuality = () => {
+  const [bulkResolving, setBulkResolving] = useState(false);
+
+  const handleBulkResolveDataQuality = async () => {
     if (selectedAlerts.size === 0) {
       toast.error("Geen alerts geselecteerd");
       return;
@@ -126,8 +148,37 @@ export function AlertTriageSystem() {
       return;
     }
     
-    toast.info(`${dataQualityAlerts.length} data quality alerts worden opgelost...`);
-    handleResolve(dataQualityAlerts.map(a => a.id));
+    setBulkResolving(true);
+    const BATCH_SIZE = 50;
+    let resolved = 0;
+    
+    try {
+      const alertIds = dataQualityAlerts.map(a => a.id);
+      
+      for (let i = 0; i < alertIds.length; i += BATCH_SIZE) {
+        const batch = alertIds.slice(i, i + BATCH_SIZE);
+        
+        const { error } = await supabase
+          .from('business_intelligence')
+          .update({ status: 'resolved' })
+          .in('id', batch);
+        
+        if (error) throw error;
+        
+        resolved += batch.length;
+        if (alertIds.length > BATCH_SIZE) {
+          toast.info(`Resolved ${resolved}/${alertIds.length} alerts...`);
+        }
+      }
+      
+      toast.success(`✅ ${resolved} alerts resolved`);
+      setSelectedAlerts(new Set());
+      refetch();
+    } catch (error: any) {
+      toast.error(`Error: ${error.message}`);
+    } finally {
+      setBulkResolving(false);
+    }
   };
 
   const toggleSelectAlert = (alertId: string) => {
@@ -150,10 +201,10 @@ export function AlertTriageSystem() {
 
   const stats = {
     total: alerts?.length || 0,
-    critical: alerts?.filter(a => a.severity === 'critical' && a.status === 'active').length || 0,
-    high: alerts?.filter(a => a.severity === 'high' && a.status === 'active').length || 0,
-    medium: alerts?.filter(a => a.severity === 'medium' && a.status === 'active').length || 0,
-    low: alerts?.filter(a => a.severity === 'low' && a.status === 'active').length || 0,
+    critical: statsData?.critical || 0,
+    high: statsData?.high || 0,
+    medium: statsData?.medium || 0,
+    low: statsData?.low || 0,
   };
 
   if (isLoading) {

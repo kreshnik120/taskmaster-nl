@@ -173,17 +173,15 @@ export const ManualFunctionTrigger = () => {
 
         if (!active || !orgData?.org_id) return;
 
-        const { data: states } = await supabase
+        const { data: state } = await supabase
           .from('orchestrator_state')
           .select('*')
-          .eq('org_id', orgData.org_id)
-          .contains('metadata', { component: 'auto-backfill-orchestrator' })
+          .eq('metadata->>component', 'auto-backfill-orchestrator')
           .order('created_at', { ascending: false })
-          .limit(1);
+          .limit(1)
+          .single();
 
-        if (!active) return;
-
-        const state = states?.[0];
+        if (!active || !state) return;
 
         if (state) {
           const metadata = (state.metadata || {}) as Record<string, any>;
@@ -249,9 +247,9 @@ export const ManualFunctionTrigger = () => {
     // Initial check on mount
     pollStatus();
 
-    // Start polling if backfilling
+    // Start polling if backfilling (increased to 10 seconds)
     if (isBackfilling) {
-      pollInterval = setInterval(pollStatus, 5000);
+      pollInterval = setInterval(pollStatus, 10000);
     }
 
     return () => {

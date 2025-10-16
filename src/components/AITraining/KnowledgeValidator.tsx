@@ -51,7 +51,8 @@ export function KnowledgeValidator() {
       if (showQuickWins) {
         query = query
           .eq("validation_status", "unverified")
-          .gte("confidence_score", 0.80);
+          .gte("confidence_score", 0.70)
+          .order("confidence_score", { ascending: false });
       } else {
         if (filterStatus !== "all") {
           query = query.eq("validation_status", filterStatus);

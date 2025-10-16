@@ -37,7 +37,7 @@ export function AlertPriorityRanker() {
 
       if (error) throw error;
 
-      // Calculate priority scores
+      // Calculate priority scores with improved algorithm
       const ranked = alerts?.map((alert: any) => {
         const hoursSinceDetection = 
           (Date.now() - new Date(alert.detected_at).getTime()) / (1000 * 60 * 60);
@@ -51,11 +51,27 @@ export function AlertPriorityRanker() {
 
         // Priority score calculation:
         // - Frequency (max 50 points): more duplicates = higher priority
-        // - Recency (max 30 points): newer = higher priority
-        // - Category impact (max 20 points): certain categories are more critical
+        // - Recency (decay function): newer = higher, but old alerts still get points
+        // - Category impact (configurable per category): certain categories are more critical
         const frequencyScore = Math.min(frequency * 5, 50);
-        const recencyScore = Math.max(30 - hoursSinceDetection, 0);
-        const categoryImpact = alert.data?.category === "hr" ? 20 : 10;
+        
+        // Improved recency: decay function instead of hard cutoff
+        const recencyScore = 30 / (1 + Math.pow(hoursSinceDetection / 24, 1.5));
+        
+        // Configurable category impact
+        const categoryImpactMap: Record<string, number> = {
+          'hr': 20,
+          'data_quality': 15,
+          'knowledge_gap': 15,
+          'source_issue': 10,
+          'bottleneck': 12,
+          'workflow_pattern': 8,
+          'optimization_opportunity': 8,
+          'knowledge_conflict': 18,
+          'data_inconsistency': 14,
+        };
+        const category = alert.data?.category || 'other';
+        const categoryImpact = categoryImpactMap[category] || 10;
         
         const priorityScore = frequencyScore + recencyScore + categoryImpact;
 
@@ -159,7 +175,9 @@ export function AlertPriorityRanker() {
     return acc;
   }, {} as Record<string, number>) || {};
 
-  const totalCategorized = rankedAlerts?.filter(a => a.data?.category).length || 0;
+  const totalCategorized = rankedAlerts?.filter(a => 
+    a.data?.category && a.data.category.trim() !== ""
+  ).length || 0;
   const categorizationRate = rankedAlerts?.length 
     ? ((totalCategorized / rankedAlerts.length) * 100).toFixed(1) 
     : '0.0';
