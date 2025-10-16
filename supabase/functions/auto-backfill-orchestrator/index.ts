@@ -3,8 +3,33 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-org-id, x-internal-signature',
 };
+
+// HMAC verification helper for internal calls
+async function verifyHMAC(orgId: string, signature: string): Promise<boolean> {
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const message = `${orgId}:auto-backfill`;
+  
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(key);
+  const messageData = encoder.encode(message);
+  
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  
+  const signatureBuffer = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+  const expectedSignature = Array.from(new Uint8Array(signatureBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  
+  return expectedSignature === signature;
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -19,37 +44,59 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Preflight: Get org_id from auth
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Not authenticated' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    // Dual-mode authentication: User JWT OR Internal HMAC
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
+    const internalOrgId = req.headers.get('x-org-id');
+    const internalSignature = req.headers.get('x-internal-signature');
     
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid authentication' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const { data: orgData, error: orgError } = await supabase
-      .from('user_organizations')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
+    let org_id: string | null = null;
     
-    const org_id = orgData?.org_id;
-
-    if (!org_id) {
+    // Path A: Internal call with HMAC signature (from cron)
+    if (internalOrgId && internalSignature) {
+      const isValid = await verifyHMAC(internalOrgId, internalSignature);
+      if (!isValid) {
+        console.error('❌ Invalid HMAC signature');
+        return new Response(
+          JSON.stringify({ success: false, error: 'Invalid internal signature' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      org_id = internalOrgId;
+      console.log(`✅ Internal call authenticated for org: ${org_id}`);
+    } 
+    // Path B: User JWT authentication (from UI)
+    else if (authHeader) {
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+      
+      if (userError || !user) {
+        console.error('❌ User authentication failed:', userError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      const { data: orgData } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (!orgData?.org_id) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'No organization found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      org_id = orgData.org_id;
+      console.log(`✅ User authenticated for org: ${org_id}`);
+    } else {
+      console.error('❌ No authentication method provided');
       return new Response(
-        JSON.stringify({ error: 'Organization not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: false, error: 'Authentication required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 

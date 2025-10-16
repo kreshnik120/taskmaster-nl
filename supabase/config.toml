@@ -106,6 +106,10 @@ verify_jwt = false
 verify_jwt = true
 timeout = 300
 
+[functions.auto-backfill-orchestrator]
+verify_jwt = false
+timeout = 300
+
 [functions.queue-document-processing]
 verify_jwt = true
 

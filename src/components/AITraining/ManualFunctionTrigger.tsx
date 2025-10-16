@@ -204,19 +204,31 @@ export const ManualFunctionTrigger = () => {
             if (!isBackfilling) {
               setIsBackfilling(true);
               if (isHeartbeatStale) {
-                toast.error(
-                  '⚠️ Auto-backfill VASTGELOPEN - heartbeat timeout! Klik "Reset & Herstart" om opnieuw te starten.',
-                  { duration: 15000 }
-                );
+                const now = Date.now();
+                if (now - lastStaleToastAt.current > 60000) {
+                  toast.error(
+                    '⚠️ Auto-backfill heartbeat timeout! Cron job probeert automatisch te herstellen...',
+                    { duration: 15000 }
+                  );
+                  lastStaleToastAt.current = now;
+                }
               } else {
-                toast.info('🔄 Auto-backfill hersteld en loopt nog...');
+                toast.info('🔄 Auto-backfill loopt weer...');
               }
             } else if (isHeartbeatStale) {
-              // Show persistent warning every 5s while stale
-              toast.warning(
-                '⚠️ Auto-backfill heartbeat timeout gedetecteerd. Mogelijk vastgelopen.',
-                { duration: 10000 }
-              );
+              // Show warning max once per minute
+              const now = Date.now();
+              if (now - lastStaleToastAt.current > 60000) {
+                toast.warning(
+                  '⚠️ Auto-backfill heartbeat timeout. Wacht op automatisch herstel...',
+                  { duration: 10000 }
+                );
+                lastStaleToastAt.current = now;
+              }
+            } else if (isBackfilling && lastStaleToastAt.current > 0) {
+              // Recovery: heartbeat is fresh again
+              toast.success('✅ Auto-backfill hersteld door cron job!');
+              lastStaleToastAt.current = 0;
             }
           } else if (state.status === 'idle') {
             if (isBackfilling) {

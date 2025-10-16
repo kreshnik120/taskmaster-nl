@@ -89,7 +89,28 @@ Deno.serve(async (req) => {
         
         console.log(`🔄 Restarting auto-backfill for org ${org_id} (status was: ${run.status})...`);
 
-        // Call the auto-backfill-orchestrator to resume
+        // Generate HMAC signature for internal call
+        const message = `${org_id}:auto-backfill`;
+        const encoder = new TextEncoder();
+        const keyData = encoder.encode(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+        const messageData = encoder.encode(message);
+        
+        const cryptoKey = await crypto.subtle.importKey(
+          'raw',
+          keyData,
+          { name: 'HMAC', hash: 'SHA-256' },
+          false,
+          ['sign']
+        );
+        
+        const signatureBuffer = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+        const signature = Array.from(new Uint8Array(signatureBuffer))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+
+        console.log(`🔐 Generated HMAC signature for org ${org_id}`);
+
+        // Call the auto-backfill-orchestrator to resume with HMAC authentication
         const { data: restartData, error: restartError } = await supabase.functions.invoke(
           'auto-backfill-orchestrator',
           {
@@ -98,7 +119,8 @@ Deno.serve(async (req) => {
               force_restart: false // Resume from checkpoint, don't force restart
             },
             headers: {
-              'x-org-id': org_id // Pass org context
+              'x-org-id': org_id,
+              'x-internal-signature': signature
             }
           }
         );
