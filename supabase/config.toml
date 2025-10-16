@@ -1,5 +1,9 @@
 project_id = "oelmsmcgryeoryhonexw"
 
+[functions.auto-restart-backfill]
+verify_jwt = false
+schedule = "*/5 * * * *"
+
 [functions.parse-pdf-cv]
 verify_jwt = false
 

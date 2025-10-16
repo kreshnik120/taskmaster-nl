@@ -192,6 +192,8 @@ export const ManualFunctionTrigger = () => {
             ? (Date.now() - new Date(lastHeartbeat).getTime()) > 5 * 60 * 1000
             : true;
           
+          setIsStaleHeartbeat(isHeartbeatStale);
+          
           setBackfillProgress({
             processed: Number(state.total_items_processed) || 0,
             total: Number(metadata.total_missing) || 0,
@@ -384,7 +386,25 @@ export const ManualFunctionTrigger = () => {
             toast.info("ℹ️ Auto-backfill loopt al op de achtergrond");
             return;
           } else {
-            toast.warning("⚠️ Gestopte run gedetecteerd - wordt opnieuw gestart...");
+            toast.warning("⚠️ Stale run gedetecteerd - force restart wordt gestart...");
+            // Force restart bij stale runs
+            const { error: resetError } = await supabase
+              .from('orchestrator_state')
+              .update({ 
+                status: 'error',
+                metadata: {
+                  ...metadata,
+                  error: 'Stale heartbeat detected - force restarted by user',
+                  force_restarted_at: new Date().toISOString()
+                }
+              })
+              .eq('id', state.id);
+            
+            if (resetError) {
+              console.error('Failed to reset stale run:', resetError);
+              toast.error(`❌ Kon stale run niet resetten: ${resetError.message}`);
+              return;
+            }
           }
         }
       }
@@ -413,7 +433,7 @@ export const ManualFunctionTrigger = () => {
       const { data, error } = await supabase.functions.invoke('auto-backfill-orchestrator', {
         body: { 
           batch_size: 25,
-          force_restart: forceRestart === true 
+          force_restart: forceRestart === true || isStaleHeartbeat
         }
       });
 
