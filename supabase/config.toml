@@ -2,7 +2,11 @@ project_id = "oelmsmcgryeoryhonexw"
 
 [functions.auto-restart-backfill]
 verify_jwt = false
-schedule = "*/5 * * * *"
+schedule = "*/5 * * * *"  # Direct cron: elke 5 minuten
+
+[functions.system-health-monitor]
+verify_jwt = false
+schedule = "*/10 * * * *"  # Health check elke 10 minuten
 
 [functions.parse-pdf-cv]
 verify_jwt = false

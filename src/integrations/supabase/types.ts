@@ -1797,6 +1797,44 @@ export type Database = {
           },
         ]
       }
+      system_health_log: {
+        Row: {
+          actions_taken: Json | null
+          check_type: string
+          created_at: string | null
+          details: Json | null
+          id: string
+          org_id: string
+          status: string
+        }
+        Insert: {
+          actions_taken?: Json | null
+          check_type: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          org_id: string
+          status: string
+        }
+        Update: {
+          actions_taken?: Json | null
+          check_type?: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          org_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_health_log_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tags: {
         Row: {
           color: string

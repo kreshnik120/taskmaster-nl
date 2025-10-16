@@ -16,8 +16,6 @@ import { LearningDashboard } from "@/components/AITraining/LearningDashboard";
 import { SmartKnowledgeSearch } from "@/components/AITraining/SmartKnowledgeSearch";
 import { ConflictResolutionPanel } from "@/components/AITraining/ConflictResolutionPanel";
 import { ProfessionalClientLinks } from "@/components/AITraining/ProfessionalClientLinks";
-import { SystemMonitor } from "@/components/SystemMonitor";
-import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { AdminOnly } from "@/components/auth/AdminOnly";
 import { Week1To2TestPanel } from "@/components/AITraining/Week1To2TestPanel";
 import { AlertTriageSystem } from "@/components/AITraining/AlertTriageSystem";
@@ -25,6 +23,9 @@ import { AlertPriorityRanker } from "@/components/AITraining/AlertPriorityRanker
 import { KnowledgeValidator } from "@/components/AITraining/KnowledgeValidator";
 import { ValidationWorkflowGuide } from "@/components/AITraining/ValidationWorkflowGuide";
 import { ValidationOnboardingWizard } from "@/components/AITraining/ValidationOnboardingWizard";
+import { SystemMonitor } from "@/components/SystemMonitor";
+import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
+import { SystemHealthDashboard } from "@/components/AITraining/SystemHealthDashboard";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -181,6 +182,7 @@ const AiTraining = () => {
               <AdminOnly>
                 <TabsContent value="system" className="mt-6">
                   <div className="space-y-6">
+                    <SystemHealthDashboard />
                     <ManualFunctionTrigger />
                     <SystemMonitor />
                   </div>

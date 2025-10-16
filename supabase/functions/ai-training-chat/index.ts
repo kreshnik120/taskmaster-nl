@@ -47,7 +47,7 @@ serve(async (req) => {
       throw new Error("Niet geautoriseerd");
     }
 
-    const { message, isChunk, chunkIndex, totalChunks } = await req.json();
+    const { message, mode = 'manual', isChunk, chunkIndex, totalChunks } = await req.json();
 
     const { data: orgData } = await supabase
       .from("user_organizations")
