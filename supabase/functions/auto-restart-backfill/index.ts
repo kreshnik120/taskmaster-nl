@@ -17,13 +17,13 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    console.log('🔍 Checking for paused auto-backfill runs...');
+    console.log('🔍 Checking for paused or stale auto-backfill runs...');
 
-    // Find paused auto-backfill orchestrator runs
-    const { data: pausedRuns, error: queryError } = await supabase
+    // Find paused OR running with stale heartbeat (>5 min)
+    const { data: allRuns, error: queryError } = await supabase
       .from('orchestrator_state')
       .select('*')
-      .eq('status', 'paused')
+      .in('status', ['paused', 'running'])
       .contains('metadata', { component: 'auto-backfill-orchestrator' })
       .order('created_at', { ascending: false })
       .limit(10);
@@ -32,7 +32,23 @@ Deno.serve(async (req) => {
       throw queryError;
     }
 
-    if (!pausedRuns || pausedRuns.length === 0) {
+    // Filter runs that need restart: paused OR stale heartbeat
+    const pausedRuns = allRuns?.filter(run => {
+      if (run.status === 'paused') return true;
+      
+      // Check for stale heartbeat (>5 min)
+      const lastHeartbeat = run.metadata?.last_heartbeat;
+      if (run.status === 'running' && lastHeartbeat) {
+        const isStale = (Date.now() - new Date(lastHeartbeat).getTime()) > 5 * 60 * 1000;
+        if (isStale) {
+          console.log(`⚠️ Stale heartbeat detected for run ${run.id}: ${lastHeartbeat}`);
+          return true;
+        }
+      }
+      return false;
+    }) || [];
+
+    if (pausedRuns.length === 0) {
       console.log('✅ No paused runs found');
       return new Response(
         JSON.stringify({ 
@@ -44,7 +60,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`📊 Found ${pausedRuns.length} paused run(s)`);
+    console.log(`📊 Found ${pausedRuns.length} run(s) needing restart`);
 
     const results = [];
     
@@ -52,19 +68,26 @@ Deno.serve(async (req) => {
       try {
         const org_id = run.org_id;
         const metadata = run.metadata || {};
+        const isStaleHeartbeat = run.status === 'running';
         
-        // Check if this run was paused recently (within last 10 minutes)
-        const pausedAt = metadata.paused_at;
-        const isPausedRecently = pausedAt 
-          ? (Date.now() - new Date(pausedAt).getTime()) < 10 * 60 * 1000
-          : false;
-
-        if (!isPausedRecently) {
-          console.log(`⏭️ Skipping old paused run from ${pausedAt}`);
-          continue;
+        // If stale heartbeat: force reset to error first
+        if (isStaleHeartbeat) {
+          console.log(`⚠️ Stale heartbeat detected, forcing reset for run ${run.id}`);
+          await supabase
+            .from('orchestrator_state')
+            .update({
+              status: 'error',
+              metadata: {
+                ...metadata,
+                error: 'Heartbeat timeout - auto-recovered by cron',
+                stalled_at: new Date().toISOString(),
+                last_heartbeat: metadata.last_heartbeat
+              }
+            })
+            .eq('id', run.id);
         }
-
-        console.log(`🔄 Restarting auto-backfill for org ${org_id}...`);
+        
+        console.log(`🔄 Restarting auto-backfill for org ${org_id} (status was: ${run.status})...`);
 
         // Call the auto-backfill-orchestrator to resume
         const { data: restartData, error: restartError } = await supabase.functions.invoke(

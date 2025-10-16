@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
         // Existing running state - check heartbeat
         const lastHeartbeat = existingRun.metadata?.last_heartbeat;
         const isStale = lastHeartbeat 
-          ? (Date.now() - new Date(lastHeartbeat).getTime()) > 2 * 60 * 1000 // 2 min threshold
+          ? (Date.now() - new Date(lastHeartbeat).getTime()) > 5 * 60 * 1000 // 5 min threshold (aligned with cron)
           : true;
         
         // Force restart if requested
@@ -226,8 +226,10 @@ Deno.serve(async (req) => {
           
           // Check if we've hit the per-run batch limit
           if (batchesThisRun >= MAX_BATCHES_PER_RUN) {
-            console.log(`⏸️ Pausing after ${batchesThisRun} batches (processed ${totalProcessed} items) to avoid runtime timeout`);
-            await supabase
+            const pauseTimestamp = new Date().toISOString();
+            console.log(`⏸️ Pausing after ${batchesThisRun} batches (processed ${totalProcessed} items) at ${pauseTimestamp}`);
+            
+            const { error: pauseError } = await supabase
               .from('orchestrator_state')
               .update({
                 status: 'paused',
@@ -236,17 +238,23 @@ Deno.serve(async (req) => {
                 metadata: {
                   component: 'auto-backfill-orchestrator',
                   started_at: stateRecord.metadata?.started_at || new Date().toISOString(),
-                  paused_at: new Date().toISOString(),
+                  paused_at: pauseTimestamp,
                   pause_reason: `Auto-pause after ${MAX_BATCHES_PER_RUN} batches to avoid runtime limits`,
                   checkpoint_batch: batchNumber,
                   checkpoint_processed: totalProcessed,
                   checkpoint_offset: currentOffset,
                   total_missing: currentMissingCount,
                   batch_size: currentBatchSize,
-                  last_heartbeat: new Date().toISOString()
+                  last_heartbeat: pauseTimestamp
                 }
               })
               .eq('id', stateId);
+            
+            if (pauseError) {
+              console.error('❌ Failed to set paused status:', pauseError);
+            } else {
+              console.log('✅ Successfully set status to paused');
+            }
             
             // Return with should_restart flag
             return { should_restart: true, processed: totalProcessed, status: 'paused' };
