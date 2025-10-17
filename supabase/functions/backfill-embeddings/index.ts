@@ -158,6 +158,27 @@ Deno.serve(async (req) => {
 
           if (!openaiResponse.ok) {
             const errorText = await openaiResponse.text();
+            
+            // Handle 402 AI credits exhausted error
+            if (openaiResponse.status === 402) {
+              console.error(`💳 AI credits exhausted - stopping backfill`);
+              results.errors.push(`${item.id}: AI credits exhausted (402)`);
+              
+              // Return early with special error to signal orchestrator
+              return new Response(
+                JSON.stringify({
+                  success: false,
+                  error: 'AI credits exhausted. Please add funds to continue.',
+                  error_code: 402,
+                  processed: results.processed,
+                  total_missing,
+                  total_in_batch: knowledgeItems.length,
+                  errors: results.errors
+                }),
+                { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            }
+            
             console.error(`❌ OpenAI API error for ${item.id}:`, errorText);
             results.errors.push(`${item.id}: OpenAI API error - ${openaiResponse.status}`);
             continue;

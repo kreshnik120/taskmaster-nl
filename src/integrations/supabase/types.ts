@@ -71,6 +71,80 @@ export type Database = {
           },
         ]
       }
+      ai_chat_feedback: {
+        Row: {
+          created_at: string
+          feedback_type: string
+          id: string
+          knowledge_ids: string[] | null
+          message_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          feedback_type: string
+          id?: string
+          knowledge_ids?: string[] | null
+          message_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          feedback_type?: string
+          id?: string
+          knowledge_ids?: string[] | null
+          message_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ai_chat_messages: {
+        Row: {
+          confidence_score: number | null
+          content: string
+          conversation_id: string | null
+          created_at: string
+          id: string
+          message_id: string
+          org_id: string
+          role: string
+          used_knowledge: Json | null
+          user_id: string
+        }
+        Insert: {
+          confidence_score?: number | null
+          content: string
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          message_id?: string
+          org_id: string
+          role: string
+          used_knowledge?: Json | null
+          user_id: string
+        }
+        Update: {
+          confidence_score?: number | null
+          content?: string
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          message_id?: string
+          org_id?: string
+          role?: string
+          used_knowledge?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_chat_messages_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_knowledge_base: {
         Row: {
           acl: Json | null
@@ -599,7 +673,7 @@ export type Database = {
         }
         Relationships: []
       }
-      chat_messages: {
+      chat_messages_old_backup: {
         Row: {
           content: string
           content_hash: string | null
@@ -1113,7 +1187,7 @@ export type Database = {
             foreignKeyName: "message_feedback_message_id_fkey"
             columns: ["message_id"]
             isOneToOne: false
-            referencedRelation: "chat_messages"
+            referencedRelation: "chat_messages_old_backup"
             referencedColumns: ["id"]
           },
         ]
@@ -2332,6 +2406,56 @@ export type Database = {
           last_run: string | null
         }
         Relationships: []
+      }
+      chat_messages: {
+        Row: {
+          confidence_score: number | null
+          content: string | null
+          conversation_id: string | null
+          created_at: string | null
+          id: string | null
+          message_id: string | null
+          metadata: Json | null
+          org_id: string | null
+          role: string | null
+          used_knowledge: Json | null
+          user_id: string | null
+        }
+        Insert: {
+          confidence_score?: number | null
+          content?: string | null
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          message_id?: string | null
+          metadata?: never
+          org_id?: string | null
+          role?: string | null
+          used_knowledge?: Json | null
+          user_id?: string | null
+        }
+        Update: {
+          confidence_score?: number | null
+          content?: string | null
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          message_id?: string | null
+          metadata?: never
+          org_id?: string | null
+          role?: string | null
+          used_knowledge?: Json | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_chat_messages_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {

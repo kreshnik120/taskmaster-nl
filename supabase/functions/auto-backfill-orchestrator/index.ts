@@ -329,6 +329,36 @@ Deno.serve(async (req) => {
             });
 
             if (error) {
+              // Check for AI credits exhausted (402)
+              if (error.message?.includes('402') || error.message?.toLowerCase().includes('credits exhausted')) {
+                console.error('💳 AI credits exhausted - pausing backfill');
+                const pauseTimestamp = new Date().toISOString();
+                
+                await supabase
+                  .from('orchestrator_state')
+                  .update({
+                    status: 'paused',
+                    current_batch: batchNumber,
+                    total_items_processed: totalProcessed,
+                    metadata: {
+                      component: 'auto-backfill-orchestrator',
+                      started_at: stateRecord.metadata?.started_at || new Date().toISOString(),
+                      paused_at: pauseTimestamp,
+                      pause_reason: 'AI credits exhausted (402) - please add funds',
+                      error: 'AI credits exhausted',
+                      checkpoint_batch: batchNumber,
+                      checkpoint_processed: totalProcessed,
+                      checkpoint_offset: currentOffset,
+                      total_missing: currentMissingCount,
+                      batch_size: currentBatchSize,
+                      last_heartbeat: pauseTimestamp
+                    }
+                  })
+                  .eq('id', stateId);
+                
+                return { should_restart: false, processed: totalProcessed, status: 'paused', error: 'AI credits exhausted' };
+              }
+              
               // Check if it's a rate limit error (429)
               if (error.message?.includes('429') || error.message?.toLowerCase().includes('rate limit')) {
                 const waitTimes = [2000, 5000, 10000, 30000];
