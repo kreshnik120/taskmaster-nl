@@ -107,7 +107,7 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.backfill-embeddings]
-verify_jwt = true
+verify_jwt = false
 timeout = 300
 
 [functions.auto-backfill-orchestrator]
