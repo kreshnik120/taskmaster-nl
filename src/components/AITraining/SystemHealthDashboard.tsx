@@ -71,7 +71,7 @@ export function SystemHealthDashboard() {
     refetchInterval: 30000,
   });
 
-  // Trigger manual backfill
+  // Trigger manual backfill - intelligently resume or start new
   const triggerBackfill = async () => {
     setIsStartingBackfill(true);
     try {
@@ -80,9 +80,23 @@ export function SystemHealthDashboard() {
         throw new Error('Niet geauthenticeerd');
       }
 
+      // Check if there's an existing paused or running run
+      const shouldResumeExisting = 
+        orchestratorState?.status === 'paused' || 
+        orchestratorState?.status === 'running';
+
+      const actionDescription = shouldResumeExisting 
+        ? 'Bestaande run wordt hervat...' 
+        : 'Nieuwe run wordt gestart...';
+
+      toast({
+        title: actionDescription,
+        description: `Verwerkt ${embeddingStats?.missing || 0} ontbrekende embeddings`,
+      });
+
       const { data, error } = await supabase.functions.invoke('auto-backfill-orchestrator', {
         body: { 
-          force_restart: true, 
+          force_restart: !shouldResumeExisting, // Only force restart if no existing run
           batch_size: 50 
         },
         headers: {
@@ -93,8 +107,8 @@ export function SystemHealthDashboard() {
       if (error) throw error;
 
       toast({
-        title: "Backfill gestart!",
-        description: `De embedding backfill is gestart en zal ${embeddingStats?.missing || 0} items verwerken.`,
+        title: shouldResumeExisting ? "Run hervat!" : "Backfill gestart!",
+        description: `De embedding backfill verwerkt nu ${embeddingStats?.missing || 0} items.`,
       });
 
       // Refresh all queries
