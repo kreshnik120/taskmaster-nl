@@ -1,14 +1,17 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Activity, AlertTriangle, CheckCircle2, RefreshCw, Zap } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, RefreshCw, Zap, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { useState } from "react";
 
 export function SystemHealthDashboard() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [isStartingBackfill, setIsStartingBackfill] = useState(false);
 
   // Fetch orchestrator state
   const { data: orchestratorState, refetch: refetchOrchestrator } = useQuery({
@@ -68,6 +71,50 @@ export function SystemHealthDashboard() {
     refetchInterval: 30000,
   });
 
+  // Trigger manual backfill
+  const triggerBackfill = async () => {
+    setIsStartingBackfill(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session) {
+        throw new Error('Niet geauthenticeerd');
+      }
+
+      const { data, error } = await supabase.functions.invoke('auto-backfill-orchestrator', {
+        body: { 
+          force_restart: true, 
+          batch_size: 50 
+        },
+        headers: {
+          Authorization: `Bearer ${sessionData.session.access_token}`
+        }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Backfill gestart!",
+        description: `De embedding backfill is gestart en zal ${embeddingStats?.missing || 0} items verwerken.`,
+      });
+
+      // Refresh all queries
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['orchestrator-state'] });
+        queryClient.invalidateQueries({ queryKey: ['embedding-stats'] });
+      }, 2000);
+      
+    } catch (error: any) {
+      console.error('Backfill start error:', error);
+      toast({
+        title: "Fout bij starten backfill",
+        description: error.message || 'Er is iets misgegaan',
+        variant: "destructive",
+      });
+    } finally {
+      setIsStartingBackfill(false);
+    }
+  };
+
   // Trigger manual health check
   const triggerHealthCheck = async () => {
     try {
@@ -126,6 +173,36 @@ export function SystemHealthDashboard() {
 
   return (
     <div className="space-y-4">
+      {/* Low Coverage Alert */}
+      {embeddingStats && embeddingStats.coverage < 95 && (
+        <Card className="border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/20">
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="text-orange-900 dark:text-orange-100 text-base flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5" />
+                  Lage Embedding Coverage Gedetecteerd
+                </CardTitle>
+                <CardDescription className="text-orange-700 dark:text-orange-300 mt-2">
+                  {embeddingStats.missing} items hebben nog geen embeddings. 
+                  Dit beperkt AI Chat, Knowledge Graph en Smart Deduplicator functionaliteit.
+                  Start de backfill om het systeem volledig functioneel te maken.
+                </CardDescription>
+              </div>
+              <Button
+                onClick={triggerBackfill}
+                disabled={isStartingBackfill}
+                size="sm"
+                className="shrink-0 ml-4"
+              >
+                <Play className="w-4 h-4 mr-2" />
+                {isStartingBackfill ? 'Starten...' : 'Start Backfill'}
+              </Button>
+            </div>
+          </CardHeader>
+        </Card>
+      )}
+
       {/* Overall Health Status */}
       <Card>
         <CardHeader>

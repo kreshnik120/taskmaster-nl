@@ -2457,6 +2457,17 @@ export type Database = {
           },
         ]
       }
+      embedding_coverage_summary: {
+        Row: {
+          coverage_percentage: number | null
+          items_missing_embeddings: number | null
+          items_with_embeddings: number | null
+          org_id: string | null
+          org_name: string | null
+          total_kb_items: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       binary_quantize: {
