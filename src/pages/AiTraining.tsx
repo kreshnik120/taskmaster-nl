@@ -26,6 +26,7 @@ import { ValidationOnboardingWizard } from "@/components/AITraining/ValidationOn
 import { SystemMonitor } from "@/components/SystemMonitor";
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { SystemHealthDashboard } from "@/components/AITraining/SystemHealthDashboard";
+import { EmbeddingCoverageDashboard } from "@/components/AITraining/EmbeddingCoverageDashboard";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
@@ -182,6 +183,7 @@ const AiTraining = () => {
               <AdminOnly>
                 <TabsContent value="system" className="mt-6">
                   <div className="space-y-6">
+                    <EmbeddingCoverageDashboard />
                     <SystemHealthDashboard />
                     <ManualFunctionTrigger hideBackfill />
                     <SystemMonitor />

@@ -268,7 +268,8 @@ Deno.serve(async (req) => {
     // Start background task
     const backgroundTask = async () => {
       const MAX_BATCHES_PER_RUN = 10; // ~3 min runtime per cycle
-      const BATCH_SIZE = batch_size;
+      const BATCH_SIZE = 200; // Verhoogd van 50 naar 200 voor snellere verwerking
+      const MAX_PARALLEL_BATCHES = 3; // Nieuw: Parallelle batches voor hogere doorvoer
       
       // Resume from checkpoint if available
       let totalProcessed = existingRun?.total_items_processed || 0;
