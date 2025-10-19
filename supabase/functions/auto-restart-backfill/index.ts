@@ -62,6 +62,7 @@ Deno.serve(async (req) => {
 
     console.log(`📊 Found ${pausedRuns.length} run(s) needing restart`);
 
+    const startTime = Date.now();
     const results = [];
     
     for (const run of pausedRuns) {
@@ -148,6 +149,25 @@ Deno.serve(async (req) => {
           error: err instanceof Error ? err.message : 'Unknown error'
         });
       }
+    }
+
+    // Log to function_call_logs for visibility
+    const executionTime = Date.now() - startTime;
+    try {
+      await supabase.from('function_call_logs').insert({
+        function_name: 'auto-restart-backfill',
+        success: true,
+        org_id: '550e8400-e29b-41d4-a716-446655440000',
+        user_id: '00000000-0000-0000-0000-000000000000', // system
+        execution_time_ms: executionTime,
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+        model_used: 'system',
+        estimated_cost_eur: 0
+      });
+    } catch (logError) {
+      console.error('Failed to log to function_call_logs:', logError);
     }
 
     return new Response(

@@ -88,22 +88,18 @@ export const EmbeddingCoverageDashboard = () => {
     };
   }, []);
 
-  // Calculate ETA
+  // Calculate ETA based on current processing speed
   const calculateETA = () => {
     if (!stats || stats.missingEmbeddings === 0) return null;
     
-    // Aanname: 200 items per 15 min (met nieuwe config)
-    const itemsPerMinute = 200 / 15;
-    const minutesRemaining = Math.ceil(stats.missingEmbeddings / itemsPerMinute);
+    // Average: 50 items per batch, ~28s per batch = ~6,500 items/hour
+    const itemsPerHour = 6500;
+    const hoursRemaining = stats.missingEmbeddings / itemsPerHour;
     
-    if (minutesRemaining < 60) {
-      return `~${minutesRemaining} minuten`;
-    } else if (minutesRemaining < 1440) {
-      const hours = Math.ceil(minutesRemaining / 60);
-      return `~${hours} ${hours === 1 ? 'uur' : 'uur'}`;
+    if (hoursRemaining < 1) {
+      return `~${Math.round(hoursRemaining * 60)} minuten`;
     } else {
-      const days = Math.ceil(minutesRemaining / 1440);
-      return `~${days} ${days === 1 ? 'dag' : 'dagen'}`;
+      return `~${Math.round(hoursRemaining * 10) / 10} uur`;
     }
   };
 
@@ -162,16 +158,59 @@ export const EmbeddingCoverageDashboard = () => {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Warnings */}
-        {isBackfillActive && isStale && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Backfill proces lijkt vastgelopen (laatste heartbeat: {lastHeartbeat?.toLocaleTimeString()})
+        {/* Orchestrator Status */}
+        {orchestratorStatus && (
+          <Alert className={
+            orchestratorStatus.status === 'running' && !isStale ? 'border-green-500 bg-green-50 dark:bg-green-950' :
+            orchestratorStatus.status === 'paused' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950' :
+            orchestratorStatus.status === 'idle' ? 'border-blue-500 bg-blue-50 dark:bg-blue-950' :
+            'border-red-500 bg-red-50 dark:bg-red-950'
+          }>
+            <Activity className="h-4 w-4" />
+            <AlertDescription className="space-y-2">
+              <div className="font-semibold">
+                Backfill Status: {orchestratorStatus.status.toUpperCase()}
+                {orchestratorStatus.status === 'running' && !isStale && ' 🟢'}
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>Batch: {orchestratorStatus.current_batch || 0}</div>
+                <div>Verwerkt: {orchestratorStatus.total_items_processed || 0}</div>
+                {lastHeartbeat && (
+                  <>
+                    <div>Laatste heartbeat: {lastHeartbeat.toLocaleTimeString('nl-NL')}</div>
+                    <div>Laatste run: {orchestratorStatus.last_run_at ? new Date(orchestratorStatus.last_run_at).toLocaleTimeString('nl-NL') : 'N/A'}</div>
+                  </>
+                )}
+              </div>
+              {orchestratorStatus.status === 'running' && !isStale && eta && (
+                <div className="mt-2 text-sm font-medium">
+                  🕒 Geschatte resterende tijd: {eta}
+                </div>
+              )}
+              {isStale && (
+                <div className="mt-2 text-sm text-red-600 font-medium">
+                  ⚠️ Waarschuwing: Heartbeat is ouder dan 5 minuten - proces mogelijk vastgelopen
+                </div>
+              )}
             </AlertDescription>
           </Alert>
         )}
-        
+
+        {/* Realtime Updates */}
+        {realtimeCount && realtimeCount > 0 && (
+          <Alert className="border-green-500 bg-green-50 dark:bg-green-950">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <AlertDescription>
+              {realtimeCount} nieuwe embeddings toegevoegd in deze sessie
+              <br />
+              <span className="text-xs text-muted-foreground">
+                Laatste update: {lastUpdate.toLocaleTimeString('nl-NL')}
+              </span>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Warnings */}
         {!isBackfillActive && stats && stats.missingEmbeddings > 100 && (
           <Alert>
             <AlertCircle className="h-4 w-4" />
@@ -180,6 +219,7 @@ export const EmbeddingCoverageDashboard = () => {
             </AlertDescription>
           </Alert>
         )}
+
         {/* Embedding Coverage */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">

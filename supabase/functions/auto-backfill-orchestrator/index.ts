@@ -267,7 +267,7 @@ Deno.serve(async (req) => {
 
     // Start background task
     const backgroundTask = async () => {
-      const MAX_BATCHES_PER_RUN = 50; // Meer batches per uur voor hogere doorvoer
+      const MAX_BATCHES_PER_RUN = 999; // Increased to allow continuous backfill until complete
       const BATCH_SIZE = 50; // Gebalanceerd voor betrouwbaarheid en snelheid
       const MAX_PARALLEL_BATCHES = 2; // Verlaagd naar 2 voor meer stabiliteit
       

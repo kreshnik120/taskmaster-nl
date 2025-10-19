@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
       .from('ai_knowledge_base')
       .select('id, category, key, value, org_id')
       .is('deleted_at', null)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false }) // Process newest items first
       .limit(windowSize);
 
     if (fetchError) {
