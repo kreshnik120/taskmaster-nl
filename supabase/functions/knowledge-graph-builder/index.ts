@@ -101,8 +101,8 @@ serve(async (req) => {
     // ULTRA-AUTONOMOUS CONFIG: Higher batch size and parallel mode enabled by default
     const { batch_size, parallel_mode } = await req.json().catch(() => ({}));
 
-    // ADAPTIVE BATCH SIZE: Reduce for large orgs to prevent token overload
-    let effectiveBatchSize = batch_size || 100;
+    // ADAPTIVE BATCH SIZE: Reduce for large orgs to prevent token overload (VERLAAGD)
+    let effectiveBatchSize = batch_size || 30; // VERLAAGD: was 100, nu 30 voor kostenreductie
     
     // Fetch total count to determine adaptive sizing
     const { count: totalCount } = await supabase
@@ -112,7 +112,7 @@ serve(async (req) => {
       .is('deleted_at', null);
     
     if (totalCount && totalCount > 500) {
-      effectiveBatchSize = 50; // Extra small for large knowledge bases
+      effectiveBatchSize = 30; // VERLAAGD: was 50, nu 30 voor extra kostenbesparing
       console.log(`📉 Large org detected (${totalCount} items), reducing batch to ${effectiveBatchSize}`);
     }
     
@@ -167,7 +167,7 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'google/gemini-2.5-pro',
+            model: 'google/gemini-2.5-flash', // GOEDKOPER MODEL: was pro, nu flash (10x goedkoper)
             response_format: { type: "json_object" },
             messages: [
               {
@@ -390,9 +390,9 @@ Format:
       console.log(`⚠️ ${errors.length} errors occurred during insertion`);
     }
 
-    // FASE 4: Self-Supervised Pattern Discovery
+    // FASE 4: Self-Supervised Pattern Discovery (VERHOOGDE THRESHOLD)
     // Analyze ALL relationships to discover meta-patterns
-    if (insertedCount > 10) { // Only run if we have enough data
+    if (insertedCount > 50) { // VERHOOGD: was 10, nu 50 - alleen bij grote volumes
       console.log('🔬 FASE 4: Discovering meta-patterns...');
       
       // Fetch ALL relationships for this org for pattern analysis
@@ -414,7 +414,7 @@ Format:
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'google/gemini-2.5-pro',
+            model: 'google/gemini-2.5-flash', // GOEDKOPER MODEL: was pro, nu flash
             response_format: { type: "json_object" },
             messages: [
               {

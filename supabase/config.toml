@@ -2,7 +2,7 @@ project_id = "oelmsmcgryeoryhonexw"
 
 [functions.auto-restart-backfill]
 verify_jwt = false
-schedule = "*/5 * * * *"  # Direct cron: elke 5 minuten
+schedule = "0 * * * *"  # Elk uur (was elke 5 min)
 
 [functions.system-health-monitor]
 verify_jwt = false
@@ -44,36 +44,36 @@ verify_jwt = true
 [functions.rollback-knowledge]
 verify_jwt = true
 
-[functions.tariff-analyzer]
-verify_jwt = false
-schedule = "45 * * * *"
+# [functions.tariff-analyzer]
+# verify_jwt = false
+# schedule = "45 * * * *"  # UITGESCHAKELD - cutoff date passed
 
 [functions.continuous-learner]
 verify_jwt = true
 
 [functions.data-quality-auditor]
 verify_jwt = false
-schedule = "20 * * * *"
+schedule = "0 */6 * * *"  # Elke 6 uur (was 20 min)
 
 [functions.smart-deduplicator]
 verify_jwt = false
-schedule = "30 * * * *"
+schedule = "0 4 * * *"  # 1x per dag om 04:00 (was 30 min)
 
 [functions.source-validator]
 verify_jwt = false
-schedule = "35 * * * *"
+schedule = "0 5 * * *"  # 1x per dag om 05:00 (was 35 min)
 
 [functions.feedback-processor]
 verify_jwt = false
-schedule = "*/5 * * * *"
+schedule = "0 * * * *"  # Elk uur (was elke 5 min)
 
 [functions.master-scheduler]
 verify_jwt = false
-schedule = "* * * * *"
+schedule = "0 * * * *"  # Elk uur (was elke minuut)
 
 [functions.knowledge-graph-builder]
 verify_jwt = false
-schedule = "15 * * * *"
+schedule = "0 3 * * *"  # 1x per dag om 03:00 (was elk uur)
 timeout = 300
 
 [functions.meta-orchestrator]

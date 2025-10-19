@@ -12,6 +12,7 @@ export function SystemHealthDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isStartingBackfill, setIsStartingBackfill] = useState(false);
+  const [isTogglingAutomation, setIsTogglingAutomation] = useState(false);
 
   // Fetch orchestrator state
   const { data: orchestratorState, refetch: refetchOrchestrator } = useQuery({
@@ -67,6 +68,44 @@ export function SystemHealthDashboard() {
       
       if (error) throw error;
       return data;
+    },
+    refetchInterval: 30000,
+  });
+
+  // Fetch system config (automation status & budget)
+  const { data: systemConfig } = useQuery({
+    queryKey: ['system-config'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('system_config')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+      
+      if (error) throw error;
+      return data;
+    },
+    refetchInterval: 10000,
+  });
+
+  // Fetch daily AI spend
+  const { data: dailySpend } = useQuery({
+    queryKey: ['daily-ai-spend'],
+    queryFn: async () => {
+      const today = new Date().toISOString().split('T')[0];
+      const { data, error } = await supabase
+        .from('function_call_logs')
+        .select('estimated_cost_eur')
+        .gte('created_at', today + 'T00:00:00Z')
+        .lte('created_at', today + 'T23:59:59Z');
+      
+      if (error) throw error;
+      
+      const total = data?.reduce((sum, log) => {
+        const cost = log.estimated_cost_eur ? parseFloat(String(log.estimated_cost_eur)) : 0;
+        return sum + cost;
+      }, 0) || 0;
+      return { total, date: today };
     },
     refetchInterval: 30000,
   });
@@ -256,6 +295,39 @@ export function SystemHealthDashboard() {
     }
   };
 
+  // Toggle automation pause/resume
+  const toggleAutomation = async () => {
+    setIsTogglingAutomation(true);
+    try {
+      const newPausedState = !systemConfig?.automation_paused;
+      
+      const { error } = await supabase
+        .from('system_config')
+        .update({ automation_paused: newPausedState })
+        .eq('id', systemConfig?.id);
+      
+      if (error) throw error;
+      
+      toast({
+        title: newPausedState ? "⏸️ Automaties gepauzeerd" : "▶️ Automaties hervat",
+        description: newPausedState 
+          ? "Alle automatische processen zijn gestopt" 
+          : "Automatische processen zijn weer actief",
+      });
+      
+      queryClient.invalidateQueries({ queryKey: ['system-config'] });
+      
+    } catch (error: any) {
+      toast({
+        title: "Fout bij toggle",
+        description: error.message || 'Er is iets misgegaan',
+        variant: "destructive",
+      });
+    } finally {
+      setIsTogglingAutomation(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'running': return 'bg-blue-500';
@@ -287,8 +359,74 @@ export function SystemHealthDashboard() {
 
   const healthStatus = getHealthStatus();
 
+  const dailyBudget = systemConfig?.daily_ai_budget_eur || 10;
+  const budgetUsedPercent = dailySpend ? (dailySpend.total / dailyBudget) * 100 : 0;
+
   return (
     <div className="space-y-4">
+      {/* Automation Control & Budget */}
+      <Card className={systemConfig?.automation_paused ? "border-orange-500 bg-orange-50 dark:bg-orange-950/20" : "border-green-500 bg-green-50 dark:bg-green-950/20"}>
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <CardTitle className="text-base flex items-center gap-2">
+                {systemConfig?.automation_paused ? (
+                  <>
+                    <Pause className="w-5 h-5 text-orange-600" />
+                    <span className="text-orange-900 dark:text-orange-100">Automaties Gepauzeerd</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-5 h-5 text-green-600" />
+                    <span className="text-green-900 dark:text-green-100">Automaties Actief</span>
+                  </>
+                )}
+              </CardTitle>
+              <CardDescription className="mt-2">
+                {systemConfig?.automation_paused 
+                  ? "Alle automatische processen zijn gestopt. Klik 'Hervat' om ze weer te starten."
+                  : "Automatische taken draaien volgens schema. Gebruik de pauzeknop om kosten te stoppen."}
+              </CardDescription>
+              
+              {/* Budget Display */}
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Vandaag besteed:</span>
+                  <span className={`font-bold ${budgetUsedPercent > 80 ? 'text-red-600' : budgetUsedPercent > 50 ? 'text-yellow-600' : 'text-green-600'}`}>
+                    €{dailySpend?.total.toFixed(2) || '0.00'} / €{dailyBudget.toFixed(2)}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div 
+                    className={`h-2 rounded-full transition-all ${budgetUsedPercent > 80 ? 'bg-red-500' : budgetUsedPercent > 50 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                    style={{ width: `${Math.min(budgetUsedPercent, 100)}%` }}
+                  />
+                </div>
+                {budgetUsedPercent > 80 && (
+                  <p className="text-xs text-red-600 font-medium">⚠️ Waarschuwing: meer dan 80% van dagbudget bereikt</p>
+                )}
+              </div>
+            </div>
+            
+            <Button
+              onClick={toggleAutomation}
+              disabled={isTogglingAutomation}
+              variant={systemConfig?.automation_paused ? "default" : "destructive"}
+              className="shrink-0 ml-4"
+            >
+              {isTogglingAutomation ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : systemConfig?.automation_paused ? (
+                <Play className="w-4 h-4 mr-2" />
+              ) : (
+                <Pause className="w-4 h-4 mr-2" />
+              )}
+              {isTogglingAutomation ? 'Bezig...' : systemConfig?.automation_paused ? 'Hervat Automaties' : 'Pauzeer Automaties'}
+            </Button>
+          </div>
+        </CardHeader>
+      </Card>
+
       {/* Low Coverage Alert */}
       {embeddingStats && embeddingStats.coverage < 95 && (
         <Card className="border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/20">

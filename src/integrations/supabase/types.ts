@@ -1871,6 +1871,33 @@ export type Database = {
           },
         ]
       }
+      system_config: {
+        Row: {
+          automation_paused: boolean
+          created_at: string | null
+          daily_ai_budget_eur: number | null
+          id: string
+          org_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          automation_paused?: boolean
+          created_at?: string | null
+          daily_ai_budget_eur?: number | null
+          id?: string
+          org_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          automation_paused?: boolean
+          created_at?: string | null
+          daily_ai_budget_eur?: number | null
+          id?: string
+          org_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       system_health_log: {
         Row: {
           actions_taken: Json | null
