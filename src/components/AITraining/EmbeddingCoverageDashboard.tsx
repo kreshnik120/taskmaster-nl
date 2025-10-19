@@ -25,10 +25,14 @@ export const EmbeddingCoverageDashboard = () => {
 
       const totalItems = data.length;
       
-      // Count items met embeddings
+      // Get IDs van actieve knowledge items
+      const activeKnowledgeIds = data.map(item => item.id);
+
+      // Count items met embeddings (alleen voor actieve items)
       const { count: embeddedCount } = await supabase
         .from("knowledge_embeddings")
-        .select("*", { count: "exact", head: true });
+        .select("*", { count: "exact", head: true })
+        .in("knowledge_id", activeKnowledgeIds);
 
       const verifiedItems = data.filter(d => d.validation_status === "verified").length;
       const unverifiedItems = data.filter(d => d.validation_status === "unverified").length;
