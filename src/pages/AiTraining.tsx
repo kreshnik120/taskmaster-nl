@@ -183,7 +183,7 @@ const AiTraining = () => {
                 <TabsContent value="system" className="mt-6">
                   <div className="space-y-6">
                     <SystemHealthDashboard />
-                    <ManualFunctionTrigger />
+                    <ManualFunctionTrigger hideBackfill />
                     <SystemMonitor />
                   </div>
                 </TabsContent>

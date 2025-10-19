@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Activity, AlertTriangle, CheckCircle2, RefreshCw, Zap, Play } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, RefreshCw, Zap, Play, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -80,11 +80,21 @@ export function SystemHealthDashboard() {
         throw new Error('Niet geauthenticeerd');
       }
 
-      // Check if there's an existing paused or running run
-      const shouldResumeExisting = 
-        orchestratorState?.status === 'paused' || 
-        orchestratorState?.status === 'running';
+      // Check current status
+      if (orchestratorState?.status === 'running') {
+        toast({
+          title: "Backfill is al actief",
+          description: `Er draait al een backfill die ${embeddingStats?.missing || 0} items verwerkt.`,
+        });
+        // Refresh queries to show latest progress
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ['orchestrator-state'] });
+          queryClient.invalidateQueries({ queryKey: ['embedding-stats'] });
+        }, 1000);
+        return; // Exit early - don't call the function
+      }
 
+      const shouldResumeExisting = orchestratorState?.status === 'paused';
       const actionDescription = shouldResumeExisting 
         ? 'Bestaande run wordt hervat...' 
         : 'Nieuwe run wordt gestart...';
@@ -96,7 +106,7 @@ export function SystemHealthDashboard() {
 
       const { data, error } = await supabase.functions.invoke('auto-backfill-orchestrator', {
         body: { 
-          force_restart: !shouldResumeExisting, // Only force restart if no existing run
+          force_restart: !shouldResumeExisting,
           batch_size: 50 
         },
         headers: {
@@ -121,6 +131,98 @@ export function SystemHealthDashboard() {
       console.error('Backfill start error:', error);
       toast({
         title: "Fout bij starten backfill",
+        description: error.message || 'Er is iets misgegaan',
+        variant: "destructive",
+      });
+    } finally {
+      setIsStartingBackfill(false);
+    }
+  };
+
+  // Stop/Pause backfill
+  const stopBackfill = async () => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session) {
+        throw new Error('Niet geauthenticeerd');
+      }
+
+      toast({
+        title: "Backfill wordt gestopt...",
+        description: "De lopende run wordt gepauzeerd",
+      });
+
+      const { data, error } = await supabase.functions.invoke('orchestrator-control', {
+        body: { action: 'pause' },
+        headers: {
+          Authorization: `Bearer ${sessionData.session.access_token}`
+        }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Backfill gepauzeerd",
+        description: "De run is gestopt en kan later hervat worden",
+      });
+
+      // Refresh queries
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['orchestrator-state'] });
+        queryClient.invalidateQueries({ queryKey: ['embedding-stats'] });
+      }, 1000);
+      
+    } catch (error: any) {
+      console.error('Stop backfill error:', error);
+      toast({
+        title: "Fout bij stoppen",
+        description: error.message || 'Er is iets misgegaan',
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Force restart backfill
+  const forceRestartBackfill = async () => {
+    setIsStartingBackfill(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session) {
+        throw new Error('Niet geauthenticeerd');
+      }
+
+      toast({
+        title: "Force restart...",
+        description: "Bestaande run wordt gereset en opnieuw gestart",
+      });
+
+      const { data, error } = await supabase.functions.invoke('auto-backfill-orchestrator', {
+        body: { 
+          force_restart: true,
+          batch_size: 50 
+        },
+        headers: {
+          Authorization: `Bearer ${sessionData.session.access_token}`
+        }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Backfill herstart!",
+        description: "Nieuwe run is gestart vanaf het begin",
+      });
+
+      // Refresh all queries
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['orchestrator-state'] });
+        queryClient.invalidateQueries({ queryKey: ['embedding-stats'] });
+      }, 2000);
+      
+    } catch (error: any) {
+      console.error('Force restart error:', error);
+      toast({
+        title: "Fout bij force restart",
         description: error.message || 'Er is iets misgegaan',
         variant: "destructive",
       });
@@ -274,27 +376,86 @@ export function SystemHealthDashboard() {
         </CardHeader>
         <CardContent>
           {orchestratorState ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Run ID</span>
+                <span className="text-xs font-mono text-muted-foreground">
+                  {orchestratorState.id ? orchestratorState.id.substring(0, 8) : '-'}
+                </span>
+              </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Status</span>
                 <Badge className={getStatusColor(orchestratorState.status)}>
                   {orchestratorState.status}
                 </Badge>
               </div>
-              {(orchestratorState.metadata as any)?.last_heartbeat && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Laatste heartbeat</span>
-                  <span className="text-sm">
-                    {format(new Date((orchestratorState.metadata as any).last_heartbeat), 'HH:mm:ss')}
-                  </span>
-                </div>
-              )}
-              {(orchestratorState.metadata as any)?.checkpoint_processed && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Verwerkt</span>
-                  <span className="text-sm">{(orchestratorState.metadata as any).checkpoint_processed} items</span>
-                </div>
-              )}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Last Heartbeat</span>
+                <span className="text-sm font-mono">
+                  {(orchestratorState.metadata as any)?.last_heartbeat 
+                    ? new Date((orchestratorState.metadata as any).last_heartbeat as string).toLocaleTimeString('nl-NL')
+                    : '-'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Processed / Remaining</span>
+                <span className="text-sm font-mono">
+                  {orchestratorState.total_items_processed || 0} / {(orchestratorState.metadata as any)?.total_missing || 0}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Current Batch</span>
+                <span className="text-sm font-mono">
+                  #{orchestratorState.current_batch || 0}
+                </span>
+              </div>
+              
+              <div className="flex gap-2 pt-2">
+                {orchestratorState.status === 'running' ? (
+                  <Button
+                    onClick={stopBackfill}
+                    variant="destructive"
+                    className="flex-1"
+                  >
+                    <Pause className="mr-2 h-4 w-4" />
+                    Stop Backfill
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={triggerBackfill}
+                    disabled={isStartingBackfill}
+                    className="flex-1"
+                  >
+                    {isStartingBackfill ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        Starting...
+                      </>
+                    ) : orchestratorState.status === 'paused' ? (
+                      <>
+                        <Play className="mr-2 h-4 w-4" />
+                        Resume Backfill
+                      </>
+                    ) : (
+                      <>
+                        <Play className="mr-2 h-4 w-4" />
+                        Start Backfill
+                      </>
+                    )}
+                  </Button>
+                )}
+                
+                {(orchestratorState.status === 'running' || orchestratorState.status === 'paused') && (
+                  <Button
+                    onClick={forceRestartBackfill}
+                    disabled={isStartingBackfill}
+                    variant="outline"
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Force Restart
+                  </Button>
+                )}
+              </div>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">Geen actieve run</p>

@@ -114,6 +114,9 @@ timeout = 300
 verify_jwt = false
 timeout = 300
 
+[functions.orchestrator-control]
+verify_jwt = true
+
 [functions.queue-document-processing]
 verify_jwt = true
 

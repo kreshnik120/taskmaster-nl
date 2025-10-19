@@ -111,10 +111,13 @@ Deno.serve(async (req) => {
       .contains('metadata', { component: 'auto-backfill-orchestrator' })
       .maybeSingle();
     
+    let stateId: string = '';
+    let shouldSkipInsert = false;
+    
     if (existingRun) {
       // Resume from paused state
       if (existingRun.status === 'paused') {
-        console.log('🔄 Resuming from paused state');
+        console.log('🔄 Resuming from paused state - updating existing record (no new INSERT)');
         const metadata = existingRun.metadata || {};
         const checkpoint = {
           batch: metadata.checkpoint_batch || 0,
@@ -135,6 +138,9 @@ Deno.serve(async (req) => {
             }
           })
           .eq('id', existingRun.id);
+        
+        stateId = existingRun.id;
+        shouldSkipInsert = true;
       } else {
         // Existing running state - check heartbeat
         const lastHeartbeat = existingRun.metadata?.last_heartbeat;
@@ -217,32 +223,47 @@ Deno.serve(async (req) => {
 
     console.log(`📊 Missing embeddings: ${missingCount}`);
 
-    // Initialize state with metadata.component
-    const { data: stateRecord, error: stateError } = await supabase
-      .from('orchestrator_state')
-      .insert({
-        org_id,
-        status: 'running',
-        current_batch: 0,
-        total_items_processed: 0,
-        metadata: {
-          component: 'auto-backfill-orchestrator',
-          started_at: new Date().toISOString(),
-          last_heartbeat: new Date().toISOString(),
-          batch_size,
-          total_missing: missingCount,
-          current_offset: 0,
-          max_runtime_minutes: 45
-        }
-      })
-      .select()
-      .single();
+    // Initialize state with metadata.component (only if not resuming)
+    let stateRecord: any;
+    
+    if (!shouldSkipInsert) {
+      const { data, error: stateError } = await supabase
+        .from('orchestrator_state')
+        .insert({
+          org_id,
+          status: 'running',
+          current_batch: 0,
+          total_items_processed: 0,
+          metadata: {
+            component: 'auto-backfill-orchestrator',
+            started_at: new Date().toISOString(),
+            last_heartbeat: new Date().toISOString(),
+            batch_size,
+            total_missing: missingCount,
+            current_offset: 0,
+            max_runtime_minutes: 45
+          }
+        })
+        .select()
+        .single();
 
-    if (stateError || !stateRecord) {
-      throw new Error(`Failed to create state record: ${stateError?.message}`);
+      if (stateError || !data) {
+        throw new Error(`Failed to create state record: ${stateError?.message}`);
+      }
+      
+      stateRecord = data;
+      stateId = data.id;
+      console.log('📝 Created new orchestrator state record');
+    } else {
+      // Fetch existing record for metadata
+      const { data } = await supabase
+        .from('orchestrator_state')
+        .select('*')
+        .eq('id', stateId)
+        .single();
+      stateRecord = data;
+      console.log('♻️ Reusing existing orchestrator state record');
     }
-
-    const stateId = stateRecord.id;
 
     // Start background task
     const backgroundTask = async () => {
@@ -267,6 +288,19 @@ Deno.serve(async (req) => {
 
       try {
         while (hasMore) {
+          // Check if run was paused/stopped externally
+          const { data: currentStateCheck } = await supabase
+            .from('orchestrator_state')
+            .select('status, metadata')
+            .eq('id', stateId)
+            .single();
+          
+          if (currentStateCheck && currentStateCheck.status !== 'running') {
+            console.log(`⏸️ Run status changed to '${currentStateCheck.status}' - exiting loop`);
+            hasMore = false;
+            break;
+          }
+          
           batchNumber++;
           batchesThisRun++;
           const batchStartTime = Date.now();

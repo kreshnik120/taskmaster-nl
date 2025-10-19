@@ -7,7 +7,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Play, CheckCircle2, AlertCircle, AlertTriangle, RefreshCw, Database } from "lucide-react";
 
-export const ManualFunctionTrigger = () => {
+interface ManualFunctionTriggerProps {
+  hideBackfill?: boolean;
+}
+
+export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTriggerProps) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [status, setStatus] = useState<"idle" | "running" | "success" | "error">("idle");
   const [result, setResult] = useState<any>(null);
@@ -607,7 +611,7 @@ export const ManualFunctionTrigger = () => {
           </div>
 
           {/* PRE-FLIGHT: Embeddings Backfill - MOET EERST */}
-          {validationMetrics && validationMetrics.embeddingStats.missing > 0 && (
+          {!hideBackfill && validationMetrics && validationMetrics.embeddingStats.missing > 0 && (
             <div className="p-4 border-2 border-orange-500 rounded-lg bg-orange-50 dark:bg-orange-950/20">
               <h4 className="text-sm font-bold text-orange-700 dark:text-orange-400 mb-2 flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5" />
@@ -771,28 +775,30 @@ export const ManualFunctionTrigger = () => {
                 Run Quality Audit
               </Button>
 
-              <Button
-                onClick={() => runAutoBackfill(false)}
-                disabled={isBackfilling}
-                variant="default"
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-              >
-                {isBackfilling ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {backfillProgress && (
-                      <span className="text-xs">
-                        Batch {backfillProgress.batch}: {backfillProgress.processed}/{backfillProgress.total}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    🔄 Auto-Backfill Embeddings
-                  </>
-                )}
-              </Button>
+              {!hideBackfill && (
+                <Button
+                  onClick={() => runAutoBackfill(false)}
+                  disabled={isBackfilling}
+                  variant="default"
+                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                >
+                  {isBackfilling ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {backfillProgress && (
+                        <span className="text-xs">
+                          Batch {backfillProgress.batch}: {backfillProgress.processed}/{backfillProgress.total}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      🔄 Auto-Backfill Embeddings
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
 
             <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
