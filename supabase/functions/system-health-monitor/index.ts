@@ -73,21 +73,35 @@ serve(async (req) => {
         }
       }
 
-      // **CHECK 2: Missing Embeddings**
-      const { data: knowledgeCount } = await supabase
+      // **CHECK 2: Missing Embeddings (FIXED)**
+      // Count total knowledge base items
+      const { count: kbCount } = await supabase
         .from('ai_knowledge_base')
-        .select('id', { count: 'exact', head: true })
+        .select('*', { count: 'exact', head: true })
         .eq('org_id', org.id)
         .is('deleted_at', null);
 
-      const { data: embeddingCount } = await supabase
+      // Get all knowledge IDs for this org
+      const { data: kbItems } = await supabase
+        .from('ai_knowledge_base')
+        .select('id')
+        .eq('org_id', org.id)
+        .is('deleted_at', null);
+
+      const kbIds = kbItems?.map(item => item.id) || [];
+
+      // Count items with embeddings
+      const { data: embeddingData } = await supabase
         .from('knowledge_embeddings')
-        .select('id', { count: 'exact', head: true })
-        .eq('knowledge_id', supabase.from('ai_knowledge_base').select('id').eq('org_id', org.id).is('deleted_at', null));
+        .select('knowledge_id')
+        .in('knowledge_id', kbIds);
 
-      const missingCount = (knowledgeCount as any)?.count - (embeddingCount as any)?.count || 0;
+      const totalItems = kbCount || 0;
+      const itemsWithEmbeddings = embeddingData?.length || 0;
+      const missingCount = totalItems - itemsWithEmbeddings;
+      const coveragePercentage = totalItems > 0 ? (itemsWithEmbeddings / totalItems) * 100 : 0;
 
-      console.log(`📊 Embedding coverage: ${(embeddingCount as any)?.count}/${(knowledgeCount as any)?.count} (${missingCount} missing)`);
+      console.log(`📊 Embedding coverage: ${itemsWithEmbeddings}/${totalItems} (${missingCount} missing, ${coveragePercentage.toFixed(1)}%)`);
 
       if (missingCount > 100) {
         console.log(`🚨 Too many missing embeddings (${missingCount}), triggering backfill...`);
