@@ -139,7 +139,7 @@ serve(async (req) => {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    // Report broken sources to business intelligence
+    // Report broken sources to business intelligence (FASE 2: Smart Deduplication)
     if (brokenSources.length > 0) {
       const brokenPercentage = (brokenSources.length / itemsWithSources.length) * 100;
       const impactScore = Math.min(1.0, brokenPercentage / 100);
@@ -155,26 +155,86 @@ serve(async (req) => {
       } else {
         severity = 'low';
       }
-      
-      await supabase
+
+      // Check for existing active alert within last 7 days
+      const { data: existingAlert } = await supabase
         .from('business_intelligence')
-        .insert({
-          org_id: orgId,
-          intelligence_type: 'broken_sources',
-          type: 'data_quality',
-          severity: severity,
-          title: `${brokenSources.length} broken external sources detected`,
-          description: `Weekly source validation found ${brokenSources.length} unreachable sources (${brokenPercentage.toFixed(1)}%)`,
-          priority: brokenPercentage > 25 ? 'high' : 'medium',
-          status: 'active',
-          impact_score: impactScore,
-          data: {
-            timestamp: new Date().toISOString(),
-            broken_sources: brokenSources,
-            total_validated: itemsWithSources.length,
-            broken_percentage: brokenPercentage.toFixed(1)
-          }
-        });
+        .select('id, data')
+        .eq('org_id', orgId)
+        .eq('type', 'broken_sources_structural')
+        .eq('status', 'active')
+        .gte('detected_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+        .maybeSingle();
+
+      if (existingAlert) {
+        // UPDATE existing alert
+        const history = existingAlert.data?.detection_history || [];
+        await supabase
+          .from('business_intelligence')
+          .update({
+            data: {
+              ...existingAlert.data,
+              detection_history: [
+                ...history,
+                {
+                  count: brokenSources.length,
+                  timestamp: new Date().toISOString(),
+                  percentage: brokenPercentage
+                }
+              ],
+              last_detected: new Date().toISOString(),
+              total_detections: (existingAlert.data?.total_detections || 0) + 1,
+              avg_broken_sources: Math.round(
+                ([...history.map((h: any) => h.count), brokenSources.length].reduce((a: number, b: number) => a + b, 0)) / 
+                (history.length + 1)
+              ),
+              broken_sources: brokenSources,
+              total_validated: itemsWithSources.length,
+              failure_percentage: brokenPercentage.toFixed(1)
+            },
+            description: `Source validation detected ${brokenSources.length} unreachable sources (${brokenPercentage.toFixed(1)}%). Issue persisting for ${
+              Math.round((Date.now() - new Date(existingAlert.data?.first_detected).getTime()) / (24 * 60 * 60 * 1000))
+            } days.`,
+            severity: severity
+          })
+          .eq('id', existingAlert.id);
+
+        console.log(`✅ Updated existing alert ${existingAlert.id} with new detection`);
+      } else {
+        // CREATE new alert
+        await supabase
+          .from('business_intelligence')
+          .insert({
+            org_id: orgId,
+            intelligence_type: 'broken_sources',
+            type: 'broken_sources_structural',
+            severity: severity,
+            title: `${brokenSources.length} broken external sources detected`,
+            description: `Source validation found ${brokenSources.length} unreachable sources (${brokenPercentage.toFixed(1)}%)`,
+            priority: brokenPercentage > 25 ? 'high' : 'medium',
+            status: 'active',
+            impact_score: impactScore,
+            data: {
+              category: 'source_issue',
+              timestamp: new Date().toISOString(),
+              broken_sources: brokenSources,
+              total_validated: itemsWithSources.length,
+              broken_count: brokenSources.length,
+              failure_percentage: brokenPercentage.toFixed(1),
+              detection_history: [{
+                count: brokenSources.length,
+                timestamp: new Date().toISOString(),
+                percentage: brokenPercentage
+              }],
+              first_detected: new Date().toISOString(),
+              last_detected: new Date().toISOString(),
+              total_detections: 1,
+              avg_broken_sources: brokenSources.length
+            }
+          });
+
+        console.log(`🆕 Created new structural alert for broken sources`);
+      }
     }
 
     // Log function call

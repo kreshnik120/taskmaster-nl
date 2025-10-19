@@ -168,6 +168,7 @@ export type Database = {
           jurisdiction: string | null
           key: string
           last_reviewed_at: string | null
+          last_source_check: string | null
           last_used_at: string | null
           last_validation_error: string | null
           last_verified: string | null
@@ -179,6 +180,8 @@ export type Database = {
           review_count: number | null
           role_tags: string[] | null
           source: string | null
+          source_check_failures: number | null
+          source_status: string | null
           source_title: string | null
           source_url: string | null
           updated_at: string | null
@@ -212,6 +215,7 @@ export type Database = {
           jurisdiction?: string | null
           key: string
           last_reviewed_at?: string | null
+          last_source_check?: string | null
           last_used_at?: string | null
           last_validation_error?: string | null
           last_verified?: string | null
@@ -223,6 +227,8 @@ export type Database = {
           review_count?: number | null
           role_tags?: string[] | null
           source?: string | null
+          source_check_failures?: number | null
+          source_status?: string | null
           source_title?: string | null
           source_url?: string | null
           updated_at?: string | null
@@ -256,6 +262,7 @@ export type Database = {
           jurisdiction?: string | null
           key?: string
           last_reviewed_at?: string | null
+          last_source_check?: string | null
           last_used_at?: string | null
           last_validation_error?: string | null
           last_verified?: string | null
@@ -267,6 +274,8 @@ export type Database = {
           review_count?: number | null
           role_tags?: string[] | null
           source?: string | null
+          source_check_failures?: number | null
+          source_status?: string | null
           source_title?: string | null
           source_url?: string | null
           updated_at?: string | null
