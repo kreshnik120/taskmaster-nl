@@ -2,7 +2,7 @@ project_id = "oelmsmcgryeoryhonexw"
 
 [functions.auto-restart-backfill]
 verify_jwt = false
-schedule = "*/15 * * * *"  # TIJDELIJK: Elke 15 min voor snelle backfill (was elk uur)
+schedule = "0 * * * *"  # Elk uur - stabiele backfill zonder crashes
 
 [functions.system-health-monitor]
 verify_jwt = false

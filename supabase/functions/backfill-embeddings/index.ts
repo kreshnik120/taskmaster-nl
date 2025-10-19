@@ -131,16 +131,23 @@ Deno.serve(async (req) => {
       errors: [] as string[]
     };
 
+    let processedCount = 0;
     for (const item of knowledgeItems) {
       try {
+        processedCount++;
+        if (processedCount % 10 === 0) {
+          console.log(`📊 Progress: ${processedCount}/${knowledgeItems.length} items`);
+        }
+
         // Creëer embedding text
         const embeddingText = `${item.category}: ${item.key}\n${JSON.stringify(item.value)}`;
 
-        // Genereer embedding via OpenAI met 10s timeout
+        // Genereer embedding via OpenAI met 15s timeout (verhoogd voor stabiliteit)
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
         try {
+          console.log(`🔄 Requesting embedding for ${item.id}...`);
           const openaiResponse = await fetch('https://api.openai.com/v1/embeddings', {
             method: 'POST',
             headers: {
@@ -211,10 +218,10 @@ Deno.serve(async (req) => {
           }
 
           results.processed++;
-          console.log(`✅ Processed ${item.id}`);
+          console.log(`✅ Successfully processed ${item.id} (${results.processed}/${knowledgeItems.length})`);
 
-          // Rate limiting: wacht 100ms tussen requests
-          await new Promise(resolve => setTimeout(resolve, 100));
+          // Rate limiting: wacht 150ms tussen requests (verhoogd voor stabiliteit)
+          await new Promise(resolve => setTimeout(resolve, 150));
 
         } catch (error) {
           clearTimeout(timeoutId);

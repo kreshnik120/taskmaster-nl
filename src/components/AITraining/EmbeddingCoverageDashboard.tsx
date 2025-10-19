@@ -4,11 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Clock, AlertCircle, TrendingUp, Database, Zap } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { CheckCircle2, Clock, AlertCircle, TrendingUp, Database, Zap, Activity } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const EmbeddingCoverageDashboard = () => {
   const [realtimeCount, setRealtimeCount] = useState<number | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
   // Fetch coverage stats
   const { data: stats, isLoading } = useQuery({
@@ -47,6 +49,22 @@ export const EmbeddingCoverageDashboard = () => {
     refetchInterval: 10000 // Refetch elke 10s
   });
 
+  // Check orchestrator status
+  const { data: orchestratorStatus } = useQuery({
+    queryKey: ['orchestrator-status'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('orchestrator_state')
+        .select('status, current_batch, total_items_processed, last_run_at, metadata')
+        .eq('org_id', '550e8400-e29b-41d4-a716-446655440000')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+    refetchInterval: 10000,
+  });
+
   // Realtime subscription voor embeddings
   useEffect(() => {
     const channel = supabase
@@ -60,6 +78,7 @@ export const EmbeddingCoverageDashboard = () => {
         },
         () => {
           setRealtimeCount(prev => (prev || 0) + 1);
+          setLastUpdate(new Date());
         }
       )
       .subscribe();
@@ -106,6 +125,10 @@ export const EmbeddingCoverageDashboard = () => {
   }
 
   const eta = calculateETA();
+  const isBackfillActive = orchestratorStatus?.status === 'running';
+  const metadataLastHeartbeat = orchestratorStatus?.metadata && typeof orchestratorStatus.metadata === 'object' && 'last_heartbeat' in orchestratorStatus.metadata ? orchestratorStatus.metadata.last_heartbeat : null;
+  const lastHeartbeat = metadataLastHeartbeat ? new Date(metadataLastHeartbeat as string) : orchestratorStatus?.last_run_at ? new Date(orchestratorStatus.last_run_at) : null;
+  const isStale = lastHeartbeat && (Date.now() - lastHeartbeat.getTime()) > 5 * 60 * 1000;
 
   return (
     <Card className="border-primary/20">
@@ -115,20 +138,48 @@ export const EmbeddingCoverageDashboard = () => {
             <CardTitle className="flex items-center gap-2">
               <Database className="h-5 w-5" />
               Kennisbank Dekking
+              {isBackfillActive && !isStale && (
+                <Activity className="h-4 w-4 text-green-500 animate-pulse" />
+              )}
             </CardTitle>
             <CardDescription>
               Real-time status van embeddings en validatie
             </CardDescription>
           </div>
-          {realtimeCount && realtimeCount > 0 && (
-            <Badge variant="outline" className="gap-1 animate-pulse">
-              <Zap className="h-3 w-3" />
-              +{realtimeCount} nieuwe
-            </Badge>
-          )}
+          <div className="flex gap-2">
+            {isBackfillActive && !isStale && (
+              <Badge variant="default" className="animate-pulse gap-1">
+                <Zap className="h-3 w-3" />
+                Actief bezig
+              </Badge>
+            )}
+            {realtimeCount && realtimeCount > 0 && (
+              <Badge variant="outline" className="gap-1">
+                +{realtimeCount} nieuwe
+              </Badge>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Warnings */}
+        {isBackfillActive && isStale && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Backfill proces lijkt vastgelopen (laatste heartbeat: {lastHeartbeat?.toLocaleTimeString()})
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {!isBackfillActive && stats && stats.missingEmbeddings > 100 && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Backfill proces is niet actief. Er zijn nog {stats.missingEmbeddings} items zonder embeddings.
+            </AlertDescription>
+          </Alert>
+        )}
         {/* Embedding Coverage */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -165,6 +216,11 @@ export const EmbeddingCoverageDashboard = () => {
               </span>
             )}
           </div>
+          {isBackfillActive && orchestratorStatus?.current_batch && (
+            <div className="text-xs text-muted-foreground mt-1">
+              Huidige batch: {orchestratorStatus.current_batch} ({orchestratorStatus.total_items_processed} verwerkt)
+            </div>
+          )}
         </div>
 
         {/* Validation Coverage */}
