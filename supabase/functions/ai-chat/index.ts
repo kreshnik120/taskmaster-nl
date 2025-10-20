@@ -1447,18 +1447,30 @@ ${formatKnowledgeBase()}
 🎯 98% CONFIDENCE AI STRATEGIE (ITERATIEVE INTELLIGENTIE):
 =============================================================
 
-⚡ VOORDAT JE ANTWOORDT - ALTIJD DEZE 4 STAPPEN:
+⚡ KRITIEKE ANTWOORD VOLGORDE - ALTIJD DEZE STAPPEN:
 
-STAP 1: ZOEK RELEVANTE KENNIS (al gedaan in context via rol-gebaseerde filtering)
-STAP 2: BEREKEN CONFIDENCE (gebruik verify_answer_confidence tool)
-STAP 3: CONFIDENCE CHECK (Als confidence < 98%: trigger auto_harvest_knowledge)
-STAP 4: ANTWOORD MET CONFIDENCE BADGE
+STAP 1: GEEF EERST JE VOLLEDIGE ANTWOORD
+   → Beantwoord de vraag VOLLEDIG met alle relevante informatie
+   → Gebruik concrete data uit de kennisbank
+   → Wees uitgebreid en specifiek
+
+STAP 2: GEBRUIK VERIFY_ANSWER_CONFIDENCE TOOL (INTERN)
+   → Dit is een INTERNE validatie check
+   → Gebruiker ziet de tool output NIET
+   → Tool output wordt automatisch omgezet naar confidence badge
+
+STAP 3: CONFIDENCE BADGE WORDT AUTOMATISCH TOEGEVOEGD
+   → Het systeem voegt de badge toe aan je antwoord
+   → Jij hoeft dit NIET handmatig te doen
+
+⚠️ BELANGRIJK - DOE NOOIT DIT:
+   ❌ FOUT: Alleen verify_answer_confidence tool aanroepen zonder antwoord
+   ✅ CORRECT: Eerst volledig antwoord geven, dan verify_answer_confidence
 
 Format antwoord ALTIJD zo:
-"[🟢 98% Zeker]
-[Je antwoord op basis van concrete data]
+"[Hier komt je VOLLEDIGE, UITGEBREIDE antwoord met alle details]
 
-📊 Bron: [specifieke kennisitems, documenten]"
+[Dan volgt de confidence badge automatisch]"
 
 🚫 WANNEER GEEN TAAK AANMAKEN:
 - INFORMATIEVRAGEN: "welke", "hoeveel", "wanneer", "waar", "hoe", "waarom", "wat zijn", "wie", "toon", "laat zien", "geef overzicht"
@@ -1634,7 +1646,8 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
         type: "function",
         function: {
           name: "verify_answer_confidence",
-          description: "Bereken hoe zeker je bent van je antwoord (0-100%). Gebruik dit ALTIJD voordat je een antwoord geeft.",
+          description: "🔒 INTERN VALIDATION TOOL - Gebruik dit NADAT je het volledige antwoord hebt gegeven. Deze tool berekent je confidence (0-100%) voor interne validatie. Gebruiker ziet ALLEEN je antwoord content, NIET de raw tool output. De confidence badge wordt automatisch toegevoegd door het systeem.",
+          strict: false,
           parameters: {
             type: "object",
             properties: {
@@ -1878,6 +1891,25 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
 
                 // Check if we're done and have tool calls to execute
                 if (parsed.choices?.[0]?.finish_reason === "tool_calls" && toolCalls.length > 0) {
+                  
+                  // 🚨 FALLBACK: Check if AI only did tool_calls without any content
+                  if (!fullResponse.trim() && toolCalls.some(tc => tc.function.name === "verify_answer_confidence")) {
+                    console.log("⚠️ AI only called verify_answer_confidence without content - sending nudge to generate answer");
+                    
+                    // Send a message to user explaining the issue
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                      choices: [{
+                        delta: { content: "⚠️ De AI heeft alleen een confidence check uitgevoerd zonder antwoord te geven. Ik vraag om het volledige antwoord..." },
+                        index: 0
+                      }]
+                    })}\n\n`));
+                    
+                    // Continue to next AI call with nudge prompt
+                    // The retry logic below will handle this case
+                    needsRetryWithNewKnowledge = true;
+                    newKnowledgeMessage = "\n\n🔄 Ik probeer het opnieuw met een volledig antwoord...\n";
+                  }
+                  
                   // Execute all tool calls
                   for (const toolCall of toolCalls) {
                     try {
