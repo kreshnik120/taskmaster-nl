@@ -23,7 +23,7 @@ async function sha256Hash(text: string): Promise<string> {
 // ============================================
 async function persistMessage(
   supabase: any,
-  message: { user_id: string; conversation_id: string; role: string; content: string; metadata?: any },
+  message: { user_id: string; org_id: string; conversation_id: string; role: string; content: string; metadata?: any },
   retries: number = 3
 ): Promise<{ success: boolean; messageId?: string }> {
   // ✅ NIEUWE STAP: Normaliseer content (trim whitespace voor consistent hashing)
@@ -2780,6 +2780,7 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
               // 1️⃣ CRITICAL: Persist user message with retry (using service role client)
               const userResult = await persistMessage(supabaseServiceClient, {
                 user_id: userId,
+                org_id: userOrgId,
                 conversation_id: conversationId,
                 role: 'user',
                 content: userMessage.content
@@ -2864,6 +2865,7 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
           try {
             const assistantResult = await persistMessage(supabaseServiceClient, {
               user_id: userId,
+              org_id: userOrgId,
               conversation_id: conversation_id,
               role: 'assistant',
               content: fullResponse,
