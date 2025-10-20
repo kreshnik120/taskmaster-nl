@@ -17,6 +17,7 @@ export const DocumentUpload = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isFirefox, setIsFirefox] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
+  const [processingPending, setProcessingPending] = useState(false);
   const [activeJobs, setActiveJobs] = useState<{[jobId: string]: number}>({});
   const [totalChunks, setTotalChunks] = useState(0);
   const { toast } = useToast();
@@ -39,6 +40,49 @@ export const DocumentUpload = () => {
       return data;
     },
   });
+
+  // ✅ OPTIE 2: Auto-polling voor pending jobs (elke 30 seconden)
+  useEffect(() => {
+    const checkAndProcessPendingJobs = async () => {
+      try {
+        const { data: pendingJobs, error } = await supabase
+          .from('processing_jobs')
+          .select('id')
+          .eq('status', 'pending')
+          .limit(1);
+
+        if (error) {
+          console.error('Error checking pending jobs:', error);
+          return;
+        }
+
+        // Als er pending jobs zijn, trigger process-pending-jobs
+        if (pendingJobs && pendingJobs.length > 0) {
+          console.log(`[AUTO-POLL] ${pendingJobs.length} pending jobs gevonden, triggering verwerking...`);
+          
+          const { data, error: invokeError } = await supabase.functions.invoke('process-pending-jobs');
+          
+          if (invokeError) {
+            console.error('[AUTO-POLL] Error triggering process-pending-jobs:', invokeError);
+          } else {
+            console.log('[AUTO-POLL] Verwerking getriggerd:', data);
+            // Refresh document lijst
+            refetch();
+          }
+        }
+      } catch (error) {
+        console.error('[AUTO-POLL] Unexpected error:', error);
+      }
+    };
+
+    // Check direct bij mount
+    checkAndProcessPendingJobs();
+
+    // Daarna elke 30 seconden
+    const interval = setInterval(checkAndProcessPendingJobs, 30000);
+
+    return () => clearInterval(interval);
+  }, [refetch]);
 
   // Auto-refresh for processing or failed documents
   useEffect(() => {
@@ -458,6 +502,55 @@ export const DocumentUpload = () => {
     }
   };
 
+  // ✅ OPTIE 1: Handmatige trigger voor process-pending-jobs
+  const triggerPendingJobsProcessing = async () => {
+    setProcessingPending(true);
+    try {
+      // Check hoeveel pending jobs er zijn
+      const { data: pendingJobs, error: checkError } = await supabase
+        .from('processing_jobs')
+        .select('id')
+        .eq('status', 'pending');
+
+      if (checkError) throw checkError;
+
+      if (!pendingJobs || pendingJobs.length === 0) {
+        toast({
+          title: "Geen pending jobs",
+          description: "Alle jobs zijn al verwerkt of in behandeling.",
+        });
+        return;
+      }
+
+      toast({
+        title: "Verwerking starten...",
+        description: `${pendingJobs.length} pending job(s) worden nu verwerkt`,
+      });
+
+      // Trigger process-pending-jobs edge function
+      const { data, error } = await supabase.functions.invoke('process-pending-jobs');
+
+      if (error) throw error;
+
+      toast({
+        title: "Verwerking gestart",
+        description: `${data?.processed || 0} job(s) worden nu verwerkt`,
+      });
+
+      // Refresh document lijst
+      setTimeout(() => refetch(), 2000);
+    } catch (error: any) {
+      console.error("Trigger pending jobs error:", error);
+      toast({
+        title: "Verwerking mislukt",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setProcessingPending(false);
+    }
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "completed":
@@ -625,50 +718,72 @@ export const DocumentUpload = () => {
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Geüploade Documenten</h3>
-          {(failedDocsCount > 0 || stuckDocsCount > 0) && (
-            <div className="flex gap-2">
-              {stuckDocsCount > 0 && (
-                <Button 
-                  onClick={forceStopStuckDocuments} 
-                  disabled={reprocessing}
-                  variant="destructive"
-                  size="sm"
-                >
-                  {reprocessing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Stoppen...
-                    </>
-                  ) : (
-                    <>
-                      <AlertCircle className="h-4 w-4 mr-2" />
-                      Forceer Stoppen ({stuckDocsCount})
-                    </>
-                  )}
-                </Button>
+          <div className="flex gap-2">
+            {/* ✅ OPTIE 1: Handmatige "Verwerk Nu" knop */}
+            <Button 
+              onClick={triggerPendingJobsProcessing} 
+              disabled={processingPending}
+              variant="secondary"
+              size="sm"
+            >
+              {processingPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Verwerken...
+                </>
+              ) : (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2" />
+                  Verwerk Nu
+                </>
               )}
-              {failedDocsCount > 0 && (
-                <Button 
-                  onClick={reprocessFailedDocuments} 
-                  disabled={reprocessing}
-                  variant="outline"
-                  size="sm"
-                >
-                  {reprocessing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Herverwerken...
-                    </>
-                  ) : (
-                    <>
-                      <AlertCircle className="h-4 w-4 mr-2" />
-                      Herverwerk Gefaalde ({failedDocsCount})
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
-          )}
+            </Button>
+            
+            {(failedDocsCount > 0 || stuckDocsCount > 0) && (
+              <>
+                {stuckDocsCount > 0 && (
+                  <Button 
+                    onClick={forceStopStuckDocuments} 
+                    disabled={reprocessing}
+                    variant="destructive"
+                    size="sm"
+                  >
+                    {reprocessing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Stoppen...
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-4 w-4 mr-2" />
+                        Forceer Stoppen ({stuckDocsCount})
+                      </>
+                    )}
+                  </Button>
+                )}
+                {failedDocsCount > 0 && (
+                  <Button 
+                    onClick={reprocessFailedDocuments} 
+                    disabled={reprocessing}
+                    variant="outline"
+                    size="sm"
+                  >
+                    {reprocessing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Herverwerken...
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-4 w-4 mr-2" />
+                        Herverwerk Gefaalde ({failedDocsCount})
+                      </>
+                    )}
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         </div>
         <div className="space-y-2">
           {documents && documents.length > 0 ? (
