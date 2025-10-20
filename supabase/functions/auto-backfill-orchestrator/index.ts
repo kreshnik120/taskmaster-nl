@@ -360,7 +360,7 @@ Deno.serve(async (req) => {
               .eq('id', stateId);
 
             const { data, error } = await supabase.functions.invoke('backfill-embeddings', {
-              body: { batch_size: currentBatchSize }
+              body: { batch_size: currentBatchSize, offset: currentOffset, direction: 'asc' }
             });
 
             if (error) {
@@ -409,9 +409,17 @@ Deno.serve(async (req) => {
             const batchDuration = Date.now() - batchStartTime;
             totalProcessed += data.processed || 0;
             currentMissingCount = data.total_missing || 0;
-            currentOffset += data.processed || 0;
+            
+            // ✅ STAP 2: Als processed === 0 én total_missing > 0, verhoog offset (spring leeg venster over)
+            if (data.reason === 'window_empty_but_missing' && data.total_missing > 0) {
+              const windowSize = Math.max(currentBatchSize * 20, 1000);
+              currentOffset += windowSize;
+              console.log(`⏭️ Window empty but ${data.total_missing} still missing - jumping offset to ${currentOffset}`);
+            } else {
+              currentOffset += data.processed || 0;
+            }
 
-            console.log(`✅ Batch ${batchNumber}: processed=${data.processed}, remaining=${currentMissingCount}, duration=${batchDuration}ms, batch_size=${currentBatchSize}`);
+            console.log(`✅ Batch ${batchNumber}: processed=${data.processed}, remaining=${currentMissingCount}, offset=${currentOffset}, duration=${batchDuration}ms, batch_size=${currentBatchSize}`);
 
             // Adjust batch size based on performance
             if (batchDuration > 60000 && currentBatchSize > 25) {

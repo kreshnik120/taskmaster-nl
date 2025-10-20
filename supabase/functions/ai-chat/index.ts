@@ -1998,6 +1998,12 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
 
                           if (knowledgeError) throw knowledgeError;
                           
+                          // ✅ STAP 1: Direct embedding triggeren (geen afhankelijkheid van DB triggers)
+                          console.log(`🔄 Triggering embedding generation for ${knowledge.id}...`);
+                          supabaseClient.functions.invoke('generate-embedding', {
+                            body: { knowledge_id: knowledge.id }
+                          }).catch(err => console.warn('⚠️ Embedding trigger failed (will retry):', err));
+                          
                           // ✅ FASE 3: Wait for embedding to be created
                           let embeddingReady = false;
                           let retries = 0;

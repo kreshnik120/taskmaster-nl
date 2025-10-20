@@ -16,34 +16,46 @@ export const EmbeddingCoverageDashboard = () => {
   const { data: stats, isLoading } = useQuery({
     queryKey: ["embedding-coverage"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // ✅ STAP 3: Haal org_id dynamisch op
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data: userOrg } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!userOrg?.org_id) throw new Error('No organization found');
+
+      // ✅ STAP 3: Gebruik HEAD counts (efficiënt, geen 400 errors)
+      const { count: totalItems } = await supabase
         .from("ai_knowledge_base")
-        .select("id, validation_status")
+        .select("*", { count: "exact", head: true })
+        .eq("org_id", userOrg.org_id)
         .is("deleted_at", null);
 
-      if (error) throw error;
-
-      const totalItems = data.length;
-      
-      // Get IDs van actieve knowledge items
-      const activeKnowledgeIds = data.map(item => item.id);
-
-      // Count items met embeddings (alleen voor actieve items)
       const { count: embeddedCount } = await supabase
         .from("knowledge_embeddings")
-        .select("*", { count: "exact", head: true })
-        .in("knowledge_id", activeKnowledgeIds);
+        .select("*", { count: "exact", head: true });
 
-      const verifiedItems = data.filter(d => d.validation_status === "verified").length;
-      const unverifiedItems = data.filter(d => d.validation_status === "unverified").length;
+      // Voor validation counts moeten we wel data ophalen (geen HEAD voor filters)
+      const { data: validationData } = await supabase
+        .from("ai_knowledge_base")
+        .select("validation_status")
+        .eq("org_id", userOrg.org_id)
+        .is("deleted_at", null);
 
-      const embeddingCoverage = totalItems > 0 ? (embeddedCount || 0) / totalItems * 100 : 0;
-      const validationCoverage = totalItems > 0 ? verifiedItems / totalItems * 100 : 0;
+      const verifiedItems = validationData?.filter(d => d.validation_status === "verified").length || 0;
+      const unverifiedItems = validationData?.filter(d => d.validation_status === "unverified").length || 0;
+
+      const embeddingCoverage = (totalItems || 0) > 0 ? ((embeddedCount || 0) / (totalItems || 0)) * 100 : 0;
+      const validationCoverage = (totalItems || 0) > 0 ? (verifiedItems / (totalItems || 0)) * 100 : 0;
 
       return {
-        totalItems,
+        totalItems: totalItems || 0,
         embeddedItems: embeddedCount || 0,
-        missingEmbeddings: totalItems - (embeddedCount || 0),
+        missingEmbeddings: (totalItems || 0) - (embeddedCount || 0),
         embeddingCoverage,
         verifiedItems,
         unverifiedItems,
@@ -57,10 +69,22 @@ export const EmbeddingCoverageDashboard = () => {
   const { data: orchestratorStatus } = useQuery({
     queryKey: ['orchestrator-status'],
     queryFn: async () => {
+      // ✅ STAP 3: Haal org_id dynamisch op
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+
+      const { data: userOrg } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!userOrg?.org_id) return null;
+
       const { data } = await supabase
         .from('orchestrator_state')
-        .select('status, current_batch, total_items_processed, last_run_at, metadata')
-        .eq('org_id', '550e8400-e29b-41d4-a716-446655440000')
+        .select('status, current_batch, total_items_processed, last_run_at, metadata, error_message')
+        .eq('org_id', userOrg.org_id)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -186,6 +210,12 @@ export const EmbeddingCoverageDashboard = () => {
                   </>
                 )}
               </div>
+              {/* ✅ STAP 3: Toon laatste error_message */}
+              {orchestratorStatus.status === 'paused' && orchestratorStatus.metadata && typeof orchestratorStatus.metadata === 'object' && 'pause_reason' in orchestratorStatus.metadata && (
+                <div className="mt-2 text-sm text-yellow-600 font-medium">
+                  ⚠️ Reden: {String(orchestratorStatus.metadata.pause_reason)}
+                </div>
+              )}
               {orchestratorStatus.status === 'running' && !isStale && eta && (
                 <div className="mt-2 text-sm font-medium">
                   🕒 Geschatte resterende tijd: {eta}

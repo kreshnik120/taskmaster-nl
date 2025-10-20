@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { batch_size = 10 } = await req.json();
+    const { batch_size = 10, offset = 0, direction = 'desc' } = await req.json();
 
     // ✅ Check OpenAI API key
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
@@ -32,16 +32,17 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Step 1: Fetch a window of recent knowledge items
+    // Step 1: Fetch a window of knowledge items (with offset support)
     const windowSize = Math.max(batch_size * 20, 1000);
-    console.log(`📦 Using two-step candidate selection (windowSize: ${windowSize})...`);
+    const orderAscending = direction === 'asc';
+    console.log(`📦 Candidate selection: windowSize=${windowSize}, offset=${offset}, direction=${direction}...`);
 
     const { data: recentItems, error: fetchError } = await supabase
       .from('ai_knowledge_base')
       .select('id, category, key, value, org_id')
       .is('deleted_at', null)
-      .order('created_at', { ascending: false }) // Process newest items first
-      .limit(windowSize);
+      .order('created_at', { ascending: orderAscending })
+      .range(offset, offset + windowSize - 1);
 
     if (fetchError) {
       console.error('❌ Error fetching knowledge items:', fetchError);
@@ -100,7 +101,8 @@ Deno.serve(async (req) => {
             processed: 0,
             total_missing,
             total_in_batch: 0,
-            message: 'No candidates in this window'
+            message: 'No candidates in this window',
+            reason: 'window_empty_but_missing' // Signal orchestrator to move offset
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
