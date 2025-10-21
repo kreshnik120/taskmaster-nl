@@ -953,6 +953,44 @@ export type Database = {
           },
         ]
       }
+      embedding_generation_log: {
+        Row: {
+          created_at: string | null
+          error: string | null
+          id: string
+          knowledge_id: string | null
+          request_id: number | null
+          status: string | null
+          trigger_time: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          error?: string | null
+          id?: string
+          knowledge_id?: string | null
+          request_id?: number | null
+          status?: string | null
+          trigger_time?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          error?: string | null
+          id?: string
+          knowledge_id?: string | null
+          request_id?: number | null
+          status?: string | null
+          trigger_time?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "embedding_generation_log_knowledge_id_fkey"
+            columns: ["knowledge_id"]
+            isOneToOne: false
+            referencedRelation: "ai_knowledge_base"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       function_call_logs: {
         Row: {
           created_at: string | null

@@ -826,6 +826,27 @@ async function processWithVision(
     orgId
   );
 
+  // ✅ FASE 2: Direct trigger embeddings na insert (Post-Processing Hook)
+  if (result.inserted > 0) {
+    console.log(`🔄 [AUTONOMOUS-AI] Triggering batch embeddings for ${result.inserted} new items...`);
+    
+    const { data: newItems } = await supabase
+      .from('ai_knowledge_base')
+      .select('id')
+      .eq('source', `doc:${fileName}`)
+      .order('created_at', { ascending: false })
+      .limit(result.inserted);
+    
+    if (newItems && newItems.length > 0) {
+      supabase.functions.invoke('generate-embedding', {
+        body: { knowledge_ids: newItems.map((i: any) => i.id) }
+      }).catch((err: Error) => 
+        console.error('❌ [AUTONOMOUS-AI] Post-processing embedding failed:', err)
+      );
+      console.log(`✅ [AUTONOMOUS-AI] Queued ${newItems.length} items for embedding generation`);
+    }
+  }
+
   // Log detailed results
   console.log(`[VISION] 📊 Smart Upsert Results:`);
   console.log(`  ✅ Inserted: ${result.inserted}`);
@@ -1598,6 +1619,27 @@ BELANGRIJK:
       userId,
       orgId
     );
+    
+    // ✅ FASE 2: Direct trigger embeddings na insert (Post-Processing Hook)
+    if (result.inserted > 0) {
+      console.log(`🔄 [AUTONOMOUS-AI] Triggering batch embeddings for ${result.inserted} new items...`);
+      
+      const { data: newItems } = await supabase
+        .from('ai_knowledge_base')
+        .select('id')
+        .eq('source', `doc:${fileName}`)
+        .order('created_at', { ascending: false })
+        .limit(result.inserted);
+      
+      if (newItems && newItems.length > 0) {
+        supabase.functions.invoke('generate-embedding', {
+          body: { knowledge_ids: newItems.map((i: any) => i.id) }
+        }).catch((err: Error) => 
+          console.error('❌ [AUTONOMOUS-AI] Post-processing embedding failed:', err)
+        );
+        console.log(`✅ [AUTONOMOUS-AI] Queued ${newItems.length} items for embedding generation`);
+      }
+    }
     
     console.log(`[TEXT] 📊 Smart Upsert Results:`);
     console.log(`  ✅ Inserted: ${result.inserted}`);

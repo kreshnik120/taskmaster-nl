@@ -17,7 +17,36 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    console.log('🔍 Checking for paused or stale auto-backfill runs...');
+    console.log('🔍 [AUTONOMOUS-AI] Checking for paused backfill runs AND missing embeddings...');
+
+    // ✅ FASE 3: Check voor items zonder embeddings (top 100)
+    const { data: kbItems } = await supabase
+      .from('ai_knowledge_base')
+      .select('id')
+      .is('deleted_at', null)
+      .limit(100);
+    
+    if (kbItems && kbItems.length > 0) {
+      const { data: existingEmb } = await supabase
+        .from('knowledge_embeddings')
+        .select('knowledge_id')
+        .in('knowledge_id', kbItems.map(k => k.id));
+      
+      const existingSet = new Set(existingEmb?.map(e => e.knowledge_id) || []);
+      const missingIds = kbItems.filter(k => !existingSet.has(k.id)).map(k => k.id);
+      
+      if (missingIds.length > 0) {
+        console.log(`🔄 [AUTONOMOUS-AI] Found ${missingIds.length} missing embeddings, triggering batch generation...`);
+        
+        await supabase.functions.invoke('generate-embedding', {
+          body: { knowledge_ids: missingIds }
+        });
+        
+        console.log(`✅ [AUTONOMOUS-AI] Queued ${missingIds.length} items for embedding generation`);
+      } else {
+        console.log(`✅ [AUTONOMOUS-AI] All checked items have embeddings`);
+      }
+    }
 
     // Find paused OR running with stale heartbeat (>5 min)
     const { data: allRuns, error: queryError } = await supabase
