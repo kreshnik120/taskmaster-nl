@@ -130,3 +130,7 @@ timeout = 300
 
 [functions.process-pending-jobs]
 verify_jwt = false
+
+[functions.cleanup-stale-jobs]
+verify_jwt = false
+schedule = "*/15 * * * *"

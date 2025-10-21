@@ -68,14 +68,14 @@ serve(async (req) => {
       const progressPct = Math.round(((job.chunk_index + 1) / job.total_chunks) * 100);
       const isLastChunk = (job.chunk_index + 1) === job.total_chunks;
 
-      // Update job with success
+      // Update job with success (each chunk finishes as 'done')
       await supabase
         .from('processing_jobs')
         .update({
-          status: isLastChunk ? 'done' : 'processing',
+          status: 'done',
           progress_pct: progressPct,
           items_processed: extractedItems,
-          completed_at: isLastChunk ? new Date().toISOString() : null,
+          completed_at: new Date().toISOString(),
           result: result
         })
         .eq('id', job_id);
@@ -148,71 +148,51 @@ async function processPDFChunk(fileData: Blob, chunkIndex: number, supabase: any
   const arrayBuffer = await fileData.arrayBuffer();
   const base64 = arrayBufferToBase64(arrayBuffer);
 
-  // Call Vision API
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-pro",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Analyseer dit bedrijfsdocument (${fileName}, chunk ${chunkIndex}) en extraheer belangrijke kennis in gestructureerd formaat.`
-            },
-            {
-              type: "input_image",
-              input_image: {
-                url: `data:application/pdf;base64,${base64}`
-              }
-            }
-          ]
-        }
-      ],
-      tools: [{
-        type: "function",
-        function: {
-          name: "save_knowledge_items",
-          description: "Save extracted knowledge items from the document",
-          parameters: {
-            type: "object",
-            properties: {
-              items: {
-                type: "array",
-                description: "Array of knowledge items extracted from the document",
-                items: {
-                  type: "object",
-                  properties: {
-                    category: { 
-                      type: "string",
-                      enum: ["bedrijfsprocessen", "klantinformatie", "tarieven", "contractvoorwaarden", "regels", "facturatie"],
-                      description: "De categorie van het kennis item"
-                    },
-                    key: { 
-                      type: "string",
-                      description: "Korte identificerende sleutel voor dit item (snake_case)"
-                    },
-                    value: { 
-                      type: "string",
-                      description: "De eigenlijke kennis waarde in helder Nederlands"
-                    }
-                  },
-                  required: ["category", "key", "value"]
-                }
-              }
-            },
-            required: ["items"]
+  // Call Vision API with timeout
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 300000); // 5 min
+  let response: Response;
+  try {
+    response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-pro",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: `Analyseer dit bedrijfsdocument (${fileName}, chunk ${chunkIndex}) en extraheer belangrijke kennis in gestructureerd formaat.` },
+              { type: "input_image", input_image: { url: `data:application/pdf;base64,${base64}` } }
+            ]
           }
-        }
-      }],
-      tool_choice: { type: "function", function: { name: "save_knowledge_items" } }
-    }),
-  });
+        ],
+        tools: [{
+          type: "function",
+          function: {
+            name: "save_knowledge_items",
+            description: "Save extracted knowledge items from the document",
+            parameters: {
+              type: "object",
+              properties: { items: { type: "array", description: "Array of knowledge items extracted from the document", items: { type: "object", properties: { category: { type: "string", enum: ["bedrijfsprocessen", "klantinformatie", "tarieven", "contractvoorwaarden", "regels", "facturatie"], description: "De categorie van het kennis item" }, key: { type: "string", description: "Korte identificerende sleutel voor dit item (snake_case)" }, value: { type: "string", description: "De eigenlijke kennis waarde in helder Nederlands" } }, required: ["category", "key", "value"] } } }, required: ["items"]
+            }
+          }
+        }],
+        tool_choice: { type: "function", function: { name: "save_knowledge_items" } }
+      }),
+      signal: controller.signal,
+    });
+  } catch (e: any) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') {
+      throw new Error('Vision API timeout na 5 minuten');
+    }
+    throw e;
+  }
+  clearTimeout(timeout);
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -299,52 +279,62 @@ async function processTextChunk(fileData: Blob, chunkIndex: number, supabase: an
   const text = await fileData.text();
   console.log(`[TEXT-CHUNK] Processing ${text.length} characters with AI`);
 
-  // Call Lovable AI for structured extraction
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        {
-          role: "user",
-          content: `Analyseer deze tekst uit "${fileName}" (chunk ${chunkIndex}) en extraheer belangrijke kennis:\n\n${text.substring(0, 10000)}`
-        }
-      ],
-      tools: [{
-        type: "function",
-        function: {
-          name: "save_knowledge_items",
-          description: "Save extracted knowledge items",
-          parameters: {
-            type: "object",
-            properties: {
-              items: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    category: { 
-                      type: "string",
-                      enum: ["bedrijfsprocessen", "klantinformatie", "tarieven", "contractvoorwaarden", "regels", "facturatie"]
-                    },
-                    key: { type: "string" },
-                    value: { type: "string" }
-                  },
-                  required: ["category", "key", "value"]
-                }
-              }
-            },
-            required: ["items"]
+  // Call Lovable AI for structured extraction with timeout
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 300000); // 5 min
+  let response: Response;
+  try {
+    response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "user",
+            content: `Analyseer deze tekst uit "${fileName}" (chunk ${chunkIndex}) en extraheer belangrijke kennis:\n\n${text.substring(0, 10000)}`
           }
-        }
-      }],
-      tool_choice: { type: "function", function: { name: "save_knowledge_items" } }
-    }),
-  });
+        ],
+        tools: [{
+          type: "function",
+          function: {
+            name: "save_knowledge_items",
+            description: "Save extracted knowledge items",
+            parameters: {
+              type: "object",
+              properties: {
+                items: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      category: { type: "string", enum: ["bedrijfsprocessen", "klantinformatie", "tarieven", "contractvoorwaarden", "regels", "facturatie"] },
+                      key: { type: "string" },
+                      value: { type: "string" }
+                    },
+                    required: ["category", "key", "value"]
+                  }
+                }
+              },
+              required: ["items"]
+            }
+          }
+        }],
+        tool_choice: { type: "function", function: { name: "save_knowledge_items" } }
+      }),
+      signal: controller.signal,
+    });
+  } catch (e: any) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') {
+      throw new Error('AI timeout na 5 minuten');
+    }
+    throw e;
+  }
+  clearTimeout(timeout);
 
   if (!response.ok) {
     console.error(`[TEXT-CHUNK] AI error: ${response.status}`);
