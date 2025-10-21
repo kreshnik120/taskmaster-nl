@@ -91,18 +91,33 @@ Deno.serve(async (req) => {
 
     console.log(`✅ ${trustedItems.length} items meet trust criteria`);
 
-    // Update validation status
+    // Update validation status IN BATCHES (prevent URL length issues)
     const itemIds = trustedItems.map(i => i.id);
-    const { error: updateError } = await supabase
-      .from('ai_knowledge_base')
-      .update({
-        validation_status: 'verified',
-        last_verified: new Date().toISOString()
-      })
-      .in('id', itemIds);
+    const UPDATE_BATCH_SIZE = 200;
+    
+    console.log(`📦 Updating ${itemIds.length} items in batches of ${UPDATE_BATCH_SIZE}...`);
+    
+    for (let i = 0; i < itemIds.length; i += UPDATE_BATCH_SIZE) {
+      const batch = itemIds.slice(i, i + UPDATE_BATCH_SIZE);
+      const { error: updateError } = await supabase
+        .from('ai_knowledge_base')
+        .update({
+          validation_status: 'verified',
+          last_verified: new Date().toISOString()
+        })
+        .in('id', batch);
 
-    if (updateError) {
-      throw updateError;
+      if (updateError) {
+        console.error(`❌ Update batch ${i}-${i + batch.length} failed:`, {
+          code: updateError.code,
+          message: updateError.message,
+          details: updateError.details,
+          hint: updateError.hint
+        });
+        throw updateError;
+      }
+      
+      console.log(`✅ Updated batch ${Math.floor(i / UPDATE_BATCH_SIZE) + 1}/${Math.ceil(itemIds.length / UPDATE_BATCH_SIZE)}: ${batch.length} items`);
     }
 
     // Log validation events
@@ -131,13 +146,28 @@ Deno.serve(async (req) => {
       };
     });
 
-    const { error: logError } = await supabase
-      .from('ai_learning_events')
-      .insert(events);
+    // Insert learning events IN BATCHES (prevent payload size issues)
+    const INSERT_BATCH_SIZE = 200;
     
-    if (logError) {
-      console.error('⚠️ Failed to log validation events:', logError);
-      // Don't crash - validation already succeeded
+    console.log(`📦 Inserting ${events.length} learning events in batches of ${INSERT_BATCH_SIZE}...`);
+    
+    for (let i = 0; i < events.length; i += INSERT_BATCH_SIZE) {
+      const batch = events.slice(i, i + INSERT_BATCH_SIZE);
+      const { error: logError } = await supabase
+        .from('ai_learning_events')
+        .insert(batch);
+      
+      if (logError) {
+        console.error(`⚠️ Failed to log events batch ${i}-${i + batch.length}:`, {
+          code: logError.code,
+          message: logError.message,
+          details: logError.details,
+          hint: logError.hint
+        });
+        // Don't crash - validation already succeeded
+      } else {
+        console.log(`✅ Logged events batch ${Math.floor(i / INSERT_BATCH_SIZE) + 1}/${Math.ceil(events.length / INSERT_BATCH_SIZE)}`);
+      }
     }
 
     console.log(`✅ Auto-validated ${trustedItems.length} items`);
@@ -153,11 +183,19 @@ Deno.serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Error in auto-validate-trusted-knowledge:', error);
+    console.error('❌ Error in auto-validate-trusted-knowledge:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      code: (error as any)?.code,
+      details: (error as any)?.details,
+      hint: (error as any)?.hint,
+      stack: error instanceof Error ? error.stack : undefined
+    });
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        code: (error as any)?.code,
+        details: (error as any)?.details
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

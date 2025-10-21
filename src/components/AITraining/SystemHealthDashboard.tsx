@@ -479,8 +479,11 @@ export function SystemHealthDashboard() {
 
       // Final success
       toast({
-        title: '✅ Bulk validatie voltooid',
-        description: `${totalValidated} items succesvol gevalideerd in ${processedChunks} batches.`,
+        title: totalValidated > 0 ? '✅ Bulk validatie voltooid' : '⚠️ Bulk validatie mislukt',
+        description: totalValidated > 0 
+          ? `${totalValidated} items succesvol gevalideerd in ${processedChunks} batches.`
+          : `Geen items konden worden gevalideerd. Controleer de logs voor details.`,
+        variant: totalValidated > 0 ? "default" : "destructive"
       });
 
       // Refresh data
