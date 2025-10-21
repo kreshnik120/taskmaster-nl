@@ -105,7 +105,8 @@ Deno.serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'text-embedding-3-small', // 1536-dim (native OpenAI), cost-efficient
+            model: 'text-embedding-3-small',
+            dimensions: 1536, // CRITICAL: Explicitly request 1536-dim embeddings
             input: embeddingInputs
           })
         });
