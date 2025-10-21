@@ -455,29 +455,68 @@ export const ChatWidget = () => {
       return;
     }
 
-    // Timeout mechanism for robustness
+    // Check session validity first
+    const checkSession = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error || !session) {
+        setIsLoading(false);
+        toast({
+          title: 'Sessie verlopen',
+          description: 'Je sessie is verlopen. Log opnieuw in om door te gaan.',
+          variant: 'destructive',
+          action: (
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => {
+                window.location.href = '/auth';
+              }}
+            >
+              Opnieuw inloggen
+            </Button>
+          ),
+        });
+        return null;
+      }
+      return session;
+    };
+
+    const session = await checkSession();
+    if (!session) {
+      setMessages(prev => prev.slice(0, -1)); // Remove user message
+      return;
+    }
+
+    // Timeout mechanism for robustness (increased for bulk validate scenario)
     const timeoutId = setTimeout(() => {
-      console.error('Stream timeout after 60s');
+      console.error('Stream timeout after 120s');
       setIsLoading(false);
       toast({
         title: 'Time-out',
-        description: 'AI-assistent reageert te langzaam. Probeer het opnieuw.',
+        description: 'De AI-assistent reageert te langzaam. Dit kan komen door:\n• Een verlopen sessie (log opnieuw in)\n• Te veel unverified knowledge items (voer Bulk Validate uit)\n• Een complexe vraag (probeer eenvoudiger)',
         variant: 'destructive',
+        action: (
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={async () => {
+              const sessionCheck = await checkSession();
+              if (sessionCheck) {
+                toast({
+                  title: 'Sessie OK',
+                  description: 'Je sessie is nog geldig. Probeer je vraag opnieuw.',
+                });
+              }
+            }}
+          >
+            Controleer sessie
+          </Button>
+        ),
       });
-    }, 60000);
+    }, 120000);
 
     try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError) {
-        console.error('Session error:', sessionError);
-        throw new Error('Authenticatie fout. Probeer opnieuw in te loggen.');
-      }
-      
-      if (!session?.access_token) {
-        console.error('No valid session or access token');
-        throw new Error('Je moet ingelogd zijn om de AI-assistent te gebruiken');
-      }
 
       console.log('🤖 AI Request:', {
         messageCount: newMessages.length,
@@ -701,13 +740,29 @@ export const ChatWidget = () => {
       console.error('❌ Chat error:', error);
       setIsLoading(false);
       
+      // Check if it's an auth error
+      const errorMessage = error instanceof Error ? error.message : 'Kon geen antwoord krijgen van AI-assistent';
+      const isAuthError = errorMessage.toLowerCase().includes('authenticatie') || 
+                          errorMessage.toLowerCase().includes('ingelogd') ||
+                          errorMessage.toLowerCase().includes('sessie');
+      
       // Alleen toast als het niet rate-limit/credits is (die hebben al een toast)
       if (!(error instanceof Error && (error.message === 'Rate limit' || error.message === 'Credits'))) {
-        const errorMessage = error instanceof Error ? error.message : 'Kon geen antwoord krijgen van AI-assistent';
         toast({
-          title: 'Fout',
+          title: isAuthError ? 'Authenticatie vereist' : 'Fout',
           description: errorMessage,
           variant: 'destructive',
+          action: isAuthError ? (
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => {
+                window.location.href = '/auth';
+              }}
+            >
+              Opnieuw inloggen
+            </Button>
+          ) : undefined,
         });
       }
       
