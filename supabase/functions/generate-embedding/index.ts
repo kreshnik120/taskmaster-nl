@@ -125,10 +125,8 @@ Deno.serve(async (req) => {
         const knowledge = batch[j];
         const embedding = embeddingData.data[j].embedding;
 
-        if (embedding.length !== 1536) {
-          console.error(`Invalid embedding size for ${knowledge.id}: ${embedding.length}`);
-          continue;
-        }
+        const actualDim = embedding.length;
+        console.log(`📊 Storing embedding for ${knowledge.id}: ${actualDim} dimensions`);
 
         // Check of er al een embedding bestaat
         const { data: existingEmbedding } = await supabase
