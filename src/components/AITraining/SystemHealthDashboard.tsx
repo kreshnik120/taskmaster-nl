@@ -13,6 +13,8 @@ export function SystemHealthDashboard() {
   const queryClient = useQueryClient();
   const [isStartingBackfill, setIsStartingBackfill] = useState(false);
   const [isTogglingAutomation, setIsTogglingAutomation] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+  const [isUpdatingCategories, setIsUpdatingCategories] = useState(false);
 
   // Fetch orchestrator state
   const { data: orchestratorState, refetch: refetchOrchestrator } = useQuery({
@@ -328,6 +330,75 @@ export function SystemHealthDashboard() {
     }
   };
 
+  // Trigger auto-validation
+  const triggerAutoValidate = async () => {
+    setIsValidating(true);
+    try {
+      toast({
+        title: "Auto-Validatie Gestart",
+        description: "Verwerken van high-confidence items..."
+      });
+
+      const { data, error } = await supabase.functions.invoke('auto-validate-trusted-knowledge');
+
+      if (error) throw error;
+
+      toast({
+        title: "Auto-Validatie Voltooid",
+        description: `${data?.validated || 0} items geverifieerd`,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['validation-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['embedding-stats'] });
+    } catch (error: any) {
+      console.error('Error triggering auto-validate:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Kon auto-validatie niet starten",
+        variant: "destructive"
+      });
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  // Trigger meta-orchestrator for categories update
+  const triggerMetaOrchestrator = async () => {
+    setIsUpdatingCategories(true);
+    try {
+      toast({
+        title: "Categorieën Update Gestart",
+        description: "Verwerken van knowledge items..."
+      });
+
+      const { data, error } = await supabase.functions.invoke('meta-orchestrator', {
+        body: { 
+          trigger: 'manual', 
+          org_id: '550e8400-e29b-41d4-a716-446655440000',
+          batch_size: 500 
+        }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Categorieën Update Voltooid",
+        description: `${data?.categories_created || 0} categorieën bijgewerkt`,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['embedding-stats'] });
+    } catch (error: any) {
+      console.error('Error triggering meta-orchestrator:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Kon categorieën update niet starten",
+        variant: "destructive"
+      });
+    } finally {
+      setIsUpdatingCategories(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'running': return 'bg-blue-500';
@@ -595,7 +666,18 @@ export function SystemHealthDashboard() {
       {/* Embedding Coverage */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium">Embedding Coverage</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium">Embedding Coverage</CardTitle>
+            <Button
+              onClick={triggerMetaOrchestrator}
+              disabled={isUpdatingCategories}
+              size="sm"
+              variant="outline"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${isUpdatingCategories ? 'animate-spin' : ''}`} />
+              {isUpdatingCategories ? 'Updaten...' : 'Update Categorieën'}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {embeddingStats ? (
@@ -630,6 +712,37 @@ export function SystemHealthDashboard() {
           ) : (
             <p className="text-sm text-muted-foreground">Laden...</p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Validation Coverage */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium">Validatie Coverage</CardTitle>
+            <Button
+              onClick={triggerAutoValidate}
+              disabled={isValidating}
+              size="sm"
+              variant="outline"
+            >
+              <Play className={`w-4 h-4 mr-2 ${isValidating ? 'animate-spin' : ''}`} />
+              {isValidating ? 'Valideren...' : 'Auto-Validate'}
+            </Button>
+          </div>
+          <CardDescription className="mt-2">
+            Automatisch valideren van high-confidence knowledge items
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-sm text-muted-foreground">
+            <p className="mb-2">Valideert automatisch items met:</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Confidence score ≥ 0.8</li>
+              <li>Geen negatieve feedback</li>
+              <li>Trusted sources (overheid.nl, rijksoverheid.nl)</li>
+            </ul>
+          </div>
         </CardContent>
       </Card>
 
