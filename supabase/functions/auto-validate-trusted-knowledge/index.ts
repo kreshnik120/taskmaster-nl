@@ -120,15 +120,14 @@ Deno.serve(async (req) => {
         event_type: 'auto_validation',
         context: {
           validation_reason: validationReason,
-          knowledge_id: item.id
-        },
-        metadata: {
+          knowledge_id: item.id,
           category: item.category,
           key: item.key,
-          confidence_score: item.confidence_score,
-          source: item.source
+          source: item.source,
+          confidence_score: item.confidence_score
         },
-        score: item.confidence_score
+        outcome: 'auto_validated',
+        learning_score: item.confidence_score
       };
     });
 
