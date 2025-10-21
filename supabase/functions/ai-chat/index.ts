@@ -812,8 +812,34 @@ serve(async (req) => {
       }
     );
 
-    // Get user context with explicit access token
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(accessToken);
+    // Get user context with timeout protection (5 seconds)
+    let authResult;
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Auth timeout')), 5000)
+      );
+      
+      const authPromise = supabaseClient.auth.getUser(accessToken);
+      
+      authResult = await Promise.race([
+        authPromise,
+        timeoutPromise
+      ]);
+    } catch (authTimeoutError) {
+      console.error('⚠️ Auth timeout na 5 seconden - mogelijk netwerk probleem');
+      return new Response(
+        JSON.stringify({ 
+          error: 'Authenticatie timeout - probeer het opnieuw',
+          details: 'De authenticatie service reageert niet binnen 5 seconden'
+        }), 
+        {
+          status: 408, // Request Timeout
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    const { data: { user }, error: userError } = authResult;
     
     if (userError) {
       console.error('Auth error:', userError);
