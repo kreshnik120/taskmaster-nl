@@ -15,6 +15,8 @@ export function SystemHealthDashboard() {
   const [isTogglingAutomation, setIsTogglingAutomation] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [isUpdatingCategories, setIsUpdatingCategories] = useState(false);
+  const [bulkValidating, setBulkValidating] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
 
   // Fetch orchestrator state
   const { data: orchestratorState, refetch: refetchOrchestrator } = useQuery({
@@ -399,6 +401,59 @@ export function SystemHealthDashboard() {
     }
   };
 
+  // Bulk validate all eligible items
+  const triggerBulkValidate = async () => {
+    setBulkValidating(true);
+    let totalValidated = 0;
+    let hasMore = true;
+    
+    try {
+      toast({
+        title: "Bulk Validatie Gestart",
+        description: "Alle eligible items worden geverifieerd..."
+      });
+
+      while (hasMore) {
+        const { data, error } = await supabase.functions.invoke('auto-validate-trusted-knowledge');
+        
+        if (error) throw error;
+        
+        const validated = data?.validated || 0;
+        totalValidated += validated;
+        
+        setBulkProgress({ current: totalValidated, total: 5603 });
+        
+        // Stop als er geen items meer validated werden
+        if (validated === 0) {
+          hasMore = false;
+        }
+        
+        // Korte pauze tussen batches
+        if (hasMore) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+      
+      toast({
+        title: "Bulk Validatie Voltooid",
+        description: `${totalValidated} items geverifieerd`,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['validation-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['embedding-stats'] });
+    } catch (error: any) {
+      console.error('Error during bulk validation:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Kon bulk validatie niet voltooien",
+        variant: "destructive"
+      });
+    } finally {
+      setBulkValidating(false);
+      setBulkProgress({ current: 0, total: 0 });
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'running': return 'bg-blue-500';
@@ -720,15 +775,28 @@ export function SystemHealthDashboard() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-medium">Validatie Coverage</CardTitle>
-            <Button
-              onClick={triggerAutoValidate}
-              disabled={isValidating}
-              size="sm"
-              variant="outline"
-            >
-              <Play className={`w-4 h-4 mr-2 ${isValidating ? 'animate-spin' : ''}`} />
-              {isValidating ? 'Valideren...' : 'Auto-Validate'}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={triggerAutoValidate}
+                disabled={isValidating || bulkValidating}
+                size="sm"
+                variant="outline"
+              >
+                <Play className={`w-4 h-4 mr-2 ${isValidating ? 'animate-spin' : ''}`} />
+                {isValidating ? 'Valideren...' : 'Validate (1000)'}
+              </Button>
+              <Button
+                onClick={triggerBulkValidate}
+                disabled={bulkValidating || isValidating}
+                size="sm"
+                variant="default"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${bulkValidating ? 'animate-spin' : ''}`} />
+                {bulkValidating 
+                  ? `${bulkProgress.current}/${bulkProgress.total}`
+                  : 'Bulk Validate All'}
+              </Button>
+            </div>
           </div>
           <CardDescription className="mt-2">
             Automatisch valideren van high-confidence knowledge items
@@ -742,6 +810,14 @@ export function SystemHealthDashboard() {
               <li>Geen negatieve feedback</li>
               <li>Trusted sources (overheid.nl, rijksoverheid.nl)</li>
             </ul>
+            {bulkValidating && (
+              <div className="mt-4 p-3 bg-muted rounded-md">
+                <p className="font-medium">Bulk validatie bezig...</p>
+                <p className="text-xs mt-1">
+                  Voortgang: {bulkProgress.current} / {bulkProgress.total} items
+                </p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

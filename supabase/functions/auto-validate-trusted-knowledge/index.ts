@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const BATCH_SIZE = 100;
+    const BATCH_SIZE = 1000;
 
     // Fetch unverified items die voldoen aan trust criteria
     const { data: candidates, error: fetchError } = await supabase
