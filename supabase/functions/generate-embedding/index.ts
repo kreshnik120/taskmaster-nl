@@ -136,18 +136,51 @@ Deno.serve(async (req) => {
           .maybeSingle();
 
         if (existingEmbedding) {
-          await supabase
+          const { error: updateError } = await supabase
             .from('knowledge_embeddings')
             .update({ embedding, updated_at: new Date().toISOString() })
             .eq('knowledge_id', knowledge.id);
+          
+          if (updateError) {
+            console.error(`❌ UPDATE FAILED for ${knowledge.id}:`, {
+              error: updateError.message,
+              code: updateError.code,
+              details: updateError.details,
+              hint: updateError.hint,
+              embedding_dim: actualDim
+            });
+            results.push({ knowledge_id: knowledge.id, success: false, error: updateError.message });
+            continue;
+          }
+          
+          console.log(`✅ Successfully updated embedding for ${knowledge.id} (${actualDim}D)`);
         } else {
-          await supabase
+          const { error: insertError } = await supabase
             .from('knowledge_embeddings')
             .insert({ knowledge_id: knowledge.id, embedding });
+          
+          if (insertError) {
+            console.error(`❌ INSERT FAILED for ${knowledge.id}:`, {
+              error: insertError.message,
+              code: insertError.code,
+              details: insertError.details,
+              hint: insertError.hint,
+              embedding_dim: actualDim
+            });
+            results.push({ knowledge_id: knowledge.id, success: false, error: insertError.message });
+            continue;
+          }
+          
+          console.log(`✅ Successfully inserted embedding for ${knowledge.id} (${actualDim}D)`);
         }
 
         processedCount++;
-        results.push({ knowledge_id: knowledge.id, success: true });
+        results.push({ 
+          knowledge_id: knowledge.id, 
+          success: true,
+          dimension: actualDim,
+          operation: existingEmbedding ? 'updated' : 'inserted'
+        });
 
         // Progress logging per 100 items
         if (processedCount % 100 === 0) {
