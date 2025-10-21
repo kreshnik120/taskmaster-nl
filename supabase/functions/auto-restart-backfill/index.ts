@@ -19,11 +19,12 @@ Deno.serve(async (req) => {
 
     console.log('🔍 [AUTONOMOUS-AI] Checking for paused backfill runs AND missing embeddings...');
 
-    // ✅ FASE 3: Check voor items zonder embeddings (top 100)
+    // LAAG 3.3: Check voor items zonder embeddings (prioriteer nieuwe items)
     const { data: kbItems } = await supabase
       .from('ai_knowledge_base')
       .select('id')
       .is('deleted_at', null)
+      .order('created_at', { ascending: false }) // Nieuwe items eerst
       .limit(100);
     
     if (kbItems && kbItems.length > 0) {

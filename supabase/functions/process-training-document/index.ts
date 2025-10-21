@@ -493,6 +493,68 @@ async function insertWithDuplicateHandling(
   return results;
 }
 
+// === LAAG 2: AI CATEGORY ENRICHMENT ===
+async function enrichCategoryWithAI(items: any[], LOVABLE_API_KEY: string): Promise<any[]> {
+  console.log(`[AI-CATEGORIZE] Enriching ${items.length} items with intelligent categorization...`);
+  
+  try {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [{
+          role: 'user',
+          content: `Categoriseer deze knowledge items intelligent. Gebruik bestaande categorieën waar mogelijk, of creëer nieuwe specifieke categorieën in snake_case formaat.
+
+Bestaande categorieën: organisatie_intel, wetgeving, zzp_vereisten, bedrijfsgegevens, cao, markt_financieel, compliance, planning_intelligence, tarieven, processen, ggz_markt, ouderenzorg_markt, ghz_markt, documenten, hr_arbeidsvoorwaarden, contracten, externe_inhuur_markten, registraties, business_rule, zzp.
+
+Items om te categoriseren (eerste 50):
+${JSON.stringify(items.slice(0, 50).map(i => ({ key: i.key, value: typeof i.value === 'string' ? i.value.substring(0, 200) : i.value, suggested_category: i.category })))}
+
+Return een JSON array met: [{ original_index: 0, category: "best_passende_categorie", reasoning: "korte uitleg" }]`
+        }]
+      })
+    });
+    
+    if (!response.ok) {
+      console.error('[AI-CATEGORIZE] API error:', response.status);
+      return items; // Fallback naar originele categorieën
+    }
+    
+    const result = await response.json();
+    const content = result.choices[0].message.content;
+    
+    // Parse JSON uit response (kan wrapped zijn in markdown code blocks)
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      console.error('[AI-CATEGORIZE] No JSON found in response');
+      return items;
+    }
+    
+    const categorizations = JSON.parse(jsonMatch[0]);
+    
+    // Merge categorizations terug naar items (eerste 50)
+    const enrichedItems = items.map((item, idx) => {
+      if (idx >= 50) return item; // Alleen eerste 50 verrijken
+      const cat = categorizations.find((c: any) => c.original_index === idx);
+      if (cat && cat.category) {
+        console.log(`[AI-CATEGORIZE] ${item.key}: ${item.category} → ${cat.category} (${cat.reasoning})`);
+        return { ...item, category: cat.category };
+      }
+      return item;
+    });
+    
+    return enrichedItems;
+  } catch (error) {
+    console.error('[AI-CATEGORIZE] Error:', error);
+    return items; // Fallback naar originele categorieën
+  }
+}
+
 async function processWithVision(
   supabase: any,
   filePath: string,
@@ -559,8 +621,7 @@ async function processWithVision(
                       properties: {
                         category: { 
                           type: "string",
-                          enum: ["bedrijfsprocessen", "klantinformatie", "tarieven", "contractvoorwaarden", "regels", "facturatie"],
-                          description: "De categorie van het kennis item"
+                          description: "Kies de meest passende categorie uit bestaande categorieën of creëer een nieuwe specifieke categorie. Bestaande: organisatie_intel, wetgeving, zzp_vereisten, bedrijfsgegevens, cao, markt_financieel, compliance, planning_intelligence, tarieven, processen, ggz_markt, ouderenzorg_markt, ghz_markt, documenten, hr_arbeidsvoorwaarden, contracten, externe_inhuur_markten, registraties, business_rule, zzp. Gebruik snake_case en wees specifiek."
                         },
                         key: { 
                           type: "string",
@@ -803,8 +864,14 @@ async function processWithVision(
     acl: item.acl || []
   }));
 
+  // LAAG 2: AI Category Enrichment (gebruik bestaande LOVABLE_API_KEY uit functie scope)
+  let finalEnrichedItems = enrichedItems;
+  if (LOVABLE_API_KEY && enrichedItems.length > 0) {
+    finalEnrichedItems = await enrichCategoryWithAI(enrichedItems, LOVABLE_API_KEY);
+  }
+
   // 🔍 FIX 2: Fail if no knowledge items were extracted
-  if (enrichedItems.length === 0) {
+  if (finalEnrichedItems.length === 0) {
     console.error('[VISION] ❌ Zero knowledge items extracted after all processing');
     await supabase
       .from("training_documents")
@@ -821,12 +888,12 @@ async function processWithVision(
   // 🚀 SMART UPSERT: Insert with duplicate handling
   const result = await insertWithDuplicateHandling(
     supabase,
-    enrichedItems,
+    finalEnrichedItems,
     userId,
     orgId
   );
 
-  // ✅ FASE 2: Direct trigger embeddings na insert (Post-Processing Hook)
+  // LAAG 3.2: Post-Processing Hook - Queue embedding generation (primaire flow)
   if (result.inserted > 0) {
     console.log(`🔄 [AUTONOMOUS-AI] Triggering batch embeddings for ${result.inserted} new items...`);
     
@@ -838,12 +905,16 @@ async function processWithVision(
       .limit(result.inserted);
     
     if (newItems && newItems.length > 0) {
-      supabase.functions.invoke('generate-embedding', {
+      const { error: embeddingError } = await supabase.functions.invoke('generate-embedding', {
         body: { knowledge_ids: newItems.map((i: any) => i.id) }
-      }).catch((err: Error) => 
-        console.error('❌ [AUTONOMOUS-AI] Post-processing embedding failed:', err)
-      );
-      console.log(`✅ [AUTONOMOUS-AI] Queued ${newItems.length} items for embedding generation`);
+      });
+      
+      if (embeddingError) {
+        console.error('❌ [AUTONOMOUS-AI] Embedding generation failed:', embeddingError);
+        // Log maar continue - document is al opgeslagen
+      } else {
+        console.log(`✅ [AUTONOMOUS-AI] Queued ${newItems.length} items for embedding generation`);
+      }
     }
   }
 

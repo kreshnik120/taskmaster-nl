@@ -64,15 +64,6 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiApiKey) {
-      console.error('OPENAI_API_KEY not found in environment');
-      return new Response(
-        JSON.stringify({ error: 'OPENAI_API_KEY not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     // Haal alle knowledge items op in 1 query
     const { data: knowledgeItems, error: fetchError } = await supabase
       .from('ai_knowledge_base')
@@ -100,25 +91,29 @@ Deno.serve(async (req) => {
         `${k.category}: ${k.key}\n${JSON.stringify(k.value)}`
       );
 
-      // Genereer embeddings met retry logic
+      // LAAG 1: Genereer embeddings met Gemini via Lovable AI Gateway (GRATIS)
       const embeddingData = await retryWithBackoff(async () => {
-        const response = await fetch('https://api.openai.com/v1/embeddings', {
+        const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+        if (!lovableApiKey) {
+          throw new Error('LOVABLE_API_KEY not configured');
+        }
+
+        const response = await fetch('https://ai.gateway.lovable.dev/v1/embeddings', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${openaiApiKey}`,
+            'Authorization': `Bearer ${lovableApiKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'text-embedding-3-small',
-            input: embeddingInputs,
-            dimensions: 768
+            model: 'text-embedding-004', // Gemini embedding model
+            input: embeddingInputs
           })
         });
 
         if (!response.ok) {
           const error = await response.text();
-          console.error('OpenAI API error:', error);
-          throw new Error(`OpenAI API error: ${response.status}`);
+          console.error('Gemini Embedding API error:', error);
+          throw new Error(`Gemini API error: ${response.status}`);
         }
 
         return await response.json();
