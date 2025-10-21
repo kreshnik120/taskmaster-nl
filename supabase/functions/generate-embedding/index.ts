@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'text-embedding-3-small', // 768-dim, cost-efficient
+            model: 'text-embedding-3-small', // 1536-dim (native OpenAI), cost-efficient
             input: embeddingInputs
           })
         });
@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
         const knowledge = batch[j];
         const embedding = embeddingData.data[j].embedding;
 
-        if (embedding.length !== 768) {
+        if (embedding.length !== 1536) {
           console.error(`Invalid embedding size for ${knowledge.id}: ${embedding.length}`);
           continue;
         }

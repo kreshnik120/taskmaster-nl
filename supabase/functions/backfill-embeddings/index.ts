@@ -152,7 +152,7 @@ Deno.serve(async (req) => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              model: 'text-embedding-3-small', // 768-dim, cost-efficient
+              model: 'text-embedding-3-small', // 1536-dim (native OpenAI), cost-efficient
               input: embeddingText
             }),
             signal: controller.signal
@@ -192,8 +192,8 @@ Deno.serve(async (req) => {
 
           // Validate and log embedding dimensions
           console.log(`✅ Processed ${item.id}: ${embedding.length} dimensions`);
-          if (embedding.length !== 768) {
-            const error = `Invalid embedding size: ${embedding.length}, expected 768`;
+          if (embedding.length !== 1536) {
+            const error = `Invalid embedding size: ${embedding.length}, expected 1536`;
             console.error(error);
             results.errors.push(`${item.id}: ${error}`);
             continue;
