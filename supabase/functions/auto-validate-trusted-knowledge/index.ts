@@ -25,21 +25,24 @@ Deno.serve(async (req) => {
   try {
     console.log('🤖 Auto-validate trusted knowledge starting...');
     
+    // Parse request body for batch parameters
+    const { batch_size = 1000, offset = 0 } = await req.json().catch(() => ({}));
+    
+    console.log(`📊 Processing batch: size=${batch_size}, offset=${offset}`);
+    
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const BATCH_SIZE = 1000;
-
-    // Fetch unverified items die voldoen aan trust criteria
+    // Fetch unverified items with OFFSET for chunked processing
     const { data: candidates, error: fetchError } = await supabase
       .from('ai_knowledge_base')
       .select('id, source, confidence_score, helpful_count, harmful_count, category, key')
       .eq('validation_status', 'unverified')
       .is('deleted_at', null)
       .order('confidence_score', { ascending: false })
-      .limit(BATCH_SIZE);
+      .range(offset, offset + batch_size - 1);
 
     if (fetchError) {
       throw fetchError;

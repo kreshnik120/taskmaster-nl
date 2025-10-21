@@ -401,52 +401,98 @@ export function SystemHealthDashboard() {
     }
   };
 
-  // Bulk validate all eligible items
+  // Bulk validate all eligible items - crash-proof chunked validation
   const triggerBulkValidate = async () => {
     setBulkValidating(true);
-    let totalValidated = 0;
-    let hasMore = true;
     
     try {
+      // Step 1: Fetch total unverified count
+      const { count: totalUnverified } = await supabase
+        .from('ai_knowledge_base')
+        .select('*', { count: 'exact', head: true })
+        .eq('validation_status', 'unverified')
+        .is('deleted_at', null);
+
+      if (!totalUnverified || totalUnverified === 0) {
+        toast({
+          title: 'Niets te valideren',
+          description: 'Alle items zijn al gevalideerd.',
+        });
+        setBulkValidating(false);
+        return;
+      }
+
+      console.log(`🔄 Starting chunked validation: ${totalUnverified} items`);
+
       toast({
         title: "Bulk Validatie Gestart",
-        description: "Alle eligible items worden geverifieerd..."
+        description: `Verwerken van ${totalUnverified} items in chunks van 1000...`
       });
 
-      while (hasMore) {
-        const { data, error } = await supabase.functions.invoke('auto-validate-trusted-knowledge');
+      // Step 2: Process in chunks of 1000
+      const CHUNK_SIZE = 1000;
+      const totalChunks = Math.ceil(totalUnverified / CHUNK_SIZE);
+      let processedChunks = 0;
+      let totalValidated = 0;
+
+      for (let i = 0; i < totalChunks; i++) {
+        console.log(`📦 Processing chunk ${i + 1}/${totalChunks}...`);
         
-        if (error) throw error;
-        
-        const validated = data?.validated || 0;
-        totalValidated += validated;
-        
-        setBulkProgress({ current: totalValidated, total: 5603 });
-        
-        // Stop als er geen items meer validated werden
-        if (validated === 0) {
-          hasMore = false;
+        // Call edge function for this chunk
+        const { data, error } = await supabase.functions.invoke(
+          'auto-validate-trusted-knowledge',
+          {
+            body: { 
+              batch_size: CHUNK_SIZE,
+              offset: i * CHUNK_SIZE 
+            }
+          }
+        );
+
+        if (error) {
+          console.error(`❌ Chunk ${i + 1} failed:`, error);
+          toast({
+            title: 'Chunk fout',
+            description: `Chunk ${i + 1}/${totalChunks} mislukt. Al ${totalValidated} items gevalideerd.`,
+            variant: 'destructive',
+          });
+          break;
         }
-        
-        // Korte pauze tussen batches
-        if (hasMore) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+
+        processedChunks++;
+        totalValidated += data?.validated || 0;
+
+        // Update progress
+        setBulkProgress({ current: processedChunks, total: totalChunks });
+
+        // Show progress toast
+        toast({
+          title: `Voortgang: ${Math.round((processedChunks / totalChunks) * 100)}%`,
+          description: `${totalValidated} items gevalideerd (chunk ${processedChunks}/${totalChunks})`,
+        });
+
+        // Wait 2 seconds between chunks to prevent overload
+        if (i < totalChunks - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
-      
+
+      // Final success
       toast({
-        title: "Bulk Validatie Voltooid",
-        description: `${totalValidated} items geverifieerd`,
+        title: '✅ Bulk validatie voltooid',
+        description: `${totalValidated} items succesvol gevalideerd in ${processedChunks} batches.`,
       });
 
+      // Refresh data
       queryClient.invalidateQueries({ queryKey: ['validation-stats'] });
       queryClient.invalidateQueries({ queryKey: ['embedding-stats'] });
+
     } catch (error: any) {
-      console.error('Error during bulk validation:', error);
+      console.error('Bulk validate error:', error);
       toast({
-        title: "Error",
-        description: error.message || "Kon bulk validatie niet voltooien",
-        variant: "destructive"
+        title: 'Fout',
+        description: error instanceof Error ? error.message : 'Onbekende fout tijdens bulk validatie',
+        variant: 'destructive',
       });
     } finally {
       setBulkValidating(false);
