@@ -2634,6 +2634,16 @@ export type Database = {
               query_embedding: string
             }
           | {
+              filter_customer_id?: string
+              filter_jurisdiction?: string
+              filter_org_id?: string
+              filter_role_tags?: string[]
+              match_count?: number
+              match_threshold?: number
+              query_embedding: string
+              require_verified?: boolean
+            }
+          | {
               filter_org_id?: string
               match_count?: number
               match_threshold?: number
@@ -2648,6 +2658,7 @@ export type Database = {
           similarity: number
           valid_from: string
           valid_to: string
+          validation_status: string
           value: Json
         }[]
       }

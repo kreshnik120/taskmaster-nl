@@ -1232,7 +1232,7 @@ serve(async (req) => {
           
           console.log('✅ Embedding generated, calling match_knowledge...');
           
-          // Call match_knowledge function
+          // Call match_knowledge function with validation filter
           const { data: semanticMatches, error: matchError } = await supabaseClient
             .rpc('match_knowledge', {
               query_embedding: queryEmbedding,
@@ -1240,7 +1240,8 @@ serve(async (req) => {
               match_count: 50,
               filter_org_id: userOrgId,
               filter_role_tags: [detectedRole],
-              filter_jurisdiction: 'NL'
+              filter_jurisdiction: 'NL',
+              require_verified: true  // ✨ NIEUW - alleen verified items voor betere kwaliteit
             });
 
           if (matchError) {
