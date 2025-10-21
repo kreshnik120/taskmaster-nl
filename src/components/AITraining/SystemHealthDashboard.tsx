@@ -421,7 +421,7 @@ export function SystemHealthDashboard() {
               ) : (
                 <Pause className="w-4 h-4 mr-2" />
               )}
-              {isTogglingAutomation ? 'Bezig...' : systemConfig?.automation_paused ? 'Hervat Automaties' : 'Pauzeer Automaties'}
+              {isTogglingAutomation ? 'Bezig...' : systemConfig?.automation_paused ? 'Hervat Automatische Processen' : 'Pauzeer Automatische Processen'}
             </Button>
           </div>
         </CardHeader>
@@ -440,18 +440,9 @@ export function SystemHealthDashboard() {
                 <CardDescription className="text-orange-700 dark:text-orange-300 mt-2">
                   {embeddingStats.missing} items hebben nog geen embeddings. 
                   Dit beperkt AI Chat, Knowledge Graph en Smart Deduplicator functionaliteit.
-                  Start de backfill om het systeem volledig functioneel te maken.
+                  Gebruik de "Start Backfill" knop in het Orchestrator blok hieronder.
                 </CardDescription>
               </div>
-              <Button
-                onClick={triggerBackfill}
-                disabled={isStartingBackfill}
-                size="sm"
-                className="shrink-0 ml-4"
-              >
-                <Play className="w-4 h-4 mr-2" />
-                {isStartingBackfill ? 'Starten...' : 'Start Backfill'}
-              </Button>
             </div>
           </CardHeader>
         </Card>
