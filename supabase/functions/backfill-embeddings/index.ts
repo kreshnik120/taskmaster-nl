@@ -12,20 +12,9 @@ Deno.serve(async (req) => {
   }
 
   try {
+    console.warn('⚠️ DEPRECATED: backfill-embeddings is replaced by generate-embedding. Use generate-embedding instead.');
+    
     const { batch_size = 10, offset = 0, direction = 'desc' } = await req.json();
-
-    // ✅ Check OpenAI API key
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiApiKey) {
-      console.error('❌ OPENAI_API_KEY not configured');
-      return new Response(
-        JSON.stringify({ 
-          error: 'OPENAI_API_KEY not configured',
-          stage: 'config_check'
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -144,32 +133,37 @@ Deno.serve(async (req) => {
         // Creëer embedding text
         const embeddingText = `${item.category}: ${item.key}\n${JSON.stringify(item.value)}`;
 
-        // Genereer embedding via OpenAI met 15s timeout (verhoogd voor stabiliteit)
+        // Genereer embedding via Gemini (GRATIS via Lovable AI Gateway)
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
         try {
-          console.log(`🔄 Requesting embedding for ${item.id}...`);
-          const openaiResponse = await fetch('https://api.openai.com/v1/embeddings', {
+          console.log(`🔄 Requesting Gemini embedding for ${item.id}...`);
+          
+          const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+          if (!lovableApiKey) {
+            throw new Error('LOVABLE_API_KEY not configured');
+          }
+
+          const geminiResponse = await fetch('https://ai.gateway.lovable.dev/v1/embeddings', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${openaiApiKey}`,
+              'Authorization': `Bearer ${lovableApiKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              model: 'text-embedding-3-small',
-              input: embeddingText,
-              dimensions: 768
+              model: 'text-embedding-004', // Gemini embedding model
+              input: embeddingText
             }),
-            signal: controller.signal // ⬅️ Timeout na 10s
+            signal: controller.signal
           });
           clearTimeout(timeoutId);
 
-          if (!openaiResponse.ok) {
-            const errorText = await openaiResponse.text();
+          if (!geminiResponse.ok) {
+            const errorText = await geminiResponse.text();
             
             // Handle 402 AI credits exhausted error
-            if (openaiResponse.status === 402) {
+            if (geminiResponse.status === 402) {
               console.error(`💳 AI credits exhausted - stopping backfill`);
               results.errors.push(`${item.id}: AI credits exhausted (402)`);
               
@@ -188,13 +182,13 @@ Deno.serve(async (req) => {
               );
             }
             
-            console.error(`❌ OpenAI API error for ${item.id}:`, errorText);
-            results.errors.push(`${item.id}: OpenAI API error - ${openaiResponse.status}`);
+            console.error(`❌ Gemini API error for ${item.id}:`, errorText);
+            results.errors.push(`${item.id}: Gemini API error - ${geminiResponse.status}`);
             continue;
           }
 
-          const { data: [embeddingData] } = await openaiResponse.json();
-          const embedding = embeddingData.embedding;
+          const geminiData = await geminiResponse.json();
+          const embedding = geminiData.data[0].embedding;
 
           // Validate and log embedding dimensions
           console.log(`✅ Processed ${item.id}: ${embedding.length} dimensions`);

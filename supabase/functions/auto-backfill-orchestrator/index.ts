@@ -31,6 +31,37 @@ async function verifyHMAC(orgId: string, signature: string): Promise<boolean> {
   return expectedSignature === signature;
 }
 
+// Helper functie: Haal knowledge IDs op die nog geen embeddings hebben
+async function getKnowledgeIdsWithoutEmbeddings(
+  supabase: any, 
+  batchSize: number, 
+  offset: number
+): Promise<string[]> {
+  // Fetch knowledge items zonder embeddings (prioriteer nieuwe items)
+  const { data: kbItems } = await supabase
+    .from('ai_knowledge_base')
+    .select('id')
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false }) // Nieuwe items eerst
+    .range(offset, offset + batchSize * 20 - 1); // Window voor filtering
+  
+  if (!kbItems || kbItems.length === 0) return [];
+  
+  // Filter items die al embeddings hebben
+  const { data: existingEmb } = await supabase
+    .from('knowledge_embeddings')
+    .select('knowledge_id')
+    .in('knowledge_id', kbItems.map((k: any) => k.id));
+  
+  const existingSet = new Set(existingEmb?.map((e: any) => e.knowledge_id) || []);
+  const missingIds = kbItems
+    .filter((k: any) => !existingSet.has(k.id))
+    .map((k: any) => k.id)
+    .slice(0, batchSize); // Neem alleen batch_size items
+  
+  return missingIds;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -359,8 +390,24 @@ Deno.serve(async (req) => {
               })
               .eq('id', stateId);
 
-            const { data, error } = await supabase.functions.invoke('backfill-embeddings', {
-              body: { batch_size: currentBatchSize, offset: currentOffset, direction: 'asc' }
+            // Haal knowledge IDs zonder embeddings op
+            const knowledgeIds = await getKnowledgeIdsWithoutEmbeddings(
+              supabase,
+              currentBatchSize,
+              currentOffset
+            );
+
+            if (knowledgeIds.length === 0) {
+              console.log('✅ No more items without embeddings');
+              hasMore = false;
+              break;
+            }
+
+            console.log(`📦 Processing ${knowledgeIds.length} items via generate-embedding`);
+
+            // Gebruik generate-embedding (Gemini) in plaats van backfill-embeddings
+            const { data, error } = await supabase.functions.invoke('generate-embedding', {
+              body: { knowledge_ids: knowledgeIds }
             });
 
             if (error) {
@@ -407,19 +454,32 @@ Deno.serve(async (req) => {
             }
 
             const batchDuration = Date.now() - batchStartTime;
-            totalProcessed += data.processed || 0;
-            currentMissingCount = data.total_missing || 0;
+            const processedInBatch = data.processed || 0;
+            totalProcessed += processedInBatch;
             
-            // ✅ STAP 2: Als processed === 0 én total_missing > 0, verhoog offset (spring leeg venster over)
-            if (data.reason === 'window_empty_but_missing' && data.total_missing > 0) {
-              const windowSize = Math.max(currentBatchSize * 20, 1000);
-              currentOffset += windowSize;
-              console.log(`⏭️ Window empty but ${data.total_missing} still missing - jumping offset to ${currentOffset}`);
-            } else {
-              currentOffset += data.processed || 0;
-            }
+            // Herbereken missing count
+            const { count: currentTotal } = await supabase
+              .from('ai_knowledge_base')
+              .select('*', { count: 'exact', head: true })
+              .is('deleted_at', null);
+            
+            const { count: currentEmbeddings } = await supabase
+              .from('knowledge_embeddings')
+              .select('*', { count: 'exact', head: true });
+            
+            currentMissingCount = Math.max((currentTotal || 0) - (currentEmbeddings || 0), 0);
+            
+            // Update offset (niet meer nodig met nieuwe flow, maar behouden voor tracking)
+            currentOffset += processedInBatch;
 
-            console.log(`✅ Batch ${batchNumber}: processed=${data.processed}, remaining=${currentMissingCount}, offset=${currentOffset}, duration=${batchDuration}ms, batch_size=${currentBatchSize}`);
+            console.log(`✅ Batch ${batchNumber}: processed=${processedInBatch}, remaining=${currentMissingCount}, offset=${currentOffset}, duration=${batchDuration}ms`);
+
+            // Stop if no more missing
+            if (currentMissingCount === 0) {
+              console.log('✅ All embeddings complete!');
+              hasMore = false;
+              break;
+            }
 
             // Adjust batch size based on performance
             if (batchDuration > 60000 && currentBatchSize > 25) {
