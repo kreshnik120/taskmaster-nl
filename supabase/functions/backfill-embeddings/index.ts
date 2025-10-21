@@ -133,26 +133,26 @@ Deno.serve(async (req) => {
         // Creëer embedding text
         const embeddingText = `${item.category}: ${item.key}\n${JSON.stringify(item.value)}`;
 
-        // Genereer embedding via Gemini (GRATIS via Lovable AI Gateway)
+        // Generate embedding via OpenAI text-embedding-3-small (768-dim)
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
         try {
-          console.log(`🔄 Requesting Gemini embedding for ${item.id}...`);
+          console.log(`🔄 Requesting OpenAI embedding for ${item.id}...`);
           
-          const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-          if (!lovableApiKey) {
-            throw new Error('LOVABLE_API_KEY not configured');
+          const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+          if (!openaiApiKey) {
+            throw new Error('OPENAI_API_KEY not configured');
           }
 
-          const geminiResponse = await fetch('https://ai.gateway.lovable.dev/v1/embeddings', {
+          const geminiResponse = await fetch('https://api.openai.com/v1/embeddings', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${lovableApiKey}`,
+              'Authorization': `Bearer ${openaiApiKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              model: 'google/text-embedding-004', // Gemini embedding model via Lovable AI Gateway
+              model: 'text-embedding-3-small', // 768-dim, cost-efficient
               input: embeddingText
             }),
             signal: controller.signal
@@ -182,8 +182,8 @@ Deno.serve(async (req) => {
               );
             }
             
-            console.error(`❌ Gemini API error for ${item.id}:`, errorText);
-            results.errors.push(`${item.id}: Gemini API error - ${geminiResponse.status}`);
+            console.error(`❌ OpenAI API error for ${item.id}:`, errorText);
+            results.errors.push(`${item.id}: OpenAI API error - ${geminiResponse.status}`);
             continue;
           }
 
