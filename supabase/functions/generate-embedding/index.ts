@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'text-embedding-004', // Gemini embedding model
+            model: 'google/text-embedding-004', // Gemini embedding model via Lovable AI Gateway
             input: embeddingInputs
           })
         });

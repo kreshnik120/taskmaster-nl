@@ -75,63 +75,9 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Dual-mode authentication: User JWT OR Internal HMAC
-    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
-    const internalOrgId = req.headers.get('x-org-id');
-    const internalSignature = req.headers.get('x-internal-signature');
-    
-    let org_id: string | null = null;
-    
-    // Path A: Internal call with HMAC signature (from cron)
-    if (internalOrgId && internalSignature) {
-      const isValid = await verifyHMAC(internalOrgId, internalSignature);
-      if (!isValid) {
-        console.error('❌ Invalid HMAC signature');
-        return new Response(
-          JSON.stringify({ success: false, error: 'Invalid internal signature' }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      org_id = internalOrgId;
-      console.log(`✅ Internal call authenticated for org: ${org_id}`);
-    } 
-    // Path B: User JWT authentication (from UI)
-    else if (authHeader) {
-      const token = authHeader.replace('Bearer ', '');
-      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-      
-      if (userError || !user) {
-        console.error('❌ User authentication failed:', userError);
-        return new Response(
-          JSON.stringify({ success: false, error: 'Unauthorized' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      const { data: orgData } = await supabase
-        .from('user_organizations')
-        .select('org_id')
-        .eq('user_id', user.id)
-        .single();
-      
-      if (!orgData?.org_id) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'No organization found' }),
-          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      org_id = orgData.org_id;
-      console.log(`✅ User authenticated for org: ${org_id}`);
-    } else {
-      console.error('❌ No authentication method provided');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Authentication required' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log(`🚀 Starting auto-backfill orchestrator for org: ${org_id}`);
+    // Fixed org_id voor autonomous AI (CRON heeft geen user context)
+    const org_id = '550e8400-e29b-41d4-a716-446655440000';
+    console.log(`🤖 [CRON] Auto-backfill orchestrator started for org: ${org_id}`);
 
     // Check for existing runs (running or paused)
     const { data: existingRun } = await supabase
@@ -175,26 +121,28 @@ Deno.serve(async (req) => {
       } else {
         // Existing running state - check heartbeat
         const lastHeartbeat = existingRun.metadata?.last_heartbeat;
-        const isStale = lastHeartbeat 
-          ? (Date.now() - new Date(lastHeartbeat).getTime()) > 5 * 60 * 1000 // 5 min threshold (aligned with cron)
-          : true;
+        const timeSinceHeartbeat = lastHeartbeat 
+          ? Date.now() - new Date(lastHeartbeat).getTime()
+          : Infinity;
+        const HEARTBEAT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minuten
         
         // Force restart if requested
         if (force_restart) {
-          console.log('🔄 Force restart requested, resetting existing run');
+          console.log('🔄 Force restart requested, marking existing run as timeout');
           await supabase
             .from('orchestrator_state')
             .update({ 
-              status: 'error',
+              status: 'timeout',
               metadata: {
                 ...existingRun.metadata,
-                error: 'Force restart requested by user',
+                error: 'Force restart requested',
                 force_restarted_at: new Date().toISOString()
               }
             })
             .eq('id', existingRun.id);
-        } else if (!isStale) {
-          console.log('⚠️ Auto-backfill already running with fresh heartbeat');
+        } else if (timeSinceHeartbeat < HEARTBEAT_TIMEOUT_MS) {
+          // Fresh heartbeat: orchestrator is still running
+          console.log(`⏸️ Auto-backfill already running with fresh heartbeat (${Math.round(timeSinceHeartbeat/1000)}s ago)`);
           return new Response(
             JSON.stringify({ 
               success: false, 
@@ -204,23 +152,27 @@ Deno.serve(async (req) => {
                 batch: existingRun.current_batch,
                 processed: existingRun.total_items_processed,
                 total: existingRun.metadata?.total_missing || 0
-              }
+              },
+              heartbeat_age_seconds: Math.round(timeSinceHeartbeat / 1000)
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         } else {
-          console.log(`⚠️ Stale heartbeat detected (${lastHeartbeat}), auto-recovering stale run`);
+          // Stale heartbeat: mark as timeout and start new run
+          console.log(`⚠️ Heartbeat timeout detected (${Math.round(timeSinceHeartbeat/1000)}s since last heartbeat), marking as timeout`);
           await supabase
             .from('orchestrator_state')
             .update({ 
-              status: 'error',
+              status: 'timeout',
               metadata: {
                 ...existingRun.metadata,
-                error: 'Heartbeat timeout - auto-recovered',
-                stalled_at: new Date().toISOString()
+                error: `Heartbeat timeout (${Math.round(timeSinceHeartbeat/1000)}s since last update)`,
+                timeout_at: new Date().toISOString()
               }
             })
             .eq('id', existingRun.id);
+          
+          console.log('✅ Old run marked as timeout, starting new run');
         }
       }
     }
