@@ -106,25 +106,40 @@ Deno.serve(async (req) => {
     }
 
     // Log validation events
-    const events = trustedItems.map(item => ({
-      org_id: '550e8400-e29b-41d4-a716-446655440000', // Default org
-      event_type: 'auto_validation',
-      metadata: {
-        knowledge_id: item.id,
-        category: item.category,
-        key: item.key,
-        validation_reason: 
-          TRUSTED_DOMAINS.some(d => item.source?.toLowerCase().includes(d)) ? 'trusted_source' :
-          item.confidence_score >= 0.8 ? 'high_confidence' :
-          'positive_feedback',
-        source: item.source,
-        confidence_score: item.confidence_score
-      }
-    }));
+    const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
+    
+    const events = trustedItems.map(item => {
+      const validationReason = 
+        TRUSTED_DOMAINS.some(d => item.source?.toLowerCase().includes(d)) ? 'trusted_source' :
+        item.confidence_score >= 0.8 ? 'high_confidence' :
+        'positive_feedback';
+      
+      return {
+        org_id: '550e8400-e29b-41d4-a716-446655440000',
+        user_id: SYSTEM_USER_ID,
+        event_type: 'auto_validation',
+        context: {
+          validation_reason: validationReason,
+          knowledge_id: item.id
+        },
+        metadata: {
+          category: item.category,
+          key: item.key,
+          confidence_score: item.confidence_score,
+          source: item.source
+        },
+        score: item.confidence_score
+      };
+    });
 
-    await supabase
+    const { error: logError } = await supabase
       .from('ai_learning_events')
       .insert(events);
+    
+    if (logError) {
+      console.error('⚠️ Failed to log validation events:', logError);
+      // Don't crash - validation already succeeded
+    }
 
     console.log(`✅ Auto-validated ${trustedItems.length} items`);
 
