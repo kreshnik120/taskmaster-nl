@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { format, startOfWeek, addDays, isSameDay, parseISO, getWeek } from "date-fns";
+import { format, startOfWeek, endOfDay, startOfDay, addDays, isSameDay, parseISO, getWeek } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Loader2, ChevronLeft, ChevronRight, User, Bell, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
