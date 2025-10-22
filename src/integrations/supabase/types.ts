@@ -370,7 +370,7 @@ export type Database = {
           org_id: string
           outcome: string | null
           user_action: Json | null
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           ai_response?: Json | null
@@ -384,7 +384,7 @@ export type Database = {
           org_id: string
           outcome?: string | null
           user_action?: Json | null
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           ai_response?: Json | null
@@ -398,7 +398,7 @@ export type Database = {
           org_id?: string
           outcome?: string | null
           user_action?: Json | null
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -409,6 +409,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ai_learning_events_backup_pre_nullable: {
+        Row: {
+          ai_response: Json | null
+          applied_to_knowledge_base: boolean | null
+          confidence_score: number | null
+          context: Json | null
+          created_at: string | null
+          event_type: string | null
+          id: string | null
+          learning_score: number | null
+          org_id: string | null
+          outcome: string | null
+          user_action: Json | null
+          user_id: string | null
+        }
+        Insert: {
+          ai_response?: Json | null
+          applied_to_knowledge_base?: boolean | null
+          confidence_score?: number | null
+          context?: Json | null
+          created_at?: string | null
+          event_type?: string | null
+          id?: string | null
+          learning_score?: number | null
+          org_id?: string | null
+          outcome?: string | null
+          user_action?: Json | null
+          user_id?: string | null
+        }
+        Update: {
+          ai_response?: Json | null
+          applied_to_knowledge_base?: boolean | null
+          confidence_score?: number | null
+          context?: Json | null
+          created_at?: string | null
+          event_type?: string | null
+          id?: string | null
+          learning_score?: number | null
+          org_id?: string | null
+          outcome?: string | null
+          user_action?: Json | null
+          user_id?: string | null
+        }
+        Relationships: []
       }
       ai_meta_patterns: {
         Row: {
@@ -2472,6 +2517,17 @@ export type Database = {
       }
     }
     Views: {
+      ai_learning_events_summary: {
+        Row: {
+          event_type: string | null
+          last_event_at: string | null
+          system_event_percentage: number | null
+          system_events: number | null
+          total_events: number | null
+          user_events: number | null
+        }
+        Relationships: []
+      }
       autonomous_system_status: {
         Row: {
           component: string | null
@@ -2544,32 +2600,12 @@ export type Database = {
       }
     }
     Functions: {
-      binary_quantize: {
-        Args: { "": string } | { "": unknown }
-        Returns: unknown
-      }
       get_relevant_categories: {
         Args: { org_id_param?: string; user_question: string }
         Returns: {
           category_name: string
           confidence: number
         }[]
-      }
-      halfvec_avg: {
-        Args: { "": number[] }
-        Returns: unknown
-      }
-      halfvec_out: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      halfvec_send: {
-        Args: { "": unknown }
-        Returns: string
-      }
-      halfvec_typmod_in: {
-        Args: { "": unknown[] }
-        Returns: number
       }
       has_acl_access: {
         Args: { _acl: Json; _user_id: string }
@@ -2582,58 +2618,13 @@ export type Database = {
         }
         Returns: boolean
       }
-      hnsw_bit_support: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      hnsw_halfvec_support: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      hnsw_sparsevec_support: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      hnswhandler: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
       is_knowledge_valid: {
         Args: { _valid_from: string; _valid_to: string }
         Returns: boolean
       }
-      ivfflat_bit_support: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      ivfflat_halfvec_support: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      ivfflathandler: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      l2_norm: {
-        Args: { "": unknown } | { "": unknown }
-        Returns: number
-      }
-      l2_normalize: {
-        Args: { "": string } | { "": unknown } | { "": unknown }
-        Returns: unknown
-      }
-      match_knowledge: {
-        Args:
-          | {
-              filter_customer_id?: string
-              filter_jurisdiction?: string
-              filter_org_id?: string
-              filter_role_tags?: string[]
-              match_count?: number
-              match_threshold?: number
-              query_embedding: string
-            }
-          | {
+      match_knowledge:
+        | {
+            Args: {
               filter_customer_id?: string
               filter_jurisdiction?: string
               filter_org_id?: string
@@ -2643,68 +2634,61 @@ export type Database = {
               query_embedding: string
               require_verified?: boolean
             }
-          | {
+            Returns: {
+              category: string
+              confidence_score: number
+              key: string
+              knowledge_id: string
+              role_tags: string[]
+              similarity: number
+              valid_from: string
+              valid_to: string
+              validation_status: string
+              value: Json
+            }[]
+          }
+        | {
+            Args: {
+              filter_customer_id?: string
+              filter_jurisdiction?: string
+              filter_org_id?: string
+              filter_role_tags?: string[]
+              match_count?: number
+              match_threshold?: number
+              query_embedding: string
+            }
+            Returns: {
+              category: string
+              confidence_score: number
+              key: string
+              knowledge_id: string
+              role_tags: string[]
+              similarity: number
+              valid_from: string
+              valid_to: string
+              value: Json
+            }[]
+          }
+        | {
+            Args: {
               filter_org_id?: string
               match_count?: number
               match_threshold?: number
               query_embedding: string
             }
-        Returns: {
-          category: string
-          confidence_score: number
-          key: string
-          knowledge_id: string
-          role_tags: string[]
-          similarity: number
-          valid_from: string
-          valid_to: string
-          validation_status: string
-          value: Json
-        }[]
-      }
-      redact_pii: {
-        Args: { input_text: string }
-        Returns: string
-      }
-      sparsevec_out: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      sparsevec_send: {
-        Args: { "": unknown }
-        Returns: string
-      }
-      sparsevec_typmod_in: {
-        Args: { "": unknown[] }
-        Returns: number
-      }
+            Returns: {
+              category: string
+              confidence_score: number
+              key: string
+              knowledge_id: string
+              similarity: number
+              value: Json
+            }[]
+          }
+      redact_pii: { Args: { input_text: string }; Returns: string }
       user_is_org_member: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
-      }
-      vector_avg: {
-        Args: { "": number[] }
-        Returns: string
-      }
-      vector_dims: {
-        Args: { "": string } | { "": unknown }
-        Returns: number
-      }
-      vector_norm: {
-        Args: { "": string }
-        Returns: number
-      }
-      vector_out: {
-        Args: { "": string }
-        Returns: unknown
-      }
-      vector_send: {
-        Args: { "": string }
-        Returns: string
-      }
-      vector_typmod_in: {
-        Args: { "": unknown[] }
-        Returns: number
       }
     }
     Enums: {

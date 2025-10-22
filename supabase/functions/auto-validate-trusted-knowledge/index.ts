@@ -120,9 +120,7 @@ Deno.serve(async (req) => {
       console.log(`✅ Updated batch ${Math.floor(i / UPDATE_BATCH_SIZE) + 1}/${Math.ceil(itemIds.length / UPDATE_BATCH_SIZE)}: ${batch.length} items`);
     }
 
-    // Log validation events
-    const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
-    
+    // Log validation events - use NULL user_id for system events (service_role)
     const events = trustedItems.map(item => {
       const validationReason = 
         TRUSTED_DOMAINS.some(d => item.source?.toLowerCase().includes(d)) ? 'trusted_source' :
@@ -131,7 +129,7 @@ Deno.serve(async (req) => {
       
       return {
         org_id: '550e8400-e29b-41d4-a716-446655440000',
-        user_id: SYSTEM_USER_ID,
+        user_id: null, // NULL for system events - allowed by RLS for service_role
         event_type: 'auto_validation',
         context: {
           validation_reason: validationReason,
