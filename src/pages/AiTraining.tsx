@@ -33,24 +33,35 @@ const AiTraining = () => {
   const [user, setUser] = useState<any>(null);
   const navigate = useNavigate();
 
-  // Fetch validation stats for banner
+  // ⚡ EFFICIENT BANNER QUERY: Server-side HEAD count (uses idx_ai_knowledge_validation_deleted)
   const { data: stats } = useQuery({
     queryKey: ["validation-stats-banner"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { count, error } = await supabase
         .from("ai_knowledge_base")
-        .select("validation_status")
+        .select("*", { count: "exact", head: true })
+        .eq("validation_status", "unverified")
         .is("deleted_at", null);
       
-      if (error) throw error;
+      if (error) {
+        console.error("⚠️ Failed to fetch validation stats:", error.code, error.message);
+        return { unverified: 0 };
+      }
       
-      const unverified = data.filter(d => d.validation_status === "unverified").length;
-      return { unverified };
+      return { unverified: count || 0 };
     },
+    staleTime: 60000, // ⚡ CACHE: 60s
   });
 
   useEffect(() => {
+    // ⚡ AUTH FALLBACK: Prevent infinite spinner on slow auth
+    const fallbackTimer = setTimeout(() => {
+      console.warn("⚠️ Auth check timeout - showing page anyway");
+      setLoading(false);
+    }, 10000);
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      clearTimeout(fallbackTimer);
       if (session) {
         setUser(session.user);
       } else {

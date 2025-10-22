@@ -34,19 +34,27 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { isAdmin, canEdit } = useUserRole();
 
-  // Fetch validation queue count
+  // ⚡ EFFICIENT COUNT: Uses idx_ai_knowledge_validation_deleted for fast query
   const { data: validationCount } = useQuery({
     queryKey: ['validation-queue-count'],
     queryFn: async () => {
-      const { count } = await supabase
+      // Uses COUNT(*) with covering index (faster than HEAD on large tables)
+      const { count, error } = await supabase
         .from('ai_knowledge_base')
         .select('*', { count: 'exact', head: true })
         .eq('validation_status', 'unverified')
         .is('deleted_at', null);
+      
+      if (error) {
+        console.error('⚠️ Failed to fetch validation count:', error.code, error.message);
+        return 0;
+      }
+      
       return count || 0;
     },
     enabled: isAdmin(),
-    refetchInterval: 30000,
+    staleTime: 60000, // ⚡ CACHE: 60s (reduces queries)
+    refetchInterval: 60000,
   });
 
   const handleLogout = async () => {

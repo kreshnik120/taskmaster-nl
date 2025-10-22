@@ -162,6 +162,10 @@ export default function Kalender() {
 
   const fetchReminders = async () => {
     try {
+      // ⚡ OPTIMIZED: Only fetch shown reminders for current week (uses idx_reminders_task_subtask_shown)
+      const startOfWeek = startOfDay(currentWeekStart);
+      const endOfWeek = endOfDay(addDays(currentWeekStart, 6));
+
       const { data, error } = await supabase
         .from("reminders")
         .select(`
@@ -169,12 +173,16 @@ export default function Kalender() {
           tasks:task_id(title),
           subtasks:subtask_id(title)
         `)
-        .order("at", { ascending: true });
+        .not("shown_at", "is", null)
+        .gte("at", startOfWeek.toISOString())
+        .lte("at", endOfWeek.toISOString())
+        .order("at", { ascending: true })
+        .limit(100);
 
       if (error) throw error;
       setReminders(data || []);
     } catch (error) {
-      console.error("Error fetching reminders:", error);
+      console.error("⚠️ Error fetching reminders:", error);
     }
   };
 

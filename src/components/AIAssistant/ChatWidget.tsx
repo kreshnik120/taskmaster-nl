@@ -123,28 +123,29 @@ export const ChatWidget = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Load conversation history from database
+  // ⚡ LAZY LOADING: Load conversation history only when widget opens
   useEffect(() => {
     const loadConversationHistory = async () => {
-      if (!isAuthenticated) return;
+      if (!isAuthenticated || !isOpen || messages.length > 0) return;
       
       const conversationId = getConversationId();
       
+      // Uses idx_chat_messages_conv_created for fast lookup
       const { data, error } = await supabase
         .from('chat_messages')
         .select('id, role, content, metadata')
         .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true })
-        .limit(20);
+        .order('created_at', { ascending: false })
+        .limit(50);
       
       if (error) {
-        console.error('Error loading conversation history:', error);
+        console.error('⚠️ Error loading conversation history:', error.code, error.message);
         return;
       }
       
       if (data && data.length > 0) {
-        console.log(`📚 Loaded ${data.length} messages from history`);
-        setMessages(data.map(m => ({
+        console.log(`📚 Loaded ${data.length} messages (lazy)`);
+        setMessages(data.reverse().map(m => ({
           role: m.role as 'user' | 'assistant',
           content: m.content,
           showInteractive: false,
@@ -160,7 +161,7 @@ export const ChatWidget = () => {
     };
     
     loadConversationHistory();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isOpen]);
 
   // Sync resizeRef with dimensions state
   useEffect(() => {

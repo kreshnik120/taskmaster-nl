@@ -21,121 +21,120 @@ export const NotificationService = () => {
       Notification.requestPermission();
     }
 
-    // Check for due reminders every 30 seconds
+    // ⚡ OPTIMIZED: Combined IN_APP + EMAIL query (50% fewer DB calls)
     const checkReminders = async () => {
-      const now = new Date();
-      const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000);
+      try {
+        const now = new Date();
+        const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000);
 
-      // Check for IN_APP reminders
-      const { data: inAppReminders, error: inAppError } = await supabase
-        .from("reminders")
-        .select("*")
-        .is("shown_at", null)
-        .lte("at", now.toISOString())
-        .gte("at", twoMinutesAgo.toISOString())
-        .eq("channel", "IN_APP");
+        // Single query for both channels (uses idx_reminders_channel_shown_at_at)
+        const { data: reminders, error } = await supabase
+          .from("reminders")
+          .select("*")
+          .is("shown_at", null)
+          .lte("at", now.toISOString())
+          .gte("at", twoMinutesAgo.toISOString())
+          .in("channel", ["IN_APP", "EMAIL"]);
 
-      if (inAppError) {
-        console.error("Error fetching IN_APP reminders:", inAppError);
-      }
+        if (error) {
+          console.error("⚠️ Error fetching reminders:", error.code, error.message);
+          return;
+        }
 
-      // Check for EMAIL reminders
-      const { data: emailReminders, error: emailError } = await supabase
-        .from("reminders")
-        .select("*")
-        .is("shown_at", null)
-        .lte("at", now.toISOString())
-        .gte("at", twoMinutesAgo.toISOString())
-        .eq("channel", "EMAIL");
+        if (!reminders || reminders.length === 0) return;
 
-      if (emailError) {
-        console.error("Error fetching EMAIL reminders:", emailError);
-      }
+        // Split by channel in memory (no extra DB calls)
+        const inAppReminders = reminders.filter(r => r.channel === "IN_APP");
+        const emailReminders = reminders.filter(r => r.channel === "EMAIL");
 
-      // Handle IN_APP reminders
-      if (inAppReminders && inAppReminders.length > 0) {
-        setActiveReminders((prev) => {
-          const newReminders = inAppReminders.filter(
-            (reminder) => !prev.some((r) => r.id === reminder.id)
-          );
-          return [...prev, ...newReminders];
-        });
-
-        // Show browser notification
-        inAppReminders.forEach((reminder) => {
-          if ("Notification" in window && Notification.permission === "granted") {
-            new Notification(reminder.title || "Herinnering", {
-              body: `Herinnering voor taak`,
-              icon: "/favicon.ico",
-              tag: reminder.id,
-            });
-          }
-        });
-      }
-
-      // Handle EMAIL reminders
-      if (emailReminders && emailReminders.length > 0) {
-        for (const reminder of emailReminders) {
-          try {
-            // Fetch task and subtask details
-            const { data: task } = await supabase
-              .from("tasks")
-              .select("title")
-              .eq("id", reminder.task_id)
-              .maybeSingle();
-
-            let subtaskTitle = null;
-            if (reminder.subtask_id) {
-              const { data: subtask } = await supabase
-                .from("subtasks")
-                .select("title")
-                .eq("id", reminder.subtask_id)
-                .maybeSingle();
-              subtaskTitle = subtask?.title;
-            }
-
-            // Get user email
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user?.email) {
-              console.error("No user email found for reminder:", reminder.id);
-              continue;
-            }
-
-            // Send email via edge function
-            const { error: emailSendError } = await supabase.functions.invoke(
-              "send-reminder-email",
-              {
-                body: {
-                  to: user.email,
-                  reminderTitle: reminder.title,
-                  taskTitle: task?.title,
-                  subtaskTitle,
-                  reminderTime: reminder.at,
-                  taskId: reminder.task_id,
-                },
-              }
+        // Handle IN_APP reminders
+        if (inAppReminders.length > 0) {
+          setActiveReminders((prev) => {
+            const newReminders = inAppReminders.filter(
+              (reminder) => !prev.some((r) => r.id === reminder.id)
             );
+            return [...prev, ...newReminders];
+          });
 
-            if (emailSendError) {
-              console.error("Error sending reminder email:", emailSendError);
-            } else {
-              console.log("Reminder email sent successfully for:", reminder.id);
-              
-              // Mark reminder as shown
-              await supabase
-                .from("reminders")
-                .update({ shown_at: new Date().toISOString() })
-                .eq("id", reminder.id);
+          // Show browser notifications
+          inAppReminders.forEach((reminder) => {
+            if ("Notification" in window && Notification.permission === "granted") {
+              new Notification(reminder.title || "Herinnering", {
+                body: `Herinnering voor taak`,
+                icon: "/favicon.ico",
+                tag: reminder.id,
+              });
             }
-          } catch (error) {
-            console.error("Error processing EMAIL reminder:", error);
+          });
+        }
+
+        // Handle EMAIL reminders
+        if (emailReminders.length > 0) {
+          for (const reminder of emailReminders) {
+            try {
+              // Fetch task and subtask details
+              const { data: task } = await supabase
+                .from("tasks")
+                .select("title")
+                .eq("id", reminder.task_id)
+                .maybeSingle();
+
+              let subtaskTitle = null;
+              if (reminder.subtask_id) {
+                const { data: subtask } = await supabase
+                  .from("subtasks")
+                  .select("title")
+                  .eq("id", reminder.subtask_id)
+                  .maybeSingle();
+                subtaskTitle = subtask?.title;
+              }
+
+              // Get user email
+              const { data: { user } } = await supabase.auth.getUser();
+              if (!user?.email) {
+                console.error("No user email found for reminder:", reminder.id);
+                continue;
+              }
+
+              // Send email via edge function
+              const { error: emailSendError } = await supabase.functions.invoke(
+                "send-reminder-email",
+                {
+                  body: {
+                    to: user.email,
+                    reminderTitle: reminder.title,
+                    taskTitle: task?.title,
+                    subtaskTitle,
+                    reminderTime: reminder.at,
+                    taskId: reminder.task_id,
+                  },
+                }
+              );
+
+              if (emailSendError) {
+                console.error("Error sending reminder email:", emailSendError);
+              } else {
+                console.log("✅ Reminder email sent:", reminder.id);
+                
+                // Mark reminder as shown
+                await supabase
+                  .from("reminders")
+                  .update({ shown_at: new Date().toISOString() })
+                  .eq("id", reminder.id);
+              }
+            } catch (error) {
+              console.error("⚠️ Error processing EMAIL reminder:", error);
+            }
           }
         }
+      } catch (error) {
+        console.error("⚠️ Reminder check failed:", error);
       }
     };
 
     checkReminders();
-    const interval = setInterval(checkReminders, 30000);
+    // ⚡ REDUCED FREQUENCY: 60s instead of 30s (less load, still responsive)
+    const interval = setInterval(checkReminders, 60000);
 
     // Listen for new reminders
     const channel = supabase

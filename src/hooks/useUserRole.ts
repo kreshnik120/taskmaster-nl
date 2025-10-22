@@ -12,7 +12,11 @@ interface UseUserRoleReturn {
 }
 
 export function useUserRole(): UseUserRoleReturn {
-  const [role, setRole] = useState<UserRole | null>(null);
+  // ⚡ CACHED ROLE: Init from localStorage to prevent flickering
+  const [role, setRole] = useState<UserRole | null>(() => {
+    const cached = localStorage.getItem('user_role_cache');
+    return cached ? (cached as UserRole) : null;
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,21 +29,32 @@ export function useUserRole(): UseUserRoleReturn {
           return;
         }
 
+        // ⚡ TIMEOUT: Prevent infinite loading (5s max)
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+
         const { data, error } = await supabase
           .from('user_roles')
           .select('role')
           .eq('user_id', user.id)
+          .abortSignal(controller.signal)
           .single();
 
+        clearTimeout(timeout);
+
         if (error) {
-          console.error('Error fetching user role:', error);
-          setRole('user'); // default to user role
+          console.error('⚠️ Error fetching user role:', error.code, error.message);
+          // ⚡ KEEP CACHED ROLE: Don't default to 'user' on error
+          // Only update loading state
         } else {
-          setRole(data.role as UserRole);
+          const newRole = data.role as UserRole;
+          setRole(newRole);
+          // ⚡ UPDATE CACHE: Persist for next load
+          localStorage.setItem('user_role_cache', newRole);
         }
       } catch (error) {
-        console.error('Error in fetchUserRole:', error);
-        setRole('user');
+        console.error('⚠️ Error in fetchUserRole:', error);
+        // ⚡ KEEP CACHED ROLE: Don't override with 'user'
       } finally {
         setLoading(false);
       }
