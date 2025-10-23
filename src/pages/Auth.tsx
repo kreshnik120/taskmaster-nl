@@ -58,12 +58,24 @@ const Auth = () => {
   const [resetMode, setResetMode] = useState(false);
   const [backendOffline, setBackendOffline] = useState(false);
   const [healthCheckAttempts, setHealthCheckAttempts] = useState(0);
+  const [backoffInterval, setBackoffInterval] = useState(10000);
+  const [lastHealthCheck, setLastHealthCheck] = useState<{
+    timestamp: Date;
+    success: boolean;
+    error?: string;
+  } | null>(null);
+  const [demoMode, setDemoMode] = useState(false);
   const navigate = useNavigate();
 
   const checkBackendHealth = async () => {
     if (!navigator.onLine) {
       setBackendOffline(true);
       setHealthCheckAttempts(0);
+      setLastHealthCheck({
+        timestamp: new Date(),
+        success: false,
+        error: 'Browser offline'
+      });
       return;
     }
     
@@ -85,19 +97,49 @@ const Auth = () => {
       clearTimeout(timeoutId);
       setBackendOffline(false);
       setHealthCheckAttempts(0);
+      setBackoffInterval(10000);
+      setLastHealthCheck({
+        timestamp: new Date(),
+        success: true
+      });
+      console.log('[Backend Health] ✅ Backend bereikbaar');
     } catch (error: any) {
-      if (error.name === 'AbortError' || error.message.includes('fetch')) {
-        const newAttempts = healthCheckAttempts + 1;
-        setHealthCheckAttempts(newAttempts);
+      const errorMsg = error.name === 'AbortError' ? 'Timeout (8s)' : error.message;
+      const newAttempts = healthCheckAttempts + 1;
+      setHealthCheckAttempts(newAttempts);
+      
+      setLastHealthCheck({
+        timestamp: new Date(),
+        success: false,
+        error: errorMsg
+      });
+      
+      if (newAttempts >= 2) {
+        console.warn(`[Backend Health] ❌ Backend niet bereikbaar na ${newAttempts} pogingen`);
+        setBackendOffline(true);
         
-        if (newAttempts >= 2) {
-          console.warn('[Backend Health] Backend niet bereikbaar na 2 pogingen');
-          setBackendOffline(true);
-        }
-      } else {
-        setBackendOffline(false);
+        // Exponential backoff: 10s -> 20s -> 40s -> 80s -> 120s (max)
+        const newInterval = Math.min(backoffInterval * 2, 120000);
+        setBackoffInterval(newInterval);
+        console.log(`[Backend Health] Next retry in ${newInterval / 1000}s`);
       }
     }
+  };
+
+  const enableDemoMode = () => {
+    const mockSession = {
+      user: {
+        id: 'demo-user',
+        email: 'demo@example.com',
+        user_metadata: { name: 'Demo Gebruiker' }
+      },
+      access_token: 'demo-token',
+      expires_at: Date.now() + 3600000
+    };
+    localStorage.setItem('demo-session', JSON.stringify(mockSession));
+    setDemoMode(true);
+    toast.success('Demo modus geactiveerd - Alleen UI demonstratie!');
+    navigate('/');
   };
 
   useEffect(() => {
@@ -105,13 +147,14 @@ const Auth = () => {
     
     let retryInterval: NodeJS.Timeout;
     if (backendOffline) {
+      console.log(`[Backend Health] Setting retry interval: ${backoffInterval / 1000}s`);
       retryInterval = setInterval(() => {
         checkBackendHealth();
-      }, 10000);
+      }, backoffInterval);
     }
     
     return () => clearInterval(retryInterval);
-  }, [backendOffline]);
+  }, [backendOffline, backoffInterval]);
 
   // Handle browser online/offline events
   useEffect(() => {
@@ -242,24 +285,64 @@ const Auth = () => {
                   <li>Tijdelijke server onderhoud</li>
                   <li>Firewall of netwerk blokkade</li>
                 </ul>
-                <div className="flex gap-2 mt-2">
+                
+                {lastHealthCheck && (
+                  <div className="mt-2 p-2 bg-muted rounded-md text-xs font-mono">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">Laatste controle:</span>
+                      <span>{lastHealthCheck.timestamp.toLocaleTimeString('nl-NL')}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">Status:</span>
+                      <span className={lastHealthCheck.success ? 'text-green-600' : 'text-red-600'}>
+                        {lastHealthCheck.success ? '✅ Online' : '❌ Offline'}
+                      </span>
+                    </div>
+                    {lastHealthCheck.error && (
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">Fout:</span>
+                        <span className="text-red-600">{lastHealthCheck.error}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">Volgende poging:</span>
+                      <span>{backoffInterval / 1000}s</span>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex flex-col gap-2 mt-2">
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        setHealthCheckAttempts(0);
+                        setBackoffInterval(10000);
+                        await checkBackendHealth();
+                      }}
+                    >
+                      Opnieuw proberen
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setBackendOffline(false)}
+                    >
+                      Negeren
+                    </Button>
+                  </div>
                   <Button
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
-                    onClick={async () => {
-                      setHealthCheckAttempts(0);
-                      await checkBackendHealth();
-                    }}
+                    onClick={enableDemoMode}
+                    className="w-full"
                   >
-                    Opnieuw proberen
+                    🎨 Demo modus (alleen UI)
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setBackendOffline(false)}
-                  >
-                    Negeren en doorgaan
-                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Demo modus: Bekijk de UI zonder backend. Geen data wordt opgeslagen.
+                  </p>
                 </div>
               </AlertDescription>
             </Alert>
