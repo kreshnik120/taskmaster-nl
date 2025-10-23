@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { NotificationService } from "@/components/NotificationService";
 import { ChatWidget } from "@/components/AIAssistant/ChatWidget";
+import { GlobalOfflineBanner } from "@/components/GlobalOfflineBanner";
 import { supabase } from "@/integrations/supabase/client";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -18,6 +19,7 @@ import VerwijderdeTaken from "./pages/VerwijderdeTaken";
 import AfgerondeTaken from "./pages/AfgerondeTaken";
 import AiTraining from "./pages/AiTraining";
 import Professionals from "./pages/Professionals";
+import Diagnostics from "./pages/Diagnostics";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,6 +55,7 @@ const GlobalServicesMounter = () => {
 
   return (
     <>
+      <GlobalOfflineBanner />
       <NotificationService />
       <ChatWidget />
     </>
@@ -78,6 +81,7 @@ const App = () => (
           <Route path="/afgerond" element={<AfgerondeTaken />} />
           <Route path="/ai-training" element={<AiTraining />} />
           <Route path="/professionals" element={<Professionals />} />
+          <Route path="/diagnostics" element={<Diagnostics />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
