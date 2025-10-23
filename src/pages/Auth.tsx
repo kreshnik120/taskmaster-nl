@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { withTimeout } from "@/lib/withTimeout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +15,14 @@ const translateAuthError = (error: any): string => {
   console.log("🔍 Supabase error:", error);
   
   const errorMsg = error?.message?.toLowerCase() || "";
+  
+  // Network and timeout errors
+  if (errorMsg.includes("failed to fetch") || 
+      errorMsg.includes("networkerror") || 
+      errorMsg.includes("request timeout") ||
+      error?.name === "AbortError") {
+    return "De backend is tijdelijk niet bereikbaar. Probeer het later opnieuw.";
+  }
   
   // Common Supabase auth errors
   if (errorMsg.includes("invalid login credentials") || errorMsg.includes("invalid credentials")) {
@@ -108,16 +117,19 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            name: name,
+      const { error } = await withTimeout(
+        supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              name: name,
+            },
+            emailRedirectTo: `${window.location.origin}/`,
           },
-          emailRedirectTo: `${window.location.origin}/`,
-        },
-      });
+        }),
+        10000
+      );
 
       if (error) throw error;
 
@@ -131,13 +143,22 @@ const Auth = () => {
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (backendOffline) {
+      toast.error("Backend is tijdelijk niet bereikbaar. Probeer eerst 'Opnieuw proberen'.");
+      return;
+    }
+    
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { error } = await withTimeout(
+        supabase.auth.signInWithPassword({
+          email,
+          password,
+        }),
+        8000
+      );
 
       if (error) throw error;
 
@@ -159,9 +180,12 @@ const Auth = () => {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/`,
-      });
+      const { error } = await withTimeout(
+        supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/`,
+        }),
+        8000
+      );
 
       if (error) throw error;
 
@@ -288,7 +312,7 @@ const Auth = () => {
                       required
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
+                  <Button type="submit" className="w-full" disabled={loading || backendOffline}>
                     {loading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
