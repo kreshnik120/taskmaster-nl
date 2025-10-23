@@ -48,25 +48,60 @@ const Auth = () => {
   const [loading, setLoading] = useState(false);
   const [resetMode, setResetMode] = useState(false);
   const [backendOffline, setBackendOffline] = useState(false);
+  const [healthCheckAttempts, setHealthCheckAttempts] = useState(0);
   const navigate = useNavigate();
 
   const checkBackendHealth = async () => {
-    if (!navigator.onLine) return;
+    if (!navigator.onLine) {
+      setBackendOffline(false);
+      return;
+    }
     
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/auth/v1/settings`,
-        { method: 'GET', signal: AbortSignal.timeout(3000) }
+        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/`,
+        { 
+          method: 'HEAD',
+          signal: controller.signal,
+          headers: {
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+          }
+        }
       );
-      setBackendOffline(!response.ok);
-    } catch {
-      setBackendOffline(true);
+      
+      clearTimeout(timeoutId);
+      setBackendOffline(false);
+      setHealthCheckAttempts(0);
+    } catch (error: any) {
+      if (error.name === 'AbortError' || error.message.includes('fetch')) {
+        const newAttempts = healthCheckAttempts + 1;
+        setHealthCheckAttempts(newAttempts);
+        
+        if (newAttempts >= 2) {
+          console.warn('[Backend Health] Backend niet bereikbaar na 2 pogingen');
+          setBackendOffline(true);
+        }
+      } else {
+        setBackendOffline(false);
+      }
     }
   };
 
   useEffect(() => {
     checkBackendHealth();
-  }, []);
+    
+    let retryInterval: NodeJS.Timeout;
+    if (backendOffline) {
+      retryInterval = setInterval(() => {
+        checkBackendHealth();
+      }, 10000);
+    }
+    
+    return () => clearInterval(retryInterval);
+  }, [backendOffline]);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,16 +189,32 @@ const Auth = () => {
             <Alert variant="destructive" className="mb-4">
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Backend tijdelijk niet bereikbaar</AlertTitle>
-              <AlertDescription>
-                De verbinding met de backend is verbroken. Probeer het later opnieuw.
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="ml-2 mt-2"
-                  onClick={checkBackendHealth}
-                >
-                  Opnieuw proberen
-                </Button>
+              <AlertDescription className="flex flex-col gap-2">
+                <span>De verbinding met de backend is verbroken. Dit kan komen door:</span>
+                <ul className="list-disc list-inside text-sm">
+                  <li>Traag internet</li>
+                  <li>Tijdelijke server onderhoud</li>
+                  <li>Firewall of netwerk blokkade</li>
+                </ul>
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      setHealthCheckAttempts(0);
+                      await checkBackendHealth();
+                    }}
+                  >
+                    Opnieuw proberen
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setBackendOffline(false)}
+                  >
+                    Negeren en doorgaan
+                  </Button>
+                </div>
               </AlertDescription>
             </Alert>
           )}
