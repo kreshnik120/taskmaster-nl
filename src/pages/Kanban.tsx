@@ -8,10 +8,12 @@ import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { Plus, Loader2, Sparkles } from "lucide-react";
+import { Plus, Loader2, Sparkles, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAiScoring } from "@/hooks/useAiScoring";
+import { withTimeout } from "@/lib/withTimeout";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface Task {
   id: string;
@@ -52,6 +54,8 @@ const Kanban = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [backendOffline, setBackendOffline] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { taskId } = useParams();
   
@@ -59,15 +63,37 @@ const Kanban = () => {
   const { priorityScores, loading: aiLoading, getScoreForTask } = useAiScoring(tasks, true);
 
   useEffect(() => {
-    // Check authentication
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setUser(session.user);
-        loadData();
-      } else {
-        navigate("/auth");
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await withTimeout(
+          supabase.auth.getSession(),
+          3000
+        );
+        
+        if (session) {
+          setUser(session.user);
+          await loadDataWithTimeout();
+        } else {
+          navigate("/auth");
+        }
+      } catch (error: any) {
+        console.error("[Kanban Auth] Timeout bij authenticatie:", error);
+        setLastError(error.message);
+        setBackendOffline(true);
+        setLoading(false);
       }
-    });
+    };
+
+    initAuth();
+
+    // Safety timer: forceer fallback na 7s als loading nog steeds true is
+    const safetyTimeout = setTimeout(() => {
+      if (loading) {
+        console.warn("[Kanban Safety] Geforceerde timeout na 7s");
+        setBackendOffline(true);
+        setLoading(false);
+      }
+    }, 7000);
 
     const {
       data: { subscription },
@@ -79,40 +105,58 @@ const Kanban = () => {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(safetyTimeout);
+      subscription.unsubscribe();
+    };
   }, [navigate]);
 
-  const loadData = async () => {
+  const loadDataWithTimeout = async () => {
     try {
-      // Load columns
-      const { data: columnsData, error: columnsError } = await supabase
-        .from("columns")
-        .select("*")
-        .order("order");
+      await withTimeout(loadData(), 8000);
+      setBackendOffline(false);
+      setLastError(null);
+    } catch (error: any) {
+      console.error("[Kanban Data] Timeout bij laden:", error);
+      setLastError(error.message);
+      setBackendOffline(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      if (columnsError) throw columnsError;
+  const loadData = async () => {
+    // Load columns
+    const { data: columnsData, error: columnsError } = await supabase
+      .from("columns")
+      .select("*")
+      .order("order");
 
-      if (columnsData && columnsData.length > 0) {
-        setColumns(columnsData);
-      } else {
-        // Create default columns if none exist
-        await createDefaultColumns();
-      }
+    if (columnsError) throw columnsError;
 
-      // Load tasks with scoring metadata
-      const { data: tasksData, error: tasksError } = await supabase
-        .from("tasks")
-        .select(`
-          *,
-          profiles:profiles!tasks_assignee_id_fkey(name, email),
-          task_scoring_metadata(*)
-        `)
-        .is("deleted_at", null)
-        .order("order_key");
+    if (columnsData && columnsData.length > 0) {
+      setColumns(columnsData);
+    } else {
+      // Create default columns if none exist
+      await createDefaultColumns();
+    }
 
-      if (tasksError) throw tasksError;
-      setTasks(tasksData || []);
+    // Load tasks with scoring metadata
+    const { data: tasksData, error: tasksError } = await supabase
+      .from("tasks")
+      .select(`
+        *,
+        profiles:profiles!tasks_assignee_id_fkey(name, email),
+        task_scoring_metadata(*)
+      `)
+      .is("deleted_at", null)
+      .order("order_key");
 
+    if (tasksError) throw tasksError;
+    setTasks(tasksData || []);
+
+    // Real-time listeners alleen starten na succesvolle data load
+    if (!backendOffline) {
       // Real-time listener voor taak updates
       const tasksChannel = supabase
         .channel('kanban-tasks-changes')
@@ -172,10 +216,6 @@ const Kanban = () => {
         supabase.removeChannel(tasksChannel);
         supabase.removeChannel(columnsChannel);
       };
-    } catch (error: any) {
-      toast.error("Fout bij laden van gegevens: " + error.message);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -377,7 +417,14 @@ const Kanban = () => {
   };
 
   const handleTaskUpdated = () => {
-    loadData();
+    loadDataWithTimeout();
+  };
+
+  const handleRetry = async () => {
+    setBackendOffline(false);
+    setLastError(null);
+    setLoading(true);
+    await loadDataWithTimeout();
   };
 
   // Auto-open task modal from URL parameter
@@ -394,6 +441,50 @@ const Kanban = () => {
       }
     }
   }, [taskId, tasks, loading, navigate]);
+
+  if (backendOffline) {
+    return (
+      <SidebarProvider>
+        <div className="flex min-h-screen w-full">
+          <AppSidebar />
+          <main className="flex-1 p-6">
+            <SidebarTrigger className="mb-4" />
+            <div className="flex items-center justify-center min-h-[60vh]">
+              <Alert variant="destructive" className="max-w-lg">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Backend tijdelijk niet bereikbaar</AlertTitle>
+                <AlertDescription className="flex flex-col gap-3 mt-2">
+                  <span>De verbinding met de backend is verbroken. Probeer het later opnieuw.</span>
+                  {lastError && (
+                    <details className="text-xs opacity-70">
+                      <summary className="cursor-pointer">Technische details</summary>
+                      <code className="block mt-1 p-2 bg-background rounded">{lastError}</code>
+                    </details>
+                  )}
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRetry}
+                    >
+                      Opnieuw proberen
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => navigate('/auth')}
+                    >
+                      Naar login
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            </div>
+          </main>
+        </div>
+      </SidebarProvider>
+    );
+  }
 
   if (loading || !user) {
     return (
