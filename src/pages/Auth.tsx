@@ -9,11 +9,43 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2 } from "lucide-react";
 
+const translateAuthError = (error: any): string => {
+  console.log("🔍 Supabase error:", error);
+  
+  const errorMsg = error?.message?.toLowerCase() || "";
+  
+  // Common Supabase auth errors
+  if (errorMsg.includes("invalid login credentials") || errorMsg.includes("invalid credentials")) {
+    return "Onjuist e-mailadres of wachtwoord";
+  }
+  if (errorMsg.includes("user already registered")) {
+    return "Dit e-mailadres is al geregistreerd. Probeer in te loggen.";
+  }
+  if (errorMsg.includes("email not confirmed")) {
+    return "Je e-mailadres is nog niet bevestigd. Check je inbox.";
+  }
+  if (errorMsg.includes("password should be at least")) {
+    return "Wachtwoord moet minimaal 6 tekens bevatten";
+  }
+  if (errorMsg.includes("invalid email")) {
+    return "Ongeldig e-mailadres";
+  }
+  if (errorMsg.includes("email rate limit exceeded")) {
+    return "Te veel pogingen. Probeer het later opnieuw.";
+  }
+  if (errorMsg.includes("user not found")) {
+    return "Geen account gevonden met dit e-mailadres";
+  }
+  
+  return error?.message || "Er ging iets mis. Probeer het opnieuw.";
+};
+
 const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetMode, setResetMode] = useState(false);
   const navigate = useNavigate();
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -36,7 +68,7 @@ const Auth = () => {
 
       toast.success("Account aangemaakt! Je kunt nu inloggen.");
     } catch (error: any) {
-      toast.error(error.message || "Er ging iets mis bij het aanmaken van je account");
+      toast.error(translateAuthError(error));
     } finally {
       setLoading(false);
     }
@@ -57,7 +89,31 @@ const Auth = () => {
       toast.success("Welkom terug!");
       navigate("/");
     } catch (error: any) {
-      toast.error(error.message || "Er ging iets mis bij het inloggen");
+      toast.error(translateAuthError(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) {
+      toast.error("Vul je e-mailadres in");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/`,
+      });
+
+      if (error) throw error;
+
+      toast.success("Check je inbox voor de wachtwoord reset link!");
+      setResetMode(false);
+    } catch (error: any) {
+      toast.error(translateAuthError(error));
     } finally {
       setLoading(false);
     }
@@ -80,39 +136,82 @@ const Auth = () => {
               <TabsTrigger value="signup">Registreren</TabsTrigger>
             </TabsList>
             <TabsContent value="login">
-              <form onSubmit={handleSignIn} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">E-mailadres</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="naam@voorbeeld.nl"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Wachtwoord</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Inloggen...
-                    </>
-                  ) : (
-                    "Inloggen"
-                  )}
-                </Button>
-              </form>
+              {resetMode ? (
+                <form onSubmit={handlePasswordReset} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="reset-email">E-mailadres</Label>
+                    <Input
+                      id="reset-email"
+                      type="email"
+                      placeholder="naam@voorbeeld.nl"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Versturen...
+                      </>
+                    ) : (
+                      "Wachtwoord reset link versturen"
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => setResetMode(false)}
+                  >
+                    Terug naar inloggen
+                  </Button>
+                </form>
+              ) : (
+                <form onSubmit={handleSignIn} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">E-mailadres</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="naam@voorbeeld.nl"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="password">Wachtwoord</Label>
+                      <button
+                        type="button"
+                        onClick={() => setResetMode(true)}
+                        className="text-sm text-primary hover:underline"
+                      >
+                        Wachtwoord vergeten?
+                      </button>
+                    </div>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Inloggen...
+                      </>
+                    ) : (
+                      "Inloggen"
+                    )}
+                  </Button>
+                </form>
+              )}
             </TabsContent>
             <TabsContent value="signup">
               <form onSubmit={handleSignUp} className="space-y-4">
