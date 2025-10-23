@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 
 const translateAuthError = (error: any): string => {
   console.log("🔍 Supabase error:", error);
@@ -46,7 +47,26 @@ const Auth = () => {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetMode, setResetMode] = useState(false);
+  const [backendOffline, setBackendOffline] = useState(false);
   const navigate = useNavigate();
+
+  const checkBackendHealth = async () => {
+    if (!navigator.onLine) return;
+    
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/auth/v1/settings`,
+        { method: 'GET', signal: AbortSignal.timeout(3000) }
+      );
+      setBackendOffline(!response.ok);
+    } catch {
+      setBackendOffline(true);
+    }
+  };
+
+  useEffect(() => {
+    checkBackendHealth();
+  }, []);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,6 +150,23 @@ const Auth = () => {
           <CardDescription>Beheer je taken efficiënt</CardDescription>
         </CardHeader>
         <CardContent>
+          {backendOffline && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Backend tijdelijk niet bereikbaar</AlertTitle>
+              <AlertDescription>
+                De verbinding met de backend is verbroken. Probeer het later opnieuw.
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="ml-2 mt-2"
+                  onClick={checkBackendHealth}
+                >
+                  Opnieuw proberen
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
           <Tabs defaultValue="login" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="login">Inloggen</TabsTrigger>

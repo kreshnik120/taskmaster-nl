@@ -22,22 +22,31 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-// ⚡ DELAYED SERVICE MOUNTING: Voorkomt blokkerend opstarten
+// ⚡ SMART SERVICE MOUNTING: Only mount when session exists
 const GlobalServicesMounter = () => {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // Mount services after 1.5s OR when session is ready (whichever comes first)
-    const timer = setTimeout(() => setReady(true), 1500);
+    let mounted = true;
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        clearTimeout(timer);
+      if (mounted && session) {
         setReady(true);
       }
     });
 
-    return () => clearTimeout(timer);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (mounted) {
+          setReady(!!session);
+        }
+      }
+    );
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   if (!ready) return null;
