@@ -62,7 +62,8 @@ const Auth = () => {
 
   const checkBackendHealth = async () => {
     if (!navigator.onLine) {
-      setBackendOffline(false);
+      setBackendOffline(true);
+      setHealthCheckAttempts(0);
       return;
     }
     
@@ -111,6 +112,27 @@ const Auth = () => {
     
     return () => clearInterval(retryInterval);
   }, [backendOffline]);
+
+  // Handle browser online/offline events
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('[Network] Browser is online, checking backend...');
+      checkBackendHealth();
+    };
+
+    const handleOffline = () => {
+      console.log('[Network] Browser is offline');
+      setBackendOffline(true);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
