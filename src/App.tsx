@@ -10,6 +10,7 @@ import { GlobalOfflineBanner } from "@/components/GlobalOfflineBanner";
 import { supabase } from "@/integrations/supabase/client";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import Kanban from "./pages/Kanban";
 import Lijst from "./pages/Lijst";
 import Kalender from "./pages/Kalender";
@@ -71,7 +72,11 @@ const App = () => (
         <GlobalServicesMounter />
         <Routes>
           <Route path="/" element={<Index />} />
-          <Route path="/auth" element={<Auth />} />
+            <Route path="/auth" element={
+              <ErrorBoundary fallbackTitle="Login pagina crashte">
+                <Auth />
+              </ErrorBoundary>
+            } />
           <Route path="/kanban/:taskId?" element={<Kanban />} />
           <Route path="/lijst" element={<Lijst />} />
           <Route path="/kalender" element={<Kalender />} />

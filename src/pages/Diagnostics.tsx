@@ -17,6 +17,7 @@ interface CheckResult {
 
 export default function Diagnostics() {
   const [checks, setChecks] = useState<CheckResult[]>([
+    { name: 'REST HEAD Ping', status: 'pending' },
     { name: 'Core DB Reachability', status: 'pending' },
     { name: 'Backend REST', status: 'pending' },
     { name: 'Auth Service', status: 'pending' },
@@ -24,7 +25,9 @@ export default function Diagnostics() {
     { name: 'Storage Service', status: 'pending' },
   ]);
   const [isRunning, setIsRunning] = useState(false);
+  const [isSmokeTestRunning, setIsSmokeTestRunning] = useState(false);
   const [lastRun, setLastRun] = useState<Date | null>(null);
+  const [smokeTestResult, setSmokeTestResult] = useState<string>('');
 
   const updateCheck = (index: number, update: Partial<CheckResult>) => {
     setChecks(prev => {
@@ -43,26 +46,38 @@ export default function Diagnostics() {
     } catch (error: any) {
       const latency = Date.now() - start;
       
-      // Enhanced error detection
+      // Enhanced error detection with categories
       let errorType = 'Fout';
       let details = error?.message || 'Onbekende fout';
+      let errorCategory = '';
       
-      if (error?.code === '544' || error?.message?.includes('504') || error?.message?.includes('timeout')) {
-        errorType = 'Timeout (504/544)';
-        details = 'Database verbinding timeout - mogelijk backend overbelast of offline';
+      if (error?.name === 'AbortError' || error?.message?.includes('timeout')) {
+        errorType = 'Infra-timeout ⏱️';
+        errorCategory = '[TIMEOUT]';
+        details = `Client-side timeout - verzoek duurde te lang (${latency}ms)`;
+      } else if (error?.code === '544' || error?.message?.includes('504')) {
+        errorType = 'Infra-timeout (504/544) ⏱️';
+        errorCategory = '[TIMEOUT]';
+        details = `Database gateway timeout - backend overbelast of offline (${latency}ms)`;
       } else if (error?.code === '401') {
-        errorType = 'Authenticatie';
-        details = 'Niet geautoriseerd - login vereist';
+        errorType = 'Auth (401) 🔒';
+        errorCategory = '[AUTH]';
+        details = `Niet geautoriseerd - login vereist (${latency}ms)`;
       } else if (error?.code === '403') {
-        errorType = 'Toegang geweigerd';
-        details = 'RLS policy voorkomt toegang';
+        errorType = 'RLS/Toegang (403) 🚫';
+        errorCategory = '[RLS]';
+        details = `RLS policy voorkomt toegang (${latency}ms)`;
       } else if (error?.code === '429') {
-        errorType = 'Rate limit';
-        details = 'Te veel verzoeken - probeer later opnieuw';
+        errorType = 'Rate limit (429) 🚦';
+        errorCategory = '[RATE_LIMIT]';
+        details = `Te veel verzoeken - wacht en probeer opnieuw (${latency}ms)`;
       } else if (error?.code === '402') {
-        errorType = 'Betaling vereist';
-        details = 'Quota overschreden';
+        errorType = 'Quota (402) 💳';
+        errorCategory = '[QUOTA]';
+        details = `Quota overschreden - check billing (${latency}ms)`;
       }
+      
+      details = `${errorCategory} ${details}${error?.code ? ` | Code: ${error.code}` : ''}`;
       
       updateCheck(index, { 
         status: 'error', 
@@ -77,38 +92,69 @@ export default function Diagnostics() {
     setIsRunning(true);
     setChecks(prev => prev.map(c => ({ ...c, status: 'pending', latency: undefined, message: undefined, details: undefined })));
 
-    // Check 0: Core DB reachability (simple query)
+    // Check 0: HEAD REST ping (3s timeout)
     await runCheck(0, async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/`,
+        {
+          method: 'HEAD',
+          signal: controller.signal,
+          headers: {
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+          }
+        }
+      );
+      
+      clearTimeout(timeoutId);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    });
+
+    // Check 1: Core DB reachability (5s timeout with AbortController)
+    await runCheck(1, async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
       const { error } = await supabase
         .from('tasks')
         .select('id')
         .limit(1)
+        .abortSignal(controller.signal)
         .maybeSingle();
+      
+      clearTimeout(timeoutId);
       if (error && error.code !== 'PGRST116') throw error;
     });
 
-    // Check 1: REST reachability
-    await runCheck(1, async () => {
+    // Check 2: REST reachability
+    await runCheck(2, async () => {
       const { error } = await supabase.from('autonomous_system_status').select('count').limit(1).maybeSingle();
       if (error && error.code !== 'PGRST116') throw error;
     });
 
-    // Check 2: Auth service
-    await runCheck(2, async () => {
+    // Check 3: Auth service
+    await runCheck(3, async () => {
       const { error } = await supabase.auth.getSession();
       if (error) throw error;
     });
 
-    // Check 3: Edge Functions
-    await runCheck(3, async () => {
+    // Check 4: Edge Functions (5s timeout)
+    await runCheck(4, async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
       const { error } = await supabase.functions.invoke('system-health-monitor', {
         body: { check: 'ping' }
       });
+      
+      clearTimeout(timeoutId);
       if (error) throw error;
     });
 
-    // Check 4: Storage (user-scope list)
-    await runCheck(4, async () => {
+    // Check 5: Storage (user-scope list)
+    await runCheck(5, async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         const { error } = await supabase.storage.listBuckets();
@@ -122,6 +168,75 @@ export default function Diagnostics() {
 
     setIsRunning(false);
     setLastRun(new Date());
+  };
+
+  const runSmokeTest = async () => {
+    setIsSmokeTestRunning(true);
+    setSmokeTestResult('');
+    const results: string[] = [];
+    
+    try {
+      // 1. HEAD REST (3s)
+      const headStart = Date.now();
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/`,
+          {
+            method: 'HEAD',
+            signal: controller.signal,
+            headers: { 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY }
+          }
+        );
+        clearTimeout(timeoutId);
+        results.push(`✅ HEAD REST: ${Date.now() - headStart}ms (${response.status})`);
+      } catch (e: any) {
+        results.push(`❌ HEAD REST: ${e.message} (${Date.now() - headStart}ms)`);
+      }
+      
+      // 2. SELECT query (5s)
+      const selectStart = Date.now();
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const { error } = await supabase
+          .from('tasks')
+          .select('id')
+          .limit(1)
+          .abortSignal(controller.signal)
+          .maybeSingle();
+        
+        clearTimeout(timeoutId);
+        if (error && error.code !== 'PGRST116') throw error;
+        results.push(`✅ DB SELECT: ${Date.now() - selectStart}ms`);
+      } catch (e: any) {
+        results.push(`❌ DB SELECT: ${e.message} (${Date.now() - selectStart}ms)`);
+      }
+      
+      // 3. Edge function (5s)
+      const funcStart = Date.now();
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const { error } = await supabase.functions.invoke('system-health-monitor', {
+          body: { check: 'ping' }
+        });
+        
+        clearTimeout(timeoutId);
+        if (error) throw error;
+        results.push(`✅ Edge Function: ${Date.now() - funcStart}ms`);
+      } catch (e: any) {
+        results.push(`❌ Edge Function: ${e.message} (${Date.now() - funcStart}ms)`);
+      }
+      
+      setSmokeTestResult(results.join('\n'));
+    } finally {
+      setIsSmokeTestRunning(false);
+    }
   };
 
   const getStatusIcon = (status: CheckResult['status']) => {
@@ -190,20 +305,37 @@ Gegenereerd door: TaskFlow Diagnostics v1.0`;
               Controleer de bereikbaarheid van alle backend services
             </p>
           </div>
-          <Button 
-            onClick={runAllChecks} 
-            disabled={isRunning}
-            size="lg"
-          >
-            {isRunning ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Bezig met testen...
-              </>
-            ) : (
-              'Run Diagnostics'
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              onClick={runAllChecks} 
+              disabled={isRunning}
+              size="lg"
+            >
+              {isRunning ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Bezig met testen...
+                </>
+              ) : (
+                'Run Diagnostics'
+              )}
+            </Button>
+            <Button 
+              onClick={runSmokeTest} 
+              disabled={isSmokeTestRunning}
+              variant="secondary"
+              size="lg"
+            >
+              {isSmokeTestRunning ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Rooktest...
+                </>
+              ) : (
+                '🔥 Snelle Rooktest'
+              )}
+            </Button>
+          </div>
         </div>
 
         {lastRun && (
@@ -247,6 +379,22 @@ Gegenereerd door: TaskFlow Diagnostics v1.0`;
             </Card>
           ))}
         </div>
+
+        {smokeTestResult && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Rooktest Resultaat</CardTitle>
+              <CardDescription>
+                Snelle health check van kritieke backend services
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <pre className="text-sm font-mono bg-muted p-4 rounded-md whitespace-pre-wrap">
+                {smokeTestResult}
+              </pre>
+            </CardContent>
+          </Card>
+        )}
 
         {hasError && (
           <Card>

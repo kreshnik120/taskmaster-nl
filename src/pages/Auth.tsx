@@ -58,30 +58,36 @@ const Auth = () => {
   const [resetMode, setResetMode] = useState(false);
   const [backendOffline, setBackendOffline] = useState(false);
   const [healthCheckAttempts, setHealthCheckAttempts] = useState(0);
-  const [backoffInterval, setBackoffInterval] = useState(10000);
   const [lastHealthCheck, setLastHealthCheck] = useState<{
     timestamp: Date;
     success: boolean;
     error?: string;
+    duration?: number;
   } | null>(null);
   const [demoMode, setDemoMode] = useState(false);
+  const [forceLoginAttempt, setForceLoginAttempt] = useState(false);
   const navigate = useNavigate();
 
   const checkBackendHealth = async () => {
+    const startTime = Date.now();
+    console.info('[AUTH][HEALTH] Starting check...', { timestamp: new Date().toISOString() });
+    
     if (!navigator.onLine) {
+      console.info('[AUTH][HEALTH] Browser offline detected');
       setBackendOffline(true);
       setHealthCheckAttempts(0);
       setLastHealthCheck({
         timestamp: new Date(),
         success: false,
-        error: 'Browser offline'
+        error: 'Browser offline',
+        duration: 0
       });
       return;
     }
     
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // Reduced from 8s to 3s
       
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/`,
@@ -95,35 +101,52 @@ const Auth = () => {
       );
       
       clearTimeout(timeoutId);
+      const duration = Date.now() - startTime;
+      
+      console.info('[AUTH][HEALTH] ✅ Success', { duration: `${duration}ms`, status: response.status });
+      
       setBackendOffline(false);
       setHealthCheckAttempts(0);
-      setBackoffInterval(10000);
       setLastHealthCheck({
         timestamp: new Date(),
-        success: true
+        success: true,
+        duration
       });
-      console.log('[Backend Health] ✅ Backend bereikbaar');
     } catch (error: any) {
-      const errorMsg = error.name === 'AbortError' ? 'Timeout (8s)' : error.message;
+      const duration = Date.now() - startTime;
+      const errorMsg = error.name === 'AbortError' ? 'Timeout (3s)' : error.message;
       const newAttempts = healthCheckAttempts + 1;
-      setHealthCheckAttempts(newAttempts);
       
+      console.warn('[AUTH][HEALTH] ❌ Failed', { 
+        attempt: newAttempts,
+        duration: `${duration}ms`,
+        error: errorMsg,
+        type: error.name
+      });
+      
+      setHealthCheckAttempts(newAttempts);
       setLastHealthCheck({
         timestamp: new Date(),
         success: false,
-        error: errorMsg
+        error: errorMsg,
+        duration
       });
       
       if (newAttempts >= 2) {
-        console.warn(`[Backend Health] ❌ Backend niet bereikbaar na ${newAttempts} pogingen`);
         setBackendOffline(true);
-        
-        // Exponential backoff: 10s -> 20s -> 40s -> 80s -> 120s (max)
-        const newInterval = Math.min(backoffInterval * 2, 120000);
-        setBackoffInterval(newInterval);
-        console.log(`[Backend Health] Next retry in ${newInterval / 1000}s`);
       }
     }
+  };
+
+  const scheduleNextHealthCheck = () => {
+    // Exponential backoff: 3s -> 6s -> 12s -> 24s -> 60s (max)
+    const delay = Math.min(3000 * Math.pow(2, healthCheckAttempts), 60000);
+    console.info('[AUTH][HEALTH] Next check scheduled in', { delay: `${delay / 1000}s` });
+    
+    setTimeout(async () => {
+      await checkBackendHealth();
+      scheduleNextHealthCheck();
+    }, delay);
   };
 
   const enableDemoMode = () => {
@@ -144,17 +167,8 @@ const Auth = () => {
 
   useEffect(() => {
     checkBackendHealth();
-    
-    let retryInterval: NodeJS.Timeout;
-    if (backendOffline) {
-      console.log(`[Backend Health] Setting retry interval: ${backoffInterval / 1000}s`);
-      retryInterval = setInterval(() => {
-        checkBackendHealth();
-      }, backoffInterval);
-    }
-    
-    return () => clearInterval(retryInterval);
-  }, [backendOffline, backoffInterval]);
+    scheduleNextHealthCheck();
+  }, []);
 
   // Handle browser online/offline events
   useEffect(() => {
@@ -209,12 +223,13 @@ const Auth = () => {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (backendOffline) {
-      toast.error("Backend is tijdelijk niet bereikbaar. Probeer eerst 'Opnieuw proberen'.");
+    if (backendOffline && !forceLoginAttempt) {
+      toast.error("Backend is tijdelijk niet bereikbaar. Gebruik 'Toch inloggen proberen' om het toch te proberen.");
       return;
     }
     
     setLoading(true);
+    console.info('[AUTH] Login attempt started', { email, forced: forceLoginAttempt });
 
     try {
       const { error } = await withTimeout(
@@ -305,10 +320,12 @@ const Auth = () => {
                         <span className="text-red-600">{lastHealthCheck.error}</span>
                       </div>
                     )}
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">Volgende poging:</span>
-                      <span>{backoffInterval / 1000}s</span>
-                    </div>
+                    {lastHealthCheck.duration !== undefined && (
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">Duur:</span>
+                        <span>{lastHealthCheck.duration}ms</span>
+                      </div>
+                    )}
                   </div>
                 )}
                 
@@ -319,11 +336,21 @@ const Auth = () => {
                       size="sm"
                       onClick={async () => {
                         setHealthCheckAttempts(0);
-                        setBackoffInterval(10000);
                         await checkBackendHealth();
                       }}
                     >
                       Opnieuw proberen
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setForceLoginAttempt(true);
+                        setBackendOffline(false);
+                        toast.info("Je kunt nu inloggen proberen ondanks de offline status");
+                      }}
+                    >
+                      Toch inloggen proberen
                     </Button>
                     <Button
                       variant="outline"
