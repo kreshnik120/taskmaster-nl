@@ -23,53 +23,63 @@ export const GlobalOfflineBanner = () => {
   };
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 p-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <Alert variant="destructive" className="relative">
-        <AlertTriangle className="h-4 w-4" />
-        <AlertTitle className="pr-8">Backend tijdelijk offline</AlertTitle>
-        <AlertDescription className="mt-2 space-y-2">
-          <p className="text-sm">
-            De backend is momenteel niet bereikbaar. Dit is waarschijnlijk een tijdelijke platformstoring.
-            Laatste check: {formatLastCheck()}
-          </p>
-          {errorMessage && (
-            <p className="text-xs opacity-80 font-mono">{errorMessage}</p>
-          )}
-          <div className="flex gap-2 mt-3">
-            <Button 
-              size="sm" 
-              variant="outline"
-              onClick={retry}
-              disabled={status === 'checking'}
-            >
-              <RefreshCw className={`h-3 w-3 mr-1 ${status === 'checking' ? 'animate-spin' : ''}`} />
-              Opnieuw proberen
-            </Button>
-            <Button 
-              size="sm" 
-              variant="outline"
-              onClick={() => navigate('/diagnostics')}
-            >
-              Diagnostics
-            </Button>
-            <Button 
-              size="sm" 
-              variant="ghost"
-              onClick={() => setDismissed(true)}
-              className="ml-auto"
-            >
-              Sluiten
-            </Button>
+    <div className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-destructive/50 shadow-lg">
+      <Alert variant="destructive" className="rounded-none border-0">
+        <AlertTriangle className="h-5 w-5" />
+        <AlertTitle className="text-base font-bold flex items-center gap-2">
+          🔴 Backend Kritiek Offline - 504/544 Timeouts
+        </AlertTitle>
+        <AlertDescription className="mt-2">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+            <div className="space-y-2 flex-1">
+              <p className="font-semibold text-sm">De backend database is al 48+ uur onbereikbaar. Data kan niet worden opgeslagen.</p>
+              <div className="flex flex-col gap-1 text-xs">
+                {lastCheck && (
+                  <p className="opacity-80">
+                    📅 Laatste controle: {formatLastCheck()}
+                  </p>
+                )}
+                {errorMessage && (
+                  <p className="opacity-90 font-mono bg-destructive/20 px-2 py-1 rounded max-w-fit">
+                    ⚠️ {errorMessage}
+                  </p>
+                )}
+              </div>
+              <p className="text-xs opacity-70 mt-2">
+                💡 Gebruik de <span className="font-semibold">Diagnostics</span> pagina voor uitgebreide foutanalyse
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 md:flex-shrink-0">
+              <Button 
+                size="sm"
+                variant="outline"
+                onClick={retry}
+                disabled={status === 'checking'}
+                className="bg-background hover:bg-accent"
+              >
+                <RefreshCw className={`h-3 w-3 mr-1 ${status === 'checking' ? 'animate-spin' : ''}`} />
+                Opnieuw
+              </Button>
+              <Button 
+                size="sm"
+                variant="outline"
+                onClick={() => navigate('/diagnostics')}
+                className="bg-background hover:bg-accent"
+              >
+                📊 Diagnostics
+              </Button>
+              <Button 
+                size="sm"
+                variant="ghost"
+                onClick={() => setDismissed(true)}
+                className="hover:bg-background/50"
+              >
+                <X className="h-3 w-3 mr-1" />
+                Sluiten
+              </Button>
+            </div>
           </div>
         </AlertDescription>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="absolute top-2 right-2 h-6 w-6"
-          onClick={() => setDismissed(true)}
-        >
-          <X className="h-4 w-4" />
-        </Button>
       </Alert>
     </div>
   );

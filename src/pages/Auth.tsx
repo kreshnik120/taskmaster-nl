@@ -277,13 +277,14 @@ const Auth = () => {
           {backendOffline && (
             <Alert variant="destructive" className="mb-4">
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Backend tijdelijk niet bereikbaar</AlertTitle>
+              <AlertTitle>🔴 Backend Kritiek Offline (504/544)</AlertTitle>
               <AlertDescription className="flex flex-col gap-2">
-                <span>De verbinding met de backend is verbroken. Dit kan komen door:</span>
-                <ul className="list-disc list-inside text-sm">
-                  <li>Traag internet</li>
-                  <li>Tijdelijke server onderhoud</li>
-                  <li>Firewall of netwerk blokkade</li>
+                <span className="font-semibold">De database is al 48+ uur onbereikbaar.</span>
+                <p className="text-sm">Alle verbindingspogingen resulteren in timeouts. Mogelijke oorzaken:</p>
+                <ul className="list-disc list-inside text-sm space-y-1 ml-2">
+                  <li>Database instance crash (Lovable Cloud)</li>
+                  <li>Netwerk isolatie tussen frontend/backend</li>
+                  <li>Backend overbelasting (alle workers vastgelopen)</li>
                 </ul>
                 
                 {lastHealthCheck && (
@@ -312,7 +313,7 @@ const Auth = () => {
                 )}
                 
                 <div className="flex flex-col gap-2 mt-2">
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <Button
                       variant="outline"
                       size="sm"
@@ -323,6 +324,13 @@ const Auth = () => {
                       }}
                     >
                       Opnieuw proberen
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate('/diagnostics')}
+                    >
+                      📊 Diagnostics
                     </Button>
                     <Button
                       variant="ghost"

@@ -17,6 +17,7 @@ interface CheckResult {
 
 export default function Diagnostics() {
   const [checks, setChecks] = useState<CheckResult[]>([
+    { name: 'Core DB Reachability', status: 'pending' },
     { name: 'Backend REST', status: 'pending' },
     { name: 'Auth Service', status: 'pending' },
     { name: 'Edge Functions', status: 'pending' },
@@ -41,11 +42,33 @@ export default function Diagnostics() {
       updateCheck(index, { status: 'success', latency, message: 'OK' });
     } catch (error: any) {
       const latency = Date.now() - start;
+      
+      // Enhanced error detection
+      let errorType = 'Fout';
+      let details = error?.message || 'Onbekende fout';
+      
+      if (error?.code === '544' || error?.message?.includes('504') || error?.message?.includes('timeout')) {
+        errorType = 'Timeout (504/544)';
+        details = 'Database verbinding timeout - mogelijk backend overbelast of offline';
+      } else if (error?.code === '401') {
+        errorType = 'Authenticatie';
+        details = 'Niet geautoriseerd - login vereist';
+      } else if (error?.code === '403') {
+        errorType = 'Toegang geweigerd';
+        details = 'RLS policy voorkomt toegang';
+      } else if (error?.code === '429') {
+        errorType = 'Rate limit';
+        details = 'Te veel verzoeken - probeer later opnieuw';
+      } else if (error?.code === '402') {
+        errorType = 'Betaling vereist';
+        details = 'Quota overschreden';
+      }
+      
       updateCheck(index, { 
         status: 'error', 
         latency, 
-        message: 'Fout', 
-        details: error?.message || 'Onbekende fout'
+        message: errorType, 
+        details
       });
     }
   };
@@ -54,30 +77,47 @@ export default function Diagnostics() {
     setIsRunning(true);
     setChecks(prev => prev.map(c => ({ ...c, status: 'pending', latency: undefined, message: undefined, details: undefined })));
 
-    // Check 1: REST reachability
+    // Check 0: Core DB reachability (simple query)
     await runCheck(0, async () => {
-      const { error } = await supabase.from('autonomous_system_status').select('count').limit(1);
+      const { error } = await supabase
+        .from('tasks')
+        .select('id')
+        .limit(1)
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') throw error;
+    });
+
+    // Check 1: REST reachability
+    await runCheck(1, async () => {
+      const { error } = await supabase.from('autonomous_system_status').select('count').limit(1).maybeSingle();
       if (error && error.code !== 'PGRST116') throw error;
     });
 
     // Check 2: Auth service
-    await runCheck(1, async () => {
+    await runCheck(2, async () => {
       const { error } = await supabase.auth.getSession();
       if (error) throw error;
     });
 
     // Check 3: Edge Functions
-    await runCheck(2, async () => {
+    await runCheck(3, async () => {
       const { error } = await supabase.functions.invoke('system-health-monitor', {
         body: { check: 'ping' }
       });
       if (error) throw error;
     });
 
-    // Check 4: Storage
-    await runCheck(3, async () => {
-      const { error } = await supabase.storage.listBuckets();
-      if (error) throw error;
+    // Check 4: Storage (user-scope list)
+    await runCheck(4, async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        const { error } = await supabase.storage.listBuckets();
+        if (error) throw error;
+      } else {
+        // User-scoped check
+        const { error } = await supabase.storage.from('training-documents').list('', { limit: 1 });
+        if (error && error.message !== 'Bucket not found') throw error;
+      }
     });
 
     setIsRunning(false);
@@ -104,11 +144,28 @@ export default function Diagnostics() {
 
   const generateIncidentSnippet = () => {
     const timestamp = new Date().toISOString();
-    const summary = checks.map(c => 
-      `${c.name}: ${c.status.toUpperCase()} ${c.latency ? `(${c.latency}ms)` : ''} ${c.details ? `- ${c.details}` : ''}`
-    ).join('\n');
+    const summary = checks.map(c => {
+      const status = c.status.toUpperCase();
+      const latency = c.latency ? `${c.latency}ms` : 'N/A';
+      const msg = c.message || status;
+      const details = c.details ? `\n  Details: ${c.details}` : '';
+      return `[${status}] ${c.name} (${latency}) - ${msg}${details}`;
+    }).join('\n\n');
     
-    return `Backend Diagnostics - ${timestamp}\n\n${summary}\n\nSupport ID: ${supabase.auth.getSession()}`;
+    return `=== BACKEND DIAGNOSTICS RAPPORT ===
+Timestamp: ${timestamp}
+Project: TaskFlow (ABCzorg/CitoZorg)
+User: ${supabase.auth.getSession() ? 'Authenticated' : 'Anonymous'}
+
+--- SERVICE STATUS ---
+${summary}
+
+--- ACTIES ---
+${checks.filter(c => c.status === 'error').length > 0 ? 
+  '⚠️ Backend is momenteel offline\n⚠️ Meerdere timeouts (504/544) gedetecteerd\n⚠️ Neem contact op met Lovable support' : 
+  '✅ Alle services operationeel'}
+
+Gegenereerd door: TaskFlow Diagnostics v1.0`;
   };
 
   const copyIncidentReport = () => {

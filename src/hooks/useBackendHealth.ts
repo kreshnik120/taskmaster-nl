@@ -26,10 +26,15 @@ export const useBackendHealth = () => {
     setHealthState(prev => ({ ...prev, status: 'checking' }));
     
     try {
-      // Simple reachability check using Supabase REST endpoint
-      const { error } = await supabase.from('autonomous_system_status').select('count').limit(1).maybeSingle();
+      // Core DB reachability check - try basic table query
+      const { error } = await supabase
+        .from('tasks')
+        .select('id')
+        .limit(1)
+        .maybeSingle();
       
-      if (error && error.code !== 'PGRST116') { // PGRST116 = table not found (but connection works)
+      if (error && error.code !== 'PGRST116') {
+        // PGRST116 = table not found (but connection works)
         throw error;
       }
 
@@ -42,7 +47,18 @@ export const useBackendHealth = () => {
       
       return true;
     } catch (error: any) {
-      const errorMsg = error?.message || 'Backend onbereikbaar';
+      // Differentiate error types
+      let errorMsg = 'Backend onbereikbaar';
+      
+      if (error?.code === '544' || error?.message?.includes('504') || error?.message?.includes('timeout')) {
+        errorMsg = 'Database timeout (504/544)';
+      } else if (error?.code === '401' || error?.code === '403') {
+        errorMsg = 'Authenticatie fout';
+      } else if (error?.code === '429') {
+        errorMsg = 'Rate limit bereikt';
+      } else if (error?.message) {
+        errorMsg = error.message;
+      }
       
       setHealthState(prev => ({
         status: 'offline',
