@@ -1,0 +1,80 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.58.0';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+Deno.serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  const startTime = Date.now();
+  const result: any = {
+    timestamp: new Date().toISOString(),
+    checks: {},
+  };
+
+  try {
+    // DB Ping with 3s timeout
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+    const dbStart = Date.now();
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('id')
+        .limit(1)
+        .abortSignal(controller.signal)
+        .maybeSingle();
+
+      clearTimeout(timeoutId);
+      const dbDuration = Date.now() - dbStart;
+
+      result.checks.db = {
+        status: error && error.code !== 'PGRST116' ? 'error' : 'ok',
+        latency_ms: dbDuration,
+        error: error?.message || null,
+        error_code: error?.code || null,
+      };
+    } catch (dbError: any) {
+      clearTimeout(timeoutId);
+      result.checks.db = {
+        status: 'timeout',
+        latency_ms: Date.now() - dbStart,
+        error: dbError.name === 'AbortError' ? 'Timeout (3s)' : dbError.message,
+        error_code: dbError.code || null,
+      };
+    }
+
+    result.overall_status = result.checks.db.status === 'ok' ? 'healthy' : 'degraded';
+    result.total_duration_ms = Date.now() - startTime;
+
+    return new Response(JSON.stringify(result, null, 2), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: result.overall_status === 'healthy' ? 200 : 503,
+    });
+  } catch (error: any) {
+    console.error('[PUBLIC-HEALTH] Critical error:', error);
+    return new Response(
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        overall_status: 'error',
+        error: error.message,
+        total_duration_ms: Date.now() - startTime,
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500,
+      }
+    );
+  }
+});

@@ -21,6 +21,7 @@ import AfgerondeTaken from "./pages/AfgerondeTaken";
 import AiTraining from "./pages/AiTraining";
 import Professionals from "./pages/Professionals";
 import Diagnostics from "./pages/Diagnostics";
+import ForensicMonitor from "./pages/ForensicMonitor";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -87,6 +88,7 @@ const App = () => (
           <Route path="/ai-training" element={<AiTraining />} />
           <Route path="/professionals" element={<Professionals />} />
           <Route path="/diagnostics" element={<Diagnostics />} />
+          <Route path="/forensic-monitor" element={<ForensicMonitor />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

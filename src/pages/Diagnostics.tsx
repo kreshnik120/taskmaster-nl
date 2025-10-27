@@ -1,9 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, CheckCircle, XCircle, AlertTriangle, Copy, Activity } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, AlertTriangle, Copy, Activity, MonitorCog } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -16,6 +17,7 @@ interface CheckResult {
 }
 
 export default function Diagnostics() {
+  const navigate = useNavigate();
   const [checks, setChecks] = useState<CheckResult[]>([
     { name: 'REST HEAD Ping', status: 'pending' },
     { name: 'Core DB Reachability', status: 'pending' },
@@ -334,6 +336,14 @@ Gegenereerd door: TaskFlow Diagnostics v1.0`;
               ) : (
                 '🔥 Snelle Rooktest'
               )}
+            </Button>
+            <Button 
+              onClick={() => navigate('/forensic-monitor')} 
+              variant="outline"
+              size="lg"
+            >
+              <MonitorCog className="h-4 w-4 mr-2" />
+              Forensische Monitor
             </Button>
           </div>
         </div>
