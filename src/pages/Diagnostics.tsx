@@ -23,6 +23,7 @@ export default function Diagnostics() {
     { name: 'Core DB Reachability', status: 'pending' },
     { name: 'Backend REST', status: 'pending' },
     { name: 'Auth Service', status: 'pending' },
+    { name: 'Public Health Endpoint', status: 'pending' },
     { name: 'Edge Functions', status: 'pending' },
     { name: 'Storage Service', status: 'pending' },
   ]);
@@ -142,8 +143,33 @@ export default function Diagnostics() {
       if (error) throw error;
     });
 
-    // Check 4: Edge Functions (5s timeout)
+    // Check 4: Public Health Endpoint (3s timeout)
     await runCheck(4, async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-health`,
+        {
+          method: 'GET',
+          signal: controller.signal,
+          headers: {
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+          }
+        }
+      );
+      
+      clearTimeout(timeoutId);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
+      const data = await response.json();
+      if (data.overall_status !== 'healthy') {
+        throw new Error(`Health check failed: ${data.overall_status}`);
+      }
+    });
+
+    // Check 5: Edge Functions (5s timeout)
+    await runCheck(5, async () => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
       
@@ -155,8 +181,8 @@ export default function Diagnostics() {
       if (error) throw error;
     });
 
-    // Check 5: Storage (user-scope list)
-    await runCheck(5, async () => {
+    // Check 6: Storage (user-scope list)
+    await runCheck(6, async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         const { error } = await supabase.storage.listBuckets();
@@ -294,6 +320,14 @@ Gegenereerd door: TaskFlow Diagnostics v1.0`;
   const allSuccess = checks.every(c => c.status === 'success');
   const hasError = checks.some(c => c.status === 'error');
 
+  const envKeys = {
+    frontend: {
+      VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL || '',
+      VITE_SUPABASE_PUBLISHABLE_KEY: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '',
+      VITE_SUPABASE_PROJECT_ID: import.meta.env.VITE_SUPABASE_PROJECT_ID || '',
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -405,6 +439,27 @@ Gegenereerd door: TaskFlow Diagnostics v1.0`;
             </CardContent>
           </Card>
         )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Environment Variabelen</CardTitle>
+            <CardDescription>
+              Frontend env keys - gebruikt VITE_SUPABASE_PUBLISHABLE_KEY (niet VITE_SUPABASE_ANON_KEY)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 font-mono text-sm">
+              {Object.entries(envKeys.frontend).map(([key, value]) => (
+                <div key={key} className="flex items-center justify-between">
+                  <span className="text-muted-foreground">{key}</span>
+                  <Badge variant={value ? 'default' : 'destructive'}>
+                    {value ? '✓ Ingesteld' : '✗ Ontbreekt'}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {hasError && (
           <Card>
