@@ -1073,6 +1073,12 @@ serve(async (req) => {
     // 🎯 CLIENT-VRAAG DETECTIE
     const isClientQuestion = /\b(klant|client|opdrachtgever|customer|organisatie)\b/i.test(lastUserMessage);
     
+    // 🛡️ KVK-VRAAG DETECTIE & GUARDRAIL
+    const isKvKQuestion = /(kvk|kvk-nummer|kvk nummer|kamer van koophandel)/i.test(lastUserMessage);
+    let guardrailTriggered = false;
+    let answerSource = 'ai_knowledge_base';
+    let orgProfileUsed = false;
+    
     // Haal relevante AI categorieën op via Meta-Orchestrator
     const { data: relevantCategories } = await supabaseClient
       .rpc('get_relevant_categories', { 
@@ -1151,7 +1157,12 @@ serve(async (req) => {
         .order('updated_at', { ascending: false });
 
       if (categoryItems) {
-        fullKnowledgeBase = categoryItems;
+        // 🛡️ Prioritize org_profile items at the top
+        fullKnowledgeBase = categoryItems.sort((a, b) => {
+          if (a.category === 'org_profile' && b.category !== 'org_profile') return -1;
+          if (a.category !== 'org_profile' && b.category === 'org_profile') return 1;
+          return 0;
+        });
         console.log(`✅ Smart Context: ${fullKnowledgeBase.length} items uit ${categoryNames.length} categorieën`);
         
         // FASE 2: Expand via relationships (Neural Graph Traversal)
@@ -1176,7 +1187,12 @@ serve(async (req) => {
         .limit(300);
 
       if (fallbackKnowledge) {
-        fullKnowledgeBase = fallbackKnowledge;
+        // 🛡️ Prioritize org_profile items at the top
+        fullKnowledgeBase = fallbackKnowledge.sort((a, b) => {
+          if (a.category === 'org_profile' && b.category !== 'org_profile') return -1;
+          if (a.category !== 'org_profile' && b.category === 'org_profile') return 1;
+          return 0;
+        });
       }
     }
     
@@ -1453,6 +1469,37 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
       .from('org_profiles')
       .select('*')
       .eq('org_id', userOrgId);
+    
+    // 🛡️ KVK-VRAAG GUARDRAIL: Direct antwoord uit org_profiles
+    if (isKvKQuestion && orgProfiles && orgProfiles.length > 0) {
+      console.log('🛡️ KvK-guardrail activated - direct answer from org_profiles');
+      guardrailTriggered = true;
+      answerSource = 'org_profile';
+      orgProfileUsed = true;
+      
+      // Build direct answer
+      let directAnswer = '**KvK-nummers van onze organisaties:**\n\n';
+      orgProfiles.forEach(profile => {
+        directAnswer += `• **${profile.brand_name}**: KvK ${profile.kvk_number || 'onbekend'}\n`;
+      });
+      directAnswer += '\n_Deze informatie is geverifieerd en komt direct uit onze organisatieprofielen._';
+      
+      // Log guardrail event
+      await supabaseServiceClient.from('ai_learning_events').insert({
+        org_id: userOrgId,
+        user_id: user.id,
+        event_type: 'guardrail_kvk',
+        context: { question: lastUserMessage, detected_kvk: true },
+        outcome: 'direct_answer_from_org_profile',
+        ai_response: { answer: directAnswer },
+        learning_score: 1.0
+      });
+      
+      // Return direct answer immediately
+      return new Response(directAnswer, {
+        headers: { ...corsHeaders, 'Content-Type': 'text/plain' }
+      });
+    }
     
     let orgProfileContext = '';
     if (orgProfiles && orgProfiles.length > 0) {
