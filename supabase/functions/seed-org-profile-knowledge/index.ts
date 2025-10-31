@@ -12,6 +12,24 @@ serve(async (req) => {
   }
 
   try {
+    // ✅ Check Authorization header EERST
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.error('❌ No Authorization header in request');
+      return new Response(
+        JSON.stringify({ 
+          error: 'No authorization header', 
+          hint: 'Ensure you are logged in and the session is active' 
+        }), 
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    console.log('✅ Authorization header found, creating Supabase client...');
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -20,7 +38,7 @@ serve(async (req) => {
           persistSession: false,
         },
         global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
+          headers: { Authorization: authHeader },
         },
       }
     );
@@ -30,14 +48,36 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Verify user
+    // ✅ Verify user met betere error message
+    console.log('🔐 Verifying user authentication...');
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    
+    if (authError) {
+      console.error('❌ Auth verification failed:', authError);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Authentication failed', 
+          details: authError.message 
+        }), 
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
+    
+    if (!user) {
+      console.error('❌ No user found in token');
+      return new Response(
+        JSON.stringify({ error: 'No user found - token may be expired' }), 
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    console.log(`✅ User authenticated: ${user.id}`)
 
     console.log('🌱 Starting org_profile knowledge seeding...');
 

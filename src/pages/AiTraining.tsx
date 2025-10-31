@@ -60,8 +60,24 @@ const AiTraining = () => {
   const handleSeedOrgProfiles = async () => {
     setSeedLoading(true);
     try {
-      console.log('🌱 Starting org-profile seed...');
-      const { data, error } = await supabase.functions.invoke('seed-org-profile-knowledge');
+      // ✅ Haal huidige session + token op
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        console.error('❌ No active session:', sessionError);
+        toast.error('Niet ingelogd. Log opnieuw in.');
+        setSeedLoading(false);
+        return;
+      }
+
+      console.log('🌱 Starting org-profile seed with auth token...');
+      
+      // ✅ Expliciet Authorization header meesturen
+      const { data, error } = await supabase.functions.invoke('seed-org-profile-knowledge', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
       
       if (error) {
         console.error('❌ Seed error:', error);
@@ -70,7 +86,7 @@ const AiTraining = () => {
       }
       
       console.log('✅ Seed success:', data);
-      toast.success(`✅ ${data.created || 0} org-profiles gemigreerd naar knowledge base. ${data.errors?.length || 0} fouten.`);
+      toast.success(`✅ ${data.created || 0} org-profiles gemigreerd. ${data.errors?.length || 0} fouten.`);
       
       // Refresh validation stats
       refetchStats();
