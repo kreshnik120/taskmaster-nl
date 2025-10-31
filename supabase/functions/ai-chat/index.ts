@@ -1578,25 +1578,49 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
         learning_score: 1.0
       });
       
-      // Return direct answer immediately
-      return new Response(
-        JSON.stringify({
-          response: guardrailAnswer.trim(),
-          used_knowledge: orgProfiles.map((p: any) => ({
-            id: `org_profile_${p.id}`,
-            category: 'org_profile',
-            key: `company_facts:${p.brand_name}`,
-            confidence_score: 0.98
-          })),
-          guardrail_triggered: true,
-          answer_source: 'org_profile',
-          org_profile_used: true
-        }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200
+      // Return SSE-compatible stream for frontend compatibility
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          // Send answer as SSE chunks
+          const content = guardrailAnswer.trim();
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            choices: [{
+              delta: { content },
+              finish_reason: null
+            }]
+          })}\n\n`));
+          
+          // Send metadata with used knowledge
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            choices: [{
+              delta: {
+                metadata: {
+                  usedKnowledge: orgProfiles.map((p: any) => `org_profile_${p.id}`),
+                  guardrail_triggered: true,
+                  answer_source: 'org_profile'
+                }
+              },
+              finish_reason: null
+            }]
+          })}\n\n`));
+          
+          // Send [DONE] signal
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            choices: [{
+              delta: {},
+              finish_reason: 'stop'
+            }]
+          })}\n\n`));
+          
+          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+          controller.close();
         }
-      );
+      });
+
+      return new Response(stream, {
+        headers: { ...corsHeaders, 'Content-Type': 'text/event-stream' }
+      });
     }
     
     // 🏢 FASE 6: GROUND TRUTH CONTEXT VERSTERKING
