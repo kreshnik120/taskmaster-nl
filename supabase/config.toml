@@ -4,7 +4,7 @@ project_id = "oelmsmcgryeoryhonexw"
 verify_jwt = false
 
 [functions.seed-org-profile-knowledge]
-verify_jwt = true
+verify_jwt = false
 
 [functions.auto-restart-backfill]
 verify_jwt = false
