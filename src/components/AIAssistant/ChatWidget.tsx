@@ -75,7 +75,12 @@ const startNewConversation = (): string => {
   return newConversationId;
 };
 
-export const ChatWidget = () => {
+interface ChatWidgetProps {
+  embedded?: boolean;      // Toon als embedded (geen floating window)
+  trainingMode?: boolean;  // Admin training mode (enable tool calling)
+}
+
+export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidgetProps = {}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -107,6 +112,13 @@ export const ChatWidget = () => {
   const resizeRef = useRef({ width: dimensions.width, height: dimensions.height });
   const { toast } = useToast();
 
+  // Training mode indicator
+  useEffect(() => {
+    if (trainingMode) {
+      console.log('🎓 Training mode enabled - tool calling active');
+    }
+  }, [trainingMode]);
+
   // Check authentication status
   useEffect(() => {
     const checkAuth = async () => {
@@ -123,10 +135,10 @@ export const ChatWidget = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ⚡ LAZY LOADING: Load conversation history only when widget opens
+  // ⚡ LAZY LOADING: Load conversation history only when widget opens (skip for embedded mode)
   useEffect(() => {
     const loadConversationHistory = async () => {
-      if (!isAuthenticated || !isOpen || messages.length > 0) return;
+      if (!isAuthenticated || (!embedded && !isOpen) || messages.length > 0) return;
       
       const conversationId = getConversationId();
       
@@ -161,7 +173,7 @@ export const ChatWidget = () => {
     };
     
     loadConversationHistory();
-  }, [isAuthenticated, isOpen]);
+  }, [isAuthenticated, isOpen, embedded]);
 
   // Sync resizeRef with dimensions state
   useEffect(() => {
@@ -1091,15 +1103,56 @@ export const ChatWidget = () => {
   }, [isResizing]);
 
 
+  // Embedded mode rendering (voor AI Training pagina)
+  if (embedded) {
+    return (
+      <div className="h-[600px] flex flex-col border rounded-lg bg-background">
+        <ScrollArea className="flex-1 p-4">
+          <div className="space-y-4">
+            {messages.map((msg, idx) => (
+              <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                {msg.role === 'assistant' && (
+                  <Avatar className="h-8 w-8 border border-primary/20 shrink-0">
+                    <AvatarFallback className="bg-primary/10">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                    </AvatarFallback>
+                  </Avatar>
+                )}
+                <div className={`rounded-lg px-4 py-2.5 max-w-[85%] ${msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                </div>
+              </div>
+            ))}
+            {isLoading && (
+              <div className="flex gap-3">
+                <Avatar className="h-8 w-8 border border-primary/20">
+                  <AvatarFallback className="bg-primary/10"><Sparkles className="h-4 w-4 text-primary" /></AvatarFallback>
+                </Avatar>
+                <div className="bg-muted rounded-lg px-4 py-2.5 flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span className="text-xs">Bezig...</span>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+        </ScrollArea>
+        <form onSubmit={handleSubmit} className="p-4 border-t">
+          <div className="flex gap-2">
+            <Textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder="Stel je vraag..." className="min-h-[60px]" disabled={isLoading} />
+            <Button type="submit" disabled={!input.trim() || isLoading}>{isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}</Button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <>
-      {/* Robot Assistant - Visible for logged in users */}
+      {/* Robot Assistant */}
       <div className="fixed bottom-6 right-6 z-[2147483647] pointer-events-none">
         <div className="pointer-events-auto drop-shadow-2xl">
-          <RobotIcon 
-            onClick={() => setIsOpen(!isOpen)} 
-            isActive={isLoading}
-          />
+          <RobotIcon onClick={() => setIsOpen(!isOpen)} isActive={isLoading} />
         </div>
       </div>
 

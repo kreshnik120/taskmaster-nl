@@ -6,9 +6,10 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Loader2, CheckCircle, Target, TrendingUp } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrainingChat } from "@/components/AITraining/TrainingChat";
+import { Bot, Sparkles } from "lucide-react";
+import { ChatWidget } from "@/components/AIAssistant/ChatWidget";
 import { DocumentUpload } from "@/components/AITraining/DocumentUpload";
 import { KnowledgeOverview } from "@/components/AITraining/KnowledgeOverview";
 import { SeedClientKnowledge } from "@/components/AITraining/SeedClientKnowledge";
@@ -211,8 +212,28 @@ const AiTraining = () => {
               </TabsContent>
 
               <TabsContent value="training" className="mt-6">
-                <div className="space-y-6">
-                  <TrainingChat />
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Bot className="h-5 w-5" />
+                      AI Training Chat
+                    </CardTitle>
+                    <CardDescription>
+                      Train de AI door vragen te stellen en correcties te geven. Je antwoorden worden automatisch opgeslagen in de knowledge base.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="border rounded-lg p-4 bg-muted/30">
+                      <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground">
+                        <Sparkles className="h-4 w-4" />
+                        <span>Training modus actief - je correcties worden automatisch opgeslagen</span>
+                      </div>
+                      <ChatWidget embedded={true} trainingMode={true} />
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <div className="space-y-6 mt-6">
                   <DocumentUpload />
                   <SeedClientKnowledge />
                 </div>

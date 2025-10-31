@@ -1436,8 +1436,40 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
       ? `\n📋 BELANGRIJKE CONTEXT UIT EERDERE GESPREKKEN:\n${keyFacts}\n`
       : '';
 
-    // ⚡ NIEUWE SYSTEM PROMPT: Integreert ABCzorg instructies + bestaande context
-    const systemPrompt = `${getFullInstructions(detectedRole)}
+    // ✅ STAP 3: Haal org_profiles op voor ground truth context
+    const { data: orgProfiles } = await supabaseClient
+      .from('org_profiles')
+      .select('*')
+      .eq('org_id', userOrgId);
+    
+    let orgProfileContext = '';
+    if (orgProfiles && orgProfiles.length > 0) {
+      orgProfileContext = `\n\n## **VERPLICHTE ORGANISATIE CONTEXT (GROUND TRUTH)**\n\n**Let op: Deze gegevens zijn geverifieerd en hebben absolute prioriteit boven andere bronnen.**\n\n`;
+      orgProfiles.forEach(profile => {
+        orgProfileContext += `**${profile.brand_name}:**\n`;
+        orgProfileContext += `- **Bedrijfstype:** ${profile.business_type}\n`;
+        orgProfileContext += `- **KvK-nummer:** ${profile.kvk_number || 'onbekend'}\n`;
+        orgProfileContext += `- **Primair domein:** ${profile.primary_domain || 'onbekend'}\n`;
+        if (profile.services && Array.isArray(profile.services) && profile.services.length > 0) {
+          orgProfileContext += `- **Diensten:** ${JSON.stringify(profile.services)}\n`;
+        }
+        if (profile.excluded_services && profile.excluded_services.length > 0) {
+          orgProfileContext += `- **UITGESLOTEN diensten:** ${profile.excluded_services.join(', ')}\n`;
+        }
+        orgProfileContext += `\n`;
+      });
+      
+      orgProfileContext += `### **STRIKTE REGELS:**\n`;
+      orgProfileContext += `1. **ABCzorg en CitoZorg zijn bemiddelingsbureaus, GEEN zorginstellingen.**\n`;
+      orgProfileContext += `2. **Nooit speculeren over faillissement, doorstart of juridische status** tenzij expliciet in org_profile.\n`;
+      orgProfileContext += `3. **Geen verwarring met externe entiteiten** zoals "Cito Zorg Thuiszorg B.V." zonder expliciete link in org_profile.\n`;
+      orgProfileContext += `4. **Als KvK of andere feiten ontbreken:** Antwoord "Deze informatie is niet beschikbaar in mijn kennisbank. Kunt u dit bevestigen?"\n`;
+      orgProfileContext += `5. **Geef exacte getallen** voor bedrijfsfeiten (KvK, adressen), nooit "circa" of "waarschijnlijk".\n`;
+      orgProfileContext += `6. **Bij tegenstrijdige bronnen:** Deze org_profile wint altijd.\n\n`;
+    }
+
+    // ⚡ NIEUWE SYSTEM PROMPT: Integreert ABCzorg instructies + org_profiles + bestaande context
+    const systemPrompt = `${getFullInstructions(detectedRole)}${orgProfileContext}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🕐 HUIDIGE NEDERLANDSE TIJD:
