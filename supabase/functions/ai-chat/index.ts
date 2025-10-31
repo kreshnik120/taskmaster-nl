@@ -859,6 +859,15 @@ serve(async (req) => {
 
     console.log('User authenticated:', user.id);
 
+    // ⏱️ Performance tracking
+    const perfTimers = {
+      start: Date.now(),
+      embedding: 0,
+      semanticSearch: 0,
+      aiCall: 0,
+      total: 0
+    };
+
     // Get user's org_id
     const { data: userOrg } = await supabaseClient
       .from('user_organizations')
@@ -1232,12 +1241,15 @@ serve(async (req) => {
           
           console.log('✅ Embedding generated, calling match_knowledge...');
           
+          perfTimers.embedding = Date.now() - perfTimers.start;
+          console.log(`⏱️ Embedding generated in ${perfTimers.embedding}ms`);
+          
           // Call match_knowledge function with validation filter
           const { data: semanticMatches, error: matchError } = await supabaseClient
             .rpc('match_knowledge', {
               query_embedding: queryEmbedding,
-              match_threshold: 0.5,  // Ruimere threshold voor meer matches
-              match_count: 50,
+              match_threshold: 0.75,  // Verhoogd voor betere kwaliteit
+              match_count: 20,  // Verlaagd voor snelheid
               filter_org_id: userOrgId,
               filter_role_tags: [detectedRole],
               filter_jurisdiction: 'NL',
@@ -1262,7 +1274,8 @@ serve(async (req) => {
               created_at: new Date().toISOString()
             }));
             
-            console.log(`✅ Found ${semanticKnowledge.length} items via semantic search`);
+            perfTimers.semanticSearch = Date.now() - perfTimers.start - perfTimers.embedding;
+            console.log(`✅ Found ${semanticKnowledge.length} items via semantic search in ${perfTimers.semanticSearch}ms`);
             console.log(`   Top 3 similarities: ${semanticMatches.slice(0,3).map((m: any) => m.similarity.toFixed(3)).join(', ')}`);
           }
         } else {
@@ -1817,22 +1830,56 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
     ];
 
     // Call Lovable AI Gateway for streaming with tool support
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-pro',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...messages,
-        ],
-        tools: tools,
-        stream: true,
-      }),
-    });
+    const AI_TIMEOUT_MS = 30000; // 30 seconden max
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.error('⚠️ AI call timeout after 30s');
+      controller.abort();
+    }, AI_TIMEOUT_MS);
+
+    let response;
+    try {
+      const aiCallStart = Date.now();
+      response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...messages,
+          ],
+          tools: tools,
+          stream: true,
+        }),
+      });
+      
+      clearTimeout(timeoutId);
+      console.log(`⏱️ AI Gateway responded in ${Date.now() - aiCallStart}ms`);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('🚨 AI Gateway timeout - returning fallback response');
+        return new Response(
+          JSON.stringify({
+            error: 'timeout',
+            message: 'Het AI systeem reageert momenteel traag. Probeer het over enkele minuten opnieuw.',
+            fallback: true
+          }),
+          {
+            status: 504,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+      
+      throw error;
+    }
 
     if (!response.ok) {
       if (response.status === 429) {
@@ -2928,6 +2975,17 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
           
           controller.close();
           
+          // ⏱️ Calculate total execution time and component timings
+          perfTimers.total = Date.now() - perfTimers.start;
+          perfTimers.aiCall = perfTimers.total - perfTimers.embedding - perfTimers.semanticSearch;
+          
+          console.log(`⏱️ Total request time: ${perfTimers.total}ms`, {
+            embedding: perfTimers.embedding,
+            semanticSearch: perfTimers.semanticSearch,
+            aiCall: perfTimers.aiCall,
+            knowledgeItemsUsed: usedKnowledgeIds.length
+          });
+          
           // Log function call for analytics
           const executionTime = Date.now() - startTime;
           const inputTokens = Math.floor(JSON.stringify(messages).length / 4);
@@ -2948,12 +3006,18 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                 user_id: user.id,
                 function_name: 'ai-chat',
                 success: true,
-                execution_time_ms: executionTime,
+                execution_time_ms: perfTimers.total,
                 model_used: 'google/gemini-2.5-flash',
                 input_tokens: inputTokens,
                 output_tokens: outputTokens,
                 total_tokens: totalTokens,
-                estimated_cost_eur: estimatedCost
+                estimated_cost_eur: estimatedCost,
+                metadata: {
+                  embedding_time_ms: perfTimers.embedding,
+                  search_time_ms: perfTimers.semanticSearch,
+                  ai_time_ms: perfTimers.aiCall,
+                  knowledge_items: usedKnowledgeIds.length
+                }
               });
             }
           } catch (logError) {
