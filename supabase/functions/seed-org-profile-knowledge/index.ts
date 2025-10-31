@@ -50,14 +50,17 @@ serve(async (req) => {
 
     // ✅ Verify user met betere error message
     console.log('🔐 Verifying user authentication...');
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    const accessToken = authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : authHeader;
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(accessToken);
     
     if (authError) {
       console.error('❌ Auth verification failed:', authError);
       return new Response(
         JSON.stringify({ 
           error: 'Authentication failed', 
-          details: authError.message 
+          details: authError.message || 'Unknown auth error' 
         }), 
         {
           status: 401,
