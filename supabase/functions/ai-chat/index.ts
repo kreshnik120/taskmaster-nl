@@ -876,6 +876,14 @@ serve(async (req) => {
       .single();
     
     const userOrgId = userOrg?.org_id;
+    
+    if (!userOrgId) {
+      console.error('❌ No organization associated with user');
+      return new Response(JSON.stringify({ error: 'Geen organisatie gekoppeld aan dit account' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // ============================================
     // FASE 1: CACHE LOOKUP (SHA256 HASH)
@@ -1134,11 +1142,13 @@ serve(async (req) => {
       
       const { data: categoryItems } = await supabaseClient
         .from('ai_knowledge_base')
-        .select('id, category, key, value, confidence_score, usage_count, source, created_at, role_tags, valid_from, valid_to')
-        .or(`user_id.eq.${user.id},org_id.eq.${userOrgId}`)
+        .select('id, category, key, value, confidence_score, usage_count, source, created_at, role_tags, valid_from, valid_to, validation_status')
+        .eq('org_id', userOrgId)
+        .eq('validation_status', 'verified')
         .is('deleted_at', null)
         .in('category', categoryNames)
-        .order('confidence_score', { ascending: false });
+        .order('confidence_score', { ascending: false })
+        .order('updated_at', { ascending: false });
 
       if (categoryItems) {
         fullKnowledgeBase = categoryItems;
@@ -1155,12 +1165,14 @@ serve(async (req) => {
       console.log('⚠️ Geen categorieën gevonden, fallback naar standaard query (300 items)...');
       const { data: fallbackKnowledge } = await supabaseClient
         .from('ai_knowledge_base')
-        .select('id, category, key, value, confidence_score, usage_count, source, created_at, role_tags, valid_from, valid_to')
-        .or(`user_id.eq.${user.id},org_id.eq.${userOrgId}`)
+        .select('id, category, key, value, confidence_score, usage_count, source, created_at, role_tags, valid_from, valid_to, validation_status')
+        .eq('org_id', userOrgId)
+        .eq('validation_status', 'verified')
         .is('deleted_at', null)
         .gte('confidence_score', 0.3)
         .order('usage_count', { ascending: false })
         .order('confidence_score', { ascending: false })
+        .order('updated_at', { ascending: false })
         .limit(300);
 
       if (fallbackKnowledge) {
