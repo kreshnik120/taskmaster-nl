@@ -5,48 +5,76 @@ import { withTimeout } from "@/lib/withTimeout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 
+/**
+ * Translate common Supabase authentication errors to Dutch.
+ */
 const translateAuthError = (error: any): string => {
   console.log("🔍 Supabase error:", error);
-  
+
   const errorMsg = error?.message?.toLowerCase() || "";
-  
+
   // Network and timeout errors
-  if (errorMsg.includes("failed to fetch") || 
-      errorMsg.includes("networkerror") || 
-      errorMsg.includes("request timeout") ||
-      error?.name === "AbortError") {
+  if (
+    errorMsg.includes("failed to fetch") ||
+    errorMsg.includes("networkerror") ||
+    errorMsg.includes("request timeout") ||
+    error?.name === "AbortError"
+  ) {
     return "De backend is tijdelijk niet bereikbaar. Probeer het later opnieuw.";
   }
-  
+
   // Common Supabase auth errors
-  if (errorMsg.includes("invalid login credentials") || errorMsg.includes("invalid credentials")) {
-    return "Onjuist e-mailadres of wachtwoord";
+  if (
+    errorMsg.includes("invalid login credentials") ||
+    errorMsg.includes("invalid credentials")
+  ) {
+    return "Onjuist e‑mailadres of wachtwoord";
   }
   if (errorMsg.includes("user already registered")) {
-    return "Dit e-mailadres is al geregistreerd. Probeer in te loggen.";
+    return "Dit e‑mailadres is al geregistreerd. Probeer in te loggen.";
   }
   if (errorMsg.includes("email not confirmed")) {
-    return "Je e-mailadres is nog niet bevestigd. Check je inbox.";
+    return "Je e‑mailadres is nog niet bevestigd. Check je inbox.";
   }
   if (errorMsg.includes("password should be at least")) {
     return "Wachtwoord moet minimaal 6 tekens bevatten";
   }
   if (errorMsg.includes("invalid email")) {
-    return "Ongeldig e-mailadres";
+    return "Ongeldig e‑mailadres";
   }
   if (errorMsg.includes("email rate limit exceeded")) {
     return "Te veel pogingen. Probeer het later opnieuw.";
   }
   if (errorMsg.includes("user not found")) {
-    return "Geen account gevonden met dit e-mailadres";
+    return "Geen account gevonden met dit e‑mailadres";
   }
-  
+  // OAuth provider mismatch
+  if (
+    errorMsg.includes("sign in using the same provider") ||
+    errorMsg.includes("other sign in method") ||
+    errorMsg.includes("existing provider")
+  ) {
+    return "Je hebt je aangemeld met een andere provider (bijv. GitHub of Google). Gebruik dezelfde provider om in te loggen.";
+  }
+
+  // Fallback
   return error?.message || "Er ging iets mis. Probeer het opnieuw.";
 };
 
@@ -71,7 +99,7 @@ const Auth = () => {
   const checkBackendHealth = async () => {
     const startTime = Date.now();
     console.info('[AUTH][HEALTH] Starting check...', { timestamp: new Date().toISOString() });
-    
+
     if (!navigator.onLine) {
       console.info('[AUTH][HEALTH] Browser offline detected');
       setBackendOffline(true);
@@ -80,58 +108,58 @@ const Auth = () => {
         timestamp: new Date(),
         success: false,
         error: 'Browser offline',
-        duration: 0
+        duration: 0,
       });
       return;
     }
-    
+
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000); // Reduced from 8s to 3s
-      
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/`,
-        { 
+        {
           method: 'HEAD',
           signal: controller.signal,
           headers: {
-            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
-          }
-        }
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+        },
       );
-      
+
       clearTimeout(timeoutId);
       const duration = Date.now() - startTime;
-      
+
       console.info('[AUTH][HEALTH] ✅ Success', { duration: `${duration}ms`, status: response.status });
-      
+
       setBackendOffline(false);
       setHealthCheckAttempts(0);
       setLastHealthCheck({
         timestamp: new Date(),
         success: true,
-        duration
+        duration,
       });
     } catch (error: any) {
       const duration = Date.now() - startTime;
       const errorMsg = error.name === 'AbortError' ? 'Timeout (3s)' : error.message;
       const newAttempts = healthCheckAttempts + 1;
-      
-      console.warn('[AUTH][HEALTH] ❌ Failed', { 
+
+      console.warn('[AUTH][HEALTH] ❌ Failed', {
         attempt: newAttempts,
         duration: `${duration}ms`,
         error: errorMsg,
-        type: error.name
+        type: error.name,
       });
-      
+
       setHealthCheckAttempts(newAttempts);
       setLastHealthCheck({
         timestamp: new Date(),
         success: false,
         error: errorMsg,
-        duration
+        duration,
       });
-      
+
       if (newAttempts >= 2) {
         setBackendOffline(true);
       }
@@ -139,10 +167,9 @@ const Auth = () => {
   };
 
   const scheduleNextHealthCheck = () => {
-    // Exponential backoff: 3s -> 6s -> 12s -> 24s -> 60s (max)
     const delay = Math.min(3000 * Math.pow(2, healthCheckAttempts), 60000);
     console.info('[AUTH][HEALTH] Next check scheduled in', { delay: `${delay / 1000}s` });
-    
+
     setTimeout(async () => {
       await checkBackendHealth();
       scheduleNextHealthCheck();
@@ -154,10 +181,10 @@ const Auth = () => {
       user: {
         id: 'demo-user',
         email: 'demo@example.com',
-        user_metadata: { name: 'Demo Gebruiker' }
+        user_metadata: { name: 'Demo Gebruiker' },
       },
       access_token: 'demo-token',
-      expires_at: Date.now() + 3600000
+      expires_at: Date.now() + 3600000,
     };
     localStorage.setItem('demo-session', JSON.stringify(mockSession));
     setDemoMode(true);
@@ -168,9 +195,9 @@ const Auth = () => {
   useEffect(() => {
     checkBackendHealth();
     scheduleNextHealthCheck();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Handle browser online/offline events
   useEffect(() => {
     const handleOnline = () => {
       console.log('[Network] Browser is online, checking backend...');
@@ -207,12 +234,12 @@ const Auth = () => {
             emailRedirectTo: `${window.location.origin}/`,
           },
         }),
-        10000
+        10000,
       );
 
       if (error) throw error;
 
-      toast.success("Account aangemaakt! Je kunt nu inloggen.");
+      toast.success('Account aangemaakt! Je kunt nu inloggen.');
     } catch (error: any) {
       toast.error(translateAuthError(error));
     } finally {
@@ -222,12 +249,14 @@ const Auth = () => {
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (backendOffline && !forceLoginAttempt) {
-      toast.error("Backend is tijdelijk niet bereikbaar. Gebruik 'Toch inloggen proberen' om het toch te proberen.");
+      toast.error(
+        "Backend is tijdelijk niet bereikbaar. Gebruik 'Toch inloggen proberen' om het toch te proberen.",
+      );
       return;
     }
-    
+
     setLoading(true);
     console.info('[AUTH] Login attempt started', { email, forced: forceLoginAttempt });
 
@@ -237,13 +266,13 @@ const Auth = () => {
           email,
           password,
         }),
-        8000
+        8000,
       );
 
       if (error) throw error;
 
-      toast.success("Welkom terug!");
-      navigate("/");
+      toast.success('Welkom terug!');
+      navigate('/');
     } catch (error: any) {
       toast.error(translateAuthError(error));
     } finally {
@@ -254,7 +283,7 @@ const Auth = () => {
   const handlePasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) {
-      toast.error("Vul je e-mailadres in");
+      toast.error('Vul je e‑mailadres in');
       return;
     }
 
@@ -264,13 +293,30 @@ const Auth = () => {
         supabase.auth.resetPasswordForEmail(email, {
           redirectTo: `${window.location.origin}/`,
         }),
-        8000
+        8000,
       );
 
       if (error) throw error;
 
-      toast.success("Check je inbox voor de wachtwoord reset link!");
+      toast.success('Check je inbox voor de wachtwoordreset link!');
       setResetMode(false);
+    } catch (error: any) {
+      toast.error(translateAuthError(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOAuthLogin = async (provider: 'github' | 'google') => {
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: `${window.location.origin}/`,
+        },
+      });
+      if (error) throw error;
     } catch (error: any) {
       toast.error(translateAuthError(error));
     } finally {
@@ -292,16 +338,9 @@ const Auth = () => {
           {backendOffline && (
             <Alert variant="destructive" className="mb-4">
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>🔴 Backend Kritiek Offline (504/544)</AlertTitle>
+              <AlertTitle>Backend Offline</AlertTitle>
               <AlertDescription className="flex flex-col gap-2">
-                <span className="font-semibold">De database is al 48+ uur onbereikbaar.</span>
-                <p className="text-sm">Alle verbindingspogingen resulteren in timeouts. Mogelijke oorzaken:</p>
-                <ul className="list-disc list-inside text-sm space-y-1 ml-2">
-                  <li>Database instance crash (Lovable Cloud)</li>
-                  <li>Netwerk isolatie tussen frontend/backend</li>
-                  <li>Backend overbelasting (alle workers vastgelopen)</li>
-                </ul>
-                
+                <span className="font-semibold">De backend is tijdelijk niet bereikbaar.</span>
                 {lastHealthCheck && (
                   <div className="mt-2 p-2 bg-muted rounded-md text-xs font-mono">
                     <div className="flex items-center gap-2">
@@ -328,7 +367,6 @@ const Auth = () => {
                     )}
                   </div>
                 )}
-                
                 <div className="flex flex-col gap-2 mt-2">
                   <div className="flex gap-2 flex-wrap">
                     <Button
@@ -391,7 +429,7 @@ const Auth = () => {
               {resetMode ? (
                 <form onSubmit={handlePasswordReset} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="reset-email">E-mailadres</Label>
+                    <Label htmlFor="reset-email">E‑mailadres</Label>
                     <Input
                       id="reset-email"
                       type="email"
@@ -408,7 +446,7 @@ const Auth = () => {
                         Versturen...
                       </>
                     ) : (
-                      "Wachtwoord reset link versturen"
+                      'Wachtwoord reset link versturen'
                     )}
                   </Button>
                   <Button
@@ -423,7 +461,7 @@ const Auth = () => {
               ) : (
                 <form onSubmit={handleSignIn} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="email">E-mailadres</Label>
+                    <Label htmlFor="email">E‑mailadres</Label>
                     <Input
                       id="email"
                       type="email"
@@ -434,16 +472,7 @@ const Auth = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="password">Wachtwoord</Label>
-                      <button
-                        type="button"
-                        onClick={() => setResetMode(true)}
-                        className="text-sm text-primary hover:underline"
-                      >
-                        Wachtwoord vergeten?
-                      </button>
-                    </div>
+                    <Label htmlFor="password">Wachtwoord</Label>
                     <Input
                       id="password"
                       type="password"
@@ -452,16 +481,54 @@ const Auth = () => {
                       required
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={loading || backendOffline}>
+                  <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Inloggen...
                       </>
                     ) : (
-                      "Inloggen"
+                      'Inloggen'
                     )}
                   </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => setResetMode(true)}
+                  >
+                    Wachtwoord vergeten?
+                  </Button>
+                  
+                  <div className="relative my-4">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">
+                        Of login met
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => handleOAuthLogin('google')}
+                      disabled={loading}
+                    >
+                      Google
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => handleOAuthLogin('github')}
+                      disabled={loading}
+                    >
+                      GitHub
+                    </Button>
+                  </div>
                 </form>
               )}
             </TabsContent>
@@ -479,7 +546,7 @@ const Auth = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signup-email">E-mailadres</Label>
+                  <Label htmlFor="signup-email">E‑mailadres</Label>
                   <Input
                     id="signup-email"
                     type="email"
@@ -504,10 +571,10 @@ const Auth = () => {
                   {loading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Account aanmaken...
+                      Registreren...
                     </>
                   ) : (
-                    "Account aanmaken"
+                    'Account aanmaken'
                   )}
                 </Button>
               </form>

@@ -8,6 +8,7 @@ import { Loader2, CheckCircle, Target, TrendingUp } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Bot, Sparkles } from "lucide-react";
 import { ChatWidget } from "@/components/AIAssistant/ChatWidget";
 import { DocumentUpload } from "@/components/AITraining/DocumentUpload";
@@ -28,14 +29,16 @@ import { SystemMonitor } from "@/components/SystemMonitor";
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { SystemHealthDashboard } from "@/components/AITraining/SystemHealthDashboard";
 import { EmbeddingCoverageDashboard } from "@/components/AITraining/EmbeddingCoverageDashboard";
+import { toast } from "sonner";
 
 const AiTraining = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [seedLoading, setSeedLoading] = useState(false);
   const navigate = useNavigate();
 
   // ⚡ EFFICIENT BANNER QUERY: Server-side HEAD count (uses idx_ai_knowledge_validation_deleted)
-  const { data: stats } = useQuery({
+  const { data: stats, refetch: refetchStats } = useQuery({
     queryKey: ["validation-stats-banner"],
     queryFn: async () => {
       const { count, error } = await supabase
@@ -53,6 +56,31 @@ const AiTraining = () => {
     },
     staleTime: 60000, // ⚡ CACHE: 60s
   });
+
+  const handleSeedOrgProfiles = async () => {
+    setSeedLoading(true);
+    try {
+      console.log('🌱 Starting org-profile seed...');
+      const { data, error } = await supabase.functions.invoke('seed-org-profile-knowledge');
+      
+      if (error) {
+        console.error('❌ Seed error:', error);
+        toast.error(`Seed mislukt: ${error.message}`);
+        return;
+      }
+      
+      console.log('✅ Seed success:', data);
+      toast.success(`✅ ${data.created || 0} org-profiles gemigreerd naar knowledge base. ${data.errors?.length || 0} fouten.`);
+      
+      // Refresh validation stats
+      refetchStats();
+    } catch (err: any) {
+      console.error('❌ Unexpected seed error:', err);
+      toast.error(`Onverwachte fout: ${err.message}`);
+    } finally {
+      setSeedLoading(false);
+    }
+  };
 
   useEffect(() => {
     // ⚡ AUTH FALLBACK: Prevent infinite spinner on slow auth
@@ -195,6 +223,48 @@ const AiTraining = () => {
               <AdminOnly>
                 <TabsContent value="system" className="mt-6">
                   <div className="space-y-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Sparkles className="h-5 w-5" />
+                          🌱 Organisatiegegevens Seeden
+                        </CardTitle>
+                        <CardDescription>
+                          Migreer org_profiles (ABCzorg, CitoZorg) naar AI knowledge base voor accurate bedrijfsinformatie
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex flex-col gap-2">
+                          <p className="text-sm text-muted-foreground">
+                            Dit proces:
+                          </p>
+                          <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
+                            <li>Haalt KvK, bedrijfstype, domeinen uit org_profiles</li>
+                            <li>Maakt verified knowledge items (category='org_profile')</li>
+                            <li>Genereert embeddings voor semantic search</li>
+                            <li>Duurt ~30-60 seconden</li>
+                          </ul>
+                        </div>
+                        <Button 
+                          onClick={handleSeedOrgProfiles}
+                          disabled={seedLoading}
+                          className="w-full"
+                        >
+                          {seedLoading ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Seeding...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="mr-2 h-4 w-4" />
+                              Seed Nu
+                            </>
+                          )}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                    
                     <EmbeddingCoverageDashboard />
                     <SystemHealthDashboard />
                     <ManualFunctionTrigger hideBackfill />

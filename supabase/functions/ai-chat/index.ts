@@ -1073,8 +1073,8 @@ serve(async (req) => {
     // 🎯 CLIENT-VRAAG DETECTIE
     const isClientQuestion = /\b(klant|client|opdrachtgever|customer|organisatie)\b/i.test(lastUserMessage);
     
-    // 🛡️ KVK-VRAAG DETECTIE & GUARDRAIL
-    const isKvKQuestion = /(kvk|kvk-nummer|kvk nummer|kamer van koophandel)/i.test(lastUserMessage);
+    // 🛡️ ORG-PROFILE VRAAG DETECTIE & GUARDRAIL (UITGEBREID)
+    const isOrgProfileQuestion = /(kvk|kvk-nummer|kvk nummer|kamer van koophandel|wat voor (organisatie|bedrijf|type)|bedrijfstype|diensten|domein|domeinnaam|abczorg|citozorg|bemiddeling|zorginstelling)/i.test(lastUserMessage);
     let guardrailTriggered = false;
     let answerSource = 'ai_knowledge_base';
     let orgProfileUsed = false;
@@ -1148,7 +1148,7 @@ serve(async (req) => {
       
       const { data: categoryItems } = await supabaseClient
         .from('ai_knowledge_base')
-        .select('id, category, key, value, confidence_score, usage_count, source, created_at, role_tags, valid_from, valid_to, validation_status')
+        .select('id, category, key, value, confidence_score, usage_count, source, created_at, updated_at, role_tags, valid_from, valid_to, validation_status')
         .eq('org_id', userOrgId)
         .eq('validation_status', 'verified')
         .is('deleted_at', null)
@@ -1157,13 +1157,37 @@ serve(async (req) => {
         .order('updated_at', { ascending: false });
 
       if (categoryItems) {
-        // 🛡️ Prioritize org_profile items at the top
-        fullKnowledgeBase = categoryItems.sort((a, b) => {
-          if (a.category === 'org_profile' && b.category !== 'org_profile') return -1;
-          if (a.category !== 'org_profile' && b.category === 'org_profile') return 1;
-          return 0;
+        // 🛡️ FASE 5: OPTIMIZED RETRIEVAL RANKING
+        // Split org_profile vs rest
+        const orgProfileItems = categoryItems.filter((item: any) => item.category === 'org_profile');
+        const otherItems = categoryItems.filter((item: any) => item.category !== 'org_profile');
+        
+        console.log(`🏢 Org-profile items: ${orgProfileItems.length}`);
+        console.log(`📚 Other items: ${otherItems.length}`);
+        
+        // Sort each group independently
+        orgProfileItems.sort((a: any, b: any) => {
+          if (a.confidence_score !== b.confidence_score) {
+            return (b.confidence_score || 0) - (a.confidence_score || 0);
+          }
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
         });
-        console.log(`✅ Smart Context: ${fullKnowledgeBase.length} items uit ${categoryNames.length} categorieën`);
+        
+        otherItems.sort((a: any, b: any) => {
+          if (a.confidence_score !== b.confidence_score) {
+            return (b.confidence_score || 0) - (a.confidence_score || 0);
+          }
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+        });
+        
+        // Recombine: org_profile items FIRST
+        const maxContextItems = 15;
+        fullKnowledgeBase = [
+          ...orgProfileItems,
+          ...otherItems.slice(0, Math.max(0, maxContextItems - orgProfileItems.length))
+        ];
+        
+        console.log(`✅ Smart Context: ${fullKnowledgeBase.length} items (${orgProfileItems.length} org-profiles) uit ${categoryNames.length} categorieën`);
         
         // FASE 2: Expand via relationships (Neural Graph Traversal)
         fullKnowledgeBase = await expandViaRelationships(fullKnowledgeBase, 2);
@@ -1176,7 +1200,7 @@ serve(async (req) => {
       console.log('⚠️ Geen categorieën gevonden, fallback naar standaard query (300 items)...');
       const { data: fallbackKnowledge } = await supabaseClient
         .from('ai_knowledge_base')
-        .select('id, category, key, value, confidence_score, usage_count, source, created_at, role_tags, valid_from, valid_to, validation_status')
+        .select('id, category, key, value, confidence_score, usage_count, source, created_at, updated_at, role_tags, valid_from, valid_to, validation_status')
         .eq('org_id', userOrgId)
         .eq('validation_status', 'verified')
         .is('deleted_at', null)
@@ -1187,12 +1211,31 @@ serve(async (req) => {
         .limit(300);
 
       if (fallbackKnowledge) {
-        // 🛡️ Prioritize org_profile items at the top
-        fullKnowledgeBase = fallbackKnowledge.sort((a, b) => {
-          if (a.category === 'org_profile' && b.category !== 'org_profile') return -1;
-          if (a.category !== 'org_profile' && b.category === 'org_profile') return 1;
-          return 0;
+        // 🛡️ FASE 5: OPTIMIZED RETRIEVAL RANKING (fallback)
+        const orgProfileItems = fallbackKnowledge.filter((item: any) => item.category === 'org_profile');
+        const otherItems = fallbackKnowledge.filter((item: any) => item.category !== 'org_profile');
+        
+        orgProfileItems.sort((a: any, b: any) => {
+          if (a.confidence_score !== b.confidence_score) {
+            return (b.confidence_score || 0) - (a.confidence_score || 0);
+          }
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
         });
+        
+        otherItems.sort((a: any, b: any) => {
+          if (a.confidence_score !== b.confidence_score) {
+            return (b.confidence_score || 0) - (a.confidence_score || 0);
+          }
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+        });
+        
+        const maxContextItems = 300;
+        fullKnowledgeBase = [
+          ...orgProfileItems,
+          ...otherItems.slice(0, Math.max(0, maxContextItems - orgProfileItems.length))
+        ];
+        
+        console.log(`✅ Fallback: ${fullKnowledgeBase.length} items (${orgProfileItems.length} org-profiles)`);
       }
     }
     
@@ -1470,65 +1513,129 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
       .select('*')
       .eq('org_id', userOrgId);
     
-    // 🛡️ KVK-VRAAG GUARDRAIL: Direct antwoord uit org_profiles
-    if (isKvKQuestion && orgProfiles && orgProfiles.length > 0) {
-      console.log('🛡️ KvK-guardrail activated - direct answer from org_profiles');
+    // 🛡️ FASE 4: UITGEBREIDE ORG-PROFILE GUARDRAIL
+    if (isOrgProfileQuestion && orgProfiles && orgProfiles.length > 0) {
+      console.log('🛡️ Org-profile guardrail activated:', { question: lastUserMessage });
       guardrailTriggered = true;
       answerSource = 'org_profile';
       orgProfileUsed = true;
       
-      // Build direct answer
-      let directAnswer = '**KvK-nummers van onze organisaties:**\n\n';
-      orgProfiles.forEach(profile => {
-        directAnswer += `• **${profile.brand_name}**: KvK ${profile.kvk_number || 'onbekend'}\n`;
+      // Detect wat wordt gevraagd
+      const askingKvK = /(kvk|kamer van koophandel)/i.test(lastUserMessage);
+      const askingType = /(type|soort|organisatie|bedrijf)/i.test(lastUserMessage);
+      const askingDomain = /(domein|domeinnaam|website)/i.test(lastUserMessage);
+      const askingServices = /(diensten|service|wat doen|wat doet)/i.test(lastUserMessage);
+      
+      // Detecteer welke organisatie
+      const askingABC = /abczorg/i.test(lastUserMessage);
+      const askingCito = /citozorg/i.test(lastUserMessage);
+      
+      // Build targeted answer
+      let guardrailAnswer = '';
+      
+      const orgsToAnswer = askingABC ? orgProfiles.filter((p: any) => /abc/i.test(p.brand_name)) :
+                            askingCito ? orgProfiles.filter((p: any) => /cito/i.test(p.brand_name)) :
+                            orgProfiles;
+      
+      orgsToAnswer.forEach((profile: any) => {
+        guardrailAnswer += `\n\n**${profile.brand_name}:**\n`;
+        
+        if (askingKvK || !askingType && !askingDomain && !askingServices) {
+          guardrailAnswer += `- **KvK-nummer:** ${profile.kvk_number}\n`;
+        }
+        
+        if (askingType || !askingKvK && !askingDomain && !askingServices) {
+          guardrailAnswer += `- **Bedrijfstype:** ${profile.business_type || 'Niet gespecificeerd'}\n`;
+        }
+        
+        if (askingDomain) {
+          guardrailAnswer += `- **Domein:** ${profile.primary_domain || 'Niet gespecificeerd'}\n`;
+        }
+        
+        if (askingServices) {
+          const services = profile.services || [];
+          const excluded = profile.excluded_services || [];
+          guardrailAnswer += `- **Diensten:** ${services.length > 0 ? services.join(', ') : 'Niet gespecificeerd'}\n`;
+          if (excluded.length > 0) {
+            guardrailAnswer += `- **NIET geleverd:** ${excluded.join(', ')}\n`;
+          }
+        }
       });
-      directAnswer += '\n_Deze informatie is geverifieerd en komt direct uit onze organisatieprofielen._';
+      
+      guardrailAnswer += `\n\n_Bron: Geverifieerde organisatiegegevens uit org_profiles_`;
       
       // Log guardrail event
       await supabaseServiceClient.from('ai_learning_events').insert({
         org_id: userOrgId,
         user_id: user.id,
-        event_type: 'guardrail_kvk',
-        context: { question: lastUserMessage, detected_kvk: true },
+        event_type: 'guardrail_org_profile',
+        context: { 
+          question: lastUserMessage, 
+          detected_aspects: { askingKvK, askingType, askingDomain, askingServices }
+        },
         outcome: 'direct_answer_from_org_profile',
-        ai_response: { answer: directAnswer },
+        ai_response: { answer: guardrailAnswer.trim() },
         learning_score: 1.0
       });
       
       // Return direct answer immediately
-      return new Response(directAnswer, {
-        headers: { ...corsHeaders, 'Content-Type': 'text/plain' }
-      });
+      return new Response(
+        JSON.stringify({
+          response: guardrailAnswer.trim(),
+          used_knowledge: orgProfiles.map((p: any) => ({
+            id: `org_profile_${p.id}`,
+            category: 'org_profile',
+            key: `company_facts:${p.brand_name}`,
+            confidence_score: 0.98
+          })),
+          guardrail_triggered: true,
+          answer_source: 'org_profile',
+          org_profile_used: true
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200
+        }
+      );
     }
     
-    let orgProfileContext = '';
+    // 🏢 FASE 6: GROUND TRUTH CONTEXT VERSTERKING
+    let orgProfileGroundTruth = '';
     if (orgProfiles && orgProfiles.length > 0) {
-      orgProfileContext = `\n\n## **VERPLICHTE ORGANISATIE CONTEXT (GROUND TRUTH)**\n\n**Let op: Deze gegevens zijn geverifieerd en hebben absolute prioriteit boven andere bronnen.**\n\n`;
-      orgProfiles.forEach(profile => {
-        orgProfileContext += `**${profile.brand_name}:**\n`;
-        orgProfileContext += `- **Bedrijfstype:** ${profile.business_type}\n`;
-        orgProfileContext += `- **KvK-nummer:** ${profile.kvk_number || 'onbekend'}\n`;
-        orgProfileContext += `- **Primair domein:** ${profile.primary_domain || 'onbekend'}\n`;
-        if (profile.services && Array.isArray(profile.services) && profile.services.length > 0) {
-          orgProfileContext += `- **Diensten:** ${JSON.stringify(profile.services)}\n`;
+      orgProfileGroundTruth = `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      orgProfileGroundTruth += `🏢 **GEVERIFIEERDE ORGANISATIEGEGEVENS (100% BETROUWBAAR - GROUND TRUTH)**\n`;
+      orgProfileGroundTruth += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+      
+      orgProfiles.forEach((profile: any) => {
+        orgProfileGroundTruth += `**${profile.brand_name}:**\n`;
+        orgProfileGroundTruth += `├─ **KvK-nummer:** ${profile.kvk_number}\n`;
+        orgProfileGroundTruth += `├─ **Bedrijfstype:** ${profile.business_type || 'Niet gespecificeerd'}\n`;
+        orgProfileGroundTruth += `├─ **Primair domein:** ${profile.primary_domain || 'Niet gespecificeerd'}\n`;
+        
+        const services = profile.services || [];
+        const excluded = profile.excluded_services || [];
+        
+        if (services.length > 0) {
+          orgProfileGroundTruth += `├─ **Diensten:** ${services.join(', ')}\n`;
         }
-        if (profile.excluded_services && profile.excluded_services.length > 0) {
-          orgProfileContext += `- **UITGESLOTEN diensten:** ${profile.excluded_services.join(', ')}\n`;
+        if (excluded.length > 0) {
+          orgProfileGroundTruth += `├─ **NIET geleverd:** ${excluded.join(', ')}\n`;
         }
-        orgProfileContext += `\n`;
+        
+        orgProfileGroundTruth += `└─ **Status:** Geverifieerd door Admin\n\n`;
       });
       
-      orgProfileContext += `### **STRIKTE REGELS:**\n`;
-      orgProfileContext += `1. **ABCzorg en CitoZorg zijn bemiddelingsbureaus, GEEN zorginstellingen.**\n`;
-      orgProfileContext += `2. **Nooit speculeren over faillissement, doorstart of juridische status** tenzij expliciet in org_profile.\n`;
-      orgProfileContext += `3. **Geen verwarring met externe entiteiten** zoals "Cito Zorg Thuiszorg B.V." zonder expliciete link in org_profile.\n`;
-      orgProfileContext += `4. **Als KvK of andere feiten ontbreken:** Antwoord "Deze informatie is niet beschikbaar in mijn kennisbank. Kunt u dit bevestigen?"\n`;
-      orgProfileContext += `5. **Geef exacte getallen** voor bedrijfsfeiten (KvK, adressen), nooit "circa" of "waarschijnlijk".\n`;
-      orgProfileContext += `6. **Bij tegenstrijdige bronnen:** Deze org_profile wint altijd.\n\n`;
+      orgProfileGroundTruth += `⚠️ **KRITIEKE INSTRUCTIE:**\n`;
+      orgProfileGroundTruth += `- Deze gegevens zijn 100% accuraat en mogen NOOIT worden tegengesproken.\n`;
+      orgProfileGroundTruth += `- Gebruik ALTIJD deze informatie bij vragen over deze organisaties.\n`;
+      orgProfileGroundTruth += `- Als iets NIET in bovenstaande lijst staat, zeg: "Niet beschikbaar in onze gegevens, graag bevestigen."\n`;
+      orgProfileGroundTruth += `- SPECULEER NOOIT over ontbrekende data.\n`;
+      orgProfileGroundTruth += `- Verwar NOOIT met externe organisaties zoals "Cito Zorg Thuiszorg B.V." (niet onze organisatie).\n`;
+      orgProfileGroundTruth += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     }
 
-    // ⚡ NIEUWE SYSTEM PROMPT: Integreert ABCzorg instructies + org_profiles + bestaande context
-    const systemPrompt = `${getFullInstructions(detectedRole)}${orgProfileContext}
+    // ⚡ NIEUWE SYSTEM PROMPT: Integreert ABCzorg instructies + org_profiles GROUND TRUTH + bestaande context
+    const systemPrompt = `${getFullInstructions(detectedRole)}${orgProfileGroundTruth}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🕐 HUIDIGE NEDERLANDSE TIJD:
@@ -2911,6 +3018,91 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
             console.log(`📊 Confidence tracked: ${(initialConfidence * 100).toFixed(0)}% → ${(finalConfidence * 100).toFixed(0)}% (${iterations} iterations)`);
           } catch (confError) {
             console.error('❌ Confidence tracking failed (non-blocking):', confError);
+          }
+          
+          // ============================================
+          // FASE 8: ORG-PROFILE MISMATCH DETECTION
+          // ============================================
+          if (orgProfiles && orgProfiles.length > 0 && fullResponse) {
+            try {
+              const aiResponseLower = fullResponse.toLowerCase();
+              
+              for (const profile of orgProfiles) {
+                const brandLower = profile.brand_name.toLowerCase();
+                
+                // Check if AI mentions this organization
+                if (aiResponseLower.includes(brandLower)) {
+                  // Check KvK mismatch
+                  if (aiResponseLower.includes('kvk')) {
+                    const mentionsWrongKvK = /kvk[:\s-]*(\d{8})/gi.exec(aiResponseLower);
+                    if (mentionsWrongKvK && mentionsWrongKvK[1] !== profile.kvk_number) {
+                      console.error('🚨 ORG-PROFILE MISMATCH: Wrong KvK!', {
+                        org: profile.brand_name,
+                        correct_kvk: profile.kvk_number,
+                        mentioned_kvk: mentionsWrongKvK[1],
+                        question: lastUserMessage
+                      });
+                      
+                      // Log as negative learning event
+                      await supabaseServiceClient.from('ai_learning_events').insert({
+                        event_type: 'org_profile_mismatch',
+                        user_id: user.id,
+                        org_id: userOrgId,
+                        context: {
+                          question: lastUserMessage,
+                          ai_answer: fullResponse.substring(0, 500),
+                          ground_truth: {
+                            org: profile.brand_name,
+                            kvk: profile.kvk_number
+                          },
+                          mismatch_type: 'kvk',
+                          mentioned_kvk: mentionsWrongKvK[1]
+                        },
+                        learning_score: -0.8,
+                        outcome: 'harmful'
+                      });
+                    }
+                  }
+                  
+                  // Check business type mismatch
+                  const wrongTypes = ['zorginstelling', 'thuiszorg', 'zorgverlener', 'verpleeghuis', 'ziekenhuis'];
+                  const correctType = (profile.business_type || '').toLowerCase();
+                  
+                  for (const wrongType of wrongTypes) {
+                    if (aiResponseLower.includes(wrongType) && !correctType.includes(wrongType)) {
+                      console.error('🚨 ORG-PROFILE MISMATCH: Wrong business type!', {
+                        org: profile.brand_name,
+                        correct_type: profile.business_type,
+                        mentioned_type: wrongType,
+                        question: lastUserMessage
+                      });
+                      
+                      await supabaseServiceClient.from('ai_learning_events').insert({
+                        event_type: 'org_profile_mismatch',
+                        user_id: user.id,
+                        org_id: userOrgId,
+                        context: {
+                          question: lastUserMessage,
+                          ai_answer: fullResponse.substring(0, 500),
+                          ground_truth: {
+                            org: profile.brand_name,
+                            business_type: profile.business_type
+                          },
+                          mismatch_type: 'business_type',
+                          mentioned_type: wrongType
+                        },
+                        learning_score: -0.6,
+                        outcome: 'harmful'
+                      });
+                    }
+                  }
+                }
+              }
+              
+              console.log('✅ Org-profile mismatch detection complete');
+            } catch (mismatchError) {
+              console.error('❌ Org-profile mismatch detection failed (non-blocking):', mismatchError);
+            }
           }
           
           // ✅ Send knowledge metadata to client for feedback tracking
