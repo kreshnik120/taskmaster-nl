@@ -1573,35 +1573,60 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
       
       guardrailAnswer += `\n\n_Bron: Geverifieerde organisatiegegevens uit org_profiles_`;
       
-      // Log guardrail event
-      await supabaseServiceClient.from('ai_learning_events').insert({
-        org_id: userOrgId,
-        user_id: user.id,
-        event_type: 'guardrail_org_profile',
-        context: { 
-          question: lastUserMessage, 
-          detected_aspects: { askingKvK, askingType, askingDomain, askingServices }
-        },
-        outcome: 'direct_answer_from_org_profile',
-        ai_response: { answer: guardrailAnswer.trim() },
-        learning_score: 1.0
-      });
+      // Log guardrail event (async, non-blocking)
+      (async () => {
+        try {
+          await supabaseServiceClient.from('ai_learning_events').insert({
+            org_id: userOrgId,
+            user_id: user.id,
+            event_type: 'guardrail_org_profile',
+            context: { 
+              question: lastUserMessage, 
+              detected_aspects: { askingKvK, askingType, askingDomain, askingServices }
+            },
+            outcome: 'direct_answer_from_org_profile',
+            ai_response: { answer: guardrailAnswer.trim() },
+            learning_score: 1.0
+          });
+          console.log('✅ Learning event logged');
+        } catch (err) {
+          console.warn('⚠️ Failed to log learning event:', err);
+        }
+      })();
       
       // Return SSE-compatible stream for frontend compatibility
       const encoder = new TextEncoder();
       const stream = new ReadableStream({
         start(controller) {
+          let streamClosed = false;
+          
+          const safeEnqueue = (payload: string) => {
+            if (streamClosed) {
+              console.warn('🧯 Blocked enqueue after close');
+              return;
+            }
+            controller.enqueue(encoder.encode(payload));
+          };
+          
+          const endStreamOnce = () => {
+            if (streamClosed) return;
+            safeEnqueue('data: [DONE]\n\n');
+            streamClosed = true;
+            setTimeout(() => controller.close(), 50); // ✅ Geef frontend tijd om te lezen
+            console.log('🧱 Stream closed safely');
+          };
+          
           // Send answer as SSE chunks
           const content = guardrailAnswer.trim();
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+          safeEnqueue(`data: ${JSON.stringify({
             choices: [{
               delta: { content },
               finish_reason: null
             }]
-          })}\n\n`));
+          })}\n\n`);
           
           // Send metadata with used knowledge
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+          safeEnqueue(`data: ${JSON.stringify({
             choices: [{
               delta: {
                 metadata: {
@@ -1612,23 +1637,28 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
               },
               finish_reason: null
             }]
-          })}\n\n`));
+          })}\n\n`);
           
-          // Send [DONE] signal
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+          // Send finish reason
+          safeEnqueue(`data: ${JSON.stringify({
             choices: [{
               delta: {},
               finish_reason: 'stop'
             }]
-          })}\n\n`));
+          })}\n\n`);
           
-          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
-          controller.close();
+          // Sluit veilig af
+          endStreamOnce();
         }
       });
 
       return new Response(stream, {
-        headers: { ...corsHeaders, 'Content-Type': 'text/event-stream' }
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive'
+        }
       });
     }
     
