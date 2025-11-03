@@ -875,7 +875,16 @@ serve(async (req) => {
       .eq('user_id', user.id)
       .single();
     
-    const userOrgId = userOrg?.org_id;
+    let userOrgId = userOrg?.org_id;
+    
+    // 🔧 FIX: Email-based org_id mapping voor ABCzorg/CitoZorg users
+    if (!userOrgId && user.email) {
+      const emailDomain = user.email.toLowerCase();
+      if (emailDomain.endsWith('@abczorg.nl') || emailDomain.endsWith('@citozorg.nl')) {
+        userOrgId = '550e8400-e29b-41d4-a716-446655440000'; // ABCzorg org_id
+        console.log(`✅ Email-based org mapping: ${user.email} → ABCzorg org`);
+      }
+    }
     
     if (!userOrgId) {
       console.error('❌ No organization associated with user');
