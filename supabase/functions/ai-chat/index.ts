@@ -1520,18 +1520,23 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
       .select('*')
       .eq('org_id', userOrgId);
     
-    // ✅ Guardrail verwijderd - volledig AI model met org_profiles als ground truth
+    // 🧠 INTELLIGENT CONFLICT RESOLUTION: org_profiles met cross-validatie
     
-    // 🏢 FASE 6: GROUND TRUTH CONTEXT VERSTERKING
+    // 🏢 FASE 6: ORGANISATIEGEGEVENS MET INTELLIGENTE VALIDATIE
     let orgProfileGroundTruth = '';
     if (orgProfiles && orgProfiles.length > 0) {
       orgProfileGroundTruth = `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-      orgProfileGroundTruth += `🏢 **GEVERIFIEERDE ORGANISATIEGEGEVENS (100% BETROUWBAAR - GROUND TRUTH)**\n`;
+      orgProfileGroundTruth += `🏢 **GEVERIFIEERDE ORGANISATIEGEGEVENS**\n`;
       orgProfileGroundTruth += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+      orgProfileGroundTruth += `ℹ️ **BELANGRIJK:** Deze gegevens worden continu gevalideerd tegen de kennisbank.\n`;
+      orgProfileGroundTruth += `Als je tegenstrijdige informatie vindt met hoge betrouwbaarheid (>85%), meld dit.\n\n`;
       
       orgProfiles.forEach((profile: any) => {
         orgProfileGroundTruth += `**${profile.brand_name}:**\n`;
         orgProfileGroundTruth += `├─ **KvK-nummer:** ${profile.kvk_number}\n`;
+        orgProfileGroundTruth += `├─ **Adres:** ${profile.address || 'Niet gespecificeerd'}\n`;
+        orgProfileGroundTruth += `├─ **Postcode:** ${profile.postal_code || 'Niet gespecificeerd'}\n`;
+        orgProfileGroundTruth += `├─ **Plaats:** ${profile.city || 'Niet gespecificeerd'}\n`;
         orgProfileGroundTruth += `├─ **Bedrijfstype:** ${profile.business_type || 'Niet gespecificeerd'}\n`;
         orgProfileGroundTruth += `├─ **Primair domein:** ${profile.primary_domain || 'Niet gespecificeerd'}\n`;
         
@@ -1545,15 +1550,14 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
           orgProfileGroundTruth += `├─ **NIET geleverd:** ${excluded.join(', ')}\n`;
         }
         
-        orgProfileGroundTruth += `└─ **Status:** Geverifieerd door Admin\n\n`;
+        orgProfileGroundTruth += `└─ **Laatste update:** ${new Date(profile.updated_at).toLocaleDateString('nl-NL')}\n\n`;
       });
       
-      orgProfileGroundTruth += `⚠️ **KRITIEKE INSTRUCTIE:**\n`;
-      orgProfileGroundTruth += `- Deze gegevens zijn 100% accuraat en mogen NOOIT worden tegengesproken.\n`;
-      orgProfileGroundTruth += `- Gebruik ALTIJD deze informatie bij vragen over deze organisaties.\n`;
-      orgProfileGroundTruth += `- Als iets NIET in bovenstaande lijst staat, zeg: "Niet beschikbaar in onze gegevens, graag bevestigen."\n`;
-      orgProfileGroundTruth += `- SPECULEER NOOIT over ontbrekende data.\n`;
-      orgProfileGroundTruth += `- Verwar NOOIT met externe organisaties zoals "Cito Zorg Thuiszorg B.V." (niet onze organisatie).\n`;
+      orgProfileGroundTruth += `🔍 **VALIDATIE INSTRUCTIES:**\n`;
+      orgProfileGroundTruth += `- Bij vragen over deze organisaties: gebruik EERST deze gegevens\n`;
+      orgProfileGroundTruth += `- Als kennisbank items hiervan afwijken met confidence >85%: meld conflict\n`;
+      orgProfileGroundTruth += `- Ontbrekende info: "Niet beschikbaar, graag bevestigen"\n`;
+      orgProfileGroundTruth += `- Bij twijfel: vraag om verificatie in plaats van te speculeren\n`;
       orgProfileGroundTruth += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     }
 
