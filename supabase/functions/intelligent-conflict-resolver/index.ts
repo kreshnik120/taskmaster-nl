@@ -120,13 +120,13 @@ serve(async (req) => {
               const confidence = relevantItem.confidence_score || 0;
               const usageCount = relevantItem.usage_count || 0;
               
-              // AUTO-RESOLVE LOGICA
+              // 🆕 VERLAAGDE DREMPELS: Tier-1 kennis met usage ≥2 kan nu auto-corrigeren
               // ✅ Auto-update als:
-              // - Confidence > 0.95 EN usage > 5
-              // - OF Confidence > 0.85 EN usage > 10
+              // - Confidence ≥ 0.95 EN usage ≥ 2 EN verified
+              // - OF Confidence ≥ 0.85 EN usage ≥ 10
               const shouldAutoResolve = 
-                (confidence > 0.95 && usageCount > 5) ||
-                (confidence > 0.85 && usageCount > 10);
+                (confidence >= 0.95 && usageCount >= 2 && relevantItem.validation_status === 'verified') ||
+                (confidence >= 0.85 && usageCount >= 10);
 
               conflicts.push({
                 field: 'kvk_number',

@@ -1554,8 +1554,9 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
       });
       
       orgProfileGroundTruth += `🔍 **VALIDATIE INSTRUCTIES:**\n`;
-      orgProfileGroundTruth += `- Bij vragen over deze organisaties: gebruik EERST deze gegevens\n`;
-      orgProfileGroundTruth += `- Als kennisbank items hiervan afwijken met confidence >85%: meld conflict\n`;
+      orgProfileGroundTruth += `- Combineer org_profiles met de kennisbank voor complete informatie\n`;
+      orgProfileGroundTruth += `- Bij conflict: kies de bron met hoogste confidence EN meest recente verificatie\n`;
+      orgProfileGroundTruth += `- Als org_profiles ouder of minder betrouwbaar: volg de kennisbank en meld het verschil\n`;
       orgProfileGroundTruth += `- Ontbrekende info: "Niet beschikbaar, graag bevestigen"\n`;
       orgProfileGroundTruth += `- Bij twijfel: vraag om verificatie in plaats van te speculeren\n`;
       orgProfileGroundTruth += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
@@ -2988,6 +2989,24 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                         learning_score: -0.8,
                         outcome: 'harmful'
                       });
+                      
+                      // 🆕 TRIGGER CONFLICT RESOLVER (non-blocking)
+                      try {
+                        console.log('🔄 Triggering intelligent-conflict-resolver due to mismatch...');
+                        supabaseServiceClient.functions.invoke('intelligent-conflict-resolver', {
+                          body: { 
+                            trigger: 'chat_mismatch',
+                            context: {
+                              org: profile.brand_name,
+                              field: 'kvk_number',
+                              wrong_value: mentionsWrongKvK[1],
+                              correct_value: profile.kvk_number
+                            }
+                          }
+                        }).catch(err => console.error('⚠️ Conflict resolver trigger failed (non-blocking):', err));
+                      } catch (triggerErr) {
+                        console.error('⚠️ Failed to trigger conflict resolver (non-blocking):', triggerErr);
+                      }
                     }
                   }
                   
