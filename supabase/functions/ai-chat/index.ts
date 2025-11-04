@@ -1082,9 +1082,7 @@ serve(async (req) => {
     // 🎯 CLIENT-VRAAG DETECTIE
     const isClientQuestion = /\b(klant|client|opdrachtgever|customer|organisatie)\b/i.test(lastUserMessage);
     
-    // 🛡️ ORG-PROFILE VRAAG DETECTIE & GUARDRAIL (UITGEBREID)
-    const isOrgProfileQuestion = /(kvk|kvk-nummer|kvk nummer|kamer van koophandel|wat voor (organisatie|bedrijf|type)|bedrijfstype|diensten|domein|domeinnaam|abczorg|citozorg|bemiddeling|zorginstelling)/i.test(lastUserMessage);
-    let guardrailTriggered = false;
+    // Guardrail verwijderd - volledig AI model altijd actief
     let answerSource = 'ai_knowledge_base';
     let orgProfileUsed = false;
     
@@ -1522,145 +1520,7 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
       .select('*')
       .eq('org_id', userOrgId);
     
-    // 🛡️ FASE 4: UITGEBREIDE ORG-PROFILE GUARDRAIL
-    if (isOrgProfileQuestion && orgProfiles && orgProfiles.length > 0) {
-      console.log('🛡️ Org-profile guardrail activated:', { question: lastUserMessage });
-      guardrailTriggered = true;
-      answerSource = 'org_profile';
-      orgProfileUsed = true;
-      
-      // Detect wat wordt gevraagd
-      const askingKvK = /(kvk|kamer van koophandel)/i.test(lastUserMessage);
-      const askingType = /(type|soort|organisatie|bedrijf)/i.test(lastUserMessage);
-      const askingDomain = /(domein|domeinnaam|website)/i.test(lastUserMessage);
-      const askingServices = /(diensten|service|wat doen|wat doet)/i.test(lastUserMessage);
-      
-      // Detecteer welke organisatie
-      const askingABC = /abczorg/i.test(lastUserMessage);
-      const askingCito = /citozorg/i.test(lastUserMessage);
-      
-      // Build targeted answer
-      let guardrailAnswer = '';
-      
-      const orgsToAnswer = askingABC ? orgProfiles.filter((p: any) => /abc/i.test(p.brand_name)) :
-                            askingCito ? orgProfiles.filter((p: any) => /cito/i.test(p.brand_name)) :
-                            orgProfiles;
-      
-      orgsToAnswer.forEach((profile: any) => {
-        guardrailAnswer += `\n\n**${profile.brand_name}:**\n`;
-        
-        if (askingKvK || !askingType && !askingDomain && !askingServices) {
-          guardrailAnswer += `- **KvK-nummer:** ${profile.kvk_number}\n`;
-        }
-        
-        if (askingType || !askingKvK && !askingDomain && !askingServices) {
-          guardrailAnswer += `- **Bedrijfstype:** ${profile.business_type || 'Niet gespecificeerd'}\n`;
-        }
-        
-        if (askingDomain) {
-          guardrailAnswer += `- **Domein:** ${profile.primary_domain || 'Niet gespecificeerd'}\n`;
-        }
-        
-        if (askingServices) {
-          const services = profile.services || [];
-          const excluded = profile.excluded_services || [];
-          guardrailAnswer += `- **Diensten:** ${services.length > 0 ? services.join(', ') : 'Niet gespecificeerd'}\n`;
-          if (excluded.length > 0) {
-            guardrailAnswer += `- **NIET geleverd:** ${excluded.join(', ')}\n`;
-          }
-        }
-      });
-      
-      guardrailAnswer += `\n\n_Bron: Geverifieerde organisatiegegevens uit org_profiles_`;
-      
-      // Log guardrail event (async, non-blocking)
-      (async () => {
-        try {
-          await supabaseServiceClient.from('ai_learning_events').insert({
-            org_id: userOrgId,
-            user_id: user.id,
-            event_type: 'guardrail_org_profile',
-            context: { 
-              question: lastUserMessage, 
-              detected_aspects: { askingKvK, askingType, askingDomain, askingServices }
-            },
-            outcome: 'direct_answer_from_org_profile',
-            ai_response: { answer: guardrailAnswer.trim() },
-            learning_score: 1.0
-          });
-          console.log('✅ Learning event logged');
-        } catch (err) {
-          console.warn('⚠️ Failed to log learning event:', err);
-        }
-      })();
-      
-      // Return SSE-compatible stream for frontend compatibility
-      const encoder = new TextEncoder();
-      const stream = new ReadableStream({
-        start(controller) {
-          let streamClosed = false;
-          
-          const safeEnqueue = (payload: string) => {
-            if (streamClosed) {
-              console.warn('🧯 Blocked enqueue after close');
-              return;
-            }
-            controller.enqueue(encoder.encode(payload));
-          };
-          
-          const endStreamOnce = () => {
-            if (streamClosed) return;
-            safeEnqueue('data: [DONE]\n\n');
-            streamClosed = true;
-            setTimeout(() => controller.close(), 50); // ✅ Geef frontend tijd om te lezen
-            console.log('🧱 Stream closed safely');
-          };
-          
-          // Send answer as SSE chunks
-          const content = guardrailAnswer.trim();
-          safeEnqueue(`data: ${JSON.stringify({
-            choices: [{
-              delta: { content },
-              finish_reason: null
-            }]
-          })}\n\n`);
-          
-          // Send metadata with used knowledge
-          safeEnqueue(`data: ${JSON.stringify({
-            choices: [{
-              delta: {
-                metadata: {
-                  usedKnowledge: orgProfiles.map((p: any) => `org_profile_${p.id}`),
-                  guardrail_triggered: true,
-                  answer_source: 'org_profile'
-                }
-              },
-              finish_reason: null
-            }]
-          })}\n\n`);
-          
-          // Send finish reason
-          safeEnqueue(`data: ${JSON.stringify({
-            choices: [{
-              delta: {},
-              finish_reason: 'stop'
-            }]
-          })}\n\n`);
-          
-          // Sluit veilig af
-          endStreamOnce();
-        }
-      });
-
-      return new Response(stream, {
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive'
-        }
-      });
-    }
+    // ✅ Guardrail verwijderd - volledig AI model met org_profiles als ground truth
     
     // 🏢 FASE 6: GROUND TRUTH CONTEXT VERSTERKING
     let orgProfileGroundTruth = '';
