@@ -1296,6 +1296,31 @@ serve(async (req) => {
     
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     
+    // 🎯 FIX 3: KEYWORD MATCHING voor bedrijfsinformatie queries
+    const isCompanyInfoQuery = /\b(adres|gegevens|kvk|bedrijfsinformatie|contactgegevens|postcode|plaats|vestiging)\b/i.test(lastUserMessage);
+    
+    // Als het een bedrijfsinformatie query is, haal ALTIJD bedrijfsinformatie items op
+    if (isCompanyInfoQuery) {
+      console.log('🏢 Bedrijfsinformatie query gedetecteerd - haal specifieke items op');
+      const { data: companyInfo } = await supabaseClient
+        .from('ai_knowledge_base')
+        .select('id, category, key, value, confidence_score, usage_count, source, created_at, updated_at, role_tags, valid_from, valid_to, validation_status')
+        .eq('org_id', userOrgId)
+        .or('key.ilike.%bedrijfsinformatie%,key.ilike.%contactgegevens%,key.ilike.%kvk%,key.ilike.%adres%')
+        .eq('validation_status', 'verified')
+        .is('deleted_at', null)
+        .limit(20);
+      
+      if (companyInfo && companyInfo.length > 0) {
+        semanticKnowledge = companyInfo.map((item: any) => ({
+          ...item,
+          similarity: 0.95, // Hoge similarity voor keyword matches
+          source: 'keyword_match'
+        }));
+        console.log(`✅ Keyword match: ${companyInfo.length} bedrijfsinformatie items gevonden`);
+      }
+    }
+    
     // 🧠 SEMANTIC SEARCH: Generate embedding and find relevant knowledge
     if (OPENAI_API_KEY && lastUserMessage.length > 0) {
       console.log('🧠 Generating embedding for semantic search...');
@@ -1322,11 +1347,14 @@ serve(async (req) => {
           perfTimers.embedding = Date.now() - perfTimers.start;
           console.log(`⏱️ Embedding generated in ${perfTimers.embedding}ms`);
           
+          // 🎯 FIX 3: Verlaag threshold voor bedrijfsinformatie queries
+          const matchThreshold = isCompanyInfoQuery ? 0.65 : 0.75;
+          
           // Call match_knowledge function with validation filter
           const { data: semanticMatches, error: matchError } = await supabaseClient
             .rpc('match_knowledge', {
               query_embedding: queryEmbedding,
-              match_threshold: 0.75,  // Verhoogd voor betere kwaliteit
+              match_threshold: matchThreshold,  // Dynamisch gebaseerd op query type
               match_count: 20,  // Verlaagd voor snelheid
               filter_org_id: userOrgId,
               filter_role_tags: [detectedRole],
@@ -1337,23 +1365,30 @@ serve(async (req) => {
           if (matchError) {
             console.error('❌ match_knowledge error:', matchError);
           } else if (semanticMatches && semanticMatches.length > 0) {
-            semanticKnowledge = semanticMatches.map((m: any) => ({
-              id: m.knowledge_id,
-              category: m.category,
-              key: m.key,
-              value: m.value,
-              confidence_score: m.confidence_score,
-              similarity: m.similarity,
-              role_tags: m.role_tags,
-              valid_from: m.valid_from,
-              valid_to: m.valid_to,
-              usage_count: 0,
-              source: 'semantic_search',
-              created_at: new Date().toISOString()
-            }));
+            // Merge keyword matches met semantic matches (keyword matches eerst)
+            const existingIds = new Set(semanticKnowledge.map((k: any) => k.id));
+            const newSemanticMatches = semanticMatches
+              .filter((m: any) => !existingIds.has(m.knowledge_id))
+              .map((m: any) => ({
+                id: m.knowledge_id,
+                category: m.category,
+                key: m.key,
+                value: m.value,
+                confidence_score: m.confidence_score,
+                similarity: m.similarity,
+                role_tags: m.role_tags,
+                valid_from: m.valid_from,
+                valid_to: m.valid_to,
+                usage_count: 0,
+                source: 'semantic_search',
+                created_at: new Date().toISOString()
+              }));
+            
+            // Voeg semantic matches toe aan bestaande keyword matches
+            semanticKnowledge = [...semanticKnowledge, ...newSemanticMatches];
             
             perfTimers.semanticSearch = Date.now() - perfTimers.start - perfTimers.embedding;
-            console.log(`✅ Found ${semanticKnowledge.length} items via semantic search in ${perfTimers.semanticSearch}ms`);
+            console.log(`✅ Found ${semanticKnowledge.length} total items (${semanticMatches.length} from semantic, ${semanticKnowledge.length - semanticMatches.length} from keywords) in ${perfTimers.semanticSearch}ms`);
             console.log(`   Top 3 similarities: ${semanticMatches.slice(0,3).map((m: any) => m.similarity.toFixed(3)).join(', ')}`);
           }
         } else {
@@ -1553,12 +1588,26 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
         orgProfileGroundTruth += `└─ **Laatste update:** ${new Date(profile.updated_at).toLocaleDateString('nl-NL')}\n\n`;
       });
       
+      // 🎯 FIX 2: EXPLICIETE ADRESGEGEVENS INSTRUCTIE
       orgProfileGroundTruth += `🔍 **VALIDATIE INSTRUCTIES:**\n`;
       orgProfileGroundTruth += `- Combineer org_profiles met de kennisbank voor complete informatie\n`;
       orgProfileGroundTruth += `- Bij conflict: kies de bron met hoogste confidence EN meest recente verificatie\n`;
       orgProfileGroundTruth += `- Als org_profiles ouder of minder betrouwbaar: volg de kennisbank en meld het verschil\n`;
       orgProfileGroundTruth += `- Ontbrekende info: "Niet beschikbaar, graag bevestigen"\n`;
-      orgProfileGroundTruth += `- Bij twijfel: vraag om verificatie in plaats van te speculeren\n`;
+      orgProfileGroundTruth += `- Bij twijfel: vraag om verificatie in plaats van te speculeren\n\n`;
+      
+      orgProfileGroundTruth += `⚠️ **KRITIEKE REGEL VOOR ADRESGEGEVENS:**\n`;
+      orgProfileGroundTruth += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      orgProfileGroundTruth += `🚫 ZEG NOOIT "Niet gespecificeerd" of "Niet beschikbaar" als de data WEL bestaat!\n\n`;
+      orgProfileGroundTruth += `✅ GEBRUIK ALTIJD de beschikbare data uit:\n`;
+      orgProfileGroundTruth += `   1. org_profiles (hierboven)\n`;
+      orgProfileGroundTruth += `   2. ai_knowledge_base items (met keys zoals: bedrijfsinformatie_*, contactgegevens_*, etc.)\n\n`;
+      orgProfileGroundTruth += `📋 Als je GEVRAAGD wordt naar adres/KvK/gegevens:\n`;
+      orgProfileGroundTruth += `   → Check EERST org_profiles\n`;
+      orgProfileGroundTruth += `   → Check DAARNA knowledge base items\n`;
+      orgProfileGroundTruth += `   → Gebruik de MEEST COMPLETE en RECENTE data\n`;
+      orgProfileGroundTruth += `   → Combineer bronnen voor volledigheid\n\n`;
+      orgProfileGroundTruth += `❌ ALLEEN zeg "Niet beschikbaar" als de data ECHT niet bestaat in BEIDE bronnen\n`;
       orgProfileGroundTruth += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     }
 
