@@ -1956,10 +1956,11 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
     ];
 
     // Call Lovable AI Gateway for streaming with tool support
-    const AI_TIMEOUT_MS = 30000; // 30 seconden max
+    // ⏱️ TIMEOUT INCREASED: 60s (was 30s)
+    const AI_TIMEOUT_MS = 60000; // 60 seconden max (was 30s)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
-      console.error('⚠️ AI call timeout after 30s');
+      console.error('⏱️ AI call timeout after 60s');
       controller.abort();
     }, AI_TIMEOUT_MS);
 
@@ -2818,6 +2819,18 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
               controller.enqueue(encoder.encode(`${data}\n\n`));
             }
           }
+          
+          // 🚫 EMPTY RESPONSE CHECK (before saving)
+          if (!fullResponse || fullResponse.trim().length === 0) {
+            console.error('🚫 EMPTY RESPONSE DETECTED - Stream ended without content');
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              choices: [{
+                delta: { content: '\n\n⚠️ **Fout**: Geen antwoord ontvangen van de AI. Probeer het opnieuw of herformuleer je vraag.\n\n' },
+                index: 0
+              }]
+            })}\n\n`));
+            fullResponse = '⚠️ Lege response - niet gecached'; // Mark as invalid
+          }
 
           // Track knowledge usage BEFORE closing stream (blocking)
           // 🎯 Use declared IDs if available, otherwise fallback to keyword matching
@@ -3097,17 +3110,25 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
 
               // ============================================
               // FASE 1: CACHE STORAGE (after streaming complete)
+              // 🚫 EMPTY RESPONSE PROTECTION
               // ============================================
               try {
-                await supabaseServiceClient.from('ai_response_cache').insert({
-                  org_id: userOrgId,
-                  question_hash: cacheKey,
-                  question: lastUserMessageForCache,
-                  response: fullResponse,
-                  knowledge_ids: usedKnowledgeIds,
-                  expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-                });
-                console.log('✅ Response cached for 24h');
+                // ✅ CRITICAL: Don't cache empty responses
+                if (!fullResponse || fullResponse.trim().length === 0) {
+                  console.error('🚫 CACHE SKIP: Empty response detected, NOT caching');
+                } else if (fullResponse.length < 10) {
+                  console.warn('🚫 CACHE SKIP: Response too short (<10 chars), NOT caching');
+                } else {
+                  await supabaseServiceClient.from('ai_response_cache').insert({
+                    org_id: userOrgId,
+                    question_hash: cacheKey,
+                    question: lastUserMessageForCache,
+                    response: fullResponse,
+                    knowledge_ids: usedKnowledgeIds,
+                    expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+                  });
+                  console.log(`✅ Response cached for 24h (${fullResponse.length} chars)`);
+                }
               } catch (cacheError) {
                 console.warn('Cache insert failed (non-critical):', cacheError);
               }
