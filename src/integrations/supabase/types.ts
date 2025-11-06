@@ -159,6 +159,7 @@ export type Database = {
             | Database["public"]["Enums"]["confidentiality_level"]
             | null
           created_at: string | null
+          data_freshness_days: number | null
           deleted_at: string | null
           deleted_by: string | null
           deletion_reason: Json | null
@@ -167,6 +168,8 @@ export type Database = {
           id: string
           jurisdiction: string | null
           key: string
+          kvk_source_data: Json | null
+          last_kvk_check: string | null
           last_reviewed_at: string | null
           last_source_check: string | null
           last_used_at: string | null
@@ -183,6 +186,7 @@ export type Database = {
           source_check_failures: number | null
           source_status: string | null
           source_title: string | null
+          source_type: string | null
           source_url: string | null
           updated_at: string | null
           usage_count: number | null
@@ -206,6 +210,7 @@ export type Database = {
             | Database["public"]["Enums"]["confidentiality_level"]
             | null
           created_at?: string | null
+          data_freshness_days?: number | null
           deleted_at?: string | null
           deleted_by?: string | null
           deletion_reason?: Json | null
@@ -214,6 +219,8 @@ export type Database = {
           id?: string
           jurisdiction?: string | null
           key: string
+          kvk_source_data?: Json | null
+          last_kvk_check?: string | null
           last_reviewed_at?: string | null
           last_source_check?: string | null
           last_used_at?: string | null
@@ -230,6 +237,7 @@ export type Database = {
           source_check_failures?: number | null
           source_status?: string | null
           source_title?: string | null
+          source_type?: string | null
           source_url?: string | null
           updated_at?: string | null
           usage_count?: number | null
@@ -253,6 +261,7 @@ export type Database = {
             | Database["public"]["Enums"]["confidentiality_level"]
             | null
           created_at?: string | null
+          data_freshness_days?: number | null
           deleted_at?: string | null
           deleted_by?: string | null
           deletion_reason?: Json | null
@@ -261,6 +270,8 @@ export type Database = {
           id?: string
           jurisdiction?: string | null
           key?: string
+          kvk_source_data?: Json | null
+          last_kvk_check?: string | null
           last_reviewed_at?: string | null
           last_source_check?: string | null
           last_used_at?: string | null
@@ -277,6 +288,7 @@ export type Database = {
           source_check_failures?: number | null
           source_status?: string | null
           source_title?: string | null
+          source_type?: string | null
           source_url?: string | null
           updated_at?: string | null
           usage_count?: number | null
@@ -1248,6 +1260,50 @@ export type Database = {
             columns: ["target_knowledge_id"]
             isOneToOne: false
             referencedRelation: "ai_knowledge_base"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kvk_validation_cache: {
+        Row: {
+          api_response: Json
+          cached_at: string | null
+          created_at: string | null
+          expires_at: string | null
+          hit_count: number | null
+          id: string
+          kvk_nummer: string
+          last_accessed_at: string | null
+          org_id: string | null
+        }
+        Insert: {
+          api_response: Json
+          cached_at?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          hit_count?: number | null
+          id?: string
+          kvk_nummer: string
+          last_accessed_at?: string | null
+          org_id?: string | null
+        }
+        Update: {
+          api_response?: Json
+          cached_at?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          hit_count?: number | null
+          id?: string
+          kvk_nummer?: string
+          last_accessed_at?: string | null
+          org_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kvk_validation_cache_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]

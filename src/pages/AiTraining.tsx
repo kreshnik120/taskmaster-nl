@@ -31,6 +31,7 @@ import { SystemMonitor } from "@/components/SystemMonitor";
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { SystemHealthDashboard } from "@/components/AITraining/SystemHealthDashboard";
 import { EmbeddingCoverageDashboard } from "@/components/AITraining/EmbeddingCoverageDashboard";
+import { KvKCostDashboard } from "@/components/AITraining/KvKCostDashboard";
 import { toast } from "sonner";
 
 const AiTraining = () => {
@@ -158,7 +159,7 @@ const AiTraining = () => {
             </div>
 
             <Tabs defaultValue="validation" className="w-full">
-              <TabsList className="grid w-full grid-cols-9">
+              <TabsList className="grid w-full grid-cols-10">
                 <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
                 <AdminOnly>
                   <TabsTrigger value="alerts">🚨 Alerts</TabsTrigger>
@@ -169,6 +170,9 @@ const AiTraining = () => {
                 <TabsTrigger value="week1-2">🧪 Week 1-2</TabsTrigger>
                 <AdminOnly>
                   <TabsTrigger value="system">🔧 Systeem</TabsTrigger>
+                </AdminOnly>
+                <AdminOnly>
+                  <TabsTrigger value="kvk">💼 KVK API</TabsTrigger>
                 </AdminOnly>
                 <TabsTrigger value="links">🔗 Links</TabsTrigger>
                 <TabsTrigger value="conflicts">⚠️ Conflicten</TabsTrigger>
@@ -288,6 +292,22 @@ const AiTraining = () => {
                     <ManualFunctionTrigger hideBackfill />
                     <SystemMonitor />
                   </div>
+                </TabsContent>
+              </AdminOnly>
+
+              <AdminOnly>
+                <TabsContent value="kvk" className="mt-6">
+                  <Card className="mb-6">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        💼 KVK API Cost Optimization
+                      </CardTitle>
+                      <CardDescription>
+                        Smart caching strategie: Database First → KVK Cache → KVK API (€0.30)
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                  <KvKCostDashboard />
                 </TabsContent>
               </AdminOnly>
 

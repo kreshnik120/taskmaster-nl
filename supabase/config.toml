@@ -140,3 +140,9 @@ verify_jwt = false
 [functions.cleanup-stale-jobs]
 verify_jwt = false
 schedule = "*/15 * * * *"
+
+[functions.kvk-smart-lookup]
+verify_jwt = true
+
+[functions.detect-and-resolve-conflicts]
+verify_jwt = false
