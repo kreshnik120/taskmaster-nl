@@ -17,6 +17,7 @@ import { SeedClientKnowledge } from "@/components/AITraining/SeedClientKnowledge
 import { LearningDashboard } from "@/components/AITraining/LearningDashboard";
 import { SmartKnowledgeSearch } from "@/components/AITraining/SmartKnowledgeSearch";
 import { ConflictResolutionPanel } from "@/components/AITraining/ConflictResolutionPanel";
+import { ConflictMonitor } from "@/components/AITraining/ConflictMonitor";
 import { IntelligentConflictDashboard } from "@/components/AITraining/IntelligentConflictDashboard";
 import { ProfessionalClientLinks } from "@/components/AITraining/ProfessionalClientLinks";
 import { AdminOnly } from "@/components/auth/AdminOnly";
@@ -294,7 +295,8 @@ const AiTraining = () => {
                 <ProfessionalClientLinks />
               </TabsContent>
 
-              <TabsContent value="conflicts" className="mt-6">
+              <TabsContent value="conflicts" className="mt-6 space-y-6">
+                <ConflictMonitor />
                 <ConflictResolutionPanel />
               </TabsContent>
 

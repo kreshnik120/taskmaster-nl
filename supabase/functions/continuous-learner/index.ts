@@ -188,15 +188,45 @@ USER FEEDBACK: ${user_feedback || 'none'}`
       };
     }
 
-    // ✅ OPTIMIZED: Auto-create high-confidence knowledge suggestions (P2-3)
+    // ✅ INTELLIGENT LEARNING: Auto-create with conflict detection
     let suggestionsCreated = 0;
+    let suggestionsRejected = 0;
+    
     if (auto_apply && analysis.new_knowledge_suggestions?.length > 0) {
-      console.log(`💡 Processing ${analysis.new_knowledge_suggestions.length} knowledge suggestions...`);
+      console.log(`💡 Processing ${analysis.new_knowledge_suggestions.length} knowledge suggestions with conflict detection...`);
       
       for (const suggestion of analysis.new_knowledge_suggestions) {
-        // ✅ P2-3: Lowered threshold from 0.85 to 0.80 for better apply rate
+        // Threshold check
         if (suggestion.confidence >= 0.80) {
-          // Check for duplicates
+          // ✅ STEP 1: Conflict detection before creating
+          const conflictCheckResponse = await supabase.functions.invoke('detect-and-resolve-conflicts', {
+            body: {
+              suggestion: {
+                ...suggestion,
+                source_type: 'ai_generated'
+              },
+              org_id: orgId
+            }
+          });
+
+          if (conflictCheckResponse.error) {
+            console.error('❌ Conflict check failed:', conflictCheckResponse.error);
+            continue;
+          }
+
+          const conflictResult = conflictCheckResponse.data;
+          
+          if (conflictResult.shouldReject) {
+            suggestionsRejected++;
+            console.log(`🚫 REJECTED suggestion "${suggestion.key}": ${conflictResult.reason}`);
+            continue;
+          }
+
+          if (conflictResult.hasConflict) {
+            console.log(`⚠️ Conflict detected for "${suggestion.key}" but allowing: ${conflictResult.reason}`);
+          }
+
+          // ✅ STEP 2: Check for duplicates
           const { data: existingDup } = await supabase
             .from('ai_knowledge_base')
             .select('id')
@@ -247,6 +277,20 @@ USER FEEDBACK: ${user_feedback || 'none'}`
               acl = ['admin', 'manager'];
             }
             
+            // ✅ STEP 3: Determine stability score based on category
+            let stabilityScore = 0.5; // default
+            const category = suggestion.category || 'learned_from_chat';
+            
+            if (category.includes('adres') || category === 'bedrijfsgegevens') {
+              stabilityScore = 0.95; // Addresses rarely change
+            } else if (category.includes('kvk') || category.includes('btw')) {
+              stabilityScore = 0.99; // Legal registration numbers almost never change
+            } else if (category.includes('tarief') || category.includes('prijs')) {
+              stabilityScore = 0.60; // Prices change periodically
+            } else if (category.includes('contact')) {
+              stabilityScore = 0.40; // Contact persons change frequently
+            }
+
             const { error: insertError } = await supabase
               .from('ai_knowledge_base')
               .insert({
@@ -254,17 +298,23 @@ USER FEEDBACK: ${user_feedback || 'none'}`
                 org_id: orgId,
                 category: suggestion.category || 'learned_from_chat',
                 key: suggestion.key,
-                value: suggestion.value,
+                value: redactedValue,
                 confidence_score: suggestion.confidence,
                 source: 'continuous_learner_auto_suggestion',
                 auto_reviewed_at: new Date().toISOString(),
                 review_count: 1,
-                // Week 1-2: New metadata fields
-                role_tags: suggestion.role_tags || ['Compliance'],
-                confidentiality: suggestion.confidentiality || 'intern',
+                // Week 1-2: Metadata fields
+                role_tags: roleTags,
+                confidentiality: confidentiality,
                 valid_from: suggestion.valid_from || new Date().toISOString().split('T')[0],
                 jurisdiction: suggestion.jurisdiction || 'NL',
-                acl: []
+                acl: acl,
+                // ✅ NEW: Source tracking & stability
+                source_type: 'ai_generated',
+                source_reference: `continuous-learner:auto-suggestion`,
+                requires_verification: suggestion.confidence < 0.95,
+                stability_score: stabilityScore,
+                correction_count: 0
               });
             
             if (!insertError) {
@@ -370,7 +420,7 @@ USER FEEDBACK: ${user_feedback || 'none'}`
       execution_time_ms: executionTime
     });
 
-    console.log(`✅ Learning analysis complete. ${updatesApplied} confidence scores updated.`);
+    console.log(`✅ Learning analysis complete. ${updatesApplied} confidence scores updated, ${suggestionsCreated} created, ${suggestionsRejected} rejected by conflict detection.`);
 
     // ✅ ACE PHASE 1: Process user feedback (helpful/harmful)
     let feedbackProcessed = 0;
@@ -455,10 +505,11 @@ USER FEEDBACK: ${user_feedback || 'none'}`
       learning_event_id: learningEvent?.id,
       confidence_updates_applied: updatesApplied,
       suggestions_created: suggestionsCreated,
+      suggestions_rejected: suggestionsRejected,
       contradictions_marked: analysis.contradictions_found,
       auto_apply_enabled: auto_apply,
-      feedback_processed: feedbackProcessed,  // ✅ ACE TRACKING
-      items_pruned: itemsPruned,  // ✅ ACE PRUNING
+      feedback_processed: feedbackProcessed,
+      items_pruned: itemsPruned,
       execution_time_ms: executionTime
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
