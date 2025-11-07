@@ -402,7 +402,7 @@ USER FEEDBACK: ${user_feedback || 'none'}`
       }
     }
 
-    // Log function call
+    // Log function call with enhanced metrics
     const executionTime = Date.now() - startTime;
     const inputTokens = Math.ceil((user_question.length + ai_response.length) / 4);
     const outputTokens = Math.ceil(analysisContent.length / 4);
@@ -417,7 +417,15 @@ USER FEEDBACK: ${user_feedback || 'none'}`
       estimated_cost_eur: 0,
       model_used: 'gemini-2.5-flash',
       success: true,
-      execution_time_ms: executionTime
+      execution_time_ms: executionTime,
+      // Enhanced metrics for AI Quality tracking
+      metadata: {
+        suggestions_created: suggestionsCreated,
+        suggestions_rejected: suggestionsRejected,
+        updates_applied: updatesApplied,
+        feedback_processed: feedbackProcessed,
+        learning_score: analysis.learning_score
+      }
     });
 
     console.log(`✅ Learning analysis complete. ${updatesApplied} confidence scores updated, ${suggestionsCreated} created, ${suggestionsRejected} rejected by conflict detection.`);
@@ -425,12 +433,38 @@ USER FEEDBACK: ${user_feedback || 'none'}`
     // ✅ ACE PHASE 1: Process user feedback (helpful/harmful)
     let feedbackProcessed = 0;
     let itemsPruned = 0;
-    
+
+    // Log function call with enhanced metrics
+    const executionTime = Date.now() - startTime;
+    const inputTokens = Math.ceil((user_question.length + ai_response.length) / 4);
+    const outputTokens = Math.ceil(analysisContent.length / 4);
+
+    await supabase.from('function_call_logs').insert({
+      user_id: userId,
+      org_id: orgId,
+      function_name: 'continuous-learner',
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      total_tokens: inputTokens + outputTokens,
+      estimated_cost_eur: 0,
+      model_used: 'gemini-2.5-flash',
+      success: true,
+      execution_time_ms: executionTime,
+      // Enhanced metrics for AI Quality tracking
+      metadata: {
+        suggestions_created: suggestionsCreated,
+        suggestions_rejected: suggestionsRejected,
+        updates_applied: updatesApplied,
+        feedback_processed: feedbackProcessed,
+        learning_score: analysis.learning_score
+      }
+    });
+
+    // Process user feedback if applicable
     if (user_feedback === 'helpful' || user_feedback === 'harmful') {
       const feedbackColumn = user_feedback === 'helpful' ? 'helpful_count' : 'harmful_count';
       console.log(`📊 Processing ${user_feedback} feedback for ${knowledge_used?.length || 0} knowledge items`);
       
-      // Update alle gebruikte knowledge items
       for (const knowledgeId of (knowledge_used || [])) {
         const { error: feedbackError } = await supabase
           .from('ai_knowledge_base')

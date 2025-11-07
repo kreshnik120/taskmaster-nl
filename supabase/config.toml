@@ -31,8 +31,8 @@ verify_jwt = true
 [functions.ai-chat.env]
 ENABLE_SAFE_PERSISTENCE = "true"
 
-[functions.ai-training-chat]
-verify_jwt = true
+# [functions.ai-training-chat] - REMOVED: Deprecated, functionality moved to ai-chat
+# verify_jwt = true
 
 [functions.process-training-document]
 verify_jwt = true

@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { getFullInstructions, detectRoleFromQuestion } from "../_shared/abczorg-instructions.ts";
+import { preflightCompletenessCheck, executePreflightActions } from "../_shared/preflight-completeness.ts";
+import { semanticKnowledgeRetrieval, calculateSemanticConfidence, mergeSemanticAndCategoryResults } from "../_shared/semantic-retrieval.ts";
+import { validateResponse, addValidationContext } from "../_shared/response-validator.ts";
+import { disambiguateEntities, applyTemporalFilter, expandViaRelationships } from "../_shared/entity-resolver.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -81,14 +85,16 @@ async function persistMessage(
 }
 
 // =============================================================================
-// FASE 1: CONFIDENCE CALCULATION FUNCTION (MET CLIENTS DATA BOOST)
+// DEPRECATED: Old keyword-based confidence (replaced by semantic)
+// Kept for backwards compatibility but not used in new flow
 // =============================================================================
-function calculateAnswerConfidence(
+function calculateAnswerConfidenceDeprecated(
   knowledgeItems: any[],
   queryKeywords: string[],
   questionText: string,
   clientsContext: any[] = []
 ): { confidence: number; reasoning: string; gaps: string[] } {
+  // This function is deprecated - use calculateSemanticConfidence from semantic-retrieval.ts instead
   if (knowledgeItems.length === 0 && clientsContext.length === 0) {
     return {
       confidence: 0,
@@ -2564,12 +2570,15 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             args.used_knowledge_ids.includes(kb.id)
                           );
                           
-                          // ✅ Pass clients data to confidence calculator
-                          const confidenceCalc = calculateAnswerConfidence(
-                            usedKnowledge,
-                            messageKeywords,
+                          // Use semantic confidence calculation
+                          const confidenceCalc = calculateSemanticConfidence(
                             lastUserMessage,
-                            clients || [] // ✅ Include clients context
+                            args.answer || '',
+                            usedKnowledge.map(kb => ({
+                              ...kb,
+                              knowledge_id: kb.id,
+                              similarity: kb.similarity || 0.8
+                            }))
                           );
                           
                           result = {

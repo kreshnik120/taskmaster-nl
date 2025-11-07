@@ -188,6 +188,7 @@ export type Database = {
           source_title: string | null
           source_type: string | null
           source_url: string | null
+          temporal_context: Json | null
           updated_at: string | null
           usage_count: number | null
           user_id: string
@@ -239,6 +240,7 @@ export type Database = {
           source_title?: string | null
           source_type?: string | null
           source_url?: string | null
+          temporal_context?: Json | null
           updated_at?: string | null
           usage_count?: number | null
           user_id: string
@@ -290,6 +292,7 @@ export type Database = {
           source_title?: string | null
           source_type?: string | null
           source_url?: string | null
+          temporal_context?: Json | null
           updated_at?: string | null
           usage_count?: number | null
           user_id?: string
@@ -1048,6 +1051,79 @@ export type Database = {
           },
         ]
       }
+      entity_relationships: {
+        Row: {
+          confidence_score: number | null
+          created_at: string | null
+          entity_id: string | null
+          entity_name: string
+          entity_type: string
+          id: string
+          org_id: string
+          related_entity_id: string | null
+          related_entity_name: string
+          relationship_type: string
+          source: string | null
+          updated_at: string | null
+          valid_from: string | null
+          valid_to: string | null
+        }
+        Insert: {
+          confidence_score?: number | null
+          created_at?: string | null
+          entity_id?: string | null
+          entity_name: string
+          entity_type: string
+          id?: string
+          org_id: string
+          related_entity_id?: string | null
+          related_entity_name: string
+          relationship_type: string
+          source?: string | null
+          updated_at?: string | null
+          valid_from?: string | null
+          valid_to?: string | null
+        }
+        Update: {
+          confidence_score?: number | null
+          created_at?: string | null
+          entity_id?: string | null
+          entity_name?: string
+          entity_type?: string
+          id?: string
+          org_id?: string
+          related_entity_id?: string | null
+          related_entity_name?: string
+          relationship_type?: string
+          source?: string | null
+          updated_at?: string | null
+          valid_from?: string | null
+          valid_to?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entity_relationships_entity_id_fkey"
+            columns: ["entity_id"]
+            isOneToOne: false
+            referencedRelation: "ai_knowledge_base"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entity_relationships_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entity_relationships_related_entity_id_fkey"
+            columns: ["related_entity_id"]
+            isOneToOne: false
+            referencedRelation: "ai_knowledge_base"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       function_call_logs: {
         Row: {
           created_at: string | null
@@ -1060,9 +1136,12 @@ export type Database = {
           model_used: string | null
           org_id: string
           output_tokens: number | null
+          preflight_incomplete_count: number | null
+          semantic_match_score: number | null
           success: boolean | null
           total_tokens: number | null
           user_id: string
+          validation_failed_count: number | null
         }
         Insert: {
           created_at?: string | null
@@ -1075,9 +1154,12 @@ export type Database = {
           model_used?: string | null
           org_id: string
           output_tokens?: number | null
+          preflight_incomplete_count?: number | null
+          semantic_match_score?: number | null
           success?: boolean | null
           total_tokens?: number | null
           user_id: string
+          validation_failed_count?: number | null
         }
         Update: {
           created_at?: string | null
@@ -1090,9 +1172,12 @@ export type Database = {
           model_used?: string | null
           org_id?: string
           output_tokens?: number | null
+          preflight_incomplete_count?: number | null
+          semantic_match_score?: number | null
           success?: boolean | null
           total_tokens?: number | null
           user_id?: string
+          validation_failed_count?: number | null
         }
         Relationships: []
       }
@@ -1490,6 +1575,50 @@ export type Database = {
           replacement_template?: string | null
         }
         Relationships: []
+      }
+      preflight_checks: {
+        Row: {
+          actions_triggered: Json | null
+          available_info_types: string[] | null
+          created_at: string | null
+          id: string
+          knowledge_fetched: number | null
+          missing_info_types: string[] | null
+          org_id: string
+          question: string
+          required_info_types: string[] | null
+        }
+        Insert: {
+          actions_triggered?: Json | null
+          available_info_types?: string[] | null
+          created_at?: string | null
+          id?: string
+          knowledge_fetched?: number | null
+          missing_info_types?: string[] | null
+          org_id: string
+          question: string
+          required_info_types?: string[] | null
+        }
+        Update: {
+          actions_triggered?: Json | null
+          available_info_types?: string[] | null
+          created_at?: string | null
+          id?: string
+          knowledge_fetched?: number | null
+          missing_info_types?: string[] | null
+          org_id?: string
+          question?: string
+          required_info_types?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "preflight_checks_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       prioritizer_state: {
         Row: {
@@ -1944,6 +2073,71 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      response_validations: {
+        Row: {
+          accuracy_score: number | null
+          ai_response: string
+          completeness_score: number | null
+          contradictions_found: string[] | null
+          coverage_score: number | null
+          created_at: string | null
+          id: string
+          knowledge_ids: string[] | null
+          missing_aspects: string[] | null
+          org_id: string
+          question: string
+          retry_attempted: boolean | null
+          unsourced_facts: string[] | null
+          user_id: string | null
+          validation_passed: boolean
+          validation_time_ms: number | null
+        }
+        Insert: {
+          accuracy_score?: number | null
+          ai_response: string
+          completeness_score?: number | null
+          contradictions_found?: string[] | null
+          coverage_score?: number | null
+          created_at?: string | null
+          id?: string
+          knowledge_ids?: string[] | null
+          missing_aspects?: string[] | null
+          org_id: string
+          question: string
+          retry_attempted?: boolean | null
+          unsourced_facts?: string[] | null
+          user_id?: string | null
+          validation_passed: boolean
+          validation_time_ms?: number | null
+        }
+        Update: {
+          accuracy_score?: number | null
+          ai_response?: string
+          completeness_score?: number | null
+          contradictions_found?: string[] | null
+          coverage_score?: number | null
+          created_at?: string | null
+          id?: string
+          knowledge_ids?: string[] | null
+          missing_aspects?: string[] | null
+          org_id?: string
+          question?: string
+          retry_attempted?: boolean | null
+          unsourced_facts?: string[] | null
+          user_id?: string | null
+          validation_passed?: boolean
+          validation_time_ms?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "response_validations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -2715,6 +2909,20 @@ export type Database = {
       }
     }
     Functions: {
+      get_entity_relationships: {
+        Args: {
+          entity_name_param: string
+          max_depth?: number
+          org_id_param: string
+        }
+        Returns: {
+          confidence: number
+          depth: number
+          entity: string
+          related_entity: string
+          relationship: string
+        }[]
+      }
       get_relevant_categories: {
         Args: { org_id_param?: string; user_question: string }
         Returns: {
