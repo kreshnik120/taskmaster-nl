@@ -3472,31 +3472,36 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
             console.log('📤 Sent metadata to client:', { knowledgeCount: usedKnowledgeIds.length, messageId: assistantMessageId });
           }
           
-          // 🧠 CONTINUOUS LEARNER: Background analysis (no feedback yet)
+          // 🧠 CONTINUOUS LEARNER: Background analysis with EdgeRuntime.waitUntil
           try {
-            console.log('🧠 [PRE-CLOSE] Triggering continuous-learner...');
+            console.log('🧠 [PRE-CLOSE] Triggering continuous-learner with waitUntil...');
             const lastUserMessage = messages[messages.length - 1];
             
-            // Don't await - let it run in background with promise chain
-            supabaseServiceClient.functions.invoke('continuous-learner', {
-              body: {
-                user_question: lastUserMessage.content,
-                ai_response: fullResponse,
-                knowledge_used: usedKnowledgeIds,
-                conversation_id: conversationId,
-                auto_apply: true
+            // Use EdgeRuntime.waitUntil to ensure the function stays alive until promise resolves
+            const learnerPromise = (async () => {
+              try {
+                const learnerResponse = await supabaseServiceClient.functions.invoke('continuous-learner', {
+                  body: {
+                    user_question: lastUserMessage.content,
+                    ai_response: fullResponse,
+                    knowledge_used: usedKnowledgeIds,
+                    conversation_id: conversationId,
+                    auto_apply: true
+                  }
+                });
+                
+                if (learnerResponse.error) {
+                  console.error('❌ Continuous learner error:', learnerResponse.error);
+                } else {
+                  console.log('✅ Continuous learner complete:', learnerResponse.data);
+                }
+              } catch (err) {
+                console.error('❌ Continuous learner exception:', err);
               }
-            }).then((res) => {
-              if (res.error) {
-                console.error('❌ Continuous learner error:', res.error);
-              } else {
-                console.log('✅ Continuous learner complete:', res.data);
-              }
-            }).catch(err => {
-              console.error('❌ Continuous learner exception:', err);
-            });
+            })();
             
-            console.log('🧠 Continuous learner call initiated');
+            EdgeRuntime.waitUntil(learnerPromise);
+            console.log('🧠 Continuous learner registered with waitUntil');
           } catch (error) {
             console.error('❌ Failed to initiate continuous-learner:', error);
           }
