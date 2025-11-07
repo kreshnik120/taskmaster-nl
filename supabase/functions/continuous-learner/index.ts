@@ -320,6 +320,17 @@ USER FEEDBACK: ${user_feedback || 'none'}`
             if (!insertError) {
               suggestionsCreated++;
               console.log(`✅ Created new knowledge: ${suggestion.key}`);
+            } else {
+              console.error(`❌ Failed to create knowledge "${suggestion.key}":`, insertError);
+              console.error('❌ Insert data was:', {
+                user_id: userId,
+                org_id: orgId,
+                category: suggestion.category,
+                key: suggestion.key,
+                confidence: suggestion.confidence,
+                value: redactedValue,
+                source: 'continuous_learner_auto_suggestion'
+              });
             }
           }
         }

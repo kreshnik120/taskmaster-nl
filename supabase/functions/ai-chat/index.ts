@@ -962,16 +962,32 @@ serve(async (req) => {
     const lastUserMessageForCache = messages[messages.length - 1]?.content || '';
     const cacheKey = await sha256Hash(`${userOrgId}|${lastUserMessageForCache.trim()}`);
     
-    const { data: cachedResponse } = await supabaseServiceClient
+    console.log('🔍 Cache lookup:', { 
+      org_id: userOrgId, 
+      question: lastUserMessageForCache.substring(0, 50) + '...', 
+      cache_key: cacheKey.substring(0, 16) + '...' 
+    });
+    
+    const { data: cachedResponse, error: cacheError } = await supabaseServiceClient
       .from('ai_response_cache')
-      .select('response, knowledge_ids, hit_count, id')
+      .select('response, knowledge_ids, hit_count, id, created_at, expires_at')
       .eq('org_id', userOrgId)
       .eq('question_hash', cacheKey)
       .gt('expires_at', new Date().toISOString())
       .maybeSingle();
     
+    if (cacheError) {
+      console.error('❌ Cache lookup error:', cacheError);
+    }
+    
     if (cachedResponse) {
-      console.log('💰 CACHE HIT - Token saving!');
+      console.log('💰 CACHE HIT - Token saving!', {
+        cache_id: cachedResponse.id,
+        hit_count: cachedResponse.hit_count,
+        created_at: cachedResponse.created_at,
+        expires_at: cachedResponse.expires_at,
+        knowledge_ids_count: cachedResponse.knowledge_ids?.length || 0
+      });
       
       // Update hit count
       await supabaseServiceClient
