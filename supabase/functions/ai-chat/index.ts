@@ -981,22 +981,121 @@ serve(async (req) => {
     }
     
     if (cachedResponse) {
-      console.log('💰 CACHE HIT - Token saving!', {
+      console.log('💰 CACHE HIT - Reconstructing SSE stream...', {
         cache_id: cachedResponse.id,
         hit_count: cachedResponse.hit_count,
-        created_at: cachedResponse.created_at,
-        expires_at: cachedResponse.expires_at,
         knowledge_ids_count: cachedResponse.knowledge_ids?.length || 0
       });
       
-      // Update hit count
-      await supabaseServiceClient
+      // Extract data
+      const usedKnowledgeIds = cachedResponse.knowledge_ids || [];
+      const cachedContent = cachedResponse.response;
+      
+      // Persist messages to get messageId
+      const userMessage = messages[messages.length - 1]?.content || '';
+      
+      const userPersist = await persistMessage(supabaseServiceClient, {
+        user_id: user.id,
+        org_id: userOrgId,
+        conversation_id: conversation_id,
+        role: 'user',
+        content: userMessage
+      });
+      
+      const assistantPersist = await persistMessage(supabaseServiceClient, {
+        user_id: user.id,
+        org_id: userOrgId,
+        conversation_id: conversation_id,
+        role: 'assistant',
+        content: cachedContent,
+        metadata: {
+          usedKnowledge: usedKnowledgeIds,
+          cached: true,
+          cache_id: cachedResponse.id
+        }
+      });
+      
+      const assistantMessageId = assistantPersist.messageId;
+      console.log('💾 Messages persisted:', { 
+        user: userPersist.success, 
+        assistant: assistantPersist.success,
+        messageId: assistantMessageId 
+      });
+      
+      // Build SSE stream
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          try {
+            // 1. Metadata event
+            const metadataEvent = {
+              choices: [{
+                delta: {
+                  metadata: {
+                    usedKnowledge: usedKnowledgeIds,
+                    messageId: assistantMessageId,
+                    cached: true
+                  }
+                },
+                index: 0
+              }]
+            };
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(metadataEvent)}\n\n`));
+            
+            // 2. Content chunks (max 2000 chars per chunk)
+            const chunkSize = 2000;
+            for (let i = 0; i < cachedContent.length; i += chunkSize) {
+              const chunk = cachedContent.slice(i, Math.min(i + chunkSize, cachedContent.length));
+              const contentEvent = {
+                choices: [{
+                  delta: { content: chunk },
+                  index: 0
+                }]
+              };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(contentEvent)}\n\n`));
+            }
+            
+            // 3. Done event
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+            
+            console.log('✅ SSE stream reconstructed:', {
+              chunks: Math.ceil(cachedContent.length / chunkSize),
+              totalLength: cachedContent.length
+            });
+          } catch (e) {
+            console.error('❌ Error building SSE stream:', e);
+            controller.error(e);
+          }
+        }
+      });
+      
+      // Update hit count (non-blocking)
+      supabaseServiceClient
         .from('ai_response_cache')
         .update({ hit_count: cachedResponse.hit_count + 1 })
-        .eq('id', cachedResponse.id);
+        .eq('id', cachedResponse.id)
+        .then(() => console.log('📊 Cache hit count updated'));
       
-      // Return cached response immediately
-      return new Response(cachedResponse.response, {
+      // Trigger continuous-learner (fire-and-forget)
+      if (usedKnowledgeIds.length > 0 && assistantMessageId) {
+        supabaseServiceClient.functions.invoke('continuous-learner', {
+          body: {
+            user_question: userMessage,
+            ai_response: cachedContent,
+            knowledge_used: usedKnowledgeIds.map((id: string) => ({ id })),
+            auto_apply: true
+          }
+        }).then(({ error }: { error: any }) => {
+          if (error) {
+            console.error('❌ Continuous-learner trigger failed:', error);
+          } else {
+            console.log('🧠 Continuous-learner triggered (cache hit)');
+          }
+        });
+      }
+      
+      return new Response(stream, {
         headers: { ...corsHeaders, 'Content-Type': 'text/event-stream' }
       });
     }
