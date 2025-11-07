@@ -3472,6 +3472,31 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
             console.log('📤 Sent metadata to client:', { knowledgeCount: usedKnowledgeIds.length, messageId: assistantMessageId });
           }
           
+          // 🧠 CONTINUOUS LEARNER: Background analysis (no feedback yet)
+          (async () => {
+            try {
+              console.log('🧠 Triggering continuous-learner for response analysis...');
+              const lastUserMessage = messages[messages.length - 1];
+              const learnerResponse = await supabaseServiceClient.functions.invoke('continuous-learner', {
+                body: {
+                  user_question: lastUserMessage.content,
+                  ai_response: fullResponse,
+                  knowledge_used: usedKnowledgeIds,
+                  conversation_id: conversationId,
+                  auto_apply: true // Automatically apply confidence updates
+                }
+              });
+              
+              if (learnerResponse.error) {
+                console.error('❌ Continuous learner error:', learnerResponse.error);
+              } else {
+                console.log('✅ Continuous learner analysis complete:', learnerResponse.data);
+              }
+            } catch (error) {
+              console.error('❌ Failed to invoke continuous-learner:', error);
+            }
+          })();
+          
           controller.close();
           
           // ⏱️ Calculate total execution time and component timings

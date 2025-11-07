@@ -243,6 +243,40 @@ serve(async (req) => {
         });
     }
 
+    // 🧠 CONTINUOUS LEARNER: Deep analysis with feedback
+    // Call continuous-learner to analyze the response with user feedback
+    try {
+      console.log('🧠 Triggering continuous-learner with user feedback...');
+      
+      // Fetch the assistant's response from the chat message
+      const { data: assistantMessage } = await supabaseClient
+        .from('chat_messages')
+        .select('content')
+        .eq('id', messageId)
+        .single();
+
+      if (assistantMessage?.content && context?.message) {
+        const learnerResponse = await supabaseClient.functions.invoke('continuous-learner', {
+          body: {
+            user_question: context.message,
+            ai_response: assistantMessage.content,
+            knowledge_used: usedKnowledge,
+            user_feedback: isPositive ? 'helpful' : 'harmful',
+            auto_apply: true
+          }
+        });
+        
+        if (learnerResponse.error) {
+          console.error('❌ Continuous learner error:', learnerResponse.error);
+        } else {
+          console.log('✅ Continuous learner feedback analysis complete:', learnerResponse.data);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Failed to invoke continuous-learner:', error);
+      // Don't fail the request if continuous-learner fails
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true,
