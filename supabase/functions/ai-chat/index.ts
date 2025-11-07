@@ -207,6 +207,61 @@ function extractClientFromKnowledge(kb: any): string | null {
   return null;
 }
 
+// ============================================
+// BUSINESS QUERY DETECTION & KVK ENTITY EXTRACTION
+// ============================================
+function detectBusinessQuery(question: string): {
+  isBusinessQuery: boolean;
+  entities: string[];
+  queryType: 'bedrijfsinfo' | 'adres' | 'kvk_nummer' | 'contact' | 'algemeen';
+} {
+  const lowerQ = question.toLowerCase();
+  
+  // Pattern matching voor business keywords
+  const businessKeywords = [
+    'kvk', 'kvk nummer', 'kvk-nummer', 'kamer van koophandel',
+    'adres', 'bezoekadres', 'postcode', 'plaats', 'locatie',
+    'bedrijf', 'organisatie', 'onderneming', 'firma',
+    'contactgegevens', 'telefoonnummer', 'email', 'website',
+    'citozorg', 'abczorg', 'stichting', 'b.v.', 'bv'
+  ];
+  
+  const isBusinessQuery = businessKeywords.some(keyword => lowerQ.includes(keyword));
+  
+  // Extract potential business entities
+  const entities: string[] = [];
+  
+  // 1. Extract KVK nummers (8 cijfers)
+  const kvkMatches = question.match(/\b(\d{8})\b/g);
+  if (kvkMatches) entities.push(...kvkMatches);
+  
+  // 2. Extract bedrijfsnamen (CitoZorg, ABCzorg, etc.)
+  const namePatterns = [
+    /\b(CitoZorg|Cito Zorg|Cito-Zorg)\b/gi,
+    /\b(ABCzorg|ABC zorg|ABC-zorg)\b/gi,
+    /\b(Stichting\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g,
+    /\b([A-Z][a-z]+\s+(?:B\.V\.|BV))\b/g
+  ];
+  
+  namePatterns.forEach(pattern => {
+    const matches = question.match(pattern);
+    if (matches) entities.push(...matches.map(m => m.trim()));
+  });
+  
+  // Determine query type
+  let queryType: 'bedrijfsinfo' | 'adres' | 'kvk_nummer' | 'contact' | 'algemeen' = 'algemeen';
+  if (lowerQ.includes('kvk') || lowerQ.includes('kamer van koophandel')) queryType = 'kvk_nummer';
+  else if (lowerQ.includes('adres') || lowerQ.includes('postcode') || lowerQ.includes('plaats')) queryType = 'adres';
+  else if (lowerQ.includes('contact') || lowerQ.includes('telefoon') || lowerQ.includes('email')) queryType = 'contact';
+  else if (lowerQ.includes('bedrijf') || lowerQ.includes('organisatie')) queryType = 'bedrijfsinfo';
+  
+  return {
+    isBusinessQuery,
+    entities: [...new Set(entities)], // Remove duplicates
+    queryType
+  };
+}
+
 // PHASE 2: Get suggested source documents for conflicting knowledge items
 async function getSuggestedDocuments(
   conflictedKnowledgeIds: string[],
@@ -864,6 +919,7 @@ serve(async (req) => {
       start: Date.now(),
       embedding: 0,
       semanticSearch: 0,
+      kvkLookup: 0,
       aiCall: 0,
       total: 0
     };
@@ -1095,6 +1151,95 @@ serve(async (req) => {
 
     console.log(`📂 Gevonden categorieën: ${relevantCategories?.length || 0}`);
 
+    // ============================================
+    // 🏢 FASE 2.5: KVK SMART LOOKUP (COST-FREE BUSINESS DATA)
+    // ============================================
+    let kvkEnrichedData: any[] = [];
+    let kvkCostSaved = 0;
+    const kvkLookupStart = Date.now();
+    
+    const businessQuery = detectBusinessQuery(lastUserMessage);
+    
+    if (businessQuery.isBusinessQuery && businessQuery.entities.length > 0) {
+      console.log(`🏢 Business query detected: ${businessQuery.queryType}`);
+      console.log(`📋 Entities to lookup: ${businessQuery.entities.join(', ')}`);
+      
+      // Call kvk-smart-lookup voor elk entity
+      for (const entity of businessQuery.entities) {
+        try {
+          console.log(`🔍 KVK Smart Lookup: "${entity}"...`);
+          
+          const { data: kvkLookup, error: kvkError } = await supabaseServiceClient.functions.invoke('kvk-smart-lookup', {
+            body: { 
+              query: entity, 
+              org_id: userOrgId,
+              query_type: 'auto'
+            }
+          });
+          
+          if (kvkError) {
+            console.warn(`⚠️ KVK lookup failed for ${entity}:`, kvkError);
+            continue;
+          }
+          
+          if (kvkLookup) {
+            console.log(`✅ KVK Smart Lookup SUCCESS: source=${kvkLookup.source}, cost_saved=€${kvkLookup.cost_saved}`);
+            
+            // Track cost savings
+            kvkCostSaved += kvkLookup.cost_saved;
+            
+            // Convert KVK data naar knowledge base format
+            const enrichedKnowledge = {
+              id: `kvk_${entity.replace(/\s+/g, '_')}`,
+              category: 'org_profile',
+              key: `bedrijfsinformatie_${entity.toLowerCase().replace(/\s+/g, '_')}`,
+              value: kvkLookup.data,
+              confidence_score: 1.0, // KVK API is authoritative
+              source: `kvk_smart_lookup_${kvkLookup.source}`,
+              created_at: kvkLookup.freshness.last_updated,
+              updated_at: kvkLookup.freshness.last_updated,
+              usage_count: 0,
+              role_tags: [],
+              valid_from: null,
+              valid_to: null,
+              validation_status: 'verified'
+            };
+            
+            kvkEnrichedData.push(enrichedKnowledge);
+            
+            // Log naar business intelligence
+            await supabaseServiceClient.from('business_intelligence').insert({
+              org_id: userOrgId,
+              intelligence_type: 'cost_optimization',
+              title: `KVK Smart Lookup: ${kvkLookup.source} hit`,
+              description: `Business query voor "${entity}" gebruikt ${kvkLookup.source} (€${kvkLookup.cost_saved} bespaard)`,
+              data: {
+                entity: entity,
+                query_type: businessQuery.queryType,
+                source: kvkLookup.source,
+                cost_saved: kvkLookup.cost_saved,
+                data_age_days: Math.floor(
+                  (Date.now() - new Date(kvkLookup.freshness.last_updated).getTime()) / (1000 * 60 * 60 * 24)
+                )
+              },
+              impact_score: kvkLookup.cost_saved > 0 ? 0.8 : 0.5,
+              status: 'active'
+            });
+          }
+        } catch (error) {
+          console.error(`❌ KVK Smart Lookup error for ${entity}:`, error);
+          // Continue met volgende entity, don't break flow
+        }
+      }
+      
+      if (kvkEnrichedData.length > 0) {
+        console.log(`💰 Total KVK cost saved: €${kvkCostSaved.toFixed(2)}`);
+        console.log(`📊 KVK enriched data items: ${kvkEnrichedData.length}`);
+      }
+    }
+    
+    perfTimers.kvkLookup = Date.now() - kvkLookupStart;
+
     // FASE 2: Graph Traversal Helper Function (Neural Brain)
     async function expandViaRelationships(coreItems: any[], maxDepth = 2) {
       if (coreItems.length === 0) return coreItems;
@@ -1149,6 +1294,15 @@ serve(async (req) => {
     let fullKnowledgeBase: any[] = [];
     let semanticKnowledge: any[] = [];
 
+    // ============================================
+    // MERGE KVK DATA MET KNOWLEDGE BASE (HOOGSTE PRIORITEIT)
+    // ============================================
+    if (kvkEnrichedData.length > 0) {
+      console.log('🔗 Prepending KVK enriched data to knowledge base (highest priority)...');
+      fullKnowledgeBase = [...kvkEnrichedData];
+      console.log(`✅ KVK data prepended: ${kvkEnrichedData.length} items`);
+    }
+
     if (relevantCategories && relevantCategories.length > 0) {
       // Haal ALLE items uit relevante categorieën (geen limit!)
       const categoryNames = relevantCategories.map((c: any) => c.category_name);
@@ -1165,9 +1319,12 @@ serve(async (req) => {
 
       if (categoryItems) {
         // 🛡️ FASE 5: OPTIMIZED RETRIEVAL RANKING
-        // Split org_profile vs rest
-        const orgProfileItems = categoryItems.filter((item: any) => item.category === 'org_profile');
-        const otherItems = categoryItems.filter((item: any) => item.category !== 'org_profile');
+        // Split org_profile vs rest (excluding KVK items already added)
+        const existingIds = new Set(fullKnowledgeBase.map((kb: any) => kb.id));
+        const filteredCategoryItems = categoryItems.filter((item: any) => !existingIds.has(item.id));
+        
+        const orgProfileItems = filteredCategoryItems.filter((item: any) => item.category === 'org_profile');
+        const otherItems = filteredCategoryItems.filter((item: any) => item.category !== 'org_profile');
         
         console.log(`🏢 Org-profile items: ${orgProfileItems.length}`);
         console.log(`📚 Other items: ${otherItems.length}`);
@@ -1187,14 +1344,20 @@ serve(async (req) => {
           return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
         });
         
-        // Recombine: org_profile items FIRST
+        // Recombine: KVK items FIRST, then org_profile, then rest
         const maxContextItems = 15;
-        fullKnowledgeBase = [
+        const categoryBasedItems = [
           ...orgProfileItems,
           ...otherItems.slice(0, Math.max(0, maxContextItems - orgProfileItems.length))
         ];
         
-        console.log(`✅ Smart Context: ${fullKnowledgeBase.length} items (${orgProfileItems.length} org-profiles) uit ${categoryNames.length} categorieën`);
+        // Merge with KVK items (KVK has priority)
+        fullKnowledgeBase = [
+          ...fullKnowledgeBase, // KVK items already prepended
+          ...categoryBasedItems
+        ];
+        
+        console.log(`✅ Smart Context: ${fullKnowledgeBase.length} items (${kvkEnrichedData.length} KVK + ${orgProfileItems.length} org-profiles) uit ${categoryNames.length} categorieën`);
         
         // FASE 2: Expand via relationships (Neural Graph Traversal)
         fullKnowledgeBase = await expandViaRelationships(fullKnowledgeBase, 2);
@@ -1563,6 +1726,34 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
       orgProfileGroundTruth = `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
       orgProfileGroundTruth += `🏢 **GEVERIFIEERDE ORGANISATIEGEGEVENS**\n`;
       orgProfileGroundTruth += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+      
+      // ✅ KVK ENRICHED DATA DISCLAIMER (HOOGSTE PRIORITEIT)
+      if (kvkEnrichedData.length > 0) {
+        orgProfileGroundTruth += `🏛️ **KVK GEVERIFIEERDE DATA** (${kvkEnrichedData.length} items):\n`;
+        orgProfileGroundTruth += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        orgProfileGroundTruth += `✅ Deze gegevens zijn real-time opgehaald uit het officiële KVK register\n`;
+        orgProfileGroundTruth += `✅ Dit is de MEEST BETROUWBARE bron voor bedrijfsgegevens (confidence: 100%)\n`;
+        orgProfileGroundTruth += `✅ Bij tegenstrijdigheden: KVK data heeft ALTIJD voorrang boven andere bronnen\n`;
+        orgProfileGroundTruth += `💰 Cost saved door smart caching: €${kvkCostSaved.toFixed(2)}\n\n`;
+        
+        kvkEnrichedData.forEach((item: any) => {
+          const data = item.value;
+          orgProfileGroundTruth += `**${data.naam || 'Bedrijf'}:**\n`;
+          orgProfileGroundTruth += `├─ **KvK-nummer:** ${data.kvk_nummer}\n`;
+          orgProfileGroundTruth += `├─ **Adres:** ${data.bezoekadres || 'Niet beschikbaar'}\n`;
+          orgProfileGroundTruth += `├─ **Postcode:** ${data.postcode || 'Niet beschikbaar'}\n`;
+          orgProfileGroundTruth += `├─ **Plaats:** ${data.plaats || 'Niet beschikbaar'}\n`;
+          if (data.telefoonnummer) orgProfileGroundTruth += `├─ **Telefoon:** ${data.telefoonnummer}\n`;
+          if (data.email) orgProfileGroundTruth += `├─ **Email:** ${data.email}\n`;
+          if (data.website) orgProfileGroundTruth += `├─ **Website:** ${data.website}\n`;
+          if (data.type_onderneming) orgProfileGroundTruth += `├─ **Type:** ${data.type_onderneming}\n`;
+          if (data.hoofdactiviteit) orgProfileGroundTruth += `├─ **Hoofdactiviteit:** ${data.hoofdactiviteit}\n`;
+          orgProfileGroundTruth += `└─ **Data bron:** ${item.source} (cached)\n\n`;
+        });
+        
+        orgProfileGroundTruth += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+      }
+      
       orgProfileGroundTruth += `ℹ️ **BELANGRIJK:** Deze gegevens worden continu gevalideerd tegen de kennisbank.\n`;
       orgProfileGroundTruth += `Als je tegenstrijdige informatie vindt met hoge betrouwbaarheid (>85%), meld dit.\n\n`;
       
