@@ -4,8 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { TrendingUp, AlertTriangle, Target, Clock, Zap } from "lucide-react";
+import { TrendingUp, AlertTriangle, Target, Clock, Zap, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
 interface RankedAlert {
   id: string;
@@ -22,6 +23,7 @@ interface RankedAlert {
 
 export function AlertPriorityRanker() {
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   // Fetch and rank alerts
   const { data: rankedAlerts, isLoading } = useQuery({
@@ -182,6 +184,31 @@ export function AlertPriorityRanker() {
     ? ((totalCategorized / rankedAlerts.length) * 100).toFixed(1) 
     : '0.0';
 
+  // Find broken link alerts and extract knowledge IDs
+  const brokenLinkAlerts = rankedAlerts?.filter(a => 
+    a.title?.toLowerCase().includes('404') || 
+    a.title?.toLowerCase().includes('broken') ||
+    a.data?.category === 'source_issue'
+  ) || [];
+  
+  const brokenKnowledgeIds = brokenLinkAlerts
+    .map(a => a.data?.knowledge_base_id)
+    .filter(Boolean);
+
+  const handleNavigateToBrokenLinks = () => {
+    if (brokenKnowledgeIds.length === 0) {
+      toast({
+        title: "Geen kapotte links gevonden",
+        description: "Er zijn geen kennisitems met broken links in de alerts",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Navigate to validator with broken link IDs
+    navigate(`/ai-training?tab=validator&broken=${brokenKnowledgeIds.join(',')}`);
+  };
+
   return (
     <div className="space-y-6">
       {/* Summary Stats */}
@@ -274,11 +301,22 @@ export function AlertPriorityRanker() {
             Voer acties uit op meerdere alerts tegelijk
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Button onClick={handleBulkMergeDuplicates} className="gap-2">
+        <CardContent className="space-y-3">
+          <Button onClick={handleBulkMergeDuplicates} className="gap-2 w-full">
             <Zap className="h-4 w-4" />
             Voeg Duplicaten Samen ({quickWins.length} groepen)
           </Button>
+          
+          {brokenKnowledgeIds.length > 0 && (
+            <Button 
+              onClick={handleNavigateToBrokenLinks} 
+              variant="destructive"
+              className="gap-2 w-full"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Fix {brokenKnowledgeIds.length} Kapotte Links →
+            </Button>
+          )}
         </CardContent>
       </Card>
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,10 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, CheckCircle, XCircle, AlertCircle, Zap, Database } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, AlertCircle, Zap, Database, Link } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import confetti from "canvas-confetti";
 import { Progress } from "@/components/ui/progress";
+import { useSearchParams } from "react-router-dom";
 
 interface KnowledgeItem {
   id: string;
@@ -27,6 +28,7 @@ interface KnowledgeItem {
 export function KnowledgeValidator() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("unverified");
@@ -35,10 +37,28 @@ export function KnowledgeValidator() {
     return stored ? parseInt(stored, 10) : 0;
   });
   const [showQuickWins, setShowQuickWins] = useState<boolean>(true);
+  const [brokenLinkIds, setBrokenLinkIds] = useState<string[]>([]);
+
+  // Check for broken link IDs in URL params
+  useEffect(() => {
+    const brokenParam = searchParams.get('broken');
+    if (brokenParam) {
+      const ids = brokenParam.split(',').filter(Boolean);
+      setBrokenLinkIds(ids);
+      setShowQuickWins(false);
+      setFilterStatus('all');
+      
+      toast({
+        title: "🔗 Kapotte links filter actief",
+        description: `${ids.length} items met broken links worden getoond`,
+        duration: 5000,
+      });
+    }
+  }, [searchParams, toast]);
 
   // Fetch knowledge items needing validation
   const { data: items, isLoading } = useQuery({
-    queryKey: ["knowledge-validation", filterCategory, filterStatus, showQuickWins],
+    queryKey: ["knowledge-validation", filterCategory, filterStatus, showQuickWins, brokenLinkIds],
     queryFn: async () => {
       let query = supabase
         .from("ai_knowledge_base")
@@ -47,13 +67,19 @@ export function KnowledgeValidator() {
         .order("created_at", { ascending: false })
         .limit(100);
 
-      // Apply Quick Wins filter: high confidence + unverified
-      if (showQuickWins) {
+      // Priority 1: Filter by broken link IDs if present
+      if (brokenLinkIds.length > 0) {
+        query = query.in("id", brokenLinkIds);
+      }
+      // Priority 2: Apply Quick Wins filter
+      else if (showQuickWins) {
         query = query
           .eq("validation_status", "unverified")
           .gte("confidence_score", 0.70)
           .order("confidence_score", { ascending: false });
-      } else {
+      } 
+      // Priority 3: Apply standard filters
+      else {
         if (filterStatus !== "all") {
           query = query.eq("validation_status", filterStatus);
         }
@@ -225,8 +251,37 @@ export function KnowledgeValidator() {
     return { icon: "🌱", label: "Getting Started", color: "bg-gray-500" };
   };
 
+  const clearBrokenLinkFilter = () => {
+    searchParams.delete('broken');
+    setSearchParams(searchParams);
+    setBrokenLinkIds([]);
+    setShowQuickWins(true);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Broken Links Alert Banner */}
+      {brokenLinkIds.length > 0 && (
+        <Card className="bg-destructive/10 border-destructive/30">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Link className="h-5 w-5 text-destructive" />
+                <div>
+                  <p className="font-bold">🔗 Kapotte Links Filter Actief</p>
+                  <p className="text-sm text-muted-foreground">
+                    {items?.length || 0} kennisitems met broken links worden getoond
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={clearBrokenLinkFilter}>
+                Verwijder Filter
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Validation Streak Banner */}
       {validationStreak > 0 && (
         <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
