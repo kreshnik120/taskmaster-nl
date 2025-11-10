@@ -37,12 +37,12 @@ async function getKnowledgeIdsWithoutEmbeddings(
   batchSize: number, 
   offset: number
 ): Promise<string[]> {
-  // Fetch knowledge items zonder embeddings (prioriteer nieuwe items)
+  // Fetch knowledge items zonder embeddings (prioriteer OUDSTE items)
   const { data: kbItems } = await supabase
     .from('ai_knowledge_base')
     .select('id')
     .is('deleted_at', null)
-    .order('created_at', { ascending: false }) // Nieuwe items eerst
+    .order('created_at', { ascending: true }) // 🔧 FIX: Oudste items eerst (voorkomt infinite loop)
     .range(offset, offset + batchSize * 20 - 1); // Window voor filtering
   
   if (!kbItems || kbItems.length === 0) return [];

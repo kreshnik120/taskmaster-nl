@@ -39,15 +39,23 @@ export const EmbeddingCoverageDashboard = () => {
         .from("knowledge_embeddings")
         .select("*", { count: "exact", head: true });
 
-      // Voor validation counts moeten we wel data ophalen (geen HEAD voor filters)
-      const { data: validationData } = await supabase
+      // 🔧 FIX: Gebruik COUNT queries voor accurate validation percentages
+      const { count: verifiedCount } = await supabase
         .from("ai_knowledge_base")
-        .select("validation_status")
+        .select("*", { count: "exact", head: true })
         .eq("org_id", userOrg.org_id)
+        .eq("validation_status", "verified")
         .is("deleted_at", null);
 
-      const verifiedItems = validationData?.filter(d => d.validation_status === "verified").length || 0;
-      const unverifiedItems = validationData?.filter(d => d.validation_status === "unverified").length || 0;
+      const { count: unverifiedCount } = await supabase
+        .from("ai_knowledge_base")
+        .select("*", { count: "exact", head: true })
+        .eq("org_id", userOrg.org_id)
+        .eq("validation_status", "unverified")
+        .is("deleted_at", null);
+
+      const verifiedItems = verifiedCount || 0;
+      const unverifiedItems = unverifiedCount || 0;
 
       const embeddingCoverage = (totalItems || 0) > 0 ? ((embeddedCount || 0) / (totalItems || 0)) * 100 : 0;
       const validationCoverage = (totalItems || 0) > 0 ? (verifiedItems / (totalItems || 0)) * 100 : 0;
