@@ -283,10 +283,21 @@ export const LearningDashboard = () => {
           <Card className="p-4">
             <p className="text-sm text-muted-foreground mb-1">Usage Score</p>
             <div className="text-2xl font-bold text-purple-600">
-              {Math.min(Math.round((knowledgeStats?.totalUsage || 0) / 100), 100)}%
+              {(() => {
+                const usedItemsCount = knowledgeStats?.recentItems?.filter(i => i.usage_count > 0).length || 0;
+                const usageScore = knowledgeStats?.total > 0 
+                  ? Math.round((usedItemsCount / knowledgeStats.total) * 100)
+                  : 0;
+                return `${usageScore}%`;
+              })()}
             </div>
             <Progress 
-              value={Math.min((knowledgeStats?.totalUsage || 0) / 10, 100)} 
+              value={(() => {
+                const usedItemsCount = knowledgeStats?.recentItems?.filter(i => i.usage_count > 0).length || 0;
+                return knowledgeStats?.total > 0 
+                  ? Math.round((usedItemsCount / knowledgeStats.total) * 100)
+                  : 0;
+              })()} 
               className="mt-2" 
             />
           </Card>
