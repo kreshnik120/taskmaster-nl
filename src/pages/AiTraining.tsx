@@ -27,7 +27,7 @@ import { AlertPriorityRanker } from "@/components/AITraining/AlertPriorityRanker
 import { KnowledgeValidator } from "@/components/AITraining/KnowledgeValidator";
 import { ValidationWorkflowGuide } from "@/components/AITraining/ValidationWorkflowGuide";
 import { ValidationOnboardingWizard } from "@/components/AITraining/ValidationOnboardingWizard";
-import { SystemMonitor } from "@/components/SystemMonitor";
+
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { SystemHealthDashboard } from "@/components/AITraining/SystemHealthDashboard";
 import { EmbeddingCoverageDashboard } from "@/components/AITraining/EmbeddingCoverageDashboard";
@@ -182,7 +182,6 @@ const AiTraining = () => {
                     <div className="space-y-6">
                       <EmbeddingCoverageDashboard />
                       <SystemHealthDashboard />
-                      <SystemMonitor />
                     </div>
                   </TabsContent>
                 </Tabs>
