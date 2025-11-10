@@ -7,11 +7,21 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, CheckCircle, XCircle, AlertCircle, Zap, Database, Link } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, AlertCircle, Zap, Database, Link, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import confetti from "canvas-confetti";
 import { Progress } from "@/components/ui/progress";
 import { useSearchParams } from "react-router-dom";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface KnowledgeItem {
   id: string;
@@ -38,6 +48,7 @@ export function KnowledgeValidator() {
   });
   const [showQuickWins, setShowQuickWins] = useState<boolean>(true);
   const [brokenLinkIds, setBrokenLinkIds] = useState<string[]>([]);
+  const [showDeleteDialog, setShowDeleteDialog] = useState<boolean>(false);
 
   // Check for broken link IDs in URL params
   useEffect(() => {
@@ -169,6 +180,48 @@ export function KnowledgeValidator() {
     },
   });
 
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async ({ ids, reason }: { ids: string[]; reason?: string }) => {
+      const { data, error } = await supabase.functions.invoke("bulk-delete-knowledge", {
+        body: { knowledgeIds: ids, reason },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["knowledge-validation"] });
+      queryClient.invalidateQueries({ queryKey: ["validation-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["intelligence-alerts"] });
+      setSelectedIds(new Set());
+      setShowDeleteDialog(false);
+      
+      // Clear broken links filter if we deleted broken items
+      if (brokenLinkIds.length > 0) {
+        clearBrokenLinkFilter();
+      }
+      
+      toast({
+        title: "Items verwijderd! 🗑️",
+        description: `${data.deletedCount} items verwijderd • Critical alerts opgelost`,
+      });
+
+      // Confetti for successful cleanup
+      confetti({
+        particleCount: 80,
+        spread: 60,
+        origin: { y: 0.6 }
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Verwijderen mislukt",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const toggleSelectAll = () => {
     if (selectedIds.size === items?.length) {
       setSelectedIds(new Set());
@@ -221,6 +274,38 @@ export function KnowledgeValidator() {
     validateMutation.mutate({ ids, status });
   };
 
+  const handleBulkDelete = () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) {
+      toast({
+        title: "Geen items geselecteerd",
+        description: "Selecteer eerst items om te verwijderen",
+        variant: "destructive",
+      });
+      return;
+    }
+    setShowDeleteDialog(true);
+  };
+
+  const handleDeleteAllBroken = () => {
+    if (brokenLinkIds.length === 0) return;
+    
+    // Select all broken link items
+    setSelectedIds(new Set(brokenLinkIds));
+    
+    // Immediately trigger delete with specific reason
+    deleteMutation.mutate({ 
+      ids: brokenLinkIds, 
+      reason: "broken_links" 
+    });
+  };
+
+  const confirmDelete = () => {
+    const ids = Array.from(selectedIds);
+    const reason = brokenLinkIds.length > 0 ? "broken_links" : "manual_deletion";
+    deleteMutation.mutate({ ids, reason });
+  };
+
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -270,13 +355,25 @@ export function KnowledgeValidator() {
                 <div>
                   <p className="font-bold">🔗 Kapotte Links Filter Actief</p>
                   <p className="text-sm text-muted-foreground">
-                    {items?.length || 0} kennisitems met broken links worden getoond
+                    {items?.length || 0} kennisitems met broken links worden getoond • 
+                    <span className="font-semibold ml-1">Deze items kunnen niet meer worden gebruikt</span>
                   </p>
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={clearBrokenLinkFilter}>
-                Verwijder Filter
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  variant="destructive" 
+                  size="sm" 
+                  onClick={handleDeleteAllBroken}
+                  disabled={deleteMutation.isPending}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  🗑️ Verwijder Alle Broken Links
+                </Button>
+                <Button variant="outline" size="sm" onClick={clearBrokenLinkFilter}>
+                  Annuleer Filter
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -443,6 +540,18 @@ export function KnowledgeValidator() {
               <XCircle className="w-4 h-4 mr-2" />
               Reject ({selectedIds.size})
             </Button>
+            
+            <div className="flex-1" />
+            
+            <Button
+              onClick={handleBulkDelete}
+              disabled={selectedIds.size === 0 || deleteMutation.isPending}
+              variant={brokenLinkIds.length > 0 ? "destructive" : "outline"}
+              className={brokenLinkIds.length > 0 ? "border-2" : ""}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Bulk Delete ({selectedIds.size})
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -505,6 +614,48 @@ export function KnowledgeValidator() {
           )}
         </div>
       </ScrollArea>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Weet je het zeker?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Je staat op het punt om <span className="font-bold text-destructive">{selectedIds.size} items</span> te verwijderen.
+              {brokenLinkIds.length > 0 && (
+                <span className="block mt-2 font-semibold text-orange-600">
+                  ⚠️ Deze items hebben kapotte bronnen en zijn niet meer bruikbaar.
+                </span>
+              )}
+              <span className="block mt-2">
+                Deze actie kan niet ongedaan worden gemaakt. De items worden permanent verwijderd uit de knowledge base.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              Annuleren
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={deleteMutation.isPending}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Verwijderen...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Definitief Verwijderen
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
