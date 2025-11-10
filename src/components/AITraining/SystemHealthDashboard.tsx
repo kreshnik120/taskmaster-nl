@@ -448,13 +448,27 @@ export function SystemHealthDashboard() {
       }
 
       // Final success
-      toast({
-        title: totalValidated > 0 ? '✅ Bulk validatie voltooid' : '⚠️ Bulk validatie mislukt',
-        description: totalValidated > 0 
-          ? `${totalValidated} items succesvol gevalideerd in ${processedChunks} batches.`
-          : `Geen items konden worden gevalideerd. Controleer de logs voor details.`,
-        variant: totalValidated > 0 ? "default" : "destructive"
-      });
+      if (totalValidated > 0) {
+        toast({
+          title: '✅ Bulk validatie voltooid',
+          description: `${totalValidated} items succesvol gevalideerd in ${processedChunks} batches.`,
+        });
+      } else {
+        toast({
+          title: 'ℹ️ Geen items voldoen aan auto-validatie criteria',
+          description: (
+            <div className="space-y-2">
+              <p>{totalUnverified} items gevonden, maar geen enkele voldoet aan de trust criteria:</p>
+              <ul className="list-disc list-inside text-xs space-y-1">
+                <li>Vertrouwde bron (overheid.nl, etc.)</li>
+                <li>Hoge confidence (≥0.7) + geen negatieve feedback</li>
+                <li>Positieve gebruikersfeedback (≥2 votes)</li>
+              </ul>
+              <p className="text-xs mt-2">💡 Ga naar Knowledge Validator voor handmatige review.</p>
+            </div>
+          ),
+        });
+      }
 
       // Refresh data
       queryClient.invalidateQueries({ queryKey: ['validation-stats'] });
@@ -750,10 +764,19 @@ export function SystemHealthDashboard() {
           <div className="text-sm text-muted-foreground">
             <p className="mb-2">Valideert automatisch items met:</p>
             <ul className="list-disc list-inside space-y-1">
-              <li>Confidence score ≥ 0.8</li>
+              <li>Confidence score ≥ 0.7</li>
               <li>Geen negatieve feedback</li>
+              <li>Positieve feedback (≥2 votes)</li>
               <li>Trusted sources (overheid.nl, rijksoverheid.nl)</li>
             </ul>
+            <Button
+              onClick={() => window.location.href = '/ai-training?tab=validator'}
+              variant="outline"
+              size="sm"
+              className="mt-3"
+            >
+              Open Knowledge Validator →
+            </Button>
             {bulkValidating && (
               <div className="mt-4 p-3 bg-muted rounded-md">
                 <p className="font-medium">Bulk validatie bezig...</p>

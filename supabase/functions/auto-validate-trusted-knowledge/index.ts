@@ -65,13 +65,13 @@ Deno.serve(async (req) => {
         item.source.toLowerCase().includes(domain)
       );
 
-      // Criterium 2: High confidence + geen negatieve feedback
+      // Criterium 2: High confidence + geen negatieve feedback (VERLAAGD: 0.8 → 0.7)
       const isHighConfidence = 
-        item.confidence_score >= 0.8 && 
+        item.confidence_score >= 0.7 && 
         (item.harmful_count || 0) === 0;
 
-      // Criterium 3: Positieve feedback van gebruikers
-      const hasPositiveFeedback = (item.helpful_count || 0) >= 5;
+      // Criterium 3: Positieve feedback van gebruikers (VERLAAGD: 5 → 2)
+      const hasPositiveFeedback = (item.helpful_count || 0) >= 2;
 
       return isTrustedSource || isHighConfidence || hasPositiveFeedback;
     });
