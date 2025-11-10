@@ -65,6 +65,30 @@ export const LearningDashboard = () => {
     }
   });
 
+  // Separate query for accurate usage statistics
+  const { data: usageStats } = useQuery({
+    queryKey: ['usage-stats'],
+    queryFn: async () => {
+      const { count: activeCount } = await supabase
+        .from('ai_knowledge_base')
+        .select('*', { count: 'exact', head: true })
+        .is('deleted_at', null)
+        .gt('usage_count', 0);
+
+      const { count: totalCount } = await supabase
+        .from('ai_knowledge_base')
+        .select('*', { count: 'exact', head: true })
+        .is('deleted_at', null);
+
+      return {
+        activeCount: activeCount || 0,
+        totalCount: totalCount || 0,
+        percentage: totalCount > 0 ? Math.round((activeCount / totalCount) * 100) : 0
+      };
+    },
+    refetchInterval: 30000,
+  });
+
   // Fetch learning events
   const { data: learningEvents, refetch: refetchLearningEvents } = useQuery({
     queryKey: ['learning-events'],
@@ -283,23 +307,15 @@ export const LearningDashboard = () => {
           <Card className="p-4">
             <p className="text-sm text-muted-foreground mb-1">Usage Score</p>
             <div className="text-2xl font-bold text-purple-600">
-              {(() => {
-                const usedItemsCount = knowledgeStats?.recentItems?.filter(i => i.usage_count > 0).length || 0;
-                const usageScore = knowledgeStats?.total > 0 
-                  ? Math.round((usedItemsCount / knowledgeStats.total) * 100)
-                  : 0;
-                return `${usageScore}%`;
-              })()}
+              {usageStats?.percentage || 0}%
             </div>
             <Progress 
-              value={(() => {
-                const usedItemsCount = knowledgeStats?.recentItems?.filter(i => i.usage_count > 0).length || 0;
-                return knowledgeStats?.total > 0 
-                  ? Math.round((usedItemsCount / knowledgeStats.total) * 100)
-                  : 0;
-              })()} 
+              value={usageStats?.percentage || 0} 
               className="mt-2" 
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              {usageStats?.activeCount || 0} van {usageStats?.totalCount || 0} items actief gebruikt
+            </p>
           </Card>
 
           <Card className="p-4">
@@ -360,8 +376,8 @@ export const LearningDashboard = () => {
                   <h4 className="text-sm font-medium mb-2">Recent Toegevoegd</h4>
                   <ScrollArea className="h-[200px]">
                     <div className="space-y-2">
-                      {knowledgeStats?.recentItems?.map((item: any) => (
-                        <div key={`recent-${item.id}`} className="p-3 bg-muted/50 rounded-lg text-sm">
+                {knowledgeStats?.recentItems?.map((item: any, index: number) => (
+                  <div key={item.id || `recent-${index}`} className="p-3 bg-muted/50 rounded-lg text-sm">
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">

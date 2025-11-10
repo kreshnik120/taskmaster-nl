@@ -31,14 +31,14 @@ export function TopValidatorsLeaderboard() {
       const oneDayAgo = new Date();
       oneDayAgo.setDate(oneDayAgo.getDate() - 1);
 
-      // Fetch validation events with user profiles
+      // Fetch validation events with user profiles (INNER JOIN)
       const { data, error } = await supabase
         .from('ai_learning_events')
         .select(`
           user_id,
           created_at,
           event_type,
-          profiles!ai_learning_events_user_id_fkey (
+          profiles!inner (
             id,
             name,
             email,
