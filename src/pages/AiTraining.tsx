@@ -158,93 +158,179 @@ const AiTraining = () => {
               </p>
             </div>
 
-            <Tabs defaultValue="validation" className="w-full">
-              <TabsList className="grid w-full grid-cols-10">
-                <TabsTrigger value="dashboard">📊 Dashboard</TabsTrigger>
-                <AdminOnly>
-                  <TabsTrigger value="alerts">🚨 Alerts</TabsTrigger>
-                </AdminOnly>
-                <AdminOnly>
-                  <TabsTrigger value="validation">📋 Validation</TabsTrigger>
-                </AdminOnly>
-                <TabsTrigger value="week1-2">🧪 Week 1-2</TabsTrigger>
-                <AdminOnly>
-                  <TabsTrigger value="system">🔧 Systeem</TabsTrigger>
-                </AdminOnly>
-                <AdminOnly>
-                  <TabsTrigger value="kvk">💼 KVK API</TabsTrigger>
-                </AdminOnly>
-                <TabsTrigger value="links">🔗 Links</TabsTrigger>
-                <TabsTrigger value="conflicts">⚠️ Conflicten</TabsTrigger>
+            <Tabs defaultValue="overview" className="w-full">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="overview">📊 Overzicht</TabsTrigger>
+                <TabsTrigger value="management">🔧 Beheer</TabsTrigger>
+                <TabsTrigger value="knowledge">🗄️ Kennis</TabsTrigger>
                 <TabsTrigger value="training">💬 Training</TabsTrigger>
-                <TabsTrigger value="knowledge">🗄️ Kennisbank</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="dashboard" className="mt-6">
-                <LearningDashboard />
+              {/* 📊 OVERZICHT */}
+              <TabsContent value="overview" className="mt-6">
+                <Tabs defaultValue="dashboard" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+                    <TabsTrigger value="health">Systeem Health</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="dashboard" className="mt-4">
+                    <LearningDashboard />
+                  </TabsContent>
+                  
+                  <TabsContent value="health" className="mt-4">
+                    <div className="space-y-6">
+                      <EmbeddingCoverageDashboard />
+                      <SystemHealthDashboard />
+                      <SystemMonitor />
+                    </div>
+                  </TabsContent>
+                </Tabs>
               </TabsContent>
 
-              <AdminOnly>
-                <TabsContent value="alerts" className="mt-6">
-                  <Tabs defaultValue="triage" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="triage">Alert Triage</TabsTrigger>
-                      <TabsTrigger value="priority">Priority Ranker</TabsTrigger>
+              {/* 🔧 BEHEER (AdminOnly) */}
+              <TabsContent value="management" className="mt-6">
+                <AdminOnly fallback={
+                  <Card className="p-8 text-center">
+                    <p className="text-muted-foreground">Alleen toegankelijk voor administrators</p>
+                  </Card>
+                }>
+                  <Tabs defaultValue="validation" className="w-full">
+                    <TabsList className="grid w-full grid-cols-4">
+                      <TabsTrigger value="validation">Validation</TabsTrigger>
+                      <TabsTrigger value="alerts">Alerts</TabsTrigger>
+                      <TabsTrigger value="kvk">KVK API</TabsTrigger>
+                      <TabsTrigger value="week1-2">Week 1-2 Test</TabsTrigger>
                     </TabsList>
-                    <TabsContent value="triage" className="mt-4">
-                      <AlertTriageSystem />
+                    
+                    <TabsContent value="validation" className="mt-4">
+                      {/* Validation Adoption Banner */}
+                      <Card className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-blue-500/20 mb-6">
+                        <CardContent className="p-6">
+                          <div className="flex items-start gap-4">
+                            <div className="p-3 bg-blue-500 rounded-full">
+                              <CheckCircle className="h-6 w-6 text-white" />
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="font-bold text-lg mb-2">
+                                🎯 Start met Valideren - Boost AI Kwaliteit!
+                              </h3>
+                              <p className="text-sm text-muted-foreground mb-3">
+                                Er zijn <strong>{stats?.unverified || 0} unverified items</strong> klaar voor review. 
+                                Begin met de "Quick Wins" filter voor items met 80%+ confidence - deze zijn het makkelijkst te valideren!
+                              </p>
+                              <div className="flex gap-2">
+                                <Badge variant="outline" className="gap-1">
+                                  <Target className="h-3 w-3" />
+                                  Doel: 100 validaties deze week
+                                </Badge>
+                                <Badge variant="outline" className="gap-1">
+                                  <TrendingUp className="h-3 w-3" />
+                                  Impact: Directe kwaliteitsverbetering
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      
+                      <ValidationWorkflowGuide />
+                      <KnowledgeValidator />
                     </TabsContent>
-                    <TabsContent value="priority" className="mt-4">
-                      <AlertPriorityRanker />
+                    
+                    <TabsContent value="alerts" className="mt-4">
+                      <Tabs defaultValue="triage" className="w-full">
+                        <TabsList className="grid w-full grid-cols-2">
+                          <TabsTrigger value="triage">Alert Triage</TabsTrigger>
+                          <TabsTrigger value="priority">Priority Ranker</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="triage" className="mt-4">
+                          <AlertTriageSystem />
+                        </TabsContent>
+                        <TabsContent value="priority" className="mt-4">
+                          <AlertPriorityRanker />
+                        </TabsContent>
+                      </Tabs>
+                    </TabsContent>
+                    
+                    <TabsContent value="kvk" className="mt-4">
+                      <Card className="mb-6">
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            💼 KVK API Cost Optimization
+                          </CardTitle>
+                          <CardDescription>
+                            Smart caching strategie: Database First → KVK Cache → KVK API (€0.30)
+                          </CardDescription>
+                        </CardHeader>
+                      </Card>
+                      <KvKCostDashboard />
+                    </TabsContent>
+                    
+                    <TabsContent value="week1-2" className="mt-4">
+                      <Week1To2TestPanel />
                     </TabsContent>
                   </Tabs>
-                </TabsContent>
-              </AdminOnly>
+                </AdminOnly>
+              </TabsContent>
 
-              <AdminOnly>
-                <TabsContent value="validation" className="mt-6">
-                  {/* Validation Adoption Banner */}
-                  <Card className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-blue-500/20 mb-6">
-                    <CardContent className="p-6">
-                      <div className="flex items-start gap-4">
-                        <div className="p-3 bg-blue-500 rounded-full">
-                          <CheckCircle className="h-6 w-6 text-white" />
+              {/* 🗄️ KENNIS */}
+              <TabsContent value="knowledge" className="mt-6">
+                <Tabs defaultValue="search" className="w-full">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="search">Zoeken</TabsTrigger>
+                    <TabsTrigger value="conflicts">Conflicten</TabsTrigger>
+                    <TabsTrigger value="links">Links</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="search" className="mt-4">
+                    <div className="space-y-6">
+                      <SmartKnowledgeSearch />
+                      <KnowledgeOverview />
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="conflicts" className="mt-4">
+                    <div className="space-y-6">
+                      <ConflictMonitor />
+                      <ConflictResolutionPanel />
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="links" className="mt-4">
+                    <ProfessionalClientLinks />
+                  </TabsContent>
+                </Tabs>
+              </TabsContent>
+
+              {/* 💬 TRAINING */}
+              <TabsContent value="training" className="mt-6">
+                <div className="space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Bot className="h-5 w-5" />
+                        AI Training Chat
+                      </CardTitle>
+                      <CardDescription>
+                        Train de AI door vragen te stellen en correcties te geven. Je antwoorden worden automatisch opgeslagen in de knowledge base.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="border rounded-lg p-4 bg-muted/30">
+                        <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground">
+                          <Sparkles className="h-4 w-4" />
+                          <span>Training modus actief - je correcties worden automatisch opgeslagen</span>
                         </div>
-                        <div className="flex-1">
-                          <h3 className="font-bold text-lg mb-2">
-                            🎯 Start met Valideren - Boost AI Kwaliteit!
-                          </h3>
-                          <p className="text-sm text-muted-foreground mb-3">
-                            Er zijn <strong>{stats?.unverified || 0} unverified items</strong> klaar voor review. 
-                            Begin met de "Quick Wins" filter voor items met 80%+ confidence - deze zijn het makkelijkst te valideren!
-                          </p>
-                          <div className="flex gap-2">
-                            <Badge variant="outline" className="gap-1">
-                              <Target className="h-3 w-3" />
-                              Doel: 100 validaties deze week
-                            </Badge>
-                            <Badge variant="outline" className="gap-1">
-                              <TrendingUp className="h-3 w-3" />
-                              Impact: Directe kwaliteitsverbetering
-                            </Badge>
-                          </div>
-                        </div>
+                        <ChatWidget embedded={true} trainingMode={true} />
                       </div>
                     </CardContent>
                   </Card>
                   
-                  <ValidationWorkflowGuide />
-                  <KnowledgeValidator />
-                </TabsContent>
-              </AdminOnly>
-
-              <TabsContent value="week1-2" className="mt-6">
-                <Week1To2TestPanel />
-              </TabsContent>
-
-              <AdminOnly>
-                <TabsContent value="system" className="mt-6">
-                  <div className="space-y-6">
+                  <DocumentUpload />
+                  <SeedClientKnowledge />
+                  
+                  <AdminOnly>
                     <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2">
@@ -287,71 +373,8 @@ const AiTraining = () => {
                       </CardContent>
                     </Card>
                     
-                    <EmbeddingCoverageDashboard />
-                    <SystemHealthDashboard />
                     <ManualFunctionTrigger hideBackfill />
-                    <SystemMonitor />
-                  </div>
-                </TabsContent>
-              </AdminOnly>
-
-              <AdminOnly>
-                <TabsContent value="kvk" className="mt-6">
-                  <Card className="mb-6">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        💼 KVK API Cost Optimization
-                      </CardTitle>
-                      <CardDescription>
-                        Smart caching strategie: Database First → KVK Cache → KVK API (€0.30)
-                      </CardDescription>
-                    </CardHeader>
-                  </Card>
-                  <KvKCostDashboard />
-                </TabsContent>
-              </AdminOnly>
-
-              <TabsContent value="links" className="mt-6 space-y-6">
-                <ProfessionalClientLinks />
-              </TabsContent>
-
-              <TabsContent value="conflicts" className="mt-6 space-y-6">
-                <ConflictMonitor />
-                <ConflictResolutionPanel />
-              </TabsContent>
-
-              <TabsContent value="training" className="mt-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Bot className="h-5 w-5" />
-                      AI Training Chat
-                    </CardTitle>
-                    <CardDescription>
-                      Train de AI door vragen te stellen en correcties te geven. Je antwoorden worden automatisch opgeslagen in de knowledge base.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="border rounded-lg p-4 bg-muted/30">
-                      <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground">
-                        <Sparkles className="h-4 w-4" />
-                        <span>Training modus actief - je correcties worden automatisch opgeslagen</span>
-                      </div>
-                      <ChatWidget embedded={true} trainingMode={true} />
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <div className="space-y-6 mt-6">
-                  <DocumentUpload />
-                  <SeedClientKnowledge />
-                </div>
-              </TabsContent>
-
-              <TabsContent value="knowledge" className="mt-6">
-                <div className="space-y-6">
-                  <SmartKnowledgeSearch />
-                  <KnowledgeOverview />
+                  </AdminOnly>
                 </div>
               </TabsContent>
             </Tabs>
