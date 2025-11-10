@@ -1,5 +1,6 @@
-import { Home, Kanban, List, Calendar, Clock, BarChart3, Trash2, CheckCircle2, Brain, LogOut, Users } from "lucide-react";
+import { Home, Kanban, List, Calendar, Clock, BarChart3, Trash2, CheckCircle2, Brain, Users } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -16,6 +17,8 @@ import { toast } from "sonner";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
+import { UserProfileCard } from "./UserProfileCard";
+import { User } from "@supabase/supabase-js";
 
 const menuItems = [
   { title: "Mijn dag", url: "/", icon: Home },
@@ -32,7 +35,16 @@ const menuItems = [
 
 export function AppSidebar() {
   const navigate = useNavigate();
-  const { isAdmin, canEdit } = useUserRole();
+  const { role, isAdmin, canEdit } = useUserRole();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUser(user);
+    };
+    fetchUser();
+  }, []);
 
   // ⚡ EFFICIENT COUNT: Uses idx_ai_knowledge_validation_deleted for fast query
   const { data: validationCount } = useQuery({
@@ -64,6 +76,16 @@ export function AppSidebar() {
       navigate("/auth");
     } catch (error) {
       toast.error("Er ging iets mis bij het uitloggen");
+    }
+  };
+
+  const handleSwitchAccount = async () => {
+    try {
+      await supabase.auth.signOut();
+      toast.info("Log in met een ander account");
+      navigate("/auth");
+    } catch (error) {
+      toast.error("Er ging iets mis bij het wisselen");
     }
   };
 
@@ -105,14 +127,12 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleLogout}>
-              <LogOut className="h-4 w-4" />
-              <span>Uitloggen</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <UserProfileCard
+          user={currentUser}
+          role={role}
+          onLogout={handleLogout}
+          onSwitch={handleSwitchAccount}
+        />
       </SidebarFooter>
     </Sidebar>
   );
