@@ -155,8 +155,6 @@ export const LearningDashboard = () => {
   const verificationRate = knowledgeStats?.total 
     ? ((knowledgeStats.total - (stats?.unverified || 0)) / knowledgeStats.total * 100)
     : 0;
-  const validatedThisWeek = parseInt(localStorage.getItem('total_validations') || '0');
-  const weeklyGoal = 500;
 
   return (
     <div className="space-y-6">
@@ -178,16 +176,6 @@ export const LearningDashboard = () => {
             >
               Start Validating Now →
             </Button>
-            <div className="mt-4">
-              <div className="flex justify-between text-sm mb-1">
-                <span>Weekly Goal Progress</span>
-                <span>{validatedThisWeek} / {weeklyGoal}</span>
-              </div>
-              <Progress value={(validatedThisWeek / weeklyGoal) * 100} className="h-2 bg-white/20" />
-              <p className="text-xs mt-2 opacity-90">
-                {weeklyGoal - validatedThisWeek} validations to go this week 🎯
-              </p>
-            </div>
           </CardContent>
         </Card>
       )}
@@ -313,43 +301,6 @@ export const LearningDashboard = () => {
           </Card>
         </div>
 
-        {/* Admin Leaderboard */}
-        <AdminOnly>
-          <div className="mt-6">
-            <h3 className="font-semibold mb-3 flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Top Validators (deze week)
-            </h3>
-            <div className="space-y-2">
-              {[
-                { name: "Admin", validations: 156, trend: "+23%" },
-                { name: "Manager 1", validations: 89, trend: "+12%" },
-                { name: "Manager 2", validations: 67, trend: "+8%" },
-              ].map((user, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline">#{index + 1}</Badge>
-                    <span className="font-medium">{user.name}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold">{user.validations} validaties</span>
-                    <Badge variant="outline" className="text-green-600">{user.trend}</Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </AdminOnly>
-
-        {/* CSV Export Button */}
-        <AdminOnly>
-          <div className="mt-4">
-            <Button variant="outline" className="w-full gap-2">
-              <Database className="h-4 w-4" />
-              Export KB Health Report (CSV)
-            </Button>
-          </div>
-        </AdminOnly>
       </Card>
 
       {/* Detailed Tabs */}
