@@ -35,31 +35,6 @@ export function SystemHealthDashboard() {
     refetchInterval: 30000, // Refresh every 30s
   });
 
-  // Fetch embedding coverage
-  const { data: embeddingStats } = useQuery({
-    queryKey: ['embedding-stats'],
-    queryFn: async () => {
-      const { count: knowledgeCount, error: kError } = await supabase
-        .from('ai_knowledge_base')
-        .select('*', { count: 'exact', head: true })
-        .is('deleted_at', null);
-      
-      const { count: embeddingCount, error: eError } = await supabase
-        .from('knowledge_embeddings')
-        .select('*', { count: 'exact', head: true });
-      
-      if (kError || eError) throw kError || eError;
-      
-      return {
-        total: knowledgeCount || 0,
-        withEmbeddings: embeddingCount || 0,
-        missing: (knowledgeCount || 0) - (embeddingCount || 0),
-        coverage: knowledgeCount ? ((embeddingCount || 0) / knowledgeCount * 100) : 0
-      };
-    },
-    refetchInterval: 30000,
-  });
-
   // Fetch recent health logs
   const { data: healthLogs } = useQuery({
     queryKey: ['health-logs'],
@@ -127,12 +102,11 @@ export function SystemHealthDashboard() {
       if (orchestratorState?.status === 'running') {
         toast({
           title: "Backfill is al actief",
-          description: `Er draait al een backfill die ${embeddingStats?.missing || 0} items verwerkt.`,
+          description: `Er draait al een backfill.`,
         });
         // Refresh queries to show latest progress
         setTimeout(() => {
           queryClient.invalidateQueries({ queryKey: ['orchestrator-state'] });
-          queryClient.invalidateQueries({ queryKey: ['embedding-stats'] });
         }, 1000);
         return; // Exit early - don't call the function
       }
@@ -144,7 +118,7 @@ export function SystemHealthDashboard() {
 
       toast({
         title: actionDescription,
-        description: `Verwerkt ${embeddingStats?.missing || 0} ontbrekende embeddings`,
+        description: `Backfill wordt verwerkt`,
       });
 
       const { data, error } = await supabase.functions.invoke('auto-backfill-orchestrator', {
@@ -161,13 +135,12 @@ export function SystemHealthDashboard() {
 
       toast({
         title: shouldResumeExisting ? "Run hervat!" : "Backfill gestart!",
-        description: `De embedding backfill verwerkt nu ${embeddingStats?.missing || 0} items.`,
+        description: `De embedding backfill is actief.`,
       });
 
       // Refresh all queries
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['orchestrator-state'] });
-        queryClient.invalidateQueries({ queryKey: ['embedding-stats'] });
       }, 2000);
       
     } catch (error: any) {
@@ -212,7 +185,6 @@ export function SystemHealthDashboard() {
       // Refresh queries
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['orchestrator-state'] });
-        queryClient.invalidateQueries({ queryKey: ['embedding-stats'] });
       }, 1000);
       
     } catch (error: any) {
@@ -259,7 +231,6 @@ export function SystemHealthDashboard() {
       // Refresh all queries
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['orchestrator-state'] });
-        queryClient.invalidateQueries({ queryKey: ['embedding-stats'] });
       }, 2000);
       
     } catch (error: any) {
@@ -351,7 +322,6 @@ export function SystemHealthDashboard() {
       });
 
       queryClient.invalidateQueries({ queryKey: ['validation-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['embedding-stats'] });
     } catch (error: any) {
       console.error('Error triggering auto-validate:', error);
       toast({
@@ -388,7 +358,7 @@ export function SystemHealthDashboard() {
         description: `${data?.categories_created || 0} categorieën bijgewerkt`,
       });
 
-      queryClient.invalidateQueries({ queryKey: ['embedding-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['ai-knowledge-stats'] });
     } catch (error: any) {
       console.error('Error triggering meta-orchestrator:', error);
       toast({
@@ -488,7 +458,6 @@ export function SystemHealthDashboard() {
 
       // Refresh data
       queryClient.invalidateQueries({ queryKey: ['validation-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['embedding-stats'] });
 
     } catch (error: any) {
       console.error('Bulk validate error:', error);
@@ -514,19 +483,18 @@ export function SystemHealthDashboard() {
   };
 
   const getHealthStatus = () => {
-    if (!orchestratorState || !embeddingStats) return 'unknown';
+    if (!orchestratorState) return 'unknown';
     
     const metadata = orchestratorState.metadata as any;
     const isRunning = orchestratorState.status === 'running';
     const hasStaleHeartbeat = metadata?.last_heartbeat 
       ? (Date.now() - new Date(metadata.last_heartbeat).getTime()) > 300000
       : false;
-    const lowCoverage = embeddingStats.coverage < 80;
     
-    if (hasStaleHeartbeat || (lowCoverage && embeddingStats.missing > 100)) {
+    if (hasStaleHeartbeat) {
       return 'critical';
     }
-    if (isRunning || lowCoverage) {
+    if (isRunning) {
       return 'warning';
     }
     return 'healthy';
@@ -601,27 +569,6 @@ export function SystemHealthDashboard() {
           </div>
         </CardHeader>
       </Card>
-
-      {/* Low Coverage Alert */}
-      {embeddingStats && embeddingStats.coverage < 95 && (
-        <Card className="border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/20">
-          <CardHeader>
-            <div className="flex items-start justify-between">
-              <div>
-                <CardTitle className="text-orange-900 dark:text-orange-100 text-base flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5" />
-                  Lage Embedding Coverage Gedetecteerd
-                </CardTitle>
-                <CardDescription className="text-orange-700 dark:text-orange-300 mt-2">
-                  {embeddingStats.missing} items hebben nog geen embeddings. 
-                  Dit beperkt AI Chat, Knowledge Graph en Smart Deduplicator functionaliteit.
-                  Gebruik de "Start Backfill" knop in het Orchestrator blok hieronder.
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-        </Card>
-      )}
 
       {/* Overall Health Status */}
       <Card>
@@ -763,58 +710,6 @@ export function SystemHealthDashboard() {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">Geen actieve run</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Embedding Coverage */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-medium">Embedding Coverage</CardTitle>
-            <Button
-              onClick={triggerMetaOrchestrator}
-              disabled={isUpdatingCategories}
-              size="sm"
-              variant="outline"
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${isUpdatingCategories ? 'animate-spin' : ''}`} />
-              {isUpdatingCategories ? 'Updaten...' : 'Update Categorieën'}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {embeddingStats ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-2xl font-bold">{embeddingStats.coverage.toFixed(1)}%</span>
-                <Zap className="w-5 h-5 text-yellow-500" />
-              </div>
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Totaal kennis items</span>
-                  <span className="font-medium">{embeddingStats.total}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Met embeddings</span>
-                  <span className="font-medium text-green-600">{embeddingStats.withEmbeddings}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Ontbrekend</span>
-                  <span className={`font-medium ${embeddingStats.missing > 100 ? 'text-red-600' : 'text-yellow-600'}`}>
-                    {embeddingStats.missing}
-                  </span>
-                </div>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-gradient-to-r from-yellow-500 to-green-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${embeddingStats.coverage}%` }}
-                />
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Laden...</p>
           )}
         </CardContent>
       </Card>
