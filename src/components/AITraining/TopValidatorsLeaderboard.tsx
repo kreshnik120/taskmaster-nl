@@ -45,7 +45,7 @@ export function TopValidatorsLeaderboard() {
             image
           )
         `)
-        .eq('event_type', 'validation')
+        .in('event_type', ['manual_validation', 'auto_validation'])
         .not('user_id', 'is', null)
         .order('created_at', { ascending: false });
 
