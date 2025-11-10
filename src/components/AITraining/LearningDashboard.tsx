@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { AdminOnly } from "@/components/auth/AdminOnly";
 import { LearningProgressCharts } from "./LearningProgressCharts";
+import { TopValidatorsLeaderboard } from "./TopValidatorsLeaderboard";
 import { useNavigate } from "react-router-dom";
 
 export const LearningDashboard = () => {
@@ -300,6 +301,11 @@ export const LearningDashboard = () => {
             </p>
           </Card>
         </div>
+
+        {/* Top Validators Leaderboard */}
+        <AdminOnly>
+          <TopValidatorsLeaderboard />
+        </AdminOnly>
 
       </Card>
 
