@@ -2239,6 +2239,7 @@ export type Database = {
         Row: {
           can_comment: boolean
           created_at: string
+          created_by: string | null
           expires_at: string | null
           id: string
           last_accessed_at: string | null
@@ -2250,6 +2251,7 @@ export type Database = {
         Insert: {
           can_comment?: boolean
           created_at?: string
+          created_by?: string | null
           expires_at?: string | null
           id?: string
           last_accessed_at?: string | null
@@ -2261,6 +2263,7 @@ export type Database = {
         Update: {
           can_comment?: boolean
           created_at?: string
+          created_by?: string | null
           expires_at?: string | null
           id?: string
           last_accessed_at?: string | null
