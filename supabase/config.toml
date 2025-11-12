@@ -86,7 +86,7 @@ schedule = "0 3 * * *"  # 1x per dag om 03:00 (was elk uur)
 timeout = 300
 
 [functions.meta-orchestrator]
-verify_jwt = false
+verify_jwt = true  # 🔒 Admin-only access
 schedule = "0 2 * * *"
 
 [functions.synapse-pruner]

@@ -22,6 +22,30 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
     
+    // 🔒 SECURITY: Admin-only access control (if JWT is provided)
+    const authHeader = req.headers.get('authorization');
+    if (authHeader) {
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user } } = await supabase.auth.getUser(token);
+      
+      if (user) {
+        const { data: isAdmin } = await supabase.rpc('has_role', {
+          _user_id: user.id,
+          _role: 'admin'
+        });
+
+        if (!isAdmin) {
+          console.error('❌ Non-admin user attempted meta-orchestrator:', user.id);
+          return new Response(
+            JSON.stringify({ error: 'Forbidden: Admin access required' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        console.log(`🔓 Admin access verified: ${user.id}`);
+      }
+    }
+    
     let { trigger, org_id, batch_size = 500 } = await req.json();
     
     // ✅ FALLBACK: Haal eerste org op als org_id ontbreekt

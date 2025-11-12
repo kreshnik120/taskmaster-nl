@@ -36,10 +36,32 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const resendApiKey = Deno.env.get("RESEND_API_KEY")!;
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY")!;
+    const webhookSecret = Deno.env.get("RESEND_WEBHOOK_SIGNING_SECRET");
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const payload: ResendWebhookPayload = await req.json();
+    // 🔒 SECURITY: Verify webhook signature (if secret is configured)
+    let payload: ResendWebhookPayload;
+    
+    if (webhookSecret) {
+      const rawBody = await req.text();
+      const { verifySvixSignature } = await import("../_shared/webhook-validator.ts");
+      
+      const isValid = await verifySvixSignature(rawBody, req.headers, webhookSecret);
+      if (!isValid) {
+        console.error("❌ Invalid webhook signature - potential attack attempt");
+        return new Response(
+          JSON.stringify({ error: "Unauthorized" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      // Parse payload after verification
+      payload = JSON.parse(rawBody);
+    } else {
+      console.warn("⚠️ RESEND_WEBHOOK_SIGNING_SECRET not configured - webhook verification disabled");
+      payload = await req.json();
+    }
     console.log("=== Processing Application Reply ===");
     console.log("Webhook type:", payload.type);
 

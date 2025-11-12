@@ -16,6 +16,20 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // 🔒 SECURITY: Rate limiting to prevent brute-force attacks
+    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0] || 
+                     req.headers.get("x-real-ip") || 
+                     "unknown";
+    
+    const { checkRateLimit } = await import("../_shared/rate-limiter.ts");
+    
+    if (!checkRateLimit(clientIp)) {
+      return new Response(
+        JSON.stringify({ error: "Te veel verzoeken, probeer over 1 minuut opnieuw" }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);

@@ -46,6 +46,22 @@ Deno.serve(async (req) => {
       );
     }
 
+    // 🔒 SECURITY: Admin-only access control
+    const { data: isAdmin } = await supabase.rpc('has_role', {
+      _user_id: user.id,
+      _role: 'admin'
+    });
+
+    if (!isAdmin) {
+      console.error('❌ Non-admin user attempted orchestrator control:', user.id);
+      return new Response(
+        JSON.stringify({ error: 'Forbidden: Admin access required' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`🔓 Admin access verified: ${user.id}`);
+
     // Get org_id
     const { data: orgData } = await supabase
       .from('user_organizations')
