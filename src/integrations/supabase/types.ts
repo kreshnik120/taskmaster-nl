@@ -2863,30 +2863,6 @@ export type Database = {
         }
         Relationships: []
       }
-      user_upload_quotas: {
-        Row: {
-          created_at: string
-          daily_limit: number
-          last_reset: string
-          uploads_today: number
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          daily_limit?: number
-          last_reset?: string
-          uploads_today?: number
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          daily_limit?: number
-          last_reset?: string
-          uploads_today?: number
-          user_id?: string
-        }
-        Relationships: []
-      }
       watches: {
         Row: {
           created_at: string
