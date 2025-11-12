@@ -18,7 +18,6 @@ import { LearningDashboard } from "@/components/AITraining/LearningDashboard";
 import { SmartKnowledgeSearch } from "@/components/AITraining/SmartKnowledgeSearch";
 import { ConflictResolutionPanel } from "@/components/AITraining/ConflictResolutionPanel";
 import { ConflictMonitor } from "@/components/AITraining/ConflictMonitor";
-import { IntelligentConflictDashboard } from "@/components/AITraining/IntelligentConflictDashboard";
 import { ProfessionalClientLinks } from "@/components/AITraining/ProfessionalClientLinks";
 import { AdminOnly } from "@/components/auth/AdminOnly";
 import { Week1To2TestPanel } from "@/components/AITraining/Week1To2TestPanel";

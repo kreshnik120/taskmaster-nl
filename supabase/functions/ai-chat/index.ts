@@ -3367,23 +3367,8 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                         outcome: 'harmful'
                       });
                       
-                      // 🆕 TRIGGER CONFLICT RESOLVER (non-blocking)
-                      try {
-                        console.log('🔄 Triggering intelligent-conflict-resolver due to mismatch...');
-                        supabaseServiceClient.functions.invoke('intelligent-conflict-resolver', {
-                          body: { 
-                            trigger: 'chat_mismatch',
-                            context: {
-                              org: profile.brand_name,
-                              field: 'kvk_number',
-                              wrong_value: mentionsWrongKvK[1],
-                              correct_value: profile.kvk_number
-                            }
-                          }
-                        }).catch(err => console.error('⚠️ Conflict resolver trigger failed (non-blocking):', err));
-                      } catch (triggerErr) {
-                        console.error('⚠️ Failed to trigger conflict resolver (non-blocking):', triggerErr);
-                      }
+                      // ⚠️ Note: Conflict detection logged in ai_learning_events
+                      // Use detect-and-resolve-conflicts function for manual conflict resolution
                     }
                   }
                   
