@@ -974,6 +974,69 @@ export type Database = {
         }
         Relationships: []
       }
+      data_conflicts: {
+        Row: {
+          conflict_type: string
+          conflicting_suggestion: Json
+          created_at: string
+          existing_knowledge_id: string | null
+          id: string
+          metadata: Json | null
+          org_id: string
+          resolution_action: string | null
+          resolution_status: string
+          resolved_at: string | null
+          resolved_by: string | null
+          severity: string
+          updated_at: string
+        }
+        Insert: {
+          conflict_type: string
+          conflicting_suggestion: Json
+          created_at?: string
+          existing_knowledge_id?: string | null
+          id?: string
+          metadata?: Json | null
+          org_id: string
+          resolution_action?: string | null
+          resolution_status?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity: string
+          updated_at?: string
+        }
+        Update: {
+          conflict_type?: string
+          conflicting_suggestion?: Json
+          created_at?: string
+          existing_knowledge_id?: string | null
+          id?: string
+          metadata?: Json | null
+          org_id?: string
+          resolution_action?: string | null
+          resolution_status?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_conflicts_existing_knowledge_id_fkey"
+            columns: ["existing_knowledge_id"]
+            isOneToOne: false
+            referencedRelation: "ai_knowledge_base"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_conflicts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dependencies: {
         Row: {
           created_at: string
