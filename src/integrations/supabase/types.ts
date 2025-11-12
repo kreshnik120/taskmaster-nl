@@ -2852,7 +2852,15 @@ export type Database = {
           org_name: string | null
           total_kb_items: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ai_knowledge_base_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {
