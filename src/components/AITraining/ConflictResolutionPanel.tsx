@@ -9,7 +9,7 @@ import { AlertTriangle, CheckCircle2, Trash2, XCircle, Lightbulb } from "lucide-
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export const ConflictResolutionPanel = () => {
   const { toast } = useToast();
@@ -405,88 +405,94 @@ export const ConflictResolutionPanel = () => {
     setExpandedItems(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Auto-resolve complementary conflicts with batch processing
+  // Auto-resolve: Call backend function instead of direct mutations
+  const autoResolveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastAutoResolveRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!autoResolveEnabled) return;
     
-    const processAutoResolve = async () => {
-      const maxIterations = 5;
-      const batchSize = 25;
-      const pauseBetweenBatches = 1000; // 1 second
-      
-      let iteration = 0;
-      let totalProcessed = 0;
-      
-      while (iteration < maxIterations) {
-        // Combineer conflicts en suggestions
+    // Clear existing timer
+    if (autoResolveTimerRef.current) {
+      clearTimeout(autoResolveTimerRef.current);
+    }
+
+    // Debounce: alleen uitvoeren als data stabiel is (5 seconden geen wijzigingen)
+    autoResolveTimerRef.current = setTimeout(async () => {
+      try {
+        // Check if we already ran recently (prevent duplicate runs)
+        const lastRun = localStorage.getItem('autoResolveLastRun');
+        if (lastRun && lastAutoResolveRef.current === lastRun) {
+          return; // Skip if no new data since last run
+        }
+
         const allItems = [
           ...(conflicts || []).map((c: any) => ({ ...c, type: 'conflict' })),
           ...(suggestions || []).map((s: any) => ({ ...s, type: 'suggestion' }))
         ];
         
-        if (allItems.length === 0) break;
-        
-        // Filter complementary items met uitgebreide checks
+        if (allItems.length === 0) return;
+
+        // Filter complementary items
         const complementaryItems = allItems.filter((item: any) => {
           const itemData = item.data as any;
           const reasoning = itemData?.ai_reasoning || itemData?.reasoning || "";
-          
-          // Check 1: Keywords in reasoning
           const hasKeyword = isComplementaryConflict(reasoning);
-          
-          // Check 2: Voor suggestions - check of alleen "keep" acties
           const isKeepOnly = item.type === 'suggestion' && isKeepOnlySuggestion(itemData);
-          
           return hasKeyword || isKeepOnly;
         });
-        
-        if (complementaryItems.length === 0) break;
-        
-        const toResolve = complementaryItems.slice(0, batchSize);
-        
-        console.log(`🤖 [Auto-Resolve Batch ${iteration + 1}/${maxIterations}] Processing ${toResolve.length} items (${toResolve.filter(i => i.type === 'conflict').length} conflicts, ${toResolve.filter(i => i.type === 'suggestion').length} suggestions)`);
-        
-        // Resolve each with correct mutation based on type
-        toResolve.forEach((item: any) => {
-          if (item.type === 'conflict') {
-            noConflictMutation.mutate({ conflictId: item.id, isAutoResolved: true });
-          } else {
-            rejectSuggestionMutation.mutate({ suggestionId: item.id, isAutoResolved: true });
-          }
+
+        if (complementaryItems.length === 0) return;
+
+        console.log(`🤖 [Auto-Resolve] Calling backend for ${complementaryItems.length} complementary items`);
+
+        // Call backend edge function instead of direct mutations
+        const { data, error } = await supabase.functions.invoke('auto-resolve-alerts', {
+          body: { orgId: conflicts?.[0]?.org_id || null }
         });
-        
-        totalProcessed += toResolve.length;
-        iteration++;
-        
-        // Als er meer items zijn, wacht dan kort en herhaal
-        if (complementaryItems.length > batchSize && iteration < maxIterations) {
-          await new Promise(resolve => setTimeout(resolve, pauseBetweenBatches));
-        } else {
-          break;
+
+        if (error) {
+          console.error('❌ [Auto-Resolve] Backend call failed:', error);
+          toast({
+            title: "Auto-Resolve Fout",
+            description: "Backend kon niet worden aangeroepen. Probeer later opnieuw.",
+            variant: "destructive",
+          });
+          return;
         }
+
+        const resolvedCount = data?.resolved || 0;
+        if (resolvedCount > 0) {
+          console.log(`✅ [Auto-Resolve] Backend resolved ${resolvedCount} items`);
+          setAutoResolvedToday(prev => prev + resolvedCount);
+          
+          toast({
+            title: "🤖 Auto-Resolve Compleet",
+            description: `${resolvedCount} complementaire items automatisch verwerkt`,
+          });
+
+          const now = new Date().toISOString();
+          localStorage.setItem('autoResolveLastRun', now);
+          lastAutoResolveRef.current = now;
+
+          // Refresh queries after successful resolution
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ["conflict-resolution"] });
+            queryClient.invalidateQueries({ queryKey: ["ai-suggestions"] });
+            refetchStats?.();
+          }, 1500);
+        }
+      } catch (err) {
+        console.error('❌ [Auto-Resolve] Unexpected error:', err);
       }
-      
-      if (totalProcessed > 0) {
-        console.log(`✅ [Auto-Resolve Complete] ${totalProcessed} items processed in ${iteration} batch(es)`);
-        setAutoResolvedToday(prev => prev + totalProcessed);
-        
-        toast({
-          title: "🤖 Auto-Resolve Compleet",
-          description: `${totalProcessed} complementaire items verwerkt in ${iteration} batch(es)`,
-        });
-        
-        // Update last run timestamp in localStorage
-        localStorage.setItem('autoResolveLastRun', new Date().toISOString());
-        
-        // Refresh statistics na auto-resolve
-        setTimeout(() => {
-          refetchStats?.();
-        }, 1500);
+    }, 5000); // 5 second debounce
+
+    return () => {
+      if (autoResolveTimerRef.current) {
+        clearTimeout(autoResolveTimerRef.current);
       }
     };
-    
-    processAutoResolve();
-  }, [conflicts, suggestions, autoResolveEnabled]);
+  }, [conflicts, suggestions, autoResolveEnabled, toast, queryClient, refetchStats]);
 
   if (isLoading) {
     return <div className="text-center py-8">Laden...</div>;
