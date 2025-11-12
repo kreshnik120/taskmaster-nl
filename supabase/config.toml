@@ -101,6 +101,7 @@ verify_jwt = true
 
 [functions.auto-resolve-alerts]
 verify_jwt = false
+schedule = "*/30 * * * *"  # Elke 30 minuten - automatische conflict resolutie
 
 [functions.retroactive-training-evaluator]
 verify_jwt = true
@@ -146,3 +147,4 @@ verify_jwt = true
 
 [functions.detect-and-resolve-conflicts]
 verify_jwt = false
+schedule = "0 */6 * * *"  # Elke 6 uur - intelligent conflict detection
