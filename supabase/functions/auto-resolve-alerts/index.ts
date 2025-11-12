@@ -123,28 +123,81 @@ serve(async (req) => {
       }
     }
 
-    // 3. AUTO-RESOLVE DATA QUALITY (if data was validated)
+    // 3. AUTO-RESOLVE DATA QUALITY (check conflicting items)
     const dataQualityAlerts = alerts?.filter(a => 
-      a.data?.category === 'data_quality' && a.status === 'active'
+      a.data?.category === 'data_quality' && 
+      a.status === 'active' &&
+      a.data?.conflicting_items?.length > 0
     ) || [];
 
     for (const alert of dataQualityAlerts) {
-      const knowledgeId = alert.data?.knowledge_id;
-      if (knowledgeId) {
-        const { data: kb } = await supabase
-          .from("ai_knowledge_base")
-          .select("validation_status")
-          .eq("id", knowledgeId)
-          .single();
+      const conflictingItems = alert.data.conflicting_items || [];
+      const aiReasoning = alert.data.ai_reasoning || '';
+      
+      // Check if AI says items are complementary (not conflicting)
+      const isComplementary = 
+        aiReasoning.toLowerCase().includes('complement') ||
+        aiReasoning.toLowerCase().includes('aanvullend') ||
+        aiReasoning.toLowerCase().includes('niet in conflict');
+      
+      if (isComplementary) {
+        // Auto-resolve: mark as no conflict
+        await supabase
+          .from("business_intelligence")
+          .update({
+            status: "resolved",
+            data: {
+              ...alert.data,
+              resolution: "auto_complementary_items",
+              resolved_at: new Date().toISOString(),
+            }
+          })
+          .eq("id", alert.id);
+        
+        // Mark all items as validated
+        const itemIds = conflictingItems.map((item: any) => item.id);
+        if (itemIds.length > 0) {
+          await supabase
+            .from("ai_knowledge_base")
+            .update({ 
+              needs_review: false,
+              validation_status: 'verified'
+            })
+            .in('id', itemIds);
+        }
 
-        if (kb?.validation_status === "verified") {
+        resolvedCount++;
+        resolutionLog.push({
+          id: alert.id,
+          title: alert.title,
+          reason: "complementary_items",
+          items_validated: itemIds.length
+        });
+        
+        console.log(`✅ Auto-resolved complementary conflict: ${alert.title} (${itemIds.length} items validated)`);
+        continue;
+      }
+      
+      // Check if all items are already validated
+      const itemIds = conflictingItems.map((item: any) => item.id).filter(Boolean);
+      if (itemIds.length > 0) {
+        const { data: kbItems } = await supabase
+          .from("ai_knowledge_base")
+          .select("id, validation_status")
+          .in('id', itemIds);
+        
+        const allValidated = kbItems?.every((kb: any) => 
+          kb.validation_status === 'verified'
+        );
+        
+        if (allValidated && kbItems && kbItems.length === itemIds.length) {
           await supabase
             .from("business_intelligence")
             .update({
               status: "resolved",
               data: {
                 ...alert.data,
-                resolution: "data_validated_by_admin",
+                resolution: "all_items_validated_by_admin",
                 resolved_at: new Date().toISOString(),
               }
             })
@@ -154,10 +207,10 @@ serve(async (req) => {
           resolutionLog.push({
             id: alert.id,
             title: alert.title,
-            reason: "data_validated",
+            reason: "all_items_validated",
           });
-
-          console.log(`✅ Auto-resolved data quality: ${alert.title}`);
+          
+          console.log(`✅ Auto-resolved data quality: ${alert.title} (all ${itemIds.length} items validated)`);
         }
       }
     }
