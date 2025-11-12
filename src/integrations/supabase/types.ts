@@ -974,6 +974,69 @@ export type Database = {
         }
         Relationships: []
       }
+      data_conflicts: {
+        Row: {
+          conflict_type: string
+          conflicting_suggestion: Json
+          created_at: string
+          existing_knowledge_id: string | null
+          id: string
+          metadata: Json | null
+          org_id: string
+          resolution_action: string | null
+          resolution_status: string
+          resolved_at: string | null
+          resolved_by: string | null
+          severity: string
+          updated_at: string
+        }
+        Insert: {
+          conflict_type: string
+          conflicting_suggestion: Json
+          created_at?: string
+          existing_knowledge_id?: string | null
+          id?: string
+          metadata?: Json | null
+          org_id: string
+          resolution_action?: string | null
+          resolution_status?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity: string
+          updated_at?: string
+        }
+        Update: {
+          conflict_type?: string
+          conflicting_suggestion?: Json
+          created_at?: string
+          existing_knowledge_id?: string | null
+          id?: string
+          metadata?: Json | null
+          org_id?: string
+          resolution_action?: string | null
+          resolution_status?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_conflicts_existing_knowledge_id_fkey"
+            columns: ["existing_knowledge_id"]
+            isOneToOne: false
+            referencedRelation: "ai_knowledge_base"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "data_conflicts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dependencies: {
         Row: {
           created_at: string
@@ -2176,26 +2239,35 @@ export type Database = {
         Row: {
           can_comment: boolean
           created_at: string
+          expires_at: string | null
           id: string
+          last_accessed_at: string | null
           project_id: string | null
           task_id: string | null
           token: string
+          view_count: number | null
         }
         Insert: {
           can_comment?: boolean
           created_at?: string
+          expires_at?: string | null
           id?: string
+          last_accessed_at?: string | null
           project_id?: string | null
           task_id?: string | null
           token: string
+          view_count?: number | null
         }
         Update: {
           can_comment?: boolean
           created_at?: string
+          expires_at?: string | null
           id?: string
+          last_accessed_at?: string | null
           project_id?: string | null
           task_id?: string | null
           token?: string
+          view_count?: number | null
         }
         Relationships: [
           {
@@ -2784,6 +2856,30 @@ export type Database = {
           granted_by?: string | null
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_upload_quotas: {
+        Row: {
+          created_at: string
+          daily_limit: number
+          last_reset: string
+          uploads_today: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          daily_limit?: number
+          last_reset?: string
+          uploads_today?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          daily_limit?: number
+          last_reset?: string
+          uploads_today?: number
           user_id?: string
         }
         Relationships: []
