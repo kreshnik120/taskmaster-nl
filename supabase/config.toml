@@ -1,5 +1,8 @@
 project_id = "oelmsmcgryeoryhonexw"
 
+[functions.view-shared-content]
+verify_jwt = false
+
 [functions.public-health]
 verify_jwt = false
 
