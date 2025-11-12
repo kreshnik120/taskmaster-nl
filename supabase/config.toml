@@ -53,9 +53,6 @@ verify_jwt = true
 [functions.rollback-knowledge]
 verify_jwt = true
 
-# [functions.tariff-analyzer]
-# verify_jwt = false
-# schedule = "45 * * * *"  # UITGESCHAKELD - cutoff date passed
 
 [functions.continuous-learner]
 verify_jwt = true
