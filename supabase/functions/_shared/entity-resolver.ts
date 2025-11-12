@@ -74,27 +74,15 @@ export async function resolveEntity(
 
 /**
  * Get entity relationships from the database
+ * DISABLED: entity_relationships table removed - graceful degradation
  */
 async function getEntityRelationships(
   entityName: string,
   orgId: string,
   supabase: any
 ): Promise<EntityContext['relationships']> {
-  const { data: relationships, error } = await supabase.rpc('get_entity_relationships', {
-    entity_name_param: entityName,
-    org_id_param: orgId,
-    max_depth: 2
-  });
-
-  if (error || !relationships) {
-    return [];
-  }
-
-  return relationships.map((rel: any) => ({
-    relatedEntity: rel.related_entity,
-    relationshipType: rel.relationship,
-    confidence: rel.confidence
-  }));
+  console.log(`ℹ️ Entity relationships feature disabled (table removed)`);
+  return [];
 }
 
 /**
@@ -187,11 +175,8 @@ export async function expandViaRelationships(
     if (!entityName) continue;
 
     // Get relationships for this entity
-    const { data: relationships } = await supabase.rpc('get_entity_relationships', {
-      entity_name_param: entityName,
-      org_id_param: orgId,
-      max_depth: 1
-    });
+    // DISABLED: entity_relationships table removed - graceful degradation
+    const relationships: any[] = [];
 
     if (!relationships || relationships.length === 0) continue;
 
