@@ -363,18 +363,42 @@ Deno.serve(async (req) => {
             });
 
             if (error) {
-              // Check for token limit error (400) - log and skip
-              if (error.message?.includes('400') || error.message?.toLowerCase().includes('token') || error.message?.toLowerCase().includes('context length')) {
+              console.error(`❌ Error in batch ${batchNumber}:`, error);
+              
+              // Check embedding_failures to see which items have failed before
+              const { data: failures } = await supabase
+                .from('embedding_failures')
+                .select('knowledge_id, retry_count')
+                .in('knowledge_id', knowledgeIds);
+              
+              // Skip items that have already failed 3+ times
+              const failedItems = new Set(
+                failures?.filter(f => (f.retry_count || 0) >= 3).map(f => f.knowledge_id) || []
+              );
+              
+              if (failedItems.size > 0) {
+                console.log(`⏭️ Skipping ${failedItems.size} items that failed 3+ times`);
+                totalProcessed += failedItems.size;
+              }
+              
+              // Check for token limit error (400/500) - log and skip
+              if (error.message?.includes('400') || error.message?.includes('500') || error.message?.toLowerCase().includes('token') || error.message?.toLowerCase().includes('context length')) {
                 console.error(`❌ Token limit error for batch ${batchNumber} - logging failures and continuing`);
                 
-                // Log failures to embedding_failures table
+                // Log failures to embedding_failures table (increment retry_count)
                 for (const kid of knowledgeIds) {
-                  await supabase.from('embedding_failures').insert({
+                  if (failedItems.has(kid)) continue; // Skip already failed 3+ times
+                  
+                  const existingFailure = failures?.find(f => f.knowledge_id === kid);
+                  const retryCount = (existingFailure?.retry_count || 0) + 1;
+                  
+                  await supabase.from('embedding_failures').upsert({
                     knowledge_id: kid,
-                    error_type: 'token_limit',
+                    error_type: error.message?.includes('500') ? 'openai_500_error' : 'token_limit',
                     error_message: error.message?.substring(0, 500),
-                    attempted_at: new Date().toISOString()
-                  }).select().maybeSingle();
+                    attempted_at: new Date().toISOString(),
+                    retry_count: retryCount
+                  }, { onConflict: 'knowledge_id' });
                 }
                 
                 // Als batch_size > 10, probeer met kleinere batch
@@ -430,7 +454,26 @@ Deno.serve(async (req) => {
                 batchNumber--; // Retry this batch
                 continue;
               }
-              throw error;
+              
+              // Unknown error - log to embedding_failures and continue
+              console.error(`⚠️ Unknown error, logging and continuing:`, error);
+              for (const kid of knowledgeIds) {
+                if (failedItems.has(kid)) continue;
+                
+                const existingFailure = failures?.find(f => f.knowledge_id === kid);
+                const retryCount = (existingFailure?.retry_count || 0) + 1;
+                
+                await supabase.from('embedding_failures').upsert({
+                  knowledge_id: kid,
+                  error_type: 'unknown_error',
+                  error_message: error.message?.substring(0, 500) || 'Unknown error',
+                  attempted_at: new Date().toISOString(),
+                  retry_count: retryCount
+                }, { onConflict: 'knowledge_id' });
+              }
+              
+              currentOffset += knowledgeIds.length;
+              continue;
             }
 
             const batchDuration = Date.now() - batchStartTime;

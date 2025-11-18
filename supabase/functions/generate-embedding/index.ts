@@ -6,8 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Maximum characters to prevent token limit errors (~8000 tokens = ~32000 chars)
-const MAX_CHARS = 32000;
+// Maximum characters to prevent token limit errors (~7000 tokens = ~28000 chars)
+const MAX_CHARS = 28000;
 
 // Retry helper met exponential backoff
 async function retryWithBackoff<T>(
@@ -99,100 +99,151 @@ Deno.serve(async (req) => {
         return fullText;
       });
 
-      // Generate embeddings with OpenAI text-embedding-3-small (768-dim)
-      const embeddingData = await retryWithBackoff(async () => {
-        const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-        if (!openaiApiKey) {
-          throw new Error('OPENAI_API_KEY not configured');
-        }
+      // Generate embeddings with OpenAI text-embedding-3-small with better error handling
+      let embeddingData;
+      try {
+        embeddingData = await retryWithBackoff(async () => {
+          const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+          if (!openaiApiKey) {
+            throw new Error('OPENAI_API_KEY not configured');
+          }
 
-        const response = await fetch('https://api.openai.com/v1/embeddings', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${openaiApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'text-embedding-3-small',
-            dimensions: 1536, // CRITICAL: Explicitly request 1536-dim embeddings
-            input: embeddingInputs
-          })
+          const response = await fetch('https://api.openai.com/v1/embeddings', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openaiApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'text-embedding-3-small',
+              dimensions: 1536,
+              input: embeddingInputs
+            })
+          });
+
+          if (!response.ok) {
+            const error = await response.text();
+            console.error('OpenAI Embedding API error:', error);
+            
+            // Log failures for this batch
+            for (const knowledge of batch) {
+              await supabase.from('embedding_failures').insert({
+                knowledge_id: knowledge.id,
+                error_type: response.status === 500 ? 'openai_500_error' : 'openai_api_error',
+                error_message: `OpenAI API ${response.status}: ${error.substring(0, 500)}`,
+                token_count: Math.floor(embeddingInputs[batch.indexOf(knowledge)].length / 4)
+              });
+            }
+            
+            throw new Error(`OpenAI API error: ${response.status}`);
+          }
+
+          return await response.json();
         });
-
-        if (!response.ok) {
-          const error = await response.text();
-          console.error('OpenAI Embedding API error:', error);
-          throw new Error(`OpenAI API error: ${response.status}`);
+      } catch (batchError) {
+        console.error(`❌ Batch embedding generation failed:`, batchError);
+        
+        // Mark all items in batch as failed
+        for (const knowledge of batch) {
+          results.push({ 
+            knowledge_id: knowledge.id, 
+            success: false, 
+            error: batchError instanceof Error ? batchError.message : 'Batch generation failed' 
+          });
         }
+        
+        continue; // Skip to next batch
+      }
 
-        return await response.json();
-      });
-
-      // Store embeddings
+      // Store embeddings with better error handling
       for (let j = 0; j < batch.length; j++) {
         const knowledge = batch[j];
-        const embedding = embeddingData.data[j].embedding;
+        
+        try {
+          const embedding = embeddingData.data[j].embedding;
+          const actualDim = embedding.length;
+          console.log(`📊 Storing embedding for ${knowledge.id}: ${actualDim} dimensions`);
 
-        const actualDim = embedding.length;
-        console.log(`📊 Storing embedding for ${knowledge.id}: ${actualDim} dimensions`);
-
-        // Check of er al een embedding bestaat
-        const { data: existingEmbedding } = await supabase
-          .from('knowledge_embeddings')
-          .select('id')
-          .eq('knowledge_id', knowledge.id)
-          .maybeSingle();
-
-        if (existingEmbedding) {
-          const { error: updateError } = await supabase
+          // Check of er al een embedding bestaat
+          const { data: existingEmbedding } = await supabase
             .from('knowledge_embeddings')
-            .update({ embedding, updated_at: new Date().toISOString() })
-            .eq('knowledge_id', knowledge.id);
-          
-          if (updateError) {
-            console.error(`❌ UPDATE FAILED for ${knowledge.id}:`, {
-              error: updateError.message,
-              code: updateError.code,
-              details: updateError.details,
-              hint: updateError.hint,
-              embedding_dim: actualDim
-            });
-            results.push({ knowledge_id: knowledge.id, success: false, error: updateError.message });
-            continue;
-          }
-          
-          console.log(`✅ Successfully updated embedding for ${knowledge.id} (${actualDim}D)`);
-        } else {
-          const { error: insertError } = await supabase
-            .from('knowledge_embeddings')
-            .insert({ knowledge_id: knowledge.id, embedding });
-          
-          if (insertError) {
-            console.error(`❌ INSERT FAILED for ${knowledge.id}:`, {
-              error: insertError.message,
-              code: insertError.code,
-              details: insertError.details,
-              hint: insertError.hint,
-              embedding_dim: actualDim
-            });
-            results.push({ knowledge_id: knowledge.id, success: false, error: insertError.message });
-            continue;
-          }
-          
-          console.log(`✅ Successfully inserted embedding for ${knowledge.id} (${actualDim}D)`);
-        }
+            .select('id')
+            .eq('knowledge_id', knowledge.id)
+            .maybeSingle();
 
-        processedCount++;
-        results.push({ 
-          knowledge_id: knowledge.id, 
-          success: true,
-          dimension: actualDim,
-          operation: existingEmbedding ? 'updated' : 'inserted'
-        });
+          if (existingEmbedding) {
+            const { error: updateError } = await supabase
+              .from('knowledge_embeddings')
+              .update({ embedding, updated_at: new Date().toISOString() })
+              .eq('knowledge_id', knowledge.id);
+            
+            if (updateError) {
+              console.error(`❌ UPDATE FAILED for ${knowledge.id}:`, updateError);
+              
+              // Log to embedding_failures
+              await supabase.from('embedding_failures').insert({
+                knowledge_id: knowledge.id,
+                error_type: 'storage_error',
+                error_message: updateError.message,
+                token_count: Math.floor(embeddingInputs[j].length / 4) // Rough estimate
+              });
+              
+              results.push({ knowledge_id: knowledge.id, success: false, error: updateError.message });
+              continue;
+            }
+            
+            console.log(`✅ Successfully updated embedding for ${knowledge.id} (${actualDim}D)`);
+          } else {
+            const { error: insertError } = await supabase
+              .from('knowledge_embeddings')
+              .insert({ knowledge_id: knowledge.id, embedding });
+            
+            if (insertError) {
+              console.error(`❌ INSERT FAILED for ${knowledge.id}:`, insertError);
+              
+              // Log to embedding_failures
+              await supabase.from('embedding_failures').insert({
+                knowledge_id: knowledge.id,
+                error_type: 'storage_error',
+                error_message: insertError.message,
+                token_count: Math.floor(embeddingInputs[j].length / 4)
+              });
+              
+              results.push({ knowledge_id: knowledge.id, success: false, error: insertError.message });
+              continue;
+            }
+            
+            console.log(`✅ Successfully inserted embedding for ${knowledge.id} (${actualDim}D)`);
+          }
 
-        // Progress logging per 100 items
-        if (processedCount % 100 === 0) {
-          console.log(`✅ Processed ${processedCount}/${knowledgeItems.length} embeddings`);
+          processedCount++;
+          results.push({ 
+            knowledge_id: knowledge.id, 
+            success: true,
+            dimension: actualDim,
+            operation: existingEmbedding ? 'updated' : 'inserted'
+          });
+
+          // Progress logging per 100 items
+          if (processedCount % 100 === 0) {
+            console.log(`✅ Processed ${processedCount}/${knowledgeItems.length} embeddings`);
+          }
+        } catch (itemError) {
+          console.error(`❌ UNEXPECTED ERROR for ${knowledge.id}:`, itemError);
+          
+          // Log to embedding_failures
+          await supabase.from('embedding_failures').insert({
+            knowledge_id: knowledge.id,
+            error_type: 'unexpected_error',
+            error_message: itemError instanceof Error ? itemError.message : 'Unknown error',
+            token_count: Math.floor(embeddingInputs[j].length / 4)
+          });
+          
+          results.push({ 
+            knowledge_id: knowledge.id, 
+            success: false, 
+            error: itemError instanceof Error ? itemError.message : 'Unknown error' 
+          });
         }
       }
     }
