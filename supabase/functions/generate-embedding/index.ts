@@ -6,8 +6,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Maximum characters to prevent token limit errors (~7000 tokens = ~28000 chars)
-const MAX_CHARS = 28000;
+// Maximum characters to prevent token limit errors
+// Targeting ~5000 content tokens + ~3000 overhead = ~8000 total (safe under 8192 limit)
+const MAX_CHARS = 20000;
+const FALLBACK_CHARS = 15000;
 
 // Retry helper met exponential backoff
 async function retryWithBackoff<T>(
@@ -99,14 +101,20 @@ Deno.serve(async (req) => {
         return fullText;
       });
 
-      // Generate embeddings with OpenAI text-embedding-3-small with better error handling
+      // Generate embeddings with OpenAI text-embedding-3-small with fallback for token limits
       let embeddingData;
+      let usedFallback = false;
+      
       try {
         embeddingData = await retryWithBackoff(async () => {
           const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
           if (!openaiApiKey) {
             throw new Error('OPENAI_API_KEY not configured');
           }
+
+          const inputsToUse = usedFallback 
+            ? embeddingInputs.map(text => text.substring(0, FALLBACK_CHARS) + '...[fallback truncated]')
+            : embeddingInputs;
 
           const response = await fetch('https://api.openai.com/v1/embeddings', {
             method: 'POST',
@@ -117,7 +125,7 @@ Deno.serve(async (req) => {
             body: JSON.stringify({
               model: 'text-embedding-3-small',
               dimensions: 1536,
-              input: embeddingInputs
+              input: inputsToUse
             })
           });
 
@@ -125,13 +133,31 @@ Deno.serve(async (req) => {
             const error = await response.text();
             console.error('OpenAI Embedding API error:', error);
             
+            // Check if it's a token limit error
+            const isTokenError = error.includes('token') || error.includes('maximum context length');
+            
+            if (isTokenError && !usedFallback) {
+              console.warn(`🔄 Token limit hit, retrying with ${FALLBACK_CHARS} chars fallback...`);
+              usedFallback = true;
+              throw new Error('TOKEN_LIMIT_RETRY'); // Trigger retry with fallback
+            }
+            
             // Log failures for this batch
             for (const knowledge of batch) {
-              await supabase.from('embedding_failures').insert({
+              const inputText = usedFallback 
+                ? embeddingInputs[batch.indexOf(knowledge)].substring(0, FALLBACK_CHARS)
+                : embeddingInputs[batch.indexOf(knowledge)];
+              
+              await supabase.from('embedding_failures').upsert({
                 knowledge_id: knowledge.id,
-                error_type: response.status === 500 ? 'openai_500_error' : 'openai_api_error',
-                error_message: `OpenAI API ${response.status}: ${error.substring(0, 500)}`,
-                token_count: Math.floor(embeddingInputs[batch.indexOf(knowledge)].length / 4)
+                error_type: isTokenError ? 'token_limit_exceeded' : (response.status === 500 ? 'openai_500_error' : 'openai_api_error'),
+                error_message: `OpenAI API ${response.status}: ${error.substring(0, 500)}${usedFallback ? ' (even after fallback truncation)' : ''}`,
+                token_count: Math.floor(inputText.length / 4),
+                attempted_at: new Date().toISOString(),
+                retry_count: 1
+              }, {
+                onConflict: 'knowledge_id',
+                ignoreDuplicates: false
               });
             }
             
@@ -141,18 +167,62 @@ Deno.serve(async (req) => {
           return await response.json();
         });
       } catch (batchError) {
-        console.error(`❌ Batch embedding generation failed:`, batchError);
-        
-        // Mark all items in batch as failed
-        for (const knowledge of batch) {
-          results.push({ 
-            knowledge_id: knowledge.id, 
-            success: false, 
-            error: batchError instanceof Error ? batchError.message : 'Batch generation failed' 
-          });
+        // If TOKEN_LIMIT_RETRY error, retry once more with fallback
+        if (batchError instanceof Error && batchError.message === 'TOKEN_LIMIT_RETRY' && !usedFallback) {
+          usedFallback = true;
+          try {
+            embeddingData = await retryWithBackoff(async () => {
+              const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+              const inputsToUse = embeddingInputs.map(text => text.substring(0, FALLBACK_CHARS) + '...[fallback truncated]');
+              
+              const response = await fetch('https://api.openai.com/v1/embeddings', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${openaiApiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: 'text-embedding-3-small',
+                  dimensions: 1536,
+                  input: inputsToUse
+                })
+              });
+
+              if (!response.ok) {
+                const error = await response.text();
+                throw new Error(`OpenAI API error after fallback: ${response.status}`);
+              }
+
+              return await response.json();
+            });
+          } catch (fallbackError) {
+            console.error(`❌ Fallback embedding generation also failed:`, fallbackError);
+            
+            // Mark all items as unable to embed even with fallback
+            for (const knowledge of batch) {
+              results.push({ 
+                knowledge_id: knowledge.id, 
+                success: false, 
+                error: 'Unable to embed even with fallback truncation' 
+              });
+            }
+            
+            continue; // Skip to next batch
+          }
+        } else {
+          console.error(`❌ Batch embedding generation failed:`, batchError);
+          
+          // Mark all items in batch as failed
+          for (const knowledge of batch) {
+            results.push({ 
+              knowledge_id: knowledge.id, 
+              success: false, 
+              error: batchError instanceof Error ? batchError.message : 'Batch generation failed' 
+            });
+          }
+          
+          continue; // Skip to next batch
         }
-        
-        continue; // Skip to next batch
       }
 
       // Store embeddings with better error handling

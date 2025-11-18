@@ -295,20 +295,24 @@ serve(async (req) => {
         severity = 'low';
       }
       
+      // Report audit results with UPSERT to prevent duplicates
+      const alertTitle = summary.length > 0
+        ? `Data Quality Audit: ${issues.length} issues, ${summary.join(', ')}`
+        : `Data Quality Audit: ${issues.length} issues found`;
+
       await supabase
         .from('business_intelligence')
-        .insert({
+        .upsert({
           org_id: orgId,
           intelligence_type: 'data_quality_audit',
           type: 'data_quality',
           severity: severity,
-          title: summary.length > 0
-            ? `Data Quality Audit: ${issues.length} issues, ${summary.join(', ')}`
-            : `Data Quality Audit: ${issues.length} issues found`,
+          title: alertTitle,
           description: issues.join(', '),
           priority: (fixedItemsCount > 0 || archivedCount > 0 || boostedCount > 0) ? 'medium' : 'high',
           status: 'active',
           impact_score: impactScore,
+          last_updated_at: new Date().toISOString(),
           data: {
             timestamp: new Date().toISOString(),
             outdated_count: outdated?.length || 0,
@@ -320,6 +324,9 @@ serve(async (req) => {
             confidence_boosted_count: boostedCount,
             total_issues: issues.length
           }
+        }, {
+          onConflict: 'intelligence_type,title,org_id',
+          ignoreDuplicates: false
         });
     }
 
