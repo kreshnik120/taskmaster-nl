@@ -142,42 +142,51 @@ serve(async (req) => {
 
     console.log(`✅ Processed: ${negativeProcessed} negative, ${positiveProcessed} positive, ${errors} errors`);
 
-    // Log to business intelligence with smart classification
+    // Only create/update alert if there's actual activity to report
     const totalProcessed = negativeProcessed + positiveProcessed;
-    const impactScore = totalProcessed / 10;
     
-    // Determine severity based on errors and volume
-    let severity: string;
-    if (errors > 5 || (negativeProcessed > 10 && totalProcessed > 0)) {
-      severity = 'high';
-    } else if (errors > 0 || negativeProcessed > 5) {
-      severity = 'medium';
-    } else {
-      severity = 'low';
-    }
-    
-    const { error: biError } = await supabaseClient
-      .from('business_intelligence')
-      .insert({
-        org_id: orgId,
-        intelligence_type: 'feedback_processing',
-        type: 'knowledge',
-        severity: severity,
-        title: 'Feedback Loop Results',
-        description: `Processed ${negativeProcessed} negative and ${positiveProcessed} positive feedback events`,
-        priority: errors > 5 ? 'high' : (errors > 0 ? 'medium' : 'low'),
-        status: 'active',
-        impact_score: impactScore,
-        data: {
-          negative_processed: negativeProcessed,
-          positive_processed: positiveProcessed,
-          errors: errors,
-          total_events: feedbackEvents?.length || 0
-        }
-      });
+    if (totalProcessed > 0 || errors > 0) {
+      const impactScore = totalProcessed / 10;
+      
+      // Determine severity based on errors and volume
+      let severity: string;
+      if (errors > 5 || (negativeProcessed > 10 && totalProcessed > 0)) {
+        severity = 'high';
+      } else if (errors > 0 || negativeProcessed > 5) {
+        severity = 'medium';
+      } else {
+        severity = 'low';
+      }
+      
+      // Use upsert to prevent duplicate key violations
+      const { error: biError } = await supabaseClient
+        .from('business_intelligence')
+        .upsert({
+          org_id: orgId,
+          intelligence_type: 'feedback_processing',
+          type: 'knowledge',
+          severity: severity,
+          title: 'Feedback Loop Results',
+          description: `Processed ${negativeProcessed} negative and ${positiveProcessed} positive feedback events`,
+          priority: errors > 5 ? 'high' : (errors > 0 ? 'medium' : 'low'),
+          status: 'active',
+          impact_score: impactScore,
+          detected_at: new Date().toISOString(),
+          last_updated_at: new Date().toISOString(),
+          data: {
+            negative_processed: negativeProcessed,
+            positive_processed: positiveProcessed,
+            errors: errors,
+            total_events: feedbackEvents?.length || 0
+          }
+        }, {
+          onConflict: 'intelligence_type,title,org_id',
+          ignoreDuplicates: false
+        });
 
-    if (biError) {
-      console.error('Failed to log to business intelligence:', biError);
+      if (biError) {
+        console.error('Failed to log to business intelligence:', biError);
+      }
     }
 
     // Log function call
