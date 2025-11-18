@@ -363,6 +363,34 @@ Deno.serve(async (req) => {
             });
 
             if (error) {
+              // Check for token limit error (400) - log and skip
+              if (error.message?.includes('400') || error.message?.toLowerCase().includes('token') || error.message?.toLowerCase().includes('context length')) {
+                console.error(`❌ Token limit error for batch ${batchNumber} - logging failures and continuing`);
+                
+                // Log failures to embedding_failures table
+                for (const kid of knowledgeIds) {
+                  await supabase.from('embedding_failures').insert({
+                    knowledge_id: kid,
+                    error_type: 'token_limit',
+                    error_message: error.message?.substring(0, 500),
+                    attempted_at: new Date().toISOString()
+                  }).select().maybeSingle();
+                }
+                
+                // Als batch_size > 10, probeer met kleinere batch
+                if (currentBatchSize > 10) {
+                  currentBatchSize = 10;
+                  console.log(`🔄 Reducing batch size to ${currentBatchSize} and retrying...`);
+                  batchNumber--; // Retry this batch with smaller size
+                  continue;
+                }
+                
+                // Skip to next batch
+                console.log(`⏭️ Skipping failed items, moving to next batch`);
+                currentOffset += knowledgeIds.length;
+                continue;
+              }
+              
               // Check for AI credits exhausted (402)
               if (error.message?.includes('402') || error.message?.toLowerCase().includes('credits exhausted')) {
                 console.error('💳 AI credits exhausted - pausing backfill');

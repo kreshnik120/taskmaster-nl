@@ -1076,6 +1076,47 @@ export type Database = {
           },
         ]
       }
+      embedding_failures: {
+        Row: {
+          attempted_at: string
+          created_at: string | null
+          error_message: string | null
+          error_type: string
+          id: string
+          knowledge_id: string
+          retry_count: number | null
+          token_count: number | null
+        }
+        Insert: {
+          attempted_at?: string
+          created_at?: string | null
+          error_message?: string | null
+          error_type: string
+          id?: string
+          knowledge_id: string
+          retry_count?: number | null
+          token_count?: number | null
+        }
+        Update: {
+          attempted_at?: string
+          created_at?: string | null
+          error_message?: string | null
+          error_type?: string
+          id?: string
+          knowledge_id?: string
+          retry_count?: number | null
+          token_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "embedding_failures_knowledge_id_fkey"
+            columns: ["knowledge_id"]
+            isOneToOne: false
+            referencedRelation: "ai_knowledge_base"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       embedding_generation_log: {
         Row: {
           created_at: string | null

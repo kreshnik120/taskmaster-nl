@@ -6,6 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Maximum characters to prevent token limit errors (~8000 tokens = ~32000 chars)
+const MAX_CHARS = 32000;
+
 // Retry helper met exponential backoff
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
@@ -86,10 +89,15 @@ Deno.serve(async (req) => {
     for (let i = 0; i < knowledgeItems.length; i += BATCH_SIZE) {
       const batch = knowledgeItems.slice(i, i + BATCH_SIZE);
       
-      // Creëer embedding texts
-      const embeddingInputs = batch.map(k => 
-        `${k.category}: ${k.key}\n${JSON.stringify(k.value)}`
-      );
+      // Creëer embedding texts met truncation om token limit te voorkomen
+      const embeddingInputs = batch.map(k => {
+        const fullText = `${k.category}: ${k.key}\n${JSON.stringify(k.value)}`;
+        if (fullText.length > MAX_CHARS) {
+          console.warn(`⚠️ Truncating content for ${k.id}: ${fullText.length} chars → ${MAX_CHARS} chars`);
+          return fullText.substring(0, MAX_CHARS) + '...[truncated]';
+        }
+        return fullText;
+      });
 
       // Generate embeddings with OpenAI text-embedding-3-small (768-dim)
       const embeddingData = await retryWithBackoff(async () => {
