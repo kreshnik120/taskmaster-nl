@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { Resend } from "https://esm.sh/resend@4.0.0";
 // PDF parsing moved to separate parse-pdf-cv function
 
@@ -67,6 +68,41 @@ const handler = async (req: Request): Promise<Response> => {
       console.warn("⚠️ RESEND_WEBHOOK_SIGNING_SECRET not configured - webhook verification disabled");
       payload = await req.json();
     }
+    
+    // 🔒 SECURITY: Validate webhook payload structure with Zod
+    const ResendWebhookSchema = z.object({
+      type: z.string(),
+      created_at: z.string().optional(),
+      data: z.object({
+        created_at: z.string().optional(),
+        email_id: z.string().optional(),
+        from: z.string().email().max(255),
+        subject: z.string().max(500),
+        to: z.array(z.string().email()).max(100),
+        html: z.string().max(1000000).optional(),
+        text: z.string().max(1000000).optional(),
+        attachments: z.array(z.object({
+          content: z.string().max(20000000), // ~15MB base64
+          content_type: z.string().max(100),
+          filename: z.string().max(255),
+          size: z.number().int().positive().max(20000000)
+        })).max(10).optional()
+      })
+    });
+    
+    const webhookValidation = ResendWebhookSchema.safeParse(payload);
+    if (!webhookValidation.success) {
+      const errors = webhookValidation.error.errors
+        .map(e => `${e.path.join('.')}: ${e.message}`)
+        .join(', ');
+      console.error("❌ Webhook payload validation failed:", errors);
+      return new Response(
+        JSON.stringify({ error: `Invalid payload: ${errors}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    payload = webhookValidation.data as ResendWebhookPayload;
     console.log("Webhook type:", payload.type);
 
     if (payload.type !== "email.received") {

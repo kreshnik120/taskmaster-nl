@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { getFullInstructions, detectRoleFromQuestion } from "../_shared/abczorg-instructions.ts";
 import { preflightCompletenessCheck, executePreflightActions } from "../_shared/preflight-completeness.ts";
 import { semanticKnowledgeRetrieval, calculateSemanticConfidence, mergeSemanticAndCategoryResults } from "../_shared/semantic-retrieval.ts";
@@ -811,15 +812,26 @@ serve(async (req) => {
   }
 
   try {
-    const requestBody = await req.json();
-    const { messages, conversation_id } = requestBody; // ✅ Ontvang conversation_id
+    // 🔒 SECURITY: Validate input with Zod schema
+    const AiChatRequestSchema = z.object({
+      messages: z.array(z.object({
+        role: z.enum(['user', 'assistant', 'system']),
+        content: z.string().min(1).max(50000)
+      })).min(1).max(100),
+      conversation_id: z.string().uuid()
+    });
+
+    const rawBody = await req.json();
+    const validation = AiChatRequestSchema.safeParse(rawBody);
     
-    // ✅ CRITICAL: Validate conversation_id BEFORE any processing or stream creation
-    if (!conversation_id) {
-      console.error('❌ Missing conversation_id in request body');
+    if (!validation.success) {
+      const errors = validation.error.errors
+        .map(e => `${e.path.join('.')}: ${e.message}`)
+        .join(', ');
+      console.error('❌ Validation failed:', errors);
       return new Response(
         JSON.stringify({ 
-          error: 'conversation_id is vereist. Start een nieuwe chat door de pagina te verversen.' 
+          error: `Validation failed: ${errors}` 
         }), 
         { 
           status: 400, 
@@ -827,6 +839,8 @@ serve(async (req) => {
         }
       );
     }
+    
+    const { messages, conversation_id } = validation.data;
     console.log(`🔑 Processing conversation: ${conversation_id}`);
     
     const authHeader = req.headers.get('Authorization');
