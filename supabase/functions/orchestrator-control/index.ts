@@ -1,5 +1,6 @@
 import "https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,14 +13,27 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, reason } = await req.json();
+    // 🔒 SECURITY: Validate input with Zod schema
+    const OrchestratorControlSchema = z.object({
+      action: z.enum(['pause', 'resume', 'stop']),
+      reason: z.string().min(1).max(500).optional()
+    });
+
+    const rawBody = await req.json();
+    const validation = OrchestratorControlSchema.safeParse(rawBody);
     
-    if (!['pause', 'resume', 'stop'].includes(action)) {
+    if (!validation.success) {
+      const errors = validation.error.errors
+        .map(e => `${e.path.join('.')}: ${e.message}`)
+        .join(', ');
+      console.error('❌ Validation failed:', errors);
       return new Response(
-        JSON.stringify({ error: 'Invalid action. Must be pause, resume, or stop' }),
+        JSON.stringify({ error: `Validation failed: ${errors}` }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    
+    const { action, reason } = validation.data;
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',

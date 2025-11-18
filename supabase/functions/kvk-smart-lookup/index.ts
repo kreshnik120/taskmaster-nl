@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,11 +31,32 @@ serve(async (req) => {
   }
 
   try {
-    const { query, force_refresh = false, org_id } = await req.json() as SmartLookupRequest;
+    // 🔒 SECURITY: Validate input with Zod schema
+    const KvkLookupRequestSchema = z.object({
+      query: z.string().min(1).max(500).refine(
+        val => !/[<>{}\\]/.test(val),
+        { message: "Query contains invalid characters" }
+      ),
+      query_type: z.enum(['naam', 'kvk_nummer', 'auto']).optional(),
+      force_refresh: z.boolean().optional().default(false),
+      org_id: z.string().uuid()
+    });
 
-    if (!query || !org_id) {
-      throw new Error('query and org_id are required');
+    const rawBody = await req.json();
+    const validation = KvkLookupRequestSchema.safeParse(rawBody);
+    
+    if (!validation.success) {
+      const errors = validation.error.errors
+        .map(e => `${e.path.join('.')}: ${e.message}`)
+        .join(', ');
+      console.error('❌ Validation failed:', errors);
+      return new Response(
+        JSON.stringify({ error: `Validation failed: ${errors}` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
+    
+    const { query, force_refresh, org_id } = validation.data;
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -62,6 +63,40 @@ serve(async (req) => {
       console.warn("⚠️ RESEND_WEBHOOK_SIGNING_SECRET not configured - webhook verification disabled");
       payload = await req.json();
     }
+    
+    // 🔒 SECURITY: Validate webhook payload structure with Zod
+    const ResendReplyWebhookSchema = z.object({
+      type: z.string(),
+      data: z.object({
+        from: z.string().email().max(255),
+        to: z.string().max(255),
+        subject: z.string().max(500),
+        text: z.string().max(500000),
+        html: z.string().max(500000).optional(),
+        in_reply_to: z.string().max(255).optional(),
+        references: z.string().max(1000).optional(),
+        message_id: z.string().max(255).optional(),
+        attachments: z.array(z.object({
+          filename: z.string().max(255),
+          content: z.string().max(20000000),
+          content_type: z.string().max(100)
+        })).max(10).optional()
+      })
+    });
+    
+    const replyValidation = ResendReplyWebhookSchema.safeParse(payload);
+    if (!replyValidation.success) {
+      const errors = replyValidation.error.errors
+        .map(e => `${e.path.join('.')}: ${e.message}`)
+        .join(', ');
+      console.error("❌ Webhook payload validation failed:", errors);
+      return new Response(
+        JSON.stringify({ error: `Invalid payload: ${errors}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    payload = replyValidation.data as ResendWebhookPayload;
     console.log("=== Processing Application Reply ===");
     console.log("Webhook type:", payload.type);
 
