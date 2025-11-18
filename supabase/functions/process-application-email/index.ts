@@ -117,7 +117,11 @@ const handler = async (req: Request): Promise<Response> => {
       );
 
       if (cvAttachment) {
-        console.log("Processing CV:", cvAttachment.filename);
+        console.log("📎 Processing CV attachment:", {
+          filename: cvAttachment.filename,
+          contentType: cvAttachment.content_type,
+          size: cvAttachment.content?.length || 0
+        });
         
         // Decode base64 content
         const cvBuffer = Uint8Array.from(atob(cvAttachment.content), c => c.charCodeAt(0));
@@ -128,7 +132,15 @@ const handler = async (req: Request): Promise<Response> => {
         cvFileName = cvAttachment.filename;
         cvFilePath = `${orgId}/${applicantEmail.replace(/[^a-zA-Z0-9@.-]/g, "_")}_${timestamp}_${safeName}`;
         
-        const { error: uploadError } = await supabase.storage
+        console.log("🔄 Attempting CV upload to storage:", {
+          bucket: "application-cvs",
+          path: cvFilePath,
+          size: cvBuffer.length,
+          contentType: cvAttachment.content_type,
+          upsert: false
+        });
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
           .from("application-cvs")
           .upload(cvFilePath, cvBuffer, {
             contentType: cvAttachment.content_type,
@@ -136,11 +148,22 @@ const handler = async (req: Request): Promise<Response> => {
           });
 
         if (uploadError) {
-          console.error("Upload error:", uploadError);
+          console.error("❌ CV upload failed:", {
+            error: uploadError,
+            message: uploadError.message,
+            bucket: "application-cvs",
+            path: cvFilePath,
+            size: cvBuffer.length
+          });
           throw uploadError;
         }
 
-        console.log("CV uploaded to:", cvFilePath);
+        console.log("✅ CV uploaded successfully:", {
+          path: uploadData?.path || cvFilePath,
+          fullPath: uploadData?.fullPath,
+          size: cvBuffer.length,
+          id: uploadData?.id
+        });
 
         // Extract text from PDF using parse-pdf-cv function
         if (cvAttachment.content_type === "application/pdf") {
