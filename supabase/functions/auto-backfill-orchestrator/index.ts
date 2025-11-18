@@ -251,7 +251,7 @@ Deno.serve(async (req) => {
     // Start background task
     const backgroundTask = async () => {
       const MAX_BATCHES_PER_RUN = 999; // Increased to allow continuous backfill until complete
-      const BATCH_SIZE = 50; // Gebalanceerd voor betrouwbaarheid en snelheid
+      const BATCH_SIZE = 5; // Reduced from 50 to 5 to prevent token limit errors (5 items * 1500 tokens = safe)
       const MAX_PARALLEL_BATCHES = 2; // Verlaagd naar 2 voor meer stabiliteit
       
       // Resume from checkpoint if available

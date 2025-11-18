@@ -7,9 +7,10 @@ const corsHeaders = {
 };
 
 // Maximum characters to prevent token limit errors
-// Targeting ~5000 content tokens + ~3000 overhead = ~8000 total (safe under 8192 limit)
-const MAX_CHARS = 20000;
-const FALLBACK_CHARS = 15000;
+// Reduced to 6000 chars (~1500 tokens) to safely handle 5-item batches
+// 5 items * 1500 tokens = 7500 tokens + 692 buffer = well under 8192 limit
+const MAX_CHARS = 6000;
+const FALLBACK_CHARS = 4000;
 
 // Retry helper met exponential backoff
 async function retryWithBackoff<T>(
@@ -86,8 +87,9 @@ Deno.serve(async (req) => {
     const results = [];
     let processedCount = 0;
 
-    // Process in batches van 50 (OpenAI batch limit)
-    const BATCH_SIZE = 50;
+    // Process in batches van 5 (reduced from 50 to prevent token limit errors)
+    // With 1500 tokens per item, 5 items = 7500 tokens (safe under 8192 limit)
+    const BATCH_SIZE = 5;
     for (let i = 0; i < knowledgeItems.length; i += BATCH_SIZE) {
       const batch = knowledgeItems.slice(i, i + BATCH_SIZE);
       
