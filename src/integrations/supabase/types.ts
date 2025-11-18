@@ -1239,6 +1239,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "interview_appointments_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_public"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "interview_appointments_task_id_fkey"
             columns: ["task_id"]
             isOneToOne: false
@@ -1727,6 +1734,13 @@ export type Database = {
             referencedRelation: "professionals"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "professional_applications_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       professional_availability: {
@@ -1760,6 +1774,13 @@ export type Database = {
             columns: ["professional_id"]
             isOneToOne: false
             referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_availability_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_public"
             referencedColumns: ["id"]
           },
         ]
@@ -1811,6 +1832,13 @@ export type Database = {
             columns: ["professional_id"]
             isOneToOne: false
             referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_clients_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_public"
             referencedColumns: ["id"]
           },
         ]
@@ -2855,6 +2883,62 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "ai_knowledge_base_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      professionals_public: {
+        Row: {
+          beschikbaarheidsnotities: string | null
+          created_at: string | null
+          full_name: string | null
+          functie_niveau: string | null
+          id: string | null
+          org_id: string | null
+          rating: number | null
+          regio: string | null
+          skills: string[] | null
+          status: string | null
+          tags: string[] | null
+          updated_at: string | null
+          werkvorm: string | null
+        }
+        Insert: {
+          beschikbaarheidsnotities?: string | null
+          created_at?: string | null
+          full_name?: string | null
+          functie_niveau?: string | null
+          id?: string | null
+          org_id?: string | null
+          rating?: number | null
+          regio?: string | null
+          skills?: string[] | null
+          status?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
+          werkvorm?: string | null
+        }
+        Update: {
+          beschikbaarheidsnotities?: string | null
+          created_at?: string | null
+          full_name?: string | null
+          functie_niveau?: string | null
+          id?: string | null
+          org_id?: string | null
+          rating?: number | null
+          regio?: string | null
+          skills?: string[] | null
+          status?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
+          werkvorm?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professionals_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"

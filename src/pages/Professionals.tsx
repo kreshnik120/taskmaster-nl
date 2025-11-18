@@ -70,8 +70,9 @@ const Professionals = () => {
 
       if (!userOrg) return;
 
+      // Use secure view - admins/managers can still INSERT/UPDATE on main table
       const { data, error } = await supabase
-        .from("professionals")
+        .from("professionals_public")
         .select("*")
         .eq("org_id", userOrg.org_id)
         .order("full_name");
