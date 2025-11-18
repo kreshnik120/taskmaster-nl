@@ -158,6 +158,7 @@ export type Database = {
           confidentiality:
             | Database["public"]["Enums"]["confidentiality_level"]
             | null
+          correction_count: number | null
           created_at: string | null
           data_freshness_days: number | null
           deleted_at: string | null
@@ -169,6 +170,7 @@ export type Database = {
           jurisdiction: string | null
           key: string
           kvk_source_data: Json | null
+          last_correction: Json | null
           last_kvk_check: string | null
           last_reviewed_at: string | null
           last_source_check: string | null
@@ -179,15 +181,18 @@ export type Database = {
           org_id: string
           original_text: string | null
           redacted_text: string | null
+          requires_verification: boolean | null
           retrieved_at: string | null
           review_count: number | null
           role_tags: string[] | null
           source: string | null
           source_check_failures: number | null
+          source_reference: string | null
           source_status: string | null
           source_title: string | null
           source_type: string | null
           source_url: string | null
+          stability_score: number | null
           temporal_context: Json | null
           updated_at: string | null
           usage_count: number | null
@@ -210,6 +215,7 @@ export type Database = {
           confidentiality?:
             | Database["public"]["Enums"]["confidentiality_level"]
             | null
+          correction_count?: number | null
           created_at?: string | null
           data_freshness_days?: number | null
           deleted_at?: string | null
@@ -221,6 +227,7 @@ export type Database = {
           jurisdiction?: string | null
           key: string
           kvk_source_data?: Json | null
+          last_correction?: Json | null
           last_kvk_check?: string | null
           last_reviewed_at?: string | null
           last_source_check?: string | null
@@ -231,15 +238,18 @@ export type Database = {
           org_id: string
           original_text?: string | null
           redacted_text?: string | null
+          requires_verification?: boolean | null
           retrieved_at?: string | null
           review_count?: number | null
           role_tags?: string[] | null
           source?: string | null
           source_check_failures?: number | null
+          source_reference?: string | null
           source_status?: string | null
           source_title?: string | null
           source_type?: string | null
           source_url?: string | null
+          stability_score?: number | null
           temporal_context?: Json | null
           updated_at?: string | null
           usage_count?: number | null
@@ -262,6 +272,7 @@ export type Database = {
           confidentiality?:
             | Database["public"]["Enums"]["confidentiality_level"]
             | null
+          correction_count?: number | null
           created_at?: string | null
           data_freshness_days?: number | null
           deleted_at?: string | null
@@ -273,6 +284,7 @@ export type Database = {
           jurisdiction?: string | null
           key?: string
           kvk_source_data?: Json | null
+          last_correction?: Json | null
           last_kvk_check?: string | null
           last_reviewed_at?: string | null
           last_source_check?: string | null
@@ -283,15 +295,18 @@ export type Database = {
           org_id?: string
           original_text?: string | null
           redacted_text?: string | null
+          requires_verification?: boolean | null
           retrieved_at?: string | null
           review_count?: number | null
           role_tags?: string[] | null
           source?: string | null
           source_check_failures?: number | null
+          source_reference?: string | null
           source_status?: string | null
           source_title?: string | null
           source_type?: string | null
           source_url?: string | null
+          stability_score?: number | null
           temporal_context?: Json | null
           updated_at?: string | null
           usage_count?: number | null
