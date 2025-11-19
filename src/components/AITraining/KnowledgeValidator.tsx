@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, CheckCircle, XCircle, AlertCircle, Zap, Database, Link, Trash2 } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, AlertCircle, Zap, Database, Link, Trash2, AlertTriangle, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import confetti from "canvas-confetti";
 import { Progress } from "@/components/ui/progress";
@@ -22,6 +22,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface KnowledgeItem {
   id: string;
@@ -34,6 +36,51 @@ interface KnowledgeItem {
   created_at: string;
   source?: string;
 }
+
+// Helper function to detect incomplete data
+const isIncompleteData = (item: KnowledgeItem): boolean => {
+  if (!item.value) return true;
+  
+  const valueStr = JSON.stringify(item.value).toLowerCase();
+  
+  // Check for placeholder text
+  const placeholderPatterns = [
+    'nog te bepalen',
+    'in te vullen',
+    'todo',
+    'tbd',
+    'not available',
+    'n/a',
+    'unknown',
+    'onbekend',
+    'nvt',
+    '...',
+    'xxx',
+  ];
+  
+  const hasPlaceholder = placeholderPatterns.some(pattern => 
+    valueStr.includes(pattern)
+  );
+  
+  // Check for excessive null/empty values
+  const valueObj = typeof item.value === 'object' ? item.value : {};
+  const fields = Object.values(valueObj);
+  const emptyFields = fields.filter(val => 
+    val === null || 
+    val === undefined || 
+    val === '' || 
+    (typeof val === 'string' && val.trim() === '')
+  );
+  
+  const emptyFieldPercentage = fields.length > 0 
+    ? (emptyFields.length / fields.length) * 100 
+    : 0;
+  
+  // Check for very short content (likely incomplete)
+  const hasShortContent = valueStr.length < 20;
+  
+  return hasPlaceholder || emptyFieldPercentage > 60 || hasShortContent;
+};
 
 export function KnowledgeValidator() {
   const { toast } = useToast();
@@ -49,6 +96,7 @@ export function KnowledgeValidator() {
   const [showQuickWins, setShowQuickWins] = useState<boolean>(true);
   const [brokenLinkIds, setBrokenLinkIds] = useState<string[]>([]);
   const [showDeleteDialog, setShowDeleteDialog] = useState<boolean>(false);
+  const [hideIncomplete, setHideIncomplete] = useState<boolean>(true);
 
   // Check for broken link IDs in URL params
   useEffect(() => {
@@ -68,7 +116,7 @@ export function KnowledgeValidator() {
   }, [searchParams, toast]);
 
   // Fetch knowledge items needing validation
-  const { data: items, isLoading } = useQuery({
+  const { data: rawItems, isLoading } = useQuery({
     queryKey: ["knowledge-validation", filterCategory, filterStatus, showQuickWins, brokenLinkIds],
     queryFn: async () => {
       let query = supabase
@@ -104,6 +152,15 @@ export function KnowledgeValidator() {
       return data as KnowledgeItem[];
     },
   });
+
+  // Filter out incomplete items if hideIncomplete is true
+  const items = rawItems?.filter(item => {
+    if (!hideIncomplete) return true;
+    return !isIncompleteData(item);
+  });
+
+  // Count incomplete items for warning
+  const incompleteCount = rawItems?.filter(isIncompleteData).length || 0;
 
   // Fetch categories for filter
   const { data: categories } = useQuery({
@@ -453,6 +510,29 @@ export function KnowledgeValidator() {
         </Card>
       </div>
 
+      {/* Incomplete Data Warning Banner */}
+      {incompleteCount > 0 && hideIncomplete && (
+        <Alert className="border-orange-500 bg-orange-50 dark:bg-orange-950">
+          <AlertTriangle className="h-4 w-4 text-orange-600" />
+          <AlertTitle>Incomplete Data Gedetecteerd</AlertTitle>
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              {incompleteCount} items bevatten placeholder tekst of incomplete data. 
+              Deze zijn automatisch verborgen.
+            </span>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setHideIncomplete(false)}
+              className="ml-4"
+            >
+              <EyeOff className="h-4 w-4 mr-2" />
+              Toon Incomplete Items
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
 
       {/* Filters & Actions */}
       <Card>
@@ -472,6 +552,16 @@ export function KnowledgeValidator() {
             >
               <Zap className="h-4 w-4" />
               Quick Wins (80%+ confidence)
+            </Button>
+
+            <Button
+              variant={hideIncomplete ? "default" : "outline"}
+              size="sm"
+              onClick={() => setHideIncomplete(!hideIncomplete)}
+              className="gap-2"
+            >
+              <EyeOff className="h-4 w-4" />
+              Verberg Incomplete ({incompleteCount})
             </Button>
 
             {!showQuickWins && (
@@ -566,8 +656,11 @@ export function KnowledgeValidator() {
               </CardContent>
             </Card>
           ) : (
-            items?.map((item) => (
-              <Card key={item.id} className="hover:border-primary transition-colors">
+            items?.map((item) => {
+              const isIncomplete = isIncompleteData(item);
+              
+              return (
+              <Card key={item.id} className={`hover:border-primary transition-colors ${isIncomplete ? 'border-orange-300 bg-orange-50/50 dark:bg-orange-950/20' : ''}`}>
                 <CardContent className="p-4">
                   <div className="flex items-start gap-4">
                     <Checkbox
@@ -578,11 +671,30 @@ export function KnowledgeValidator() {
                     <div className="flex-1 space-y-2">
                       <div className="flex items-start justify-between">
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <Badge variant="outline">{item.category}</Badge>
                             {getStatusBadge(item.validation_status)}
                             {item.needs_review && (
                               <Badge variant="destructive">Needs Review</Badge>
+                            )}
+                            {isIncomplete && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="outline" className="border-orange-500 text-orange-700 dark:text-orange-400 gap-1">
+                                      <AlertTriangle className="h-3 w-3" />
+                                      Incomplete Data
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs">
+                                    <p className="text-sm">
+                                      Dit item bevat placeholder tekst, te veel lege velden, of te weinig content.
+                                      <br /><br />
+                                      <strong>Aanbeveling:</strong> Gebruik "Reject" of "Mark for Review" in plaats van "Approve".
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             )}
                           </div>
                           <p className="font-medium mt-1">{item.key}</p>
@@ -610,7 +722,7 @@ export function KnowledgeValidator() {
                   </div>
                 </CardContent>
               </Card>
-            ))
+            )})
           )}
         </div>
       </ScrollArea>

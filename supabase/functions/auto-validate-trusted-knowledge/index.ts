@@ -58,8 +58,35 @@ Deno.serve(async (req) => {
 
     console.log(`📊 Found ${candidates.length} candidates`);
 
+    // Helper function to detect placeholder text
+    const hasPlaceholderText = (item: any): boolean => {
+      if (!item || typeof item !== 'object') return false;
+      
+      const valueStr = JSON.stringify(item).toLowerCase();
+      const placeholders = [
+        'nog te bepalen',
+        'in te vullen', 
+        'todo',
+        'tbd',
+        'not available',
+        'n/a',
+        'unknown',
+        'onbekend',
+        'nvt',
+        'xxx'
+      ];
+      
+      return placeholders.some(pattern => valueStr.includes(pattern));
+    };
+
     // Filter op trust criteria
     const trustedItems = candidates.filter(item => {
+      // BLOCKER: Reject items with placeholder text immediately
+      if (hasPlaceholderText(item)) {
+        console.log(`❌ Skipping ${item.key}: contains placeholder text`);
+        return false;
+      }
+      
       // Criterium 1: Trusted domain
       const isTrustedSource = item.source && TRUSTED_DOMAINS.some(domain => 
         item.source.toLowerCase().includes(domain)
