@@ -3,21 +3,29 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, CheckCircle, XCircle, Eye } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 
 export const ConflictMonitor = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showResolved, setShowResolved] = useState(false);
 
   const { data: conflicts, isLoading, refetch } = useQuery({
-    queryKey: ['data-conflicts'],
+    queryKey: ['data-conflicts', showResolved],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('data_conflicts' as any)
         .select('*')
         .order('created_at', { ascending: false })
         .limit(50);
+
+      // Filter on pending status unless showResolved is true
+      if (!showResolved) {
+        query = query.eq('resolution_status', 'pending');
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       return data as any[];
@@ -144,10 +152,34 @@ export const ConflictMonitor = () => {
       {/* Conflicts List */}
       <Card>
         <CardHeader>
-          <CardTitle>Gedetecteerde Conflicten</CardTitle>
-          <CardDescription>
-            AI heeft geprobeerd data te wijzigen maar dit werd geblokkeerd door intelligent conflict detection
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Gedetecteerde Conflicten</CardTitle>
+              <CardDescription>
+                {showResolved 
+                  ? "Alle conflicten (inclusief opgeloste)" 
+                  : "AI heeft geprobeerd data te wijzigen maar dit werd geblokkeerd door intelligent conflict detection"}
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowResolved(!showResolved)}
+              className="gap-2"
+            >
+              {showResolved ? (
+                <>
+                  <EyeOff className="h-4 w-4" />
+                  Verberg opgeloste
+                </>
+              ) : (
+                <>
+                  <Eye className="h-4 w-4" />
+                  Toon opgeloste
+                </>
+              )}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
