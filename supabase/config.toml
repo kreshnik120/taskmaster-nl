@@ -148,3 +148,6 @@ verify_jwt = true
 [functions.detect-and-resolve-conflicts]
 verify_jwt = false
 schedule = "0 */6 * * *"  # Elke 6 uur - intelligent conflict detection
+
+[functions.ai-categorize-knowledge]
+verify_jwt = true
