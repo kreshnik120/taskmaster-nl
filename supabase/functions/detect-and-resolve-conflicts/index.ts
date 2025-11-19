@@ -265,26 +265,43 @@ async function createAlert(
   suggestion: any,
   result: ConflictCheckResult
 ) {
+  const entity = extractEntity(existing.key);
+  const field = extractField(existing.key);
+  
+  // Generate clear title based on entity and field
+  const title = `Conflict: ${entity || 'kennis'} - ${field || existing.key}`;
+  
   const { error } = await supabase
     .from('business_intelligence')
     .insert({
       org_id,
-      intelligence_type: 'conflict',
+      intelligence_type: 'data_quality',
       type: 'alert',
       severity: result.severity === 'critical' ? 'high' : result.severity,
       status: 'active',
-      title: `🚨 Kennisconflict gedetecteerd: ${existing.key}`,
-      description: `AI probeerde ${existing.key} te wijzigen maar dit werd geblokkeerd.\n\nReden: ${result.reason}`,
+      title: title,
+      description: result.reason || `Conflict gedetecteerd bij ${existing.key}`,
       data: {
-        category: 'knowledge_conflict',
-        existing_id: existing.id,
-        existing_value: existing.value,
-        suggested_value: suggestion.value,
-        conflict_reason: result.reason,
-        source_type_existing: existing.source_type,
-        source_type_suggested: suggestion.source_type,
-        stability_score: existing.stability_score
-      }
+        conflict_type: 'value_mismatch',
+        item_a: {
+          id: existing.id,
+          key: existing.key,
+          value: existing.value,
+          confidence: existing.confidence_score,
+          source: existing.source_type,
+          stability: existing.stability_score
+        },
+        item_b: {
+          key: suggestion.key,
+          value: suggestion.value,
+          confidence: suggestion.confidence,
+          source: 'ai_generated'
+        },
+        ai_reasoning: result.reason,
+        recommended_action: 'manual_review_required'
+      },
+      priority: result.severity === 'critical' ? 'high' : 'medium',
+      detected_at: new Date().toISOString()
     });
 
   if (error) {

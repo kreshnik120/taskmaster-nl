@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle, CheckCircle2, Trash2, XCircle, Lightbulb } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Trash2, XCircle, Lightbulb, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -184,6 +184,38 @@ export const ConflictResolutionPanel = () => {
         if (deleteError) throw deleteError;
       }
 
+      // Call log-conflict-resolution for AI learning
+      const { data: conflict } = await supabase
+        .from("business_intelligence")
+        .select("*")
+        .eq("id", conflictId)
+        .single();
+
+      if (conflict) {
+        const conflictData = conflict.data as any;
+        
+        const { error: logError } = await supabase.functions.invoke(
+          'log-conflict-resolution',
+          {
+            body: {
+              user_action: resolution === 'keep_a' ? 'kept_existing' : 'accepted_new',
+              conflict_type: conflictData?.conflict_type || 'value_mismatch',
+              conflict_id: conflictId,
+              items: [winner, loser].filter(Boolean),
+              chosen_item_ids: [winner?.id].filter(Boolean),
+              deleted_item_ids: [loser?.id].filter(Boolean),
+              auto_resolved: false,
+              ai_reasoning: conflictData?.ai_reasoning || conflict.description
+            }
+          }
+        );
+
+        if (logError) {
+          console.error('❌ Failed to log conflict resolution:', logError);
+          // Don't block - conflict is already resolved
+        }
+      }
+
       const { error: updateError } = await supabase
         .from("business_intelligence")
         .update({ 
@@ -222,6 +254,113 @@ export const ConflictResolutionPanel = () => {
         variant: "destructive",
       });
     },
+  });
+
+  const categorizeAndKeepMutation = useMutation({
+    mutationFn: async ({ conflictId, winner, loser }: { conflictId: string; winner: any; loser: any }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Niet ingelogd");
+
+      // Call AI to analyze and improve the winner item
+      const { data: aiResult, error: aiError } = await supabase.functions.invoke(
+        'ai-categorize-knowledge',
+        {
+          body: { item: winner }
+        }
+      );
+
+      if (aiError) throw aiError;
+
+      const suggestions = aiResult?.suggestions || [];
+      
+      // Process AI suggestions
+      for (const sug of suggestions) {
+        if (sug.key !== winner.key || sug.category !== winner.category) {
+          // New derived item - insert
+          await supabase
+            .from('ai_knowledge_base')
+            .insert({
+              org_id: winner.org_id,
+              user_id: user.id,
+              category: sug.category,
+              key: sug.key,
+              value: sug.value,
+              confidence_score: sug.confidence,
+              source_type: 'ai_categorized',
+              source: JSON.stringify({
+                derived_from: winner.id,
+                conflict_id: conflictId,
+                ai_reasoning: sug.reason
+              })
+            });
+        } else {
+          // Improvement of existing item - update
+          await supabase
+            .from('ai_knowledge_base')
+            .update({
+              category: sug.category,
+              value: sug.value,
+              confidence_score: Math.min(1.0, (winner.confidence_score || 0.5) + 0.1)
+            })
+            .eq('id', winner.id);
+        }
+      }
+
+      // Soft-delete loser
+      if (loser) {
+        await supabase
+          .from("ai_knowledge_base")
+          .update({
+            deleted_at: new Date().toISOString(),
+            deleted_by: user.id,
+            deletion_reason: {
+              reason: 'conflict_resolution_with_categorization',
+              conflict_id: conflictId,
+              replaced_by_items: suggestions.map((s: any) => s.key)
+            }
+          })
+          .eq("id", loser.id);
+      }
+
+      // Log the resolution
+      await supabase.functions.invoke('log-conflict-resolution', {
+        body: {
+          user_action: 'categorized_and_kept',
+          conflict_type: 'value_mismatch',
+          conflict_id: conflictId,
+          items: [winner, loser],
+          chosen_item_ids: [winner.id],
+          deleted_item_ids: [loser?.id],
+          auto_resolved: false,
+          ai_reasoning: `AI categorized into ${suggestions.length} items`
+        }
+      });
+
+      // Resolve conflict
+      await supabase
+        .from("business_intelligence")
+        .update({ status: "resolved" })
+        .eq("id", conflictId);
+    },
+    onSuccess: () => {
+      setLastError(null);
+      toast({
+        title: "Conflict opgelost en kennis gecategoriseerd",
+        description: "De AI heeft de kennis geanalyseerd en verbeterd",
+      });
+      queryClient.invalidateQueries({ queryKey: ["conflict-resolution"] });
+      queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
+      refetchStats();
+    },
+    onError: (error: any) => {
+      const explained = explainConflictError(error, "keep_existing");
+      setLastError(explained);
+      toast({
+        title: explained.title,
+        description: explained.functionalMessage,
+        variant: "destructive",
+      });
+    }
   });
 
   const approveSuggestionMutation = useMutation({
@@ -594,6 +733,19 @@ export const ConflictResolutionPanel = () => {
                           disabled={resolveConflictMutation.isPending}
                         >
                           Behoud A
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => categorizeAndKeepMutation.mutate({
+                            conflictId: conflict.id,
+                            winner: itemA,
+                            loser: itemB
+                          })}
+                          disabled={categorizeAndKeepMutation.isPending}
+                        >
+                          <Sparkles className="h-4 w-4 mr-1" />
+                          Categoriseer A
                         </Button>
                         <Button
                           size="sm"
