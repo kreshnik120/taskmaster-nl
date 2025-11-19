@@ -43,19 +43,26 @@ export const ConflictMonitor = () => {
 
   const handleResolve = async (conflictId: string, action: string) => {
     try {
+      const resolutionStatus = action === 'ignore' ? 'ignored' : 'resolved';
+      
       const { error } = await supabase
         .from('data_conflicts' as any)
         .update({
-          resolution_status: 'manually_resolved',
+          resolution_status: resolutionStatus,
           resolution_action: action,
           resolved_at: new Date().toISOString(),
         })
         .eq('id', conflictId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error resolving conflict:', error);
+        throw error;
+      }
+      
       toast.success('Conflict opgelost');
       refetch();
     } catch (error) {
+      console.error('Kon conflict niet oplossen', error);
       toast.error('Kon conflict niet oplossen');
     }
   };
@@ -76,8 +83,10 @@ export const ConflictMonitor = () => {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'auto_resolved': return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case 'manually_resolved': return <CheckCircle className="h-4 w-4 text-blue-500" />;
+      case 'resolved': return <CheckCircle className="h-4 w-4 text-blue-500" />;
+      case 'ignored': return <XCircle className="h-4 w-4 text-gray-400" />;
       case 'pending': return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
+      case 'merged': return <CheckCircle className="h-4 w-4 text-purple-500" />;
       default: return <XCircle className="h-4 w-4 text-gray-500" />;
     }
   };
