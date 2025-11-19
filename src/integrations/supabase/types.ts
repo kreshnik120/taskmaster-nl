@@ -1525,6 +1525,71 @@ export type Database = {
           },
         ]
       }
+      org_ai_budgets: {
+        Row: {
+          allow_temporary_overage: boolean
+          budget_reset_day: number
+          created_at: string
+          created_by: string | null
+          critical_sent_at: string | null
+          critical_threshold_pct: number
+          daily_budget_eur: number | null
+          enforce_hard_limit: boolean
+          id: string
+          last_reset_at: string | null
+          limit_reached_at: string | null
+          monthly_budget_eur: number
+          org_id: string
+          updated_at: string
+          warning_sent_at: string | null
+          warning_threshold_pct: number
+        }
+        Insert: {
+          allow_temporary_overage?: boolean
+          budget_reset_day?: number
+          created_at?: string
+          created_by?: string | null
+          critical_sent_at?: string | null
+          critical_threshold_pct?: number
+          daily_budget_eur?: number | null
+          enforce_hard_limit?: boolean
+          id?: string
+          last_reset_at?: string | null
+          limit_reached_at?: string | null
+          monthly_budget_eur?: number
+          org_id: string
+          updated_at?: string
+          warning_sent_at?: string | null
+          warning_threshold_pct?: number
+        }
+        Update: {
+          allow_temporary_overage?: boolean
+          budget_reset_day?: number
+          created_at?: string
+          created_by?: string | null
+          critical_sent_at?: string | null
+          critical_threshold_pct?: number
+          daily_budget_eur?: number | null
+          enforce_hard_limit?: boolean
+          id?: string
+          last_reset_at?: string | null
+          limit_reached_at?: string | null
+          monthly_budget_eur?: number
+          org_id?: string
+          updated_at?: string
+          warning_sent_at?: string | null
+          warning_threshold_pct?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_ai_budgets_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_profiles: {
         Row: {
           brand_name: string
@@ -2256,6 +2321,62 @@ export type Database = {
           },
         ]
       }
+      spending_alerts: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          action_taken: string | null
+          alert_type: string
+          budget_limit_eur: number
+          created_at: string
+          current_spend_eur: number
+          id: string
+          metadata: Json | null
+          org_id: string
+          percentage_used: number
+          period_type: string
+          resolved_at: string | null
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          action_taken?: string | null
+          alert_type: string
+          budget_limit_eur: number
+          created_at?: string
+          current_spend_eur: number
+          id?: string
+          metadata?: Json | null
+          org_id: string
+          percentage_used: number
+          period_type: string
+          resolved_at?: string | null
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          action_taken?: string | null
+          alert_type?: string
+          budget_limit_eur?: number
+          created_at?: string
+          current_spend_eur?: number
+          id?: string
+          metadata?: Json | null
+          org_id?: string
+          percentage_used?: number
+          period_type?: string
+          resolved_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spending_alerts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subtasks: {
         Row: {
           assignee_id: string | null
@@ -2946,6 +3067,20 @@ export type Database = {
           },
         ]
       }
+      org_spending_summary: {
+        Row: {
+          avg_cost_per_call: number | null
+          last_call_at: string | null
+          month_calls: number | null
+          month_spend_eur: number | null
+          org_id: string | null
+          refreshed_at: string | null
+          today_calls: number | null
+          today_spend_eur: number | null
+          week_spend_eur: number | null
+        }
+        Relationships: []
+      }
       professionals_public: {
         Row: {
           beschikbaarheidsnotities: string | null
@@ -3004,6 +3139,10 @@ export type Database = {
       }
     }
     Functions: {
+      check_budget_status: {
+        Args: { _org_id: string; _requested_cost_eur?: number }
+        Returns: Json
+      }
       get_relevant_categories: {
         Args: { org_id_param?: string; user_question: string }
         Returns: {

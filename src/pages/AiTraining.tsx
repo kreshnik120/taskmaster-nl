@@ -28,6 +28,8 @@ import { ValidationWorkflowGuide } from "@/components/AITraining/ValidationWorkf
 import { ValidationOnboardingWizard } from "@/components/AITraining/ValidationOnboardingWizard";
 import { AutoResolveMonitor } from "@/components/AITraining/AutoResolveMonitor";
 import { AutoLearnedKnowledgeDashboard } from "@/components/AITraining/AutoLearnedKnowledgeDashboard";
+import { BudgetDashboard } from "@/components/AITraining/BudgetDashboard";
+import { BudgetConfiguration } from "@/components/AITraining/BudgetConfiguration";
 
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { SystemHealthDashboard } from "@/components/AITraining/SystemHealthDashboard";
@@ -160,8 +162,9 @@ const AiTraining = () => {
             </div>
 
             <Tabs defaultValue="overview" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="overview">📊 Overzicht</TabsTrigger>
+                <TabsTrigger value="budget">💰 Budget</TabsTrigger>
                 <TabsTrigger value="management">🔧 Beheer</TabsTrigger>
                 <TabsTrigger value="knowledge">🗄️ Kennis</TabsTrigger>
                 <TabsTrigger value="training">💬 Training</TabsTrigger>
@@ -190,6 +193,16 @@ const AiTraining = () => {
                     </div>
                   </TabsContent>
                 </Tabs>
+              </TabsContent>
+
+              {/* 💰 BUDGET */}
+              <TabsContent value="budget" className="mt-6">
+                <div className="space-y-6">
+                  <BudgetDashboard />
+                  <AdminOnly>
+                    <BudgetConfiguration />
+                  </AdminOnly>
+                </div>
               </TabsContent>
 
               {/* 🔧 BEHEER (AdminOnly) */}

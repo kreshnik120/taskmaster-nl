@@ -151,3 +151,6 @@ schedule = "0 */6 * * *"  # Elke 6 uur - intelligent conflict detection
 
 [functions.ai-categorize-knowledge]
 verify_jwt = true
+
+[functions.check-budget-alert]
+verify_jwt = false
