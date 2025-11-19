@@ -117,17 +117,22 @@ export const ConflictResolutionPanel = () => {
       keepItemId: string;
       deleteItemIds: string[];
     }) => {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Niet ingelogd - log opnieuw in");
+
       // Soft-delete conflicting items
       const { error: deleteError } = await supabase
         .from("ai_knowledge_base")
         .update({
           deleted_at: new Date().toISOString(),
-          deleted_by: 'CONFLICT_RESOLUTION',
+          deleted_by: user.id,
           deletion_reason: {
             reason: 'resolved_conflict',
             conflict_id: conflictId,
             kept_item_id: keepItemId,
-            action: 'manual_resolution'
+            action: 'manual_resolution',
+            deleted_by_context: 'CONFLICT_RESOLUTION'
           }
         })
         .in("id", deleteItemIds);
@@ -154,9 +159,10 @@ export const ConflictResolutionPanel = () => {
       queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
     },
     onError: (error: any) => {
+      console.error("[ConflictResolution] resolveConflictMutation failed:", error);
       toast({
-        title: "Fout bij oplossen conflict",
-        description: error.message,
+        title: "Kon conflict niet oplossen",
+        description: error.message || "Er ging iets mis bij het opslaan",
         variant: "destructive",
       });
     },
@@ -250,9 +256,10 @@ export const ConflictResolutionPanel = () => {
       queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
     },
     onError: (error: any) => {
+      console.error("[ConflictResolution] restoreMutation failed:", error);
       toast({
-        title: "Fout bij herstellen",
-        description: error.message,
+        title: "Kon item niet herstellen",
+        description: error.message || "Er ging iets mis bij het herstellen",
         variant: "destructive",
       });
     },
@@ -264,6 +271,10 @@ export const ConflictResolutionPanel = () => {
       suggestionId: string; 
       actions: Array<{ item_id: string; action: 'keep' | 'delete' }>;
     }) => {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Niet ingelogd - log opnieuw in");
+
       const deleteIds = actions.filter(a => a.action === 'delete').map(a => a.item_id);
       
       // Soft delete losers
@@ -272,8 +283,11 @@ export const ConflictResolutionPanel = () => {
           .from('ai_knowledge_base')
           .update({
             deleted_at: new Date().toISOString(),
-            deleted_by: 'USER_APPROVED_AI_SUGGESTION',
-            deletion_reason: { suggestion_id: suggestionId }
+            deleted_by: user.id,
+            deletion_reason: { 
+              suggestion_id: suggestionId,
+              deleted_by_context: 'USER_APPROVED_AI_SUGGESTION'
+            }
           })
           .in('id', deleteIds);
         
@@ -318,9 +332,10 @@ export const ConflictResolutionPanel = () => {
       queryClient.invalidateQueries({ queryKey: ["ai-deleted-items"] });
     },
     onError: (error: any) => {
+      console.error("[ConflictResolution] approveSuggestionMutation failed:", error);
       toast({
-        title: "Fout bij goedkeuren",
-        description: error.message,
+        title: "Kon suggestie niet goedkeuren",
+        description: error.message || "Er ging iets mis bij het opslaan",
         variant: "destructive",
       });
     },
