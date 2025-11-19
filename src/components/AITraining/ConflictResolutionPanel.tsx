@@ -117,10 +117,19 @@ export const ConflictResolutionPanel = () => {
       keepItemId: string;
       deleteItemIds: string[];
     }) => {
-      // Delete conflicting items
+      // Soft-delete conflicting items
       const { error: deleteError } = await supabase
         .from("ai_knowledge_base")
-        .delete()
+        .update({
+          deleted_at: new Date().toISOString(),
+          deleted_by: 'CONFLICT_RESOLUTION',
+          deletion_reason: {
+            reason: 'resolved_conflict',
+            conflict_id: conflictId,
+            kept_item_id: keepItemId,
+            action: 'manual_resolution'
+          }
+        })
         .in("id", deleteItemIds);
 
       if (deleteError) throw deleteError;
