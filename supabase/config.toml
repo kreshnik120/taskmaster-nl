@@ -154,3 +154,6 @@ verify_jwt = true
 
 [functions.check-budget-alert]
 verify_jwt = false
+
+[functions.cleanup-deleted-knowledge]
+verify_jwt = false
