@@ -970,6 +970,29 @@ serve(async (req) => {
       });
     }
 
+    // ✨ BUDGET CHECK: Check if org has budget left before continuing
+    const { checkBudgetBeforeAiCall } = await import('../_shared/budget-guard.ts');
+    const budgetCheck = await checkBudgetBeforeAiCall(
+      supabaseClient, 
+      userOrgId,
+      0.002 // Estimated cost per call
+    );
+
+    if (!budgetCheck.allowed) {
+      const status = budgetCheck.status;
+      return new Response(
+        JSON.stringify({ 
+          error: 'Budget limit bereikt',
+          message: `Je organisatie heeft het AI-budget limiet bereikt (${status?.month_percentage}% gebruikt). Neem contact op met een admin om het budget te verhogen.`,
+          budget_status: status
+        }),
+        { 
+          status: 429, // Too Many Requests
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
     // ============================================
     // FASE 1: CACHE LOOKUP (SHA256 HASH)
     // ============================================
