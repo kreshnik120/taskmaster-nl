@@ -27,6 +27,7 @@ import { KnowledgeValidator } from "@/components/AITraining/KnowledgeValidator";
 import { ValidationWorkflowGuide } from "@/components/AITraining/ValidationWorkflowGuide";
 import { ValidationOnboardingWizard } from "@/components/AITraining/ValidationOnboardingWizard";
 import { AutoResolveMonitor } from "@/components/AITraining/AutoResolveMonitor";
+import { AutoLearnedKnowledgeDashboard } from "@/components/AITraining/AutoLearnedKnowledgeDashboard";
 
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { SystemHealthDashboard } from "@/components/AITraining/SystemHealthDashboard";
@@ -177,6 +178,7 @@ const AiTraining = () => {
                   <TabsContent value="dashboard" className="mt-4">
                     <div className="space-y-6">
                       <AutoResolveMonitor />
+                      <AutoLearnedKnowledgeDashboard />
                       <LearningDashboard />
                     </div>
                   </TabsContent>
