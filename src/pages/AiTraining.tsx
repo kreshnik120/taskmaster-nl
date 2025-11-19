@@ -30,6 +30,7 @@ import { AutoResolveMonitor } from "@/components/AITraining/AutoResolveMonitor";
 import { AutoLearnedKnowledgeDashboard } from "@/components/AITraining/AutoLearnedKnowledgeDashboard";
 import { BudgetDashboard } from "@/components/AITraining/BudgetDashboard";
 import { BudgetConfiguration } from "@/components/AITraining/BudgetConfiguration";
+import { CleanupDeletedKnowledge } from "@/components/AITraining/CleanupDeletedKnowledge";
 
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { SystemHealthDashboard } from "@/components/AITraining/SystemHealthDashboard";
@@ -213,11 +214,12 @@ const AiTraining = () => {
                   </Card>
                 }>
                   <Tabs defaultValue="validation" className="w-full">
-                    <TabsList className="grid w-full grid-cols-4">
+                    <TabsList className="grid w-full grid-cols-5">
                       <TabsTrigger value="validation">Validation</TabsTrigger>
                       <TabsTrigger value="alerts">Alerts</TabsTrigger>
                       <TabsTrigger value="kvk">KVK API</TabsTrigger>
                       <TabsTrigger value="week1-2">Week 1-2 Test</TabsTrigger>
+                      <TabsTrigger value="cleanup">Cleanup</TabsTrigger>
                     </TabsList>
                     
                     <TabsContent value="validation" className="mt-4">
@@ -286,6 +288,10 @@ const AiTraining = () => {
                     
                     <TabsContent value="week1-2" className="mt-4">
                       <Week1To2TestPanel />
+                    </TabsContent>
+                    
+                    <TabsContent value="cleanup" className="mt-4">
+                      <CleanupDeletedKnowledge />
                     </TabsContent>
                   </Tabs>
                 </AdminOnly>
