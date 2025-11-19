@@ -31,36 +31,44 @@ async function persistMessage(
   message: { user_id: string; org_id: string; conversation_id: string; role: string; content: string; metadata?: any },
   retries: number = 3
 ): Promise<{ success: boolean; messageId?: string }> {
-  // ✅ NIEUWE STAP: Normaliseer content (trim whitespace voor consistent hashing)
-  const normalizedMessage = {
-    ...message,
+  // Transform metadata to used_knowledge for ai_chat_messages table
+  const insertData: any = {
+    user_id: message.user_id,
+    org_id: message.org_id,
+    conversation_id: message.conversation_id,
+    role: message.role,
     content: message.content.trim()
   };
   
+  // Extract used_knowledge from metadata if present
+  if (message.metadata?.usedKnowledge || message.metadata?.knowledge_ids_for_feedback) {
+    insertData.used_knowledge = message.metadata.usedKnowledge || message.metadata.knowledge_ids_for_feedback || [];
+  }
+  
   for (let attempt = 1; attempt <= retries; attempt++) {
     const { data, error } = await supabase
-      .from('chat_messages')
-      .insert(normalizedMessage)
+      .from('ai_chat_messages')
+      .insert(insertData)
       .select('id')
       .single();
     
     if (!error && data) {
-      console.log(`✅ ${normalizedMessage.role} message persisted (attempt ${attempt}/${retries}), id: ${data.id}`);
+      console.log(`✅ ${insertData.role} message persisted (attempt ${attempt}/${retries}), id: ${data.id}`);
       return { success: true, messageId: data.id };
     }
     
     // ✅ NIEUWE LOGICA: Check of het een duplicate constraint error is
     if (error?.code === '23505') { // PostgreSQL unique violation
-      console.log(`ℹ️ ${normalizedMessage.role} message already exists (deduplicated), fetching existing ID...`);
+      console.log(`ℹ️ ${insertData.role} message already exists (deduplicated), fetching existing ID...`);
       
       // Haal bestaande message ID op
       const { data: existing } = await supabase
-        .from('chat_messages')
+        .from('ai_chat_messages')
         .select('id')
-        .eq('user_id', normalizedMessage.user_id)
-        .eq('conversation_id', normalizedMessage.conversation_id)
-        .eq('role', normalizedMessage.role)
-        .eq('content', normalizedMessage.content)
+        .eq('user_id', insertData.user_id)
+        .eq('conversation_id', insertData.conversation_id)
+        .eq('role', insertData.role)
+        .eq('content', insertData.content)
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
@@ -81,7 +89,7 @@ async function persistMessage(
     }
   }
   
-  console.error(`❌ Failed to persist ${normalizedMessage.role} message after ${retries} attempts`);
+  console.error(`❌ Failed to persist ${insertData.role} message after ${retries} attempts`);
   return { success: false };
 }
 
