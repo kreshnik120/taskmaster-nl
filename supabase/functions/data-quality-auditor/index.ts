@@ -272,12 +272,74 @@ serve(async (req) => {
       }
     }
 
+    // SCAN 6: Incomplete Data Detection
+    const { data: allItems } = await supabase
+      .from('ai_knowledge_base')
+      .select('id, key, value, confidence_score, category')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .limit(500);
+
+    let incompleteCount = 0;
+    
+    if (allItems && allItems.length > 0) {
+      console.log(`🔍 Scanning ${allItems.length} items for incomplete data...`);
+      
+      const hasPlaceholderText = (value: any): boolean => {
+        if (!value) return false;
+        const valueStr = JSON.stringify(value).toLowerCase();
+        const placeholders = [
+          'nog te bepalen', 'in te vullen', 'todo', 'tbd',
+          'not available', 'n/a', 'unknown', 'onbekend', 'nvt', '...'
+        ];
+        return placeholders.some(p => valueStr.includes(p));
+      };
+
+      const hasExcessiveNulls = (value: any): boolean => {
+        if (!value || typeof value !== 'object') return false;
+        const fields = Object.values(value);
+        if (fields.length === 0) return false;
+        
+        const emptyFields = fields.filter(v => 
+          v === null || v === undefined || v === '' || 
+          (typeof v === 'string' && v.trim() === '')
+        );
+        return (emptyFields.length / fields.length) > 0.6;
+      };
+
+      for (const item of allItems) {
+        const isIncomplete = hasPlaceholderText(item.value) || 
+                            hasExcessiveNulls(item.value) ||
+                            JSON.stringify(item.value).length < 20;
+        
+        if (isIncomplete) {
+          await supabase
+            .from('ai_knowledge_base')
+            .update({
+              needs_review: true,
+              confidence_score: Math.max(0.3, (item.confidence_score || 0.5) - 0.2),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', item.id);
+          
+          incompleteCount++;
+          console.log(`⚠️ Incomplete data detected: ${item.key} in ${item.category}`);
+        }
+      }
+      
+      if (incompleteCount > 0) {
+        issues.push(`${incompleteCount} incomplete items (placeholder text or excessive nulls)`);
+        console.log(`⚠️ Flagged ${incompleteCount} items with incomplete data for review`);
+      }
+    }
+
     // Report to business intelligence
     if (issues.length > 0 || fixedItemsCount > 0 || archivedCount > 0 || boostedCount > 0) {
       const summary = [];
       if (fixedItemsCount > 0) summary.push(`${fixedItemsCount} auto-fixed`);
       if (archivedCount > 0) summary.push(`${archivedCount} archived`);
       if (boostedCount > 0) summary.push(`${boostedCount} boosted`);
+      if (incompleteCount > 0) summary.push(`${incompleteCount} incomplete`);
       
       // Calculate impact score and classify
       const totalIssues = issues.length;
@@ -340,7 +402,7 @@ serve(async (req) => {
       model_used: 'autonomous'
     });
 
-    console.log(`✅ Quality audit complete: ${issues.length} issues, ${fixedItemsCount} fixed, ${archivedCount} archived, ${boostedCount} boosted`);
+    console.log(`✅ Quality audit complete: ${issues.length} issues, ${fixedItemsCount} fixed, ${archivedCount} archived, ${boostedCount} boosted, ${incompleteCount} incomplete`);
 
     return new Response(JSON.stringify({
       success: true,
@@ -348,8 +410,9 @@ serve(async (req) => {
       auto_fixed: fixedItemsCount,
       auto_archived: archivedCount,
       confidence_boosted: boostedCount,
+      incomplete_flagged: incompleteCount,
       details: issues,
-      items_marked_for_review: (outdated?.length || 0) + (lowConfidence?.length || 0) + unvalidatedItems.length
+      items_marked_for_review: (outdated?.length || 0) + (lowConfidence?.length || 0) + unvalidatedItems.length + incompleteCount
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
