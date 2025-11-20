@@ -75,32 +75,35 @@ export const ConflictMonitor = () => {
       return;
     }
 
-    // Deep merge de edits met de bestaande waarde
-    // Wrap edits in { value: {...} } structuur als conflicting_suggestion een value property heeft
-    let mergedValue;
-    if (conflict.conflicting_suggestion?.value && typeof conflict.conflicting_suggestion.value === 'object') {
-      // Edits zijn voor nested fields binnen 'value'
-      mergedValue = deepMerge(conflict.conflicting_suggestion, {
-        value: edits
-      });
-    } else {
-      // Direct merge op top-level
-      mergedValue = deepMerge(conflict.conflicting_suggestion, edits);
-    }
-
+    // Basis waarde uit metadata.suggested_value (flat structure zonder category/key/etc)
+    const baseValue = conflict.metadata?.suggested_value || {};
+    
+    console.log('[ConflictMonitor] Merging edits:', {
+      baseValue,
+      edits,
+      conflictId
+    });
+    
+    // Deep merge edits met basis waarde (ALLEEN value fields)
+    const mergedValue = deepMerge(baseValue, edits);
+    
     // Detecteer en verwijder duplicate velden
-    const duplicates = detectDuplicateFields(mergedValue);
+    const duplicates = detectDuplicateFields({ value: mergedValue });
+    let finalValue = mergedValue;
+    
     if (duplicates.length > 0) {
       console.warn('[ConflictMonitor] Duplicate fields detected:', duplicates);
-      mergedValue = cleanupDuplicateFields(mergedValue);
-      toast.warning(`Duplicate velden gedetecteerd en opgeschoond: ${duplicates.join(', ')}`);
+      finalValue = cleanupDuplicateFields({ value: mergedValue }).value || mergedValue;
+      toast.warning(`Duplicate velden verwijderd: ${duplicates.join(', ')}`);
     }
+
+    console.log('[ConflictMonitor] Final value to save:', finalValue);
 
     try {
       const { data, error } = await supabase.functions.invoke('update-knowledge-from-conflict', {
         body: {
           conflict_id: conflictId,
-          edited_value: mergedValue,
+          edited_value: finalValue, // ✅ Alleen value fields, geen metadata
           resolution_action: 'edited'
         }
       });
