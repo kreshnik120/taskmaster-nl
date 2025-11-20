@@ -3,9 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, CheckCircle, XCircle, Eye, EyeOff } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, Eye, EyeOff, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
+import { ConflictDiffView } from "./ConflictDiffView";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export const ConflictMonitor = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -97,6 +99,57 @@ export const ConflictMonitor = () => {
       case 'merged': return <CheckCircle className="h-4 w-4 text-purple-500" />;
       default: return <XCircle className="h-4 w-4 text-gray-500" />;
     }
+  };
+
+  const getAIRecommendation = (conflict: any) => {
+    const metadata = conflict.metadata || {};
+    const reason = metadata.reason || '';
+    const conflictType = conflict.conflict_type || '';
+    
+    // Bepaal aanbeveling op basis van conflict type en metadata
+    if (reason.includes('KVK API') || metadata.suggested_source_type === 'kvk_api') {
+      return {
+        action: 'accept_new',
+        label: 'Accepteer Nieuwe Waarde',
+        reason: 'KVK API data is betrouwbaar en actueel',
+        confidence: 95
+      };
+    }
+    
+    if (conflictType === 'data_freshness' && metadata.existing_stability_score < 0.5) {
+      return {
+        action: 'accept_new',
+        label: 'Accepteer Nieuwe Waarde',
+        reason: 'Bestaande data heeft lage stabiliteit',
+        confidence: 80
+      };
+    }
+    
+    if (conflictType === 'source_hierarchy' && metadata.existing_stability_score > 0.8) {
+      return {
+        action: 'keep_existing',
+        label: 'Behoud Oude Waarde',
+        reason: 'Bestaande data is zeer stabiel',
+        confidence: 85
+      };
+    }
+    
+    if (reason.includes('placeholder') || reason.includes('incomplete')) {
+      return {
+        action: 'accept_new',
+        label: 'Accepteer Nieuwe Waarde',
+        reason: 'Vervangt incomplete/placeholder data',
+        confidence: 90
+      };
+    }
+    
+    // Default: voorzichtig zijn
+    return {
+      action: 'keep_existing',
+      label: 'Behoud Oude Waarde',
+      reason: 'Bij twijfel: behoud bestaande data',
+      confidence: 60
+    };
   };
 
   return (
@@ -238,59 +291,107 @@ export const ConflictMonitor = () => {
                     </Button>
 
                     {expandedId === conflict.id && (
-                      <div className="space-y-3 border-t pt-3">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <div className="font-medium text-sm">Bestaande Waarde:</div>
-                            <div className="text-xs bg-green-50 dark:bg-green-950 p-2 rounded border border-green-200 dark:border-green-800">
-                              <div className="mb-1">
-                                <Badge variant="outline" className="mr-2">
-                                  {conflict.existing_knowledge?.source_type}
-                                </Badge>
-                                <span className="text-muted-foreground">
-                                  Stability: {(conflict.existing_knowledge?.stability_score * 100).toFixed(0)}%
-                                </span>
+                      <div className="space-y-4 border-t pt-3">
+                        {/* AI Aanbeveling */}
+                        {conflict.resolution_status === 'pending' && (() => {
+                          const recommendation = getAIRecommendation(conflict);
+                          return (
+                            <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                              <div className="flex items-start gap-3">
+                                <Lightbulb className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                                <div className="space-y-1 flex-1">
+                                  <div className="font-medium text-sm text-foreground">
+                                    🤖 AI Aanbeveling: {recommendation.label}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {recommendation.reason}
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs">
+                                    <Badge variant="secondary" className="text-xs">
+                                      Vertrouwen: {recommendation.confidence}%
+                                    </Badge>
+                                    {recommendation.confidence >= 85 && (
+                                      <CheckCircle className="h-3 w-3 text-green-600" />
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                              <pre className="whitespace-pre-wrap">
-                                {JSON.stringify(conflict.metadata?.existing_value, null, 2)}
-                              </pre>
                             </div>
-                          </div>
+                          );
+                        })()}
 
-                          <div className="space-y-2">
-                            <div className="font-medium text-sm">Voorgestelde Wijziging:</div>
-                            <div className="text-xs bg-red-50 dark:bg-red-950 p-2 rounded border border-red-200 dark:border-red-800">
-                              <pre className="whitespace-pre-wrap">
-                                {JSON.stringify(conflict.metadata?.suggested_value, null, 2)}
-                              </pre>
-                            </div>
-                          </div>
-                        </div>
+                        {/* Diff View */}
+                        <ConflictDiffView
+                          existingValue={conflict.metadata?.existing_value}
+                          suggestedValue={conflict.metadata?.suggested_value}
+                          existingMetadata={{
+                            source_type: conflict.metadata?.existing_source_type,
+                            stability_score: conflict.metadata?.existing_stability_score
+                          }}
+                          reason={conflict.metadata?.reason}
+                        />
 
+                        {/* Action Buttons */}
                         {conflict.resolution_status === 'pending' && (
-                          <div className="flex gap-2 pt-2">
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleResolve(conflict.id, 'keep_existing')}
-                            >
-                              Behoud Bestaand
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => handleResolve(conflict.id, 'accept_new')}
-                            >
-                              Accepteer Nieuw
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleResolve(conflict.id, 'ignore')}
-                            >
-                              Negeer
-                            </Button>
-                          </div>
+                          <TooltipProvider>
+                            <div className="flex gap-2 pt-2">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleResolve(conflict.id, 'keep_existing')}
+                                    className="flex-1"
+                                  >
+                                    <XCircle className="h-4 w-4 mr-2" />
+                                    Behoud Oude Waarde
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="max-w-xs text-xs">
+                                    Behoud de huidige waarde in de kennisbank en verwerp de voorgestelde wijziging
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    onClick={() => handleResolve(conflict.id, 'accept_new')}
+                                    className="flex-1"
+                                  >
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    Vervang met Nieuwe Waarde
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="max-w-xs text-xs">
+                                    Vervang de oude waarde volledig met de nieuwe voorgestelde waarde
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleResolve(conflict.id, 'ignore')}
+                                  >
+                                    <EyeOff className="h-4 w-4 mr-2" />
+                                    Negeer
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="max-w-xs text-xs">
+                                    Markeer dit conflict als genegeerd zonder actie te ondernemen
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </TooltipProvider>
                         )}
                       </div>
                     )}
