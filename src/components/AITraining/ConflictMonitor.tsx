@@ -9,6 +9,7 @@ import { useState } from "react";
 import { ConflictDiffView } from "./ConflictDiffView";
 import { ConflictEditDialog } from "./ConflictEditDialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { deepMerge, detectDuplicateFields, cleanupDuplicateFields } from "@/lib/deepMerge";
 
 export const ConflictMonitor = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -74,11 +75,26 @@ export const ConflictMonitor = () => {
       return;
     }
 
-    // Merge edited fields with suggested value
-    const mergedValue = {
-      ...(typeof conflict.conflicting_suggestion === 'object' ? conflict.conflicting_suggestion : {}),
-      ...edits
-    };
+    // Deep merge de edits met de bestaande waarde
+    // Wrap edits in { value: {...} } structuur als conflicting_suggestion een value property heeft
+    let mergedValue;
+    if (conflict.conflicting_suggestion?.value && typeof conflict.conflicting_suggestion.value === 'object') {
+      // Edits zijn voor nested fields binnen 'value'
+      mergedValue = deepMerge(conflict.conflicting_suggestion, {
+        value: edits
+      });
+    } else {
+      // Direct merge op top-level
+      mergedValue = deepMerge(conflict.conflicting_suggestion, edits);
+    }
+
+    // Detecteer en verwijder duplicate velden
+    const duplicates = detectDuplicateFields(mergedValue);
+    if (duplicates.length > 0) {
+      console.warn('[ConflictMonitor] Duplicate fields detected:', duplicates);
+      mergedValue = cleanupDuplicateFields(mergedValue);
+      toast.warning(`Duplicate velden gedetecteerd en opgeschoond: ${duplicates.join(', ')}`);
+    }
 
     try {
       const { data, error } = await supabase.functions.invoke('update-knowledge-from-conflict', {

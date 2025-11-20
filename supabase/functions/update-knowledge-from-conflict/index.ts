@@ -78,11 +78,40 @@ serve(async (req) => {
       );
     }
 
-    // Update het knowledge item met de bewerkte waarde
+    // Valideer de edited_value structuur
+    let validatedValue = edited_value;
+    
+    // Detecteer en verwijder duplicate fields (top-level vs nested)
+    if (typeof edited_value === 'object' && edited_value !== null) {
+      const duplicateFields: string[] = [];
+      
+      if (edited_value.value && typeof edited_value.value === 'object') {
+        const topLevelKeys = Object.keys(edited_value);
+        const nestedKeys = Object.keys(edited_value.value);
+        
+        for (const key of topLevelKeys) {
+          if (key !== 'value' && nestedKeys.includes(key)) {
+            duplicateFields.push(key);
+          }
+        }
+        
+        if (duplicateFields.length > 0) {
+          console.warn('[update-knowledge-from-conflict] Duplicate fields detected, cleaning up:', duplicateFields);
+          
+          // Verwijder top-level duplicaten (behoud alleen nested versie)
+          validatedValue = { ...edited_value };
+          for (const field of duplicateFields) {
+            delete validatedValue[field];
+          }
+        }
+      }
+    }
+
+    // Update het knowledge item met de gevalideerde waarde
     const { error: updateError } = await supabaseClient
       .from('ai_knowledge_base')
       .update({
-        value: edited_value,
+        value: validatedValue,
         updated_at: new Date().toISOString(),
       })
       .eq('id', knowledge.id);

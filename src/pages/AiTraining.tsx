@@ -36,6 +36,7 @@ import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTri
 import { SystemHealthDashboard } from "@/components/AITraining/SystemHealthDashboard";
 import { EmbeddingCoverageDashboard } from "@/components/AITraining/EmbeddingCoverageDashboard";
 import { KvKCostDashboard } from "@/components/AITraining/KvKCostDashboard";
+import { CleanupDuplicateFields } from "@/components/AITraining/CleanupDuplicateFields";
 import { toast } from "sonner";
 
 const AiTraining = () => {
@@ -291,7 +292,10 @@ const AiTraining = () => {
                     </TabsContent>
                     
                     <TabsContent value="cleanup" className="mt-4">
-                      <CleanupDeletedKnowledge />
+                      <div className="space-y-6">
+                        <CleanupDuplicateFields />
+                        <CleanupDeletedKnowledge />
+                      </div>
                     </TabsContent>
                   </Tabs>
                 </AdminOnly>
