@@ -64,72 +64,94 @@ serve(async (req) => {
     const results: CleanupResult[] = [];
     let fixedCount = 0;
 
-    // Analyseer elk item
-    for (const item of knowledgeItems || []) {
-      const value = item.value;
+  // Analyseer elk item
+  for (const item of knowledgeItems || []) {
+    const value = item.value;
+    
+    if (typeof value !== 'object' || value === null) {
+      continue;
+    }
+
+    let needsCleanup = false;
+    let cleanedValue = { ...value };
+    const issues: string[] = [];
+    const before = { ...value };
+
+    // CHECK 1: Metadata velden in value (horen niet in value column)
+    const prohibitedFields = ['category', 'key', 'confidence', 'role_tags', 'source_type', 'org_id', 'client_id'];
+    const foundProhibited = prohibitedFields.filter(field => cleanedValue[field] !== undefined);
+    
+    if (foundProhibited.length > 0) {
+      needsCleanup = true;
+      issues.push(`metadata_fields: ${foundProhibited.join(', ')}`);
+      foundProhibited.forEach(field => delete cleanedValue[field]);
+    }
+
+    // CHECK 2: Nested value.value structure (double nesting)
+    if (cleanedValue.value && typeof cleanedValue.value === 'object') {
+      // Check of de nested value ook daadwerkelijk content heeft
+      const nestedKeys = Object.keys(cleanedValue.value);
+      if (nestedKeys.length > 0) {
+        needsCleanup = true;
+        issues.push('nested_value_structure');
+        cleanedValue = cleanedValue.value;
+      }
+    }
+
+    // CHECK 3: Duplicate fields (existing logic - na flattening)
+    if (cleanedValue.value && typeof cleanedValue.value === 'object') {
+      const topLevelKeys = Object.keys(cleanedValue);
+      const nestedKeys = Object.keys(cleanedValue.value);
+      const duplicateFields = topLevelKeys.filter(key => 
+        key !== 'value' && nestedKeys.includes(key)
+      );
       
-      // Check of het een object is met een nested 'value' property
-      if (typeof value !== 'object' || value === null || !value.value || typeof value.value !== 'object') {
-        continue;
+      if (duplicateFields.length > 0) {
+        needsCleanup = true;
+        issues.push(`duplicate_fields: ${duplicateFields.join(', ')}`);
+        duplicateFields.forEach(field => delete cleanedValue[field]);
       }
+    }
 
-      const topLevelKeys = Object.keys(value);
-      const nestedKeys = Object.keys(value.value);
-      const duplicateFields: string[] = [];
+    if (!needsCleanup) {
+      continue;
+    }
 
-      // Detecteer duplicaten
-      for (const key of topLevelKeys) {
-        if (key !== 'value' && nestedKeys.includes(key)) {
-          duplicateFields.push(key);
-        }
-      }
+    console.log(`[cleanup-duplicate-fields] Fixing ${item.key}: ${issues.join(' | ')}`);
+    const after = cleanedValue;
 
-      if (duplicateFields.length === 0) {
-        continue;
-      }
+    // Update het item in de database
+    const { error: updateError } = await supabaseClient
+      .from('ai_knowledge_base')
+      .update({
+        value: after,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', item.id);
 
-      console.log(`[cleanup-duplicate-fields] Found duplicates in ${item.key}:`, duplicateFields);
-
-      const before = { ...value };
-      const after = { ...value };
-
-      // Verwijder top-level duplicaten
-      for (const field of duplicateFields) {
-        delete after[field];
-      }
-
-      // Update het item in de database
-      const { error: updateError } = await supabaseClient
-        .from('ai_knowledge_base')
-        .update({
-          value: after,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', item.id);
-
-      if (updateError) {
-        console.error(`[cleanup-duplicate-fields] Error updating ${item.key}:`, updateError);
-        results.push({
-          itemId: item.id,
-          key: item.key,
-          duplicateFields,
-          before,
-          after,
-          fixed: false,
-          error: updateError.message,
-        });
-      } else {
-        console.log(`[cleanup-duplicate-fields] Fixed ${item.key}`);
-        fixedCount++;
-        results.push({
-          itemId: item.id,
-          key: item.key,
-          duplicateFields,
-          before,
-          after,
-          fixed: true,
-        });
-      }
+    if (updateError) {
+      console.error(`[cleanup-duplicate-fields] Error updating ${item.key}:`, updateError);
+      results.push({
+        itemId: item.id,
+        key: item.key,
+        duplicateFields: issues,
+        before,
+        after,
+        fixed: false,
+        error: updateError.message,
+      });
+    } else {
+      console.log(`[cleanup-duplicate-fields] Fixed ${item.key}`);
+      fixedCount++;
+      results.push({
+        itemId: item.id,
+        key: item.key,
+        duplicateFields: issues,
+        before,
+        after,
+        fixed: true,
+      });
+    }
     }
 
     console.log(`[cleanup-duplicate-fields] Cleanup complete. Fixed ${fixedCount} out of ${results.length} items with duplicates.`);

@@ -78,16 +78,34 @@ serve(async (req) => {
       );
     }
 
-    // Valideer de edited_value structuur
+    // Server-side validatie van edited_value
     let validatedValue = edited_value;
     
-    // Detecteer en verwijder duplicate fields (top-level vs nested)
-    if (typeof edited_value === 'object' && edited_value !== null) {
+    console.log('[update-knowledge] Raw edited_value:', edited_value);
+    
+    // STAP 1: Verwijder metadata velden die niet in value column horen
+    const prohibitedFields = ['category', 'key', 'confidence', 'role_tags', 'source_type', 'org_id', 'client_id'];
+    const foundProhibited = prohibitedFields.filter(field => validatedValue[field] !== undefined);
+    
+    if (foundProhibited.length > 0) {
+      console.warn('[update-knowledge] Removing prohibited metadata fields:', foundProhibited);
+      validatedValue = { ...validatedValue };
+      foundProhibited.forEach(field => delete validatedValue[field]);
+    }
+    
+    // STAP 2: Detecteer en flatten nested value.value structure
+    if (validatedValue.value && typeof validatedValue.value === 'object') {
+      console.warn('[update-knowledge] Nested value.value structure detected, flattening...');
+      validatedValue = validatedValue.value;
+    }
+    
+    // STAP 3: Detecteer en verwijder duplicate fields (top-level vs nested)
+    if (typeof validatedValue === 'object' && validatedValue !== null) {
       const duplicateFields: string[] = [];
       
-      if (edited_value.value && typeof edited_value.value === 'object') {
-        const topLevelKeys = Object.keys(edited_value);
-        const nestedKeys = Object.keys(edited_value.value);
+      if (validatedValue.value && typeof validatedValue.value === 'object') {
+        const topLevelKeys = Object.keys(validatedValue);
+        const nestedKeys = Object.keys(validatedValue.value);
         
         for (const key of topLevelKeys) {
           if (key !== 'value' && nestedKeys.includes(key)) {
@@ -96,16 +114,16 @@ serve(async (req) => {
         }
         
         if (duplicateFields.length > 0) {
-          console.warn('[update-knowledge-from-conflict] Duplicate fields detected, cleaning up:', duplicateFields);
-          
-          // Verwijder top-level duplicaten (behoud alleen nested versie)
-          validatedValue = { ...edited_value };
+          console.warn('[update-knowledge] Duplicate fields detected, removing top-level:', duplicateFields);
+          validatedValue = { ...validatedValue };
           for (const field of duplicateFields) {
             delete validatedValue[field];
           }
         }
       }
     }
+    
+    console.log('[update-knowledge] Validated edited_value:', validatedValue);
 
     // Update het knowledge item met de gevalideerde waarde
     const { error: updateError } = await supabaseClient
