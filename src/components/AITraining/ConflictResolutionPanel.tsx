@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle, CheckCircle2, Trash2, XCircle, Lightbulb, Sparkles } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Progress } from "@/components/ui/progress";
+import { AlertTriangle, CheckCircle2, Trash2, XCircle, Lightbulb, Sparkles, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -84,6 +86,7 @@ export const ConflictResolutionPanel = () => {
     const saved = localStorage.getItem('autoResolveEnabled');
     return saved !== null ? saved === 'true' : true;
   });
+  const [expandedSuggestions, setExpandedSuggestions] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     localStorage.setItem('autoResolveEnabled', String(autoResolveEnabled));
@@ -598,51 +601,144 @@ export const ConflictResolutionPanel = () => {
             <div className="space-y-4">
               {suggestionArray.map((suggestion) => {
                 const data = suggestion.data as any;
-                const items = data?.items || [];
+                
+                // Combine conflicting_items with recommended_actions
+                const conflictingItems = data?.conflicting_items || [];
+                const actions = data?.recommended_actions || [];
+                
+                // Merge data: add action to each item
+                const enrichedItems = conflictingItems.map((item: any) => {
+                  const action = actions.find((a: any) => a.item_id === item.id);
+                  return {
+                    ...item,
+                    action: action?.action || 'unknown'
+                  };
+                });
+                
+                const confidence = data?.confidence ? Math.round(data.confidence * 100) : 0;
+                const keepCount = enrichedItems.filter((i: any) => i.action === 'keep').length;
+                const deleteCount = enrichedItems.filter((i: any) => i.action === 'delete').length;
+                const isExpanded = expandedSuggestions[suggestion.id];
                 
                 return (
                   <Card key={suggestion.id} className="p-4 border-l-4 border-l-blue-500">
-                    <div className="space-y-2">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
+                    <div className="space-y-3">
+                      {/* Header */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
                           <h4 className="font-medium">{suggestion.title || "AI Suggestie"}</h4>
                           <p className="text-sm text-muted-foreground mt-1">
                             {suggestion.description || "De AI stelt voor om wijzigingen door te voeren"}
                           </p>
                         </div>
-                        <Badge variant="outline">
-                          {data?.confidence || 'N/A'}% zekerheid
-                        </Badge>
+                        <div className="flex flex-col items-end gap-2 shrink-0">
+                          <Badge variant="outline" className="whitespace-nowrap">
+                            {confidence}% zekerheid
+                          </Badge>
+                          {confidence > 0 && (
+                            <div className="flex items-center gap-2">
+                              <Progress value={confidence} className="w-20 h-2" />
+                            </div>
+                          )}
+                        </div>
                       </div>
 
-                      {items.length > 0 && (
-                        <div className="mt-4 space-y-2">
-                          {items.map((item: any, idx: number) => (
-                            <div key={idx} className="p-3 rounded bg-muted/50 text-sm">
-                              <div className="flex items-center gap-2">
-                                {item.action === 'delete' ? (
-                                  <XCircle className="h-4 w-4 text-red-500" />
-                                ) : (
-                                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                                )}
-                                <span className="font-medium">{item.key}</span>
-                              </div>
-                              <div className="mt-1 text-muted-foreground">
-                                {item.action === 'delete' ? 'Verwijderen' : 'Behouden'}: {JSON.stringify(item.value)}
-                              </div>
-                            </div>
-                          ))}
+                      {/* Reasoning */}
+                      {data?.reasoning && (
+                        <Alert>
+                          <Sparkles className="h-4 w-4" />
+                          <AlertTitle>AI Redenering</AlertTitle>
+                          <AlertDescription className="text-sm mt-1">
+                            {data.reasoning}
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      {/* Summary Badges */}
+                      {enrichedItems.length > 0 && (
+                        <div className="flex gap-2 flex-wrap">
+                          {keepCount > 0 && (
+                            <Badge variant="outline" className="text-green-600 border-green-600">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              {keepCount} behouden
+                            </Badge>
+                          )}
+                          {deleteCount > 0 && (
+                            <Badge variant="outline" className="text-red-600 border-red-600">
+                              <Trash2 className="h-3 w-3 mr-1" />
+                              {deleteCount} verwijderen
+                            </Badge>
+                          )}
                         </div>
                       )}
 
-                      <div className="flex gap-2 mt-4">
+                      {/* Collapsible Details */}
+                      {enrichedItems.length > 0 && (
+                        <Collapsible 
+                          open={isExpanded}
+                          onOpenChange={(open) => setExpandedSuggestions(prev => ({...prev, [suggestion.id]: open}))}
+                        >
+                          <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover:underline">
+                            <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                            {isExpanded ? 'Details verbergen' : `Details tonen (${enrichedItems.length} items)`}
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="mt-3">
+                            <div className="space-y-2">
+                              {enrichedItems.map((item: any) => (
+                                <Card key={item.id} className="p-3">
+                                  <div className="flex items-start gap-3">
+                                    {/* Icon */}
+                                    {item.action === 'delete' ? (
+                                      <XCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
+                                    ) : (
+                                      <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                                    )}
+                                    
+                                    <div className="flex-1 min-w-0">
+                                      {/* Key & Action */}
+                                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                        <span className="font-semibold text-sm break-all">{item.key}</span>
+                                        <Badge variant={item.action === 'delete' ? 'destructive' : 'default'} className="shrink-0">
+                                          {item.action === 'delete' ? '🗑️ Verwijderen' : '✅ Behouden'}
+                                        </Badge>
+                                      </div>
+                                      
+                                      {/* Value preview */}
+                                      <div className="rounded bg-muted/50 p-2 text-xs font-mono overflow-x-auto">
+                                        <pre className="whitespace-pre-wrap break-words">{JSON.stringify(item.value, null, 2)}</pre>
+                                      </div>
+                                      
+                                      {/* Metadata */}
+                                      <div className="flex gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
+                                        {item.confidence_score && (
+                                          <span>Confidence: {Math.round(item.confidence_score * 100)}%</span>
+                                        )}
+                                        {item.usage_count !== undefined && (
+                                          <span>Gebruikt: {item.usage_count}x</span>
+                                        )}
+                                        {item.created_at && (
+                                          <span>Aangemaakt: {format(new Date(item.created_at), 'dd MMM yyyy', { locale: nl })}</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </Card>
+                              ))}
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-2 pt-2">
                         <Button
                           size="sm"
                           onClick={() => approveSuggestionMutation.mutate({
                             suggestionId: suggestion.id,
-                            actions: items.map((item: any) => ({
+                            actions: enrichedItems.map((item: any) => ({
                               item_id: item.id,
-                              action: item.action
+                              action: item.action,
+                              key: item.key
                             }))
                           })}
                           disabled={approveSuggestionMutation.isPending}
