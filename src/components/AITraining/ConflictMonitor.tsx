@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, CheckCircle, XCircle, Eye, EyeOff, Lightbulb, Edit } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, Eye, EyeOff, Lightbulb, Edit, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import { ConflictDiffView } from "./ConflictDiffView";
@@ -14,6 +14,7 @@ export const ConflictMonitor = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
   const [editingConflict, setEditingConflict] = useState<any | null>(null);
+  const [editedFields, setEditedFields] = useState<Record<string, Record<string, any>>>({});
 
   const { data: conflicts, isLoading, refetch } = useQuery({
     queryKey: ['data-conflicts', showResolved],
@@ -52,6 +53,56 @@ export const ConflictMonitor = () => {
       };
     }
   });
+
+  const handleFieldEdit = (conflictId: string, fieldName: string, newValue: any) => {
+    setEditedFields(prev => ({
+      ...prev,
+      [conflictId]: {
+        ...(prev[conflictId] || {}),
+        [fieldName]: newValue
+      }
+    }));
+  };
+
+  const handleSaveEdits = async (conflictId: string) => {
+    const conflict = conflicts?.find(c => c.id === conflictId);
+    if (!conflict) return;
+
+    const edits = editedFields[conflictId];
+    if (!edits || Object.keys(edits).length === 0) {
+      toast.error("Geen wijzigingen om op te slaan");
+      return;
+    }
+
+    // Merge edited fields with suggested value
+    const mergedValue = {
+      ...(typeof conflict.conflicting_suggestion === 'object' ? conflict.conflicting_suggestion : {}),
+      ...edits
+    };
+
+    try {
+      const { data, error } = await supabase.functions.invoke('update-knowledge-from-conflict', {
+        body: {
+          conflict_id: conflictId,
+          edited_value: mergedValue,
+          resolution_action: 'edited'
+        }
+      });
+
+      if (error) throw error;
+
+      toast.success("Wijzigingen opgeslagen en conflict opgelost");
+      setEditedFields(prev => {
+        const newEdits = { ...prev };
+        delete newEdits[conflictId];
+        return newEdits;
+      });
+      refetch();
+    } catch (error: any) {
+      console.error('Error saving edits:', error);
+      toast.error(error.message || "Fout bij opslaan wijzigingen");
+    }
+  };
 
   const handleResolve = async (conflictId: string, action: string) => {
     try {
@@ -331,87 +382,118 @@ export const ConflictMonitor = () => {
                             stability_score: conflict.metadata?.existing_stability_score
                           }}
                           reason={conflict.metadata?.reason}
+                          onFieldEdit={(fieldName, newValue) => handleFieldEdit(conflict.id, fieldName, newValue)}
+                          editedFields={editedFields[conflict.id] || {}}
                         />
 
                         {/* Action Buttons */}
                         {conflict.resolution_status === 'pending' && (
-                          <TooltipProvider>
-                            <div className="flex gap-2 pt-2 flex-wrap">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => setEditingConflict(conflict)}
-                                    className="flex-1 min-w-[200px]"
-                                  >
-                                    <Edit className="h-4 w-4 mr-2" />
-                                    Bewerk & Accepteer
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className="max-w-xs text-xs">
-                                    Bewerk de voorgestelde waarde handmatig voordat je deze accepteert
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
+                          <div className="flex gap-2 pt-2 flex-wrap">
+                            {editedFields[conflict.id] && Object.keys(editedFields[conflict.id]).length > 0 ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => handleSaveEdits(conflict.id)}
+                                  className="flex-1 min-w-[220px]"
+                                >
+                                  <Check className="h-4 w-4 mr-2" />
+                                  Opslaan Wijzigingen ({Object.keys(editedFields[conflict.id]).length})
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setEditedFields(prev => {
+                                      const newEdits = { ...prev };
+                                      delete newEdits[conflict.id];
+                                      return newEdits;
+                                    });
+                                    toast.info("Wijzigingen verwijderd");
+                                  }}
+                                >
+                                  <X className="h-4 w-4 mr-2" />
+                                  Verwijder Wijzigingen
+                                </Button>
+                              </>
+                            ) : (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => setEditingConflict(conflict)}
+                                      className="flex-1 min-w-[200px]"
+                                    >
+                                      <Edit className="h-4 w-4 mr-2" />
+                                      Bewerk JSON
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="max-w-xs text-xs">
+                                      Bewerk de volledige JSON structuur handmatig
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
 
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="default"
-                                    onClick={() => handleResolve(conflict.id, 'accept_new')}
-                                    className="flex-1 min-w-[200px]"
-                                  >
-                                    <CheckCircle className="h-4 w-4 mr-2" />
-                                    Vervang met Nieuwe Waarde
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className="max-w-xs text-xs">
-                                    Vervang de oude waarde volledig met de nieuwe voorgestelde waarde
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="default"
+                                      onClick={() => handleResolve(conflict.id, 'accept_new')}
+                                      className="flex-1 min-w-[200px]"
+                                    >
+                                      <CheckCircle className="h-4 w-4 mr-2" />
+                                      Vervang met Nieuwe Waarde
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="max-w-xs text-xs">
+                                      Vervang de oude waarde volledig met de nieuwe voorgestelde waarde
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
 
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleResolve(conflict.id, 'keep_existing')}
-                                    className="flex-1 min-w-[180px]"
-                                  >
-                                    <XCircle className="h-4 w-4 mr-2" />
-                                    Behoud Oude Waarde
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className="max-w-xs text-xs">
-                                    Behoud de huidige waarde in de kennisbank en verwerp de voorgestelde wijziging
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleResolve(conflict.id, 'keep_existing')}
+                                      className="flex-1 min-w-[180px]"
+                                    >
+                                      <XCircle className="h-4 w-4 mr-2" />
+                                      Behoud Oude Waarde
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="max-w-xs text-xs">
+                                      Behoud de huidige waarde in de kennisbank en verwerp de voorgestelde wijziging
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
 
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleResolve(conflict.id, 'ignore')}
-                                  >
-                                    <EyeOff className="h-4 w-4 mr-2" />
-                                    Negeer
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className="max-w-xs text-xs">
-                                    Markeer dit conflict als genegeerd zonder actie te ondernemen
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
-                          </TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleResolve(conflict.id, 'ignore')}
+                                    >
+                                      <EyeOff className="h-4 w-4 mr-2" />
+                                      Negeer
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="max-w-xs text-xs">
+                                      Markeer dit conflict als genegeerd zonder actie te ondernemen
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}
