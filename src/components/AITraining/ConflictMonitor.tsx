@@ -3,15 +3,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, CheckCircle, XCircle, Eye, EyeOff, Lightbulb } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, Eye, EyeOff, Lightbulb, Edit } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import { ConflictDiffView } from "./ConflictDiffView";
+import { ConflictEditDialog } from "./ConflictEditDialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export const ConflictMonitor = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showResolved, setShowResolved] = useState(false);
+  const [editingConflict, setEditingConflict] = useState<any | null>(null);
 
   const { data: conflicts, isLoading, refetch } = useQuery({
     queryKey: ['data-conflicts', showResolved],
@@ -334,22 +336,21 @@ export const ConflictMonitor = () => {
                         {/* Action Buttons */}
                         {conflict.resolution_status === 'pending' && (
                           <TooltipProvider>
-                            <div className="flex gap-2 pt-2">
+                            <div className="flex gap-2 pt-2 flex-wrap">
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button
                                     size="sm"
-                                    variant="outline"
-                                    onClick={() => handleResolve(conflict.id, 'keep_existing')}
-                                    className="flex-1"
+                                    onClick={() => setEditingConflict(conflict)}
+                                    className="flex-1 min-w-[200px]"
                                   >
-                                    <XCircle className="h-4 w-4 mr-2" />
-                                    Behoud Oude Waarde
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Bewerk & Accepteer
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
                                   <p className="max-w-xs text-xs">
-                                    Behoud de huidige waarde in de kennisbank en verwerp de voorgestelde wijziging
+                                    Bewerk de voorgestelde waarde handmatig voordat je deze accepteert
                                   </p>
                                 </TooltipContent>
                               </Tooltip>
@@ -360,7 +361,7 @@ export const ConflictMonitor = () => {
                                     size="sm"
                                     variant="default"
                                     onClick={() => handleResolve(conflict.id, 'accept_new')}
-                                    className="flex-1"
+                                    className="flex-1 min-w-[200px]"
                                   >
                                     <CheckCircle className="h-4 w-4 mr-2" />
                                     Vervang met Nieuwe Waarde
@@ -369,6 +370,25 @@ export const ConflictMonitor = () => {
                                 <TooltipContent>
                                   <p className="max-w-xs text-xs">
                                     Vervang de oude waarde volledig met de nieuwe voorgestelde waarde
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleResolve(conflict.id, 'keep_existing')}
+                                    className="flex-1 min-w-[180px]"
+                                  >
+                                    <XCircle className="h-4 w-4 mr-2" />
+                                    Behoud Oude Waarde
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="max-w-xs text-xs">
+                                    Behoud de huidige waarde in de kennisbank en verwerp de voorgestelde wijziging
                                   </p>
                                 </TooltipContent>
                               </Tooltip>
@@ -406,6 +426,17 @@ export const ConflictMonitor = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Edit Dialog */}
+      <ConflictEditDialog
+        conflict={editingConflict}
+        open={!!editingConflict}
+        onOpenChange={(open) => !open && setEditingConflict(null)}
+        onSuccess={() => {
+          setEditingConflict(null);
+          refetch();
+        }}
+      />
     </div>
   );
 };
