@@ -3,16 +3,19 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Search, Trash2, FileText, MessageSquare, Brain, AlertTriangle, XCircle, Filter, Lock, Users, Clock, GraduationCap, ClipboardCheck } from "lucide-react";
+import { Search, Trash2, FileText, MessageSquare, Brain, AlertTriangle, XCircle, Filter, Lock, Users, Clock, GraduationCap, ClipboardCheck, Edit, RefreshCw } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { VersionHistory } from "./VersionHistory";
+import { KnowledgeEditDialog } from "./KnowledgeEditDialog";
 
 export const KnowledgeOverview = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -71,6 +74,31 @@ export const KnowledgeOverview = () => {
         variant: "destructive",
       });
     }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
+      await refetch();
+      toast({
+        title: "Data ververst",
+        description: "Kennisbank data is opnieuw geladen uit de database",
+      });
+    } catch (error) {
+      toast({
+        title: "Refresh mislukt",
+        description: "Kon data niet verversen",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleEditSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
+    refetch();
   };
 
   const getSourceIcon = (source: string | null) => {
@@ -132,14 +160,25 @@ export const KnowledgeOverview = () => {
             </p>
           </div>
 
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Zoek in kennisbank..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
+          <div className="flex gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Zoek in kennisbank..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Button 
+              variant="outline" 
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="shrink-0"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              {isRefreshing ? 'Verversen...' : 'Ververs Data'}
+            </Button>
           </div>
 
           <div className="space-y-2">
@@ -295,8 +334,17 @@ export const KnowledgeOverview = () => {
                   <Button
                     variant="ghost"
                     size="icon"
+                    onClick={() => setEditingItem(item)}
+                    title="Bewerk kennis item"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => handleDelete(item.id)}
                     className="text-destructive hover:text-destructive"
+                    title="Verwijder kennis item"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -314,6 +362,13 @@ export const KnowledgeOverview = () => {
           </Card>
         )}
       </div>
+
+      <KnowledgeEditDialog
+        knowledgeItem={editingItem}
+        open={!!editingItem}
+        onOpenChange={(open) => !open && setEditingItem(null)}
+        onSuccess={handleEditSuccess}
+      />
     </div>
   );
 };
