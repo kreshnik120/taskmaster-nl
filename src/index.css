@@ -137,4 +137,19 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Sidebar Collapsible Group Styling */
+  .sidebar-group-header {
+    @apply px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border/50 mb-2;
+  }
+
+  /* Active Route Indicator Enhancement */
+  .sidebar-menu-item-active {
+    @apply relative bg-accent/80 text-accent-foreground font-medium;
+  }
+
+  .sidebar-menu-item-active::before {
+    content: '';
+    @apply absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r;
+  }
 }
