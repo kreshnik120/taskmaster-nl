@@ -45,9 +45,6 @@ export const GlobalOfflineBanner = () => {
                   </p>
                 )}
               </div>
-              <p className="text-xs opacity-70 mt-2">
-                💡 Gebruik de <span className="font-semibold">Diagnostics</span> pagina voor uitgebreide foutanalyse
-              </p>
             </div>
             <div className="flex flex-wrap gap-2 md:flex-shrink-0">
               <Button 
@@ -60,15 +57,7 @@ export const GlobalOfflineBanner = () => {
                 <RefreshCw className={`h-3 w-3 mr-1 ${status === 'checking' ? 'animate-spin' : ''}`} />
                 Opnieuw
               </Button>
-              <Button 
-                size="sm"
-                variant="outline"
-                onClick={() => navigate('/diagnostics')}
-                className="bg-background hover:bg-accent"
-              >
-                📊 Diagnostics
-              </Button>
-              <Button 
+              <Button
                 size="sm"
                 variant="ghost"
                 onClick={() => setDismissed(true)}

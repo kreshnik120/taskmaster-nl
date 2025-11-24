@@ -391,13 +391,6 @@ const Auth = () => {
                       Toch inloggen proberen
                     </Button>
                     <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate('/diagnostics')}
-                    >
-                      📊 Diagnostics
-                    </Button>
-                    <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setBackendOffline(false)}
