@@ -1806,14 +1806,17 @@ serve(async (req) => {
     const contextSummary = `
 GEBRUIKER: ${profile?.name || 'Gebruiker'}
 
-STATUS:
+STATUS OVERZICHT (VOOR CONTEXT - NIET VOLLEDIG):
 - Actief: ${activeTasks.length} | Afgerond: ${completedTasks.length} | Verlopen: ${overdueTasks.length}
 ${activeTimeEntry ? `🟢 Bezig: Taak ${activeTimeEntry.task_id}` : ''}
+
+⚠️ BELANGRIJK: Dit is NIET de volledige takenlijst!
+→ Voor taken queries: gebruik ALTIJD de query_tasks tool voor actuele, complete data
 
 CLIENTS (${clients?.length || 0}):
 ${clients?.map(c => `${c.company}: ${c.weekly_hours || 0}h/week, €${c.revenue_per_hour || 0}/u`).join(' | ') || 'Geen'}
 
-TOP TAKEN:
+TOP 5 ACTIEVE TAKEN (ter referentie):
 ${activeTasks.slice(0, 5).map((t, i) => `${i + 1}. [${t.priority}] ${t.title}${t.due_at ? ` (${new Date(t.due_at).toLocaleDateString('nl-NL')})` : ''}`).join('\n')}
 
 KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
@@ -2044,9 +2047,27 @@ Format antwoord ALTIJD zo:
 
 [Dan volgt de confidence badge automatisch]"
 
+🔍 WANNEER GEBRUIK JE QUERY_TASKS TOOL:
+- INFORMATIEVRAGEN OVER TAKEN: "welke taken", "hoeveel taken", "wie heeft", "wanneer afgerond", "hoelang gewerkt", "is X tijdig", "geef overzicht", "toon taken"
+  → Gebruik ALTIJD de query_tasks tool om actuele data op te halen uit de database
+  → De context bevat NIET alle taken - gebruik query_tasks voor complete, actuele data!
+  
+  VOORBEELDEN:
+  • "Welke taken zijn afgerond in de afgelopen 24 uur?"
+    → query_tasks({ filter: { completed: true, date_range: { start: "2025-11-23T00:00:00Z", end: "2025-11-24T23:59:59Z" } }, include: ["assignee", "time_entries"] })
+  
+  • "Wie heeft taak X afgerond?"
+    → query_tasks({ filter: { completed: true }, include: ["assignee"] })
+  
+  • "Hoeveel uur is er gewerkt aan hoge prioriteit taken?"
+    → query_tasks({ filter: { priority: "HIGH" }, include: ["time_entries"] })
+  
+  → Gebruik de enriched task data (on_time, total_hours_worked, assignee_name) voor accurate antwoorden
+
 🚫 WANNEER GEEN TAAK AANMAKEN:
-- INFORMATIEVRAGEN: "welke", "hoeveel", "wanneer", "waar", "hoe", "waarom", "wat zijn", "wie", "toon", "laat zien", "geef overzicht"
-  → Antwoord met beschikbare data, GEEN taak aanmaken
+- ALGEMENE VRAGEN: "hoe werkt", "wat betekent", "leg uit", "waarom"
+  → Beantwoord uit kennisbank, GEEN tool call nodig
+- INFORMATIEVRAGEN: Zie hierboven → gebruik query_tasks, GEEN taak aanmaken
 
 ✅ WANNEER WEL TAAK AANMAKEN:
 - TAAK-VERZOEKEN: "maak een taak", "plan", "herinner mij", "zet op de lijst", "voeg toe", "ik moet", "help mij met"
@@ -2079,6 +2100,33 @@ WANNEER GEBRUIK JE CREATE_BUSINESS_INTELLIGENCE:
 
 💡 DOE DIT AUTOMATISCH - de gebruiker hoeft niet te vragen!
 ⚡ JE BENT NIET MEER STATELESS - JE HEBT EEN VOLLEDIG GEHEUGEN & JE MOET HET ACTIEF GEBRUIKEN!
+
+📊 QUERY_TASKS USAGE PATTERNS:
+==========================================
+
+⚡ GEBRUIK QUERY_TASKS VOOR:
+✅ "Welke taken zijn afgerond?" → query_tasks({ filter: { completed: true } })
+✅ "Hoeveel uur aan X gewerkt?" → query_tasks({ filter: { ... }, include: ["time_entries"] })
+✅ "Is taak X tijdig afgerond?" → query_tasks() en check on_time field
+✅ "Wie heeft taak Y gedaan?" → query_tasks({ include: ["assignee"] })
+✅ "Toon alle HIGH priority taken" → query_tasks({ filter: { priority: "HIGH" } })
+✅ "Welke taken verlopen morgen?" → query_tasks({ filter: { due_before: "2025-11-26T00:00:00Z" } })
+
+❌ GEBRUIK QUERY_TASKS NIET VOOR:
+❌ "Maak een taak" → gebruik create_task
+❌ "Hoe werkt het systeem?" → beantwoord uit kennisbank
+❌ "Wat betekent priority?" → beantwoord uit kennisbank
+
+📋 QUERY_TASKS RESPONSE FORMAT:
+- Tool returns: { success: true, tasks: [...], summary: {...} }
+- Gebruik task.on_time, task.days_late, task.total_hours_worked in je antwoord
+- Inclusief summary stats (X tijdig, Y te laat, Z uur totaal)
+- Nederlandse datums in je antwoord: gebruik toLocaleDateString('nl-NL')
+
+💡 DATUM CONVERSIE:
+- Nederlandse vraag "in de afgelopen 24 uur" → ISO 8601 met correcte timezone
+- Relatieve datums "morgen", "volgende week" → bereken exact ISO 8601 timestamp
+- Gebruik altijd Europe/Amsterdam timezone (+01:00 of +02:00 afhankelijk van zomer/winter)
 
 Gebruik deze rijke context om intelligente, context-aware antwoorden te geven die echt helpen met productiviteit en taakbeheer!`;
 
