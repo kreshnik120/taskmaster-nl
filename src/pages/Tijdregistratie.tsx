@@ -60,6 +60,13 @@ const Tijdregistratie = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const navigate = useNavigate();
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Goedemorgen";
+    if (hour < 18) return "Goedemiddag";
+    return "Goedenavond";
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
@@ -339,9 +346,122 @@ const Tijdregistratie = () => {
           <SidebarTrigger className="mb-4" />
           
           <div className="space-y-6">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">Tijdregistratie</h1>
-              <p className="text-muted-foreground mt-1">Registreer en beheer je tijdsinvestering</p>
+            {/* Hero Section */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <h1 className="text-4xl font-bold">
+                      {getGreeting()}, {user?.user_metadata?.name || 'daar'}
+                    </h1>
+                    {activeTimer && (
+                      <Badge variant="secondary" className="text-sm">
+                        <Clock className="h-4 w-4 mr-1 animate-pulse" />
+                        Timer actief
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xl text-muted-foreground">
+                    {format(new Date(), "EEEE d MMMM", { locale: nl })}
+                  </p>
+                </div>
+                {activeTimer && (
+                  <Button 
+                    onClick={stopTimer}
+                    variant="destructive"
+                    size="lg"
+                  >
+                    <Square className="h-5 w-5 mr-2" />
+                    Stop Timer
+                  </Button>
+                )}
+              </div>
+              
+              {/* Smart Summary */}
+              <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                {activeTimer ? (
+                  <>
+                    <p className="text-sm">
+                      ⏱️ <strong>{activeTimer.tasks?.title}</strong> - Timer loopt al <strong>{getRunningTime()}</strong>
+                    </p>
+                    {activeTimer.note && (
+                      <p className="text-sm text-muted-foreground">
+                        📝 {activeTimer.note}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm">
+                    📊 Je hebt <strong>{formatMinutes(totalMinutes)}</strong> geregistreerd {filterPeriod === 'today' ? 'vandaag' : filterPeriod === 'week' ? 'deze week' : 'deze maand'}
+                    {timeEntries.length > 0 && (
+                      <> over <strong>{timeEntries.length} registraties</strong></>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Compact Stats Bar */}
+            <div className="grid grid-cols-4 gap-3 mb-6">
+              {/* Vandaag */}
+              <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
+                <span className="text-2xl mb-1">📅</span>
+                <span className="text-2xl font-bold">
+                  {formatMinutes(
+                    timeEntries
+                      .filter(e => {
+                        const entryDate = new Date(e.start);
+                        const today = new Date();
+                        return entryDate.toDateString() === today.toDateString();
+                      })
+                      .reduce((sum, e) => sum + (e.duration_min || 0), 0)
+                  )}
+                </span>
+                <span className="text-xs text-muted-foreground">Vandaag</span>
+              </div>
+              
+              {/* Deze Week */}
+              <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
+                <span className="text-2xl mb-1">📊</span>
+                <span className="text-2xl font-bold text-primary">
+                  {formatMinutes(
+                    timeEntries
+                      .filter(e => {
+                        const entryDate = new Date(e.start);
+                        const today = new Date();
+                        const weekStart = new Date(today);
+                        weekStart.setDate(today.getDate() - today.getDay() + 1);
+                        return entryDate >= weekStart;
+                      })
+                      .reduce((sum, e) => sum + (e.duration_min || 0), 0)
+                  )}
+                </span>
+                <span className="text-xs text-muted-foreground">Deze Week</span>
+              </div>
+              
+              {/* Registraties */}
+              <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
+                <span className="text-2xl mb-1">📝</span>
+                <span className="text-2xl font-bold">
+                  {timeEntries.length}
+                </span>
+                <span className="text-xs text-muted-foreground">Registraties</span>
+              </div>
+              
+              {/* Active Timer */}
+              <div className={`flex flex-col items-center justify-center p-4 rounded-lg ${
+                activeTimer ? 'bg-primary/10 border-2 border-primary' : 'bg-muted/30'
+              }`}>
+                <span className="text-2xl mb-1">⏱️</span>
+                <span className={`text-2xl font-bold ${
+                  activeTimer ? 'text-primary' : 'text-muted-foreground'
+                }`}>
+                  {activeTimer ? getRunningTime().split(' ')[0] : '0u'}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {activeTimer ? 'Timer Loopt' : 'Geen Timer'}
+                </span>
+              </div>
             </div>
 
             {/* Timer Card */}
@@ -354,20 +474,26 @@ const Tijdregistratie = () => {
               </CardHeader>
               <CardContent className="space-y-4">
                 {activeTimer ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-primary/10 rounded-lg border-2 border-primary">
-                      <div>
-                        <p className="font-medium text-foreground">{activeTimer.tasks?.title}</p>
-                        <p className="text-sm text-muted-foreground">Timer loopt...</p>
+                  <div className="p-4 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 rounded-lg border-2 border-primary/20">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Clock className="h-5 w-5 text-primary animate-pulse" />
+                          <p className="font-semibold text-lg">{activeTimer.tasks?.title}</p>
+                        </div>
+                        {activeTimer.note && (
+                          <p className="text-sm text-muted-foreground pl-7">📝 {activeTimer.note}</p>
+                        )}
+                        <p className="text-sm text-muted-foreground pl-7 mt-1">
+                          Gestart om {format(new Date(activeTimer.start), "HH:mm", { locale: nl })}
+                        </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-2xl font-bold text-primary">{getRunningTime()}</p>
+                        <p className="text-4xl font-bold text-primary tabular-nums">
+                          {getRunningTime()}
+                        </p>
                       </div>
                     </div>
-                    <Button onClick={stopTimer} variant="destructive" className="w-full">
-                      <Square className="mr-2 h-4 w-4" />
-                      Stop Timer
-                    </Button>
                   </div>
                 ) : (
                   <div className="space-y-4">
