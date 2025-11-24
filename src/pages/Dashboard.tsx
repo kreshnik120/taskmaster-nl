@@ -498,6 +498,22 @@ const Dashboard = () => {
     CRITICAL: "Kritiek",
   };
 
+  // Helper function voor context-aware greeting
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Goedemorgen";
+    if (hour < 18) return "Goedemiddag";
+    return "Goedenavond";
+  };
+
+  // Priority breakdown voor smart summary
+  const priorityBreakdown = {
+    critical: tasks.filter(t => t.priority === 'CRITICAL').length,
+    high: tasks.filter(t => t.priority === 'HIGH').length,
+    medium: tasks.filter(t => t.priority === 'MEDIUM').length,
+    low: tasks.filter(t => t.priority === 'LOW').length,
+  };
+
   const activateAllFunctions = async () => {
     setActivatingFunctions(true);
     
@@ -543,108 +559,150 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Mijn dag</h1>
-          <p className="text-muted-foreground">
-            {format(new Date(), "EEEE, d MMMM yyyy", { locale: nl })}
-          </p>
+      {/* Hero Sectie met Context-Aware Greeting */}
+      <div className="relative overflow-hidden rounded-lg border bg-gradient-to-br from-primary/5 via-background to-background p-6">
+        <div className="relative z-10">
+          <div className="flex items-start justify-between">
+            <div className="space-y-2">
+              <h1 className="text-4xl font-bold tracking-tight">
+                {getGreeting()} 👋
+              </h1>
+              <p className="text-lg text-muted-foreground">
+                {format(new Date(), "EEEE, d MMMM yyyy", { locale: nl })}
+              </p>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-3">
+                {tasks.length > 0 ? (
+                  <>
+                    <span className="font-medium text-foreground">{tasks.length} taken</span>
+                    {priorityBreakdown.critical > 0 && (
+                      <span className="text-priority-critical">• {priorityBreakdown.critical} kritiek</span>
+                    )}
+                    {priorityBreakdown.high > 0 && (
+                      <span className="text-priority-high">• {priorityBreakdown.high} hoog</span>
+                    )}
+                  </>
+                ) : (
+                  <span>Geen openstaande taken - geniet van je dag!</span>
+                )}
+              </div>
+            </div>
+            
+            {/* Quick Action Pills */}
+            <div className="flex items-center gap-2">
+              <Button 
+                onClick={() => setDialogOpen(true)}
+                size="lg"
+                className="shadow-lg"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Nieuwe taak
+              </Button>
+              {activatingFunctions ? (
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  disabled
+                  className="h-10 w-10"
+                >
+                  <Clock className="h-4 w-4 animate-spin" />
+                </Button>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={activateAllFunctions}
+                  title="Activeer systeem functies"
+                  className="h-10 w-10"
+                >
+                  <Zap className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nieuwe taak
-        </Button>
+        
+        {/* Decorative gradient orb */}
+        <div className="absolute -top-24 -right-24 h-48 w-48 rounded-full bg-primary/10 blur-3xl" />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="cursor-pointer hover:bg-accent/50 transition-colors">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Vandaag</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{tasks.length}</div>
-            <p className="text-xs text-muted-foreground">Openstaande taken</p>
-          </CardContent>
-        </Card>
-        <Card 
-          className="cursor-pointer hover:bg-accent/50 transition-colors"
+      {/* Compacte Stats Bar - Inline 4 Metrics */}
+      <div className="grid grid-cols-4 gap-4">
+        <button
+          onClick={() => {/* current page */}}
+          className="group relative overflow-hidden rounded-lg border bg-card p-4 text-left transition-all hover:border-primary/50 hover:shadow-md"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Open</p>
+              <p className="text-2xl font-bold mt-1">{tasks.length}</p>
+            </div>
+            <Calendar className="h-8 w-8 text-muted-foreground/50 group-hover:text-primary/70 transition-colors" />
+          </div>
+          <div className="absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r from-primary/20 to-primary/5" />
+        </button>
+
+        <button
           onClick={() => window.location.href = '/afgerond'}
+          className="group relative overflow-hidden rounded-lg border bg-card p-4 text-left transition-all hover:border-primary/50 hover:shadow-md"
         >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Afgerond</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{completedThisWeek}</div>
-            <p className="text-xs text-muted-foreground">Deze week</p>
-          </CardContent>
-        </Card>
-        <Card 
-          className="cursor-pointer hover:bg-accent/50 transition-colors"
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Afgerond</p>
+              <p className="text-2xl font-bold mt-1">{completedThisWeek}</p>
+            </div>
+            <CheckCircle2 className="h-8 w-8 text-muted-foreground/50 group-hover:text-green-600/70 transition-colors" />
+          </div>
+          <div className="absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r from-green-500/20 to-green-500/5" />
+        </button>
+
+        <button
           onClick={() => window.location.href = '/tijdregistratie'}
+          className="group relative overflow-hidden rounded-lg border bg-card p-4 text-left transition-all hover:border-primary/50 hover:shadow-md"
         >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Tijdregistratie</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{todayHours}</div>
-            <p className="text-xs text-muted-foreground">Vandaag gewerkt</p>
-          </CardContent>
-        </Card>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Gewerkt</p>
+              <p className="text-2xl font-bold mt-1">{todayHours}</p>
+            </div>
+            <Clock className="h-8 w-8 text-muted-foreground/50 group-hover:text-blue-600/70 transition-colors" />
+          </div>
+          <div className="absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r from-blue-500/20 to-blue-500/5" />
+        </button>
+
+        <div className="group relative overflow-hidden rounded-lg border bg-card p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Prioriteit</p>
+              <p className="text-2xl font-bold mt-1 text-priority-high">
+                {priorityBreakdown.critical + priorityBreakdown.high}
+              </p>
+            </div>
+            <Badge variant="destructive" className="h-8 px-3">
+              Hoog
+            </Badge>
+          </div>
+          <div className="absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r from-destructive/20 to-destructive/5" />
+        </div>
       </div>
 
-      {/* Active Process Steps Widget */}
+      {/* Active Process Steps Widget - Subtiel gepositioneerd */}
       <ActiveProcessWidget />
 
-      {/* Function Activator Card */}
-      <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-background">
+      {/* Zone 1: Nu Doen - Primary Focus Tasks */}
+      <Card className="border-primary/20">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <div>
+            <div className="space-y-1">
               <CardTitle className="flex items-center gap-2">
-                <Zap className="h-5 w-5 text-primary" />
-                Systeem Activatie
+                <span className="text-2xl">🎯</span>
+                Nu Doen
               </CardTitle>
               <CardDescription>
-                Activeer alle geplande edge functions om de automatische processen te starten
+                {tasks.length > 0 
+                  ? `${tasks.length} ${tasks.length === 1 ? 'taak' : 'taken'} die aandacht ${tasks.length === 1 ? 'vraagt' : 'vragen'}`
+                  : 'Geen taken - je bent helemaal bij!'
+                }
               </CardDescription>
-            </div>
-            <Button 
-              onClick={activateAllFunctions}
-              disabled={activatingFunctions}
-              size="lg"
-              className="min-w-[180px]"
-            >
-              {activatingFunctions ? (
-                <>
-                  <Clock className="h-4 w-4 mr-2 animate-spin" />
-                  Activeren...
-                </>
-              ) : (
-                <>
-                  <Zap className="h-4 w-4 mr-2" />
-                  Activeer Nu
-                </>
-              )}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          <p>
-            Deze actie triggert 8 geplande edge functions die verantwoordelijk zijn voor:
-            AI training, kennisbeheer, compliance monitoring, data kwaliteit en meer.
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Focus taken</CardTitle>
-              <CardDescription>De belangrijkste taken om vandaag aan te werken</CardDescription>
             </div>
             <Select value={sortOrder} onValueChange={(value: any) => setSortOrder(value)}>
               <SelectTrigger className="w-[180px]">
