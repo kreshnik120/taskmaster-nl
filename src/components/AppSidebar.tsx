@@ -1,4 +1,4 @@
-import { Home, Kanban, List, Calendar, Clock, BarChart3, Trash2, CheckCircle2, Brain, Users } from "lucide-react";
+import { Home, Kanban, List, Calendar, Clock, BarChart3, Trash2, CheckCircle2, Brain, Users, ChevronDown } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import {
@@ -12,6 +12,8 @@ import {
   SidebarMenuItem,
   SidebarFooter,
 } from "@/components/ui/sidebar";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -20,18 +22,144 @@ import { Badge } from "@/components/ui/badge";
 import { UserProfileCard } from "./UserProfileCard";
 import { User } from "@supabase/supabase-js";
 
-const menuItems = [
-  { title: "Mijn dag", url: "/", icon: Home },
-  { title: "Kanban bord", url: "/kanban", icon: Kanban },
-  { title: "Lijstweergave", url: "/lijst", icon: List },
-  { title: "Kalender", url: "/kalender", icon: Calendar },
-  { title: "Tijdregistratie", url: "/tijdregistratie", icon: Clock },
-  { title: "Opvolging", url: "/opvolging", icon: BarChart3 },
-  { title: "Afgeronde taken", url: "/afgerond", icon: CheckCircle2 },
-  { title: "Verwijderde taken", url: "/verwijderd", icon: Trash2 },
-  { title: "Professionals", url: "/professionals", icon: Users },
-  { title: "AI Training", url: "/ai-training", icon: Brain },
+interface MenuItem {
+  title: string;
+  url: string;
+  icon: any;
+  badge?: 'taskCount' | 'validationCount';
+  requiresEdit?: boolean;
+  requiresAdmin?: boolean;
+}
+
+interface MenuGroup {
+  label: string;
+  defaultOpen: boolean | 'conditional';
+  items: MenuItem[];
+}
+
+const menuGroups: MenuGroup[] = [
+  {
+    label: "Dagelijks werk",
+    defaultOpen: true,
+    items: [
+      { title: "Mijn dag", url: "/", icon: Home, badge: 'taskCount' },
+      { title: "Kanban bord", url: "/kanban", icon: Kanban },
+      { title: "Lijstweergave", url: "/lijst", icon: List },
+      { title: "Kalender", url: "/kalender", icon: Calendar },
+    ],
+  },
+  {
+    label: "Analyse & Tracking",
+    defaultOpen: false,
+    items: [
+      { title: "Tijdregistratie", url: "/tijdregistratie", icon: Clock },
+      { title: "Opvolging", url: "/opvolging", icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Archief",
+    defaultOpen: false,
+    items: [
+      { title: "Afgeronde taken", url: "/afgerond", icon: CheckCircle2 },
+      { title: "Verwijderde taken", url: "/verwijderd", icon: Trash2 },
+    ],
+  },
+  {
+    label: "Beheer",
+    defaultOpen: 'conditional',
+    items: [
+      { title: "Professionals", url: "/professionals", icon: Users, requiresEdit: true },
+      { title: "AI Training", url: "/ai-training", icon: Brain, badge: 'validationCount', requiresAdmin: true },
+    ],
+  },
 ];
+
+interface CollapsibleGroupProps {
+  group: MenuGroup;
+  activeTaskCount?: number;
+  validationCount?: number;
+  canEdit: boolean;
+  isAdmin: boolean;
+}
+
+const CollapsibleGroup = ({ 
+  group, 
+  activeTaskCount, 
+  validationCount,
+  canEdit,
+  isAdmin 
+}: CollapsibleGroupProps) => {
+  const visibleItems = group.items.filter(item => {
+    if (item.requiresAdmin && !isAdmin) return false;
+    if (item.requiresEdit && !canEdit) return false;
+    return true;
+  });
+
+  if (visibleItems.length === 0) return null;
+
+  const shouldBeOpen = 
+    group.defaultOpen === true ? true :
+    group.defaultOpen === 'conditional' ? visibleItems.length > 0 :
+    false;
+
+  const [isOpen, setIsOpen] = useState(shouldBeOpen);
+
+  const getBadgeCount = (badgeType?: string) => {
+    if (badgeType === 'taskCount') return activeTaskCount;
+    if (badgeType === 'validationCount') return validationCount;
+    return undefined;
+  };
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="mb-2">
+      <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors group rounded-md hover:bg-muted/50">
+        <span>{group.label}</span>
+        <ChevronDown className={cn(
+          "h-4 w-4 transition-transform duration-200",
+          isOpen && "transform rotate-180"
+        )} />
+      </CollapsibleTrigger>
+      
+      <CollapsibleContent className="mt-1">
+        <SidebarMenu>
+          {visibleItems.map((item) => {
+            const badgeCount = getBadgeCount(item.badge);
+            
+            return (
+              <SidebarMenuItem key={item.title}>
+                <SidebarMenuButton asChild>
+                  <NavLink
+                    to={item.url}
+                    className={({ isActive }) =>
+                      cn(
+                        "flex items-center gap-3 px-4 py-2.5 rounded-md transition-colors relative",
+                        isActive 
+                          ? "bg-accent text-accent-foreground font-medium before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-primary before:rounded-r" 
+                          : "hover:bg-muted/50"
+                      )
+                    }
+                  >
+                    <item.icon className="h-4 w-4 flex-shrink-0" />
+                    <span className="flex-1">{item.title}</span>
+                    
+                    {badgeCount !== undefined && badgeCount > 0 && (
+                      <Badge 
+                        variant={item.badge === 'validationCount' ? 'destructive' : 'default'}
+                        className="ml-auto shrink-0"
+                      >
+                        {badgeCount > 99 ? '99+' : badgeCount}
+                      </Badge>
+                    )}
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+};
 
 export function AppSidebar() {
   const navigate = useNavigate();
@@ -134,45 +262,25 @@ export function AppSidebar() {
     }
   };
 
-  const filteredMenuItems = menuItems.filter((item) => {
-    if (item.url === '/ai-training') return isAdmin();
-    if (item.url === '/professionals') return canEdit();
-    return true;
-  });
-
   return (
     <Sidebar>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-lg font-bold">TaskFlow</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {filteredMenuItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink
-                      to={item.url}
-                      className={({ isActive }) =>
-                        isActive ? "bg-accent text-accent-foreground" : ""
-                      }
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                      {item.url === '/' && activeTaskCount !== undefined && activeTaskCount > 0 && (
-                        <Badge variant="default" className="ml-auto">
-                          {activeTaskCount > 99 ? '99+' : activeTaskCount}
-                        </Badge>
-                      )}
-                      {item.url === '/ai-training' && isAdmin() && validationCount && validationCount > 0 && (
-                        <Badge variant="destructive" className="ml-auto">
-                          {validationCount > 999 ? '999+' : validationCount}
-                        </Badge>
-                      )}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+          <SidebarGroupLabel className="text-lg font-bold mb-4">
+            TaskFlow
+          </SidebarGroupLabel>
+          
+          <SidebarGroupContent className="space-y-1">
+            {menuGroups.map((group) => (
+              <CollapsibleGroup
+                key={group.label}
+                group={group}
+                activeTaskCount={activeTaskCount}
+                validationCount={validationCount}
+                canEdit={canEdit()}
+                isAdmin={isAdmin()}
+              />
+            ))}
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
