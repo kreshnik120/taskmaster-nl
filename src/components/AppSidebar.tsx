@@ -135,7 +135,7 @@ const CollapsibleGroup = ({
                         "flex items-center gap-3 px-4 py-2.5 rounded-md transition-colors relative",
                   isActive 
                     ? "bg-accent text-accent-foreground font-medium before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-primary before:rounded-r" 
-                    : "text-foreground/70 hover:text-foreground hover:bg-muted/50"
+                    : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
                       )
                     }
                   >
