@@ -15,7 +15,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useUserRole } from "@/hooks/useUserRole";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { UserProfileCard } from "./UserProfileCard";
 import { User } from "@supabase/supabase-js";
@@ -37,6 +37,7 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { role, isAdmin, canEdit } = useUserRole();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -68,6 +69,50 @@ export function AppSidebar() {
     staleTime: 60000, // ⚡ CACHE: 60s (reduces queries)
     refetchInterval: 60000,
   });
+
+  // ⚡ EFFICIENT COUNT: Active tasks (not completed, not deleted)
+  const { data: activeTaskCount } = useQuery({
+    queryKey: ['active-task-count'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('tasks')
+        .select('*', { count: 'exact', head: true })
+        .is('completed_at', null)
+        .is('deleted_at', null);
+      
+      if (error) {
+        console.error('⚠️ Failed to fetch task count:', error);
+        return 0;
+      }
+      
+      return count || 0;
+    },
+    staleTime: 30000, // ⚡ CACHE: 30s (tasks change more frequently)
+    refetchInterval: 30000,
+  });
+
+  // 🔄 REAL-TIME: Listen for task changes
+  useEffect(() => {
+    const channel = supabase
+      .channel('sidebar-tasks-count')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks'
+        },
+        () => {
+          // Invalidate query to trigger instant refetch
+          queryClient.invalidateQueries({ queryKey: ['active-task-count'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -113,6 +158,11 @@ export function AppSidebar() {
                     >
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
+                      {item.url === '/' && activeTaskCount !== undefined && activeTaskCount > 0 && (
+                        <Badge variant="default" className="ml-auto">
+                          {activeTaskCount > 99 ? '99+' : activeTaskCount}
+                        </Badge>
+                      )}
                       {item.url === '/ai-training' && isAdmin() && validationCount && validationCount > 0 && (
                         <Badge variant="destructive" className="ml-auto">
                           {validationCount > 999 ? '999+' : validationCount}
