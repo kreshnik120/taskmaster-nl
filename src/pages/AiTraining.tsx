@@ -37,6 +37,7 @@ import { SystemHealthDashboard } from "@/components/AITraining/SystemHealthDashb
 import { EmbeddingCoverageDashboard } from "@/components/AITraining/EmbeddingCoverageDashboard";
 import { KvKCostDashboard } from "@/components/AITraining/KvKCostDashboard";
 import { CleanupDuplicateFields } from "@/components/AITraining/CleanupDuplicateFields";
+import { SystemLearningDashboard } from "@/components/AITraining/SystemLearningDashboard";
 import { toast } from "sonner";
 
 const AiTraining = () => {
@@ -183,6 +184,7 @@ const AiTraining = () => {
                   <TabsContent value="dashboard" className="mt-4">
                     <div className="space-y-6">
                       <AutoResolveMonitor />
+                      <SystemLearningDashboard />
                       <AutoLearnedKnowledgeDashboard />
                       <LearningDashboard />
                     </div>

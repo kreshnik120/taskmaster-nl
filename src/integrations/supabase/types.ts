@@ -757,6 +757,53 @@ export type Database = {
         }
         Relationships: []
       }
+      category_suggestions: {
+        Row: {
+          confidence: number | null
+          created_at: string | null
+          example_key: string | null
+          id: string
+          org_id: string
+          reasoning: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string | null
+          suggested_category: string
+        }
+        Insert: {
+          confidence?: number | null
+          created_at?: string | null
+          example_key?: string | null
+          id?: string
+          org_id: string
+          reasoning?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string | null
+          suggested_category: string
+        }
+        Update: {
+          confidence?: number | null
+          created_at?: string | null
+          example_key?: string | null
+          id?: string
+          org_id?: string
+          reasoning?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string | null
+          suggested_category?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "category_suggestions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_messages_old_backup: {
         Row: {
           content: string
@@ -2461,6 +2508,56 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      system_events: {
+        Row: {
+          created_at: string
+          entity_id: string
+          entity_type: string
+          event_data: Json
+          event_type: string
+          id: string
+          learning_outcome: Json | null
+          metadata: Json | null
+          org_id: string
+          processed_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          event_data: Json
+          event_type: string
+          id?: string
+          learning_outcome?: Json | null
+          metadata?: Json | null
+          org_id: string
+          processed_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          event_data?: Json
+          event_type?: string
+          id?: string
+          learning_outcome?: Json | null
+          metadata?: Json | null
+          org_id?: string
+          processed_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_events_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       system_health_log: {
         Row: {

@@ -2358,6 +2358,53 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
             required: ["knowledge_ids"]
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "query_tasks",
+          description: "Query de tasks database om vragen te beantwoorden over taak geschiedenis, voltooiingen, verantwoordelijken, tijdsregistraties, etc. Gebruik dit wanneer gebruikers vragen stellen over welke taken zijn afgerond, wie verantwoordelijk was, hoelang er aan is gewerkt, etc.",
+          parameters: {
+            type: "object",
+            properties: {
+              filter: {
+                type: "object",
+                description: "Filters voor de query",
+                properties: {
+                  completed: { type: "boolean", description: "Filter op afgeronde taken (true) of actieve taken (false)" },
+                  assignee_id: { type: "string", description: "Filter op toegewezen persoon UUID" },
+                  date_range: { 
+                    type: "object",
+                    description: "Filter op datum bereik",
+                    properties: {
+                      start: { type: "string", description: "Start datum (ISO 8601)" },
+                      end: { type: "string", description: "Eind datum (ISO 8601)" }
+                    }
+                  },
+                  priority: { 
+                    type: "string", 
+                    enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+                    description: "Filter op prioriteit" 
+                  },
+                  on_time: { type: "boolean", description: "Filter op tijdig afgeronde taken" }
+                }
+              },
+              include: {
+                type: "array",
+                description: "Welke gerelateerde data moet worden meegenomen",
+                items: { 
+                  type: "string", 
+                  enum: ["subtasks", "time_entries", "assignee", "comments"]
+                }
+              },
+              limit: {
+                type: "number",
+                description: "Maximum aantal resultaten",
+                default: 50
+              }
+            }
+          }
+        }
       }
     ];
 
@@ -2851,6 +2898,134 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                               message: "⚠️ Harvester kon niet worden gestart, maar knowledge gap is wel gelogd"
                             };
                           }
+                          break;
+
+                        case "query_tasks":
+                          console.log("🔍 Executing database query for tasks...", args);
+                          
+                          // Build query with dynamic select
+                          const selectFields = [
+                            'id', 'title', 'description', 'priority', 'status',
+                            'due_at', 'start_at', 'completed_at', 'created_at',
+                            'assignee_id', 'revenue_impact_eur', 'estimate_min'
+                          ];
+                          
+                          let selectString = selectFields.join(', ');
+                          
+                          if (args.include?.includes('subtasks')) {
+                            selectString += ', subtasks(id, title, status, order)';
+                          }
+                          if (args.include?.includes('time_entries')) {
+                            selectString += ', time_entries(id, started_at, ended_at, duration_min)';
+                          }
+                          if (args.include?.includes('comments')) {
+                            selectString += ', comments(id, body, created_at, author_id)';
+                          }
+                          if (args.include?.includes('assignee')) {
+                            selectString += ', profiles:assignee_id(id, name, email)';
+                          }
+                          
+                          let tasksQuery = supabaseClient
+                            .from('tasks')
+                            .select(selectString);
+                          
+                          // Apply filters
+                          if (args.filter?.completed !== undefined) {
+                            if (args.filter.completed) {
+                              tasksQuery = tasksQuery.not('completed_at', 'is', null);
+                            } else {
+                              tasksQuery = tasksQuery.is('completed_at', null);
+                            }
+                          }
+                          
+                          if (args.filter?.assignee_id) {
+                            tasksQuery = tasksQuery.eq('assignee_id', args.filter.assignee_id);
+                          }
+                          
+                          if (args.filter?.priority) {
+                            tasksQuery = tasksQuery.eq('priority', args.filter.priority);
+                          }
+                          
+                          if (args.filter?.date_range) {
+                            const dateField = args.filter.completed ? 'completed_at' : 'created_at';
+                            tasksQuery = tasksQuery
+                              .gte(dateField, args.filter.date_range.start)
+                              .lte(dateField, args.filter.date_range.end);
+                          }
+                          
+                          tasksQuery = tasksQuery
+                            .is('deleted_at', null)
+                            .order('completed_at', { ascending: false, nullsFirst: false })
+                            .limit(args.limit || 50);
+                          
+                          const { data: queriedTasks, error: queryError } = await tasksQuery;
+                          
+                          if (queryError) {
+                            console.error('❌ Task query error:', queryError);
+                            result = {
+                              success: false,
+                              message: `❌ Database query mislukt: ${queryError.message}`
+                            };
+                            break;
+                          }
+                          
+                          // Enrich tasks with calculated fields
+                          const enrichedTasks = queriedTasks?.map((task: any) => {
+                            const timeEntries = task.time_entries || [];
+                            const totalMinutes = timeEntries.reduce((sum: number, entry: any) => {
+                              if (entry.duration_min) return sum + entry.duration_min;
+                              if (entry.started_at && entry.ended_at) {
+                                const duration = (new Date(entry.ended_at).getTime() - new Date(entry.started_at).getTime()) / 60000;
+                                return sum + duration;
+                              }
+                              return sum;
+                            }, 0);
+                            
+                            const totalHours = (totalMinutes / 60).toFixed(1);
+                            
+                            const onTime = task.due_at && task.completed_at
+                              ? new Date(task.completed_at) <= new Date(task.due_at)
+                              : task.due_at ? false : true;
+                            
+                            const daysLate = task.due_at && task.completed_at && !onTime
+                              ? Math.ceil((new Date(task.completed_at).getTime() - new Date(task.due_at).getTime()) / (1000 * 60 * 60 * 24))
+                              : 0;
+                            
+                            return {
+                              id: task.id,
+                              title: task.title,
+                              priority: task.priority,
+                              completed_at: task.completed_at,
+                              due_at: task.due_at,
+                              assignee_name: task.profiles?.name || 'Niet toegewezen',
+                              assignee_email: task.profiles?.email || null,
+                              total_hours_worked: totalHours,
+                              on_time: onTime,
+                              days_late: daysLate,
+                              subtasks_count: task.subtasks?.length || 0,
+                              comments_count: task.comments?.length || 0
+                            };
+                          }) || [];
+                          
+                          console.log(`✅ Query results: ${enrichedTasks.length} taken gevonden`);
+                          
+                          // Calculate summary stats
+                          const onTimeTasks = enrichedTasks.filter((t: any) => t.on_time);
+                          const lateTasks = enrichedTasks.filter((t: any) => !t.on_time && t.due_at);
+                          
+                          result = {
+                            success: true,
+                            tasks: enrichedTasks,
+                            summary: {
+                              total: enrichedTasks.length,
+                              on_time: onTimeTasks.length,
+                              late: lateTasks.length,
+                              on_time_percentage: enrichedTasks.length > 0 
+                                ? ((onTimeTasks.length / enrichedTasks.length) * 100).toFixed(1) 
+                                : '0'
+                            },
+                            message: `📊 ${enrichedTasks.length} taken gevonden - ${onTimeTasks.length} tijdig, ${lateTasks.length} te laat`
+                          };
                           break;
 
                         case "search_professionals":
