@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { AppSidebar } from "@/components/AppSidebar";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Undo2, Clock, CheckCircle2, AlertCircle } from "lucide-react";
@@ -46,9 +46,17 @@ const priorityLabels: Record<string, string> = {
   CRITICAL: "Kritiek",
 };
 
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Goedemorgen";
+  if (hour < 18) return "Goedemiddag";
+  return "Goedenavond";
+};
+
 const AfgerondeTaken = () => {
   const [tasks, setTasks] = useState<CompletedTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -61,6 +69,8 @@ const AfgerondeTaken = () => {
       navigate("/auth");
       return;
     }
+    const { data: { user } } = await supabase.auth.getUser();
+    setUser(user);
     fetchCompletedTasks();
   };
 
@@ -186,17 +196,118 @@ const AfgerondeTaken = () => {
         <main className="flex-1 p-6">
           <SidebarTrigger className="mb-4" />
           
-          <Card>
-            <CardHeader>
-              <CardTitle>Afgeronde taken</CardTitle>
-              <div className="flex gap-4 text-sm text-muted-foreground mt-2">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  <span>Tijdig: {onTimeTasks.length}</span>
+          {/* Hero Section */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <h1 className="text-4xl font-bold">
+                    {getGreeting()}, {user?.user_metadata?.name || 'daar'}
+                  </h1>
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Archief
+                  </Badge>
                 </div>
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-destructive" />
-                  <span>Te laat: {lateTasks.length}</span>
+                <p className="text-xl text-muted-foreground">
+                  {format(new Date(), "EEEE d MMMM", { locale: nl })}
+                </p>
+              </div>
+            </div>
+            
+            {/* Celebration Summary */}
+            <div className="bg-gradient-to-r from-green-500/10 via-green-500/5 to-background rounded-lg p-4 border border-green-500/20">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+                <div className="space-y-2 flex-1">
+                  {loading ? (
+                    <p className="text-sm">Laden...</p>
+                  ) : tasks.length === 0 ? (
+                    <p className="text-sm">
+                      🎯 Nog geen afgeronde taken. Start vandaag met het voltooien van je eerste taak!
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-sm">
+                        🎉 <strong>{tasks.length} taken afgerond</strong> - geweldig werk!
+                      </p>
+                      {onTimeTasks.length > 0 && (
+                        <p className="text-sm text-green-600">
+                          ✅ <strong>{onTimeTasks.length} taken ({Math.round(onTimeTasks.length / tasks.length * 100)}%)</strong> tijdig voltooid
+                        </p>
+                      )}
+                      {lateTasks.length > 0 && (
+                        <p className="text-sm text-orange-600">
+                          ⚠️ <strong>{lateTasks.length} taken ({Math.round(lateTasks.length / tasks.length * 100)}%)</strong> te laat voltooid
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Compact Stats Bar */}
+          <div className="grid grid-cols-4 gap-3 mb-6">
+            {/* Totaal Afgerond */}
+            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
+              <span className="text-2xl mb-1">✅</span>
+              <span className="text-2xl font-bold">
+                {tasks.length}
+              </span>
+              <span className="text-xs text-muted-foreground">Totaal Afgerond</span>
+            </div>
+            
+            {/* Tijdig Voltooid */}
+            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+              <span className="text-2xl mb-1">🎯</span>
+              <span className="text-2xl font-bold text-green-600">
+                {onTimeTasks.length}
+              </span>
+              <span className="text-xs text-muted-foreground">Tijdig Voltooid</span>
+            </div>
+            
+            {/* Te Laat */}
+            <div className={`flex flex-col items-center justify-center p-4 rounded-lg ${
+              lateTasks.length > 0 ? 'bg-orange-500/10 border border-orange-500/20' : 'bg-muted/30'
+            }`}>
+              <span className="text-2xl mb-1">⚠️</span>
+              <span className={`text-2xl font-bold ${
+                lateTasks.length > 0 ? 'text-orange-600' : 'text-muted-foreground'
+              }`}>
+                {lateTasks.length}
+              </span>
+              <span className="text-xs text-muted-foreground">Te Laat</span>
+            </div>
+            
+            {/* Success Rate */}
+            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-primary/10 border border-primary/20">
+              <span className="text-2xl mb-1">📊</span>
+              <span className="text-2xl font-bold text-primary">
+                {tasks.length > 0 ? Math.round(onTimeTasks.length / tasks.length * 100) : 0}%
+              </span>
+              <span className="text-xs text-muted-foreground">Success Rate</span>
+            </div>
+          </div>
+          
+          <Card>
+            <CardHeader className="bg-muted/30">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-green-500/10">
+                    <CheckCircle2 className="h-6 w-6 text-green-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl">Afgeronde Taken</CardTitle>
+                    <CardDescription className="flex items-center gap-2 mt-1">
+                      {tasks.length > 0 ? (
+                        <span>Bekijk je voltooide taken en prestaties</span>
+                      ) : (
+                        <span>Start met het voltooien van taken om hier je geschiedenis te zien</span>
+                      )}
+                    </CardDescription>
+                  </div>
                 </div>
               </div>
             </CardHeader>
