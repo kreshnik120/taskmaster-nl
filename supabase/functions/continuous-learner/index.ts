@@ -9,6 +9,50 @@ const corsHeaders = {
 
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
+// ============================================
+// RETRY HELPER FOR TRANSIENT FAILURES
+// ============================================
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries: number = 3
+): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      
+      // Retry on 503 Service Unavailable or 502 Bad Gateway
+      if (response.status === 503 || response.status === 502) {
+        if (attempt === maxRetries) {
+          throw new Error(`AI service temporarily unavailable (${response.status}) after ${maxRetries} attempts`);
+        }
+        
+        const backoffMs = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+        console.log(`⚠️ AI service unavailable (${response.status}), retry ${attempt}/${maxRetries} in ${backoffMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+        continue;
+      }
+      
+      // Success or non-retryable error
+      return response;
+    } catch (error) {
+      lastError = error as Error;
+      
+      if (attempt === maxRetries) {
+        throw new Error(`Network error after ${maxRetries} attempts: ${lastError.message}`);
+      }
+      
+      const backoffMs = Math.pow(2, attempt - 1) * 1000;
+      console.log(`⚠️ Network error, retry ${attempt}/${maxRetries} in ${backoffMs}ms...`);
+      await new Promise(resolve => setTimeout(resolve, backoffMs));
+    }
+  }
+  
+  throw lastError || new Error('Unexpected retry failure');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -83,8 +127,8 @@ serve(async (req) => {
 
     console.log('🎓 Continuous Learner analyzing interaction...');
 
-    // Analyze the chat interaction with AI
-    const analysisResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    // Analyze the chat interaction with AI (with retry for transient failures)
+    const analysisResponse = await fetchWithRetry('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,
