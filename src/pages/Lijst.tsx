@@ -59,10 +59,18 @@ const priorityLabels = {
   CRITICAL: "Kritiek",
 };
 
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Goedemorgen";
+  if (hour < 18) return "Goedemiddag";
+  return "Goedenavond";
+};
+
 export default function Lijst() {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [groupBy, setGroupBy] = useState<string>("none");
@@ -139,6 +147,7 @@ export default function Lijst() {
     if (!session) {
       navigate("/auth");
     } else {
+      setUser(session.user);
       setCurrentUserId(session.user.id);
     }
   };
@@ -418,6 +427,7 @@ export default function Lijst() {
     if (filterPriority !== "all" && task.priority !== filterPriority) return false;
     if (filterStatus === "completed" && !task.completed_at) return false;
     if (filterStatus === "active" && task.completed_at) return false;
+    if (filterStatus === "accepted" && !task.accepted_by) return false;
     return true;
   });
 
@@ -444,12 +454,21 @@ export default function Lijst() {
   };
 
   const groups = groupedTasks();
+  const myTasksCount = filteredTasks.filter(t => t.assignee_id === currentUserId).length;
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
+      <SidebarProvider>
+        <div className="flex min-h-screen w-full">
+          <AppSidebar />
+          <main className="flex-1 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Lijstweergave laden...</p>
+            </div>
+          </main>
+        </div>
+      </SidebarProvider>
     );
   }
 
@@ -457,44 +476,165 @@ export default function Lijst() {
     <SidebarProvider>
       <div className="flex min-h-screen w-full">
         <AppSidebar />
-        <main className="flex-1 overflow-auto bg-background p-6">
-          <div className="mb-6 flex items-center justify-between">
-            <h1 className="text-3xl font-bold">Lijstweergave</h1>
-            <div className="flex gap-2">
-              <Select value={groupBy} onValueChange={setGroupBy}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Groeperen op" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Geen groepering</SelectItem>
-                  <SelectItem value="start">Startdatum</SelectItem>
-                  <SelectItem value="due">Einddatum</SelectItem>
-                  <SelectItem value="priority">Prioriteit</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={filterPriority} onValueChange={setFilterPriority}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="Prioriteit" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle prioriteiten</SelectItem>
-                  <SelectItem value="LOW">Laag</SelectItem>
-                  <SelectItem value="MEDIUM">Gemiddeld</SelectItem>
-                  <SelectItem value="HIGH">Hoog</SelectItem>
-                  <SelectItem value="CRITICAL">Kritiek</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle taken</SelectItem>
-                  <SelectItem value="active">Actief</SelectItem>
-                  <SelectItem value="completed">Afgerond</SelectItem>
-                </SelectContent>
-              </Select>
+        <main className="flex-1 p-8">
+          {/* Hero Section */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h1 className="text-4xl font-bold mb-2">
+                  {getGreeting()}, {user?.user_metadata?.name || 'daar'}
+                </h1>
+                <p className="text-xl text-muted-foreground">
+                  {format(new Date(), "EEEE d MMMM", { locale: nl })}
+                </p>
+              </div>
             </div>
+            
+            {/* Smart Summary + Filters */}
+            <div className="bg-muted/30 rounded-lg p-4 space-y-4">
+              <div className="space-y-2">
+                <p className="text-sm">
+                  📊 Je hebt <strong>{filteredTasks.length} taken</strong> in de lijst
+                  {Object.keys(groups).length > 1 && (
+                    <> verdeeld over <strong>{Object.keys(groups).length} groepen</strong></>
+                  )}
+                </p>
+                {filteredTasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length > 0 && (
+                  <p className="text-sm text-destructive">
+                    ⚠️ <strong>{filteredTasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length} high priority taken</strong> vereisen aandacht
+                  </p>
+                )}
+              </div>
+
+              {/* Integrated Filters */}
+              <div className="flex gap-4 items-end">
+                <div className="flex-1">
+                  <label className="text-sm font-medium mb-2 block">
+                    Groepeer op
+                  </label>
+                  <Select value={groupBy} onValueChange={setGroupBy}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Geen groepering</SelectItem>
+                      <SelectItem value="start">Startdatum</SelectItem>
+                      <SelectItem value="due">Einddatum</SelectItem>
+                      <SelectItem value="priority">Prioriteit</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex-1">
+                  <label className="text-sm font-medium mb-2 block">
+                    Filter op prioriteit
+                  </label>
+                  <Select value={filterPriority} onValueChange={setFilterPriority}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Alle prioriteiten</SelectItem>
+                      <SelectItem value="LOW">Laag</SelectItem>
+                      <SelectItem value="MEDIUM">Gemiddeld</SelectItem>
+                      <SelectItem value="HIGH">Hoog</SelectItem>
+                      <SelectItem value="CRITICAL">Kritiek</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex-1">
+                  <label className="text-sm font-medium mb-2 block">
+                    Filter op status
+                  </label>
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Alle statussen</SelectItem>
+                      <SelectItem value="active">Actief</SelectItem>
+                      <SelectItem value="accepted">Geaccepteerd</SelectItem>
+                      <SelectItem value="completed">Afgerond</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Compact Stats Bar */}
+          <div className="grid grid-cols-4 gap-3 mb-6">
+            <button
+              onClick={() => {
+                setFilterStatus('active');
+                setFilterPriority('all');
+              }}
+              className={`flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border-2 ${
+                filterStatus === 'active' ? 'border-primary/50' : 'border-transparent hover:border-primary/20'
+              }`}
+            >
+              <span className="text-2xl mb-1">📋</span>
+              <span className="text-2xl font-bold">
+                {tasks.filter(t => !t.completed_at && !t.accepted_by).length}
+              </span>
+              <span className="text-xs text-muted-foreground">Open</span>
+            </button>
+            
+            <button
+              onClick={() => {
+                setFilterStatus('completed');
+                setFilterPriority('all');
+              }}
+              className={`flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border-2 ${
+                filterStatus === 'completed' ? 'border-green-500/50' : 'border-transparent hover:border-green-500/20'
+              }`}
+            >
+              <span className="text-2xl mb-1">✅</span>
+              <span className="text-2xl font-bold text-green-600">
+                {tasks.filter(t => t.completed_at && new Date(t.completed_at).toDateString() === new Date().toDateString()).length}
+              </span>
+              <span className="text-xs text-muted-foreground">Vandaag</span>
+            </button>
+            
+            <button
+              onClick={() => {
+                setFilterPriority('HIGH');
+                setFilterStatus('all');
+              }}
+              className={`flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border-2 ${
+                filterPriority === 'HIGH' ? 'border-destructive/50' : 'border-transparent hover:border-destructive/20'
+              }`}
+              disabled={tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length === 0}
+            >
+              <span className="text-2xl mb-1">⚠️</span>
+              <span className={`text-2xl font-bold ${
+                tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length > 0 
+                  ? 'text-destructive' 
+                  : 'text-muted-foreground'
+              }`}>
+                {tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length}
+              </span>
+              <span className="text-xs text-muted-foreground">High Priority</span>
+            </button>
+            
+            <button
+              onClick={() => {
+                if (myTasksCount > 0) {
+                  setFilterStatus('all');
+                  setFilterPriority('all');
+                  toast.info(`${myTasksCount} taken aan jou toegewezen`);
+                }
+              }}
+              className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border-2 border-transparent hover:border-blue-500/20"
+              disabled={myTasksCount === 0}
+            >
+              <span className="text-2xl mb-1">👤</span>
+              <span className="text-2xl font-bold text-blue-600">
+                {myTasksCount}
+              </span>
+              <span className="text-xs text-muted-foreground">Mijn Taken</span>
+            </button>
           </div>
 
           <div className="space-y-8">
