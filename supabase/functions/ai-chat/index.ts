@@ -13,6 +13,17 @@ const corsHeaders = {
 };
 
 // ============================================
+// SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
+// ============================================
+// Increment this version when system prompt changes to invalidate old cached responses
+const SYSTEM_PROMPT_VERSION = "v2.0-query-tools";
+
+// ============================================
+// CACHE CONFIGURATION
+// ============================================
+const CACHE_TTL_MINUTES = 5; // Short TTL for development/testing (was 24 hours)
+
+// ============================================
 // SHA256 HASH HELPER FOR CACHE KEYS
 // ============================================
 async function sha256Hash(text: string): Promise<string> {
@@ -1005,12 +1016,14 @@ serve(async (req) => {
     // FASE 1: CACHE LOOKUP (SHA256 HASH)
     // ============================================
     const lastUserMessageForCache = messages[messages.length - 1]?.content || '';
-    const cacheKey = await sha256Hash(`${userOrgId}|${lastUserMessageForCache.trim()}`);
+    // Include SYSTEM_PROMPT_VERSION in cache key to auto-invalidate on prompt updates
+    const cacheKey = await sha256Hash(`${userOrgId}|${SYSTEM_PROMPT_VERSION}|${lastUserMessageForCache.trim()}`);
     
     console.log('🔍 Cache lookup:', { 
       org_id: userOrgId, 
       question: lastUserMessageForCache.substring(0, 50) + '...', 
-      cache_key: cacheKey.substring(0, 16) + '...' 
+      cache_key: cacheKey.substring(0, 16) + '...',
+      prompt_version: SYSTEM_PROMPT_VERSION
     });
     
     const { data: cachedResponse, error: cacheError } = await supabaseServiceClient
@@ -3758,9 +3771,9 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
                     question: lastUserMessageForCache,
                     response: fullResponse,
                     knowledge_ids: usedKnowledgeIds,
-                    expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+                    expires_at: new Date(Date.now() + CACHE_TTL_MINUTES * 60 * 1000).toISOString()
                   });
-                  console.log(`✅ Response cached for 24h (${fullResponse.length} chars)`);
+                  console.log(`✅ Response cached for ${CACHE_TTL_MINUTES}min (${fullResponse.length} chars, version: ${SYSTEM_PROMPT_VERSION})`);
                 }
               } catch (cacheError) {
                 console.warn('Cache insert failed (non-critical):', cacheError);
