@@ -5,6 +5,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { format, differenceInDays } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Loader2, AlertCircle, Clock, TrendingUp, Sparkles } from "lucide-react";
@@ -62,6 +63,12 @@ const priorityLabels = {
   CRITICAL: "Kritiek",
 };
 
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Goedemorgen";
+  if (hour < 18) return "Goedemiddag";
+  return "Goedenavond";
+};
 
 type FilterType = "achterstallig" | "deze-week" | "met-actie" | null;
 
@@ -71,6 +78,7 @@ export default function Opvolging() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>(null);
+  const [user, setUser] = useState<any>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Use the smart caching hook
@@ -122,6 +130,9 @@ export default function Opvolging() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       navigate("/auth");
+    } else {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
     }
   };
 
@@ -241,102 +252,166 @@ export default function Opvolging() {
       <div className="flex min-h-screen w-full">
         <AppSidebar />
         <main className="flex-1 overflow-auto bg-background p-6">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold">Opvolging</h1>
-            <p className="text-muted-foreground">
-              Taken die je aandacht vereisen
-            </p>
+          {/* Hero Section */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <h1 className="text-4xl font-bold">
+                    {getGreeting()}, {user?.user_metadata?.name || 'daar'}
+                  </h1>
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    <Sparkles className="h-4 w-4" />
+                    AI Opvolging
+                  </Badge>
+                </div>
+                <p className="text-xl text-muted-foreground">
+                  {format(new Date(), "EEEE d MMMM", { locale: nl })}
+                </p>
+              </div>
+            </div>
+            
+            {/* Smart Summary met AI Context */}
+            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-background rounded-lg p-4 border border-primary/20">
+              <div className="flex items-start gap-3">
+                <Sparkles className="h-5 w-5 text-primary mt-0.5" />
+                <div className="space-y-2 flex-1">
+                  {scoringLoading ? (
+                    <p className="text-sm flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <strong>AI analyseert {tasks.length} taken...</strong>
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-sm">
+                        🎯 <strong>{focusTasks.length} prioriteiten</strong> geïdentificeerd door AI uit {tasks.length} actieve taken
+                      </p>
+                      {overdueTasks.length > 0 && (
+                        <p className="text-sm text-destructive">
+                          ⚠️ <strong>{overdueTasks.length} taken zijn achterstallig</strong> en vereisen directe aandacht
+                        </p>
+                      )}
+                      {focusTasks.some(t => t.scoreLabel === "CRITICAL") && (
+                        <p className="text-sm text-destructive">
+                          🚨 <strong>{focusTasks.filter(t => t.scoreLabel === "CRITICAL").length} kritieke taken</strong> met zeer hoge impact
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="mb-6 grid gap-4 md:grid-cols-3">
-            <Card 
-              className={`cursor-pointer transition-all hover:shadow-md ${
-                activeFilter === "achterstallig" 
-                  ? "ring-2 ring-destructive bg-destructive/5" 
-                  : "hover:bg-muted/50"
-              }`}
+          {/* Compact Stats Bar met Filters */}
+          <div className="grid grid-cols-4 gap-3 mb-6">
+            {/* Achterstallig Filter */}
+            <button
               onClick={() => setActiveFilter(activeFilter === "achterstallig" ? null : "achterstallig")}
-            >
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Achterstallig</CardTitle>
-                <AlertCircle className="h-4 w-4 text-destructive" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{overdueTasks.length}</div>
-                <p className="text-xs text-muted-foreground">
-                  taken over deadline
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card 
-              className={`cursor-pointer transition-all hover:shadow-md ${
-                activeFilter === "deze-week" 
-                  ? "ring-2 ring-primary bg-primary/5" 
-                  : "hover:bg-muted/50"
+              className={`flex flex-col items-center justify-center p-4 rounded-lg transition-all border-2 ${
+                activeFilter === "achterstallig"
+                  ? "bg-destructive/10 border-destructive shadow-lg scale-105"
+                  : "bg-muted/30 border-transparent hover:bg-destructive/5 hover:border-destructive/30"
               }`}
+            >
+              <span className="text-2xl mb-1">🚨</span>
+              <span className={`text-2xl font-bold ${
+                overdueTasks.length > 0 ? "text-destructive" : "text-muted-foreground"
+              }`}>
+                {overdueTasks.length}
+              </span>
+              <span className="text-xs text-muted-foreground">Achterstallig</span>
+              {activeFilter === "achterstallig" && (
+                <Badge variant="destructive" className="mt-2 text-xs">Actief</Badge>
+              )}
+            </button>
+            
+            {/* Deze Week Filter */}
+            <button
               onClick={() => setActiveFilter(activeFilter === "deze-week" ? null : "deze-week")}
-            >
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Deze week</CardTitle>
-                <Clock className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{upcomingTasks.length}</div>
-                <p className="text-xs text-muted-foreground">
-                  taken binnenkort klaar
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card 
-              className={`cursor-pointer transition-all hover:shadow-md ${
-                activeFilter === "met-actie" 
-                  ? "ring-2 ring-accent bg-accent/5" 
-                  : "hover:bg-muted/50"
+              className={`flex flex-col items-center justify-center p-4 rounded-lg transition-all border-2 ${
+                activeFilter === "deze-week"
+                  ? "bg-primary/10 border-primary shadow-lg scale-105"
+                  : "bg-muted/30 border-transparent hover:bg-primary/5 hover:border-primary/30"
               }`}
-              onClick={() => setActiveFilter(activeFilter === "met-actie" ? null : "met-actie")}
             >
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Met actie</CardTitle>
-                <TrendingUp className="h-4 w-4 text-accent" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{tasksWithNextAction.length}</div>
-                <p className="text-xs text-muted-foreground">
-                  taken met volgende actie
-                </p>
-              </CardContent>
-            </Card>
+              <span className="text-2xl mb-1">📅</span>
+              <span className="text-2xl font-bold text-primary">
+                {upcomingTasks.length}
+              </span>
+              <span className="text-xs text-muted-foreground">Deze Week</span>
+              {activeFilter === "deze-week" && (
+                <Badge className="mt-2 text-xs">Actief</Badge>
+              )}
+            </button>
+            
+            {/* Met Actie Filter */}
+            <button
+              onClick={() => setActiveFilter(activeFilter === "met-actie" ? null : "met-actie")}
+              className={`flex flex-col items-center justify-center p-4 rounded-lg transition-all border-2 ${
+                activeFilter === "met-actie"
+                  ? "bg-accent/10 border-accent shadow-lg scale-105"
+                  : "bg-muted/30 border-transparent hover:bg-accent/5 hover:border-accent/30"
+              }`}
+            >
+              <span className="text-2xl mb-1">⚡</span>
+              <span className="text-2xl font-bold text-accent">
+                {tasksWithNextAction.length}
+              </span>
+              <span className="text-xs text-muted-foreground">Met Actie</span>
+              {activeFilter === "met-actie" && (
+                <Badge variant="secondary" className="mt-2 text-xs">Actief</Badge>
+              )}
+            </button>
+            
+            {/* AI Score Statistiek */}
+            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
+              <span className="text-2xl mb-1">🤖</span>
+              <span className="text-2xl font-bold text-primary">
+                {focusTasks.length}
+              </span>
+              <span className="text-xs text-muted-foreground">AI Top Taken</span>
+            </div>
           </div>
 
           <div className="space-y-6">
-            <Card>
-              <CardHeader>
+            <Card className="border-primary/20">
+              <CardHeader className="bg-gradient-to-r from-primary/5 to-background">
                 <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                  <div>
-                    <CardTitle>Top 10 Focus Taken</CardTitle>
-                    <CardDescription>
-                      {activeFilter 
-                        ? `Gefilterd op: ${
-                            activeFilter === "achterstallig" ? "Achterstallige taken" :
-                            activeFilter === "deze-week" ? "Deze week" :
-                            "Taken met actie"
-                          }`
-                        : "Taken geanalyseerd en gescoord met AI (Google Gemini 2.5 Flash)"
-                      }
-                    </CardDescription>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Sparkles className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl">Top 10 Focus Taken</CardTitle>
+                      <CardDescription className="flex items-center gap-2">
+                        {activeFilter ? (
+                          <span>
+                            Gefilterd op: <strong>
+                              {activeFilter === "achterstallig" ? "🚨 Achterstallige taken" :
+                               activeFilter === "deze-week" ? "📅 Deze week" :
+                               "⚡ Taken met actie"}
+                            </strong>
+                          </span>
+                        ) : (
+                          <>
+                            <span>Geanalyseerd met</span>
+                            <Badge variant="outline" className="text-xs">
+                              Google Gemini 2.5 Flash
+                            </Badge>
+                          </>
+                        )}
+                      </CardDescription>
+                    </div>
                   </div>
-                </div>
                   {activeFilter && (
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => setActiveFilter(null)}
-                      className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
                     >
-                      Alle taken tonen
-                    </button>
+                      Toon alle taken
+                    </Button>
                   )}
                 </div>
               </CardHeader>
