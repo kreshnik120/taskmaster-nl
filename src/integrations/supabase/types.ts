@@ -3143,6 +3143,7 @@ export type Database = {
         Args: { _org_id: string; _requested_cost_eur?: number }
         Returns: Json
       }
+      cleanup_old_logs: { Args: never; Returns: undefined }
       get_relevant_categories: {
         Args: { org_id_param?: string; user_question: string }
         Returns: {
