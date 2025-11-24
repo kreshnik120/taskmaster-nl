@@ -3,6 +3,10 @@ project_id = "oelmsmcgryeoryhonexw"
 [functions.view-shared-content]
 verify_jwt = false
 
+[functions.process-system-events]
+verify_jwt = false
+schedule = "*/5 * * * *"
+
 [functions.public-health]
 verify_jwt = false
 
