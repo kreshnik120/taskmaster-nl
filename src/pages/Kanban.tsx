@@ -8,12 +8,12 @@ import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { Plus, Loader2, Sparkles, AlertCircle } from "lucide-react";
+import { Plus, Loader2, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { format } from "date-fns";
+import { nl } from "date-fns/locale";
 import { useAiScoring } from "@/hooks/useAiScoring";
-import { withTimeout } from "@/lib/withTimeout";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface Task {
   id: string;
@@ -22,6 +22,7 @@ interface Task {
   priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
   assignee_id: string | null;
   due_at: string | null;
+  completed_at: string | null;
   order_key: string;
   column_id?: string;
   start_at: string | null;
@@ -54,46 +55,32 @@ const Kanban = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
-  const [backendOffline, setBackendOffline] = useState(false);
-  const [lastError, setLastError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { taskId } = useParams();
   
   // AI Scoring integration
   const { priorityScores, loading: aiLoading, getScoreForTask } = useAiScoring(tasks, true);
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Goedemorgen";
+    if (hour < 18) return "Goedemiddag";
+    return "Goedenavond";
+  };
+
   useEffect(() => {
     const initAuth = async () => {
-      try {
-        const { data: { session } } = await withTimeout(
-          supabase.auth.getSession(),
-          3000
-        );
-        
-        if (session) {
-          setUser(session.user);
-          await loadDataWithTimeout();
-        } else {
-          navigate("/auth");
-        }
-      } catch (error: any) {
-        console.error("[Kanban Auth] Timeout bij authenticatie:", error);
-        setLastError(error.message);
-        setBackendOffline(true);
-        setLoading(false);
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        setUser(session.user);
+        loadData();
+      } else {
+        navigate("/auth");
       }
     };
 
     initAuth();
-
-    // Safety timer: forceer fallback na 7s als loading nog steeds true is
-    const safetyTimeout = setTimeout(() => {
-      if (loading) {
-        console.warn("[Kanban Safety] Geforceerde timeout na 7s");
-        setBackendOffline(true);
-        setLoading(false);
-      }
-    }, 7000);
 
     const {
       data: { subscription },
@@ -106,116 +93,46 @@ const Kanban = () => {
     });
 
     return () => {
-      clearTimeout(safetyTimeout);
       subscription.unsubscribe();
     };
   }, [navigate]);
 
-  const loadDataWithTimeout = async () => {
-    try {
-      await withTimeout(loadData(), 8000);
-      setBackendOffline(false);
-      setLastError(null);
-    } catch (error: any) {
-      console.error("[Kanban Data] Timeout bij laden:", error);
-      setLastError(error.message);
-      setBackendOffline(true);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const loadData = async () => {
-    // Load columns
-    const { data: columnsData, error: columnsError } = await supabase
-      .from("columns")
-      .select("*")
-      .order("order");
+    try {
+      // Load columns
+      const { data: columnsData, error: columnsError } = await supabase
+        .from("columns")
+        .select("*")
+        .order("order");
 
-    if (columnsError) throw columnsError;
+      if (columnsError) throw columnsError;
 
-    if (columnsData && columnsData.length > 0) {
-      setColumns(columnsData);
-    } else {
-      // Create default columns if none exist
-      await createDefaultColumns();
-    }
+      if (columnsData && columnsData.length > 0) {
+        setColumns(columnsData);
+      } else {
+        // Create default columns if none exist
+        await createDefaultColumns();
+      }
 
-    // Load tasks with scoring metadata
-    const { data: tasksData, error: tasksError } = await supabase
-      .from("tasks")
-      .select(`
-        *,
-        profiles:profiles!tasks_assignee_id_fkey(name, email),
-        task_scoring_metadata(*)
-      `)
-      .is("deleted_at", null)
-      .order("order_key");
+      // Load tasks with scoring metadata
+      const { data: tasksData, error: tasksError } = await supabase
+        .from("tasks")
+        .select(`
+          *,
+          profiles:profiles!tasks_assignee_id_fkey(name, email),
+          task_scoring_metadata(*)
+        `)
+        .is("deleted_at", null)
+        .order("order_key");
 
-    if (tasksError) throw tasksError;
-    setTasks(tasksData || []);
+      if (tasksError) throw tasksError;
+      setTasks(tasksData || []);
 
-    // Real-time listeners alleen starten na succesvolle data load
-    if (!backendOffline) {
-      // Real-time listener voor taak updates
-      const tasksChannel = supabase
-        .channel('kanban-tasks-changes')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'tasks'
-          },
-          (payload) => {
-            console.log('Task change detected:', payload);
-            // Herlaad taken bij elke wijziging
-            supabase
-              .from("tasks")
-              .select(`
-                *,
-                profiles:profiles!tasks_assignee_id_fkey(name, email),
-                task_scoring_metadata(*)
-              `)
-              .is("deleted_at", null)
-              .order("order_key")
-              .then(({ data }) => {
-                if (data) {
-                  setTasks(data);
-                }
-              });
-          }
-        )
-        .subscribe();
-
-      // Real-time listener voor kolom updates
-      const columnsChannel = supabase
-        .channel('kanban-columns-changes')
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'columns'
-          },
-          (payload) => {
-            console.log('Kolom bijgewerkt:', payload);
-            setColumns((prev) =>
-              prev.map((col) =>
-                col.id === payload.new.id
-                  ? { ...col, name: payload.new.name }
-                  : col
-              )
-            );
-          }
-        )
-        .subscribe();
-
-      // Cleanup function wordt aangeroepen bij unmount
-      return () => {
-        supabase.removeChannel(tasksChannel);
-        supabase.removeChannel(columnsChannel);
-      };
+      setLoading(false);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      setLoading(false);
+      toast.error("Er is een fout opgetreden bij het laden van data");
     }
   };
 
@@ -417,14 +334,7 @@ const Kanban = () => {
   };
 
   const handleTaskUpdated = () => {
-    loadDataWithTimeout();
-  };
-
-  const handleRetry = async () => {
-    setBackendOffline(false);
-    setLastError(null);
-    setLoading(true);
-    await loadDataWithTimeout();
+    loadData();
   };
 
   // Auto-open task modal from URL parameter
@@ -442,55 +352,19 @@ const Kanban = () => {
     }
   }, [taskId, tasks, loading, navigate]);
 
-  if (backendOffline) {
+  if (loading || !user) {
     return (
       <SidebarProvider>
         <div className="flex min-h-screen w-full">
           <AppSidebar />
-          <main className="flex-1 p-6">
-            <SidebarTrigger className="mb-4" />
-            <div className="flex items-center justify-center min-h-[60vh]">
-              <Alert variant="destructive" className="max-w-lg">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Backend tijdelijk niet bereikbaar</AlertTitle>
-                <AlertDescription className="flex flex-col gap-3 mt-2">
-                  <span>De verbinding met de backend is verbroken. Probeer het later opnieuw.</span>
-                  {lastError && (
-                    <details className="text-xs opacity-70">
-                      <summary className="cursor-pointer">Technische details</summary>
-                      <code className="block mt-1 p-2 bg-background rounded">{lastError}</code>
-                    </details>
-                  )}
-                  <div className="flex gap-2 mt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRetry}
-                    >
-                      Opnieuw proberen
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => navigate('/auth')}
-                    >
-                      Naar login
-                    </Button>
-                  </div>
-                </AlertDescription>
-              </Alert>
+          <main className="flex-1 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Kanban bord laden...</p>
             </div>
           </main>
         </div>
       </SidebarProvider>
-    );
-  }
-
-  if (loading || !user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
     );
   }
 
@@ -500,49 +374,157 @@ const Kanban = () => {
         <AppSidebar />
         <main className="flex-1 p-6 overflow-auto">
           <SidebarTrigger className="mb-4" />
-          <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-3xl font-bold">Kanban Bord</h1>
-            {aiLoading && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Sparkles className="h-3 w-3 animate-pulse" />
-                AI scoring...
+          <div className="flex flex-col h-full space-y-6">
+            {/* Hero Section */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <h1 className="text-4xl font-bold">
+                      {getGreeting()}, {user?.user_metadata?.name || 'daar'}
+                    </h1>
+                    {aiLoading && (
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground px-3 py-1 rounded-full bg-muted/50">
+                        <Sparkles className="h-4 w-4 animate-pulse" />
+                        AI scoring...
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xl text-muted-foreground">
+                    {format(new Date(), "EEEE d MMMM", { locale: nl })}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      const blockedColumn = columns.find(c => c.status === 'BLOCKED');
+                      if (blockedColumn) {
+                        document.getElementById(`column-${blockedColumn.id}`)?.scrollIntoView({ behavior: 'smooth' });
+                      }
+                    }}
+                    disabled={getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length === 0}
+                  >
+                    🔥 Toon blocked
+                  </Button>
+                  <Button onClick={() => setDialogOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nieuwe taak
+                  </Button>
+                </div>
               </div>
-            )}
-          </div>
-          <p className="text-muted-foreground">Sleep taken tussen kolommen om de status te wijzigen</p>
-        </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nieuwe taak
-        </Button>
-      </div>
+              
+              {/* Smart Summary */}
+              <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                <p className="text-sm">
+                  📊 Je hebt <strong>{tasks.filter(t => !t.completed_at).length} actieve taken</strong> verdeeld over {columns.length} kolommen
+                </p>
+                {getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length > 0 && (
+                  <p className="text-sm text-destructive">
+                    ⚠️ <strong>{getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length} geblokkeerde taken</strong> vereisen aandacht
+                  </p>
+                )}
+              </div>
+            </div>
 
-      <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="flex gap-4 overflow-x-auto pb-4">
-              {columns.map((column) => (
-                <KanbanColumn
-                  key={column.id}
-                  id={column.id}
-                  title={column.name}
-                  tasks={getTasksForColumn(column.id)}
-                  status={column.status}
-                  onUpdateName={handleUpdateColumnName}
-                  onTaskClick={handleTaskClick}
-                />
-              ))}
-        </div>
-        <DragOverlay>
-          {activeTask && (
-            <TaskCard 
-              task={activeTask} 
-              aiScore={getScoreForTask(activeTask.id)}
-            />
-          )}
-        </DragOverlay>
-      </DndContext>
+            {/* Compact Stats Bar */}
+            <div className="grid grid-cols-4 gap-3 mb-6">
+              <button
+                onClick={() => {
+                  const backlogColumn = columns.find(c => c.status === 'BACKLOG');
+                  if (backlogColumn) {
+                    document.getElementById(`column-${backlogColumn.id}`)?.scrollIntoView({ behavior: 'smooth' });
+                  }
+                }}
+                className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border-2 border-transparent hover:border-primary/20"
+              >
+                <span className="text-2xl mb-1">📋</span>
+                <span className="text-2xl font-bold">
+                  {getTasksForColumn(columns.find(c => c.status === 'BACKLOG')?.id || '').length}
+                </span>
+                <span className="text-xs text-muted-foreground">Backlog</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  const doingColumn = columns.find(c => c.status === 'DOING');
+                  if (doingColumn) {
+                    document.getElementById(`column-${doingColumn.id}`)?.scrollIntoView({ behavior: 'smooth' });
+                  }
+                }}
+                className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border-2 border-transparent hover:border-blue-500/20"
+              >
+                <span className="text-2xl mb-1">🏃</span>
+                <span className="text-2xl font-bold text-blue-600">
+                  {getTasksForColumn(columns.find(c => c.status === 'DOING')?.id || '').length + 
+                   getTasksForColumn(columns.find(c => c.status === 'REVIEW')?.id || '').length}
+                </span>
+                <span className="text-xs text-muted-foreground">Bezig</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  const blockedColumn = columns.find(c => c.status === 'BLOCKED');
+                  if (blockedColumn) {
+                    document.getElementById(`column-${blockedColumn.id}`)?.scrollIntoView({ behavior: 'smooth' });
+                  }
+                }}
+                className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border-2 border-transparent hover:border-destructive/20"
+                disabled={getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length === 0}
+              >
+                <span className="text-2xl mb-1">🚫</span>
+                <span className={`text-2xl font-bold ${
+                  getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length > 0 
+                    ? 'text-destructive' 
+                    : 'text-muted-foreground'
+                }`}>
+                  {getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length}
+                </span>
+                <span className="text-xs text-muted-foreground">Blocked</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  const doneColumn = columns.find(c => c.status === 'DONE');
+                  if (doneColumn) {
+                    document.getElementById(`column-${doneColumn.id}`)?.scrollIntoView({ behavior: 'smooth' });
+                  }
+                }}
+                className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border-2 border-transparent hover:border-green-500/20"
+              >
+                <span className="text-2xl mb-1">✅</span>
+                <span className="text-2xl font-bold text-green-600">
+                  {tasks.filter(t => t.completed_at && new Date(t.completed_at).toDateString() === new Date().toDateString()).length}
+                </span>
+                <span className="text-xs text-muted-foreground">Vandaag</span>
+              </button>
+            </div>
+
+            <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+              <div className="flex gap-4 overflow-x-auto pb-4">
+                {columns.map((column) => (
+                  <div key={column.id} id={`column-${column.id}`}>
+                    <KanbanColumn
+                      id={column.id}
+                      title={column.name}
+                      tasks={getTasksForColumn(column.id)}
+                      status={column.status}
+                      onUpdateName={handleUpdateColumnName}
+                      onTaskClick={handleTaskClick}
+                    />
+                  </div>
+                ))}
+              </div>
+              <DragOverlay>
+                {activeTask && (
+                  <TaskCard 
+                    task={activeTask} 
+                    aiScore={getScoreForTask(activeTask.id)}
+                  />
+                )}
+              </DragOverlay>
+            </DndContext>
           </div>
         </main>
       </div>
