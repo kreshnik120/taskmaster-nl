@@ -54,6 +54,14 @@ export default function Kalender() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"5" | "7">("5"); // 5-dag of 7-dag weergave
+  const [user, setUser] = useState<any>(null);
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Goedemorgen";
+    if (hour < 18) return "Goedemiddag";
+    return "Goedenavond";
+  };
 
   useEffect(() => {
     checkAuth();
@@ -103,6 +111,9 @@ export default function Kalender() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       navigate("/auth");
+    } else {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
     }
   };
 
@@ -265,30 +276,102 @@ export default function Kalender() {
       <div className="flex min-h-screen w-full">
         <AppSidebar />
         <main className="flex-1 overflow-auto bg-background p-6">
-          <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
-            <h1 className="text-3xl font-bold">
-              Kalender - {format(currentWeekStart, "MMMM yyyy", { locale: nl })}, Week {getWeek(currentWeekStart, { locale: nl })}
-            </h1>
-            <div className="flex items-center gap-4 flex-wrap">
-              <ToggleGroup type="single" value={viewMode} onValueChange={(value) => value && setViewMode(value as "5" | "7")}>
-                <ToggleGroupItem value="5" aria-label="Werkweek" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
-                  Werkweek (Ma-Vr)
-                </ToggleGroupItem>
-                <ToggleGroupItem value="7" aria-label="Volle week" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
-                  Volle week (Ma-Zo)
-                </ToggleGroupItem>
-              </ToggleGroup>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button variant="outline" size="sm" onClick={goToToday}>
-                  Vandaag
-                </Button>
-                <Button variant="outline" size="sm" onClick={goToNextWeek}>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+          {/* Hero Section */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <h1 className="text-4xl font-bold">
+                    {getGreeting()}, {user?.user_metadata?.name || 'daar'}
+                  </h1>
+                </div>
+                <p className="text-xl text-muted-foreground">
+                  Week {getWeek(currentWeekStart, { locale: nl })} - {format(currentWeekStart, "MMMM yyyy", { locale: nl })}
+                </p>
               </div>
+              
+              {/* Week Navigatie + View Toggle */}
+              <div className="flex items-center gap-3">
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={goToToday}>
+                    Vandaag
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={goToNextWeek}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                <ToggleGroup type="single" value={viewMode} onValueChange={(value) => value && setViewMode(value as "5" | "7")}>
+                  <ToggleGroupItem value="5" aria-label="Werkweek" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+                    Ma-Vr
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="7" aria-label="Volle week" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+                    Ma-Zo
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </div>
+            </div>
+            
+            {/* Smart Summary */}
+            <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+              <p className="text-sm">
+                📅 Je hebt <strong>{tasks.length} taken</strong> deze week verdeeld over {weekDays.length} dagen
+              </p>
+              {tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length > 0 && (
+                <p className="text-sm text-destructive">
+                  ⚠️ <strong>{tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length} high priority taken</strong> vereisen aandacht
+                </p>
+              )}
+              {reminders.length > 0 && (
+                <p className="text-sm text-primary">
+                  🔔 <strong>{reminders.length} herinneringen</strong> ingesteld deze week
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Compact Stats Bar */}
+          <div className="grid grid-cols-4 gap-3 mb-6">
+            <button
+              onClick={goToToday}
+              className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border-2 border-transparent hover:border-primary/20"
+            >
+              <span className="text-2xl mb-1">📅</span>
+              <span className="text-2xl font-bold">
+                {getTasksForDay(new Date()).length}
+              </span>
+              <span className="text-xs text-muted-foreground">Vandaag</span>
+            </button>
+            
+            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
+              <span className="text-2xl mb-1">📋</span>
+              <span className="text-2xl font-bold">
+                {tasks.length}
+              </span>
+              <span className="text-xs text-muted-foreground">Deze Week</span>
+            </div>
+            
+            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
+              <span className="text-2xl mb-1">🔔</span>
+              <span className="text-2xl font-bold text-primary">
+                {reminders.length}
+              </span>
+              <span className="text-xs text-muted-foreground">Reminders</span>
+            </div>
+            
+            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
+              <span className="text-2xl mb-1">⚠️</span>
+              <span className={`text-2xl font-bold ${
+                tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length > 0 
+                  ? 'text-destructive' 
+                  : 'text-muted-foreground'
+              }`}>
+                {tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length}
+              </span>
+              <span className="text-xs text-muted-foreground">High Priority</span>
             </div>
           </div>
 
