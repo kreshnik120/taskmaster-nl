@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.1-query-tools-fixed";
+const SYSTEM_PROMPT_VERSION = "v2.2-query-priority-fix";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -1984,46 +1984,49 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
       orgProfileGroundTruth += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     }
 
-    // ⚡ NIEUWE SYSTEM PROMPT: Integreert ABCzorg instructies + org_profiles GROUND TRUTH + bestaande context
-    const systemPrompt = `${getFullInstructions(detectedRole)}${orgProfileGroundTruth}
+    // ⚡ NIEUWE SYSTEM PROMPT: Query tools EERST, dan ABCzorg instructies
+    const systemPrompt = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚨 PRIORITEIT 0: DATABASE TOOLS - ALTIJD EERST CONTROLEREN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🕐 HUIDIGE NEDERLANDSE TIJD:
-Vandaag is: ${dutchDateTime}
-Je werkt in Nederlandse tijd (Europe/Amsterdam, CET/CEST tijdzone).
-${conversationSummary}
+🔍 KRITIEKE REGEL: TAAK VRAGEN → QUERY_TASKS TOOL (GEEN KENNISBANK!)
 
-${keyFacts ? `📋 BELANGRIJKE CONTEXT UIT EERDERE GESPREKKEN:\n${keyFacts}\n` : ''}
+Bij ELKE vraag over taken, EERST controleren of dit een database vraag is:
+• "Welke taken..." → DIRECT query_tasks tool gebruiken
+• "Hoeveel taken..." → DIRECT query_tasks tool gebruiken  
+• "Wie heeft taak..." → DIRECT query_tasks tool gebruiken
+• "Is taak X afgerond..." → DIRECT query_tasks tool gebruiken
+• "Toon overzicht van taken..." → DIRECT query_tasks tool gebruiken
+• "Welke taken zijn afgerond..." → DIRECT query_tasks tool gebruiken
+• "Geef een lijst..." → DIRECT query_tasks tool gebruiken
 
-HUIDIGE CONTEXT:
-${contextSummary}
+⚠️ VERBODEN ANTWOORDEN BIJ TAAK VRAGEN:
+❌ "Geen informatie beschikbaar in de database"
+❌ "De database lijkt leeg"
+❌ "Ik kan niet zien welke taken..."
+❌ "Op basis van de context..."
+→ Deze antwoorden zijn ALLEEN toegestaan NA het uitvoeren van query_tasks tool!
 
-📋 **KLANTEN DATABASE** (${clients?.length || 0} actieve klanten):
-${clients?.map(c => `- **${c.name}** (${c.company}) - Tier ${c.tier}${c.weekly_hours ? `, ${c.weekly_hours}u/week` : ''}${c.revenue_per_hour ? `, €${c.revenue_per_hour}/u` : ''}`).join('\n') || 'Geen klanten'}
+🎯 ONDERSCHEID TAAK DATA vs KENNIS DATA:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**TAAK DATA** (Live database → query_tasks tool):
+✅ "Welke taken zijn afgerond"
+✅ "Hoeveel uur gewerkt"
+✅ "Wie heeft taak X gedaan"
+✅ "Zijn de taken tijdig"
+✅ "Toon taken van deze week"
 
-📚 KENNISBANK (${fullKnowledgeBase.length} relevante items voor jouw rol: ${detectedRole}):
-${formatKnowledgeBase()}
+**KENNIS DATA** (AI Knowledge base → kennisbank zoeken):
+✅ "Wat is het vakantiebeleid"
+✅ "Hoe werkt de planning"
+✅ "Wat zijn de werkuren"
+✅ "Hoe declareer ik"
+✅ "Wat is het adres van klant X"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 QUERY_TASKS TOOL USAGE - CORRECTE VOORBEELDEN:
 
-🔍 DATABASE QUERY TOOL - GEBRUIK ALTIJD VOOR TAAK VRAGEN
-==========================================
-⚠️ KRITIEK: Bij informatievragen over taken → DIRECT query_tasks gebruiken!
-
-WANNEER:
-• "Welke taken..." → query_tasks
-• "Hoeveel uur..." → query_tasks met include: ["time_entries"]
-• "Wie heeft..." → query_tasks met include: ["assignee"]
-• "Is X tijdig..." → query_tasks en check on_time field
-• "Toon overzicht..." → query_tasks
-• "Geef lijst..." → query_tasks
-
-NIET DOEN:
-❌ Antwoorden uit context summary (is NIET volledig)
-❌ Zeggen "ik kan niet..." (je KUNT WEL via query_tasks)
-❌ Taak aanmaken bij informatievragen
-
-VOORBEELDEN MET CORRECTE NEDERLANDSE TIJD (+01:00):
 "Welke taken zijn afgerond in de afgelopen 24 uur?"
 → query_tasks({ 
     filter: { 
@@ -2051,17 +2054,41 @@ VOORBEELDEN MET CORRECTE NEDERLANDSE TIJD (+01:00):
     include: ["time_entries"] 
   })
 
-RESPONSE FORMAT:
-- Tool returns: { success: true, tasks: [...], summary: {...} }
-- Gebruik task.on_time, task.days_late, task.total_hours_worked
-- Geef Nederlandse datums: toLocaleDateString('nl-NL')
-- Inclusief summary: "X taken gevonden, Y tijdig, Z te laat, totaal W uur"
-
 💡 DATUM CONVERSIE VOOR NEDERLANDSE TIJD:
 - "afgelopen 24 uur" → start: gisteren 00:00 +01:00, end: nu
 - "deze week" → start: maandag 00:00 +01:00, end: zondag 23:59 +01:00
 - "morgen" → start: morgen 00:00 +01:00, end: morgen 23:59 +01:00
 - Gebruik ALTIJD Europe/Amsterdam timezone (+01:00 winter, +02:00 zomer)
+
+📊 RESPONSE FORMAT:
+- Tool returns: { success: true, tasks: [...], summary: {...} }
+- Gebruik task.on_time, task.days_late, task.total_hours_worked
+- Geef Nederlandse datums: toLocaleDateString('nl-NL')
+- Inclusief summary: "X taken gevonden, Y tijdig, Z te laat, totaal W uur"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${getFullInstructions(detectedRole)}${orgProfileGroundTruth}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🕐 HUIDIGE NEDERLANDSE TIJD:
+Vandaag is: ${dutchDateTime}
+Je werkt in Nederlandse tijd (Europe/Amsterdam, CET/CEST tijdzone).
+${conversationSummary}
+
+${keyFacts ? `📋 BELANGRIJKE CONTEXT UIT EERDERE GESPREKKEN:\n${keyFacts}\n` : ''}
+
+HUIDIGE CONTEXT:
+${contextSummary}
+
+⚠️ WAARSCHUWING: De bovenstaande context bevat NIET alle taken!
+Voor complete taak informatie → gebruik query_tasks tool!
+
+📋 **KLANTEN DATABASE** (${clients?.length || 0} actieve klanten):
+${clients?.map(c => `- **${c.name}** (${c.company}) - Tier ${c.tier}${c.weekly_hours ? `, ${c.weekly_hours}u/week` : ''}${c.revenue_per_hour ? `, €${c.revenue_per_hour}/u` : ''}`).join('\n') || 'Geen klanten'}
+
+📚 KENNISBANK (${fullKnowledgeBase.length} relevante items voor jouw rol: ${detectedRole}):
+${formatKnowledgeBase()}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
