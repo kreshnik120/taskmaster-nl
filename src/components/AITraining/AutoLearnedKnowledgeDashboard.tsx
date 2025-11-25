@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, CheckCircle, Eye, Edit, TrendingUp, Calendar, AlertCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle, Eye, Edit, TrendingUp, Calendar, AlertCircle, XCircle, Scan, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
@@ -26,11 +26,21 @@ interface AutoLearnedItem {
   source_reference: string;
 }
 
+interface OutdatedItem {
+  id: string;
+  key: string;
+  category: string;
+  reason: string;
+  confidence: number;
+}
+
 export const AutoLearnedKnowledgeDashboard = () => {
   const queryClient = useQueryClient();
   const [sortBy, setSortBy] = useState<string>("recent");
   const [showUnverifiedOnly, setShowUnverifiedOnly] = useState(false);
   const [selectedItem, setSelectedItem] = useState<AutoLearnedItem | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [outdatedItems, setOutdatedItems] = useState<OutdatedItem[]>([]);
 
   // Fetch auto-learned knowledge items
   const { data: items = [], refetch } = useQuery({
@@ -130,7 +140,66 @@ export const AutoLearnedKnowledgeDashboard = () => {
     }
 
     toast.success("✓ Item geverifieerd!");
+    setSelectedItem(null);
     refetch();
+  };
+
+  const rejectItem = async (id: string, reason: string = "Verouderd of onjuist") => {
+    const { error } = await supabase
+      .from("ai_knowledge_base")
+      .update({
+        requires_verification: false,
+        validation_status: "rejected",
+        last_verified: new Date().toISOString(),
+        stability_score: 0.0,
+        deletion_reason: { reason, rejected_at: new Date().toISOString() },
+      })
+      .eq("id", id);
+
+    if (error) {
+      toast.error("Afwijzing mislukt", {
+        description: error.message,
+      });
+      return;
+    }
+
+    toast.success("✗ Item afgewezen!");
+    setSelectedItem(null);
+    refetch();
+  };
+
+  const scanOutdatedKnowledge = async () => {
+    setIsScanning(true);
+    setOutdatedItems([]);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("scan-outdated-knowledge", {
+        body: {},
+      });
+
+      if (error) throw error;
+
+      if (data.outdated && data.outdated.length > 0) {
+        setOutdatedItems(data.outdated);
+        toast.success(`✓ Scan compleet: ${data.outdated.length} verouderde items gevonden`);
+      } else {
+        toast.success("✓ Geen verouderde items gevonden!");
+      }
+    } catch (error) {
+      console.error("Scan error:", error);
+      toast.error("Scan mislukt", {
+        description: error instanceof Error ? error.message : "Onbekende fout",
+      });
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const rejectAllOutdated = async () => {
+    const promises = outdatedItems.map((item) => rejectItem(item.id, item.reason));
+    await Promise.all(promises);
+    setOutdatedItems([]);
+    toast.success(`✓ ${outdatedItems.length} items afgewezen!`);
   };
 
   const getStabilityColor = (score: number) => {
@@ -232,7 +301,84 @@ export const AutoLearnedKnowledgeDashboard = () => {
               </>
             )}
           </Button>
+
+          <Button
+            variant="secondary"
+            onClick={scanOutdatedKnowledge}
+            disabled={isScanning}
+            className="gap-2"
+          >
+            {isScanning ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Scannen...
+              </>
+            ) : (
+              <>
+                <Scan className="h-4 w-4" />
+                Scan Verouderde Items
+              </>
+            )}
+          </Button>
         </div>
+
+        {/* Outdated Items Results */}
+        {outdatedItems.length > 0 && (
+          <Card className="mb-4 border-orange-500">
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle className="text-orange-600 flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5" />
+                    Verouderde Items Gevonden
+                  </CardTitle>
+                  <CardDescription>
+                    {outdatedItems.length} items bevatten mogelijk verouderde of onjuiste informatie
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="destructive"
+                  onClick={rejectAllOutdated}
+                  className="gap-2"
+                >
+                  <XCircle className="h-4 w-4" />
+                  Reject Alle {outdatedItems.length}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[200px]">
+                <div className="space-y-2">
+                  {outdatedItems.map((item) => (
+                    <Card key={item.id} className="p-3">
+                      <div className="flex justify-between items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant="outline">{item.category}</Badge>
+                            <Badge variant="secondary">
+                              {Math.round(item.confidence * 100)}% zeker
+                            </Badge>
+                          </div>
+                          <p className="font-medium text-sm mb-1">{item.key}</p>
+                          <p className="text-xs text-muted-foreground">{item.reason}</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => rejectItem(item.id, item.reason)}
+                          className="gap-1 flex-shrink-0"
+                        >
+                          <XCircle className="h-3 w-3" />
+                          Reject
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Knowledge Items List */}
         {items.length === 0 ? (
@@ -316,14 +462,25 @@ export const AutoLearnedKnowledgeDashboard = () => {
                           Details
                         </Button>
                         {item.requires_verification && (
-                          <Button
-                            size="sm"
-                            onClick={() => verifyItem(item.id)}
-                            className="gap-2"
-                          >
-                            <CheckCircle className="h-3 w-3" />
-                            Verify
-                          </Button>
+                          <>
+                            <Button
+                              size="sm"
+                              onClick={() => verifyItem(item.id)}
+                              className="gap-2"
+                            >
+                              <CheckCircle className="h-3 w-3" />
+                              Verify
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => rejectItem(item.id)}
+                              className="gap-2"
+                            >
+                              <XCircle className="h-3 w-3" />
+                              Reject
+                            </Button>
+                          </>
                         )}
                       </div>
                     </div>
@@ -374,9 +531,34 @@ export const AutoLearnedKnowledgeDashboard = () => {
                       </Badge>
                     </div>
                   </div>
-                  <Button onClick={() => setSelectedItem(null)} className="w-full">
-                    Sluiten
-                  </Button>
+                  <div className="flex gap-2">
+                    {selectedItem.requires_verification && (
+                      <>
+                        <Button 
+                          onClick={() => verifyItem(selectedItem.id)} 
+                          className="flex-1 gap-2"
+                        >
+                          <CheckCircle className="h-4 w-4" />
+                          Verify
+                        </Button>
+                        <Button 
+                          onClick={() => rejectItem(selectedItem.id)}
+                          variant="destructive"
+                          className="flex-1 gap-2"
+                        >
+                          <XCircle className="h-4 w-4" />
+                          Reject
+                        </Button>
+                      </>
+                    )}
+                    <Button 
+                      onClick={() => setSelectedItem(null)} 
+                      variant="outline"
+                      className={selectedItem.requires_verification ? "flex-1" : "w-full"}
+                    >
+                      Sluiten
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
