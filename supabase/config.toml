@@ -162,5 +162,9 @@ verify_jwt = false
 [functions.cleanup-deleted-knowledge]
 verify_jwt = false
 
+[functions.cleanup-low-stability-knowledge]
+verify_jwt = false
+schedule = "0 6 * * *"  # Dagelijks om 06:00 - automatische cleanup van lage stability items
+
 [functions.scan-outdated-knowledge]
 verify_jwt = true
