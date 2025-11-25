@@ -66,7 +66,7 @@ serve(async (req) => {
     const isRealUserAuth = authHeader && !authHeader.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9lbG1zbWNncnllb3J5aG9uZXh3');
     
     let orgId: string;
-    let userId: string;
+    let userId: string | null;
     let supabase: any;
 
     if (isRealUserAuth) {
@@ -89,7 +89,7 @@ serve(async (req) => {
         );
         const { data: orgs } = await supabase.from('organizations').select('id').limit(1);
         orgId = orgs![0].id;
-        userId = orgId;
+        userId = null;
       } else {
         userId = user.id;
         const { data: userOrg } = await supabase
@@ -114,7 +114,7 @@ serve(async (req) => {
       );
       const { data: orgs } = await supabase.from('organizations').select('id').limit(1);
       orgId = orgs![0].id;
-      userId = orgId;
+      userId = null;
     }
 
     const { 
@@ -235,6 +235,7 @@ USER FEEDBACK: ${user_feedback || 'none'}`
     // ✅ INTELLIGENT LEARNING: Auto-create with conflict detection
     let suggestionsCreated = 0;
     let suggestionsRejected = 0;
+    let suggestionsReinforced = 0;
     
     if (auto_apply && analysis.new_knowledge_suggestions?.length > 0) {
       console.log(`💡 Processing ${analysis.new_knowledge_suggestions.length} knowledge suggestions with conflict detection...`);
@@ -270,112 +271,146 @@ USER FEEDBACK: ${user_feedback || 'none'}`
             console.log(`⚠️ Conflict detected for "${suggestion.key}" but allowing: ${conflictResult.reason}`);
           }
 
-          // ✅ STEP 2: Check for duplicates
-          const { data: existingDup } = await supabase
+          // ✅ STEP 2: Check for existing similar knowledge - BOOST or CREATE
+          const { data: existingSimilar, error: existingError } = await supabase
             .from('ai_knowledge_base')
-            .select('id')
+            .select('id, stability_score, observation_count')
             .eq('key', suggestion.key)
             .eq('org_id', orgId)
             .is('deleted_at', null)
-            .limit(1);
-          
-          if (!existingDup || existingDup.length === 0) {
-            // ✅ P2-3 ENHANCED: PII REDACTION with improved error handling
-            let redactedValue = suggestion.value;
-            let originalText = '';
-            
-            if (typeof redactedValue === 'object') {
-              originalText = JSON.stringify(redactedValue);
+            .maybeSingle();
+
+          if (existingError) {
+            console.warn('⚠️ Failed to check existing knowledge for reinforcement:', existingError);
+          }
+
+          if (existingSimilar) {
+            const currentStability = typeof existingSimilar.stability_score === 'number'
+              ? existingSimilar.stability_score
+              : 0.5;
+            const newStability = Math.min(1.0, currentStability + 0.1);
+            const newObservationCount = (existingSimilar.observation_count ?? 1) + 1;
+
+            const { error: updateError } = await supabase
+              .from('ai_knowledge_base')
+              .update({
+                stability_score: newStability,
+                observation_count: newObservationCount,
+                updated_at: new Date().toISOString(),
+                auto_reviewed_at: new Date().toISOString()
+              })
+              .eq('id', existingSimilar.id)
+              .eq('org_id', orgId);
+
+            if (updateError) {
+              console.error(`❌ Failed to reinforce knowledge "${suggestion.key}":`, updateError);
             } else {
-              originalText = String(redactedValue);
-            }
-            
-            const { data: redactedResult, error: redactError } = await supabase.rpc('redact_pii', {
-              input_text: originalText
-            });
-            
-            if (redactError) {
-              console.warn('⚠️ PII redaction failed, using original value:', redactError);
-            } else if (redactedResult && redactedResult !== originalText) {
-              console.log('🔒 PII redacted in suggestion:', suggestion.key);
-              try {
-                if (typeof redactedValue === 'object') {
-                  redactedValue = JSON.parse(redactedResult);
-                } else {
-                  redactedValue = redactedResult;
-                }
-              } catch {
-                redactedValue = { redacted_content: redactedResult };
-              }
-            }
-            
-            // Detect role tags from category if not provided
-            const roleTags = suggestion.role_tags || detectRoleFromCategory(suggestion.category);
-            
-            // Auto-set confidentiality for HR categories
-            let confidentiality = suggestion.confidentiality || 'intern';
-            let acl = suggestion.acl || [];
-            
-            if (suggestion.category?.startsWith('hr_')) {
-              confidentiality = 'vertrouwelijk';
-              acl = ['admin', 'manager'];
-            }
-            
-            // ✅ STEP 3: Determine stability score based on category
-            let stabilityScore = 0.5; // default
-            const category = suggestion.category || 'learned_from_chat';
-            
-            if (category.includes('adres') || category === 'bedrijfsgegevens') {
-              stabilityScore = 0.95; // Addresses rarely change
-            } else if (category.includes('kvk') || category.includes('btw')) {
-              stabilityScore = 0.99; // Legal registration numbers almost never change
-            } else if (category.includes('tarief') || category.includes('prijs')) {
-              stabilityScore = 0.60; // Prices change periodically
-            } else if (category.includes('contact')) {
-              stabilityScore = 0.40; // Contact persons change frequently
+              suggestionsReinforced++;
+              console.log(
+                `🔄 Reinforced knowledge "${suggestion.key}": stability ${currentStability.toFixed(2)} → ${newStability.toFixed(2)}, observations: ${newObservationCount}`
+              );
             }
 
-            const { error: insertError } = await supabase
-              .from('ai_knowledge_base')
-              .insert({
-                user_id: userId,
-                org_id: orgId,
-                category: suggestion.category || 'learned_from_chat',
-                key: suggestion.key,
-                value: redactedValue,
-                confidence_score: suggestion.confidence,
-                source: 'continuous_learner_auto_suggestion',
-                auto_reviewed_at: new Date().toISOString(),
-                review_count: 1,
-                // Week 1-2: Metadata fields
-                role_tags: roleTags,
-                confidentiality: confidentiality,
-                valid_from: suggestion.valid_from || new Date().toISOString().split('T')[0],
-                jurisdiction: suggestion.jurisdiction || 'NL',
-                acl: acl,
-                // ✅ NEW: Source tracking & stability
-                source_type: 'ai_generated',
-                source_reference: `continuous-learner:auto-suggestion`,
-                requires_verification: suggestion.confidence < 0.95,
-                stability_score: stabilityScore,
-                correction_count: 0
-              });
-            
-            if (!insertError) {
-              suggestionsCreated++;
-              console.log(`✅ Created new knowledge: ${suggestion.key}`);
-            } else {
-              console.error(`❌ Failed to create knowledge "${suggestion.key}":`, insertError);
-              console.error('❌ Insert data was:', {
-                user_id: userId,
-                org_id: orgId,
-                category: suggestion.category,
-                key: suggestion.key,
-                confidence: suggestion.confidence,
-                value: redactedValue,
-                source: 'continuous_learner_auto_suggestion'
-              });
+            continue;
+          }
+
+          // ✅ NO EXISTING ITEM: create new knowledge with initial observation_count
+          // ✅ P2-3 ENHANCED: PII REDACTION with improved error handling
+          let redactedValue = suggestion.value;
+          let originalText = '';
+          
+          if (typeof redactedValue === 'object') {
+            originalText = JSON.stringify(redactedValue);
+          } else {
+            originalText = String(redactedValue);
+          }
+          
+          const { data: redactedResult, error: redactError } = await supabase.rpc('redact_pii', {
+            input_text: originalText
+          });
+          
+          if (redactError) {
+            console.warn('⚠️ PII redaction failed, using original value:', redactError);
+          } else if (redactedResult && redactedResult !== originalText) {
+            console.log('🔒 PII redacted in suggestion:', suggestion.key);
+            try {
+              if (typeof redactedValue === 'object') {
+                redactedValue = JSON.parse(redactedResult);
+              } else {
+                redactedValue = redactedResult;
+              }
+            } catch {
+              redactedValue = { redacted_content: redactedResult };
             }
+          }
+          
+          // Detect role tags from category if not provided
+          const roleTags = suggestion.role_tags || detectRoleFromCategory(suggestion.category);
+          
+          // Auto-set confidentiality for HR categories
+          let confidentiality = suggestion.confidentiality || 'intern';
+          let acl = suggestion.acl || [];
+          
+          if (suggestion.category?.startsWith('hr_')) {
+            confidentiality = 'vertrouwelijk';
+            acl = ['admin', 'manager'];
+          }
+          
+          // ✅ STEP 3: Determine stability score based on category
+          let stabilityScore = 0.5; // default
+          const category = suggestion.category || 'learned_from_chat';
+          
+          if (category.includes('adres') || category === 'bedrijfsgegevens') {
+            stabilityScore = 0.95; // Addresses rarely change
+          } else if (category.includes('kvk') || category.includes('btw')) {
+            stabilityScore = 0.99; // Legal registration numbers almost never change
+          } else if (category.includes('tarief') || category.includes('prijs')) {
+            stabilityScore = 0.60; // Prices change periodically
+          } else if (category.includes('contact')) {
+            stabilityScore = 0.40; // Contact persons change frequently
+          }
+
+          const { error: insertError } = await supabase
+            .from('ai_knowledge_base')
+            .insert({
+              user_id: userId,
+              org_id: orgId,
+              category: suggestion.category || 'learned_from_chat',
+              key: suggestion.key,
+              value: redactedValue,
+              confidence_score: suggestion.confidence,
+              source: 'continuous_learner_auto_suggestion',
+              auto_reviewed_at: new Date().toISOString(),
+              review_count: 1,
+              // Week 1-2: Metadata fields
+              role_tags: roleTags,
+              confidentiality: confidentiality,
+              valid_from: suggestion.valid_from || new Date().toISOString().split('T')[0],
+              jurisdiction: suggestion.jurisdiction || 'NL',
+              acl: acl,
+              // ✅ NEW: Source tracking & stability
+              source_type: 'ai_generated',
+              source_reference: `continuous-learner:auto-suggestion`,
+              requires_verification: suggestion.confidence < 0.95,
+              stability_score: stabilityScore,
+              observation_count: 1,
+              correction_count: 0
+            });
+          
+          if (!insertError) {
+            suggestionsCreated++;
+            console.log(`✅ Created new knowledge: ${suggestion.key}`);
+          } else {
+            console.error(`❌ Failed to create knowledge "${suggestion.key}":`, insertError);
+            console.error('❌ Insert data was:', {
+              user_id: userId,
+              org_id: orgId,
+              category: suggestion.category,
+              key: suggestion.key,
+              confidence: suggestion.confidence,
+              value: redactedValue,
+              source: 'continuous_learner_auto_suggestion'
+            });
           }
         }
       }
@@ -444,7 +479,7 @@ USER FEEDBACK: ${user_feedback || 'none'}`
         ai_response: analysis,
         outcome: analysis.completeness === 'yes' && analysis.accuracy === 'yes' ? 'success' : 'needs_improvement',
         learning_score: analysis.learning_score,
-        applied_to_knowledge_base: auto_apply && (updatesApplied > 0 || suggestionsCreated > 0)  // ✅ DYNAMISCH: alleen TRUE als daadwerkelijk toegepast
+        applied_to_knowledge_base: auto_apply && (updatesApplied > 0 || suggestionsCreated > 0 || suggestionsReinforced > 0)  // ✅ DYNAMISCH: ook TRUE bij reinforcement-updates
       })
       .select()
       .single();

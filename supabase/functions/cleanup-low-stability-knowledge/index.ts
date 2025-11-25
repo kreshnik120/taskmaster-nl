@@ -25,8 +25,9 @@ serve(async (req) => {
     // Find items to cleanup
     const { data: itemsToDelete, error: selectError } = await supabase
       .from('ai_knowledge_base')
-      .select('id, key, category, stability_score, created_at, source')
-      .lt('stability_score', 0.5)
+      .select('id, key, category, stability_score, observation_count, created_at, source')
+      .lt('stability_score', 0.4)
+      .lt('observation_count', 3)
       .eq('requires_verification', true)
       .is('deleted_at', null)
       .lt('created_at', sevenDaysAgo.toISOString());
@@ -67,7 +68,8 @@ serve(async (req) => {
         deletion_reason: {
           reason: 'Automatic cleanup: low stability score',
           criteria: {
-            stability_score: '< 0.5',
+            stability_score: '< 0.4',
+            observation_count: '< 3',
             requires_verification: true,
             age_days: 7
           },

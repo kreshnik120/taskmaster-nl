@@ -178,6 +178,7 @@ export type Database = {
           last_validation_error: string | null
           last_verified: string | null
           needs_review: boolean | null
+          observation_count: number | null
           org_id: string
           original_text: string | null
           redacted_text: string | null
@@ -196,7 +197,7 @@ export type Database = {
           temporal_context: Json | null
           updated_at: string | null
           usage_count: number | null
-          user_id: string
+          user_id: string | null
           valid_from: string | null
           valid_to: string | null
           validation_failures: number | null
@@ -235,6 +236,7 @@ export type Database = {
           last_validation_error?: string | null
           last_verified?: string | null
           needs_review?: boolean | null
+          observation_count?: number | null
           org_id: string
           original_text?: string | null
           redacted_text?: string | null
@@ -253,7 +255,7 @@ export type Database = {
           temporal_context?: Json | null
           updated_at?: string | null
           usage_count?: number | null
-          user_id: string
+          user_id?: string | null
           valid_from?: string | null
           valid_to?: string | null
           validation_failures?: number | null
@@ -292,6 +294,7 @@ export type Database = {
           last_validation_error?: string | null
           last_verified?: string | null
           needs_review?: boolean | null
+          observation_count?: number | null
           org_id?: string
           original_text?: string | null
           redacted_text?: string | null
@@ -310,7 +313,7 @@ export type Database = {
           temporal_context?: Json | null
           updated_at?: string | null
           usage_count?: number | null
-          user_id?: string
+          user_id?: string | null
           valid_from?: string | null
           valid_to?: string | null
           validation_failures?: number | null
