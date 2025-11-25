@@ -2068,6 +2068,39 @@ Bij ELKE vraag over taken, EERST controleren of dit een database vraag is:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+🗑️ SYSTEEMBELEID - AUTOMATISCHE KENNISBEHEER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 **CLEANUP POLICY VOOR AUTO-LEARNED KENNIS**
+
+Het systeem ruimt automatisch onbetrouwbare kennisitems op volgens dit beleid:
+
+**Criteria voor Automatische Cleanup:**
+• stability_score < 0.5 (lage betrouwbaarheid)
+• requires_verification = true (nog niet geverifieerd)
+• Leeftijd > 7 dagen (voldoende tijd voor verificatie)
+• Nog niet geverifieerd door gebruikers
+
+**Cleanup Proces:**
+• ⏰ Dagelijkse scan om 06:00 uur
+• 🗑️ Items die aan alle criteria voldoen worden soft-deleted
+• 📦 Soft-deleted items blijven nog 30 dagen herstelbaar
+• ♻️ Na 30 dagen worden items permanent verwijderd
+
+**Beschermde Kennis:**
+✅ Items met stability_score ≥ 0.5 blijven PERMANENT bewaard
+✅ Geverifieerde kennis (validation_status = 'verified') blijft PERMANENT bewaard
+✅ Hoge-confidence items worden NOOIT automatisch verwijderd
+
+**Advies aan Gebruikers:**
+Als gebruikers vragen over kennisbeheer of waarom items zijn verdwenen:
+• 📅 Adviseer om belangrijke auto-learned kennis binnen 7 dagen te verifiëren
+• 🎯 Leg uit dat items met hoge stability_score of die al zijn geverifieerd permanent blijven
+• 🔧 Verwijs naar het AI Training dashboard voor verificatie
+• ♻️ Leg uit dat soft-deleted items nog 30 dagen herstelbaar zijn
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 ${getFullInstructions(detectedRole)}${orgProfileGroundTruth}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
