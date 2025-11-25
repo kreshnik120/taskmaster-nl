@@ -1,13 +1,19 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Brain, CheckCircle2, Clock, Sparkles, TrendingUp } from "lucide-react";
+import { Brain, CheckCircle2, Clock, Sparkles, TrendingUp, Play } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import { toast } from "sonner";
 
 export const SystemLearningDashboard = () => {
+  const queryClient = useQueryClient();
+  const [isProcessing, setIsProcessing] = useState(false);
+
   // Fetch recent system events
   const { data: recentEvents, isLoading } = useQuery({
     queryKey: ['system-events'],
@@ -51,6 +57,36 @@ export const SystemLearningDashboard = () => {
     if (eventType === 'task_completed') return 'default';
     if (eventType === 'task_created') return 'secondary';
     return 'outline';
+  };
+
+  const handleProcessEvents = async () => {
+    setIsProcessing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('process-system-events', {
+        body: {}
+      });
+
+      if (error) throw error;
+
+      toast.success(
+        `✅ Events verwerkt: ${data.processed}/${data.total}`, 
+        {
+          description: data.knowledgeCreated 
+            ? `${data.knowledgeCreated} kennis items aangemaakt`
+            : 'Geen nieuwe kennis aangemaakt'
+        }
+      );
+
+      // Refresh the events list
+      queryClient.invalidateQueries({ queryKey: ['system-events'] });
+    } catch (error) {
+      console.error('Error processing events:', error);
+      toast.error('❌ Fout bij verwerken events', {
+        description: error instanceof Error ? error.message : 'Onbekende fout'
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -142,13 +178,26 @@ export const SystemLearningDashboard = () => {
       {/* Recent Events Timeline */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Brain className="h-5 w-5" />
-            Recente Systeem Learning Events
-          </CardTitle>
-          <CardDescription>
-            AI leert automatisch van acties in het systeem
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Brain className="h-5 w-5" />
+                Recente Systeem Learning Events
+              </CardTitle>
+              <CardDescription>
+                AI leert automatisch van acties in het systeem
+              </CardDescription>
+            </div>
+            <Button
+              onClick={handleProcessEvents}
+              disabled={isProcessing || pendingEvents.length === 0}
+              size="sm"
+              className="gap-2"
+            >
+              <Play className="h-4 w-4" />
+              {isProcessing ? 'Verwerken...' : 'Process Nu'}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
