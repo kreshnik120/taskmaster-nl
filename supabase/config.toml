@@ -161,3 +161,6 @@ verify_jwt = false
 
 [functions.cleanup-deleted-knowledge]
 verify_jwt = false
+
+[functions.scan-outdated-knowledge]
+verify_jwt = true
