@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.0-query-tools";
+const SYSTEM_PROMPT_VERSION = "v2.1-query-tools-fixed";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -2993,7 +2993,7 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             selectString += ', subtasks(id, title, status, order)';
                           }
                           if (args.include?.includes('time_entries')) {
-                            selectString += ', time_entries(id, started_at, ended_at, duration_min)';
+                            selectString += ', time_entries(id, start, end, duration_min)';
                           }
                           if (args.include?.includes('comments')) {
                             selectString += ', comments(id, body, created_at, author_id)';
@@ -3051,8 +3051,8 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             const timeEntries = task.time_entries || [];
                             const totalMinutes = timeEntries.reduce((sum: number, entry: any) => {
                               if (entry.duration_min) return sum + entry.duration_min;
-                              if (entry.started_at && entry.ended_at) {
-                                const duration = (new Date(entry.ended_at).getTime() - new Date(entry.started_at).getTime()) / 60000;
+                              if (entry.start && entry.end) {
+                                const duration = (new Date(entry.end).getTime() - new Date(entry.start).getTime()) / 60000;
                                 return sum + duration;
                               }
                               return sum;
