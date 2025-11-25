@@ -3150,6 +3150,25 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                           const onTimeTasks = enrichedTasks.filter((t: any) => t.on_time);
                           const lateTasks = enrichedTasks.filter((t: any) => !t.on_time && t.due_at);
                           
+                          // Format detailed task list
+                          const formattedTasks = enrichedTasks.map((task: any, i: number) => {
+                            const statusIcon = task.on_time ? '✅' : (task.due_at ? '⚠️' : '⏱️');
+                            const lateInfo = !task.on_time && task.days_late > 0 ? ` (${task.days_late}d te laat)` : '';
+                            const completedDate = task.completed_at 
+                              ? new Date(task.completed_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })
+                              : 'Niet afgerond';
+                            
+                            return `${i + 1}. **${task.title}** (${task.priority})\n` +
+                              `   └ Afgerond: ${completedDate}${lateInfo}\n` +
+                              `   └ Door: ${task.assignee_name}\n` +
+                              `   └ Tijd besteed: ${task.total_hours_worked}u ${statusIcon}`;
+                          }).join('\n\n');
+                          
+                          const summaryHeader = `📊 **${enrichedTasks.length} taken gevonden** - ${onTimeTasks.length} tijdig, ${lateTasks.length} te laat`;
+                          const detailedMessage = enrichedTasks.length > 0 
+                            ? `${summaryHeader}\n\n${formattedTasks}`
+                            : `${summaryHeader}\n\nℹ️ Geen taken gevonden met deze filters.`;
+                          
                           result = {
                             success: true,
                             tasks: enrichedTasks,
@@ -3161,7 +3180,7 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                                 ? ((onTimeTasks.length / enrichedTasks.length) * 100).toFixed(1) 
                                 : '0'
                             },
-                            message: `📊 ${enrichedTasks.length} taken gevonden - ${onTimeTasks.length} tijdig, ${lateTasks.length} te laat`
+                            message: detailedMessage
                           };
                           break;
 
