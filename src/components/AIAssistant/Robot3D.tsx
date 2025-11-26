@@ -19,6 +19,7 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
   const statusRingRef = useRef<THREE.Mesh>(null);
   const antennaRef = useRef<THREE.Mesh>(null);
   const ledBarRef = useRef<THREE.Mesh>(null);
+  const smileRef = useRef<THREE.Mesh>(null);
   const bodyRef = useRef<THREE.Mesh>(null);
   const leftArmRef = useRef<THREE.Mesh>(null);
   const rightArmRef = useRef<THREE.Mesh>(null);
@@ -94,8 +95,22 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
       headRef.current.scale.setScalar(breathe);
     }
 
-    // Idle micro-movements - subtle head tilt
-    if (headRef.current && !isActive) {
+    // Head follows cursor (subtle tilt)
+    if (headRef.current && mousePos) {
+      const headTiltX = THREE.MathUtils.lerp(
+        headRef.current.rotation.x,
+        mousePos.y * -0.05,
+        0.05
+      );
+      const headTiltY = THREE.MathUtils.lerp(
+        headRef.current.rotation.y,
+        mousePos.x * 0.08,
+        0.05
+      );
+      headRef.current.rotation.x = headTiltX;
+      headRef.current.rotation.y = headTiltY;
+    } else if (headRef.current && !isActive) {
+      // Idle micro-movements - subtle head tilt (only when not tracking cursor)
       const tiltX = Math.sin(time * 0.4) * 0.03;
       const tiltZ = Math.cos(time * 0.3) * 0.02;
       headRef.current.rotation.x = tiltX;
@@ -184,6 +199,16 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
       }
     }
 
+    // Smile animation (wider when active)
+    if (smileRef.current) {
+      const targetSmileScale = isActive ? 1.3 : 1.0;
+      smileRef.current.scale.x = THREE.MathUtils.lerp(
+        smileRef.current.scale.x,
+        targetSmileScale,
+        0.1
+      );
+    }
+
     // Eye glow pulse when active
     if (leftEyeRef.current && rightEyeRef.current) {
       const pulse = isActive ? 0.8 + Math.sin(time * 2) * 0.2 : 0.4;
@@ -235,7 +260,7 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
   });
 
   return (
-    <group ref={robotRef} scale={1.1}>
+    <group ref={robotRef} scale={1.15}>
       {/* Head - spherical top part */}
       <Sphere ref={headRef} args={[0.55, 48, 48]} position={[0, 0.55, 0]}>
         <meshPhysicalMaterial 
@@ -297,46 +322,46 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
       </Sphere>
 
       {/* Left arm - shorter and closer */}
-      <Capsule ref={leftArmRef} args={[0.05, 0.26, 4, 16]} position={[-0.46, -0.08, 0]} rotation={[0, 0, 0.1]}>
+      <Capsule ref={leftArmRef} args={[0.05, 0.20, 4, 16]} position={[-0.46, -0.08, 0]} rotation={[0, 0, 0.1]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
-      <Sphere args={[0.05, 16, 16]} position={[-0.46, -0.21, 0]}>
+      <Sphere args={[0.05, 16, 16]} position={[-0.46, -0.18, 0]}>
         <meshStandardMaterial color="#1E293B" metalness={0.5} roughness={0.3} />
       </Sphere>
-      <Sphere args={[0.07, 16, 16]} position={[-0.46, -0.33, 0]}>
+      <Sphere args={[0.10, 16, 16]} position={[-0.46, -0.28, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
       </Sphere>
 
       {/* Right arm - shorter and closer */}
-      <Capsule ref={rightArmRef} args={[0.05, 0.26, 4, 16]} position={[0.46, -0.08, 0]} rotation={[0, 0, -0.1]}>
+      <Capsule ref={rightArmRef} args={[0.05, 0.20, 4, 16]} position={[0.46, -0.08, 0]} rotation={[0, 0, -0.1]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
-      <Sphere args={[0.05, 16, 16]} position={[0.46, -0.21, 0]}>
+      <Sphere args={[0.05, 16, 16]} position={[0.46, -0.18, 0]}>
         <meshStandardMaterial color="#1E293B" metalness={0.5} roughness={0.3} />
       </Sphere>
-      <Sphere args={[0.07, 16, 16]} position={[0.46, -0.33, 0]}>
+      <Sphere args={[0.10, 16, 16]} position={[0.46, -0.28, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
       </Sphere>
 
       {/* Left leg - shorter and higher */}
-      <Capsule args={[0.07, 0.18, 4, 16]} position={[-0.12, -0.48, 0]}>
+      <Capsule args={[0.07, 0.15, 4, 16]} position={[-0.12, -0.48, 0]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
-      <Sphere args={[0.06, 16, 16]} position={[-0.12, -0.57, 0]}>
+      <Sphere args={[0.06, 16, 16]} position={[-0.12, -0.55, 0]}>
         <meshStandardMaterial color="#1E293B" metalness={0.5} roughness={0.3} />
       </Sphere>
-      <Sphere args={[0.08, 16, 16]} position={[-0.12, -0.67, 0]}>
+      <Sphere args={[0.10, 16, 16]} position={[-0.12, -0.60, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
       </Sphere>
 
       {/* Right leg - shorter and higher */}
-      <Capsule args={[0.07, 0.18, 4, 16]} position={[0.12, -0.48, 0]}>
+      <Capsule args={[0.07, 0.15, 4, 16]} position={[0.12, -0.48, 0]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
-      <Sphere args={[0.06, 16, 16]} position={[0.12, -0.57, 0]}>
+      <Sphere args={[0.06, 16, 16]} position={[0.12, -0.55, 0]}>
         <meshStandardMaterial color="#1E293B" metalness={0.5} roughness={0.3} />
       </Sphere>
-      <Sphere args={[0.08, 16, 16]} position={[0.12, -0.67, 0]}>
+      <Sphere args={[0.10, 16, 16]} position={[0.12, -0.60, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
       </Sphere>
 
@@ -426,6 +451,7 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
 
       {/* Smile indicator - subtle curved LED */}
       <Torus 
+        ref={smileRef}
         args={[0.08, 0.012, 16, 32, Math.PI]} 
         position={[0, 0.25, 0.52]} 
         rotation={[0, 0, Math.PI]}
