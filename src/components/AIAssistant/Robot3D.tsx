@@ -6,9 +6,10 @@ import * as THREE from 'three';
 interface Robot3DProps {
   isActive?: boolean;
   dragVelocity?: { x: number; y: number };
+  mousePos?: { x: number; y: number };
 }
 
-export const Robot3D = ({ isActive, dragVelocity }: Robot3DProps) => {
+export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
   const robotRef = useRef<THREE.Group>(null);
   const timeRef = useRef(0);
   const headRef = useRef<THREE.Mesh>(null);
@@ -18,10 +19,23 @@ export const Robot3D = ({ isActive, dragVelocity }: Robot3DProps) => {
   const statusRingRef = useRef<THREE.Mesh>(null);
   const antennaRef = useRef<THREE.Mesh>(null);
   const ledBarRef = useRef<THREE.Mesh>(null);
+  const bodyRef = useRef<THREE.Mesh>(null);
+  const leftArmRef = useRef<THREE.Mesh>(null);
+  const rightArmRef = useRef<THREE.Mesh>(null);
   
   // Refs for smooth rotation interpolation
   const targetRotation = useRef({ x: 0, y: 0 });
   const currentRotation = useRef({ x: 0, y: 0 });
+  
+  // Eye tracking refs
+  const targetEyePos = useRef({ x: 0, y: 0 });
+  const currentEyePos = useRef({ x: 0, y: 0 });
+  
+  // Blinking state
+  const blinkTimer = useRef(0);
+  const nextBlinkTime = useRef(3 + Math.random() * 3); // 3-6 seconds
+  const isBlinking = useRef(false);
+  const blinkProgress = useRef(0);
 
   // Professional TaskFlow color palette
   const colors = {
@@ -73,20 +87,101 @@ export const Robot3D = ({ isActive, dragVelocity }: Robot3DProps) => {
     robotRef.current.rotation.y = currentRotation.current.y + Math.sin(time * 0.5) * 0.02;
     robotRef.current.rotation.x = currentRotation.current.x;
 
-    // Subtle "breathing" - head scale variation
+    // Subtle "breathing" - head scale variation with slight speed variation
     if (headRef.current) {
-      const breathe = 1 + Math.sin(time * 1.2) * 0.01;
+      const breathSpeed = 1.2 + Math.sin(time * 0.3) * 0.1;
+      const breathe = 1 + Math.sin(time * breathSpeed) * 0.01;
       headRef.current.scale.setScalar(breathe);
     }
 
-      // Eyes "looking" subtly around when active
-    if (leftEyeRef.current && rightEyeRef.current && isActive) {
-      const lookX = Math.sin(time * 0.7) * 0.02;
-      const lookY = Math.cos(time * 0.5) * 0.01;
-      leftEyeRef.current.position.x = -0.16 + lookX;
-      leftEyeRef.current.position.y = 0.55 + lookY;
-      rightEyeRef.current.position.x = 0.16 + lookX;
-      rightEyeRef.current.position.y = 0.55 + lookY;
+    // Idle micro-movements - subtle head tilt
+    if (headRef.current && !isActive) {
+      const tiltX = Math.sin(time * 0.4) * 0.03;
+      const tiltZ = Math.cos(time * 0.3) * 0.02;
+      headRef.current.rotation.x = tiltX;
+      headRef.current.rotation.z = tiltZ;
+    }
+
+    // Body subtle sway
+    if (bodyRef.current) {
+      const sway = Math.sin(time * 0.5) * 0.01;
+      bodyRef.current.rotation.z = sway;
+    }
+
+    // Arms micro-movements
+    if (leftArmRef.current) {
+      const swing = Math.sin(time * 0.6 + 0.5) * 0.05;
+      leftArmRef.current.rotation.z = 0.1 + swing;
+    }
+    if (rightArmRef.current) {
+      const swing = Math.sin(time * 0.6) * 0.05;
+      rightArmRef.current.rotation.z = -0.1 + swing;
+    }
+
+    // Cursor tracking eyes
+    if (mousePos && leftEyeRef.current && rightEyeRef.current) {
+      // Calculate target eye position based on mouse (bounded to realistic range)
+      const maxOffset = 0.03;
+      targetEyePos.current.x = THREE.MathUtils.clamp(mousePos.x * 0.04, -maxOffset, maxOffset);
+      targetEyePos.current.y = THREE.MathUtils.clamp(mousePos.y * 0.02, -maxOffset * 0.5, maxOffset * 0.5);
+      
+      // Smooth interpolation
+      currentEyePos.current.x = THREE.MathUtils.lerp(currentEyePos.current.x, targetEyePos.current.x, 0.1);
+      currentEyePos.current.y = THREE.MathUtils.lerp(currentEyePos.current.y, targetEyePos.current.y, 0.1);
+      
+      // Apply position
+      leftEyeRef.current.position.set(
+        -0.16 + currentEyePos.current.x,
+        0.55 + currentEyePos.current.y,
+        0.45
+      );
+      rightEyeRef.current.position.set(
+        0.16 + currentEyePos.current.x,
+        0.55 + currentEyePos.current.y,
+        0.45
+      );
+    }
+
+    // Natural blinking animation
+    blinkTimer.current += delta;
+    if (blinkTimer.current >= nextBlinkTime.current && !isBlinking.current) {
+      isBlinking.current = true;
+      blinkProgress.current = 0;
+      blinkTimer.current = 0;
+      nextBlinkTime.current = 3 + Math.random() * 3; // Next blink in 3-6 seconds
+    }
+
+    // Process blink animation
+    if (isBlinking.current) {
+      const blinkSpeed = 15; // Fast blink
+      blinkProgress.current += delta * blinkSpeed;
+      
+      if (blinkProgress.current >= 1) {
+        isBlinking.current = false;
+        blinkProgress.current = 0;
+      }
+      
+      // Calculate blink scale (Y-axis squeeze)
+      let blinkScale = 1;
+      if (blinkProgress.current < 0.5) {
+        // Closing
+        blinkScale = 1 - (blinkProgress.current * 2) * 0.9; // Close to 0.1
+      } else {
+        // Opening
+        blinkScale = 0.1 + ((blinkProgress.current - 0.5) * 2) * 0.9;
+      }
+      
+      // Apply blink to both eyes
+      if (leftEyeRef.current && rightEyeRef.current) {
+        leftEyeRef.current.scale.set(1, blinkScale, 1);
+        rightEyeRef.current.scale.set(1, blinkScale, 1);
+      }
+    } else {
+      // Reset eye scale when not blinking
+      if (leftEyeRef.current && rightEyeRef.current) {
+        leftEyeRef.current.scale.set(1, 1, 1);
+        rightEyeRef.current.scale.set(1, 1, 1);
+      }
     }
 
     // Eye glow pulse when active
@@ -183,7 +278,7 @@ export const Robot3D = ({ isActive, dragVelocity }: Robot3DProps) => {
       </Torus>
 
       {/* Body - smaller and shorter capsule */}
-      <Capsule args={[0.35, 0.15, 8, 32]} position={[0, -0.20, 0]}>
+      <Capsule ref={bodyRef} args={[0.35, 0.15, 8, 32]} position={[0, -0.20, 0]}>
         <meshPhysicalMaterial 
           color={colors.body}
           metalness={0.1}
@@ -202,7 +297,7 @@ export const Robot3D = ({ isActive, dragVelocity }: Robot3DProps) => {
       </Sphere>
 
       {/* Left arm - shorter and closer */}
-      <Capsule args={[0.05, 0.26, 4, 16]} position={[-0.46, -0.08, 0]} rotation={[0, 0, 0.1]}>
+      <Capsule ref={leftArmRef} args={[0.05, 0.26, 4, 16]} position={[-0.46, -0.08, 0]} rotation={[0, 0, 0.1]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
       <Sphere args={[0.05, 16, 16]} position={[-0.46, -0.21, 0]}>
@@ -213,7 +308,7 @@ export const Robot3D = ({ isActive, dragVelocity }: Robot3DProps) => {
       </Sphere>
 
       {/* Right arm - shorter and closer */}
-      <Capsule args={[0.05, 0.26, 4, 16]} position={[0.46, -0.08, 0]} rotation={[0, 0, -0.1]}>
+      <Capsule ref={rightArmRef} args={[0.05, 0.26, 4, 16]} position={[0.46, -0.08, 0]} rotation={[0, 0, -0.1]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
       <Sphere args={[0.05, 16, 16]} position={[0.46, -0.21, 0]}>

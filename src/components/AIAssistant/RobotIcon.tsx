@@ -11,6 +11,11 @@ interface RobotIconProps {
   isActive?: boolean;
 }
 
+interface MousePos {
+  x: number;
+  y: number;
+}
+
 const STORAGE_KEY = 'robot-position';
 
 export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
@@ -32,6 +37,9 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
   const [dragVelocity, setDragVelocity] = useState({ x: 0, y: 0 });
   const [webglSupported, setWebglSupported] = useState(true);
   const [contextLost, setContextLost] = useState(false);
+  
+  // Track mouse position for eye tracking (normalized -1 to 1)
+  const [mousePos, setMousePos] = useState<MousePos>({ x: 0, y: 0 });
 
   // Clamp any restored position on mount to ensure visibility
   useEffect(() => {
@@ -73,6 +81,19 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(position));
   }, [position]);
+
+  // Track mouse position for eye tracking
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      // Normalize mouse position to -1 to 1 range
+      const x = (e.clientX / window.innerWidth) * 2 - 1;
+      const y = -(e.clientY / window.innerHeight) * 2 + 1;
+      setMousePos({ x, y });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
 
   const handleClick = () => {
     // Only trigger onClick if not dragging
@@ -231,7 +252,7 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
               <spotLight position={[0, 3, 2]} intensity={0.3} angle={0.5} />
               
               {/* 3D Robot */}
-              <Robot3D isActive={isActive} dragVelocity={dragVelocity} />
+              <Robot3D isActive={isActive} dragVelocity={dragVelocity} mousePos={mousePos} />
             </Suspense>
           </Canvas>
         </RobotErrorBoundary>
