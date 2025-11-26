@@ -48,13 +48,13 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
       headRef.current.scale.setScalar(breathe);
     }
 
-    // Eyes "looking" subtly around when active
+      // Eyes "looking" subtly around when active
     if (leftEyeRef.current && rightEyeRef.current && isActive) {
       const lookX = Math.sin(time * 0.7) * 0.02;
       const lookY = Math.cos(time * 0.5) * 0.01;
-      leftEyeRef.current.position.x = -0.18 + lookX;
+      leftEyeRef.current.position.x = -0.16 + lookX;
       leftEyeRef.current.position.y = 0.55 + lookY;
-      rightEyeRef.current.position.x = 0.18 + lookX;
+      rightEyeRef.current.position.x = 0.16 + lookX;
       rightEyeRef.current.position.y = 0.55 + lookY;
     }
 
@@ -230,83 +230,131 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
         </Sphere>
       </group>
 
-      {/* Left eye - circular LED with inner glow */}
-      <group ref={leftEyeRef} position={[-0.18, 0.55, 0.4]}>
-        {/* Eye housing - dark ring */}
+      {/* Left eye - larger and closer */}
+      <group ref={leftEyeRef} position={[-0.16, 0.55, 0.4]}>
+        {/* Eye housing - softer grey */}
         <Torus args={[0.1, 0.02, 16, 32]}>
-          <meshStandardMaterial color="#1E293B" />
+          <meshStandardMaterial color="#334155" />
         </Torus>
-        {/* LED core - circular with strong glow */}
-        <Sphere args={[0.08, 16, 16]}>
+        {/* LED core - larger */}
+        <Sphere args={[0.095, 16, 16]}>
           <meshStandardMaterial 
             color={colors.eyes}
             emissive={colors.eyeGlow}
             emissiveIntensity={0.8}
           />
         </Sphere>
-        {/* Inner highlight - lively */}
-        <Sphere args={[0.03, 16, 16]} position={[0.02, 0.02, 0.05]}>
-          <meshStandardMaterial 
-            color="#FFFFFF" 
-            emissive="#FFFFFF" 
-            emissiveIntensity={1.0}
-          />
+        {/* Double highlights */}
+        <Sphere args={[0.03, 16, 16]} position={[0.025, 0.025, 0.06]}>
+          <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={1.2} />
+        </Sphere>
+        <Sphere args={[0.012, 16, 16]} position={[-0.02, -0.02, 0.06]}>
+          <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={0.6} />
         </Sphere>
       </group>
 
-      {/* Right eye - circular LED with inner glow */}
-      <group ref={rightEyeRef} position={[0.18, 0.55, 0.4]}>
-        {/* Eye housing - dark ring */}
+      {/* Right eye - larger and closer */}
+      <group ref={rightEyeRef} position={[0.16, 0.55, 0.4]}>
+        {/* Eye housing - softer grey */}
         <Torus args={[0.1, 0.02, 16, 32]}>
-          <meshStandardMaterial color="#1E293B" />
+          <meshStandardMaterial color="#334155" />
         </Torus>
-        {/* LED core - circular with strong glow */}
-        <Sphere args={[0.08, 16, 16]}>
+        {/* LED core - larger */}
+        <Sphere args={[0.095, 16, 16]}>
           <meshStandardMaterial 
             color={colors.eyes}
             emissive={colors.eyeGlow}
             emissiveIntensity={0.8}
           />
         </Sphere>
-        {/* Inner highlight - lively */}
-        <Sphere args={[0.03, 16, 16]} position={[0.02, 0.02, 0.05]}>
-          <meshStandardMaterial 
-            color="#FFFFFF" 
-            emissive="#FFFFFF" 
-            emissiveIntensity={1.0}
-          />
+        {/* Double highlights */}
+        <Sphere args={[0.03, 16, 16]} position={[0.025, 0.025, 0.06]}>
+          <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={1.2} />
+        </Sphere>
+        <Sphere args={[0.012, 16, 16]} position={[-0.02, -0.02, 0.06]}>
+          <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={0.6} />
         </Sphere>
       </group>
 
-      {/* Chest panel around checkmark */}
-      <Torus args={[0.12, 0.015, 16, 32]} position={[0, -0.35, 0.45]} rotation={[0, 0, 0]}>
-        <meshStandardMaterial color={colors.primary} opacity={0.6} transparent metalness={0.5} />
-      </Torus>
-
-      {/* Vertical accent line on chest */}
-      <Cylinder args={[0.008, 0.008, 0.3, 8]} position={[0, -0.35, 0.44]} rotation={[0, 0, 0]}>
-        <meshStandardMaterial color={colors.primary} opacity={0.4} transparent metalness={0.6} />
+      {/* Communication LED bar below eyes */}
+      <Cylinder 
+        args={[0.012, 0.012, 0.22, 8]} 
+        position={[0, 0.32, 0.46]} 
+        rotation={[0, 0, Math.PI / 2]}
+      >
+        <meshStandardMaterial 
+          color={colors.primary} 
+          emissive={colors.glow}
+          emissiveIntensity={0.4}
+        />
       </Cylinder>
 
-      {/* Checkmark emblem on chest */}
-      <group ref={checkmarkRef} position={[0, -0.35, 0.47]}>
-        {/* Short stroke down-left */}
-        <Cylinder args={[0.015, 0.015, 0.08, 8]} position={[-0.04, -0.02, 0]} rotation={[0, 0, Math.PI / 6]}>
+      {/* Forehead sensor/status indicator */}
+      <Sphere args={[0.04, 16, 16]} position={[0, 0.78, 0.38]}>
+        <meshStandardMaterial 
+          color={colors.primary}
+          emissive={colors.glow}
+          emissiveIntensity={0.5}
+        />
+      </Sphere>
+
+      {/* Chest display frame - rectangular */}
+      {/* Vertical lines */}
+      <Cylinder args={[0.008, 0.008, 0.18, 8]} position={[-0.08, -0.35, 0.44]}>
+        <meshStandardMaterial color={colors.primary} opacity={0.5} transparent />
+      </Cylinder>
+      <Cylinder args={[0.008, 0.008, 0.18, 8]} position={[0.08, -0.35, 0.44]}>
+        <meshStandardMaterial color={colors.primary} opacity={0.5} transparent />
+      </Cylinder>
+      {/* Horizontal lines */}
+      <Cylinder args={[0.008, 0.008, 0.16, 8]} position={[0, -0.26, 0.44]} rotation={[0, 0, Math.PI/2]}>
+        <meshStandardMaterial color={colors.primary} opacity={0.5} transparent />
+      </Cylinder>
+      <Cylinder args={[0.008, 0.008, 0.16, 8]} position={[0, -0.44, 0.44]} rotation={[0, 0, Math.PI/2]}>
+        <meshStandardMaterial color={colors.primary} opacity={0.5} transparent />
+      </Cylinder>
+
+      {/* Checkmark emblem - larger and centered in display */}
+      <group ref={checkmarkRef} position={[0, -0.35, 0.48]}>
+        {/* Short stroke - larger */}
+        <Cylinder args={[0.02, 0.02, 0.11, 8]} position={[-0.055, -0.025, 0]} rotation={[0, 0, Math.PI / 6]}>
           <meshStandardMaterial 
             color={colors.checkmark} 
             emissive={colors.checkmark} 
-            emissiveIntensity={isActive ? 0.6 : 0.2}
+            emissiveIntensity={isActive ? 0.8 : 0.4}
           />
         </Cylinder>
-        {/* Long stroke up-right */}
-        <Cylinder args={[0.015, 0.015, 0.14, 8]} position={[0.03, 0.02, 0]} rotation={[0, 0, -Math.PI / 4]}>
+        {/* Long stroke - larger */}
+        <Cylinder args={[0.02, 0.02, 0.18, 8]} position={[0.04, 0.03, 0]} rotation={[0, 0, -Math.PI / 4]}>
           <meshStandardMaterial 
             color={colors.checkmark} 
             emissive={colors.checkmark} 
-            emissiveIntensity={isActive ? 0.6 : 0.2}
+            emissiveIntensity={isActive ? 0.8 : 0.4}
           />
         </Cylinder>
       </group>
+
+      {/* Side panel ventilation lines - left side */}
+      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[-0.42, -0.25, 0.15]}>
+        <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
+      </Cylinder>
+      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[-0.42, -0.35, 0.15]}>
+        <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
+      </Cylinder>
+      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[-0.42, -0.45, 0.15]}>
+        <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
+      </Cylinder>
+
+      {/* Side panel ventilation lines - right side */}
+      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[0.42, -0.25, 0.15]}>
+        <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
+      </Cylinder>
+      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[0.42, -0.35, 0.15]}>
+        <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
+      </Cylinder>
+      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[0.42, -0.45, 0.15]}>
+        <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
+      </Cylinder>
 
       {/* Status ring at bottom - pulses when active */}
       <Torus 
