@@ -26,8 +26,8 @@ const COLORS = {
 };
 
 const MATERIALS = {
-  body: { color: COLORS.body, metalness: 0.1, roughness: 0.3, clearcoat: 0.5 },
-  bodyPhysical: { color: COLORS.body, metalness: 0.15, roughness: 0.2, clearcoat: 0.8, clearcoatRoughness: 0.1 },
+  body: { color: COLORS.body, metalness: 0.05, roughness: 0.3, clearcoat: 0.5 },
+  bodyPhysical: { color: COLORS.body, metalness: 0.05, roughness: 0.3, clearcoat: 0.4, clearcoatRoughness: 0.3 },
   accent: { color: COLORS.bodyAccent, opacity: 0.8, transparent: true },
   joint: { color: "#1E293B", metalness: 0.5, roughness: 0.3 },
   handFoot: { color: COLORS.primary, metalness: 0.4, roughness: 0.3 }
@@ -269,7 +269,7 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
 
     // Smile animation
     if (smileRef.current) {
-      const targetSmileScale = isActive ? 1.3 : 1.0;
+      const targetSmileScale = isActive ? 1.15 : 1.0;
       smileRef.current.scale.x = THREE.MathUtils.lerp(smileRef.current.scale.x, targetSmileScale, 0.1);
     }
 
@@ -336,8 +336,8 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
         <meshStandardMaterial color={COLORS.primary} emissive={COLORS.glow} emissiveIntensity={0.4} />
       </Cylinder>
 
-      <Torus ref={smileRef} args={[0.08, 0.012, 16, 32, Math.PI]} position={[0, 0.25, 0.52]} rotation={[0, 0, Math.PI]}>
-        <meshStandardMaterial color={COLORS.primary} emissive={COLORS.glow} emissiveIntensity={0.3} />
+      <Torus ref={smileRef} args={[0.12, 0.022, 16, 32, Math.PI]} position={[0, 0.40, 0.52]} rotation={[0, 0, Math.PI]}>
+        <meshStandardMaterial color={COLORS.primary} emissive={COLORS.glow} emissiveIntensity={0.6} />
       </Torus>
 
       <Sphere args={[0.04, 12, 12]} position={[0, 0.85, 0.47]}>

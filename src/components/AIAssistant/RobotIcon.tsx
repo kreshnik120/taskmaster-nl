@@ -243,11 +243,12 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
               <PerspectiveCamera makeDefault position={[0, 0.2, 3.5]} />
               
               {/* Environment map for reflections */}
-              <Environment preset="studio" background={false} />
+              <Environment preset="city" background={false} />
               
               {/* Professional clean lighting */}
-              <ambientLight intensity={0.5} />
-              <directionalLight position={[3, 5, 5]} intensity={1.2} castShadow />
+              <ambientLight intensity={0.8} />
+              <directionalLight position={[3, 5, 5]} intensity={1.2} />
+              <directionalLight position={[0, -3, 2]} intensity={0.3} />
               <pointLight position={[-2, 2, 3]} intensity={0.4} color="#60A5FA" />
               <spotLight position={[0, 3, 2]} intensity={0.3} angle={0.5} />
               
