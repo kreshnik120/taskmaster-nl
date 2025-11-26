@@ -138,11 +138,23 @@ const Sollicitaties = () => {
       return;
     }
 
+    // Map pipeline_stage to status
+    const stageToStatus: Record<string, string> = {
+      nieuw: "nieuw",
+      screening: "in_behandeling",
+      interview: "in_behandeling",
+      goedgekeurd: "compleet",
+      geplaatst: "afgerond",
+    };
+
+    const newStatus = stageToStatus[newStage] || application.status;
+
     try {
       const { error } = await supabase
         .from("professional_applications")
         .update({ 
           pipeline_stage: newStage,
+          status: newStatus,
           updated_at: new Date().toISOString()
         })
         .eq("id", applicationId);
@@ -150,7 +162,7 @@ const Sollicitaties = () => {
       if (error) throw error;
 
       setApplications((prev) =>
-        prev.map((a) => (a.id === applicationId ? { ...a, pipeline_stage: newStage } : a))
+        prev.map((a) => (a.id === applicationId ? { ...a, pipeline_stage: newStage, status: newStatus } : a))
       );
 
       const stage = PIPELINE_STAGES.find(s => s.id === newStage);

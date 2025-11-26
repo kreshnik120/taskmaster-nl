@@ -180,6 +180,12 @@ export function ApplicationDetailModal({
   const handleCreateAction = async () => {
     if (!application?.id) return;
 
+    // Validate action preconditions
+    if (actionType === "call" && !application.extracted_data?.telefoonnummer) {
+      toast.error("Telefoonnummer is vereist om deze actie aan te maken");
+      return;
+    }
+
     // Determine title based on action type
     let title = "";
     const candidateName = application.professionals?.full_name || application.email_from;
@@ -278,6 +284,47 @@ export function ApplicationDetailModal({
               <Badge variant="outline" className="shrink-0">
                 {getStatusLabel(application.status)}
               </Badge>
+            </div>
+
+            {/* Contactgegevens Section */}
+            <div className="p-4 rounded-lg bg-muted/30 space-y-3">
+              <p className="text-sm font-semibold">Contactgegevens</p>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  <a 
+                    href={`mailto:${application.email_from}`}
+                    className="text-sm text-primary hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {application.email_from}
+                  </a>
+                </div>
+                {application.extracted_data?.telefoonnummer && (
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    <a 
+                      href={`tel:${application.extracted_data.telefoonnummer}`}
+                      className="text-sm text-primary hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {application.extracted_data.telefoonnummer}
+                    </a>
+                  </div>
+                )}
+                {!application.extracted_data?.telefoonnummer && (
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Telefoonnummer niet bekend</span>
+                  </div>
+                )}
+                {application.extracted_data?.regio && (
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">Regio: {application.extracted_data.regio}</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Professional Link */}
@@ -407,13 +454,18 @@ export function ApplicationDetailModal({
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={!application.extracted_data?.telefoonnummer}
                   onClick={() => {
                     setActionType("call");
                     setShowActionForm(true);
                   }}
+                  title={!application.extracted_data?.telefoonnummer ? "Voeg eerst telefoonnummer toe" : ""}
                 >
                   <Phone className="h-4 w-4 mr-2" />
                   Bel kandidaat
+                  {!application.extracted_data?.telefoonnummer && (
+                    <AlertCircle className="h-3 w-3 ml-1 text-yellow-600" />
+                  )}
                 </Button>
                 <Button
                   variant="outline"
