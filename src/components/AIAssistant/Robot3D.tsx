@@ -110,7 +110,7 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
   });
 
   return (
-    <group ref={robotRef} scale={1}>
+    <group ref={robotRef} scale={1.1}>
       {/* Head - spherical top part */}
       <Sphere ref={headRef} args={[0.5, 48, 48]} position={[0, 0.5, 0]}>
         <meshPhysicalMaterial 
@@ -164,54 +164,54 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
       </Capsule>
 
       {/* Shoulders - smaller and closer */}
-      <Sphere args={[0.08, 16, 16]} position={[-0.40, 0.02, 0]}>
+      <Sphere args={[0.10, 16, 16]} position={[-0.40, 0.02, 0]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Sphere>
-      <Sphere args={[0.08, 16, 16]} position={[0.40, 0.02, 0]}>
+      <Sphere args={[0.10, 16, 16]} position={[0.40, 0.02, 0]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Sphere>
 
       {/* Left arm - shorter and closer */}
-      <Capsule args={[0.04, 0.22, 4, 16]} position={[-0.46, -0.11, 0]} rotation={[0, 0, 0.1]}>
+      <Capsule args={[0.05, 0.26, 4, 16]} position={[-0.46, -0.13, 0]} rotation={[0, 0, 0.1]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
-      <Sphere args={[0.04, 16, 16]} position={[-0.46, -0.22, 0]}>
+      <Sphere args={[0.05, 16, 16]} position={[-0.46, -0.26, 0]}>
         <meshStandardMaterial color="#1E293B" metalness={0.5} roughness={0.3} />
       </Sphere>
-      <Sphere args={[0.06, 16, 16]} position={[-0.46, -0.33, 0]}>
+      <Sphere args={[0.07, 16, 16]} position={[-0.46, -0.38, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
       </Sphere>
 
       {/* Right arm - shorter and closer */}
-      <Capsule args={[0.04, 0.22, 4, 16]} position={[0.46, -0.11, 0]} rotation={[0, 0, -0.1]}>
+      <Capsule args={[0.05, 0.26, 4, 16]} position={[0.46, -0.13, 0]} rotation={[0, 0, -0.1]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
-      <Sphere args={[0.04, 16, 16]} position={[0.46, -0.22, 0]}>
+      <Sphere args={[0.05, 16, 16]} position={[0.46, -0.26, 0]}>
         <meshStandardMaterial color="#1E293B" metalness={0.5} roughness={0.3} />
       </Sphere>
-      <Sphere args={[0.06, 16, 16]} position={[0.46, -0.33, 0]}>
+      <Sphere args={[0.07, 16, 16]} position={[0.46, -0.38, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
       </Sphere>
 
       {/* Left leg - shorter and higher */}
-      <Capsule args={[0.06, 0.14, 4, 16]} position={[-0.12, -0.59, 0]}>
+      <Capsule args={[0.07, 0.18, 4, 16]} position={[-0.12, -0.61, 0]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
-      <Sphere args={[0.05, 16, 16]} position={[-0.12, -0.66, 0]}>
+      <Sphere args={[0.06, 16, 16]} position={[-0.12, -0.70, 0]}>
         <meshStandardMaterial color="#1E293B" metalness={0.5} roughness={0.3} />
       </Sphere>
-      <Sphere args={[0.07, 16, 16]} position={[-0.12, -0.75, 0]}>
+      <Sphere args={[0.08, 16, 16]} position={[-0.12, -0.80, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
       </Sphere>
 
       {/* Right leg - shorter and higher */}
-      <Capsule args={[0.06, 0.14, 4, 16]} position={[0.12, -0.59, 0]}>
+      <Capsule args={[0.07, 0.18, 4, 16]} position={[0.12, -0.61, 0]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
-      <Sphere args={[0.05, 16, 16]} position={[0.12, -0.66, 0]}>
+      <Sphere args={[0.06, 16, 16]} position={[0.12, -0.70, 0]}>
         <meshStandardMaterial color="#1E293B" metalness={0.5} roughness={0.3} />
       </Sphere>
-      <Sphere args={[0.07, 16, 16]} position={[0.12, -0.75, 0]}>
+      <Sphere args={[0.08, 16, 16]} position={[0.12, -0.80, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
       </Sphere>
 
@@ -371,7 +371,7 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
       <Torus 
         ref={statusRingRef}
         args={[0.25, 0.015, 16, 32]} 
-        position={[0, -0.85, 0]} 
+        position={[0, -0.90, 0]} 
         rotation={[Math.PI / 2, 0, 0]}
       >
         <meshStandardMaterial 
