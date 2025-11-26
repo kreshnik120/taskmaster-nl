@@ -1861,6 +1861,7 @@ export type Database = {
           id: string
           missing_info: Json | null
           org_id: string
+          pipeline_stage: string | null
           professional_id: string | null
           status: string
           updated_at: string | null
@@ -1877,6 +1878,7 @@ export type Database = {
           id?: string
           missing_info?: Json | null
           org_id: string
+          pipeline_stage?: string | null
           professional_id?: string | null
           status?: string
           updated_at?: string | null
@@ -1893,6 +1895,7 @@ export type Database = {
           id?: string
           missing_info?: Json | null
           org_id?: string
+          pipeline_stage?: string | null
           professional_id?: string | null
           status?: string
           updated_at?: string | null
@@ -1956,6 +1959,74 @@ export type Database = {
           },
         ]
       }
+      professional_client_matches: {
+        Row: {
+          client_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          match_reasoning: Json | null
+          match_score: number | null
+          org_id: string
+          professional_id: string
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          match_reasoning?: Json | null
+          match_score?: number | null
+          org_id: string
+          professional_id: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          match_reasoning?: Json | null
+          match_score?: number | null
+          org_id?: string
+          professional_id?: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professional_client_matches_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_client_matches_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_client_matches_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_client_matches_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       professional_clients: {
         Row: {
           client_id: string
@@ -2007,6 +2078,77 @@ export type Database = {
           },
           {
             foreignKeyName: "professional_clients_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      professional_interviews: {
+        Row: {
+          ai_assessment: Json | null
+          application_id: string
+          created_at: string | null
+          id: string
+          interviewer_id: string | null
+          notes: string | null
+          org_id: string
+          outcome: string | null
+          professional_id: string | null
+          scheduled_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          ai_assessment?: Json | null
+          application_id: string
+          created_at?: string | null
+          id?: string
+          interviewer_id?: string | null
+          notes?: string | null
+          org_id: string
+          outcome?: string | null
+          professional_id?: string | null
+          scheduled_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          ai_assessment?: Json | null
+          application_id?: string
+          created_at?: string | null
+          id?: string
+          interviewer_id?: string | null
+          notes?: string | null
+          org_id?: string
+          outcome?: string | null
+          professional_id?: string | null
+          scheduled_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professional_interviews_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_interviews_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_interviews_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_interviews_professional_id_fkey"
             columns: ["professional_id"]
             isOneToOne: false
             referencedRelation: "professionals_public"
