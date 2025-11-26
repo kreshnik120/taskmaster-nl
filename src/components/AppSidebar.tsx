@@ -1,4 +1,4 @@
-import { Home, Kanban, List, Calendar, Clock, BarChart3, Trash2, CheckCircle2, Brain, Users, ChevronDown } from "lucide-react";
+import { Home, Kanban, List, Calendar, Clock, BarChart3, Trash2, CheckCircle2, Brain, Users, ChevronDown, Briefcase } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter } from "@/components/ui/sidebar";
@@ -76,6 +76,11 @@ const menuGroups: MenuGroup[] = [{
     title: "Professionals",
     url: "/professionals",
     icon: Users,
+    requiresEdit: true
+  }, {
+    title: "Sollicitaties",
+    url: "/sollicitaties",
+    icon: Briefcase,
     requiresEdit: true
   }, {
     title: "AI Training",
