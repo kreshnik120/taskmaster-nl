@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber';
-import { PerspectiveCamera } from '@react-three/drei';
+import { PerspectiveCamera, Environment } from '@react-three/drei';
 import { motion } from 'framer-motion';
 import { Robot3D } from './Robot3D';
 import { RobotErrorBoundary } from './RobotErrorBoundary';
@@ -211,10 +211,14 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
             <Suspense fallback={null}>
               <PerspectiveCamera makeDefault position={[0, 0.2, 3.5]} />
               
+              {/* Environment map for reflections */}
+              <Environment preset="studio" />
+              
               {/* Professional clean lighting */}
-              <ambientLight intensity={0.6} color="#FFFFFF" />
-              <directionalLight position={[2, 4, 5]} intensity={1.0} color="#FFFFFF" />
-              <pointLight position={[-2, 1, 3]} intensity={0.3} color="#3B82F6" />
+              <ambientLight intensity={0.5} />
+              <directionalLight position={[3, 5, 5]} intensity={1.2} castShadow />
+              <pointLight position={[-2, 2, 3]} intensity={0.4} color="#60A5FA" />
+              <spotLight position={[0, 3, 2]} intensity={0.3} angle={0.5} />
               
               {/* 3D Robot */}
               <Robot3D isActive={isActive} />
