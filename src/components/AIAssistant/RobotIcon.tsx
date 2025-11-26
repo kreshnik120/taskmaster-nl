@@ -211,11 +211,12 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
             <Suspense fallback={null}>
               <PerspectiveCamera makeDefault position={[0.5, 0.3, 4]} />
               
-              {/* Enhanced lighting for 3D depth and cute look */}
-              <ambientLight intensity={0.9} />
-              <directionalLight position={[3, 4, 5]} intensity={1.4} color="#ffffff" castShadow />
-              <directionalLight position={[-2, 2, 3]} intensity={0.5} color="#4a9fd8" />
-              <pointLight position={[0, 1, 2]} intensity={0.3} color="#FF6B35" />
+              {/* Enhanced lighting for futuristic white/blue robot */}
+              <ambientLight intensity={1.0} />
+              <directionalLight position={[5, 5, 5]} intensity={1.5} color="#ffffff" castShadow />
+              <directionalLight position={[-3, 2, -5]} intensity={0.6} color="#ffffff" />
+              <pointLight position={[0, 3, 3]} intensity={0.4} color="#00d4ff" />
+              <pointLight position={[2, 0, 2]} intensity={0.3} color="#00a8e8" />
               
               {/* 3D Robot */}
               <Robot3D isActive={isActive} />
