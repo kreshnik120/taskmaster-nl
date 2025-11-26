@@ -2,7 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Mail, User, FileText, Calendar } from "lucide-react";
+import { GripVertical, User, FileText, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 
@@ -82,12 +82,19 @@ export function ApplicationCard({ application, onClick }: ApplicationCardProps) 
     <Card
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      className="cursor-move hover:shadow-md transition-shadow"
+      className="hover:shadow-md transition-shadow"
       onClick={onClick}
     >
       <CardContent className="p-4 space-y-3">
+        {/* Drag Handle */}
+        <div 
+          {...attributes} 
+          {...listeners}
+          className="flex items-center justify-center cursor-grab active:cursor-grabbing -mx-4 -mt-4 mb-2 px-4 pt-3 pb-2 border-b"
+        >
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        </div>
+
         {/* Kandidaat Naam */}
         <div className="flex items-start gap-2">
           <User className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />

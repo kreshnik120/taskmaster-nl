@@ -122,7 +122,16 @@ const Sollicitaties = () => {
     }
 
     const applicationId = active.id as string;
-    const newStage = over.id as string;
+    const targetId = over.id as string;
+    
+    // Valideer dat targetId een geldige stage is
+    const validStageIds = PIPELINE_STAGES.map(s => s.id);
+    if (!validStageIds.includes(targetId)) {
+      // User dropped on another card or outside valid column - ignore
+      return;
+    }
+
+    const newStage = targetId;
     
     const application = applications.find((a) => a.id === applicationId);
     if (!application || application.pipeline_stage === newStage) {
