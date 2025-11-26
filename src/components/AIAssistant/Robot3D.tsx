@@ -167,6 +167,20 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
     timeRef.current += delta;
     const time = timeRef.current;
 
+    // ═══════════════════════════════════════════════
+    // NATURAL MOTION VARIABLES
+    // ═══════════════════════════════════════════════
+    
+    // Subtle breathing effect (0.8% variation at 0.8Hz resting rate)
+    const breathe = 1 + Math.sin(time * 0.8) * 0.008;
+    
+    // Idle eye saccades - small random eye movements when not focused
+    const saccadeX = Math.sin(time * 2.3) * 0.005 + Math.sin(time * 5.7) * 0.003;
+    const saccadeY = Math.cos(time * 1.8) * 0.004 + Math.cos(time * 4.2) * 0.002;
+    
+    // Listening head tilt when active (max 3 degrees / 0.052 radians)
+    const listenTilt = isActive ? Math.sin(time * 0.5) * 0.052 : 0;
+
     // Drag rotation
     if (dragVelocity) {
       targetRotation.current.y = THREE.MathUtils.clamp(dragVelocity.x * 0.15, -0.35, 0.35);
@@ -182,25 +196,52 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
     robotRef.current.rotation.y = currentRotation.current.y;
     robotRef.current.rotation.x = currentRotation.current.x;
 
-    // Head follows cursor - only movement is cursor tracking
-    if (headRef.current && mousePos) {
-      const headTiltX = THREE.MathUtils.lerp(headRef.current.rotation.x, mousePos.y * -0.05, 0.05);
-      const headTiltY = THREE.MathUtils.lerp(headRef.current.rotation.y, mousePos.x * 0.08, 0.05);
+    // Head follows cursor with variable easing - slower, more natural
+    if (headRef.current) {
+      const targetX = mousePos ? mousePos.y * -0.05 + listenTilt : listenTilt;
+      const targetY = mousePos ? mousePos.x * 0.08 : 0;
+      
+      // Slower head movement (lerp 0.08 instead of 0.05)
+      const headTiltX = THREE.MathUtils.lerp(headRef.current.rotation.x, targetX, 0.08);
+      const headTiltY = THREE.MathUtils.lerp(headRef.current.rotation.y, targetY, 0.08);
       headRef.current.rotation.x = headTiltX;
       headRef.current.rotation.y = headTiltY;
     }
 
-    // Eye tracking
-    if (mousePos && leftEyeRef.current && rightEyeRef.current) {
+    // Eye tracking with idle saccades and pupil dilation
+    if (leftEyeRef.current && rightEyeRef.current) {
       const maxOffset = 0.03;
-      targetEyePos.current.x = THREE.MathUtils.clamp(mousePos.x * 0.04, -maxOffset, maxOffset);
-      targetEyePos.current.y = THREE.MathUtils.clamp(mousePos.y * 0.02, -maxOffset * 0.5, maxOffset * 0.5);
       
-      currentEyePos.current.x = THREE.MathUtils.lerp(currentEyePos.current.x, targetEyePos.current.x, 0.1);
-      currentEyePos.current.y = THREE.MathUtils.lerp(currentEyePos.current.y, targetEyePos.current.y, 0.1);
+      // If mouse position available, use cursor tracking, otherwise use saccades
+      if (mousePos) {
+        targetEyePos.current.x = THREE.MathUtils.clamp(mousePos.x * 0.04, -maxOffset, maxOffset);
+        targetEyePos.current.y = THREE.MathUtils.clamp(mousePos.y * 0.02, -maxOffset * 0.5, maxOffset * 0.5);
+      } else {
+        // Idle saccades when no cursor tracking
+        targetEyePos.current.x = saccadeX;
+        targetEyePos.current.y = saccadeY;
+      }
+      
+      // Faster eye movement (lerp 0.15 for quick, natural eye response)
+      currentEyePos.current.x = THREE.MathUtils.lerp(currentEyePos.current.x, targetEyePos.current.x, 0.15);
+      currentEyePos.current.y = THREE.MathUtils.lerp(currentEyePos.current.y, targetEyePos.current.y, 0.15);
       
       leftEyeRef.current.position.set(-0.16 + currentEyePos.current.x, 0.60 + currentEyePos.current.y, 0.50);
       rightEyeRef.current.position.set(0.16 + currentEyePos.current.x, 0.60 + currentEyePos.current.y, 0.50);
+      
+      // Pupil dilation when active (10% larger eyes)
+      const eyeDilation = isActive ? 1.1 : 1.0;
+      const currentDilation = THREE.MathUtils.lerp(
+        leftEyeRef.current.scale.x, 
+        eyeDilation, 
+        0.1
+      );
+      
+      // Only apply dilation when not blinking
+      if (!isBlinking.current) {
+        leftEyeRef.current.scale.set(currentDilation, currentDilation, currentDilation);
+        rightEyeRef.current.scale.set(currentDilation, currentDilation, currentDilation);
+      }
     }
 
     // Blinking
@@ -228,20 +269,25 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
       }
       
       if (leftEyeRef.current && rightEyeRef.current) {
-        leftEyeRef.current.scale.set(1, blinkScale, 1);
-        rightEyeRef.current.scale.set(1, blinkScale, 1);
-      }
-    } else {
-      if (leftEyeRef.current && rightEyeRef.current) {
-        leftEyeRef.current.scale.set(1, 1, 1);
-        rightEyeRef.current.scale.set(1, 1, 1);
+        // Pupil dilation maintained during blink
+        const eyeDilation = isActive ? 1.1 : 1.0;
+        leftEyeRef.current.scale.set(eyeDilation, blinkScale * eyeDilation, eyeDilation);
+        rightEyeRef.current.scale.set(eyeDilation, blinkScale * eyeDilation, eyeDilation);
       }
     }
 
-    // Smile animation
+    // Smile animation with subtle tremor when active
     if (smileRef.current) {
-      const targetSmileScale = isActive ? 1.15 : 1.0;
+      const tremor = isActive ? 1 + Math.sin(time * 12) * 0.02 : 1;
+      const targetSmileScale = isActive ? 1.15 * tremor : 1.0;
       smileRef.current.scale.x = THREE.MathUtils.lerp(smileRef.current.scale.x, targetSmileScale, 0.1);
+    }
+    
+    // Subtle breathing on body
+    if (bodyRef.current) {
+      // Very slow body movement (lerp 0.03 for heavy, stable feel)
+      const currentBreathing = THREE.MathUtils.lerp(bodyRef.current.scale.y, breathe, 0.03);
+      bodyRef.current.scale.set(1, currentBreathing, 1);
     }
 
     // Antenna scale animation - status indicator
