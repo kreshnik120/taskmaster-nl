@@ -103,7 +103,7 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
   return (
     <group ref={robotRef} scale={1}>
       {/* Head - spherical top part */}
-      <Sphere ref={headRef} args={[0.5, 32, 32]} position={[0, 0.5, 0]}>
+      <Sphere ref={headRef} args={[0.5, 48, 48]} position={[0, 0.5, 0]}>
         <meshPhysicalMaterial 
           color={colors.body}
           metalness={0.15}
@@ -114,13 +114,37 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
         />
       </Sphere>
 
+      {/* Ear sensors on sides of head */}
+      <group position={[-0.48, 0.5, 0]}>
+        <Cylinder args={[0.06, 0.06, 0.08, 16]} rotation={[0, 0, Math.PI / 2]}>
+          <meshStandardMaterial color={colors.bodyAccent} metalness={0.3} roughness={0.2} />
+        </Cylinder>
+        <Sphere args={[0.03, 16, 16]} position={[-0.05, 0, 0]}>
+          <meshStandardMaterial color={colors.primary} emissive={colors.glow} emissiveIntensity={0.3} />
+        </Sphere>
+      </group>
+
+      <group position={[0.48, 0.5, 0]}>
+        <Cylinder args={[0.06, 0.06, 0.08, 16]} rotation={[0, 0, Math.PI / 2]}>
+          <meshStandardMaterial color={colors.bodyAccent} metalness={0.3} roughness={0.2} />
+        </Cylinder>
+        <Sphere args={[0.03, 16, 16]} position={[0.05, 0, 0]}>
+          <meshStandardMaterial color={colors.primary} emissive={colors.glow} emissiveIntensity={0.3} />
+        </Sphere>
+      </group>
+
       {/* Neck connection - subtle ring */}
       <Torus args={[0.35, 0.04, 16, 32]} position={[0, 0.1, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.5} roughness={0.3} />
       </Torus>
 
+      {/* Second neck ring - thinner, higher */}
+      <Torus args={[0.32, 0.02, 16, 32]} position={[0, 0.15, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <meshStandardMaterial color={colors.bodyAccent} metalness={0.4} roughness={0.3} />
+      </Torus>
+
       {/* Body - capsule bottom part */}
-      <Capsule args={[0.42, 0.7, 4, 16]} position={[0, -0.4, 0]}>
+      <Capsule args={[0.42, 0.7, 8, 32]} position={[0, -0.4, 0]}>
         <meshPhysicalMaterial 
           color={colors.body}
           metalness={0.1}
@@ -142,6 +166,9 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
       <Capsule args={[0.05, 0.28, 4, 16]} position={[-0.58, -0.22, 0]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
+      <Sphere args={[0.04, 16, 16]} position={[-0.58, -0.32, 0]}>
+        <meshStandardMaterial color={colors.primary} metalness={0.5} roughness={0.3} />
+      </Sphere>
       <Sphere args={[0.07, 16, 16]} position={[-0.58, -0.42, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
       </Sphere>
@@ -150,6 +177,9 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
       <Capsule args={[0.05, 0.28, 4, 16]} position={[0.58, -0.22, 0]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
+      <Sphere args={[0.04, 16, 16]} position={[0.58, -0.32, 0]}>
+        <meshStandardMaterial color={colors.primary} metalness={0.5} roughness={0.3} />
+      </Sphere>
       <Sphere args={[0.07, 16, 16]} position={[0.58, -0.42, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
       </Sphere>
@@ -158,6 +188,9 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
       <Capsule args={[0.06, 0.18, 4, 16]} position={[-0.15, -1.0, 0]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
+      <Sphere args={[0.05, 16, 16]} position={[-0.15, -0.92, 0]}>
+        <meshStandardMaterial color={colors.primary} metalness={0.5} roughness={0.3} />
+      </Sphere>
       <Sphere args={[0.08, 16, 16]} position={[-0.15, -1.15, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
       </Sphere>
@@ -166,6 +199,9 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
       <Capsule args={[0.06, 0.18, 4, 16]} position={[0.15, -1.0, 0]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
+      <Sphere args={[0.05, 16, 16]} position={[0.15, -0.92, 0]}>
+        <meshStandardMaterial color={colors.primary} metalness={0.5} roughness={0.3} />
+      </Sphere>
       <Sphere args={[0.08, 16, 16]} position={[0.15, -1.15, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
       </Sphere>
@@ -241,6 +277,16 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
           />
         </Sphere>
       </group>
+
+      {/* Chest panel around checkmark */}
+      <Torus args={[0.12, 0.015, 16, 32]} position={[0, -0.35, 0.45]} rotation={[0, 0, 0]}>
+        <meshStandardMaterial color={colors.primary} opacity={0.6} transparent metalness={0.5} />
+      </Torus>
+
+      {/* Vertical accent line on chest */}
+      <Cylinder args={[0.008, 0.008, 0.3, 8]} position={[0, -0.35, 0.44]} rotation={[0, 0, 0]}>
+        <meshStandardMaterial color={colors.primary} opacity={0.4} transparent metalness={0.6} />
+      </Cylinder>
 
       {/* Checkmark emblem on chest */}
       <group ref={checkmarkRef} position={[0, -0.35, 0.47]}>
