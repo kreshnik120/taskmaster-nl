@@ -183,7 +183,7 @@ export const Robot3D = ({ isActive, dragVelocity }: Robot3DProps) => {
       </Torus>
 
       {/* Body - smaller and shorter capsule */}
-      <Capsule args={[0.32, 0.30, 8, 32]} position={[0, -0.20, 0]}>
+      <Capsule args={[0.35, 0.15, 8, 32]} position={[0, -0.20, 0]}>
         <meshPhysicalMaterial 
           color={colors.body}
           metalness={0.1}
@@ -256,11 +256,11 @@ export const Robot3D = ({ isActive, dragVelocity }: Robot3DProps) => {
       {/* Antenna on top of head */}
       <group position={[0, 0.95, 0]}>
         {/* Antenna rod */}
-        <Cylinder args={[0.015, 0.015, 0.15, 8]} position={[0, 0.075, 0]}>
+        <Cylinder args={[0.015, 0.015, 0.30, 8]} position={[0, 0.15, 0]}>
           <meshStandardMaterial color={colors.primary} metalness={0.8} roughness={0.2} />
         </Cylinder>
         {/* Antenna tip - pulses */}
-        <Sphere ref={antennaRef} args={[0.04, 16, 16]} position={[0, 0.15, 0]}>
+        <Sphere ref={antennaRef} args={[0.05, 16, 16]} position={[0, 0.32, 0]}>
           <meshStandardMaterial 
             color={colors.status}
             emissive={colors.status}
