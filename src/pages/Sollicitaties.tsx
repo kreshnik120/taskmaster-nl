@@ -12,6 +12,7 @@ import { nl } from "date-fns/locale";
 import { ApplicationKanbanColumn } from "@/components/ApplicationKanbanColumn";
 import { ApplicationCard } from "@/components/ApplicationCard";
 import { ApplicationDetailModal } from "@/components/ApplicationDetailModal";
+import { NewApplicationDialog } from "@/components/NewApplicationDialog";
 
 interface Application {
   id: string;
@@ -48,6 +49,7 @@ const Sollicitaties = () => {
   const [user, setUser] = useState<any>(null);
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [newApplicationDialogOpen, setNewApplicationDialogOpen] = useState(false);
   const navigate = useNavigate();
 
   const getGreeting = () => {
@@ -215,7 +217,7 @@ const Sollicitaties = () => {
                     {format(new Date(), "EEEE d MMMM", { locale: nl })}
                   </p>
                 </div>
-                <Button onClick={() => toast.info("Nieuwe sollicitatie functionaliteit komt binnenkort")}>
+                <Button onClick={() => setNewApplicationDialogOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Nieuwe sollicitatie
                 </Button>
@@ -300,6 +302,12 @@ const Sollicitaties = () => {
               onApplicationUpdated={handleApplicationUpdated}
             />
           )}
+
+          <NewApplicationDialog
+            open={newApplicationDialogOpen}
+            onOpenChange={setNewApplicationDialogOpen}
+            onApplicationCreated={handleApplicationUpdated}
+          />
         </main>
       </div>
     </SidebarProvider>
