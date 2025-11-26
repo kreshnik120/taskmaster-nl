@@ -74,9 +74,9 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
         </Sphere>
       </group>
 
-      {/* Main body/head - Two-tone blue effect */}
+      {/* Main body/head - Two-tone blue effect - Compact version */}
       {/* Dark blue left side */}
-      <RoundedBox args={[0.6, 1.2, 1]} radius={0.3} position={[-0.3, 0, 0]}>
+      <RoundedBox args={[0.6, 1.0, 1]} radius={0.35} position={[-0.3, 0, 0]}>
         <meshStandardMaterial 
           color="#1e5a8e" 
           metalness={0.1}
@@ -84,7 +84,7 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
         />
       </RoundedBox>
       {/* Light blue right side */}
-      <RoundedBox args={[0.6, 1.2, 1]} radius={0.3} position={[0.3, 0, 0]}>
+      <RoundedBox args={[0.6, 1.0, 1]} radius={0.35} position={[0.3, 0, 0]}>
         <meshStandardMaterial 
           color="#4a9fd8" 
           metalness={0.1}
@@ -123,26 +123,14 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
         </Sphere>
       </group>
 
-      {/* Mouth */}
-      <group position={[0, -0.2, 0.5]}>
-        <Box args={[0.5, 0.1, 0.05]} position={[0, 0, 0]} rotation={[0, 0, 0.15]}>
+      {/* Mouth - Horizontal smile */}
+      <group position={[0, -0.25, 0.5]}>
+        <RoundedBox args={[0.6, 0.12, 0.05]} radius={0.06}>
           <meshStandardMaterial color="#FF6B35" roughness={0.2} />
-        </Box>
-        <Box args={[0.5, 0.1, 0.05]} position={[0, 0, 0]} rotation={[0, 0, -0.15]}>
-          <meshStandardMaterial color="#FF6B35" roughness={0.2} />
-        </Box>
+        </RoundedBox>
       </group>
 
-      {/* Chest panel */}
-      <RoundedBox args={[0.5, 0.4, 0.05]} radius={0.05} position={[0, -0.4, 0.48]}>
-        <meshStandardMaterial 
-          color="#FFFFFF" 
-          metalness={0.1}
-          roughness={0.2}
-          emissive="#FFFFFF"
-          emissiveIntensity={isActive ? 0.2 : 0.05}
-        />
-      </RoundedBox>
+      {/* Chest panel - removed for original look */}
 
       {/* Arms */}
       <RoundedBox args={[0.2, 0.6, 0.2]} radius={0.1} position={[-0.7, -0.1, 0]}>
@@ -160,11 +148,11 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
         <meshStandardMaterial color="#FF6B35" roughness={0.2} metalness={0.1} />
       </Sphere>
 
-      {/* Legs */}
-      <RoundedBox args={[0.25, 0.3, 0.25]} radius={0.08} position={[-0.25, -0.9, 0]}>
+      {/* Legs - Compact and closer to body */}
+      <RoundedBox args={[0.25, 0.25, 0.25]} radius={0.1} position={[-0.25, -0.7, 0]}>
         <meshStandardMaterial color="#1e5a8e" metalness={0.1} roughness={0.2} />
       </RoundedBox>
-      <RoundedBox args={[0.25, 0.3, 0.25]} radius={0.08} position={[0.25, -0.9, 0]}>
+      <RoundedBox args={[0.25, 0.25, 0.25]} radius={0.1} position={[0.25, -0.7, 0]}>
         <meshStandardMaterial color="#1e5a8e" metalness={0.1} roughness={0.2} />
       </RoundedBox>
     </group>
