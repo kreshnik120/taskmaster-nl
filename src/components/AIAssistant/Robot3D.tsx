@@ -26,8 +26,8 @@ const COLORS = {
 };
 
 const MATERIALS = {
-  body: { color: COLORS.body, metalness: 0.05, roughness: 0.3, clearcoat: 0.5 },
-  bodyPhysical: { color: COLORS.body, metalness: 0.05, roughness: 0.3, clearcoat: 0.4, clearcoatRoughness: 0.3 },
+  body: { color: COLORS.body, metalness: 0, roughness: 0.3, clearcoat: 0.5 },
+  bodyPhysical: { color: COLORS.body, metalness: 0, roughness: 0.3, clearcoat: 0.4, clearcoatRoughness: 0.3 },
   accent: { color: COLORS.bodyAccent, opacity: 0.8, transparent: true },
   joint: { color: "#1E293B", metalness: 0.5, roughness: 0.3 },
   handFoot: { color: COLORS.primary, metalness: 0.4, roughness: 0.3 }
