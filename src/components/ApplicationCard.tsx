@@ -14,6 +14,11 @@ interface Application {
   status: string;
   completeness_score: number | null;
   created_at: string;
+  extracted_data?: {
+    naam?: string;
+    werkvorm?: string;
+    functie_niveau?: string;
+  } | null;
   professionals?: {
     full_name: string;
     functie_niveau: string;
@@ -61,6 +66,18 @@ export function ApplicationCard({ application, onClick }: ApplicationCardProps) 
     return labels[status] || status;
   };
 
+  const candidateName = application.extracted_data?.naam || 'Onbekende kandidaat';
+  const werkvorm = application.extracted_data?.werkvorm;
+  const functieNiveau = application.extracted_data?.functie_niveau || application.professionals?.functie_niveau;
+
+  const getWerkvormColor = (werkvorm: string | undefined) => {
+    if (!werkvorm) return "bg-gray-100 text-gray-700";
+    if (werkvorm.toLowerCase().includes('zzp')) return "bg-blue-100 text-blue-700";
+    if (werkvorm.toLowerCase().includes('uitzend')) return "bg-purple-100 text-purple-700";
+    if (werkvorm.toLowerCase().includes('abcito')) return "bg-green-100 text-green-700";
+    return "bg-gray-100 text-gray-700";
+  };
+
   return (
     <Card
       ref={setNodeRef}
@@ -71,27 +88,34 @@ export function ApplicationCard({ application, onClick }: ApplicationCardProps) 
       onClick={onClick}
     >
       <CardContent className="p-4 space-y-3">
-        {/* Email From */}
+        {/* Kandidaat Naam */}
         <div className="flex items-start gap-2">
-          <Mail className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+          <User className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{application.email_from}</p>
-            {application.email_subject && (
-              <p className="text-xs text-muted-foreground truncate mt-0.5">
-                {application.email_subject}
-              </p>
-            )}
+            <p className="text-sm font-medium truncate">{candidateName}</p>
+            <p className="text-xs text-muted-foreground truncate">{application.email_from}</p>
           </div>
         </div>
 
-        {/* Professional Link */}
+        {/* Werkvorm & Functieniveau */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {werkvorm && (
+            <Badge className={`text-xs ${getWerkvormColor(werkvorm)}`}>
+              {werkvorm}
+            </Badge>
+          )}
+          {functieNiveau && (
+            <span className="text-xs text-muted-foreground">{functieNiveau}</span>
+          )}
+        </div>
+
+        {/* Professional Link (if assigned) */}
         {application.professionals && (
-          <div className="flex items-center gap-2">
-            <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-xs font-medium">{application.professionals.full_name}</p>
-              <p className="text-xs text-muted-foreground">{application.professionals.functie_niveau}</p>
-            </div>
+          <div className="flex items-center gap-2 pt-1 border-t">
+            <User className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+            <p className="text-xs font-medium text-muted-foreground">
+              Gekoppeld: {application.professionals.full_name}
+            </p>
           </div>
         )}
 

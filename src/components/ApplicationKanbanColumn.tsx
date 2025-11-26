@@ -12,6 +12,11 @@ interface Application {
   status: string;
   completeness_score: number | null;
   created_at: string;
+  extracted_data?: {
+    naam?: string;
+    werkvorm?: string;
+    functie_niveau?: string;
+  } | null;
   professionals?: {
     full_name: string;
     functie_niveau: string;
