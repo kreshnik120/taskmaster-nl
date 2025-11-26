@@ -47,10 +47,10 @@ export const Robot3D = ({ isActive, dragVelocity }: Robot3DProps) => {
     
     // Calculate target rotation based on drag velocity
     if (dragVelocity) {
-      // Y rotation: horizontal drag (max ~15° = 0.26 rad)
-      targetRotation.current.y = THREE.MathUtils.clamp(dragVelocity.x * 0.02, -0.26, 0.26);
-      // X rotation: vertical drag (max ~8° = 0.15 rad)
-      targetRotation.current.x = THREE.MathUtils.clamp(dragVelocity.y * -0.02, -0.15, 0.15);
+      // Y rotation: horizontal drag (max ~20° = 0.35 rad)
+      targetRotation.current.y = THREE.MathUtils.clamp(dragVelocity.x * 0.15, -0.35, 0.35);
+      // X rotation: vertical drag (max ~14° = 0.25 rad)
+      targetRotation.current.x = THREE.MathUtils.clamp(dragVelocity.y * -0.12, -0.25, 0.25);
     } else {
       // Return to neutral when not dragging
       targetRotation.current.x = 0;
