@@ -186,6 +186,8 @@ export default function Lijst() {
           accepted_at,
           accepted_by,
           description,
+          application_id,
+          recruitment_action_type,
           organizations(name),
           profiles:profiles!tasks_assignee_id_fkey(name, email)
         `)

@@ -153,6 +153,8 @@ export default function Opvolging() {
           completed_at,
           estimate_min,
           org_id,
+          application_id,
+          recruitment_action_type,
           organizations(name),
           profiles:profiles!tasks_assignee_id_fkey(name),
           task_scoring_metadata(estimated_value_eur, complexity_score, business_impact_score, market_demand_factor)

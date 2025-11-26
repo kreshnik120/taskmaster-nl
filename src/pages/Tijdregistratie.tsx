@@ -161,7 +161,9 @@ const Tijdregistratie = () => {
         due_at,
         next_action,
         assignee_id,
-        org_id
+        org_id,
+        application_id,
+        recruitment_action_type
       `)
       .is("deleted_at", null)
       .is("completed_at", null)
