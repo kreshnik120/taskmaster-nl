@@ -16,6 +16,7 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
   const checkmarkRef = useRef<THREE.Group>(null);
   const statusRingRef = useRef<THREE.Mesh>(null);
   const antennaRef = useRef<THREE.Mesh>(null);
+  const ledBarRef = useRef<THREE.Mesh>(null);
 
   // Professional TaskFlow color palette
   const colors = {
@@ -97,6 +98,14 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
     if (statusRingRef.current) {
       const material = statusRingRef.current.material as THREE.MeshStandardMaterial;
       material.emissiveIntensity = isActive ? 0.6 + Math.sin(time * 3) * 0.2 : 0.3;
+    }
+
+    // LED bar pulse when active (communication indicator)
+    if (ledBarRef.current) {
+      const material = ledBarRef.current.material as THREE.MeshStandardMaterial;
+      material.emissiveIntensity = isActive 
+        ? 0.4 + Math.sin(time * 3) * 0.3
+        : 0.2;
     }
   });
 
@@ -278,6 +287,7 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
 
       {/* Communication LED bar below eyes - more forward */}
       <Cylinder 
+        ref={ledBarRef}
         args={[0.012, 0.012, 0.22, 8]} 
         position={[0, 0.32, 0.48]} 
         rotation={[0, 0, Math.PI / 2]}
