@@ -178,6 +178,11 @@ export const Robot3D: React.FC<Robot3DProps> = ({
   const leftHandRef = useRef<THREE.Mesh>(null);
   const rightHandRef = useRef<THREE.Mesh>(null);
   const chestDisplayRef = useRef<THREE.Mesh>(null);
+  const antennaGroupRef = useRef<THREE.Group>(null);
+  
+  // Physics state for antenna pendulum effect
+  const antennaSwing = useRef({ x: 0, z: 0 });
+  const antennaVelocity = useRef({ x: 0, z: 0 });
   
   const targetRotation = useRef({ x: 0, y: 0 });
   const currentRotation = useRef({ x: 0, y: 0 });
@@ -374,6 +379,41 @@ export const Robot3D: React.FC<Robot3DProps> = ({
       bodyRef.current.scale.set(1, currentBreathing, 1);
     }
 
+    // ═══════════════════════════════════════════════
+    // ANTENNA PENDULUM PHYSICS
+    // ═══════════════════════════════════════════════
+    if (antennaGroupRef.current) {
+      const spring = 8;       // Stiffness (how fast to spring back)
+      const damping = 0.85;   // Damping (how fast to stop)
+      
+      // External force from drag movement (opposite direction = inertia)
+      if (dragVelocity) {
+        antennaVelocity.current.x -= dragVelocity.x * 0.15;
+        antennaVelocity.current.z -= dragVelocity.y * 0.1;
+      }
+      
+      // Spring force - pulls back to center
+      antennaVelocity.current.x += -antennaSwing.current.x * spring * delta;
+      antennaVelocity.current.z += -antennaSwing.current.z * spring * delta;
+      
+      // Damping - slows down movement
+      antennaVelocity.current.x *= damping;
+      antennaVelocity.current.z *= damping;
+      
+      // Update position
+      antennaSwing.current.x += antennaVelocity.current.x * delta;
+      antennaSwing.current.z += antennaVelocity.current.z * delta;
+      
+      // Clamp maximum swing (prevent extreme bending)
+      const maxSwing = 0.3; // ~17 degrees max
+      antennaSwing.current.x = THREE.MathUtils.clamp(antennaSwing.current.x, -maxSwing, maxSwing);
+      antennaSwing.current.z = THREE.MathUtils.clamp(antennaSwing.current.z, -maxSwing, maxSwing);
+      
+      // Apply rotation to antenna group (bends from base)
+      antennaGroupRef.current.rotation.x = antennaSwing.current.z;
+      antennaGroupRef.current.rotation.z = -antennaSwing.current.x;
+    }
+
     // Antenna scale animation - status indicator
     if (antennaRef.current) {
       const targetScale = isActive ? 1.4 : 1.0;
@@ -468,8 +508,8 @@ export const Robot3D: React.FC<Robot3DProps> = ({
         <meshStandardMaterial color={COLORS.primary} emissive={COLORS.glow} emissiveIntensity={0.5} />
       </Sphere>
 
-      {/* Antenna - STATUS INDICATOR */}
-      <group position={[0, 1.05, 0]}>
+      {/* Antenna - STATUS INDICATOR with pendulum physics */}
+      <group ref={antennaGroupRef} position={[0, 1.05, 0]}>
         <Cylinder args={[0.015, 0.015, 0.40, 4]} position={[0, 0.20, 0]}>
           <meshStandardMaterial color={COLORS.primary} metalness={0.8} roughness={0.2} />
         </Cylinder>
