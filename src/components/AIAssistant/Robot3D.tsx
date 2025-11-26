@@ -132,13 +132,13 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
       // Apply position
       leftEyeRef.current.position.set(
         -0.16 + currentEyePos.current.x,
-        0.55 + currentEyePos.current.y,
-        0.45
+        0.60 + currentEyePos.current.y,
+        0.50
       );
       rightEyeRef.current.position.set(
         0.16 + currentEyePos.current.x,
-        0.55 + currentEyePos.current.y,
-        0.45
+        0.60 + currentEyePos.current.y,
+        0.50
       );
     }
 
@@ -237,7 +237,7 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
   return (
     <group ref={robotRef} scale={1.1}>
       {/* Head - spherical top part */}
-      <Sphere ref={headRef} args={[0.5, 48, 48]} position={[0, 0.5, 0]}>
+      <Sphere ref={headRef} args={[0.55, 48, 48]} position={[0, 0.55, 0]}>
         <meshPhysicalMaterial 
           color={colors.body}
           metalness={0.15}
@@ -249,7 +249,7 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
       </Sphere>
 
       {/* Ear sensors on sides of head */}
-      <group position={[-0.48, 0.5, 0]}>
+      <group position={[-0.53, 0.55, 0]}>
         <Cylinder args={[0.06, 0.06, 0.08, 16]} rotation={[0, 0, Math.PI / 2]}>
           <meshStandardMaterial color={colors.bodyAccent} metalness={0.3} roughness={0.2} />
         </Cylinder>
@@ -258,7 +258,7 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
         </Sphere>
       </group>
 
-      <group position={[0.48, 0.5, 0]}>
+      <group position={[0.53, 0.55, 0]}>
         <Cylinder args={[0.06, 0.06, 0.08, 16]} rotation={[0, 0, Math.PI / 2]}>
           <meshStandardMaterial color={colors.bodyAccent} metalness={0.3} roughness={0.2} />
         </Cylinder>
@@ -349,13 +349,13 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
       </Torus>
 
       {/* Antenna on top of head */}
-      <group position={[0, 0.95, 0]}>
+      <group position={[0, 1.05, 0]}>
         {/* Antenna rod */}
-        <Cylinder args={[0.015, 0.015, 0.30, 8]} position={[0, 0.15, 0]}>
+        <Cylinder args={[0.015, 0.015, 0.40, 8]} position={[0, 0.20, 0]}>
           <meshStandardMaterial color={colors.primary} metalness={0.8} roughness={0.2} />
         </Cylinder>
         {/* Antenna tip - pulses */}
-        <Sphere ref={antennaRef} args={[0.05, 16, 16]} position={[0, 0.32, 0]}>
+        <Sphere ref={antennaRef} args={[0.07, 16, 16]} position={[0, 0.42, 0]}>
           <meshStandardMaterial 
             color={colors.status}
             emissive={colors.status}
@@ -365,7 +365,7 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
       </group>
 
       {/* Left eye - larger, more forward, softer grey */}
-      <group ref={leftEyeRef} position={[-0.16, 0.55, 0.45]}>
+      <group ref={leftEyeRef} position={[-0.16, 0.60, 0.50]}>
         {/* Eye housing - larger */}
         <Torus args={[0.11, 0.02, 16, 32]}>
           <meshStandardMaterial color="#334155" />
@@ -388,7 +388,7 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
       </group>
 
       {/* Right eye - larger, more forward, softer grey */}
-      <group ref={rightEyeRef} position={[0.16, 0.55, 0.45]}>
+      <group ref={rightEyeRef} position={[0.16, 0.60, 0.50]}>
         {/* Eye housing - larger */}
         <Torus args={[0.11, 0.02, 16, 32]}>
           <meshStandardMaterial color="#334155" />
@@ -424,8 +424,21 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
         />
       </Cylinder>
 
+      {/* Smile indicator - subtle curved LED */}
+      <Torus 
+        args={[0.08, 0.012, 16, 32, Math.PI]} 
+        position={[0, 0.25, 0.52]} 
+        rotation={[0, 0, Math.PI]}
+      >
+        <meshStandardMaterial 
+          color={colors.primary}
+          emissive={colors.glow}
+          emissiveIntensity={0.3}
+        />
+      </Torus>
+
       {/* Forehead sensor - more forward */}
-      <Sphere args={[0.04, 16, 16]} position={[0, 0.78, 0.42]}>
+      <Sphere args={[0.04, 16, 16]} position={[0, 0.85, 0.47]}>
         <meshStandardMaterial 
           color={colors.primary}
           emissive={colors.glow}
