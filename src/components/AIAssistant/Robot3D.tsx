@@ -7,6 +7,10 @@ interface Robot3DProps {
   isActive?: boolean;
   dragVelocity?: { x: number; y: number };
   mousePos?: { x: number; y: number };
+  isUserTyping?: boolean;
+  isThinking?: boolean;
+  justOpened?: boolean;
+  lastMessageReceived?: number;
 }
 
 // ═══════════════════════════════════════════════
@@ -69,10 +73,12 @@ const Eye = ({ position, eyeRef }: { position: [number, number, number]; eyeRef:
 
 const Arm = ({ 
   side, 
-  armRef 
+  armRef,
+  handRef
 }: { 
   side: 'left' | 'right'; 
-  armRef: React.RefObject<THREE.Mesh> 
+  armRef: React.RefObject<THREE.Mesh>;
+  handRef?: React.RefObject<THREE.Mesh>;
 }) => {
   const rotation = side === 'left' ? 0.1 : -0.1;
   const armPos = GEOMETRY.arm.position[side];
@@ -87,7 +93,7 @@ const Arm = ({
       <Sphere args={[GEOMETRY.elbow.radius, 12, 12]} position={elbowPos}>
         <meshStandardMaterial {...MATERIALS.joint} />
       </Sphere>
-      <Sphere args={[GEOMETRY.hand.radius, 16, 16]} position={handPos}>
+      <Sphere ref={handRef} args={[GEOMETRY.hand.radius, 16, 16]} position={handPos}>
         <meshStandardMaterial {...MATERIALS.handFoot} />
       </Sphere>
     </>
@@ -138,7 +144,15 @@ const EarSensor = ({ position }: { position: [number, number, number] }) => {
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════
 
-export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
+export const Robot3D: React.FC<Robot3DProps> = ({ 
+  isActive = false,
+  dragVelocity,
+  mousePos,
+  isUserTyping = false,
+  isThinking = false,
+  justOpened = false,
+  lastMessageReceived = 0
+}) => {
   const robotRef = useRef<THREE.Group>(null);
   const timeRef = useRef(0);
   const headRef = useRef<THREE.Mesh>(null);
@@ -151,6 +165,8 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
   const bodyRef = useRef<THREE.Mesh>(null);
   const leftArmRef = useRef<THREE.Mesh>(null);
   const rightArmRef = useRef<THREE.Mesh>(null);
+  const leftHandRef = useRef<THREE.Mesh>(null);
+  const rightHandRef = useRef<THREE.Mesh>(null);
   
   const targetRotation = useRef({ x: 0, y: 0 });
   const currentRotation = useRef({ x: 0, y: 0 });
@@ -168,6 +184,21 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
     const time = timeRef.current;
 
     // ═══════════════════════════════════════════════
+    // CONTEXTUAL ANIMATIONS
+    // ═══════════════════════════════════════════════
+    
+    // Wave animation on chat open (eerste 1.5 seconden)
+    const waveOffset = justOpened && time < 1.5 ? Math.sin(time * 8) * 0.15 : 0;
+    if (rightHandRef.current) {
+      const baseY = GEOMETRY.hand.position.right[1];
+      rightHandRef.current.position.y = baseY + waveOffset;
+    }
+
+    // Acknowledgment nod animation
+    const timeSinceMessage = (Date.now() - lastMessageReceived) / 1000;
+    const nodOffset = timeSinceMessage < 0.3 ? Math.sin(timeSinceMessage * Math.PI * 3) * -0.05 : 0;
+
+    // ═══════════════════════════════════════════════
     // NATURAL MOTION VARIABLES
     // ═══════════════════════════════════════════════
     
@@ -178,8 +209,18 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
     const saccadeX = Math.sin(time * 2.3) * 0.005 + Math.sin(time * 5.7) * 0.003;
     const saccadeY = Math.cos(time * 1.8) * 0.004 + Math.cos(time * 4.2) * 0.002;
     
-    // Listening head tilt when active (max 3 degrees / 0.052 radians)
-    const listenTilt = isActive ? Math.sin(time * 0.5) * 0.052 : 0;
+    // Head tilt logic based on state
+    let listenTilt = 0;
+    if (isUserTyping) {
+      // Listening pose: 5° left tilt
+      listenTilt = -0.087; // -5 degrees
+    } else if (isThinking) {
+      // Thinking pose: slight upward contemplative tilt
+      listenTilt = Math.sin(time * 0.5) * 0.035;
+    } else if (isActive) {
+      // Normal active subtle movement
+      listenTilt = Math.sin(time * 0.5) * 0.052;
+    }
 
     // Drag rotation
     if (dragVelocity) {
@@ -196,28 +237,54 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
     robotRef.current.rotation.y = currentRotation.current.y;
     robotRef.current.rotation.x = currentRotation.current.x;
 
-    // Head follows cursor with variable easing - slower, more natural
+    // Head follows cursor with variable easing and contextual positioning
     if (headRef.current) {
-      const targetX = mousePos ? mousePos.y * -0.05 + listenTilt : listenTilt;
-      const targetY = mousePos ? mousePos.x * 0.08 : 0;
+      let targetX = listenTilt;
+      let targetY = 0;
+
+      // Different head behavior based on context
+      if (isUserTyping) {
+        // Direct attention forward when listening
+        targetX = -0.087 + nodOffset; // 5° left + nod
+        targetY = 0;
+      } else if (isThinking) {
+        // Contemplative upward gaze with slow eye movement
+        targetX = 0.035 + nodOffset;
+        targetY = Math.sin(time * 0.3) * 0.03;
+      } else if (mousePos) {
+        // Normal cursor tracking
+        targetX = mousePos.y * -0.05 + listenTilt + nodOffset;
+        targetY = mousePos.x * 0.08;
+      } else {
+        targetX = listenTilt + nodOffset;
+      }
       
-      // Slower head movement (lerp 0.08 instead of 0.05)
+      // Slower head movement (lerp 0.08)
       const headTiltX = THREE.MathUtils.lerp(headRef.current.rotation.x, targetX, 0.08);
       const headTiltY = THREE.MathUtils.lerp(headRef.current.rotation.y, targetY, 0.08);
       headRef.current.rotation.x = headTiltX;
       headRef.current.rotation.y = headTiltY;
     }
 
-    // Eye tracking with idle saccades and pupil dilation
+    // Eye tracking with contextual behavior
     if (leftEyeRef.current && rightEyeRef.current) {
       const maxOffset = 0.03;
       
-      // If mouse position available, use cursor tracking, otherwise use saccades
-      if (mousePos) {
+      // Contextual eye behavior
+      if (isUserTyping) {
+        // Direct eye contact when listening (focused attention)
+        targetEyePos.current.x = 0;
+        targetEyePos.current.y = 0;
+      } else if (isThinking) {
+        // Slow contemplative eye movement when thinking
+        targetEyePos.current.x = Math.sin(time * 0.5) * 0.02;
+        targetEyePos.current.y = 0.01;
+      } else if (mousePos) {
+        // Normal cursor tracking
         targetEyePos.current.x = THREE.MathUtils.clamp(mousePos.x * 0.04, -maxOffset, maxOffset);
         targetEyePos.current.y = THREE.MathUtils.clamp(mousePos.y * 0.02, -maxOffset * 0.5, maxOffset * 0.5);
       } else {
-        // Idle saccades when no cursor tracking
+        // Idle saccades when no activity
         targetEyePos.current.x = saccadeX;
         targetEyePos.current.y = saccadeY;
       }
@@ -229,8 +296,14 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
       leftEyeRef.current.position.set(-0.16 + currentEyePos.current.x, 0.60 + currentEyePos.current.y, 0.50);
       rightEyeRef.current.position.set(0.16 + currentEyePos.current.x, 0.60 + currentEyePos.current.y, 0.50);
       
-      // Pupil dilation when active (10% larger eyes)
-      const eyeDilation = isActive ? 1.1 : 1.0;
+      // Pupil dilation - larger when listening (interest)
+      let eyeDilation = 1.0;
+      if (isUserTyping) {
+        eyeDilation = 1.08; // 8% larger when listening
+      } else if (isActive) {
+        eyeDilation = 1.1; // 10% larger when active
+      }
+      
       const currentDilation = THREE.MathUtils.lerp(
         leftEyeRef.current.scale.x, 
         eyeDilation, 
@@ -328,10 +401,16 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
       });
     }
 
-    // LED bar pulse
+    // LED bar pulse - faster when thinking
     if (ledBarRef.current) {
       const material = ledBarRef.current.material as THREE.MeshStandardMaterial;
-      material.emissiveIntensity = isActive ? 0.4 + Math.sin(time * 3) * 0.3 : 0.2;
+      if (isThinking) {
+        material.emissiveIntensity = 0.5 + Math.sin(time * 5) * 0.4;
+      } else if (isActive) {
+        material.emissiveIntensity = 0.4 + Math.sin(time * 3) * 0.3;
+      } else {
+        material.emissiveIntensity = 0.2;
+      }
     }
   });
 
@@ -355,8 +434,13 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
         <meshStandardMaterial color={COLORS.primary} emissive={COLORS.glow} emissiveIntensity={0.4} />
       </Cylinder>
 
-      <Torus ref={smileRef} args={[0.12, 0.022, 16, 32, Math.PI]} position={[0, 0.36, 0.52]} rotation={[0, 0, Math.PI]}>
-        <meshStandardMaterial color="#10B981" emissive="#34D399" emissiveIntensity={0.4} />
+      <Torus 
+        ref={smileRef} 
+        args={isUserTyping ? [0.13, 0.024, 16, 32, Math.PI * 1.1] : [0.12, 0.022, 16, 32, Math.PI]} 
+        position={[0, 0.36, 0.52]} 
+        rotation={[0, 0, Math.PI]}
+      >
+        <meshStandardMaterial color="#10B981" emissive="#34D399" emissiveIntensity={isUserTyping ? 0.6 : 0.4} />
       </Torus>
 
       <Sphere args={[0.04, 12, 12]} position={[0, 0.85, 0.47]}>
@@ -465,8 +549,8 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
         <meshPhysicalMaterial {...MATERIALS.body} />
       </Sphere>
 
-      <Arm side="left" armRef={leftArmRef} />
-      <Arm side="right" armRef={rightArmRef} />
+      <Arm side="left" armRef={leftArmRef} handRef={leftHandRef} />
+      <Arm side="right" armRef={rightArmRef} handRef={rightHandRef} />
 
       <Leg side="left" />
       <Leg side="right" />
