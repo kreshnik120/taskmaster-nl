@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Capsule, Torus, RoundedBox } from '@react-three/drei';
+import { Sphere, Capsule, Torus, Cylinder } from '@react-three/drei';
 import * as THREE from 'three';
 
 interface Robot3DProps {
@@ -10,10 +10,12 @@ interface Robot3DProps {
 export const Robot3D = ({ isActive }: Robot3DProps) => {
   const robotRef = useRef<THREE.Group>(null);
   const timeRef = useRef(0);
-  const leftEyeRef = useRef<THREE.Mesh>(null);
-  const rightEyeRef = useRef<THREE.Mesh>(null);
+  const headRef = useRef<THREE.Mesh>(null);
+  const leftEyeRef = useRef<THREE.Group>(null);
+  const rightEyeRef = useRef<THREE.Group>(null);
   const checkmarkRef = useRef<THREE.Group>(null);
   const statusRingRef = useRef<THREE.Mesh>(null);
+  const antennaRef = useRef<THREE.Mesh>(null);
 
   // Professional TaskFlow color palette
   const colors = {
@@ -40,14 +42,45 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
     // Very subtle rotation
     robotRef.current.rotation.y = Math.sin(time * 0.5) * 0.02;
 
+    // Subtle "breathing" - head scale variation
+    if (headRef.current) {
+      const breathe = 1 + Math.sin(time * 1.2) * 0.01;
+      headRef.current.scale.setScalar(breathe);
+    }
+
+    // Eyes "looking" subtly around when active
+    if (leftEyeRef.current && rightEyeRef.current && isActive) {
+      const lookX = Math.sin(time * 0.7) * 0.02;
+      const lookY = Math.cos(time * 0.5) * 0.01;
+      leftEyeRef.current.position.x = -0.18 + lookX;
+      leftEyeRef.current.position.y = 0.55 + lookY;
+      rightEyeRef.current.position.x = 0.18 + lookX;
+      rightEyeRef.current.position.y = 0.55 + lookY;
+    }
+
     // Eye glow pulse when active
     if (leftEyeRef.current && rightEyeRef.current) {
-      const pulse = isActive ? 0.6 + Math.sin(time * 2) * 0.2 : 0.3;
-      const eyeMaterial = leftEyeRef.current.material as THREE.MeshStandardMaterial;
-      const rightEyeMaterial = rightEyeRef.current.material as THREE.MeshStandardMaterial;
-      
-      eyeMaterial.emissiveIntensity = pulse;
-      rightEyeMaterial.emissiveIntensity = pulse;
+      const pulse = isActive ? 0.8 + Math.sin(time * 2) * 0.2 : 0.4;
+      leftEyeRef.current.children.forEach((child) => {
+        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+          if (child.material.emissive) {
+            child.material.emissiveIntensity = pulse;
+          }
+        }
+      });
+      rightEyeRef.current.children.forEach((child) => {
+        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+          if (child.material.emissive) {
+            child.material.emissiveIntensity = pulse;
+          }
+        }
+      });
+    }
+
+    // Antenna glow pulse when active
+    if (antennaRef.current) {
+      const material = antennaRef.current.material as THREE.MeshStandardMaterial;
+      material.emissiveIntensity = isActive ? 0.8 + Math.sin(time * 4) * 0.4 : 0.2;
     }
 
     // Checkmark glow when active
@@ -69,8 +102,25 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
 
   return (
     <group ref={robotRef} scale={1}>
-      {/* Main body - elegant capsule */}
-      <Capsule args={[0.6, 1.2, 4, 16]} position={[0, 0, 0]}>
+      {/* Head - spherical top part */}
+      <Sphere ref={headRef} args={[0.5, 32, 32]} position={[0, 0.5, 0]}>
+        <meshPhysicalMaterial 
+          color={colors.body}
+          metalness={0.15}
+          roughness={0.2}
+          clearcoat={0.8}
+          clearcoatRoughness={0.1}
+          envMapIntensity={1}
+        />
+      </Sphere>
+
+      {/* Neck connection - subtle ring */}
+      <Torus args={[0.35, 0.04, 16, 32]} position={[0, 0.1, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <meshStandardMaterial color={colors.primary} metalness={0.5} roughness={0.3} />
+      </Torus>
+
+      {/* Body - capsule bottom part */}
+      <Capsule args={[0.45, 0.8, 4, 16]} position={[0, -0.4, 0]}>
         <meshPhysicalMaterial 
           color={colors.body}
           metalness={0.1}
@@ -80,80 +130,103 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
         />
       </Capsule>
 
-      {/* Accent ring around middle */}
-      <Torus args={[0.62, 0.02, 16, 32]} position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <meshStandardMaterial color={colors.primary} metalness={0.5} roughness={0.3} />
+      {/* Tech accent lines on body */}
+      <Torus args={[0.47, 0.01, 16, 32]} position={[0, -0.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <meshStandardMaterial color={colors.primary} opacity={0.5} transparent metalness={0.6} />
+      </Torus>
+      <Torus args={[0.47, 0.01, 16, 32]} position={[0, -0.5, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <meshStandardMaterial color={colors.primary} opacity={0.5} transparent metalness={0.6} />
       </Torus>
 
-      {/* Left eye - professional LED style */}
-      <group position={[-0.22, 0.35, 0.55]}>
-        {/* Eye housing */}
-        <RoundedBox args={[0.18, 0.12, 0.05]} radius={0.04}>
-          <meshStandardMaterial color="#1E293B" />
-        </RoundedBox>
-        {/* LED core with glow */}
-        <RoundedBox 
-          ref={leftEyeRef}
-          args={[0.14, 0.08, 0.02]} 
-          position={[0, 0, 0.025]} 
-          radius={0.03}
-        >
+      {/* Antenna on top of head */}
+      <group position={[0, 0.95, 0]}>
+        {/* Antenna rod */}
+        <Cylinder args={[0.015, 0.015, 0.15, 8]} position={[0, 0.075, 0]}>
+          <meshStandardMaterial color={colors.primary} metalness={0.8} roughness={0.2} />
+        </Cylinder>
+        {/* Antenna tip - pulses */}
+        <Sphere ref={antennaRef} args={[0.04, 16, 16]} position={[0, 0.15, 0]}>
           <meshStandardMaterial 
-            color={colors.eyes}
-            emissive={colors.eyeGlow}
-            emissiveIntensity={isActive ? 0.6 : 0.3}
+            color={colors.status}
+            emissive={colors.status}
+            emissiveIntensity={isActive ? 1.0 : 0.2}
           />
-        </RoundedBox>
+        </Sphere>
       </group>
 
-      {/* Right eye - professional LED style */}
-      <group position={[0.22, 0.35, 0.55]}>
-        {/* Eye housing */}
-        <RoundedBox args={[0.18, 0.12, 0.05]} radius={0.04}>
+      {/* Left eye - circular LED with inner glow */}
+      <group ref={leftEyeRef} position={[-0.18, 0.55, 0.4]}>
+        {/* Eye housing - dark ring */}
+        <Torus args={[0.1, 0.02, 16, 32]}>
           <meshStandardMaterial color="#1E293B" />
-        </RoundedBox>
-        {/* LED core with glow */}
-        <RoundedBox 
-          ref={rightEyeRef}
-          args={[0.14, 0.08, 0.02]} 
-          position={[0, 0, 0.025]} 
-          radius={0.03}
-        >
+        </Torus>
+        {/* LED core - circular with strong glow */}
+        <Sphere args={[0.08, 16, 16]}>
           <meshStandardMaterial 
             color={colors.eyes}
             emissive={colors.eyeGlow}
-            emissiveIntensity={isActive ? 0.6 : 0.3}
+            emissiveIntensity={0.8}
           />
-        </RoundedBox>
+        </Sphere>
+        {/* Inner highlight - lively */}
+        <Sphere args={[0.03, 16, 16]} position={[0.02, 0.02, 0.05]}>
+          <meshStandardMaterial 
+            color="#FFFFFF" 
+            emissive="#FFFFFF" 
+            emissiveIntensity={1.0}
+          />
+        </Sphere>
+      </group>
+
+      {/* Right eye - circular LED with inner glow */}
+      <group ref={rightEyeRef} position={[0.18, 0.55, 0.4]}>
+        {/* Eye housing - dark ring */}
+        <Torus args={[0.1, 0.02, 16, 32]}>
+          <meshStandardMaterial color="#1E293B" />
+        </Torus>
+        {/* LED core - circular with strong glow */}
+        <Sphere args={[0.08, 16, 16]}>
+          <meshStandardMaterial 
+            color={colors.eyes}
+            emissive={colors.eyeGlow}
+            emissiveIntensity={0.8}
+          />
+        </Sphere>
+        {/* Inner highlight - lively */}
+        <Sphere args={[0.03, 16, 16]} position={[0.02, 0.02, 0.05]}>
+          <meshStandardMaterial 
+            color="#FFFFFF" 
+            emissive="#FFFFFF" 
+            emissiveIntensity={1.0}
+          />
+        </Sphere>
       </group>
 
       {/* Checkmark emblem on chest */}
-      <group ref={checkmarkRef} position={[0, -0.15, 0.6]}>
+      <group ref={checkmarkRef} position={[0, -0.35, 0.47]}>
         {/* Short stroke down-left */}
-        <mesh position={[-0.04, -0.02, 0]} rotation={[0, 0, Math.PI / 6]}>
-          <cylinderGeometry args={[0.015, 0.015, 0.08, 8]} />
+        <Cylinder args={[0.015, 0.015, 0.08, 8]} position={[-0.04, -0.02, 0]} rotation={[0, 0, Math.PI / 6]}>
           <meshStandardMaterial 
             color={colors.checkmark} 
             emissive={colors.checkmark} 
             emissiveIntensity={isActive ? 0.6 : 0.2}
           />
-        </mesh>
+        </Cylinder>
         {/* Long stroke up-right */}
-        <mesh position={[0.03, 0.02, 0]} rotation={[0, 0, -Math.PI / 4]}>
-          <cylinderGeometry args={[0.015, 0.015, 0.14, 8]} />
+        <Cylinder args={[0.015, 0.015, 0.14, 8]} position={[0.03, 0.02, 0]} rotation={[0, 0, -Math.PI / 4]}>
           <meshStandardMaterial 
             color={colors.checkmark} 
             emissive={colors.checkmark} 
             emissiveIntensity={isActive ? 0.6 : 0.2}
           />
-        </mesh>
+        </Cylinder>
       </group>
 
       {/* Status ring at bottom - pulses when active */}
       <Torus 
         ref={statusRingRef}
         args={[0.35, 0.02, 16, 32]} 
-        position={[0, -0.7, 0]} 
+        position={[0, -0.9, 0]} 
         rotation={[Math.PI / 2, 0, 0]}
       >
         <meshStandardMaterial 
