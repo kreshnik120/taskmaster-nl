@@ -9,6 +9,135 @@ interface Robot3DProps {
   mousePos?: { x: number; y: number };
 }
 
+// ═══════════════════════════════════════════════
+// CONSTANTS & CONFIGURATION
+// ═══════════════════════════════════════════════
+
+const COLORS = {
+  body: "#FFFFFF",
+  bodyAccent: "#F1F5F9",
+  primary: "#3B82F6",
+  glow: "#60A5FA",
+  eyes: "#1E40AF",
+  eyeGlow: "#3B82F6",
+  status: "#10B981",
+  checkmark: "#3B82F6",
+  ring: "#E2E8F0"
+};
+
+const MATERIALS = {
+  body: { color: COLORS.body, metalness: 0.1, roughness: 0.3, clearcoat: 0.5 },
+  bodyPhysical: { color: COLORS.body, metalness: 0.15, roughness: 0.2, clearcoat: 0.8, clearcoatRoughness: 0.1 },
+  accent: { color: COLORS.bodyAccent, opacity: 0.8, transparent: true },
+  joint: { color: "#1E293B", metalness: 0.5, roughness: 0.3 },
+  handFoot: { color: COLORS.primary, metalness: 0.4, roughness: 0.3 }
+};
+
+const GEOMETRY = {
+  head: { radius: 0.55, segments: 48, position: [0, 0.55, 0] as [number, number, number] },
+  body: { radius: 0.35, length: 0.15, position: [0, -0.20, 0] as [number, number, number] },
+  shoulder: { radius: 0.10, position: { left: [-0.40, 0.02, 0] as [number, number, number], right: [0.40, 0.02, 0] as [number, number, number] } },
+  arm: { radius: 0.05, length: 0.20, position: { left: [-0.46, -0.08, 0] as [number, number, number], right: [0.46, -0.08, 0] as [number, number, number] } },
+  elbow: { radius: 0.05, position: { left: [-0.46, -0.18, 0] as [number, number, number], right: [0.46, -0.18, 0] as [number, number, number] } },
+  hand: { radius: 0.10, position: { left: [-0.46, -0.28, 0] as [number, number, number], right: [0.46, -0.28, 0] as [number, number, number] } },
+  leg: { radius: 0.07, length: 0.15, position: { left: [-0.12, -0.48, 0] as [number, number, number], right: [0.12, -0.48, 0] as [number, number, number] } },
+  knee: { radius: 0.06, position: { left: [-0.12, -0.55, 0] as [number, number, number], right: [0.12, -0.55, 0] as [number, number, number] } },
+  foot: { radius: 0.10, position: { left: [-0.12, -0.60, 0] as [number, number, number], right: [0.12, -0.60, 0] as [number, number, number] } },
+  eye: { radius: 0.10, housingRadius: 0.11, position: { left: [-0.16, 0.60, 0.50] as [number, number, number], right: [0.16, 0.60, 0.50] as [number, number, number] } }
+};
+
+// ═══════════════════════════════════════════════
+// SUB-COMPONENTS
+// ═══════════════════════════════════════════════
+
+const Eye = ({ position, eyeRef }: { position: [number, number, number]; eyeRef: React.RefObject<THREE.Group> }) => (
+  <group ref={eyeRef} position={position}>
+    <Torus args={[GEOMETRY.eye.housingRadius, 0.02, 16, 32]}>
+      <meshStandardMaterial color="#334155" />
+    </Torus>
+    <Sphere args={[GEOMETRY.eye.radius, 16, 16]}>
+      <meshStandardMaterial color={COLORS.eyes} emissive={COLORS.eyeGlow} emissiveIntensity={0.8} />
+    </Sphere>
+    <Sphere args={[0.027, 8, 8]} position={[0.03, 0.03, 0.075]}>
+      <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={1.2} />
+    </Sphere>
+    <Sphere args={[0.016, 8, 8]} position={[-0.02, -0.02, 0.08]}>
+      <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={0.8} />
+    </Sphere>
+  </group>
+);
+
+const Arm = ({ 
+  side, 
+  armRef 
+}: { 
+  side: 'left' | 'right'; 
+  armRef: React.RefObject<THREE.Mesh> 
+}) => {
+  const rotation = side === 'left' ? 0.1 : -0.1;
+  const armPos = GEOMETRY.arm.position[side];
+  const elbowPos = GEOMETRY.elbow.position[side];
+  const handPos = GEOMETRY.hand.position[side];
+  
+  return (
+    <>
+      <Capsule ref={armRef} args={[GEOMETRY.arm.radius, GEOMETRY.arm.length, 4, 16]} position={armPos} rotation={[0, 0, rotation]}>
+        <meshPhysicalMaterial {...MATERIALS.body} />
+      </Capsule>
+      <Sphere args={[GEOMETRY.elbow.radius, 12, 12]} position={elbowPos}>
+        <meshStandardMaterial {...MATERIALS.joint} />
+      </Sphere>
+      <Sphere args={[GEOMETRY.hand.radius, 16, 16]} position={handPos}>
+        <meshStandardMaterial {...MATERIALS.handFoot} />
+      </Sphere>
+    </>
+  );
+};
+
+const Leg = ({ side }: { side: 'left' | 'right' }) => {
+  const legPos = GEOMETRY.leg.position[side];
+  const kneePos = GEOMETRY.knee.position[side];
+  const footPos = GEOMETRY.foot.position[side];
+  
+  return (
+    <>
+      <Capsule args={[GEOMETRY.leg.radius, GEOMETRY.leg.length, 4, 16]} position={legPos}>
+        <meshPhysicalMaterial {...MATERIALS.body} />
+      </Capsule>
+      <Sphere args={[GEOMETRY.knee.radius, 12, 12]} position={kneePos}>
+        <meshStandardMaterial {...MATERIALS.joint} />
+      </Sphere>
+      <Sphere args={[GEOMETRY.foot.radius, 16, 16]} position={footPos}>
+        <meshStandardMaterial {...MATERIALS.handFoot} />
+      </Sphere>
+    </>
+  );
+};
+
+const VentLine = ({ position }: { position: [number, number, number] }) => (
+  <Cylinder args={[0.006, 0.006, 0.08, 4]} position={position}>
+    <meshStandardMaterial {...MATERIALS.accent} />
+  </Cylinder>
+);
+
+const EarSensor = ({ position }: { position: [number, number, number] }) => {
+  const sensorOffset = position[0] < 0 ? -0.05 : 0.05;
+  return (
+    <group position={position}>
+      <Cylinder args={[0.06, 0.06, 0.08, 16]} rotation={[0, 0, Math.PI / 2]}>
+        <meshStandardMaterial color={COLORS.bodyAccent} metalness={0.3} roughness={0.2} />
+      </Cylinder>
+      <Sphere args={[0.03, 12, 12]} position={[sensorOffset, 0, 0]}>
+        <meshStandardMaterial color={COLORS.primary} emissive={COLORS.glow} emissiveIntensity={0.3} />
+      </Sphere>
+    </group>
+  );
+};
+
+// ═══════════════════════════════════════════════
+// MAIN COMPONENT
+// ═══════════════════════════════════════════════
+
 export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
   const robotRef = useRef<THREE.Group>(null);
   const timeRef = useRef(0);
@@ -24,32 +153,14 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
   const leftArmRef = useRef<THREE.Mesh>(null);
   const rightArmRef = useRef<THREE.Mesh>(null);
   
-  // Refs for smooth rotation interpolation
   const targetRotation = useRef({ x: 0, y: 0 });
   const currentRotation = useRef({ x: 0, y: 0 });
-  
-  // Eye tracking refs
   const targetEyePos = useRef({ x: 0, y: 0 });
   const currentEyePos = useRef({ x: 0, y: 0 });
-  
-  // Blinking state
   const blinkTimer = useRef(0);
-  const nextBlinkTime = useRef(3 + Math.random() * 3); // 3-6 seconds
+  const nextBlinkTime = useRef(3 + Math.random() * 3);
   const isBlinking = useRef(false);
   const blinkProgress = useRef(0);
-
-  // Professional TaskFlow color palette
-  const colors = {
-    body: "#FFFFFF",
-    bodyAccent: "#F1F5F9",
-    primary: "#3B82F6",
-    glow: "#60A5FA",
-    eyes: "#1E40AF",
-    eyeGlow: "#3B82F6",
-    status: "#10B981",
-    checkmark: "#3B82F6",
-    ring: "#E2E8F0"
-  };
 
   useFrame((state, delta) => {
     if (!robotRef.current) return;
@@ -57,184 +168,132 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
     timeRef.current += delta;
     const time = timeRef.current;
 
-    // Subtle, professional floating animation (no bouncy movement)
+    // Floating animation
     robotRef.current.position.y = Math.sin(time * 0.8) * 0.015;
     
-    // Calculate target rotation based on drag velocity
+    // Drag rotation
     if (dragVelocity) {
-      // Y rotation: horizontal drag (max ~20° = 0.35 rad)
       targetRotation.current.y = THREE.MathUtils.clamp(dragVelocity.x * 0.15, -0.35, 0.35);
-      // X rotation: vertical drag (max ~14° = 0.25 rad)
       targetRotation.current.x = THREE.MathUtils.clamp(dragVelocity.y * -0.12, -0.25, 0.25);
     } else {
-      // Return to neutral when not dragging
       targetRotation.current.x = 0;
       targetRotation.current.y = 0;
     }
     
-    // Smooth interpolation (lerp factor 0.1)
-    currentRotation.current.x = THREE.MathUtils.lerp(
-      currentRotation.current.x,
-      targetRotation.current.x,
-      0.1
-    );
-    currentRotation.current.y = THREE.MathUtils.lerp(
-      currentRotation.current.y,
-      targetRotation.current.y,
-      0.1
-    );
+    currentRotation.current.x = THREE.MathUtils.lerp(currentRotation.current.x, targetRotation.current.x, 0.1);
+    currentRotation.current.y = THREE.MathUtils.lerp(currentRotation.current.y, targetRotation.current.y, 0.1);
     
-    // Apply rotation (combine with existing subtle animation)
     robotRef.current.rotation.y = currentRotation.current.y + Math.sin(time * 0.5) * 0.02;
     robotRef.current.rotation.x = currentRotation.current.x;
 
-    // Subtle "breathing" - head scale variation with slight speed variation
+    // Head breathing
     if (headRef.current) {
       const breathSpeed = 1.2 + Math.sin(time * 0.3) * 0.1;
       const breathe = 1 + Math.sin(time * breathSpeed) * 0.01;
       headRef.current.scale.setScalar(breathe);
     }
 
-    // Head follows cursor (subtle tilt)
+    // Head follows cursor
     if (headRef.current && mousePos) {
-      const headTiltX = THREE.MathUtils.lerp(
-        headRef.current.rotation.x,
-        mousePos.y * -0.05,
-        0.05
-      );
-      const headTiltY = THREE.MathUtils.lerp(
-        headRef.current.rotation.y,
-        mousePos.x * 0.08,
-        0.05
-      );
+      const headTiltX = THREE.MathUtils.lerp(headRef.current.rotation.x, mousePos.y * -0.05, 0.05);
+      const headTiltY = THREE.MathUtils.lerp(headRef.current.rotation.y, mousePos.x * 0.08, 0.05);
       headRef.current.rotation.x = headTiltX;
       headRef.current.rotation.y = headTiltY;
     } else if (headRef.current && !isActive) {
-      // Idle micro-movements - subtle head tilt (only when not tracking cursor)
       const tiltX = Math.sin(time * 0.4) * 0.03;
       const tiltZ = Math.cos(time * 0.3) * 0.02;
       headRef.current.rotation.x = tiltX;
       headRef.current.rotation.z = tiltZ;
     }
 
-    // Body subtle sway
+    // Body sway
     if (bodyRef.current) {
-      const sway = Math.sin(time * 0.5) * 0.01;
-      bodyRef.current.rotation.z = sway;
+      bodyRef.current.rotation.z = Math.sin(time * 0.5) * 0.01;
     }
 
-    // Arms micro-movements
+    // Arms movement
     if (leftArmRef.current) {
-      const swing = Math.sin(time * 0.6 + 0.5) * 0.05;
-      leftArmRef.current.rotation.z = 0.1 + swing;
+      leftArmRef.current.rotation.z = 0.1 + Math.sin(time * 0.6 + 0.5) * 0.05;
     }
     if (rightArmRef.current) {
-      const swing = Math.sin(time * 0.6) * 0.05;
-      rightArmRef.current.rotation.z = -0.1 + swing;
+      rightArmRef.current.rotation.z = -0.1 + Math.sin(time * 0.6) * 0.05;
     }
 
-    // Cursor tracking eyes
+    // Eye tracking
     if (mousePos && leftEyeRef.current && rightEyeRef.current) {
-      // Calculate target eye position based on mouse (bounded to realistic range)
       const maxOffset = 0.03;
       targetEyePos.current.x = THREE.MathUtils.clamp(mousePos.x * 0.04, -maxOffset, maxOffset);
       targetEyePos.current.y = THREE.MathUtils.clamp(mousePos.y * 0.02, -maxOffset * 0.5, maxOffset * 0.5);
       
-      // Smooth interpolation
       currentEyePos.current.x = THREE.MathUtils.lerp(currentEyePos.current.x, targetEyePos.current.x, 0.1);
       currentEyePos.current.y = THREE.MathUtils.lerp(currentEyePos.current.y, targetEyePos.current.y, 0.1);
       
-      // Apply position
-      leftEyeRef.current.position.set(
-        -0.16 + currentEyePos.current.x,
-        0.60 + currentEyePos.current.y,
-        0.50
-      );
-      rightEyeRef.current.position.set(
-        0.16 + currentEyePos.current.x,
-        0.60 + currentEyePos.current.y,
-        0.50
-      );
+      leftEyeRef.current.position.set(-0.16 + currentEyePos.current.x, 0.60 + currentEyePos.current.y, 0.50);
+      rightEyeRef.current.position.set(0.16 + currentEyePos.current.x, 0.60 + currentEyePos.current.y, 0.50);
     }
 
-    // Natural blinking animation
+    // Blinking
     blinkTimer.current += delta;
     if (blinkTimer.current >= nextBlinkTime.current && !isBlinking.current) {
       isBlinking.current = true;
       blinkProgress.current = 0;
       blinkTimer.current = 0;
-      nextBlinkTime.current = 3 + Math.random() * 3; // Next blink in 3-6 seconds
+      nextBlinkTime.current = 3 + Math.random() * 3;
     }
 
-    // Process blink animation
     if (isBlinking.current) {
-      const blinkSpeed = 15; // Fast blink
-      blinkProgress.current += delta * blinkSpeed;
+      blinkProgress.current += delta * 15;
       
       if (blinkProgress.current >= 1) {
         isBlinking.current = false;
         blinkProgress.current = 0;
       }
       
-      // Calculate blink scale (Y-axis squeeze)
       let blinkScale = 1;
       if (blinkProgress.current < 0.5) {
-        // Closing
-        blinkScale = 1 - (blinkProgress.current * 2) * 0.9; // Close to 0.1
+        blinkScale = 1 - (blinkProgress.current * 2) * 0.9;
       } else {
-        // Opening
         blinkScale = 0.1 + ((blinkProgress.current - 0.5) * 2) * 0.9;
       }
       
-      // Apply blink to both eyes
       if (leftEyeRef.current && rightEyeRef.current) {
         leftEyeRef.current.scale.set(1, blinkScale, 1);
         rightEyeRef.current.scale.set(1, blinkScale, 1);
       }
     } else {
-      // Reset eye scale when not blinking
       if (leftEyeRef.current && rightEyeRef.current) {
         leftEyeRef.current.scale.set(1, 1, 1);
         rightEyeRef.current.scale.set(1, 1, 1);
       }
     }
 
-    // Smile animation (wider when active)
+    // Smile animation
     if (smileRef.current) {
       const targetSmileScale = isActive ? 1.3 : 1.0;
-      smileRef.current.scale.x = THREE.MathUtils.lerp(
-        smileRef.current.scale.x,
-        targetSmileScale,
-        0.1
-      );
+      smileRef.current.scale.x = THREE.MathUtils.lerp(smileRef.current.scale.x, targetSmileScale, 0.1);
     }
 
-    // Eye glow pulse when active
+    // Eye glow pulse
     if (leftEyeRef.current && rightEyeRef.current) {
       const pulse = isActive ? 0.8 + Math.sin(time * 2) * 0.2 : 0.4;
-      leftEyeRef.current.children.forEach((child) => {
-        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
-          if (child.material.emissive) {
-            child.material.emissiveIntensity = pulse;
+      [leftEyeRef.current, rightEyeRef.current].forEach((eyeRef) => {
+        eyeRef.children.forEach((child) => {
+          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+            if (child.material.emissive) {
+              child.material.emissiveIntensity = pulse;
+            }
           }
-        }
-      });
-      rightEyeRef.current.children.forEach((child) => {
-        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
-          if (child.material.emissive) {
-            child.material.emissiveIntensity = pulse;
-          }
-        }
+        });
       });
     }
 
-    // Antenna glow pulse when active
+    // Antenna glow
     if (antennaRef.current) {
       const material = antennaRef.current.material as THREE.MeshStandardMaterial;
       material.emissiveIntensity = isActive ? 0.8 + Math.sin(time * 4) * 0.4 : 0.2;
     }
 
-    // Checkmark glow when active
+    // Checkmark glow
     if (checkmarkRef.current) {
       checkmarkRef.current.children.forEach((child) => {
         if (child instanceof THREE.Mesh) {
@@ -250,297 +309,124 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
       material.emissiveIntensity = isActive ? 0.6 + Math.sin(time * 3) * 0.2 : 0.3;
     }
 
-    // LED bar pulse when active (communication indicator)
+    // LED bar pulse
     if (ledBarRef.current) {
       const material = ledBarRef.current.material as THREE.MeshStandardMaterial;
-      material.emissiveIntensity = isActive 
-        ? 0.4 + Math.sin(time * 3) * 0.3
-        : 0.2;
+      material.emissiveIntensity = isActive ? 0.4 + Math.sin(time * 3) * 0.3 : 0.2;
     }
   });
 
   return (
     <group ref={robotRef} scale={1.15}>
-      {/* Head - spherical top part */}
-      <Sphere ref={headRef} args={[0.55, 48, 48]} position={[0, 0.55, 0]}>
-        <meshPhysicalMaterial 
-          color={colors.body}
-          metalness={0.15}
-          roughness={0.2}
-          clearcoat={0.8}
-          clearcoatRoughness={0.1}
-          envMapIntensity={1}
-        />
+      {/* ═══════════════════════════════════════════════ */}
+      {/* HEAD SECTION */}
+      {/* ═══════════════════════════════════════════════ */}
+      
+      <Sphere ref={headRef} args={[GEOMETRY.head.radius, GEOMETRY.head.segments, GEOMETRY.head.segments]} position={GEOMETRY.head.position}>
+        <meshPhysicalMaterial {...MATERIALS.bodyPhysical} envMapIntensity={1} />
       </Sphere>
 
-      {/* Ear sensors on sides of head */}
-      <group position={[-0.53, 0.55, 0]}>
-        <Cylinder args={[0.06, 0.06, 0.08, 16]} rotation={[0, 0, Math.PI / 2]}>
-          <meshStandardMaterial color={colors.bodyAccent} metalness={0.3} roughness={0.2} />
+      <EarSensor position={[-0.53, 0.55, 0]} />
+      <EarSensor position={[0.53, 0.55, 0]} />
+
+      <Eye position={GEOMETRY.eye.position.left} eyeRef={leftEyeRef} />
+      <Eye position={GEOMETRY.eye.position.right} eyeRef={rightEyeRef} />
+
+      <Cylinder ref={ledBarRef} args={[0.012, 0.012, 0.22, 4]} position={[0, 0.32, 0.48]} rotation={[0, 0, Math.PI / 2]}>
+        <meshStandardMaterial color={COLORS.primary} emissive={COLORS.glow} emissiveIntensity={0.4} />
+      </Cylinder>
+
+      <Torus ref={smileRef} args={[0.08, 0.012, 16, 32, Math.PI]} position={[0, 0.25, 0.52]} rotation={[0, 0, Math.PI]}>
+        <meshStandardMaterial color={COLORS.primary} emissive={COLORS.glow} emissiveIntensity={0.3} />
+      </Torus>
+
+      <Sphere args={[0.04, 12, 12]} position={[0, 0.85, 0.47]}>
+        <meshStandardMaterial color={COLORS.primary} emissive={COLORS.glow} emissiveIntensity={0.5} />
+      </Sphere>
+
+      <group position={[0, 1.05, 0]}>
+        <Cylinder args={[0.015, 0.015, 0.40, 4]} position={[0, 0.20, 0]}>
+          <meshStandardMaterial color={COLORS.primary} metalness={0.8} roughness={0.2} />
         </Cylinder>
-        <Sphere args={[0.03, 16, 16]} position={[-0.05, 0, 0]}>
-          <meshStandardMaterial color={colors.primary} emissive={colors.glow} emissiveIntensity={0.3} />
+        <Sphere ref={antennaRef} args={[0.07, 16, 16]} position={[0, 0.42, 0]}>
+          <meshStandardMaterial color={COLORS.status} emissive={COLORS.status} emissiveIntensity={isActive ? 1.0 : 0.2} />
         </Sphere>
       </group>
 
-      <group position={[0.53, 0.55, 0]}>
-        <Cylinder args={[0.06, 0.06, 0.08, 16]} rotation={[0, 0, Math.PI / 2]}>
-          <meshStandardMaterial color={colors.bodyAccent} metalness={0.3} roughness={0.2} />
-        </Cylinder>
-        <Sphere args={[0.03, 16, 16]} position={[0.05, 0, 0]}>
-          <meshStandardMaterial color={colors.primary} emissive={colors.glow} emissiveIntensity={0.3} />
-        </Sphere>
-      </group>
-
-      {/* Neck connection - smaller ring */}
+      {/* ═══════════════════════════════════════════════ */}
+      {/* BODY SECTION */}
+      {/* ═══════════════════════════════════════════════ */}
+      
       <Torus args={[0.28, 0.03, 16, 32]} position={[0, 0.1, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <meshStandardMaterial color={colors.primary} metalness={0.5} roughness={0.3} />
+        <meshStandardMaterial color={COLORS.primary} metalness={0.5} roughness={0.3} />
       </Torus>
 
-      {/* Second neck ring - thinner */}
       <Torus args={[0.25, 0.02, 16, 32]} position={[0, 0.08, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <meshStandardMaterial color={colors.bodyAccent} metalness={0.4} roughness={0.3} />
+        <meshStandardMaterial color={COLORS.bodyAccent} metalness={0.4} roughness={0.3} />
       </Torus>
 
-      {/* Body - smaller and shorter capsule */}
-      <Capsule ref={bodyRef} args={[0.35, 0.15, 8, 32]} position={[0, -0.20, 0]}>
-        <meshPhysicalMaterial 
-          color={colors.body}
-          metalness={0.1}
-          roughness={0.3}
-          clearcoat={0.5}
-          clearcoatRoughness={0.2}
-        />
+      <Capsule ref={bodyRef} args={[GEOMETRY.body.radius, GEOMETRY.body.length, 8, 32]} position={GEOMETRY.body.position}>
+        <meshPhysicalMaterial {...MATERIALS.body} clearcoatRoughness={0.2} />
       </Capsule>
 
-      {/* Shoulders - smaller and closer */}
-      <Sphere args={[0.10, 16, 16]} position={[-0.40, 0.02, 0]}>
-        <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
-      </Sphere>
-      <Sphere args={[0.10, 16, 16]} position={[0.40, 0.02, 0]}>
-        <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
-      </Sphere>
-
-      {/* Left arm - shorter and closer */}
-      <Capsule ref={leftArmRef} args={[0.05, 0.20, 4, 16]} position={[-0.46, -0.08, 0]} rotation={[0, 0, 0.1]}>
-        <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
-      </Capsule>
-      <Sphere args={[0.05, 16, 16]} position={[-0.46, -0.18, 0]}>
-        <meshStandardMaterial color="#1E293B" metalness={0.5} roughness={0.3} />
-      </Sphere>
-      <Sphere args={[0.10, 16, 16]} position={[-0.46, -0.28, 0]}>
-        <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
-      </Sphere>
-
-      {/* Right arm - shorter and closer */}
-      <Capsule ref={rightArmRef} args={[0.05, 0.20, 4, 16]} position={[0.46, -0.08, 0]} rotation={[0, 0, -0.1]}>
-        <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
-      </Capsule>
-      <Sphere args={[0.05, 16, 16]} position={[0.46, -0.18, 0]}>
-        <meshStandardMaterial color="#1E293B" metalness={0.5} roughness={0.3} />
-      </Sphere>
-      <Sphere args={[0.10, 16, 16]} position={[0.46, -0.28, 0]}>
-        <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
-      </Sphere>
-
-      {/* Left leg - shorter and higher */}
-      <Capsule args={[0.07, 0.15, 4, 16]} position={[-0.12, -0.48, 0]}>
-        <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
-      </Capsule>
-      <Sphere args={[0.06, 16, 16]} position={[-0.12, -0.55, 0]}>
-        <meshStandardMaterial color="#1E293B" metalness={0.5} roughness={0.3} />
-      </Sphere>
-      <Sphere args={[0.10, 16, 16]} position={[-0.12, -0.60, 0]}>
-        <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
-      </Sphere>
-
-      {/* Right leg - shorter and higher */}
-      <Capsule args={[0.07, 0.15, 4, 16]} position={[0.12, -0.48, 0]}>
-        <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
-      </Capsule>
-      <Sphere args={[0.06, 16, 16]} position={[0.12, -0.55, 0]}>
-        <meshStandardMaterial color="#1E293B" metalness={0.5} roughness={0.3} />
-      </Sphere>
-      <Sphere args={[0.10, 16, 16]} position={[0.12, -0.60, 0]}>
-        <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
-      </Sphere>
-
-      {/* Tech accent lines - smaller body */}
       <Torus args={[0.35, 0.008, 16, 32]} position={[0, -0.05, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <meshStandardMaterial color={colors.primary} opacity={0.3} transparent metalness={0.6} />
+        <meshStandardMaterial color={COLORS.primary} opacity={0.3} transparent metalness={0.6} />
       </Torus>
       <Torus args={[0.35, 0.008, 16, 32]} position={[0, -0.32, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <meshStandardMaterial color={colors.primary} opacity={0.3} transparent metalness={0.6} />
+        <meshStandardMaterial color={COLORS.primary} opacity={0.3} transparent metalness={0.6} />
       </Torus>
 
-      {/* Antenna on top of head */}
-      <group position={[0, 1.05, 0]}>
-        {/* Antenna rod */}
-        <Cylinder args={[0.015, 0.015, 0.40, 8]} position={[0, 0.20, 0]}>
-          <meshStandardMaterial color={colors.primary} metalness={0.8} roughness={0.2} />
-        </Cylinder>
-        {/* Antenna tip - pulses */}
-        <Sphere ref={antennaRef} args={[0.07, 16, 16]} position={[0, 0.42, 0]}>
-          <meshStandardMaterial 
-            color={colors.status}
-            emissive={colors.status}
-            emissiveIntensity={isActive ? 1.0 : 0.2}
-          />
-        </Sphere>
-      </group>
-
-      {/* Left eye - larger, more forward, softer grey */}
-      <group ref={leftEyeRef} position={[-0.16, 0.60, 0.50]}>
-        {/* Eye housing - larger */}
-        <Torus args={[0.11, 0.02, 16, 32]}>
-          <meshStandardMaterial color="#334155" />
-        </Torus>
-        {/* LED core - larger */}
-        <Sphere args={[0.10, 16, 16]}>
-          <meshStandardMaterial 
-            color={colors.eyes}
-            emissive={colors.eyeGlow}
-            emissiveIntensity={0.8}
-          />
-        </Sphere>
-        {/* Double highlights - proportionally larger */}
-        <Sphere args={[0.027, 16, 16]} position={[0.03, 0.03, 0.075]}>
-          <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={1.2} />
-        </Sphere>
-        <Sphere args={[0.016, 16, 16]} position={[-0.02, -0.02, 0.08]}>
-          <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={0.8} />
-        </Sphere>
-      </group>
-
-      {/* Right eye - larger, more forward, softer grey */}
-      <group ref={rightEyeRef} position={[0.16, 0.60, 0.50]}>
-        {/* Eye housing - larger */}
-        <Torus args={[0.11, 0.02, 16, 32]}>
-          <meshStandardMaterial color="#334155" />
-        </Torus>
-        {/* LED core - larger */}
-        <Sphere args={[0.10, 16, 16]}>
-          <meshStandardMaterial 
-            color={colors.eyes}
-            emissive={colors.eyeGlow}
-            emissiveIntensity={0.8}
-          />
-        </Sphere>
-        {/* Double highlights - proportionally larger */}
-        <Sphere args={[0.027, 16, 16]} position={[0.03, 0.03, 0.075]}>
-          <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={1.2} />
-        </Sphere>
-        <Sphere args={[0.016, 16, 16]} position={[-0.02, -0.02, 0.08]}>
-          <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={0.8} />
-        </Sphere>
-      </group>
-
-      {/* Communication LED bar below eyes - more forward */}
-      <Cylinder 
-        ref={ledBarRef}
-        args={[0.012, 0.012, 0.22, 8]} 
-        position={[0, 0.32, 0.48]} 
-        rotation={[0, 0, Math.PI / 2]}
-      >
-        <meshStandardMaterial 
-          color={colors.primary} 
-          emissive={colors.glow}
-          emissiveIntensity={0.4}
-        />
+      {/* Chest display frame */}
+      <Cylinder args={[0.008, 0.008, 0.10, 4]} position={[-0.06, -0.18, 0.35]}>
+        <meshStandardMaterial color={COLORS.primary} opacity={0.5} transparent />
+      </Cylinder>
+      <Cylinder args={[0.008, 0.008, 0.10, 4]} position={[0.06, -0.18, 0.35]}>
+        <meshStandardMaterial color={COLORS.primary} opacity={0.5} transparent />
+      </Cylinder>
+      <Cylinder args={[0.008, 0.008, 0.12, 4]} position={[0, -0.13, 0.35]} rotation={[0, 0, Math.PI/2]}>
+        <meshStandardMaterial color={COLORS.primary} opacity={0.5} transparent />
+      </Cylinder>
+      <Cylinder args={[0.008, 0.008, 0.12, 4]} position={[0, -0.23, 0.35]} rotation={[0, 0, Math.PI/2]}>
+        <meshStandardMaterial color={COLORS.primary} opacity={0.5} transparent />
       </Cylinder>
 
-      {/* Smile indicator - subtle curved LED */}
-      <Torus 
-        ref={smileRef}
-        args={[0.08, 0.012, 16, 32, Math.PI]} 
-        position={[0, 0.25, 0.52]} 
-        rotation={[0, 0, Math.PI]}
-      >
-        <meshStandardMaterial 
-          color={colors.primary}
-          emissive={colors.glow}
-          emissiveIntensity={0.3}
-        />
-      </Torus>
+      <group ref={checkmarkRef} position={[0, -0.18, 0.38]}>
+        <Cylinder args={[0.018, 0.018, 0.06, 4]} position={[-0.02, -0.012, 0]} rotation={[0, 0, -0.8]}>
+          <meshStandardMaterial color={COLORS.checkmark} emissive={COLORS.checkmark} emissiveIntensity={isActive ? 0.8 : 0.4} />
+        </Cylinder>
+        <Cylinder args={[0.018, 0.018, 0.09, 4]} position={[0.008, 0.015, 0]} rotation={[0, 0, 0.5]}>
+          <meshStandardMaterial color={COLORS.checkmark} emissive={COLORS.checkmark} emissiveIntensity={isActive ? 0.8 : 0.4} />
+        </Cylinder>
+      </group>
 
-      {/* Forehead sensor - more forward */}
-      <Sphere args={[0.04, 16, 16]} position={[0, 0.85, 0.47]}>
-        <meshStandardMaterial 
-          color={colors.primary}
-          emissive={colors.glow}
-          emissiveIntensity={0.5}
-        />
+      <VentLine position={[-0.32, -0.10, 0.15]} />
+      <VentLine position={[-0.32, -0.18, 0.15]} />
+      <VentLine position={[-0.32, -0.26, 0.15]} />
+      <VentLine position={[0.32, -0.10, 0.15]} />
+      <VentLine position={[0.32, -0.18, 0.15]} />
+      <VentLine position={[0.32, -0.26, 0.15]} />
+
+      {/* ═══════════════════════════════════════════════ */}
+      {/* LIMBS SECTION */}
+      {/* ═══════════════════════════════════════════════ */}
+      
+      <Sphere args={[GEOMETRY.shoulder.radius, 16, 16]} position={GEOMETRY.shoulder.position.left}>
+        <meshPhysicalMaterial {...MATERIALS.body} />
+      </Sphere>
+      <Sphere args={[GEOMETRY.shoulder.radius, 16, 16]} position={GEOMETRY.shoulder.position.right}>
+        <meshPhysicalMaterial {...MATERIALS.body} />
       </Sphere>
 
-      {/* Chest display frame - smaller and higher */}
-      {/* Vertical lines */}
-      <Cylinder args={[0.008, 0.008, 0.10, 8]} position={[-0.06, -0.18, 0.35]}>
-        <meshStandardMaterial color={colors.primary} opacity={0.5} transparent />
-      </Cylinder>
-      <Cylinder args={[0.008, 0.008, 0.10, 8]} position={[0.06, -0.18, 0.35]}>
-        <meshStandardMaterial color={colors.primary} opacity={0.5} transparent />
-      </Cylinder>
-      {/* Horizontal lines */}
-      <Cylinder args={[0.008, 0.008, 0.12, 8]} position={[0, -0.13, 0.35]} rotation={[0, 0, Math.PI/2]}>
-        <meshStandardMaterial color={colors.primary} opacity={0.5} transparent />
-      </Cylinder>
-      <Cylinder args={[0.008, 0.008, 0.12, 8]} position={[0, -0.23, 0.35]} rotation={[0, 0, Math.PI/2]}>
-        <meshStandardMaterial color={colors.primary} opacity={0.5} transparent />
-      </Cylinder>
+      <Arm side="left" armRef={leftArmRef} />
+      <Arm side="right" armRef={rightArmRef} />
 
-      {/* Checkmark emblem - larger, centered, more forward */}
-      <group ref={checkmarkRef} position={[0, -0.18, 0.38]}>
-        {/* Short stroke */}
-        <Cylinder args={[0.018, 0.018, 0.06, 8]} position={[-0.02, -0.012, 0]} rotation={[0, 0, -0.8]}>
-          <meshStandardMaterial 
-            color={colors.checkmark} 
-            emissive={colors.checkmark} 
-            emissiveIntensity={isActive ? 0.8 : 0.4}
-          />
-        </Cylinder>
-        {/* Long stroke */}
-        <Cylinder args={[0.018, 0.018, 0.09, 8]} position={[0.008, 0.015, 0]} rotation={[0, 0, 0.5]}>
-          <meshStandardMaterial 
-            color={colors.checkmark} 
-            emissive={colors.checkmark} 
-            emissiveIntensity={isActive ? 0.8 : 0.4}
-          />
-        </Cylinder>
-      </group>
+      <Leg side="left" />
+      <Leg side="right" />
 
-      {/* Side panel ventilation lines - adjusted for smaller body */}
-      {/* Left side */}
-      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[-0.32, -0.10, 0.15]}>
-        <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
-      </Cylinder>
-      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[-0.32, -0.18, 0.15]}>
-        <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
-      </Cylinder>
-      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[-0.32, -0.26, 0.15]}>
-        <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
-      </Cylinder>
-
-      {/* Right side */}
-      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[0.32, -0.10, 0.15]}>
-        <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
-      </Cylinder>
-      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[0.32, -0.18, 0.15]}>
-        <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
-      </Cylinder>
-      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[0.32, -0.26, 0.15]}>
-        <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
-      </Cylinder>
-
-      {/* Status ring at bottom - higher position */}
-      <Torus 
-        ref={statusRingRef}
-        args={[0.25, 0.015, 16, 32]} 
-        position={[0, -0.75, 0]} 
-        rotation={[Math.PI / 2, 0, 0]}
-      >
+      <Torus ref={statusRingRef} args={[0.25, 0.015, 16, 32]} position={[0, -0.75, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <meshStandardMaterial 
-          color={isActive ? colors.status : colors.primary}
-          emissive={isActive ? colors.status : colors.primary}
+          color={isActive ? COLORS.status : COLORS.primary}
+          emissive={isActive ? COLORS.status : COLORS.primary}
           emissiveIntensity={isActive ? 0.6 : 0.3}
         />
       </Torus>
