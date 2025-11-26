@@ -2,12 +2,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Application {
   id: string;
@@ -36,6 +39,19 @@ interface ApplicationDetailModalProps {
   onApplicationUpdated: () => void;
 }
 
+interface LinkedTask {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  due_at: string | null;
+  recruitment_action_type: string | null;
+  assignee_id: string | null;
+  profiles: {
+    name: string | null;
+  } | null;
+}
+
 export function ApplicationDetailModal({
   application,
   open,
@@ -43,6 +59,67 @@ export function ApplicationDetailModal({
   onApplicationUpdated,
 }: ApplicationDetailModalProps) {
   const [updating, setUpdating] = useState(false);
+  const [linkedTasks, setLinkedTasks] = useState<LinkedTask[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  
+  // Action creation form
+  const [showActionForm, setShowActionForm] = useState(false);
+  const [actionType, setActionType] = useState<string>("call");
+  const [customTitle, setCustomTitle] = useState("");
+  const [actionPriority, setActionPriority] = useState("MEDIUM");
+  const [actionNotes, setActionNotes] = useState("");
+  const [creatingAction, setCreatingAction] = useState(false);
+
+  // Load linked tasks
+  useEffect(() => {
+    if (application?.id && open) {
+      loadLinkedTasks();
+    }
+  }, [application?.id, open]);
+
+  const loadLinkedTasks = async () => {
+    if (!application?.id) return;
+    
+    setLoadingTasks(true);
+    try {
+      // Fetch tasks without join to avoid ambiguity
+      const { data: tasksData, error: tasksError } = await supabase
+        .from('tasks')
+        .select('id, title, status, priority, due_at, recruitment_action_type, assignee_id')
+        .eq('application_id', application.id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+
+      if (tasksError) throw tasksError;
+
+      // Fetch profile names for assignees
+      const assigneeIds = tasksData?.map(t => t.assignee_id).filter(Boolean) || [];
+      let profilesMap = new Map();
+
+      if (assigneeIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, name')
+          .in('id', assigneeIds);
+
+        profilesData?.forEach(p => profilesMap.set(p.id, p));
+      }
+
+      // Map tasks with profile data
+      const mappedTasks: LinkedTask[] = (tasksData || []).map(task => ({
+        ...task,
+        profiles: task.assignee_id && profilesMap.has(task.assignee_id)
+          ? { name: profilesMap.get(task.assignee_id).name }
+          : null
+      }));
+
+      setLinkedTasks(mappedTasks);
+    } catch (error) {
+      console.error('Error loading linked tasks:', error);
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
 
   const handleStageChange = async (newStage: string) => {
     setUpdating(true);
@@ -87,6 +164,95 @@ export function ApplicationDetailModal({
       afgerond: "Afgerond",
     };
     return labels[status] || status;
+  };
+
+  const getActionTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      call: "Bel kandidaat",
+      interview: "Plan interview",
+      contract: "Contract opmaken",
+      reference_check: "Check referenties",
+      custom: "Aangepaste actie",
+    };
+    return labels[type] || type;
+  };
+
+  const handleCreateAction = async () => {
+    if (!application?.id) return;
+
+    // Determine title based on action type
+    let title = "";
+    const candidateName = application.professionals?.full_name || application.email_from;
+    
+    if (actionType === "custom" && !customTitle.trim()) {
+      toast.error("Vul een titel in voor de aangepaste actie");
+      return;
+    }
+
+    switch (actionType) {
+      case "call":
+        title = `Bel ${candidateName}`;
+        break;
+      case "interview":
+        title = `Plan interview met ${candidateName}`;
+        break;
+      case "contract":
+        title = `Contract opmaken voor ${candidateName}`;
+        break;
+      case "reference_check":
+        title = `Check referenties ${candidateName}`;
+        break;
+      case "custom":
+        title = customTitle.trim();
+        break;
+    }
+
+    setCreatingAction(true);
+    try {
+      // Get current user and org
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data: orgData } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!orgData) throw new Error("No organization found");
+
+      // Create task linked to application
+      const { error } = await supabase.from('tasks').insert([{
+        org_id: orgData.org_id,
+        application_id: application.id,
+        recruitment_action_type: actionType,
+        title,
+        description: actionNotes || `Actie voor sollicitatie van ${candidateName}`,
+        priority: actionPriority as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+        category: 'recruitment',
+        status: 'todo',
+        reporter_id: user.id,
+      }]);
+
+      if (error) throw error;
+
+      toast.success("Actie aangemaakt");
+      
+      // Reset form
+      setShowActionForm(false);
+      setCustomTitle("");
+      setActionNotes("");
+      setActionType("call");
+      setActionPriority("MEDIUM");
+      
+      // Reload tasks
+      loadLinkedTasks();
+    } catch (error) {
+      console.error('Error creating action:', error);
+      toast.error("Fout bij aanmaken actie");
+    } finally {
+      setCreatingAction(false);
+    }
   };
 
   return (
@@ -213,6 +379,201 @@ export function ApplicationDetailModal({
               <span className="text-sm font-medium">E-mail inhoud</span>
               <div className="p-3 rounded-lg bg-muted/50 text-sm whitespace-pre-wrap max-h-[200px] overflow-y-auto">
                 {application.email_body}
+              </div>
+            </div>
+          )}
+
+          <Separator />
+
+          {/* Actions Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Acties</span>
+              {!showActionForm && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowActionForm(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Maak actie aan
+                </Button>
+              )}
+            </div>
+
+            {/* Quick Action Buttons */}
+            {!showActionForm && (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setActionType("call");
+                    setShowActionForm(true);
+                  }}
+                >
+                  <Phone className="h-4 w-4 mr-2" />
+                  Bel kandidaat
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setActionType("interview");
+                    setShowActionForm(true);
+                  }}
+                >
+                  <CalendarClock className="h-4 w-4 mr-2" />
+                  Plan interview
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setActionType("reference_check");
+                    setShowActionForm(true);
+                  }}
+                >
+                  <ClipboardCheck className="h-4 w-4 mr-2" />
+                  Check referenties
+                </Button>
+              </div>
+            )}
+
+            {/* Action Creation Form */}
+            {showActionForm && (
+              <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Actie type</label>
+                  <Select value={actionType} onValueChange={setActionType}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="call">📞 Bel kandidaat</SelectItem>
+                      <SelectItem value="interview">📅 Plan interview</SelectItem>
+                      <SelectItem value="reference_check">📋 Check referenties</SelectItem>
+                      <SelectItem value="contract">📄 Contract opmaken</SelectItem>
+                      <SelectItem value="custom">✏️ Aangepast</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {actionType === "custom" && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Titel</label>
+                    <Input
+                      value={customTitle}
+                      onChange={(e) => setCustomTitle(e.target.value)}
+                      placeholder="Bijv. Stuur informatiebrochure"
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Prioriteit</label>
+                  <Select value={actionPriority} onValueChange={setActionPriority}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="LOW">Laag</SelectItem>
+                      <SelectItem value="MEDIUM">Normaal</SelectItem>
+                      <SelectItem value="HIGH">Hoog</SelectItem>
+                      <SelectItem value="CRITICAL">Kritiek</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Notities (optioneel)</label>
+                  <Textarea
+                    value={actionNotes}
+                    onChange={(e) => setActionNotes(e.target.value)}
+                    placeholder="Extra informatie over deze actie..."
+                    rows={3}
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleCreateAction}
+                    disabled={creatingAction}
+                    className="flex-1"
+                  >
+                    {creatingAction ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Aanmaken...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Aanmaken
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowActionForm(false);
+                      setCustomTitle("");
+                      setActionNotes("");
+                    }}
+                    disabled={creatingAction}
+                  >
+                    Annuleren
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Linked Tasks */}
+          {linkedTasks.length > 0 && (
+            <div className="space-y-3">
+              <span className="text-sm font-medium">Lopende acties ({linkedTasks.length})</span>
+              <div className="space-y-2">
+                {loadingTasks ? (
+                  <div className="text-sm text-muted-foreground">Laden...</div>
+                ) : (
+                  linkedTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                    >
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium">{task.title}</p>
+                          {task.recruitment_action_type && (
+                            <Badge variant="outline" className="text-xs">
+                              {getActionTypeLabel(task.recruitment_action_type)}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span>Status: {task.status}</span>
+                          {task.profiles?.name && (
+                            <span>• {task.profiles.name}</span>
+                          )}
+                          {task.due_at && (
+                            <span>• Deadline: {format(new Date(task.due_at), "d MMM", { locale: nl })}</span>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          // Navigate to task - for now just show in Lijstweergave
+                          window.location.href = `/lijst?task=${task.id}`;
+                        }}
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}

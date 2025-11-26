@@ -25,6 +25,8 @@ interface Task {
   completed_at: string | null;
   order_key: string;
   column_id?: string;
+  application_id: string | null;
+  recruitment_action_type: string | null;
   start_at: string | null;
   next_action: string | null;
   profiles: {

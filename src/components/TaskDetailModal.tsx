@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, User, FileText, ArrowRight, Edit, ListChecks } from "lucide-react";
+import { Calendar, Clock, User, FileText, ArrowRight, Edit, ListChecks, Mail, ExternalLink } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { TaskDialog } from "./TaskDialog";
@@ -32,9 +32,20 @@ interface Task {
   due_at: string | null;
   next_action: string | null;
   assignee_id: string | null;
+  application_id: string | null;
+  recruitment_action_type: string | null;
   profiles: {
     name: string | null;
     email: string | null;
+  } | null;
+}
+
+interface LinkedApplication {
+  id: string;
+  email_from: string;
+  pipeline_stage: string;
+  professionals: {
+    full_name: string;
   } | null;
 }
 
@@ -56,12 +67,21 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [loadingSubtasks, setLoadingSubtasks] = useState(false);
+  const [linkedApplication, setLinkedApplication] = useState<LinkedApplication | null>(null);
+  const [loadingApplication, setLoadingApplication] = useState(false);
   const { toast } = useToast();
 
-  // Load subtasks when task changes
+  // Load subtasks and application when task changes
   useEffect(() => {
     if (task?.id && open) {
       loadSubtasks();
+      
+      // Load linked application if exists
+      if (task.application_id) {
+        loadLinkedApplication();
+      } else {
+        setLinkedApplication(null);
+      }
       
       // Subscribe to realtime updates
       const channel = supabase
@@ -84,7 +104,32 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
         supabase.removeChannel(channel);
       };
     }
-  }, [task?.id, open]);
+  }, [task?.id, task?.application_id, open]);
+
+  const loadLinkedApplication = async () => {
+    if (!task?.application_id) return;
+    
+    setLoadingApplication(true);
+    try {
+      const { data, error } = await supabase
+        .from('professional_applications')
+        .select(`
+          id,
+          email_from,
+          pipeline_stage,
+          professionals:professional_id(full_name)
+        `)
+        .eq('id', task.application_id)
+        .single();
+
+      if (error) throw error;
+      setLinkedApplication(data);
+    } catch (error) {
+      console.error('Error loading linked application:', error);
+    } finally {
+      setLoadingApplication(false);
+    }
+  };
 
   const loadSubtasks = async () => {
     if (!task?.id) return;
@@ -211,6 +256,40 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
           </DialogHeader>
 
           <div className="space-y-6">
+            {/* Linked Application Badge */}
+            {linkedApplication && (
+              <div className="p-4 border rounded-lg bg-accent/20 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">Gekoppeld aan sollicitatie</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      window.location.href = `/sollicitaties?application=${linkedApplication.id}`;
+                    }}
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="font-medium">
+                    {linkedApplication.professionals?.full_name || linkedApplication.email_from}
+                  </span>
+                  <Badge variant="outline" className="text-xs">
+                    {linkedApplication.pipeline_stage}
+                  </Badge>
+                </div>
+                {task.recruitment_action_type && (
+                  <p className="text-xs text-muted-foreground">
+                    Type: {task.recruitment_action_type}
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Priority */}
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-muted-foreground">Prioriteit:</span>

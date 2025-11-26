@@ -24,6 +24,8 @@ interface Task {
   next_action: string | null;
   completed_at: string | null;
   estimate_min: number | null;
+  application_id: string | null;
+  recruitment_action_type: string | null;
   org_id: string;
   organizations: { name: string } | null;
   profiles: { name: string | null } | null;
