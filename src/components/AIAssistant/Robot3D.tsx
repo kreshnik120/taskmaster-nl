@@ -168,9 +168,6 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
     timeRef.current += delta;
     const time = timeRef.current;
 
-    // Floating animation
-    robotRef.current.position.y = Math.sin(time * 0.8) * 0.015;
-    
     // Drag rotation
     if (dragVelocity) {
       targetRotation.current.y = THREE.MathUtils.clamp(dragVelocity.x * 0.15, -0.35, 0.35);
@@ -183,40 +180,15 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
     currentRotation.current.x = THREE.MathUtils.lerp(currentRotation.current.x, targetRotation.current.x, 0.1);
     currentRotation.current.y = THREE.MathUtils.lerp(currentRotation.current.y, targetRotation.current.y, 0.1);
     
-    robotRef.current.rotation.y = currentRotation.current.y + Math.sin(time * 0.5) * 0.02;
+    robotRef.current.rotation.y = currentRotation.current.y;
     robotRef.current.rotation.x = currentRotation.current.x;
 
-    // Head breathing
-    if (headRef.current) {
-      const breathSpeed = 1.2 + Math.sin(time * 0.3) * 0.1;
-      const breathe = 1 + Math.sin(time * breathSpeed) * 0.01;
-      headRef.current.scale.setScalar(breathe);
-    }
-
-    // Head follows cursor
+    // Head follows cursor - only movement is cursor tracking
     if (headRef.current && mousePos) {
       const headTiltX = THREE.MathUtils.lerp(headRef.current.rotation.x, mousePos.y * -0.05, 0.05);
       const headTiltY = THREE.MathUtils.lerp(headRef.current.rotation.y, mousePos.x * 0.08, 0.05);
       headRef.current.rotation.x = headTiltX;
       headRef.current.rotation.y = headTiltY;
-    } else if (headRef.current && !isActive) {
-      const tiltX = Math.sin(time * 0.4) * 0.03;
-      const tiltZ = Math.cos(time * 0.3) * 0.02;
-      headRef.current.rotation.x = tiltX;
-      headRef.current.rotation.z = tiltZ;
-    }
-
-    // Body sway
-    if (bodyRef.current) {
-      bodyRef.current.rotation.z = Math.sin(time * 0.5) * 0.01;
-    }
-
-    // Arms movement
-    if (leftArmRef.current) {
-      leftArmRef.current.rotation.z = 0.1 + Math.sin(time * 0.6 + 0.5) * 0.05;
-    }
-    if (rightArmRef.current) {
-      rightArmRef.current.rotation.z = -0.1 + Math.sin(time * 0.6) * 0.05;
     }
 
     // Eye tracking
