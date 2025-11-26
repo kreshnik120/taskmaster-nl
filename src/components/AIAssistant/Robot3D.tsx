@@ -26,21 +26,24 @@ const COLORS = {
   eyeGlow: "#60A5FA",
   status: "#10B981",
   checkmark: "#3B82F6",
-  ring: "#E2E8F0"
+  ring: "#E2E8F0",
+  purple: "#8B5CF6",
+  purpleLight: "#EDE9FE",
+  rimHighlight: "#E0F2FE"
 };
 
 const MATERIALS = {
   body: { color: COLORS.body, metalness: 0, roughness: 0.3, clearcoat: 0.5 },
   bodyPhysical: { color: COLORS.body, metalness: 0, roughness: 0.3, clearcoat: 0.4, clearcoatRoughness: 0.3 },
   accent: { color: COLORS.bodyAccent, opacity: 0.8, transparent: true },
-  joint: { color: "#1E293B", metalness: 0.5, roughness: 0.3 },
+  joint: { color: "#64748B", metalness: 0.3, roughness: 0.4 },
   handFoot: { color: COLORS.primary, metalness: 0.4, roughness: 0.3 }
 };
 
 const GEOMETRY = {
   head: { radius: 0.55, segments: 48, position: [0, 0.55, 0] as [number, number, number] },
   body: { radius: 0.35, length: 0.15, position: [0, -0.20, 0] as [number, number, number] },
-  shoulder: { radius: 0.10, position: { left: [-0.40, 0.02, 0] as [number, number, number], right: [0.40, 0.02, 0] as [number, number, number] } },
+  shoulder: { radius: 0.07, position: { left: [-0.38, 0.02, 0] as [number, number, number], right: [0.38, 0.02, 0] as [number, number, number] } },
   arm: { radius: 0.05, length: 0.20, position: { left: [-0.46, -0.08, 0] as [number, number, number], right: [0.46, -0.08, 0] as [number, number, number] } },
   elbow: { radius: 0.05, position: { left: [-0.46, -0.18, 0] as [number, number, number], right: [0.46, -0.18, 0] as [number, number, number] } },
   hand: { radius: 0.10, position: { left: [-0.46, -0.28, 0] as [number, number, number], right: [0.46, -0.28, 0] as [number, number, number] } },
@@ -126,15 +129,22 @@ const VentLine = ({ position }: { position: [number, number, number] }) => (
   </Cylinder>
 );
 
-const EarSensor = ({ position }: { position: [number, number, number] }) => {
+const EarSensor = ({ position, isActive }: { position: [number, number, number]; isActive: boolean }) => {
   const sensorOffset = position[0] < 0 ? -0.05 : 0.05;
+  const sensorColor = isActive ? COLORS.status : COLORS.primary;
+  const glowIntensity = isActive ? 0.6 : 0.15;
+  
   return (
     <group position={position}>
       <Cylinder args={[0.06, 0.06, 0.08, 16]} rotation={[0, 0, Math.PI / 2]}>
-        <meshStandardMaterial color={COLORS.bodyAccent} metalness={0.3} roughness={0.2} />
+        <meshStandardMaterial color={COLORS.purpleLight} metalness={0.2} roughness={0.3} />
       </Cylinder>
       <Sphere args={[0.02, 12, 12]} position={[sensorOffset, 0, 0]}>
-        <meshStandardMaterial color={COLORS.primary} emissive={COLORS.glow} emissiveIntensity={0.15} />
+        <meshStandardMaterial
+          color={sensorColor}
+          emissive={sensorColor}
+          emissiveIntensity={glowIntensity}
+        />
       </Sphere>
     </group>
   );
@@ -167,6 +177,7 @@ export const Robot3D: React.FC<Robot3DProps> = ({
   const rightArmRef = useRef<THREE.Mesh>(null);
   const leftHandRef = useRef<THREE.Mesh>(null);
   const rightHandRef = useRef<THREE.Mesh>(null);
+  const chestDisplayRef = useRef<THREE.Mesh>(null);
   
   const targetRotation = useRef({ x: 0, y: 0 });
   const currentRotation = useRef({ x: 0, y: 0 });
@@ -420,12 +431,22 @@ export const Robot3D: React.FC<Robot3DProps> = ({
       {/* HEAD SECTION */}
       {/* ═══════════════════════════════════════════════ */}
       
+      {/* Rim highlight for glass effect */}
+      <Sphere args={[GEOMETRY.head.radius - 0.02, 48, 48]} position={GEOMETRY.head.position}>
+        <meshStandardMaterial 
+          color={COLORS.rimHighlight}
+          transparent
+          opacity={0.3}
+          side={THREE.BackSide}
+        />
+      </Sphere>
+      
       <Sphere ref={headRef} args={[GEOMETRY.head.radius, GEOMETRY.head.segments, GEOMETRY.head.segments]} position={GEOMETRY.head.position}>
         <meshPhysicalMaterial {...MATERIALS.bodyPhysical} envMapIntensity={1} />
       </Sphere>
 
-      <EarSensor position={[-0.53, 0.55, 0]} />
-      <EarSensor position={[0.53, 0.55, 0]} />
+      <EarSensor position={[-0.53, 0.55, 0]} isActive={isActive} />
+      <EarSensor position={[0.53, 0.55, 0]} isActive={isActive} />
 
       <Eye position={GEOMETRY.eye.position.left} eyeRef={leftEyeRef} />
       <Eye position={GEOMETRY.eye.position.right} eyeRef={rightEyeRef} />
@@ -508,7 +529,7 @@ export const Robot3D: React.FC<Robot3DProps> = ({
         <meshStandardMaterial color={COLORS.primary} opacity={0.3} transparent metalness={0.6} />
       </Torus>
 
-      {/* Chest display frame */}
+      {/* Chest display frame with glow */}
       <Cylinder args={[0.008, 0.008, 0.10, 4]} position={[-0.06, -0.18, 0.35]}>
         <meshStandardMaterial color={COLORS.primary} opacity={0.5} transparent />
       </Cylinder>
@@ -521,6 +542,18 @@ export const Robot3D: React.FC<Robot3DProps> = ({
       <Cylinder args={[0.008, 0.008, 0.12, 4]} position={[0, -0.23, 0.35]} rotation={[0, 0, Math.PI/2]}>
         <meshStandardMaterial color={COLORS.primary} opacity={0.5} transparent />
       </Cylinder>
+      
+      {/* Chest display glow panel */}
+      <mesh ref={chestDisplayRef} position={[0, -0.18, 0.36]}>
+        <planeGeometry args={[0.10, 0.08]} />
+        <meshStandardMaterial 
+          color="#F8FAFC"
+          emissive={isActive ? COLORS.primary : "#F1F5F9"}
+          emissiveIntensity={isActive ? 0.3 : 0}
+          transparent
+          opacity={0.95}
+        />
+      </mesh>
 
       <group ref={checkmarkRef} position={[0, -0.18, 0.38]}>
         <Cylinder args={[0.018, 0.018, 0.06, 4]} position={[-0.02, -0.012, 0]} rotation={[0, 0, -0.8]}>
