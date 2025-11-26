@@ -161,13 +161,6 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
         <div className="w-full h-full rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border-2 border-primary/30">
           <Bot className="w-16 h-16 text-primary" />
         </div>
-        {isActive && (
-          <motion.div
-            className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full shadow-lg border-2 border-background"
-            animate={{ scale: [1, 1.3, 1], opacity: [1, 0.8, 1] }}
-            transition={{ duration: 1, repeat: Infinity }}
-          />
-        )}
       </motion.button>
     );
   }
@@ -197,15 +190,6 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
       className="relative group fixed bottom-6 right-6 z-[2147483647] cursor-grab active:cursor-grabbing border-none p-0 w-32 h-32"
       whileHover={{ scale: 1.15 }}
       whileTap={{ scale: 0.9 }}
-      animate={!isActive ? { 
-        y: [0, -15, 0],
-        scale: [1, 1.05, 1],
-      } : {}}
-      transition={{
-        duration: 2.5,
-        repeat: Infinity,
-        ease: "easeInOut"
-      }}
       title="Klik voor AI hulp"
     >
       <div className="relative w-full h-full transition-all duration-300">
@@ -252,15 +236,6 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
             </Suspense>
           </Canvas>
         </RobotErrorBoundary>
-        
-        {/* Active indicator */}
-        {isActive && (
-          <motion.div
-            className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full shadow-lg border-2 border-background"
-            animate={{ scale: [1, 1.3, 1], opacity: [1, 0.8, 1] }}
-            transition={{ duration: 1, repeat: Infinity }}
-          />
-        )}
       </div>
       
       {/* Tooltip */}
