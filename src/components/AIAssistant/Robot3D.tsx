@@ -74,17 +74,8 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
         </Sphere>
       </group>
 
-      {/* Main body/head - Two-tone blue effect - Compact & cute */}
-      {/* Dark blue left side */}
-      <RoundedBox args={[0.6, 0.9, 1]} radius={0.35} position={[-0.3, 0, 0]}>
-        <meshStandardMaterial 
-          color="#1e5a8e" 
-          metalness={0.1}
-          roughness={0.2}
-        />
-      </RoundedBox>
-      {/* Light blue right side */}
-      <RoundedBox args={[0.6, 0.9, 1]} radius={0.35} position={[0.3, 0, 0]}>
+      {/* Main body/head - Single unified body */}
+      <RoundedBox args={[1.2, 1.0, 0.9]} radius={0.4} position={[0, 0, 0]}>
         <meshStandardMaterial 
           color="#4a9fd8" 
           metalness={0.1}
@@ -92,52 +83,47 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
         />
       </RoundedBox>
 
-      {/* Eyes - Larger and more prominent */}
-      <group ref={leftEyeRef} position={[-0.3, 0.2, 0.55]}>
-        {/* Grey border */}
-        <Sphere args={[0.35, 16, 16]} position={[0, 0, -0.05]}>
-          <meshStandardMaterial color="#8a8a8a" roughness={0.3} />
-        </Sphere>
+      {/* Eyes - Proportional and positioned correctly */}
+      <group ref={leftEyeRef} position={[-0.25, 0.15, 0.45]}>
         {/* White eyeball */}
-        <Sphere args={[0.32, 16, 16]}>
+        <Sphere args={[0.22, 16, 16]}>
           <meshStandardMaterial color="white" roughness={0.1} />
         </Sphere>
         {/* Black pupil */}
-        <Sphere args={[0.15, 16, 16]} position={[0, 0, 0.18]}>
+        <Sphere args={[0.1, 16, 16]} position={[0, 0, 0.12]}>
           <meshStandardMaterial color="#1a1a1a" />
         </Sphere>
       </group>
 
-      <group ref={rightEyeRef} position={[0.3, 0.2, 0.55]}>
-        {/* Grey border */}
-        <Sphere args={[0.35, 16, 16]} position={[0, 0, -0.05]}>
-          <meshStandardMaterial color="#8a8a8a" roughness={0.3} />
-        </Sphere>
+      <group ref={rightEyeRef} position={[0.25, 0.15, 0.45]}>
         {/* White eyeball */}
-        <Sphere args={[0.32, 16, 16]}>
+        <Sphere args={[0.22, 16, 16]}>
           <meshStandardMaterial color="white" roughness={0.1} />
         </Sphere>
         {/* Black pupil */}
-        <Sphere args={[0.15, 16, 16]} position={[0, 0, 0.18]}>
+        <Sphere args={[0.1, 16, 16]} position={[0, 0, 0.12]}>
           <meshStandardMaterial color="#1a1a1a" />
         </Sphere>
       </group>
 
-      {/* No mouth for cleaner cute look */}
+      {/* Subtle smile */}
+      <Box args={[0.3, 0.04, 0.04]} position={[0, -0.1, 0.45]}>
+        <meshStandardMaterial color="#FF6B35" roughness={0.2} metalness={0.1} />
+      </Box>
 
-      {/* Arms - Adjusted for compact body */}
-      <RoundedBox args={[0.2, 0.5, 0.2]} radius={0.1} position={[-0.7, -0.05, 0]}>
+      {/* Arms - Closer to body */}
+      <RoundedBox args={[0.2, 0.5, 0.2]} radius={0.1} position={[-0.6, -0.05, 0]}>
         <meshStandardMaterial color="#1e5a8e" metalness={0.1} roughness={0.2} />
       </RoundedBox>
-      <RoundedBox args={[0.2, 0.5, 0.2]} radius={0.1} position={[0.7, -0.05, 0]}>
+      <RoundedBox args={[0.2, 0.5, 0.2]} radius={0.1} position={[0.6, -0.05, 0]}>
         <meshStandardMaterial color="#4a9fd8" metalness={0.1} roughness={0.2} />
       </RoundedBox>
 
-      {/* Hands - Adjusted position */}
-      <Sphere args={[0.18, 16, 16]} position={[-0.7, -0.4, 0]}>
+      {/* Hands */}
+      <Sphere args={[0.18, 16, 16]} position={[-0.6, -0.4, 0]}>
         <meshStandardMaterial color="#FF6B35" roughness={0.2} metalness={0.1} />
       </Sphere>
-      <Sphere args={[0.18, 16, 16]} position={[0.7, -0.4, 0]}>
+      <Sphere args={[0.18, 16, 16]} position={[0.6, -0.4, 0]}>
         <meshStandardMaterial color="#FF6B35" roughness={0.2} metalness={0.1} />
       </Sphere>
 
