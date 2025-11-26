@@ -43,7 +43,7 @@ const GEOMETRY = {
   leg: { radius: 0.07, length: 0.15, position: { left: [-0.12, -0.48, 0] as [number, number, number], right: [0.12, -0.48, 0] as [number, number, number] } },
   knee: { radius: 0.06, position: { left: [-0.12, -0.55, 0] as [number, number, number], right: [0.12, -0.55, 0] as [number, number, number] } },
   foot: { radius: 0.10, position: { left: [-0.12, -0.60, 0] as [number, number, number], right: [0.12, -0.60, 0] as [number, number, number] } },
-  eye: { radius: 0.10, housingRadius: 0.11, position: { left: [-0.16, 0.60, 0.50] as [number, number, number], right: [0.16, 0.60, 0.50] as [number, number, number] } }
+  eye: { radius: 0.12, housingRadius: 0.13, position: { left: [-0.16, 0.60, 0.50] as [number, number, number], right: [0.16, 0.60, 0.50] as [number, number, number] } }
 };
 
 // ═══════════════════════════════════════════════
@@ -127,8 +127,8 @@ const EarSensor = ({ position }: { position: [number, number, number] }) => {
       <Cylinder args={[0.06, 0.06, 0.08, 16]} rotation={[0, 0, Math.PI / 2]}>
         <meshStandardMaterial color={COLORS.bodyAccent} metalness={0.3} roughness={0.2} />
       </Cylinder>
-      <Sphere args={[0.03, 12, 12]} position={[sensorOffset, 0, 0]}>
-        <meshStandardMaterial color={COLORS.primary} emissive={COLORS.glow} emissiveIntensity={0.3} />
+      <Sphere args={[0.02, 12, 12]} position={[sensorOffset, 0, 0]}>
+        <meshStandardMaterial color={COLORS.primary} emissive={COLORS.glow} emissiveIntensity={0.15} />
       </Sphere>
     </group>
   );
@@ -273,6 +273,14 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
       smileRef.current.scale.x = THREE.MathUtils.lerp(smileRef.current.scale.x, targetSmileScale, 0.1);
     }
 
+    // Antenna scale animation - status indicator
+    if (antennaRef.current) {
+      const targetScale = isActive ? 1.4 : 1.0;
+      antennaRef.current.scale.x = THREE.MathUtils.lerp(antennaRef.current.scale.x, targetScale, 0.1);
+      antennaRef.current.scale.y = THREE.MathUtils.lerp(antennaRef.current.scale.y, targetScale, 0.1);
+      antennaRef.current.scale.z = THREE.MathUtils.lerp(antennaRef.current.scale.z, targetScale, 0.1);
+    }
+
     // Eye glow pulse
     if (leftEyeRef.current && rightEyeRef.current) {
       const pulse = isActive ? 0.8 + Math.sin(time * 2) * 0.2 : 0.4;
@@ -287,10 +295,10 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
       });
     }
 
-    // Antenna glow
+    // Antenna glow - enhanced when active
     if (antennaRef.current) {
       const material = antennaRef.current.material as THREE.MeshStandardMaterial;
-      material.emissiveIntensity = isActive ? 0.8 + Math.sin(time * 4) * 0.4 : 0.2;
+      material.emissiveIntensity = isActive ? 1.5 + Math.sin(time * 4) * 0.5 : 0.2;
     }
 
     // Checkmark glow
@@ -336,7 +344,7 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
         <meshStandardMaterial color={COLORS.primary} emissive={COLORS.glow} emissiveIntensity={0.4} />
       </Cylinder>
 
-      <Torus ref={smileRef} args={[0.12, 0.022, 16, 32, Math.PI]} position={[0, 0.40, 0.52]} rotation={[0, 0, Math.PI]}>
+      <Torus ref={smileRef} args={[0.12, 0.022, 16, 32, Math.PI]} position={[0, 0.36, 0.52]} rotation={[0, 0, Math.PI]}>
         <meshStandardMaterial color={COLORS.primary} emissive={COLORS.glow} emissiveIntensity={0.6} />
       </Torus>
 
@@ -344,13 +352,42 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
         <meshStandardMaterial color={COLORS.primary} emissive={COLORS.glow} emissiveIntensity={0.5} />
       </Sphere>
 
+      {/* Antenna - STATUS INDICATOR */}
       <group position={[0, 1.05, 0]}>
         <Cylinder args={[0.015, 0.015, 0.40, 4]} position={[0, 0.20, 0]}>
           <meshStandardMaterial color={COLORS.primary} metalness={0.8} roughness={0.2} />
         </Cylinder>
         <Sphere ref={antennaRef} args={[0.07, 16, 16]} position={[0, 0.42, 0]}>
-          <meshStandardMaterial color={COLORS.status} emissive={COLORS.status} emissiveIntensity={isActive ? 1.0 : 0.2} />
+          <meshStandardMaterial color={COLORS.status} emissive={COLORS.status} emissiveIntensity={isActive ? 1.5 : 0.2} />
         </Sphere>
+        
+        {/* PointLight voor groene gloed wanneer chat open */}
+        {isActive && (
+          <pointLight 
+            position={[0, 0.42, 0]} 
+            color={COLORS.status} 
+            intensity={2} 
+            distance={0.8}
+            decay={2}
+          />
+        )}
+        
+        {/* Glow ring halo effect wanneer chat open */}
+        {isActive && (
+          <Torus 
+            args={[0.12, 0.015, 8, 32]} 
+            position={[0, 0.42, 0]}
+            rotation={[Math.PI / 2, 0, 0]}
+          >
+            <meshStandardMaterial 
+              color={COLORS.status} 
+              emissive={COLORS.status} 
+              emissiveIntensity={1.0}
+              transparent
+              opacity={0.6}
+            />
+          </Torus>
+        )}
       </group>
 
       {/* ═══════════════════════════════════════════════ */}
