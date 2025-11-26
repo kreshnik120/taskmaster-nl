@@ -5,9 +5,10 @@ import * as THREE from 'three';
 
 interface Robot3DProps {
   isActive?: boolean;
+  dragVelocity?: { x: number; y: number };
 }
 
-export const Robot3D = ({ isActive }: Robot3DProps) => {
+export const Robot3D = ({ isActive, dragVelocity }: Robot3DProps) => {
   const robotRef = useRef<THREE.Group>(null);
   const timeRef = useRef(0);
   const headRef = useRef<THREE.Mesh>(null);
@@ -17,6 +18,10 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
   const statusRingRef = useRef<THREE.Mesh>(null);
   const antennaRef = useRef<THREE.Mesh>(null);
   const ledBarRef = useRef<THREE.Mesh>(null);
+  
+  // Refs for smooth rotation interpolation
+  const targetRotation = useRef({ x: 0, y: 0 });
+  const currentRotation = useRef({ x: 0, y: 0 });
 
   // Professional TaskFlow color palette
   const colors = {
@@ -40,8 +45,33 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
     // Subtle, professional floating animation (no bouncy movement)
     robotRef.current.position.y = Math.sin(time * 0.8) * 0.015;
     
-    // Very subtle rotation
-    robotRef.current.rotation.y = Math.sin(time * 0.5) * 0.02;
+    // Calculate target rotation based on drag velocity
+    if (dragVelocity) {
+      // Y rotation: horizontal drag (max ~15° = 0.26 rad)
+      targetRotation.current.y = THREE.MathUtils.clamp(dragVelocity.x * 0.02, -0.26, 0.26);
+      // X rotation: vertical drag (max ~8° = 0.15 rad)
+      targetRotation.current.x = THREE.MathUtils.clamp(dragVelocity.y * -0.02, -0.15, 0.15);
+    } else {
+      // Return to neutral when not dragging
+      targetRotation.current.x = 0;
+      targetRotation.current.y = 0;
+    }
+    
+    // Smooth interpolation (lerp factor 0.1)
+    currentRotation.current.x = THREE.MathUtils.lerp(
+      currentRotation.current.x,
+      targetRotation.current.x,
+      0.1
+    );
+    currentRotation.current.y = THREE.MathUtils.lerp(
+      currentRotation.current.y,
+      targetRotation.current.y,
+      0.1
+    );
+    
+    // Apply rotation (combine with existing subtle animation)
+    robotRef.current.rotation.y = currentRotation.current.y + Math.sin(time * 0.5) * 0.02;
+    robotRef.current.rotation.x = currentRotation.current.x;
 
     // Subtle "breathing" - head scale variation
     if (headRef.current) {

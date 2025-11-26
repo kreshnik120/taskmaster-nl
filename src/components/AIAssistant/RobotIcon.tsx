@@ -29,6 +29,7 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
 
   // Track if user is dragging to prevent click event
   const [isDragging, setIsDragging] = useState(false);
+  const [dragVelocity, setDragVelocity] = useState({ x: 0, y: 0 });
   const [webglSupported, setWebglSupported] = useState(true);
   const [contextLost, setContextLost] = useState(false);
 
@@ -80,6 +81,11 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
     }
   };
 
+  const handleDrag = (_: any, info: any) => {
+    // Track drag velocity for robot rotation
+    setDragVelocity({ x: info.delta.x, y: info.delta.y });
+  };
+
   const handleDoubleClick = () => {
     // Reset position on double click
     setPosition({ x: 0, y: 0 });
@@ -113,12 +119,14 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
         dragMomentum={false}
         dragElastic={0}
         onDragStart={() => setIsDragging(true)}
+        onDrag={handleDrag}
         onDragEnd={(_, info) => {
           const newPos = constrainPosition(
             position.x + info.offset.x,
             position.y + info.offset.y
           );
           setPosition(newPos);
+          setDragVelocity({ x: 0, y: 0 }); // Reset velocity
           setTimeout(() => setIsDragging(false), 100);
         }}
         style={{ x: position.x, y: position.y }}
@@ -151,12 +159,14 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
       onDragStart={() => {
         setIsDragging(true);
       }}
+      onDrag={handleDrag}
       onDragEnd={(_, info) => {
         const newPos = constrainPosition(
           position.x + info.offset.x,
           position.y + info.offset.y
         );
         setPosition(newPos);
+        setDragVelocity({ x: 0, y: 0 }); // Reset velocity
         // Reset dragging state after a short delay to prevent click
         setTimeout(() => setIsDragging(false), 100);
       }}
@@ -221,7 +231,7 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
               <spotLight position={[0, 3, 2]} intensity={0.3} angle={0.5} />
               
               {/* 3D Robot */}
-              <Robot3D isActive={isActive} />
+              <Robot3D isActive={isActive} dragVelocity={dragVelocity} />
             </Suspense>
           </Canvas>
         </RobotErrorBoundary>
