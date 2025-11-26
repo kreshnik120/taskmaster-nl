@@ -62,220 +62,126 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
     }
   });
 
-  // Color scheme
+  // Color scheme: Gray robot with cyan eyes (matching reference image)
   const colors = {
-    body: "#f0f4f8",      // White/silver body
-    accent: "#00a8e8",    // Blue accent
-    eyes: "#00d4ff",      // Cyan eyes
-    dark: "#e8eef3",      // Slightly darker for depth
+    bodyMain: "#9ca3ab",    // Gray main body
+    bodyDark: "#7a8289",    // Darker gray for depth
+    eyes: "#00d4ff",        // Cyan eyes with glow
+    accent: "#0099cc",      // Blue accents for hands
+    mouth: "#6b7278"        // Dark gray for mouth grille
   };
 
   return (
     <group ref={robotRef} position={[0, 0, 0]}>
-      {/* Head - Single sphere */}
-      <Sphere args={[0.7, 32, 32]} position={[0, 0.5, 0]}>
+      {/* Main body capsule - bottom sphere (darker) */}
+      <Sphere args={[0.9, 32, 32]} position={[0, -0.3, 0]}>
         <meshStandardMaterial 
-          color={colors.body} 
-          metalness={0.4}
-          roughness={0.2}
+          color={colors.bodyDark} 
+          metalness={0.3}
+          roughness={0.4}
         />
       </Sphere>
 
-      {/* Ear sensors - small spheres on sides */}
-      <Sphere args={[0.12, 16, 16]} position={[-0.65, 0.55, 0]}>
+      {/* Main body capsule - top sphere (lighter, overlapping) */}
+      <Sphere args={[0.9, 32, 32]} position={[0, 0.4, 0]}>
         <meshStandardMaterial 
-          color={colors.accent} 
-          metalness={0.5}
-          roughness={0.2}
-          emissive={colors.accent}
-          emissiveIntensity={0.2}
-        />
-      </Sphere>
-      <Sphere args={[0.12, 16, 16]} position={[0.65, 0.55, 0]}>
-        <meshStandardMaterial 
-          color={colors.accent} 
-          metalness={0.5}
-          roughness={0.2}
-          emissive={colors.accent}
-          emissiveIntensity={0.2}
+          color={colors.bodyMain} 
+          metalness={0.3}
+          roughness={0.4}
         />
       </Sphere>
 
-      {/* Eyes - Oval cyan with glow */}
-      <group ref={leftEyeRef} position={[-0.22, 0.6, 0.58]}>
-        {/* Eye oval */}
-        <Sphere args={[0.18, 16, 16]} scale={[1, 1.2, 0.6]}>
+      {/* Large round eyes - MUCH bigger than before */}
+      <group ref={leftEyeRef} position={[-0.25, 0.5, 0.75]}>
+        <Sphere args={[0.32, 24, 24]}>
           <meshStandardMaterial 
             color={colors.eyes}
             emissive={colors.eyes}
-            emissiveIntensity={0.5}
-            metalness={0.3}
+            emissiveIntensity={0.6}
+            metalness={0.2}
             roughness={0.1}
           />
         </Sphere>
-        {/* Eyelid accent */}
-        <RoundedBox args={[0.22, 0.06, 0.1]} radius={0.03} position={[0, 0.18, 0]}>
-          <meshStandardMaterial 
-            color={colors.dark}
-            metalness={0.4}
-            roughness={0.2}
-          />
-        </RoundedBox>
       </group>
 
-      <group ref={rightEyeRef} position={[0.22, 0.6, 0.58]}>
-        {/* Eye oval */}
-        <Sphere args={[0.18, 16, 16]} scale={[1, 1.2, 0.6]}>
+      <group ref={rightEyeRef} position={[0.25, 0.5, 0.75]}>
+        <Sphere args={[0.32, 24, 24]}>
           <meshStandardMaterial 
             color={colors.eyes}
             emissive={colors.eyes}
-            emissiveIntensity={0.5}
-            metalness={0.3}
+            emissiveIntensity={0.6}
+            metalness={0.2}
             roughness={0.1}
           />
         </Sphere>
-        {/* Eyelid accent */}
-        <RoundedBox args={[0.22, 0.06, 0.1]} radius={0.03} position={[0, 0.18, 0]}>
-          <meshStandardMaterial 
-            color={colors.dark}
-            metalness={0.4}
-            roughness={0.2}
-          />
-        </RoundedBox>
       </group>
 
-      {/* Neck - Small cylinder */}
-      <Cylinder args={[0.2, 0.25, 0.3, 16]} position={[0, -0.05, 0]}>
+      {/* Mouth grille - rectangular with horizontal lines */}
+      <RoundedBox args={[0.5, 0.25, 0.1]} radius={0.05} position={[0, 0.05, 0.85]}>
         <meshStandardMaterial 
-          color={colors.body}
+          color={colors.mouth}
           metalness={0.4}
-          roughness={0.2}
+          roughness={0.5}
+        />
+      </RoundedBox>
+
+      {/* Grille lines - 4 horizontal bars */}
+      <Box args={[0.45, 0.03, 0.12]} position={[0, 0.14, 0.85]}>
+        <meshStandardMaterial color={colors.bodyMain} metalness={0.2} roughness={0.6} />
+      </Box>
+      <Box args={[0.45, 0.03, 0.12]} position={[0, 0.06, 0.85]}>
+        <meshStandardMaterial color={colors.bodyMain} metalness={0.2} roughness={0.6} />
+      </Box>
+      <Box args={[0.45, 0.03, 0.12]} position={[0, -0.02, 0.85]}>
+        <meshStandardMaterial color={colors.bodyMain} metalness={0.2} roughness={0.6} />
+      </Box>
+      <Box args={[0.45, 0.03, 0.12]} position={[0, -0.10, 0.85]}>
+        <meshStandardMaterial color={colors.bodyMain} metalness={0.2} roughness={0.6} />
+      </Box>
+
+      {/* Left arm - simple gray cylinder */}
+      <Cylinder args={[0.12, 0.10, 0.5, 16]} position={[-0.75, -0.1, 0]} rotation={[0, 0, Math.PI / 4]}>
+        <meshStandardMaterial 
+          color={colors.bodyDark}
+          metalness={0.3}
+          roughness={0.4}
         />
       </Cylinder>
 
-      {/* Body/Torso - Capsule shape */}
-      <RoundedBox args={[0.7, 0.9, 0.6]} radius={0.3} position={[0, -0.7, 0]}>
+      {/* Right arm - simple gray cylinder */}
+      <Cylinder args={[0.12, 0.10, 0.5, 16]} position={[0.75, -0.1, 0]} rotation={[0, 0, -Math.PI / 4]}>
         <meshStandardMaterial 
-          color={colors.body}
-          metalness={0.4}
-          roughness={0.2}
+          color={colors.bodyDark}
+          metalness={0.3}
+          roughness={0.4}
         />
-      </RoundedBox>
+      </Cylinder>
 
-      {/* Blue accent stripe on body */}
-      <Box args={[0.6, 0.08, 0.62]} position={[0, -0.5, 0]}>
-        <meshStandardMaterial 
-          color={colors.accent}
-          metalness={0.5}
-          roughness={0.15}
-          emissive={colors.accent}
-          emissiveIntensity={0.1}
-        />
-      </Box>
-
-      {/* Arms - White cylinders with blue joints */}
-      <group position={[-0.5, -0.4, 0]}>
-        <Cylinder args={[0.12, 0.12, 0.5, 16]} rotation={[0, 0, Math.PI / 6]}>
-          <meshStandardMaterial 
-            color={colors.body}
-            metalness={0.4}
-            roughness={0.2}
-          />
-        </Cylinder>
-        {/* Blue shoulder joint */}
-        <Sphere args={[0.15, 16, 16]} position={[0, 0.25, 0]}>
+      {/* Left hand - blue sphere */}
+      <group ref={leftHandRef} position={[-1.05, -0.35, 0]}>
+        <Sphere args={[0.16, 16, 16]}>
           <meshStandardMaterial 
             color={colors.accent}
-            metalness={0.5}
-            roughness={0.2}
+            metalness={0.4}
+            roughness={0.3}
+            emissive={colors.accent}
+            emissiveIntensity={0.1}
           />
         </Sphere>
       </group>
 
-      <group position={[0.5, -0.4, 0]}>
-        <Cylinder args={[0.12, 0.12, 0.5, 16]} rotation={[0, 0, -Math.PI / 6]}>
-          <meshStandardMaterial 
-            color={colors.body}
-            metalness={0.4}
-            roughness={0.2}
-          />
-        </Cylinder>
-        {/* Blue shoulder joint */}
-        <Sphere args={[0.15, 16, 16]} position={[0, 0.25, 0]}>
+      {/* Right hand - blue sphere */}
+      <group ref={rightHandRef} position={[1.05, -0.35, 0]}>
+        <Sphere args={[0.16, 16, 16]}>
           <meshStandardMaterial 
             color={colors.accent}
-            metalness={0.5}
-            roughness={0.2}
+            metalness={0.4}
+            roughness={0.3}
+            emissive={colors.accent}
+            emissiveIntensity={0.1}
           />
         </Sphere>
       </group>
-
-      {/* Hands - White spheres with blue highlights */}
-      <group ref={leftHandRef} position={[-0.7, -0.75, 0]}>
-        <Sphere args={[0.18, 16, 16]}>
-          <meshStandardMaterial 
-            color={colors.body}
-            metalness={0.4}
-            roughness={0.2}
-          />
-        </Sphere>
-        <Sphere args={[0.08, 16, 16]} position={[0, 0, 0.15]}>
-          <meshStandardMaterial 
-            color={colors.accent}
-            metalness={0.5}
-            roughness={0.2}
-          />
-        </Sphere>
-      </group>
-
-      <group ref={rightHandRef} position={[0.7, -0.75, 0]}>
-        <Sphere args={[0.18, 16, 16]}>
-          <meshStandardMaterial 
-            color={colors.body}
-            metalness={0.4}
-            roughness={0.2}
-          />
-        </Sphere>
-        <Sphere args={[0.08, 16, 16]} position={[0, 0, 0.15]}>
-          <meshStandardMaterial 
-            color={colors.accent}
-            metalness={0.5}
-            roughness={0.2}
-          />
-        </Sphere>
-      </group>
-
-      {/* Legs - Short capsule shape */}
-      <RoundedBox args={[0.22, 0.35, 0.22]} radius={0.12} position={[-0.25, -1.3, 0]}>
-        <meshStandardMaterial 
-          color={colors.body}
-          metalness={0.4}
-          roughness={0.2}
-        />
-      </RoundedBox>
-      <RoundedBox args={[0.22, 0.35, 0.22]} radius={0.12} position={[0.25, -1.3, 0]}>
-        <meshStandardMaterial 
-          color={colors.body}
-          metalness={0.4}
-          roughness={0.2}
-        />
-      </RoundedBox>
-
-      {/* Blue feet accents */}
-      <Sphere args={[0.12, 16, 16]} position={[-0.25, -1.5, 0.1]}>
-        <meshStandardMaterial 
-          color={colors.accent}
-          metalness={0.5}
-          roughness={0.2}
-        />
-      </Sphere>
-      <Sphere args={[0.12, 16, 16]} position={[0.25, -1.5, 0.1]}>
-        <meshStandardMaterial 
-          color={colors.accent}
-          metalness={0.5}
-          roughness={0.2}
-        />
-      </Sphere>
     </group>
   );
 };
