@@ -16,13 +16,17 @@ export function AutoResolveMonitor() {
       weekAgo.setDate(weekAgo.getDate() - 7);
       weekAgo.setHours(0, 0, 0, 0);
 
-      // Get resolved alerts today
-      const { count: resolvedToday } = await supabase
+      // Get resolved alerts today - fetch and filter client-side due to JSONB limitation
+      const { data: resolvedTodayData } = await supabase
         .from("business_intelligence")
-        .select("*", { count: "exact", head: true })
+        .select("data")
         .eq("status", "resolved")
-        .gte("data->resolved_at", today.toISOString())
         .not("data->resolution", "is", null);
+      
+      const resolvedToday = resolvedTodayData?.filter((item: any) => {
+        const resolvedAt = item.data?.resolved_at;
+        return resolvedAt && new Date(resolvedAt) >= today;
+      }).length || 0;
 
       // Get total active alerts
       const { count: activeAlerts } = await supabase
@@ -31,24 +35,23 @@ export function AutoResolveMonitor() {
         .eq("status", "active")
         .in("severity", ["critical", "high"]);
 
-      // Get resolved this week
-      const { count: resolvedWeek } = await supabase
+      // Get resolved this week - fetch and filter client-side due to JSONB limitation
+      const { data: resolvedWeekData } = await supabase
         .from("business_intelligence")
-        .select("*", { count: "exact", head: true })
+        .select("data")
         .eq("status", "resolved")
-        .gte("data->resolved_at", weekAgo.toISOString())
         .not("data->resolution", "is", null);
+      
+      const resolvedWeek = resolvedWeekData?.filter((item: any) => {
+        const resolvedAt = item.data?.resolved_at;
+        return resolvedAt && new Date(resolvedAt) >= weekAgo;
+      }).length || 0;
 
       // Get average resolution time (simplified - use alert count as proxy)
       const avgTime = resolvedWeek ? Math.round(300 / (resolvedWeek || 1)) : 0; // Approximate 5min per alert
 
-      // Get top conflict types
-      const { data: conflictTypes } = await supabase
-        .from("business_intelligence")
-        .select("data")
-        .eq("status", "resolved")
-        .gte("data->resolved_at", weekAgo.toISOString())
-        .limit(100);
+      // Get top conflict types - use already fetched resolvedWeekData
+      const conflictTypes = resolvedWeekData?.slice(0, 100) || [];
 
       const typeCounts = new Map<string, number>();
       conflictTypes?.forEach((item) => {

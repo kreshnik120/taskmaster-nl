@@ -138,13 +138,13 @@ const Sollicitaties = () => {
       return;
     }
 
-    // Map pipeline_stage to status
+    // Map pipeline_stage to status (using valid enum values from database constraint)
     const stageToStatus: Record<string, string> = {
       nieuw: "nieuw",
-      screening: "in_behandeling",
-      interview: "in_behandeling",
-      goedgekeurd: "compleet",
-      geplaatst: "afgerond",
+      screening: "in_verwerking",
+      interview: "in_gesprek",
+      goedgekeurd: "klaar_voor_review",
+      geplaatst: "geaccepteerd",
     };
 
     const newStatus = stageToStatus[newStage] || application.status;
@@ -169,7 +169,16 @@ const Sollicitaties = () => {
       toast.success(`Sollicitatie verplaatst naar ${stage?.name}`);
     } catch (err: any) {
       console.error("Error moving application:", err);
-      toast.error("Fout bij verplaatsen van sollicitatie");
+      console.error("Error details:", {
+        message: err?.message,
+        code: err?.code,
+        details: err?.details,
+        hint: err?.hint,
+        applicationId,
+        newStage,
+        newStatus
+      });
+      toast.error(`Fout bij verplaatsen: ${err?.message || 'Onbekende fout'}`);
     }
   };
 
