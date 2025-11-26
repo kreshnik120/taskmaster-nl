@@ -103,7 +103,7 @@ const Arm = ({
   );
 };
 
-const Leg = ({ side }: { side: 'left' | 'right' }) => {
+const Leg = ({ side, footRef }: { side: 'left' | 'right'; footRef?: React.RefObject<THREE.Mesh> }) => {
   const legPos = GEOMETRY.leg.position[side];
   const kneePos = GEOMETRY.knee.position[side];
   const footPos = GEOMETRY.foot.position[side];
@@ -116,7 +116,7 @@ const Leg = ({ side }: { side: 'left' | 'right' }) => {
       <Sphere args={[GEOMETRY.knee.radius, 12, 12]} position={kneePos}>
         <meshStandardMaterial {...MATERIALS.joint} />
       </Sphere>
-      <Sphere args={[GEOMETRY.foot.radius, 16, 16]} position={footPos}>
+      <Sphere ref={footRef} args={[GEOMETRY.foot.radius, 16, 16]} position={footPos}>
         <meshStandardMaterial {...MATERIALS.handFoot} />
       </Sphere>
     </>
@@ -129,13 +129,26 @@ const VentLine = ({ position }: { position: [number, number, number] }) => (
   </Cylinder>
 );
 
-const EarSensor = ({ position, isActive }: { position: [number, number, number]; isActive: boolean }) => {
+const EarSensor = ({ position, isActive, isUserTyping }: { position: [number, number, number]; isActive: boolean; isUserTyping?: boolean }) => {
+  const groupRef = useRef<THREE.Group>(null);
   const sensorOffset = position[0] < 0 ? -0.05 : 0.05;
   const sensorColor = isActive ? COLORS.status : COLORS.primary;
   const glowIntensity = isActive ? 0.6 : 0.15;
   
+  useFrame((state) => {
+    if (groupRef.current && isUserTyping) {
+      // Subtle wiggle when user is typing (detecting sound)
+      const wiggle = Math.sin(state.clock.elapsedTime * 8) * 0.03;
+      groupRef.current.rotation.y = wiggle;
+    } else if (groupRef.current) {
+      groupRef.current.rotation.y = THREE.MathUtils.lerp(
+        groupRef.current.rotation.y, 0, 0.1
+      );
+    }
+  });
+  
   return (
-    <group position={position}>
+    <group ref={groupRef} position={position}>
       <Cylinder args={[0.06, 0.06, 0.08, 16]} rotation={[0, 0, Math.PI / 2]}>
         <meshStandardMaterial color={COLORS.purpleLight} metalness={0.2} roughness={0.3} />
       </Cylinder>
@@ -179,10 +192,18 @@ export const Robot3D: React.FC<Robot3DProps> = ({
   const rightHandRef = useRef<THREE.Mesh>(null);
   const chestDisplayRef = useRef<THREE.Mesh>(null);
   const antennaGroupRef = useRef<THREE.Group>(null);
+  const leftFootRef = useRef<THREE.Mesh>(null);
+  const rightFootRef = useRef<THREE.Mesh>(null);
+  const leftArmGroupRef = useRef<THREE.Group>(null);
+  const rightArmGroupRef = useRef<THREE.Group>(null);
   
   // Physics state for antenna pendulum effect
   const antennaSwing = useRef({ x: 0, z: 0 });
   const antennaVelocity = useRef({ x: 0, z: 0 });
+  
+  // Idle curiosity state tracking
+  const idleTimer = useRef(0);
+  const curiosityTarget = useRef({ x: 0, y: 0 });
   
   const targetRotation = useRef({ x: 0, y: 0 });
   const currentRotation = useRef({ x: 0, y: 0 });
@@ -414,6 +435,87 @@ export const Robot3D: React.FC<Robot3DProps> = ({
       antennaGroupRef.current.rotation.z = -antennaSwing.current.x;
     }
 
+    // ═══════════════════════════════════════════════
+    // ARM IDLE SWING (synchronized with breathing)
+    // ═══════════════════════════════════════════════
+    if (leftArmGroupRef.current && rightArmGroupRef.current) {
+      const armSwing = Math.sin(time * 0.8) * 0.02;
+      leftArmGroupRef.current.rotation.z = 0.1 + armSwing;
+      rightArmGroupRef.current.rotation.z = -0.1 - armSwing;
+    }
+
+    // ═══════════════════════════════════════════════
+    // BODY LEAN DURING LISTENING/THINKING
+    // ═══════════════════════════════════════════════
+    let bodyLean = 0;
+    if (isUserTyping) {
+      bodyLean = 0.03; // Forward lean (engaged)
+    } else if (isThinking) {
+      bodyLean = -0.02; // Slight back lean (contemplative)
+    }
+    
+    if (bodyRef.current) {
+      const currentLean = bodyRef.current.rotation.x;
+      bodyRef.current.rotation.x = THREE.MathUtils.lerp(currentLean, bodyLean, 0.05);
+    }
+
+    // ═══════════════════════════════════════════════
+    // IDLE CURIOSITY (looking around when inactive)
+    // ═══════════════════════════════════════════════
+    if (!isActive && !isUserTyping && !mousePos) {
+      idleTimer.current += delta;
+      
+      // Every 4-6 seconds, pick new random look direction
+      if (idleTimer.current > 4 + Math.random() * 2) {
+        curiosityTarget.current = {
+          x: (Math.random() - 0.5) * 0.15,
+          y: (Math.random() - 0.5) * 0.1
+        };
+        idleTimer.current = 0;
+      }
+      
+      // Apply curiosity look to eyes
+      targetEyePos.current.x = curiosityTarget.current.x;
+      targetEyePos.current.y = curiosityTarget.current.y;
+    } else {
+      idleTimer.current = 0;
+    }
+
+    // ═══════════════════════════════════════════════
+    // RESPONSE ANTICIPATION (when AI is thinking)
+    // ═══════════════════════════════════════════════
+    if (isThinking && robotRef.current) {
+      // Small excited bounce
+      const anticipationBounce = Math.abs(Math.sin(time * 3)) * 0.005;
+      robotRef.current.position.y = anticipationBounce;
+    } else if (robotRef.current) {
+      robotRef.current.position.y = THREE.MathUtils.lerp(
+        robotRef.current.position.y, 
+        0, 
+        0.1
+      );
+    }
+
+    // ═══════════════════════════════════════════════
+    // WEIGHT SHIFTING (subtle foot movements)
+    // ═══════════════════════════════════════════════
+    if (leftFootRef.current && rightFootRef.current) {
+      const weightShift = Math.sin(time * 0.12) * 0.008;
+      leftFootRef.current.position.y = GEOMETRY.foot.position.left[1] + weightShift;
+      rightFootRef.current.position.y = GEOMETRY.foot.position.right[1] - weightShift;
+    }
+
+    // ═══════════════════════════════════════════════
+    // ALERT MICRO-MOVEMENTS (when inactive but ready)
+    // ═══════════════════════════════════════════════
+    if (!isActive && !isUserTyping && !isThinking && headRef.current) {
+      const microX = Math.sin(time * 0.3) * 0.01 + Math.sin(time * 0.7) * 0.005;
+      const microY = Math.cos(time * 0.2) * 0.008;
+      
+      headRef.current.rotation.x += microX;
+      headRef.current.rotation.y += microY;
+    }
+
     // Antenna scale animation - status indicator
     if (antennaRef.current) {
       const targetScale = isActive ? 1.4 : 1.0;
@@ -485,8 +587,8 @@ export const Robot3D: React.FC<Robot3DProps> = ({
         <meshPhysicalMaterial {...MATERIALS.bodyPhysical} envMapIntensity={1} />
       </Sphere>
 
-      <EarSensor position={[-0.53, 0.55, 0]} isActive={isActive} />
-      <EarSensor position={[0.53, 0.55, 0]} isActive={isActive} />
+      <EarSensor position={[-0.53, 0.55, 0]} isActive={isActive} isUserTyping={isUserTyping} />
+      <EarSensor position={[0.53, 0.55, 0]} isActive={isActive} isUserTyping={isUserTyping} />
 
       <Eye position={GEOMETRY.eye.position.left} eyeRef={leftEyeRef} />
       <Eye position={GEOMETRY.eye.position.right} eyeRef={rightEyeRef} />
@@ -622,11 +724,15 @@ export const Robot3D: React.FC<Robot3DProps> = ({
         <meshPhysicalMaterial {...MATERIALS.body} />
       </Sphere>
 
-      <Arm side="left" armRef={leftArmRef} handRef={leftHandRef} />
-      <Arm side="right" armRef={rightArmRef} handRef={rightHandRef} />
+      <group ref={leftArmGroupRef}>
+        <Arm side="left" armRef={leftArmRef} handRef={leftHandRef} />
+      </group>
+      <group ref={rightArmGroupRef}>
+        <Arm side="right" armRef={rightArmRef} handRef={rightHandRef} />
+      </group>
 
-      <Leg side="left" />
-      <Leg side="right" />
+      <Leg side="left" footRef={leftFootRef} />
+      <Leg side="right" footRef={rightFootRef} />
     </group>
   );
 };
