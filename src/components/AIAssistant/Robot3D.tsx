@@ -145,7 +145,6 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
   const leftEyeRef = useRef<THREE.Group>(null);
   const rightEyeRef = useRef<THREE.Group>(null);
   const checkmarkRef = useRef<THREE.Group>(null);
-  const statusRingRef = useRef<THREE.Mesh>(null);
   const antennaRef = useRef<THREE.Mesh>(null);
   const ledBarRef = useRef<THREE.Mesh>(null);
   const smileRef = useRef<THREE.Mesh>(null);
@@ -283,12 +282,6 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
       });
     }
 
-    // Status ring pulse
-    if (statusRingRef.current) {
-      const material = statusRingRef.current.material as THREE.MeshStandardMaterial;
-      material.emissiveIntensity = isActive ? 0.6 + Math.sin(time * 3) * 0.2 : 0.3;
-    }
-
     // LED bar pulse
     if (ledBarRef.current) {
       const material = ledBarRef.current.material as THREE.MeshStandardMaterial;
@@ -330,7 +323,7 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
           <meshStandardMaterial color={COLORS.primary} metalness={0.8} roughness={0.2} />
         </Cylinder>
         <Sphere ref={antennaRef} args={[0.07, 16, 16]} position={[0, 0.42, 0]}>
-          <meshStandardMaterial color={COLORS.status} emissive={COLORS.status} emissiveIntensity={isActive ? 1.5 : 0.2} />
+          <meshStandardMaterial color={COLORS.status} emissive={COLORS.status} emissiveIntensity={isActive ? 3.0 : 0.2} />
         </Sphere>
         
         {/* PointLight voor groene gloed wanneer chat open */}
@@ -338,8 +331,8 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
           <pointLight 
             position={[0, 0.42, 0]} 
             color={COLORS.status} 
-            intensity={2} 
-            distance={0.8}
+            intensity={5} 
+            distance={2}
             decay={2}
           />
         )}
@@ -354,9 +347,9 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
             <meshStandardMaterial 
               color={COLORS.status} 
               emissive={COLORS.status} 
-              emissiveIntensity={1.0}
+              emissiveIntensity={2.0}
               transparent
-              opacity={0.6}
+              opacity={0.8}
             />
           </Torus>
         )}
@@ -431,14 +424,6 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
 
       <Leg side="left" />
       <Leg side="right" />
-
-      <Torus ref={statusRingRef} args={[0.25, 0.015, 16, 32]} position={[0, -0.75, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <meshStandardMaterial 
-          color={isActive ? COLORS.status : COLORS.primary}
-          emissive={isActive ? COLORS.status : COLORS.primary}
-          emissiveIntensity={isActive ? 0.6 : 0.3}
-        />
-      </Torus>
     </group>
   );
 };
