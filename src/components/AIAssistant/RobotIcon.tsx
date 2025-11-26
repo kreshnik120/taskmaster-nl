@@ -1,10 +1,16 @@
 import { Canvas } from '@react-three/fiber';
-import { PerspectiveCamera, Environment } from '@react-three/drei';
+import { PerspectiveCamera } from '@react-three/drei';
 import { motion } from 'framer-motion';
 import { Robot3D } from './Robot3D';
 import { RobotErrorBoundary } from './RobotErrorBoundary';
 import { Suspense, useState, useEffect } from 'react';
-import { Bot } from 'lucide-react';
+import { Bot, Keyboard } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface RobotIconProps {
   onClick?: () => void;
@@ -19,6 +25,8 @@ interface MousePos {
 const STORAGE_KEY = 'robot-position';
 
 export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
+  const [isHovered, setIsHovered] = useState(false);
+  
   // Load position from localStorage
   const [position, setPosition] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -95,6 +103,19 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
+  // Keyboard shortcut (Ctrl+K / Cmd+K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        onClick?.();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClick]);
+
   const handleClick = () => {
     // Only trigger onClick if not dragging
     if (!isDragging && onClick) {
@@ -135,81 +156,119 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
   // Fallback to 2D icon if WebGL issues
   if (!webglSupported || contextLost) {
     return (
-      <motion.button
-        drag
-        dragMomentum={false}
-        dragElastic={0}
-        onDragStart={() => setIsDragging(true)}
-        onDrag={handleDrag}
-        onDragEnd={(_, info) => {
-          const newPos = constrainPosition(
-            position.x + info.offset.x,
-            position.y + info.offset.y
-          );
-          setPosition(newPos);
-          setDragVelocity({ x: 0, y: 0 }); // Reset velocity
-          setTimeout(() => setIsDragging(false), 100);
-        }}
-        style={{ x: position.x, y: position.y }}
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
-        className="relative group fixed bottom-6 right-6 z-[2147483647] cursor-grab active:cursor-grabbing border-none p-0 w-32 h-32 drop-shadow-2xl"
-        whileHover={{ scale: 1.15 }}
-        whileTap={{ scale: 0.9 }}
-        title="Klik voor AI hulp"
-      >
-        <div className="w-full h-full rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border-2 border-primary/30">
-          <Bot className="w-16 h-16 text-primary" />
-        </div>
-      </motion.button>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <motion.button
+              drag
+              dragMomentum={false}
+              dragElastic={0}
+              onDragStart={() => setIsDragging(true)}
+              onDrag={handleDrag}
+              onDragEnd={(_, info) => {
+                const newPos = constrainPosition(
+                  position.x + info.offset.x,
+                  position.y + info.offset.y
+                );
+                setPosition(newPos);
+                setDragVelocity({ x: 0, y: 0 });
+                setTimeout(() => setIsDragging(false), 100);
+              }}
+              style={{ x: position.x, y: position.y }}
+              onClick={handleClick}
+              onDoubleClick={handleDoubleClick}
+              onMouseEnter={() => setIsHovered(true)}
+              onMouseLeave={() => setIsHovered(false)}
+              className="relative group fixed bottom-6 right-6 z-[2147483647] cursor-grab active:cursor-grabbing border-none p-0 w-32 h-32 drop-shadow-2xl rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.9 }}
+              aria-label="Open AI assistent chat"
+              aria-expanded={isActive}
+            >
+              <div className="w-full h-full rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border-2 border-primary/30">
+                <Bot className="w-16 h-16 text-primary" />
+              </div>
+            </motion.button>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="max-w-xs">
+            <div className="space-y-1">
+              <p className="font-medium">Klik om te chatten met AI</p>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Keyboard className="w-3 h-3" />
+                Sneltoets: Ctrl+K (of Cmd+K)
+              </p>
+              <p className="text-xs text-muted-foreground">Dubbelklik om positie te resetten</p>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
 
   return (
-    <motion.button
-      drag
-      dragMomentum={false}
-      dragElastic={0}
-      onDragStart={() => {
-        setIsDragging(true);
-      }}
-      onDrag={handleDrag}
-      onDragEnd={(_, info) => {
-        const newPos = constrainPosition(
-          position.x + info.offset.x,
-          position.y + info.offset.y
-        );
-        setPosition(newPos);
-        setDragVelocity({ x: 0, y: 0 }); // Reset velocity
-        // Reset dragging state after a short delay to prevent click
-        setTimeout(() => setIsDragging(false), 100);
-      }}
-      style={{ x: position.x, y: position.y }}
-      onClick={handleClick}
-      onDoubleClick={handleDoubleClick}
-      className="relative group fixed bottom-6 right-6 z-[2147483647] cursor-grab active:cursor-grabbing border-none p-0 w-32 h-32"
-      whileHover={{ scale: 1.15 }}
-      whileTap={{ scale: 0.9 }}
-      title="Klik voor AI hulp"
-    >
-      <div className="relative w-full h-full transition-all duration-300">
-        <RobotErrorBoundary
-          fallback={
-            <div className="w-full h-full flex items-center justify-center">
-              <Bot className="w-16 h-16 text-primary" />
-            </div>
-          }
-          onError={handleRobotError}
-        >
-          <Canvas 
-            gl={{ 
-              alpha: true, 
-              antialias: true,
-              powerPreference: 'low-power'
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <motion.button
+            drag
+            dragMomentum={false}
+            dragElastic={0}
+            onDragStart={() => {
+              setIsDragging(true);
             }}
-            frameloop="always"
-            style={{ background: 'transparent' }}
-            onCreated={({ gl }) => {
+            onDrag={handleDrag}
+            onDragEnd={(_, info) => {
+              const newPos = constrainPosition(
+                position.x + info.offset.x,
+                position.y + info.offset.y
+              );
+              setPosition(newPos);
+              setDragVelocity({ x: 0, y: 0 });
+              setTimeout(() => setIsDragging(false), 100);
+            }}
+            style={{ x: position.x, y: position.y }}
+            onClick={handleClick}
+            onDoubleClick={handleDoubleClick}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            className="relative group fixed bottom-6 right-6 z-[2147483647] cursor-grab active:cursor-grabbing border-none p-0 w-32 h-32 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.9 }}
+            aria-label="Open AI assistent chat"
+            aria-expanded={isActive}
+          >
+            <div className="relative w-full h-full transition-all duration-300">
+              {/* Subtle glow ring when active */}
+              {isActive && (
+                <motion.div
+                  className="absolute inset-0 rounded-full pointer-events-none"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  style={{
+                    background: 'radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%)',
+                    filter: 'blur(8px)',
+                  }}
+                />
+              )}
+              
+              <RobotErrorBoundary
+                fallback={
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Bot className="w-16 h-16 text-primary" />
+                  </div>
+                }
+                onError={handleRobotError}
+              >
+                <Canvas 
+                  gl={{ 
+                    alpha: true, 
+                    antialias: true,
+                    powerPreference: 'low-power'
+                  }}
+                  frameloop={isActive || isHovered ? "always" : "demand"}
+                  style={{ background: 'transparent' }}
+                  onCreated={({ gl }) => {
               // Context loss recovery
               gl.domElement.addEventListener('webglcontextlost', (e) => {
                 e.preventDefault();
@@ -233,19 +292,23 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
               
               {/* 3D Robot */}
               <Robot3D isActive={isActive} dragVelocity={dragVelocity} mousePos={mousePos} />
-            </Suspense>
-          </Canvas>
-        </RobotErrorBoundary>
-      </div>
-      
-      {/* Tooltip */}
-      <motion.div
-        className="absolute -top-12 left-1/2 -translate-x-1/2 bg-background border border-primary/20 rounded-lg px-3 py-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap"
-        initial={{ opacity: 0, y: 5 }}
-        whileHover={{ opacity: 1, y: 0 }}
-      >
-        <p className="text-xs font-medium">AI Assistent</p>
-      </motion.div>
-    </motion.button>
+                </Suspense>
+              </Canvas>
+            </RobotErrorBoundary>
+          </div>
+        </motion.button>
+      </TooltipTrigger>
+      <TooltipContent side="left" className="max-w-xs">
+        <div className="space-y-1">
+          <p className="font-medium">Klik om te chatten met AI</p>
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <Keyboard className="w-3 h-3" />
+            Sneltoets: Ctrl+K (of Cmd+K)
+          </p>
+          <p className="text-xs text-muted-foreground">Dubbelklik om positie te resetten</p>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
   );
 };
