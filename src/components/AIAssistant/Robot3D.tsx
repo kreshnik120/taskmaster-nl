@@ -183,7 +183,7 @@ export const Robot3D = ({ isActive, dragVelocity }: Robot3DProps) => {
       </Torus>
 
       {/* Body - smaller and shorter capsule */}
-      <Capsule args={[0.32, 0.45, 8, 32]} position={[0, -0.28, 0]}>
+      <Capsule args={[0.32, 0.30, 8, 32]} position={[0, -0.20, 0]}>
         <meshPhysicalMaterial 
           color={colors.body}
           metalness={0.1}
@@ -202,54 +202,54 @@ export const Robot3D = ({ isActive, dragVelocity }: Robot3DProps) => {
       </Sphere>
 
       {/* Left arm - shorter and closer */}
-      <Capsule args={[0.05, 0.26, 4, 16]} position={[-0.46, -0.13, 0]} rotation={[0, 0, 0.1]}>
+      <Capsule args={[0.05, 0.26, 4, 16]} position={[-0.46, -0.08, 0]} rotation={[0, 0, 0.1]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
-      <Sphere args={[0.05, 16, 16]} position={[-0.46, -0.26, 0]}>
+      <Sphere args={[0.05, 16, 16]} position={[-0.46, -0.21, 0]}>
         <meshStandardMaterial color="#1E293B" metalness={0.5} roughness={0.3} />
       </Sphere>
-      <Sphere args={[0.07, 16, 16]} position={[-0.46, -0.38, 0]}>
+      <Sphere args={[0.07, 16, 16]} position={[-0.46, -0.33, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
       </Sphere>
 
       {/* Right arm - shorter and closer */}
-      <Capsule args={[0.05, 0.26, 4, 16]} position={[0.46, -0.13, 0]} rotation={[0, 0, -0.1]}>
+      <Capsule args={[0.05, 0.26, 4, 16]} position={[0.46, -0.08, 0]} rotation={[0, 0, -0.1]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
-      <Sphere args={[0.05, 16, 16]} position={[0.46, -0.26, 0]}>
+      <Sphere args={[0.05, 16, 16]} position={[0.46, -0.21, 0]}>
         <meshStandardMaterial color="#1E293B" metalness={0.5} roughness={0.3} />
       </Sphere>
-      <Sphere args={[0.07, 16, 16]} position={[0.46, -0.38, 0]}>
+      <Sphere args={[0.07, 16, 16]} position={[0.46, -0.33, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
       </Sphere>
 
       {/* Left leg - shorter and higher */}
-      <Capsule args={[0.07, 0.18, 4, 16]} position={[-0.12, -0.61, 0]}>
+      <Capsule args={[0.07, 0.18, 4, 16]} position={[-0.12, -0.48, 0]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
-      <Sphere args={[0.06, 16, 16]} position={[-0.12, -0.70, 0]}>
+      <Sphere args={[0.06, 16, 16]} position={[-0.12, -0.57, 0]}>
         <meshStandardMaterial color="#1E293B" metalness={0.5} roughness={0.3} />
       </Sphere>
-      <Sphere args={[0.08, 16, 16]} position={[-0.12, -0.80, 0]}>
+      <Sphere args={[0.08, 16, 16]} position={[-0.12, -0.67, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
       </Sphere>
 
       {/* Right leg - shorter and higher */}
-      <Capsule args={[0.07, 0.18, 4, 16]} position={[0.12, -0.61, 0]}>
+      <Capsule args={[0.07, 0.18, 4, 16]} position={[0.12, -0.48, 0]}>
         <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
       </Capsule>
-      <Sphere args={[0.06, 16, 16]} position={[0.12, -0.70, 0]}>
+      <Sphere args={[0.06, 16, 16]} position={[0.12, -0.57, 0]}>
         <meshStandardMaterial color="#1E293B" metalness={0.5} roughness={0.3} />
       </Sphere>
-      <Sphere args={[0.08, 16, 16]} position={[0.12, -0.80, 0]}>
+      <Sphere args={[0.08, 16, 16]} position={[0.12, -0.67, 0]}>
         <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
       </Sphere>
 
       {/* Tech accent lines - smaller body */}
-      <Torus args={[0.35, 0.008, 16, 32]} position={[0, -0.08, 0]} rotation={[Math.PI / 2, 0, 0]}>
+      <Torus args={[0.35, 0.008, 16, 32]} position={[0, -0.05, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <meshStandardMaterial color={colors.primary} opacity={0.3} transparent metalness={0.6} />
       </Torus>
-      <Torus args={[0.35, 0.008, 16, 32]} position={[0, -0.42, 0]} rotation={[Math.PI / 2, 0, 0]}>
+      <Torus args={[0.35, 0.008, 16, 32]} position={[0, -0.32, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <meshStandardMaterial color={colors.primary} opacity={0.3} transparent metalness={0.6} />
       </Torus>
 
@@ -340,22 +340,22 @@ export const Robot3D = ({ isActive, dragVelocity }: Robot3DProps) => {
 
       {/* Chest display frame - smaller and higher */}
       {/* Vertical lines */}
-      <Cylinder args={[0.008, 0.008, 0.14, 8]} position={[-0.06, -0.25, 0.35]}>
+      <Cylinder args={[0.008, 0.008, 0.10, 8]} position={[-0.06, -0.18, 0.35]}>
         <meshStandardMaterial color={colors.primary} opacity={0.5} transparent />
       </Cylinder>
-      <Cylinder args={[0.008, 0.008, 0.14, 8]} position={[0.06, -0.25, 0.35]}>
+      <Cylinder args={[0.008, 0.008, 0.10, 8]} position={[0.06, -0.18, 0.35]}>
         <meshStandardMaterial color={colors.primary} opacity={0.5} transparent />
       </Cylinder>
       {/* Horizontal lines */}
-      <Cylinder args={[0.008, 0.008, 0.12, 8]} position={[0, -0.18, 0.35]} rotation={[0, 0, Math.PI/2]}>
+      <Cylinder args={[0.008, 0.008, 0.12, 8]} position={[0, -0.13, 0.35]} rotation={[0, 0, Math.PI/2]}>
         <meshStandardMaterial color={colors.primary} opacity={0.5} transparent />
       </Cylinder>
-      <Cylinder args={[0.008, 0.008, 0.12, 8]} position={[0, -0.32, 0.35]} rotation={[0, 0, Math.PI/2]}>
+      <Cylinder args={[0.008, 0.008, 0.12, 8]} position={[0, -0.23, 0.35]} rotation={[0, 0, Math.PI/2]}>
         <meshStandardMaterial color={colors.primary} opacity={0.5} transparent />
       </Cylinder>
 
       {/* Checkmark emblem - larger, centered, more forward */}
-      <group ref={checkmarkRef} position={[0, -0.25, 0.38]}>
+      <group ref={checkmarkRef} position={[0, -0.18, 0.38]}>
         {/* Short stroke */}
         <Cylinder args={[0.018, 0.018, 0.06, 8]} position={[-0.02, -0.012, 0]} rotation={[0, 0, -0.8]}>
           <meshStandardMaterial 
@@ -376,24 +376,24 @@ export const Robot3D = ({ isActive, dragVelocity }: Robot3DProps) => {
 
       {/* Side panel ventilation lines - adjusted for smaller body */}
       {/* Left side */}
-      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[-0.32, -0.16, 0.15]}>
+      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[-0.32, -0.10, 0.15]}>
         <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
       </Cylinder>
-      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[-0.32, -0.25, 0.15]}>
+      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[-0.32, -0.18, 0.15]}>
         <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
       </Cylinder>
-      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[-0.32, -0.34, 0.15]}>
+      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[-0.32, -0.26, 0.15]}>
         <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
       </Cylinder>
 
       {/* Right side */}
-      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[0.32, -0.16, 0.15]}>
+      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[0.32, -0.10, 0.15]}>
         <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
       </Cylinder>
-      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[0.32, -0.25, 0.15]}>
+      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[0.32, -0.18, 0.15]}>
         <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
       </Cylinder>
-      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[0.32, -0.34, 0.15]}>
+      <Cylinder args={[0.006, 0.006, 0.08, 8]} position={[0.32, -0.26, 0.15]}>
         <meshStandardMaterial color={colors.bodyAccent} opacity={0.8} transparent />
       </Cylinder>
 
@@ -401,7 +401,7 @@ export const Robot3D = ({ isActive, dragVelocity }: Robot3DProps) => {
       <Torus 
         ref={statusRingRef}
         args={[0.25, 0.015, 16, 32]} 
-        position={[0, -0.90, 0]} 
+        position={[0, -0.75, 0]} 
         rotation={[Math.PI / 2, 0, 0]}
       >
         <meshStandardMaterial 
