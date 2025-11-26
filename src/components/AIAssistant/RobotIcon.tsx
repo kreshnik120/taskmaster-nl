@@ -194,7 +194,7 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
       style={{ x: position.x, y: position.y }}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
-      className="relative group fixed bottom-6 right-6 z-[2147483647] cursor-grab active:cursor-grabbing border-none p-0 w-32 h-32 drop-shadow-2xl"
+      className="relative group fixed bottom-6 right-6 z-[2147483647] cursor-grab active:cursor-grabbing border-none p-0 w-32 h-32"
       whileHover={{ scale: 1.15 }}
       whileTap={{ scale: 0.9 }}
       animate={!isActive ? { 
@@ -242,14 +242,9 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
             <Suspense fallback={null}>
               <PerspectiveCamera makeDefault position={[0, 0.2, 3.5]} />
               
-              {/* Environment map for reflections */}
-              <Environment preset="city" background={false} />
-              
               {/* Professional clean lighting */}
-              <ambientLight intensity={0.8} />
-              <directionalLight position={[3, 5, 5]} intensity={1.2} />
-              <directionalLight position={[0, -3, 2]} intensity={0.3} />
-              <pointLight position={[-2, 2, 3]} intensity={0.4} color="#60A5FA" />
+              <ambientLight intensity={1.2} />
+              <directionalLight position={[3, 5, 5]} intensity={0.8} />
               <spotLight position={[0, 3, 2]} intensity={0.3} angle={0.5} />
               
               {/* 3D Robot */}
