@@ -96,50 +96,70 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
         />
       </Sphere>
 
-      {/* Left eye - large warm amber with golden glow */}
-      <group ref={leftEyeRef} position={[-0.28, 0.45, 0.78]}>
-        {/* Main eye */}
-        <Sphere args={[0.22, 24, 24]} scale={[1.1, 1, 1]}>
+      {/* Left eye - extra large cute eye with sparkle */}
+      <group ref={leftEyeRef} position={[-0.25, 0.5, 0.8]}>
+        {/* Main eye - bigger and rounder */}
+        <Sphere args={[0.28, 24, 24]}>
           <meshStandardMaterial 
             color={colors.eyes}
             emissive={colors.eyeGlow}
-            emissiveIntensity={0.4}
+            emissiveIntensity={0.5}
             metalness={0.1}
-            roughness={0.2}
+            roughness={0.1}
           />
         </Sphere>
-        {/* White highlight */}
-        <Sphere args={[0.06, 16, 16]} position={[0.08, 0.08, 0.15]}>
+        {/* Large white highlight for cuteness */}
+        <Sphere args={[0.10, 16, 16]} position={[0.10, 0.10, 0.18]}>
           <meshStandardMaterial 
             color="#FFFFFF"
             emissive="#FFFFFF"
-            emissiveIntensity={0.8}
+            emissiveIntensity={1.0}
             metalness={0}
             roughness={0.1}
+          />
+        </Sphere>
+        {/* Small sparkle */}
+        <Sphere args={[0.04, 16, 16]} position={[-0.12, 0.15, 0.20]}>
+          <meshStandardMaterial 
+            color="#FFFFFF"
+            emissive="#FFFFFF"
+            emissiveIntensity={1.2}
+            metalness={0}
+            roughness={0}
           />
         </Sphere>
       </group>
 
-      {/* Right eye - large warm amber with golden glow */}
-      <group ref={rightEyeRef} position={[0.28, 0.45, 0.78]}>
-        {/* Main eye */}
-        <Sphere args={[0.22, 24, 24]} scale={[1.1, 1, 1]}>
+      {/* Right eye - extra large cute eye with sparkle */}
+      <group ref={rightEyeRef} position={[0.25, 0.5, 0.8]}>
+        {/* Main eye - bigger and rounder */}
+        <Sphere args={[0.28, 24, 24]}>
           <meshStandardMaterial 
             color={colors.eyes}
             emissive={colors.eyeGlow}
-            emissiveIntensity={0.4}
+            emissiveIntensity={0.5}
             metalness={0.1}
-            roughness={0.2}
+            roughness={0.1}
           />
         </Sphere>
-        {/* White highlight */}
-        <Sphere args={[0.06, 16, 16]} position={[-0.08, 0.08, 0.15]}>
+        {/* Large white highlight for cuteness */}
+        <Sphere args={[0.10, 16, 16]} position={[-0.10, 0.10, 0.18]}>
           <meshStandardMaterial 
             color="#FFFFFF"
             emissive="#FFFFFF"
-            emissiveIntensity={0.8}
+            emissiveIntensity={1.0}
             metalness={0}
             roughness={0.1}
+          />
+        </Sphere>
+        {/* Small sparkle */}
+        <Sphere args={[0.04, 16, 16]} position={[0.12, 0.15, 0.20]}>
+          <meshStandardMaterial 
+            color="#FFFFFF"
+            emissive="#FFFFFF"
+            emissiveIntensity={1.2}
+            metalness={0}
+            roughness={0}
           />
         </Sphere>
       </group>
@@ -207,27 +227,77 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
         </Sphere>
       </group>
 
-      {/* Left arm stump - minimalistic */}
-      <group ref={leftHandRef} position={[-0.65, -0.15, 0]}>
-        <Cylinder args={[0.14, 0.12, 0.35, 16]} rotation={[0, 0, Math.PI / 6]}>
+      {/* Left arm - small and cute */}
+      <group ref={leftHandRef} position={[-0.6, 0, 0.1]}>
+        <Cylinder args={[0.08, 0.08, 0.3, 16]} rotation={[0, 0, Math.PI / 5]}>
           <meshStandardMaterial 
             color={colors.bodyDark}
             metalness={0.05}
             roughness={0.7}
           />
         </Cylinder>
+        {/* Small hand */}
+        <Sphere args={[0.10, 16, 16]} position={[-0.12, -0.18, 0]}>
+          <meshStandardMaterial 
+            color={colors.accent}
+            metalness={0.1}
+            roughness={0.6}
+          />
+        </Sphere>
       </group>
 
-      {/* Right arm stump - minimalistic */}
-      <group ref={rightHandRef} position={[0.65, -0.15, 0]}>
-        <Cylinder args={[0.14, 0.12, 0.35, 16]} rotation={[0, 0, -Math.PI / 6]}>
+      {/* Right arm - small and cute */}
+      <group ref={rightHandRef} position={[0.6, 0, 0.1]}>
+        <Cylinder args={[0.08, 0.08, 0.3, 16]} rotation={[0, 0, -Math.PI / 5]}>
           <meshStandardMaterial 
             color={colors.bodyDark}
             metalness={0.05}
             roughness={0.7}
           />
         </Cylinder>
+        {/* Small hand */}
+        <Sphere args={[0.10, 16, 16]} position={[0.12, -0.18, 0]}>
+          <meshStandardMaterial 
+            color={colors.accent}
+            metalness={0.1}
+            roughness={0.6}
+          />
+        </Sphere>
       </group>
+
+      {/* Left leg - small and cute */}
+      <Cylinder args={[0.10, 0.08, 0.25, 16]} position={[-0.25, -0.85, 0]}>
+        <meshStandardMaterial 
+          color={colors.bodyDark}
+          metalness={0.05}
+          roughness={0.7}
+        />
+      </Cylinder>
+      {/* Left foot */}
+      <Sphere args={[0.12, 16, 16]} position={[-0.25, -1.0, 0.08]} scale={[1, 0.6, 1.3]}>
+        <meshStandardMaterial 
+          color={colors.accent}
+          metalness={0.1}
+          roughness={0.6}
+        />
+      </Sphere>
+
+      {/* Right leg - small and cute */}
+      <Cylinder args={[0.10, 0.08, 0.25, 16]} position={[0.25, -0.85, 0]}>
+        <meshStandardMaterial 
+          color={colors.bodyDark}
+          metalness={0.05}
+          roughness={0.7}
+        />
+      </Cylinder>
+      {/* Right foot */}
+      <Sphere args={[0.12, 16, 16]} position={[0.25, -1.0, 0.08]} scale={[1, 0.6, 1.3]}>
+        <meshStandardMaterial 
+          color={colors.accent}
+          metalness={0.1}
+          roughness={0.6}
+        />
+      </Sphere>
     </group>
   );
 };
