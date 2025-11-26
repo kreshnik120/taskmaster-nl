@@ -36,6 +36,8 @@ interface Task {
   next_action: string | null;
   completed_at: string | null;
   org_id: string;
+  application_id: string | null;
+  recruitment_action_type: string | null;
   assignee_id: string | null;
   accepted_at: string | null;
   accepted_by: string | null;

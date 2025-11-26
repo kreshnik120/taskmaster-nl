@@ -2876,6 +2876,7 @@ export type Database = {
         Row: {
           accepted_at: string | null
           accepted_by: string | null
+          application_id: string | null
           assignee_id: string | null
           category: string | null
           client_id: string | null
@@ -2897,6 +2898,7 @@ export type Database = {
           org_id: string
           priority: Database["public"]["Enums"]["priority"]
           project_id: string | null
+          recruitment_action_type: string | null
           reporter_id: string | null
           revenue_impact_eur: number | null
           sequence_number: number | null
@@ -2909,6 +2911,7 @@ export type Database = {
         Insert: {
           accepted_at?: string | null
           accepted_by?: string | null
+          application_id?: string | null
           assignee_id?: string | null
           category?: string | null
           client_id?: string | null
@@ -2930,6 +2933,7 @@ export type Database = {
           org_id: string
           priority?: Database["public"]["Enums"]["priority"]
           project_id?: string | null
+          recruitment_action_type?: string | null
           reporter_id?: string | null
           revenue_impact_eur?: number | null
           sequence_number?: number | null
@@ -2942,6 +2946,7 @@ export type Database = {
         Update: {
           accepted_at?: string | null
           accepted_by?: string | null
+          application_id?: string | null
           assignee_id?: string | null
           category?: string | null
           client_id?: string | null
@@ -2963,6 +2968,7 @@ export type Database = {
           org_id?: string
           priority?: Database["public"]["Enums"]["priority"]
           project_id?: string | null
+          recruitment_action_type?: string | null
           reporter_id?: string | null
           revenue_impact_eur?: number | null
           sequence_number?: number | null
@@ -2973,6 +2979,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tasks_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tasks_assignee_id_fkey"
             columns: ["assignee_id"]

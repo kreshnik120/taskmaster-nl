@@ -52,6 +52,8 @@ interface Task {
   description: string | null;
   start_at: string | null;
   assignee_id: string | null;
+  application_id: string | null;
+  recruitment_action_type: string | null;
   profiles: {
     name: string | null;
     email: string | null;
