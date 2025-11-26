@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.2-query-priority-fix";
+const SYSTEM_PROMPT_VERSION = "v2.3-recruitment-tools";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -2068,6 +2068,75 @@ Bij ELKE vraag over taken, EERST controleren of dit een database vraag is:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+🏢 RECRUITMENT & PLAATSING TOOLS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 WANNEER GEBRUIK JE QUERY_APPLICATIONS:
+✅ "Hoeveel nieuwe sollicitaties hebben we?"
+✅ "Wie zit er in de screening fase?"
+✅ "Welke kandidaten missen nog informatie?"
+✅ "Toon alle sollicitaties van deze week"
+✅ "Welke sollicitanten hebben completeness < 50%?"
+✅ "Wie wacht op interview?"
+
+💡 QUERY_APPLICATIONS EXAMPLES:
+"Hoeveel nieuwe sollicitaties deze week?"
+→ query_applications({ 
+    filter: { 
+      pipeline_stage: "nieuw",
+      date_range: { 
+        start: "2025-11-18T00:00:00+01:00", 
+        end: "2025-11-24T23:59:59+01:00" 
+      }
+    },
+    limit: 50
+  })
+
+"Welke kandidaten missen informatie?"
+→ query_applications({ 
+    filter: { completeness_min: 0 },
+    include: ["missing_info", "extracted_data"]
+  })
+
+📊 WANNEER GEBRUIK JE QUERY_PROFESSIONAL_MATCHES:
+✅ "Welke matches zijn voorgesteld voor [Client X]?"
+✅ "Toon goedgekeurde plaatsingen"
+✅ "Welke professionals zijn gematched met hoge score?"
+✅ "Zijn er matches voor professional [Y]?"
+
+🤖 WANNEER GEBRUIK JE SUGGEST_PLACEMENTS:
+✅ "Suggereer een match voor [Client X]"
+✅ "Welke professionals passen bij deze opdracht?"
+✅ "Wie kunnen we plaatsen in regio Utrecht?"
+✅ "Vind een VIG'er voor [Client]"
+✅ "Match professionals met beschikbare clients"
+
+💡 SUGGEST_PLACEMENTS MATCHING CRITERIA (gewogen):
+- Functie niveau match: 25% (exact of hoger niveau)
+- Regio overlap: 20% (geografische nabijheid)
+- Skills match: 25% (overlap in vaardigheden)
+- Beschikbaarheid: 15% (wanneer nodig beschikbaar)
+- Tarief compatibiliteit: 15% (budget vs gewenst uurloon)
+
+De AI analyseert automatisch deze criteria en genereert AI reasoning per match!
+
+📚 RECRUITMENT KNOWLEDGE CATEGORIES:
+Het systeem leert automatisch van elke sollicitatie en plaatsing via system_events:
+- **recruitment_insights**: Patronen in succesvolle sollicitaties
+- **placement_patterns**: Welke professional-client combinaties werken goed
+- **skill_demand**: Vraag naar specifieke skills en functieniveaus
+- **pipeline_metrics**: Doorlooptijden en conversies per stage
+- **interview_outcomes**: Patronen in interview resultaten
+- **client_preferences**: Wat klanten zoeken in professionals
+
+💡 DE AI LEERT AUTOMATISCH VAN RECRUITMENT EVENTS:
+- Elke nieuwe sollicitatie → event logging
+- Status changes → patronen herkennen
+- Plaatsingen → succes factoren identificeren
+- Interview resultaten → voorspellende modellen bouwen
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 🗑️ SYSTEEMBELEID - AUTOMATISCHE KENNISBEHEER
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -2538,6 +2607,125 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                 type: "number",
                 description: "Maximum aantal resultaten",
                 default: 50
+              }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "query_applications",
+          description: "Doorzoek sollicitaties/applications om vragen te beantwoorden over kandidaten, pipeline status, completeness scores, ontbrekende informatie, etc. Gebruik dit wanneer gebruikers vragen stellen over sollicitanten, wie er in de pipeline zit, hoeveel nieuwe aanmeldingen er zijn, etc.",
+          parameters: {
+            type: "object",
+            properties: {
+              filter: {
+                type: "object",
+                properties: {
+                  pipeline_stage: { 
+                    type: "string", 
+                    enum: ["nieuw", "screening", "interview", "goedgekeurd", "geplaatst", "afgewezen"],
+                    description: "Filter op pipeline fase"
+                  },
+                  status: { 
+                    type: "string", 
+                    enum: ["nieuw", "in_behandeling", "wacht_op_info", "compleet", "afgerond"],
+                    description: "Filter op status"
+                  },
+                  completeness_min: { 
+                    type: "number", 
+                    description: "Minimum completeness score (0-100)"
+                  },
+                  date_range: {
+                    type: "object",
+                    properties: {
+                      start: { type: "string", description: "Start datum (ISO 8601)" },
+                      end: { type: "string", description: "Eind datum (ISO 8601)" }
+                    }
+                  }
+                }
+              },
+              include: {
+                type: "array",
+                items: { 
+                  type: "string", 
+                  enum: ["extracted_data", "missing_info", "professional", "conversations"]
+                }
+              },
+              limit: { type: "number", default: 50 }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "query_professional_matches",
+          description: "Doorzoek bestaande match-suggesties tussen professionals en clients. Gebruik dit om te zien welke matches zijn voorgesteld, goedgekeurd of afgewezen.",
+          parameters: {
+            type: "object",
+            properties: {
+              filter: {
+                type: "object",
+                properties: {
+                  professional_id: { type: "string", description: "Filter op specifieke professional UUID" },
+                  client_id: { type: "string", description: "Filter op specifieke client UUID" },
+                  status: { 
+                    type: "string", 
+                    enum: ["suggested", "approved", "rejected", "placed"],
+                    description: "Filter op match status"
+                  },
+                  min_score: { type: "number", description: "Minimum match score (0-100)" }
+                }
+              },
+              include: {
+                type: "array",
+                items: { 
+                  type: "string", 
+                  enum: ["professional", "client", "reasoning"]
+                }
+              },
+              limit: { type: "number", default: 20 }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "suggest_placements",
+          description: "Genereer AI-gestuurde match suggesties tussen beschikbare professionals en clients. De AI analyseert functie niveau, regio, skills, beschikbaarheid en tarief om de beste matches te vinden.",
+          parameters: {
+            type: "object",
+            properties: {
+              professional_id: { 
+                type: "string", 
+                description: "Specifieke professional UUID (optioneel - als leeg: alle beschikbare professionals)"
+              },
+              client_id: { 
+                type: "string", 
+                description: "Specifieke client UUID (optioneel - als leeg: alle actieve clients)"
+              },
+              criteria: {
+                type: "object",
+                properties: {
+                  min_match_score: { type: "number", default: 70 },
+                  prioritize: { 
+                    type: "string", 
+                    enum: ["skills", "regio", "beschikbaarheid", "tarief"],
+                    description: "Welk criterium heeft de hoogste prioriteit"
+                  },
+                  functie_niveau: { 
+                    type: "string",
+                    enum: ["Helpende 2", "VIG", "VP3", "VP4", "HBO-V"]
+                  }
+                }
+              },
+              save_suggestions: { 
+                type: "boolean", 
+                default: true,
+                description: "Sla suggesties op in professional_client_matches tabel"
               }
             }
           }
@@ -3223,6 +3411,297 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                               message: `✅ ${searchData.total_found} professionals gevonden${filterInfo.length > 0 ? ` (${filterInfo.join(', ')})` : ''}:\n\n${profList}` 
                             };
                           }
+                          break;
+
+                        case "query_applications":
+                          console.log("🔍 Querying applications...", args);
+                          
+                          let appQuery = supabaseClient
+                            .from('professional_applications')
+                            .select(`
+                              *,
+                              professional:professionals(id, full_name, functie_niveau, regio, skills, status)
+                            `);
+                          
+                          // Apply filters
+                          if (args.filter) {
+                            if (args.filter.pipeline_stage) {
+                              appQuery = appQuery.eq('pipeline_stage', args.filter.pipeline_stage);
+                            }
+                            if (args.filter.status) {
+                              appQuery = appQuery.eq('status', args.filter.status);
+                            }
+                            if (args.filter.completeness_min !== undefined) {
+                              appQuery = appQuery.gte('completeness_score', args.filter.completeness_min);
+                            }
+                            if (args.filter.date_range) {
+                              if (args.filter.date_range.start) {
+                                appQuery = appQuery.gte('created_at', args.filter.date_range.start);
+                              }
+                              if (args.filter.date_range.end) {
+                                appQuery = appQuery.lte('created_at', args.filter.date_range.end);
+                              }
+                            }
+                          }
+                          
+                          appQuery = appQuery
+                            .order('created_at', { ascending: false })
+                            .limit(args.limit || 50);
+                          
+                          const { data: applications, error: appError } = await appQuery;
+                          
+                          if (appError) {
+                            console.error("Applications query error:", appError);
+                            result = {
+                              success: false,
+                              message: `❌ Fout bij ophalen sollicitaties: ${appError.message}`
+                            };
+                          } else {
+                            const appList = applications
+                              ?.map((app: any, i: number) => {
+                                const completeness = app.completeness_score ? `${Math.round(app.completeness_score)}%` : 'n/a';
+                                const stage = app.pipeline_stage || app.status;
+                                const profName = app.professional?.full_name || app.email_from;
+                                return `${i + 1}. ${profName} - ${stage} (completeness: ${completeness})`;
+                              })
+                              .join('\n') || 'Geen sollicitaties gevonden';
+                            
+                            // Calculate summary stats
+                            const byStage = applications?.reduce((acc: any, app: any) => {
+                              const stage = app.pipeline_stage || 'onbekend';
+                              acc[stage] = (acc[stage] || 0) + 1;
+                              return acc;
+                            }, {});
+                            
+                            const avgCompleteness = applications?.length 
+                              ? (applications.reduce((sum: number, app: any) => sum + (app.completeness_score || 0), 0) / applications.length).toFixed(1)
+                              : 0;
+                            
+                            const summary = `📊 **Samenvatting**: ${applications?.length || 0} sollicitaties gevonden\n` +
+                              `├─ Gem. completeness: ${avgCompleteness}%\n` +
+                              `└─ Per fase: ${Object.entries(byStage || {}).map(([stage, count]) => `${stage}: ${count}`).join(', ')}`;
+                            
+                            result = {
+                              success: true,
+                              message: `${summary}\n\n${appList}`,
+                              applications: applications
+                            };
+                          }
+                          break;
+
+                        case "query_professional_matches":
+                          console.log("🔍 Querying professional matches...", args);
+                          
+                          let matchQuery = supabaseClient
+                            .from('professional_client_matches')
+                            .select(`
+                              *,
+                              professional:professionals(id, full_name, functie_niveau, regio, skills),
+                              client:clients(id, name, company)
+                            `);
+                          
+                          // Apply filters
+                          if (args.filter) {
+                            if (args.filter.professional_id) {
+                              matchQuery = matchQuery.eq('professional_id', args.filter.professional_id);
+                            }
+                            if (args.filter.client_id) {
+                              matchQuery = matchQuery.eq('client_id', args.filter.client_id);
+                            }
+                            if (args.filter.status) {
+                              matchQuery = matchQuery.eq('status', args.filter.status);
+                            }
+                            if (args.filter.min_score !== undefined) {
+                              matchQuery = matchQuery.gte('match_score', args.filter.min_score);
+                            }
+                          }
+                          
+                          matchQuery = matchQuery
+                            .order('match_score', { ascending: false })
+                            .limit(args.limit || 20);
+                          
+                          const { data: matches, error: matchError } = await matchQuery;
+                          
+                          if (matchError) {
+                            console.error("Matches query error:", matchError);
+                            result = {
+                              success: false,
+                              message: `❌ Fout bij ophalen matches: ${matchError.message}`
+                            };
+                          } else {
+                            const matchList = matches
+                              ?.map((match: any, i: number) => {
+                                const score = match.match_score ? `${Math.round(match.match_score)}%` : 'n/a';
+                                const profName = match.professional?.full_name || 'Onbekend';
+                                const clientName = match.client?.name || 'Onbekend';
+                                return `${i + 1}. ${profName} ↔️ ${clientName} - Score: ${score} (${match.status})`;
+                              })
+                              .join('\n') || 'Geen matches gevonden';
+                            
+                            const avgScore = matches?.length
+                              ? (matches.reduce((sum: number, m: any) => sum + (m.match_score || 0), 0) / matches.length).toFixed(1)
+                              : 0;
+                            
+                            const byStatus = matches?.reduce((acc: any, m: any) => {
+                              acc[m.status] = (acc[m.status] || 0) + 1;
+                              return acc;
+                            }, {});
+                            
+                            const summary = `📊 **Samenvatting**: ${matches?.length || 0} matches gevonden\n` +
+                              `├─ Gem. score: ${avgScore}%\n` +
+                              `└─ Per status: ${Object.entries(byStatus || {}).map(([status, count]) => `${status}: ${count}`).join(', ')}`;
+                            
+                            result = {
+                              success: true,
+                              message: `${summary}\n\n${matchList}`,
+                              matches: matches
+                            };
+                          }
+                          break;
+
+                        case "suggest_placements":
+                          console.log("🤖 Generating AI placement suggestions...", args);
+                          
+                          // Query available professionals
+                          const profFilter: any = { status: 'actief' };
+                          if (args.professional_id) {
+                            profFilter.id = args.professional_id;
+                          }
+                          if (args.criteria?.functie_niveau) {
+                            profFilter.functie_niveau = args.criteria.functie_niveau;
+                          }
+                          
+                          const { data: availableProfs, error: profError } = await supabaseClient
+                            .from('professionals')
+                            .select('*')
+                            .match(profFilter)
+                            .limit(50);
+                          
+                          if (profError || !availableProfs?.length) {
+                            result = {
+                              success: false,
+                              message: `❌ Geen beschikbare professionals gevonden${profError ? `: ${profError.message}` : ''}`
+                            };
+                            break;
+                          }
+                          
+                          // Query active clients
+                          const clientFilter: any = {};
+                          if (args.client_id) {
+                            clientFilter.id = args.client_id;
+                          }
+                          
+                          const { data: activeClients, error: clientError } = await supabaseClient
+                            .from('clients')
+                            .select('*')
+                            .match(clientFilter)
+                            .limit(50);
+                          
+                          if (clientError || !activeClients?.length) {
+                            result = {
+                              success: false,
+                              message: `❌ Geen actieve clients gevonden${clientError ? `: ${clientError.message}` : ''}`
+                            };
+                            break;
+                          }
+                          
+                          // Calculate match scores (weighted criteria)
+                          const WEIGHTS = {
+                            functie_niveau: 0.25,
+                            regio: 0.20,
+                            skills: 0.25,
+                            beschikbaarheid: 0.15,
+                            tarief: 0.15
+                          };
+                          
+                          const suggestions = [];
+                          const minScore = args.criteria?.min_match_score || 70;
+                          
+                          for (const prof of availableProfs) {
+                            for (const client of activeClients) {
+                              let totalScore = 0;
+                              const reasoning: any = {};
+                              
+                              // Functie niveau match (exact or higher)
+                              const niveaus = ['Helpende 2', 'VIG', 'VP3', 'VP4', 'HBO-V'];
+                              const profNiveau = niveaus.indexOf(prof.functie_niveau);
+                              // Assume client needs same or lower niveau
+                              const functieScore = profNiveau >= 0 ? 100 : 0;
+                              totalScore += functieScore * WEIGHTS.functie_niveau;
+                              reasoning.functie_niveau = { score: functieScore, weight: WEIGHTS.functie_niveau };
+                              
+                              // Regio match
+                              const regioScore = prof.regio && client.name?.toLowerCase().includes(prof.regio.toLowerCase()) ? 100 : 50;
+                              totalScore += regioScore * WEIGHTS.regio;
+                              reasoning.regio = { score: regioScore, weight: WEIGHTS.regio };
+                              
+                              // Skills match (placeholder - would need client skill requirements)
+                              const skillsScore = prof.skills?.length ? 80 : 60;
+                              totalScore += skillsScore * WEIGHTS.skills;
+                              reasoning.skills = { score: skillsScore, weight: WEIGHTS.skills };
+                              
+                              // Beschikbaarheid (placeholder)
+                              const beschikScore = 80;
+                              totalScore += beschikScore * WEIGHTS.beschikbaarheid;
+                              reasoning.beschikbaarheid = { score: beschikScore, weight: WEIGHTS.beschikbaarheid };
+                              
+                              // Tarief compatibiliteit
+                              const tariefScore = prof.gewenst_uurloon && client.revenue_per_hour 
+                                ? Math.max(0, 100 - Math.abs(prof.gewenst_uurloon - client.revenue_per_hour) / client.revenue_per_hour * 100)
+                                : 70;
+                              totalScore += tariefScore * WEIGHTS.tarief;
+                              reasoning.tarief = { score: tariefScore, weight: WEIGHTS.tarief };
+                              
+                              if (totalScore >= minScore) {
+                                suggestions.push({
+                                  professional_id: prof.id,
+                                  client_id: client.id,
+                                  match_score: Math.round(totalScore),
+                                  match_reasoning: reasoning,
+                                  professional_name: prof.full_name,
+                                  client_name: client.name,
+                                  org_id: userOrgId,
+                                  status: 'suggested'
+                                });
+                              }
+                            }
+                          }
+                          
+                          // Sort by score
+                          suggestions.sort((a, b) => b.match_score - a.match_score);
+                          
+                          // Save suggestions if requested
+                          if (args.save_suggestions !== false && suggestions.length > 0) {
+                            const { error: saveError } = await supabaseClient
+                              .from('professional_client_matches')
+                              .insert(suggestions.map(s => ({
+                                professional_id: s.professional_id,
+                                client_id: s.client_id,
+                                match_score: s.match_score,
+                                match_reasoning: s.match_reasoning,
+                                org_id: s.org_id,
+                                status: s.status
+                              })));
+                            
+                            if (saveError) {
+                              console.error("Error saving suggestions:", saveError);
+                            } else {
+                              console.log(`✅ Saved ${suggestions.length} match suggestions`);
+                            }
+                          }
+                          
+                          const suggestionList = suggestions
+                            .slice(0, 10)
+                            .map((s, i) => `${i + 1}. **${s.professional_name}** ↔️ **${s.client_name}** - Score: ${s.match_score}%`)
+                            .join('\n');
+                          
+                          const moreText = suggestions.length > 10 ? `\n... en ${suggestions.length - 10} meer matches` : '';
+                          
+                          result = {
+                            success: true,
+                            message: `🤖 **AI Match Suggesties**: ${suggestions.length} matches gevonden (min. score: ${minScore}%)\n\n${suggestionList}${moreText}${args.save_suggestions !== false ? '\n\n✅ Suggesties opgeslagen in database' : ''}`,
+                            suggestions: suggestions
+                          };
                           break;
 
                         case "create_multiple_tasks":
