@@ -209,13 +209,12 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
             }}
           >
             <Suspense fallback={null}>
-              <PerspectiveCamera makeDefault position={[0.5, 0.3, 4]} />
+              <PerspectiveCamera makeDefault position={[0, 0.2, 3.5]} />
               
-              {/* Soft, warm lighting for "Zorgie" healthcare robot */}
-              <ambientLight intensity={0.8} color="#FFF8E1" />
-              <directionalLight position={[3, 5, 4]} intensity={1.2} color="#FFFFFF" />
-              <pointLight position={[-2, 2, 3]} intensity={0.3} color="#4DB6AC" />
-              <pointLight position={[0, -1, 2]} intensity={0.2} color="#FFAB91" />
+              {/* Professional clean lighting */}
+              <ambientLight intensity={0.6} color="#FFFFFF" />
+              <directionalLight position={[2, 4, 5]} intensity={1.0} color="#FFFFFF" />
+              <pointLight position={[-2, 1, 3]} intensity={0.3} color="#3B82F6" />
               
               {/* 3D Robot */}
               <Robot3D isActive={isActive} />
@@ -233,13 +232,13 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
         )}
       </div>
       
-      {/* Tooltip on first visit */}
+      {/* Tooltip */}
       <motion.div
         className="absolute -top-12 left-1/2 -translate-x-1/2 bg-background border border-primary/20 rounded-lg px-3 py-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap"
         initial={{ opacity: 0, y: 5 }}
         whileHover={{ opacity: 1, y: 0 }}
       >
-        <p className="text-xs font-medium">Klik voor AI hulp 🤖</p>
+        <p className="text-xs font-medium">AI Assistent</p>
       </motion.div>
     </motion.button>
   );
