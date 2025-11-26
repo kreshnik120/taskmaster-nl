@@ -18,8 +18,8 @@ const COLORS = {
   bodyAccent: "#F1F5F9",
   primary: "#3B82F6",
   glow: "#60A5FA",
-  eyes: "#1E40AF",
-  eyeGlow: "#3B82F6",
+  eyes: "#2563EB",
+  eyeGlow: "#60A5FA",
   status: "#10B981",
   checkmark: "#3B82F6",
   ring: "#E2E8F0"
@@ -40,9 +40,9 @@ const GEOMETRY = {
   arm: { radius: 0.05, length: 0.20, position: { left: [-0.46, -0.08, 0] as [number, number, number], right: [0.46, -0.08, 0] as [number, number, number] } },
   elbow: { radius: 0.05, position: { left: [-0.46, -0.18, 0] as [number, number, number], right: [0.46, -0.18, 0] as [number, number, number] } },
   hand: { radius: 0.10, position: { left: [-0.46, -0.28, 0] as [number, number, number], right: [0.46, -0.28, 0] as [number, number, number] } },
-  leg: { radius: 0.07, length: 0.15, position: { left: [-0.12, -0.48, 0] as [number, number, number], right: [0.12, -0.48, 0] as [number, number, number] } },
-  knee: { radius: 0.06, position: { left: [-0.12, -0.55, 0] as [number, number, number], right: [0.12, -0.55, 0] as [number, number, number] } },
-  foot: { radius: 0.10, position: { left: [-0.12, -0.60, 0] as [number, number, number], right: [0.12, -0.60, 0] as [number, number, number] } },
+  leg: { radius: 0.07, length: 0.22, position: { left: [-0.12, -0.52, 0] as [number, number, number], right: [0.12, -0.52, 0] as [number, number, number] } },
+  knee: { radius: 0.06, position: { left: [-0.12, -0.63, 0] as [number, number, number], right: [0.12, -0.63, 0] as [number, number, number] } },
+  foot: { radius: 0.10, position: { left: [-0.12, -0.73, 0] as [number, number, number], right: [0.12, -0.73, 0] as [number, number, number] } },
   eye: { radius: 0.12, housingRadius: 0.13, position: { left: [-0.16, 0.60, 0.50] as [number, number, number], right: [0.16, 0.60, 0.50] as [number, number, number] } }
 };
 
@@ -356,7 +356,7 @@ export const Robot3D = ({ isActive, dragVelocity, mousePos }: Robot3DProps) => {
       </Cylinder>
 
       <Torus ref={smileRef} args={[0.12, 0.022, 16, 32, Math.PI]} position={[0, 0.36, 0.52]} rotation={[0, 0, Math.PI]}>
-        <meshStandardMaterial color={COLORS.primary} emissive={COLORS.glow} emissiveIntensity={0.6} />
+        <meshStandardMaterial color="#10B981" emissive="#34D399" emissiveIntensity={0.4} />
       </Torus>
 
       <Sphere args={[0.04, 12, 12]} position={[0, 0.85, 0.47]}>
