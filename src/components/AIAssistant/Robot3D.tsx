@@ -120,7 +120,7 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
       </Torus>
 
       {/* Body - capsule bottom part */}
-      <Capsule args={[0.45, 0.8, 4, 16]} position={[0, -0.4, 0]}>
+      <Capsule args={[0.42, 0.7, 4, 16]} position={[0, -0.4, 0]}>
         <meshPhysicalMaterial 
           color={colors.body}
           metalness={0.1}
@@ -129,6 +129,46 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
           clearcoatRoughness={0.2}
         />
       </Capsule>
+
+      {/* Shoulders */}
+      <Sphere args={[0.1, 16, 16]} position={[-0.52, 0.0, 0]}>
+        <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
+      </Sphere>
+      <Sphere args={[0.1, 16, 16]} position={[0.52, 0.0, 0]}>
+        <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
+      </Sphere>
+
+      {/* Left arm */}
+      <Capsule args={[0.05, 0.28, 4, 16]} position={[-0.58, -0.22, 0]}>
+        <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
+      </Capsule>
+      <Sphere args={[0.07, 16, 16]} position={[-0.58, -0.42, 0]}>
+        <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
+      </Sphere>
+
+      {/* Right arm */}
+      <Capsule args={[0.05, 0.28, 4, 16]} position={[0.58, -0.22, 0]}>
+        <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
+      </Capsule>
+      <Sphere args={[0.07, 16, 16]} position={[0.58, -0.42, 0]}>
+        <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
+      </Sphere>
+
+      {/* Left leg */}
+      <Capsule args={[0.06, 0.18, 4, 16]} position={[-0.15, -1.0, 0]}>
+        <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
+      </Capsule>
+      <Sphere args={[0.08, 16, 16]} position={[-0.15, -1.15, 0]}>
+        <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
+      </Sphere>
+
+      {/* Right leg */}
+      <Capsule args={[0.06, 0.18, 4, 16]} position={[0.15, -1.0, 0]}>
+        <meshPhysicalMaterial color={colors.body} metalness={0.1} roughness={0.3} clearcoat={0.5} />
+      </Capsule>
+      <Sphere args={[0.08, 16, 16]} position={[0.15, -1.15, 0]}>
+        <meshStandardMaterial color={colors.primary} metalness={0.4} roughness={0.3} />
+      </Sphere>
 
       {/* Tech accent lines on body */}
       <Torus args={[0.47, 0.01, 16, 32]} position={[0, -0.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
@@ -226,7 +266,7 @@ export const Robot3D = ({ isActive }: Robot3DProps) => {
       <Torus 
         ref={statusRingRef}
         args={[0.35, 0.02, 16, 32]} 
-        position={[0, -0.9, 0]} 
+        position={[0, -1.25, 0]} 
         rotation={[Math.PI / 2, 0, 0]}
       >
         <meshStandardMaterial 
