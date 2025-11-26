@@ -93,6 +93,12 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
   const [isDragging, setIsDragging] = useState(false);
   const [dragCounter, setDragCounter] = useState(0);
   const [processingJobs, setProcessingJobs] = useState<Record<string, ProcessingJob>>({});
+  
+  // Robot context states voor contextuele animaties
+  const [isUserTyping, setIsUserTyping] = useState(false);
+  const [justOpened, setJustOpened] = useState(false);
+  const [lastMessageReceived, setLastMessageReceived] = useState(0);
+  
   const [dimensions, setDimensions] = useState(() => ({
     width: parseInt(localStorage.getItem('chatWidth') || '384'),
     height: parseInt(localStorage.getItem('chatHeight') || '600')
@@ -118,6 +124,26 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
       console.log('🎓 Training mode enabled - tool calling active');
     }
   }, [trainingMode]);
+
+  // Track robot context: justOpened state
+  useEffect(() => {
+    if (isOpen) {
+      setJustOpened(true);
+      const timeout = setTimeout(() => setJustOpened(false), 1500);
+      return () => clearTimeout(timeout);
+    }
+  }, [isOpen]);
+
+  // Track robot context: typing state
+  useEffect(() => {
+    if (input.length > 0) {
+      setIsUserTyping(true);
+      const timeout = setTimeout(() => setIsUserTyping(false), 1000);
+      return () => clearTimeout(timeout);
+    } else {
+      setIsUserTyping(false);
+    }
+  }, [input]);
 
   // Check authentication status
   useEffect(() => {
@@ -459,6 +485,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
     };
     const newMessages = [...messages, newMessage];
     setMessages(newMessages);
+    setLastMessageReceived(Date.now()); // Track for robot acknowledgment nod
     setIsLoading(true);
     setInput('');
     
@@ -1152,7 +1179,14 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
       {/* Robot Assistant */}
       <div className="fixed bottom-6 right-6 z-[2147483647] pointer-events-none">
         <div className="pointer-events-auto drop-shadow-2xl">
-          <RobotIcon onClick={() => setIsOpen(!isOpen)} isActive={isLoading} />
+          <RobotIcon 
+            onClick={() => setIsOpen(!isOpen)} 
+            isActive={isOpen}
+            isUserTyping={isUserTyping}
+            isThinking={isLoading}
+            justOpened={justOpened}
+            lastMessageReceived={lastMessageReceived}
+          />
         </div>
       </div>
 

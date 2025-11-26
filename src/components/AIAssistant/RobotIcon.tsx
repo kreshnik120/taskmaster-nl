@@ -15,6 +15,10 @@ import {
 interface RobotIconProps {
   onClick?: () => void;
   isActive?: boolean;
+  isUserTyping?: boolean;
+  isThinking?: boolean;
+  justOpened?: boolean;
+  lastMessageReceived?: number;
 }
 
 interface MousePos {
@@ -24,7 +28,14 @@ interface MousePos {
 
 const STORAGE_KEY = 'robot-position';
 
-export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
+export const RobotIcon = ({ 
+  onClick, 
+  isActive,
+  isUserTyping = false,
+  isThinking = false,
+  justOpened = false,
+  lastMessageReceived = 0
+}: RobotIconProps) => {
   const [isHovered, setIsHovered] = useState(false);
   
   // Load position from localStorage
@@ -291,7 +302,15 @@ export const RobotIcon = ({ onClick, isActive }: RobotIconProps) => {
               <spotLight position={[0, 3, 2]} intensity={0.3} angle={0.5} />
               
               {/* 3D Robot */}
-              <Robot3D isActive={isActive} dragVelocity={dragVelocity} mousePos={mousePos} />
+              <Robot3D 
+                isActive={isActive} 
+                dragVelocity={dragVelocity} 
+                mousePos={mousePos}
+                isUserTyping={isUserTyping}
+                isThinking={isThinking}
+                justOpened={justOpened}
+                lastMessageReceived={lastMessageReceived}
+              />
                 </Suspense>
               </Canvas>
             </RobotErrorBoundary>
