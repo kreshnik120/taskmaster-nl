@@ -25,6 +25,8 @@ const COLORS = {
   eyes: "#2563EB",
   eyeGlow: "#60A5FA",
   status: "#10B981",
+  smile: "#F97316",
+  smileGlow: "#FB923C",
   checkmark: "#3B82F6",
   ring: "#E2E8F0",
   purple: "#8B5CF6",
@@ -44,12 +46,12 @@ const GEOMETRY = {
   head: { radius: 0.55, segments: 48, position: [0, 0.55, 0] as [number, number, number] },
   body: { radius: 0.35, length: 0.15, position: [0, -0.20, 0] as [number, number, number] },
   shoulder: { radius: 0.07, position: { left: [-0.38, 0.02, 0] as [number, number, number], right: [0.38, 0.02, 0] as [number, number, number] } },
-  arm: { radius: 0.05, length: 0.20, position: { left: [-0.46, -0.08, 0] as [number, number, number], right: [0.46, -0.08, 0] as [number, number, number] } },
-  elbow: { radius: 0.05, position: { left: [-0.46, -0.18, 0] as [number, number, number], right: [0.46, -0.18, 0] as [number, number, number] } },
-  hand: { radius: 0.10, position: { left: [-0.46, -0.28, 0] as [number, number, number], right: [0.46, -0.28, 0] as [number, number, number] } },
-  leg: { radius: 0.07, length: 0.22, position: { left: [-0.12, -0.52, 0] as [number, number, number], right: [0.12, -0.52, 0] as [number, number, number] } },
-  knee: { radius: 0.06, position: { left: [-0.12, -0.63, 0] as [number, number, number], right: [0.12, -0.63, 0] as [number, number, number] } },
-  foot: { radius: 0.10, position: { left: [-0.12, -0.73, 0] as [number, number, number], right: [0.12, -0.73, 0] as [number, number, number] } },
+  arm: { radius: 0.05, length: 0.28, position: { left: [-0.46, -0.12, 0] as [number, number, number], right: [0.46, -0.12, 0] as [number, number, number] } },
+  elbow: { radius: 0.05, position: { left: [-0.46, -0.26, 0] as [number, number, number], right: [0.46, -0.26, 0] as [number, number, number] } },
+  hand: { radius: 0.10, position: { left: [-0.46, -0.38, 0] as [number, number, number], right: [0.46, -0.38, 0] as [number, number, number] } },
+  leg: { radius: 0.07, length: 0.32, position: { left: [-0.12, -0.58, 0] as [number, number, number], right: [0.12, -0.58, 0] as [number, number, number] } },
+  knee: { radius: 0.06, position: { left: [-0.12, -0.74, 0] as [number, number, number], right: [0.12, -0.74, 0] as [number, number, number] } },
+  foot: { radius: 0.10, position: { left: [-0.12, -0.88, 0] as [number, number, number], right: [0.12, -0.88, 0] as [number, number, number] } },
   eye: { radius: 0.12, housingRadius: 0.13, position: { left: [-0.16, 0.60, 0.50] as [number, number, number], right: [0.16, 0.60, 0.50] as [number, number, number] } }
 };
 
@@ -603,7 +605,7 @@ export const Robot3D: React.FC<Robot3DProps> = ({
         position={[0, 0.36, 0.52]} 
         rotation={[0, 0, Math.PI]}
       >
-        <meshStandardMaterial color="#10B981" emissive="#34D399" emissiveIntensity={isUserTyping ? 0.6 : 0.4} />
+        <meshStandardMaterial color={COLORS.smile} emissive={COLORS.smileGlow} emissiveIntensity={isUserTyping ? 0.8 : 0.5} />
       </Torus>
 
       <Sphere args={[0.04, 12, 12]} position={[0, 0.85, 0.47]}>
