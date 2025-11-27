@@ -2729,6 +2729,35 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
       {
         type: "function",
         function: {
+          name: "query_placements",
+          description: "Doorzoek actieve plaatsingen van professionals bij klanten. Gebruik dit om te zien wie waar werkt, match scores, en placement status.",
+          parameters: {
+            type: "object",
+            properties: {
+              filter: {
+                type: "object",
+                properties: {
+                  status: { type: "string", description: "Filter op status (suggested/active/completed)" },
+                  professional_id: { type: "string", description: "Filter op specifieke professional UUID" },
+                  client_id: { type: "string", description: "Filter op specifieke client UUID" },
+                  min_match_score: { type: "number", description: "Minimum match score (0-100)" },
+                  date_range: {
+                    type: "object",
+                    properties: {
+                      start: { type: "string", format: "date" },
+                      end: { type: "string", format: "date" }
+                    }
+                  }
+                }
+              },
+              limit: { type: "number", default: 50 }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
           name: "suggest_placements",
           description: "Genereer AI-gestuurde match suggesties tussen beschikbare professionals en clients. De AI analyseert functie niveau, regio, skills, beschikbaarheid en tarief om de beste matches te vinden.",
           parameters: {
@@ -3808,6 +3837,93 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             message: `🤖 **AI Match Suggesties**: ${suggestions.length} matches gevonden (min. score: ${minScore}%)\n\n${suggestionList}${moreText}${args.save_suggestions !== false ? '\n\n✅ Suggesties opgeslagen in database' : ''}`,
                             suggestions: suggestions
                           };
+                          break;
+
+                        case "query_placements":
+                          console.log("🔍 Querying placements...", args);
+                          
+                          let placementQuery = supabaseClient
+                            .from('professional_client_matches')
+                            .select(`
+                              *,
+                              professionals (id, full_name, functie_niveau, werkvorm, regio, skills, status),
+                              clients (id, name, company, tier, weekly_hours, revenue_per_hour)
+                            `);
+                          
+                          // Apply filters
+                          if (args.filter) {
+                            if (args.filter.status) {
+                              placementQuery = placementQuery.eq('status', args.filter.status);
+                            }
+                            if (args.filter.professional_id) {
+                              placementQuery = placementQuery.eq('professional_id', args.filter.professional_id);
+                            }
+                            if (args.filter.client_id) {
+                              placementQuery = placementQuery.eq('client_id', args.filter.client_id);
+                            }
+                            if (args.filter.min_match_score) {
+                              placementQuery = placementQuery.gte('match_score', args.filter.min_match_score);
+                            }
+                            if (args.filter.date_range) {
+                              if (args.filter.date_range.start) {
+                                placementQuery = placementQuery.gte('created_at', args.filter.date_range.start);
+                              }
+                              if (args.filter.date_range.end) {
+                                placementQuery = placementQuery.lte('created_at', args.filter.date_range.end);
+                              }
+                            }
+                          }
+                          
+                          placementQuery = placementQuery
+                            .order('created_at', { ascending: false })
+                            .limit(args.limit || 50);
+                          
+                          const { data: placements, error: placementError } = await placementQuery;
+                          
+                          if (placementError) {
+                            console.error("Placements query error:", placementError);
+                            result = {
+                              success: false,
+                              message: `❌ Fout bij ophalen plaatsingen: ${placementError.message}`
+                            };
+                          } else {
+                            const placementList = placements
+                              ?.map((pl: any, i: number) => {
+                                const prof = pl.professionals || {};
+                                const client = pl.clients || {};
+                                const matchScore = pl.match_score ? `${Math.round(pl.match_score * 100)}%` : 'n/a';
+                                const status = pl.status === 'active' ? '✅ Actief' : 
+                                             pl.status === 'suggested' ? '💡 Voorgesteld' : 
+                                             pl.status === 'completed' ? '✔️ Afgerond' : pl.status;
+                                
+                                return `${i + 1}. **${prof.full_name}** (${prof.functie_nivel || 'n/a'}) ↔️ **${client.name}** (${client.company})
+   ├─ Status: ${status} | Match: ${matchScore}
+   ├─ Werkvorm: ${prof.werkvorm || 'n/a'} | Regio: ${prof.regio || 'n/a'}
+   └─ Client tier: ${client.tier || 'n/a'} | ${client.weekly_hours || 0}h/week`;
+                              })
+                              .join('\n\n') || 'Geen plaatsingen gevonden';
+                            
+                            // Calculate summary stats
+                            const byStatus = placements?.reduce((acc: any, pl: any) => {
+                              const status = pl.status || 'onbekend';
+                              acc[status] = (acc[status] || 0) + 1;
+                              return acc;
+                            }, {});
+                            
+                            const avgMatchScore = placements?.filter((pl: any) => pl.match_score).length 
+                              ? (placements.filter((pl: any) => pl.match_score).reduce((sum: number, pl: any) => sum + (pl.match_score * 100 || 0), 0) / placements.filter((pl: any) => pl.match_score).length).toFixed(0)
+                              : 'n/a';
+                            
+                            const summary = `📊 **Samenvatting**: ${placements?.length || 0} plaatsingen gevonden\n` +
+                              `├─ Gem. match score: ${avgMatchScore}%\n` +
+                              `└─ Per status: ${Object.entries(byStatus || {}).map(([status, count]) => `${status}: ${count}`).join(', ')}`;
+                            
+                            result = {
+                              success: true,
+                              message: `${summary}\n\n${placementList}`,
+                              placements: placements
+                            };
+                          }
                           break;
 
                         case "create_multiple_tasks":
