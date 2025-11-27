@@ -116,7 +116,13 @@ export function ApplicationCard({ application, onClick }: ApplicationCardProps) 
             <span className="text-xs text-muted-foreground">{functieNiveau}</span>
           )}
           {application.extracted_data?.assigned_organization && (
-            <Badge variant="outline" className="text-xs">
+            <Badge 
+              className={`text-xs ${
+                application.extracted_data.assigned_organization === "ABCzorg" 
+                  ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                  : "bg-orange-500 hover:bg-orange-600 text-white"
+              }`}
+            >
               {application.extracted_data.assigned_organization}
             </Badge>
           )}
