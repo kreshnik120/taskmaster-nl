@@ -1884,7 +1884,7 @@ export type Database = {
           extracted_data: Json | null
           id: string
           missing_info: Json | null
-          org_id: string
+          org_id: string | null
           pipeline_stage: string | null
           professional_id: string | null
           status: string
@@ -1901,7 +1901,7 @@ export type Database = {
           extracted_data?: Json | null
           id?: string
           missing_info?: Json | null
-          org_id: string
+          org_id?: string | null
           pipeline_stage?: string | null
           professional_id?: string | null
           status?: string
@@ -1918,7 +1918,7 @@ export type Database = {
           extracted_data?: Json | null
           id?: string
           missing_info?: Json | null
-          org_id?: string
+          org_id?: string | null
           pipeline_stage?: string | null
           professional_id?: string | null
           status?: string
