@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Upload, Search, Pencil, Trash2 } from "lucide-react";
+import { Plus, Upload, Search, Pencil, Trash2, Phone, Mail, MapPin, Briefcase, Car } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import {
   Dialog,
@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ProfessionalDetailModal } from "@/components/ProfessionalDetailModal";
 
 interface Professional {
   id: string;
@@ -34,6 +35,18 @@ interface Professional {
   status: string;
   rating: number | null;
   tags: string[];
+  werkvorm: string | null;
+  telefoonnummer: string | null;
+  email: string | null;
+  heeft_auto: boolean | null;
+  heeft_rijbewijs: boolean | null;
+  beschikbaarheidsnotities: string | null;
+  gewenst_uurloon: number | null;
+  cao_akkoord: boolean | null;
+  kvk_nummer: string | null;
+  btw_nummer: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 const Professionals = () => {
@@ -42,6 +55,8 @@ const Professionals = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterFunctie, setFilterFunctie] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [selectedProfessional, setSelectedProfessional] = useState<Professional | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
   const { toast } = useToast();
   const { canEdit } = useUserRole();
 
@@ -70,9 +85,9 @@ const Professionals = () => {
 
       if (!userOrg) return;
 
-      // Use secure view - admins/managers can still INSERT/UPDATE on main table
+      // Fetch from main professionals table instead of view to get all fields
       const { data, error } = await supabase
-        .from("professionals_public")
+        .from("professionals")
         .select("*")
         .eq("org_id", userOrg.org_id)
         .order("full_name");
@@ -313,7 +328,7 @@ const Professionals = () => {
                         )}
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-2">
+                     <CardContent className="space-y-2">
                       <div>
                         <Badge>{professional.functie_niveau}</Badge>
                         {professional.status === "actief" && (
@@ -322,9 +337,33 @@ const Professionals = () => {
                           </Badge>
                         )}
                       </div>
+                      {professional.werkvorm && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Badge variant="secondary">{professional.werkvorm}</Badge>
+                        </div>
+                      )}
                       {professional.regio && (
-                        <p className="text-sm text-muted-foreground">
-                          📍 {professional.regio}
+                        <p className="text-sm text-muted-foreground flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          {professional.regio}
+                        </p>
+                      )}
+                      {professional.telefoonnummer && (
+                        <p className="text-sm text-muted-foreground flex items-center gap-1">
+                          <Phone className="h-3 w-3" />
+                          {professional.telefoonnummer}
+                        </p>
+                      )}
+                      {professional.email && (
+                        <p className="text-sm text-muted-foreground flex items-center gap-1 truncate">
+                          <Mail className="h-3 w-3" />
+                          {professional.email}
+                        </p>
+                      )}
+                      {professional.heeft_auto && (
+                        <p className="text-sm text-muted-foreground flex items-center gap-1">
+                          <Car className="h-3 w-3" />
+                          Eigen vervoer
                         </p>
                       )}
                       {professional.skills.length > 0 && (
@@ -341,33 +380,19 @@ const Professionals = () => {
                           )}
                         </div>
                       )}
-                      {canEdit() && (
-                        <div className="flex gap-2 mt-4 pt-4 border-t">
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => {
-                              toast({ title: "Edit functionaliteit komt binnenkort" });
-                            }}
-                          >
-                            <Pencil className="w-3 h-3 mr-1" />
-                            Bewerken
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="destructive"
-                            onClick={() => {
-                              toast({ 
-                                title: "Delete functionaliteit komt binnenkort",
-                                variant: "destructive" 
-                              });
-                            }}
-                          >
-                            <Trash2 className="w-3 h-3 mr-1" />
-                            Verwijderen
-                          </Button>
-                        </div>
-                      )}
+                      <div className="flex gap-2 mt-4 pt-4 border-t">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => {
+                            setSelectedProfessional(professional);
+                            setDetailModalOpen(true);
+                          }}
+                        >
+                          Bekijk Details
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -376,6 +401,16 @@ const Professionals = () => {
           </div>
         </main>
       </div>
+      
+      <ProfessionalDetailModal
+        professional={selectedProfessional}
+        open={detailModalOpen}
+        onOpenChange={setDetailModalOpen}
+        onSuccess={() => {
+          fetchProfessionals();
+          setDetailModalOpen(false);
+        }}
+      />
     </SidebarProvider>
   );
 };

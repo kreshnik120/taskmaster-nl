@@ -3260,6 +3260,56 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                           }
                           break;
 
+                        case "query_professionals":
+                          console.log("🔍 Executing database query for professionals...", args);
+                          
+                          let professionalsQuery = supabaseClient
+                            .from('professionals')
+                            .select('*')
+                            .is('deleted_at', null);
+                          
+                          // Apply filters
+                          if (args.filter?.functie_niveau) {
+                            professionalsQuery = professionalsQuery.eq('functie_niveau', args.filter.functie_niveau);
+                          }
+                          if (args.filter?.werkvorm) {
+                            professionalsQuery = professionalsQuery.eq('werkvorm', args.filter.werkvorm);
+                          }
+                          if (args.filter?.regio) {
+                            professionalsQuery = professionalsQuery.ilike('regio', `%${args.filter.regio}%`);
+                          }
+                          if (args.filter?.status) {
+                            professionalsQuery = professionalsQuery.eq('status', args.filter.status);
+                          }
+                          if (args.filter?.has_auto !== undefined) {
+                            professionalsQuery = professionalsQuery.eq('heeft_auto', args.filter.has_auto);
+                          }
+                          
+                          const { data: professionals, error: professionalsError } = await professionalsQuery;
+                          
+                          if (professionalsError) throw professionalsError;
+                          
+                          result = {
+                            success: true,
+                            count: professionals.length,
+                            professionals: professionals.map((p: any) => ({
+                              id: p.id,
+                              full_name: p.full_name,
+                              functie_niveau: p.functie_niveau,
+                              werkvorm: p.werkvorm,
+                              regio: p.regio,
+                              status: p.status,
+                              heeft_auto: p.heeft_auto,
+                              heeft_rijbewijs: p.heeft_rijbewijs,
+                              skills: p.skills,
+                              rating: p.rating,
+                              email: p.email,
+                              telefoonnummer: p.telefoonnummer
+                            })),
+                            message: `✅ ${professionals.length} professional${professionals.length !== 1 ? 's' : ''} gevonden`
+                          };
+                          break;
+
                         case "query_tasks":
                           console.log("🔍 Executing database query for tasks...", args);
                           
