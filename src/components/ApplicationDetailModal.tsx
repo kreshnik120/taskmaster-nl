@@ -99,6 +99,11 @@ export function ApplicationDetailModal({
   
   // Convert to professional
   const [convertingToProfessional, setConvertingToProfessional] = useState(false);
+  
+  // Client matching
+  const [matchedClients, setMatchedClients] = useState<any[]>([]);
+  const [matchingLoading, setMatchingLoading] = useState(false);
+  const [showMatches, setShowMatches] = useState(false);
 
   // Load linked tasks
   useEffect(() => {
@@ -621,6 +626,117 @@ export function ApplicationDetailModal({
       toast.error("Fout bij aanmaken actie");
     } finally {
       setCreatingAction(false);
+    }
+  };
+
+  const findMatchingClients = async () => {
+    if (!application.extracted_data) {
+      toast.error("Onvoldoende sollicitant gegevens");
+      return;
+    }
+
+    setMatchingLoading(true);
+    setShowMatches(true);
+    try {
+      const { data: clients, error } = await supabase
+        .from('clients')
+        .select('*')
+        .order('name');
+      
+      if (error) throw error;
+      if (!clients?.length) {
+        setMatchedClients([]);
+        return;
+      }
+
+      const extractedData = application.extracted_data;
+      
+      // Normalize applicant regions
+      const applicantRegios = (extractedData.regio || '')
+        .toLowerCase()
+        .split(',')
+        .map((r: string) => r.trim())
+        .filter(Boolean);
+
+      const scored = clients.map(client => {
+        let score = 0;
+        let reasons: string[] = [];
+        
+        // Regio matching (30%)
+        const clientRegios = (client.regio || []).map((r: string) => r.toLowerCase());
+        const regioMatch = clientRegios.some((cr: string) => 
+          applicantRegios.some((ar: string) => ar.includes(cr) || cr.includes(ar))
+        );
+        if (regioMatch && clientRegios.length > 0) {
+          score += 30;
+          reasons.push('Regio match');
+        }
+        
+        // Sector matching (25%)
+        const clientSectors = client.sector || [];
+        const applicantSectors = extractedData.ervaring_sector || [];
+        const sectorOverlap = clientSectors.filter((s: string) => 
+          applicantSectors.includes(s)
+        ).length;
+        if (sectorOverlap > 0) {
+          const sectorScore = Math.min(25, sectorOverlap * 10);
+          score += sectorScore;
+          reasons.push(`${sectorOverlap} sector(en) match`);
+        }
+        
+        // Doelgroep matching (20%)
+        const clientDoelgroepen = client.doelgroep || [];
+        const applicantDoelgroepen = extractedData.doelgroep_ervaring || [];
+        const doelgroepOverlap = clientDoelgroepen.filter((d: string) => 
+          applicantDoelgroepen.includes(d)
+        ).length;
+        if (doelgroepOverlap > 0) {
+          const doelgroepScore = Math.min(20, doelgroepOverlap * 8);
+          score += doelgroepScore;
+          reasons.push(`${doelgroepOverlap} doelgroep(en) match`);
+        }
+        
+        // Functieniveau matching (15%)
+        const clientFuncties = client.gezochte_functies || [];
+        const applicantFunctie = extractedData.functie_niveau;
+        if (applicantFunctie && clientFuncties.includes(applicantFunctie)) {
+          score += 15;
+          reasons.push('Functieniveau match');
+        }
+        
+        // Bemiddelingsbureau matching (10%)
+        const clientOrgId = client.org_id;
+        const clientOrgName = clientOrgId === '650e8400-e29b-41d4-a716-446655440000' ? 'ABCzorg' : 'CitoZorg';
+        const applicantOrg = extractedData.assigned_organization;
+        if (applicantOrg && clientOrgName === applicantOrg) {
+          score += 10;
+          reasons.push('Zelfde bureau');
+        }
+        
+        return { 
+          ...client, 
+          matchScore: Math.round(score), 
+          matchReasons: reasons,
+          orgName: clientOrgName 
+        };
+      });
+      
+      // Sort by score, take top 5 with score > 0
+      const topMatches = scored
+        .filter(c => c.matchScore > 0)
+        .sort((a, b) => b.matchScore - a.matchScore)
+        .slice(0, 5);
+      
+      setMatchedClients(topMatches);
+      
+      if (topMatches.length === 0) {
+        toast.info("Geen passende klanten gevonden");
+      }
+    } catch (error) {
+      console.error('Error finding matching clients:', error);
+      toast.error("Fout bij zoeken naar passende klanten");
+    } finally {
+      setMatchingLoading(false);
     }
   };
 
@@ -1501,6 +1617,130 @@ export function ApplicationDetailModal({
               </div>
             )}
           </div>
+
+          <Separator />
+
+          {/* Client Matching Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium flex items-center gap-2">
+                ✨ Passende Klanten
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={findMatchingClients}
+                disabled={matchingLoading}
+              >
+                {matchingLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Zoeken...
+                  </>
+                ) : (
+                  "Zoek Matches"
+                )}
+              </Button>
+            </div>
+
+            {showMatches && (
+              <>
+                {matchingLoading ? (
+                  <div className="text-sm text-muted-foreground">Zoeken naar passende klanten...</div>
+                ) : matchedClients.length > 0 ? (
+                  <>
+                    <div className="text-xs text-muted-foreground flex items-center gap-2 pb-2">
+                      📍 Op basis van: {application.extracted_data?.regio || 'Regio'} • {application.extracted_data?.functie_niveau || 'Functieniveau'} • {(application.extracted_data?.ervaring_sector || []).slice(0, 2).join('/')}
+                    </div>
+                    <div className="space-y-3">
+                      {matchedClients.map((client) => (
+                        <div
+                          key={client.id}
+                          className="p-4 rounded-lg border bg-card hover:bg-accent/30 transition-colors space-y-2"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <Building2 className="h-4 w-4 text-muted-foreground" />
+                                <p className="text-sm font-semibold">{client.company}</p>
+                                <Badge variant="default" className="text-xs">
+                                  {client.matchScore}% match
+                                </Badge>
+                              </div>
+                              
+                              <div className="text-xs text-muted-foreground space-y-1">
+                                {client.sector && client.sector.length > 0 && (
+                                  <div className="flex items-center gap-1">
+                                    <span className="font-medium">Sector:</span>
+                                    <span>{client.sector.join(', ')}</span>
+                                  </div>
+                                )}
+                                {client.doelgroep && client.doelgroep.length > 0 && (
+                                  <div className="flex items-center gap-1">
+                                    <span className="font-medium">Doelgroep:</span>
+                                    <span>{client.doelgroep.join(', ')}</span>
+                                  </div>
+                                )}
+                                {client.regio && client.regio.length > 0 && (
+                                  <div className="flex items-center gap-1">
+                                    <span className="font-medium">Regio:</span>
+                                    <span>{client.regio.join(', ')}</span>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-1">
+                                  <span className="font-medium">Bureau:</span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {client.orgName}
+                                  </Badge>
+                                </div>
+                              </div>
+
+                              {client.matchReasons && client.matchReasons.length > 0 && (
+                                <div className="flex flex-wrap gap-1 pt-1">
+                                  {client.matchReasons.map((reason: string, idx: number) => (
+                                    <Badge key={idx} variant="secondary" className="text-xs">
+                                      ✓ {reason}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="flex gap-2 pt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                window.location.href = `/klanten`;
+                              }}
+                            >
+                              Bekijk Klant
+                            </Button>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => {
+                                toast.info("Direct koppelen functionaliteit komt binnenkort");
+                              }}
+                            >
+                              Direct Koppelen
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-sm text-muted-foreground p-3 rounded-lg bg-muted/30">
+                    Geen passende klanten gevonden. Probeer de kandidaat gegevens completer te maken.
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          <Separator />
 
           {/* Linked Tasks */}
           {linkedTasks.length > 0 && (
