@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, Search, Users, Clock, Euro } from "lucide-react";
+import { Building2, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -16,16 +16,18 @@ interface Client {
   id: string;
   name: string;
   company: string;
-  tier: number;
-  weekly_hours: number | null;
-  revenue_per_hour: number | null;
+  org_id: string;
   created_at: string;
+  organizations?: {
+    name: string;
+  };
 }
 
 export default function Klanten() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [orgFilter, setOrgFilter] = useState<string>("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -42,7 +44,10 @@ export default function Klanten() {
 
       const { data, error } = await supabase
         .from("clients")
-        .select("*")
+        .select(`
+          *,
+          organizations!inner(name)
+        `)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -55,10 +60,15 @@ export default function Klanten() {
     }
   };
 
-  const filteredClients = clients.filter(client =>
-    client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    client.company.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredClients = clients.filter(client => {
+    const matchesSearch = client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      client.company.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesOrg = !orgFilter || client.organizations?.name === orgFilter;
+    return matchesSearch && matchesOrg;
+  });
+
+  const abczorgCount = clients.filter(c => c.organizations?.name === "ABCzorg").length;
+  const citozorgCount = clients.filter(c => c.organizations?.name === "CitoZorg").length;
 
   return (
     <SidebarProvider>
@@ -93,23 +103,36 @@ export default function Klanten() {
               </div>
               <div className="h-4 w-px bg-border" />
               <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">
-                  {clients.filter(c => c.tier === 1).length}
-                </span>
-                <span className="text-muted-foreground">tier 1</span>
+                <span className="font-medium">{abczorgCount}</span>
+                <span className="text-muted-foreground">ABCzorg</span>
+              </div>
+              <div className="h-4 w-px bg-border" />
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{citozorgCount}</span>
+                <span className="text-muted-foreground">CitoZorg</span>
               </div>
             </div>
 
-            {/* Search Bar */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Zoek op naam of bedrijf..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
+            {/* Search and Filter Bar */}
+            <div className="flex gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Zoek op naam of bedrijf..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <select
+                value={orgFilter}
+                onChange={(e) => setOrgFilter(e.target.value)}
+                className="px-3 py-2 border rounded-md bg-background text-sm"
+              >
+                <option value="">Alle organisaties</option>
+                <option value="ABCzorg">ABCzorg</option>
+                <option value="CitoZorg">CitoZorg</option>
+              </select>
             </div>
 
             {/* Clients Grid */}
@@ -136,24 +159,12 @@ export default function Klanten() {
                             {client.company}
                           </p>
                         </div>
-                        <Badge variant={client.tier === 1 ? "default" : "secondary"}>
-                          Tier {client.tier}
+                        <Badge variant={client.organizations?.name === "ABCzorg" ? "default" : "secondary"}>
+                          {client.organizations?.name || "Onbekend"}
                         </Badge>
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {client.weekly_hours && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Clock className="h-4 w-4 text-muted-foreground" />
-                          <span>{client.weekly_hours} uur/week</span>
-                        </div>
-                      )}
-                      {client.revenue_per_hour && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Euro className="h-4 w-4 text-muted-foreground" />
-                          <span>€ {client.revenue_per_hour.toFixed(2)}/uur</span>
-                        </div>
-                      )}
                       <div className="text-xs text-muted-foreground">
                         Toegevoegd {format(new Date(client.created_at), "d MMM yyyy", { locale: nl })}
                       </div>
