@@ -18,6 +18,7 @@ interface Application {
     naam?: string;
     werkvorm?: string;
     functie_niveau?: string;
+    assigned_organization?: string;
   } | null;
   professionals?: {
     full_name: string;
@@ -113,6 +114,11 @@ export function ApplicationCard({ application, onClick }: ApplicationCardProps) 
           )}
           {functieNiveau && (
             <span className="text-xs text-muted-foreground">{functieNiveau}</span>
+          )}
+          {application.extracted_data?.assigned_organization && (
+            <Badge variant="outline" className="text-xs">
+              {application.extracted_data.assigned_organization}
+            </Badge>
           )}
         </div>
 
