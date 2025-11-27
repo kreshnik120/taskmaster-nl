@@ -662,7 +662,7 @@ export function ApplicationDetailModal({
         let score = 0;
         let reasons: string[] = [];
         
-        // Regio matching (30%)
+        // Regio matching (30% voor exacte match, 20% voor naam-match)
         const clientRegios = (client.regio || []).map((r: string) => r.toLowerCase());
         const regioMatch = clientRegios.some((cr: string) => 
           applicantRegios.some((ar: string) => ar.includes(cr) || cr.includes(ar))
@@ -670,6 +670,17 @@ export function ApplicationDetailModal({
         if (regioMatch && clientRegios.length > 0) {
           score += 30;
           reasons.push('Regio match');
+        } else {
+          // Fallback: check of sollicitant regio voorkomt in klantnaam
+          const clientNameLower = (client.name || '').toLowerCase();
+          const clientCompanyLower = (client.company || '').toLowerCase();
+          const nameRegioMatch = applicantRegios.some((ar: string) => 
+            clientNameLower.includes(ar) || clientCompanyLower.includes(ar)
+          );
+          if (nameRegioMatch) {
+            score += 20;
+            reasons.push('Regio in klantnaam');
+          }
         }
         
         // Sector matching (25%)
@@ -704,7 +715,7 @@ export function ApplicationDetailModal({
           reasons.push('Functieniveau match');
         }
         
-        // Bemiddelingsbureau matching (10%)
+        // Bemiddelingsbureau matching (10%) - altijd als bonus
         const clientOrgId = client.org_id;
         const clientOrgName = clientOrgId === '650e8400-e29b-41d4-a716-446655440000' ? 'ABCzorg' : 'CitoZorg';
         const applicantOrg = extractedData.assigned_organization;
@@ -721,9 +732,9 @@ export function ApplicationDetailModal({
         };
       });
       
-      // Sort by score, take top 5 with score > 0
+      // Sort by score, take top 5 with score >= 10
       const topMatches = scored
-        .filter(c => c.matchScore > 0)
+        .filter(c => c.matchScore >= 10)
         .sort((a, b) => b.matchScore - a.matchScore)
         .slice(0, 5);
       
@@ -1732,8 +1743,20 @@ export function ApplicationDetailModal({
                     </div>
                   </>
                 ) : (
-                  <div className="text-sm text-muted-foreground p-3 rounded-lg bg-muted/30">
-                    Geen passende klanten gevonden. Probeer de kandidaat gegevens completer te maken.
+                  <div className="space-y-2 p-3 rounded-lg bg-muted/30">
+                    <p className="text-sm text-muted-foreground">
+                      Geen passende klanten gevonden
+                    </p>
+                    <p className="text-sm text-amber-600">
+                      💡 Tip: Voeg regio's en sectoren toe aan klanten voor betere matching.{" "}
+                      <Button 
+                        variant="link" 
+                        className="h-auto p-0 text-amber-600 hover:text-amber-700"
+                        onClick={() => window.location.href = '/klanten'}
+                      >
+                        Naar Klanten →
+                      </Button>
+                    </p>
                   </div>
                 )}
               </>
