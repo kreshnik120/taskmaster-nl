@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2 } from "lucide-react";
+import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2, Building2 } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
@@ -89,6 +89,7 @@ export function ApplicationDetailModal({
     eigen_vervoer: false,
     bron: "",
     opmerkingen: "",
+    assigned_organization: "",
   });
   const [savingEdit, setSavingEdit] = useState(false);
   
@@ -117,6 +118,7 @@ export function ApplicationDetailModal({
         eigen_vervoer: application.extracted_data?.eigen_vervoer || false,
         bron: application.extracted_data?.bron || "",
         opmerkingen: application.extracted_data?.opmerkingen || "",
+        assigned_organization: application.extracted_data?.assigned_organization || "",
       });
     }
   }, [application, editMode]);
@@ -268,6 +270,8 @@ export function ApplicationDetailModal({
     "Anders",
   ];
 
+  const ORGANISATIES = ["ABCzorg", "CitoZorg"];
+
   // Toggle functions for multi-select badges
   const toggleSector = (sector: string) => {
     setEditData(prev => ({
@@ -295,7 +299,17 @@ export function ApplicationDetailModal({
       // Merge edit data with existing extracted_data
       const updatedExtractedData = {
         ...application.extracted_data,
-        ...editData,
+        telefoon: editData.telefoon || null,
+        regio: editData.regio || null,
+        functie_niveau: editData.functie_niveau || null,
+        werkvorm: editData.werkvorm || null,
+        beschikbaarheid: editData.beschikbaarheid || null,
+        ervaring_sector: editData.ervaring_sector,
+        doelgroep_ervaring: editData.doelgroep_ervaring,
+        eigen_vervoer: editData.eigen_vervoer,
+        bron: editData.bron || null,
+        opmerkingen: editData.opmerkingen || null,
+        assigned_organization: editData.assigned_organization || null,
       };
 
       // Calculate completeness score
@@ -780,6 +794,33 @@ export function ApplicationDetailModal({
                     </div>
                   </div>
 
+                  <Separator className="my-4" />
+
+                  {/* Organisatie Toewijzing */}
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground">Organisatie Toewijzing</p>
+                    
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">Inzet via organisatie</label>
+                      <Select 
+                        value={editData.assigned_organization} 
+                        onValueChange={(value) => setEditData({ ...editData, assigned_organization: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecteer organisatie" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ORGANISATIES.map(org => (
+                            <SelectItem key={org} value={org}>{org}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Via welke organisatie wordt de kandidaat ingezet?
+                      </p>
+                    </div>
+                  </div>
+
                   <Button
                     onClick={handleSaveEdit}
                     disabled={savingEdit}
@@ -842,6 +883,32 @@ export function ApplicationDetailModal({
                 <div>
                   <p className="text-sm font-medium">{application.professionals.full_name}</p>
                   <p className="text-xs text-muted-foreground">{application.professionals.functie_niveau}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Toegewezen Organisatie */}
+            {application.extracted_data?.assigned_organization && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20">
+                <Building2 className="h-4 w-4 text-blue-600" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Inzet via</p>
+                  <p className="text-sm font-medium text-blue-700 dark:text-blue-400">
+                    {application.extracted_data.assigned_organization}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Geen organisatie toegewezen indicator */}
+            {!application.extracted_data?.assigned_organization && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-dashed">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Organisatie nog niet toegewezen</p>
+                  <p className="text-xs text-primary cursor-pointer hover:underline" onClick={() => setEditMode(true)}>
+                    Klik om toe te wijzen
+                  </p>
                 </div>
               </div>
             )}
