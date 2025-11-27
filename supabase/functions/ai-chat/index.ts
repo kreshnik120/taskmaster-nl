@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.3-recruitment-tools";
+const SYSTEM_PROMPT_VERSION = "v2.4-recruitment-filters";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -2098,6 +2098,22 @@ Bij ELKE vraag over taken, EERST controleren of dit een database vraag is:
     include: ["missing_info", "extracted_data"]
   })
 
+"Welke VIG'ers zoeken we via ABCzorg?"
+→ query_applications({ 
+    filter: { 
+      functie_niveau: "VIG",
+      assigned_organization: "ABCzorg"
+    }
+  })
+
+"Hoeveel ZZP'ers hebben we in de pipeline voor Utrecht?"
+→ query_applications({ 
+    filter: { 
+      werkvorm: "ZZP",
+      regio: "Utrecht"
+    }
+  })
+
 📊 WANNEER GEBRUIK JE QUERY_PROFESSIONAL_MATCHES:
 ✅ "Welke matches zijn voorgesteld voor [Client X]?"
 ✅ "Toon goedgekeurde plaatsingen"
@@ -2643,6 +2659,25 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                       start: { type: "string", description: "Start datum (ISO 8601)" },
                       end: { type: "string", description: "Eind datum (ISO 8601)" }
                     }
+                  },
+                  functie_niveau: { 
+                    type: "string", 
+                    enum: ["VIG", "HBO-V", "Verpleegkundige MBO", "Helpende", "Begeleider", "Persoonlijk begeleider", "GGZ-agoog"],
+                    description: "Filter op functieniveau"
+                  },
+                  werkvorm: { 
+                    type: "string", 
+                    enum: ["ZZP", "Uitzendkracht", "ABCito constructie"],
+                    description: "Filter op gewenste werkvorm"
+                  },
+                  assigned_organization: { 
+                    type: "string", 
+                    enum: ["ABCzorg", "CitoZorg"],
+                    description: "Filter op toegewezen organisatie"
+                  },
+                  regio: { 
+                    type: "string",
+                    description: "Filter op regio (bijv. 'Utrecht', 'Amsterdam')"
                   }
                 }
               },
@@ -3442,6 +3477,18 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                                 appQuery = appQuery.lte('created_at', args.filter.date_range.end);
                               }
                             }
+                            if (args.filter.functie_niveau) {
+                              appQuery = appQuery.eq('extracted_data->>functie_niveau', args.filter.functie_niveau);
+                            }
+                            if (args.filter.werkvorm) {
+                              appQuery = appQuery.eq('extracted_data->>werkvorm', args.filter.werkvorm);
+                            }
+                            if (args.filter.assigned_organization) {
+                              appQuery = appQuery.eq('extracted_data->>assigned_organization', args.filter.assigned_organization);
+                            }
+                            if (args.filter.regio) {
+                              appQuery = appQuery.ilike('extracted_data->>regio', `%${args.filter.regio}%`);
+                            }
                           }
                           
                           appQuery = appQuery
@@ -3459,12 +3506,21 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                           } else {
                             const appList = applications
                               ?.map((app: any, i: number) => {
+                                const data = app.extracted_data || {};
                                 const completeness = app.completeness_score ? `${Math.round(app.completeness_score)}%` : 'n/a';
                                 const stage = app.pipeline_stage || app.status;
-                                const profName = app.professional?.full_name || app.email_from;
-                                return `${i + 1}. ${profName} - ${stage} (completeness: ${completeness})`;
+                                const naam = data.naam || app.email_from || 'Onbekend';
+                                const functie = data.functie_niveau || 'n/a';
+                                const werkvorm = data.werkvorm || 'n/a';
+                                const organisatie = data.assigned_organization || 'Niet toegewezen';
+                                const regio = data.regio || 'n/a';
+                                
+                                return `${i + 1}. **${naam}** (${functie})
+   ├─ Fase: ${stage} | Completeness: ${completeness}
+   ├─ Werkvorm: ${werkvorm} | Organisatie: ${organisatie}
+   └─ Regio: ${regio}`;
                               })
-                              .join('\n') || 'Geen sollicitaties gevonden';
+                              .join('\n\n') || 'Geen sollicitaties gevonden';
                             
                             // Calculate summary stats
                             const byStage = applications?.reduce((acc: any, app: any) => {
