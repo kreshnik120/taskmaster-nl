@@ -1,18 +1,19 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppSidebar } from "@/components/AppSidebar";
-import { SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Upload, Search, Pencil, Trash2, Phone, Mail, MapPin, Briefcase, Car } from "lucide-react";
+import { Plus, Upload, Search, Pencil, Trash2, Phone, Mail, MapPin, Briefcase, Car, Users } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -66,6 +67,8 @@ const Professionals = () => {
     regio: "",
     skills: "",
     rating: "",
+    email: "",
+    telefoonnummer: "",
   });
 
   useEffect(() => {
@@ -143,6 +146,8 @@ const Professionals = () => {
         regio: "",
         skills: "",
         rating: "",
+        email: "",
+        telefoonnummer: "",
       });
       fetchProfessionals();
     } catch (error) {
@@ -160,6 +165,10 @@ const Professionals = () => {
     const matchesFunctie = filterFunctie === "all" || p.functie_niveau === filterFunctie;
     return matchesSearch && matchesFunctie;
   });
+
+  // Stats berekeningen
+  const activeCount = professionals.filter(p => p.status === "actief").length;
+  const withCarCount = professionals.filter(p => p.heeft_auto).length;
 
   if (loading) {
     return (
@@ -179,13 +188,19 @@ const Professionals = () => {
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full">
-        <AppSidebar />
-        <main className="flex-1 p-8">
-          <div className="max-w-7xl mx-auto space-y-6">
+      <AppSidebar />
+      <main className="flex-1 overflow-auto">
+        <div className="p-6 space-y-6">
+          <SidebarTrigger className="mb-4" />
+
+          {/* Hero Section */}
+          <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-background rounded-lg p-6 border border-border/50">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-3xl font-bold">Professionals</h1>
-                <p className="text-muted-foreground">Beheer jouw ZZP'ers en flexwerkers</p>
+                <h1 className="text-2xl font-bold mb-2">Professionals</h1>
+                <p className="text-muted-foreground">
+                  Beheer jouw ZZP'ers en flexwerkers
+                </p>
               </div>
               {canEdit() && (
                 <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -195,89 +210,135 @@ const Professionals = () => {
                       Toevoegen
                     </Button>
                   </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Nieuwe Professional</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div>
-                      <Label htmlFor="name">Naam *</Label>
-                      <Input
-                        id="name"
-                        value={newProfessional.full_name}
-                        onChange={(e) =>
-                          setNewProfessional({ ...newProfessional, full_name: e.target.value })
-                        }
-                        placeholder="Volledige naam"
-                      />
+                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Nieuwe Professional</DialogTitle>
+                      <DialogDescription>
+                        Voeg een nieuwe professional toe aan het systeem
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="full_name">Volledige naam *</Label>
+                        <Input
+                          id="full_name"
+                          value={newProfessional.full_name}
+                          onChange={(e) =>
+                            setNewProfessional({ ...newProfessional, full_name: e.target.value })
+                          }
+                          placeholder="John Doe"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="functie_niveau">Functieniveau *</Label>
+                        <Select
+                          value={newProfessional.functie_niveau}
+                          onValueChange={(value) =>
+                            setNewProfessional({ ...newProfessional, functie_niveau: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecteer functieniveau" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="VIG">VIG</SelectItem>
+                            <SelectItem value="HBO-V">HBO-V</SelectItem>
+                            <SelectItem value="Verpleegkundige MBO">Verpleegkundige MBO</SelectItem>
+                            <SelectItem value="Helpende">Helpende</SelectItem>
+                            <SelectItem value="Begeleider">Begeleider</SelectItem>
+                            <SelectItem value="Persoonlijk begeleider">Persoonlijk begeleider</SelectItem>
+                            <SelectItem value="GGZ-agoog">GGZ-agoog</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="email">Email</Label>
+                          <Input
+                            id="email"
+                            type="email"
+                            value={newProfessional.email}
+                            onChange={(e) =>
+                              setNewProfessional({ ...newProfessional, email: e.target.value })
+                            }
+                            placeholder="professional@example.com"
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="telefoonnummer">Telefoonnummer</Label>
+                          <Input
+                            id="telefoonnummer"
+                            value={newProfessional.telefoonnummer}
+                            onChange={(e) =>
+                              setNewProfessional({ ...newProfessional, telefoonnummer: e.target.value })
+                            }
+                            placeholder="+31612345678"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="regio">Regio</Label>
+                        <Input
+                          id="regio"
+                          value={newProfessional.regio}
+                          onChange={(e) =>
+                            setNewProfessional({ ...newProfessional, regio: e.target.value })
+                          }
+                          placeholder="Amsterdam"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="skills">Vaardigheden (kommagescheiden)</Label>
+                        <Input
+                          id="skills"
+                          value={newProfessional.skills}
+                          onChange={(e) =>
+                            setNewProfessional({ ...newProfessional, skills: e.target.value })
+                          }
+                          placeholder="Wondverzorging, Medicatie, ..."
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <Label htmlFor="functie">Functie Niveau *</Label>
-                      <Select
-                        value={newProfessional.functie_niveau}
-                        onValueChange={(value) =>
-                          setNewProfessional({ ...newProfessional, functie_niveau: value })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Helpende 2">Helpende 2</SelectItem>
-                          <SelectItem value="VIG">VIG</SelectItem>
-                          <SelectItem value="VP3">VP3</SelectItem>
-                          <SelectItem value="VP4">VP4</SelectItem>
-                          <SelectItem value="HBO-V">HBO-V</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                        Annuleren
+                      </Button>
+                      <Button onClick={handleAddProfessional}>Toevoegen</Button>
                     </div>
-                    <div>
-                      <Label htmlFor="regio">Regio</Label>
-                      <Input
-                        id="regio"
-                        value={newProfessional.regio}
-                        onChange={(e) =>
-                          setNewProfessional({ ...newProfessional, regio: e.target.value })
-                        }
-                        placeholder="Bijv. Eindhoven, Nijmegen"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="skills">Skills (komma gescheiden)</Label>
-                      <Input
-                        id="skills"
-                        value={newProfessional.skills}
-                        onChange={(e) =>
-                          setNewProfessional({ ...newProfessional, skills: e.target.value })
-                        }
-                        placeholder="Bijv. Wondzorg, Diabetes, Palliatief"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="rating">Rating (0-5)</Label>
-                      <Input
-                        id="rating"
-                        type="number"
-                        min="0"
-                        max="5"
-                        step="0.1"
-                        value={newProfessional.rating}
-                        onChange={(e) =>
-                          setNewProfessional({ ...newProfessional, rating: e.target.value })
-                        }
-                        placeholder="4.5"
-                      />
-                    </div>
-                    <Button onClick={handleAddProfessional} className="w-full">
-                      Opslaan
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+                  </DialogContent>
+                </Dialog>
               )}
             </div>
+          </div>
 
-            <div className="flex gap-4">
+          {/* Compact Stats Bar */}
+          <div className="flex items-center gap-4 text-sm flex-wrap">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{professionals.length}</span>
+              <span className="text-muted-foreground">professionals</span>
+            </div>
+            <div className="h-4 w-px bg-border" />
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-green-600">{activeCount}</span>
+              <span className="text-muted-foreground">actief</span>
+            </div>
+            <div className="h-4 w-px bg-border" />
+            <div className="flex items-center gap-2">
+              <Car className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{withCarCount}</span>
+              <span className="text-muted-foreground">met eigen vervoer</span>
+            </div>
+            <div className="h-4 w-px bg-border" />
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">
+                {filteredProfessionals.length} van {professionals.length} getoond
+              </span>
+            </div>
+          </div>
+
+          {/* Search & Filters */}
+          <div className="flex gap-3 flex-wrap">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                 <Input
