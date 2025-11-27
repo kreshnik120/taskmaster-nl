@@ -71,6 +71,7 @@ export function ApplicationDetailModal({
   const [actionPriority, setActionPriority] = useState("MEDIUM");
   const [actionNotes, setActionNotes] = useState("");
   const [actionDueDate, setActionDueDate] = useState<Date | undefined>(undefined);
+  const [actionDueTime, setActionDueTime] = useState<string>("09:00");
   const [creatingAction, setCreatingAction] = useState(false);
   
   // Edit mode
@@ -329,6 +330,15 @@ export function ApplicationDetailModal({
 
       if (!orgData) throw new Error("No organization found");
 
+      // Combine date and time if both are set
+      let dueAt = null;
+      if (actionDueDate) {
+        const [hours, minutes] = actionDueTime.split(':').map(Number);
+        const combined = new Date(actionDueDate);
+        combined.setHours(hours, minutes, 0, 0);
+        dueAt = combined.toISOString();
+      }
+
       // Create task linked to application
       const { error } = await supabase.from('tasks').insert([{
         org_id: orgData.org_id,
@@ -340,7 +350,7 @@ export function ApplicationDetailModal({
         category: 'recruitment',
         status: 'todo',
         reporter_id: user.id,
-        due_at: actionDueDate ? actionDueDate.toISOString() : null,
+        due_at: dueAt,
       }]);
 
       if (error) throw error;
@@ -354,6 +364,7 @@ export function ApplicationDetailModal({
       setActionType("call");
       setActionPriority("MEDIUM");
       setActionDueDate(undefined);
+      setActionDueTime("09:00");
       
       // Reload tasks
       loadLinkedTasks();
@@ -724,28 +735,42 @@ export function ApplicationDetailModal({
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">
-                    {actionType === "interview" ? "Interview datum" : "Deadline"} (optioneel)
+                    {actionType === "interview" ? "Interview datum en tijd" : "Deadline"} (optioneel)
                   </label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-start text-left font-normal"
-                      >
-                        <Calendar className="mr-2 h-4 w-4" />
-                        {actionDueDate ? format(actionDueDate, "d MMMM yyyy", { locale: nl }) : "Selecteer datum"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <CalendarComponent
-                        mode="single"
-                        selected={actionDueDate}
-                        onSelect={setActionDueDate}
-                        initialFocus
-                        className="p-3 pointer-events-auto"
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <div className="flex gap-2">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="flex-1 justify-start text-left font-normal"
+                        >
+                          <Calendar className="mr-2 h-4 w-4" />
+                          {actionDueDate ? format(actionDueDate, "d MMMM yyyy", { locale: nl }) : "Selecteer datum"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarComponent
+                          mode="single"
+                          selected={actionDueDate}
+                          onSelect={setActionDueDate}
+                          initialFocus
+                          className="p-3 pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    
+                    {actionDueDate && (
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <Input
+                          type="time"
+                          value={actionDueTime}
+                          onChange={(e) => setActionDueTime(e.target.value)}
+                          className="w-[120px]"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
