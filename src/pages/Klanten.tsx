@@ -11,6 +11,7 @@ import { Building2, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import NewClientDialog from "@/components/NewClientDialog";
 
 interface Client {
   id: string;
@@ -28,6 +29,7 @@ export default function Klanten() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [orgFilter, setOrgFilter] = useState<string>("");
+  const [newClientOpen, setNewClientOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -87,7 +89,7 @@ export default function Klanten() {
                     Beheer opdrachtgevers en zorglocaties
                   </p>
                 </div>
-                <Button>
+                <Button onClick={() => setNewClientOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Nieuwe klant
                 </Button>
@@ -179,6 +181,12 @@ export default function Klanten() {
           </div>
         </main>
       </div>
+
+      <NewClientDialog
+        open={newClientOpen}
+        onOpenChange={setNewClientOpen}
+        onClientCreated={loadClients}
+      />
     </SidebarProvider>
   );
 }
