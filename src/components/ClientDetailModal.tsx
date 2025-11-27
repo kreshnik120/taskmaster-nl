@@ -137,7 +137,13 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
             <div className="flex items-center gap-2">
               <Building2 className="h-5 w-5" />
               <span>{client.name}</span>
-              <Badge variant={client.organizations?.name === "ABCzorg" ? "default" : "secondary"}>
+              <Badge 
+                className={
+                  client.organizations?.name === "ABCzorg" 
+                    ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                    : "bg-orange-500 hover:bg-orange-600 text-white"
+                }
+              >
                 {client.organizations?.name || "Onbekend"}
               </Badge>
             </div>
