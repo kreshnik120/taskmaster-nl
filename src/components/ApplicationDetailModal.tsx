@@ -7,7 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
@@ -81,6 +82,12 @@ export function ApplicationDetailModal({
     regio: "",
     functie_niveau: "",
     werkvorm: "",
+    beschikbaarheid: "",
+    ervaring_sector: [] as string[],
+    doelgroep_ervaring: [] as string[],
+    eigen_vervoer: false,
+    bron: "",
+    opmerkingen: "",
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -99,6 +106,12 @@ export function ApplicationDetailModal({
         regio: application.extracted_data?.regio || "",
         functie_niveau: application.extracted_data?.functie_niveau || "",
         werkvorm: application.extracted_data?.werkvorm || "",
+        beschikbaarheid: application.extracted_data?.beschikbaarheid || "",
+        ervaring_sector: application.extracted_data?.ervaring_sector || [],
+        doelgroep_ervaring: application.extracted_data?.doelgroep_ervaring || [],
+        eigen_vervoer: application.extracted_data?.eigen_vervoer || false,
+        bron: application.extracted_data?.bron || "",
+        opmerkingen: application.extracted_data?.opmerkingen || "",
       });
     }
   }, [application, editMode]);
@@ -214,6 +227,61 @@ export function ApplicationDetailModal({
     return labels[type] || type;
   };
 
+  // Constants for dropdowns and badges
+  const SECTOREN = [
+    "VVT",
+    "GGZ", 
+    "GHZ",
+    "Jeugdzorg",
+    "Ziekenhuis/Klinisch",
+    "Thuiszorg",
+  ];
+
+  const DOELGROEPEN = [
+    "Ouderen",
+    "LVB",
+    "Psychiatrie",
+    "Somatiek",
+    "Kinderen/Jeugd",
+    "Verslaving",
+  ];
+
+  const BESCHIKBAARHEDEN = [
+    "<24 uur/week",
+    "24-32 uur/week",
+    "32-40 uur/week",
+    "Flexibel",
+  ];
+
+  const BRONNEN = [
+    "Indeed",
+    "LinkedIn",
+    "Eigen netwerk",
+    "Website",
+    "Referral",
+    "Telefonisch",
+    "Anders",
+  ];
+
+  // Toggle functions for multi-select badges
+  const toggleSector = (sector: string) => {
+    setEditData(prev => ({
+      ...prev,
+      ervaring_sector: prev.ervaring_sector.includes(sector)
+        ? prev.ervaring_sector.filter(s => s !== sector)
+        : [...prev.ervaring_sector, sector]
+    }));
+  };
+
+  const toggleDoelgroep = (doelgroep: string) => {
+    setEditData(prev => ({
+      ...prev,
+      doelgroep_ervaring: prev.doelgroep_ervaring.includes(doelgroep)
+        ? prev.doelgroep_ervaring.filter(d => d !== doelgroep)
+        : [...prev.doelgroep_ervaring, doelgroep]
+    }));
+  };
+
   const handleSaveEdit = async () => {
     if (!application?.id) return;
 
@@ -235,6 +303,7 @@ export function ApplicationDetailModal({
         telefoon: updatedExtractedData.telefoon,
         ervaring_sector: updatedExtractedData.ervaring_sector,
         beschikbaarheid: updatedExtractedData.beschikbaarheid,
+        doelgroep_ervaring: updatedExtractedData.doelgroep_ervaring,
       };
 
       const weights = {
@@ -244,13 +313,14 @@ export function ApplicationDetailModal({
         werkvorm: 15,
         regio: 10,
         telefoon: 10,
-        ervaring_sector: 10,
+        ervaring_sector: 5,
         beschikbaarheid: 5,
+        doelgroep_ervaring: 5,
       };
 
       let score = 0;
       Object.entries(fields).forEach(([key, value]) => {
-        if (value) {
+        if (value && (Array.isArray(value) ? value.length > 0 : true)) {
           score += weights[key as keyof typeof weights] || 0;
         }
       });
@@ -468,10 +538,121 @@ export function ApplicationDetailModal({
                       </SelectContent>
                     </Select>
                   </div>
+
+                  <Separator className="my-4" />
+
+                  {/* Professionele Achtergrond */}
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground">Professionele Achtergrond</p>
+                    
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">Ervaring sector</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {SECTOREN.map((sector) => (
+                          <Badge
+                            key={sector}
+                            variant={editData.ervaring_sector.includes(sector) ? "default" : "outline"}
+                            className="cursor-pointer text-xs"
+                            onClick={() => toggleSector(sector)}
+                          >
+                            {sector}
+                            {editData.ervaring_sector.includes(sector) && (
+                              <X className="ml-1 h-3 w-3" />
+                            )}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">Doelgroep ervaring</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {DOELGROEPEN.map((dg) => (
+                          <Badge
+                            key={dg}
+                            variant={editData.doelgroep_ervaring.includes(dg) ? "default" : "outline"}
+                            className="cursor-pointer text-xs"
+                            onClick={() => toggleDoelgroep(dg)}
+                          >
+                            {dg}
+                            {editData.doelgroep_ervaring.includes(dg) && (
+                              <X className="ml-1 h-3 w-3" />
+                            )}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator className="my-4" />
+
+                  {/* Werkvorm & Beschikbaarheid */}
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground">Werkvorm & Beschikbaarheid</p>
+                    
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">Beschikbaarheid</label>
+                      <Select 
+                        value={editData.beschikbaarheid} 
+                        onValueChange={(value) => setEditData({ ...editData, beschikbaarheid: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecteer beschikbaarheid" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {BESCHIKBAARHEDEN.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="eigen_vervoer_edit"
+                        checked={editData.eigen_vervoer}
+                        onCheckedChange={(checked) => setEditData({ ...editData, eigen_vervoer: checked as boolean })}
+                      />
+                      <label htmlFor="eigen_vervoer_edit" className="text-xs cursor-pointer">
+                        Eigen vervoer beschikbaar
+                      </label>
+                    </div>
+                  </div>
+
+                  <Separator className="my-4" />
+
+                  {/* Bron & Opmerkingen */}
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground">Bron & Opmerkingen</p>
+                    
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">Bron sollicitatie</label>
+                      <Select 
+                        value={editData.bron} 
+                        onValueChange={(value) => setEditData({ ...editData, bron: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecteer bron" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {BRONNEN.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">Opmerkingen</label>
+                      <Textarea
+                        placeholder="Aanvullende opmerkingen..."
+                        value={editData.opmerkingen}
+                        onChange={(e) => setEditData({ ...editData, opmerkingen: e.target.value })}
+                        rows={3}
+                      />
+                    </div>
+                  </div>
+
                   <Button
                     onClick={handleSaveEdit}
                     disabled={savingEdit}
-                    className="w-full"
+                    className="w-full mt-4"
                   >
                     {savingEdit ? (
                       <>
