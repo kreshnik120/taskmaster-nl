@@ -147,47 +147,6 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
     return missing;
   };
 
-  const ensureAbcitoKnowledge = async (orgId: string) => {
-    try {
-      // Check if ABCito knowledge already exists
-      const { data: existing } = await supabase
-        .from("ai_knowledge_base")
-        .select("id")
-        .eq("org_id", orgId)
-        .eq("category", "werkvormen")
-        .eq("key", "abcito_constructie")
-        .maybeSingle();
-
-      if (existing) return;
-
-      // Create ABCito knowledge item
-      const { error } = await supabase
-        .from("ai_knowledge_base")
-        .insert({
-          org_id: orgId,
-          category: "werkvormen",
-          key: "abcito_constructie",
-          value: {
-            naam: "ABCito constructie",
-            omschrijving: "Aparte constructie van ABCzorg/CitoZorg, administratief anders dan loondienst",
-            sollicitatie_procedure: "Identiek aan ZZP en Uitzendkracht procedures",
-            document_procedure: "Identiek aan ZZP en Uitzendkracht procedures",
-            beschikbaar_via: ["ABCzorg", "CitoZorg"],
-            toelichting: "Contractueel/administratief verschil, niet procesmatig",
-          },
-          confidence_score: 1.0,
-          stability_score: 1.0,
-          source: "system_configuration",
-          source_type: "manual",
-        });
-
-      if (error) {
-        console.error("Error creating ABCito knowledge:", error);
-      }
-    } catch (error) {
-      console.error("Error ensuring ABCito knowledge:", error);
-    }
-  };
 
   const onSubmit = async (data: ApplicationFormData) => {
     setSubmitting(true);
@@ -195,14 +154,8 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Niet ingelogd");
 
-      // Get user's organization
-      const { data: userOrg } = await supabase
-        .from("user_organizations")
-        .select("org_id")
-        .eq("user_id", user.id)
-        .single();
-
-      if (!userOrg) throw new Error("Geen organisatie gevonden");
+      // Geen organisatie nodig bij aanmaken
+      // Organisatie wordt later toegewezen door recruitment team via ApplicationDetailModal
 
       const extractedData = {
         naam: data.naam,
@@ -221,11 +174,10 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
       const completenessScore = calculateCompletenessScore(data);
       const missingInfo = detectMissingInfo(data);
 
-      // Insert application
+      // Insert application zonder org_id - wordt later toegewezen
       const { error: insertError } = await supabase
         .from("professional_applications")
         .insert({
-          org_id: userOrg.org_id,
           email_from: data.email,
           email_subject: `Nieuwe sollicitatie: ${data.naam}`,
           extracted_data: extractedData,
@@ -236,9 +188,6 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
         });
 
       if (insertError) throw insertError;
-
-      // Ensure ABCito knowledge exists (async, don't wait)
-      ensureAbcitoKnowledge(userOrg.org_id);
 
       toast.success("Sollicitatie aangemaakt", {
         description: `${data.naam} is toegevoegd aan de pipeline`,
