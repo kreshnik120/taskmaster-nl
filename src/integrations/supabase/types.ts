@@ -2688,7 +2688,7 @@ export type Database = {
           id: string
           learning_outcome: Json | null
           metadata: Json | null
-          org_id: string
+          org_id: string | null
           processed_at: string | null
           user_id: string | null
         }
@@ -2701,7 +2701,7 @@ export type Database = {
           id?: string
           learning_outcome?: Json | null
           metadata?: Json | null
-          org_id: string
+          org_id?: string | null
           processed_at?: string | null
           user_id?: string | null
         }
@@ -2714,7 +2714,7 @@ export type Database = {
           id?: string
           learning_outcome?: Json | null
           metadata?: Json | null
-          org_id?: string
+          org_id?: string | null
           processed_at?: string | null
           user_id?: string | null
         }
