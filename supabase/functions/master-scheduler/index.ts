@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Active scheduled functions (7 schedules for 5 learning loops + 2 support)
+// Active scheduled functions (8 schedules for 5 learning loops + 3 support)
 const SCHEDULES = {
   'auto-resolve-alerts': '*/30 * * * *',        // Every 30 minutes (ACE Alert Resolution)
   'smart-deduplicator': '30 * * * *',           // Every hour at :30 (Learning Loop 5)
@@ -14,6 +14,7 @@ const SCHEDULES = {
   'knowledge-graph-builder': '15 * * * *',      // Every hour at :15 (Learning Loop 3)
   'feedback-processor': '*/5 * * * *',          // Every 5 minutes (Learning Loop 2)
   'process-pending-jobs': '*/1 * * * *',        // Every minute (Background Job Queue)
+  'process-system-events': '*/5 * * * *',       // Every 5 minutes (System Event Learning)
   // Note: continuous-learner (Loop 1) runs via database trigger, not scheduler
 };
 

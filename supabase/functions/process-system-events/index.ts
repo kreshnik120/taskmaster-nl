@@ -161,6 +161,10 @@ Voorbeelden van wat WEL moet worden geleerd:
 - Specifieke werkwijze of proces gevolgd (workflow patterns)
 - Tijd besteed aan bepaald type taak (productivity insights)
 - Consistent gedrag van een gebruiker (user patterns)
+- Sollicitant succesvol door pipeline naar plaatsing (recruitment_pipeline)
+- Kandidaat kwaliteit per bron (candidate_quality)
+- Plaatsing succesvol afgerond voor organisatie (placement_success)
+- Recruitment acties effectief uitgevoerd (recruitment_effectiveness)
 
 Voorbeelden van wat NIET moet worden geleerd:
 - Incidentele, eenmalige acties zonder patroon
@@ -170,7 +174,7 @@ Voorbeelden van wat NIET moet worden geleerd:
 Return ALLEEN een JSON object (geen andere tekst):
 {
   "shouldCreateKnowledge": true/false,
-  "category": "workflow_patterns" / "team_performance" / "task_history" / "productivity_insights",
+  "category": "workflow_patterns" / "team_performance" / "task_history" / "productivity_insights" / "recruitment_pipeline" / "candidate_quality" / "placement_success" / "recruitment_effectiveness",
   "key": "beschrijvende_key_zoals_professional_X_completion_time",
   "value": { "detailed": "structured data object" },
   "confidence": 0.0-1.0,
