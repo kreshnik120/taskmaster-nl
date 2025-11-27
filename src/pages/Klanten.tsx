@@ -244,7 +244,13 @@ export default function Klanten() {
                               {client.regio?.length || 0} regio's • {client.sector?.length || 0} sectoren
                             </div>
                           </div>
-                          <Badge variant={client.organizations?.name === "ABCzorg" ? "default" : "secondary"}>
+                          <Badge 
+                            className={
+                              client.organizations?.name === "ABCzorg" 
+                                ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                                : "bg-orange-500 hover:bg-orange-600 text-white"
+                            }
+                          >
                             {client.organizations?.name || "Onbekend"}
                           </Badge>
                         </CardTitle>
