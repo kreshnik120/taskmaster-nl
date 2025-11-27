@@ -5,6 +5,8 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -68,6 +70,7 @@ export function ApplicationDetailModal({
   const [customTitle, setCustomTitle] = useState("");
   const [actionPriority, setActionPriority] = useState("MEDIUM");
   const [actionNotes, setActionNotes] = useState("");
+  const [actionDueDate, setActionDueDate] = useState<Date | undefined>(undefined);
   const [creatingAction, setCreatingAction] = useState(false);
   
   // Edit mode
@@ -337,6 +340,7 @@ export function ApplicationDetailModal({
         category: 'recruitment',
         status: 'todo',
         reporter_id: user.id,
+        due_at: actionDueDate ? actionDueDate.toISOString() : null,
       }]);
 
       if (error) throw error;
@@ -349,6 +353,7 @@ export function ApplicationDetailModal({
       setActionNotes("");
       setActionType("call");
       setActionPriority("MEDIUM");
+      setActionDueDate(undefined);
       
       // Reload tasks
       loadLinkedTasks();
@@ -715,6 +720,32 @@ export function ApplicationDetailModal({
                       <SelectItem value="CRITICAL">Kritiek</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    {actionType === "interview" ? "Interview datum" : "Deadline"} (optioneel)
+                  </label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start text-left font-normal"
+                      >
+                        <Calendar className="mr-2 h-4 w-4" />
+                        {actionDueDate ? format(actionDueDate, "d MMMM yyyy", { locale: nl }) : "Selecteer datum"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={actionDueDate}
+                        onSelect={setActionDueDate}
+                        initialFocus
+                        className="p-3 pointer-events-auto"
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
                 <div className="space-y-2">
