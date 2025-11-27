@@ -4,7 +4,9 @@ import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/
 import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { Plus, Loader2, Mail } from "lucide-react";
+import { Plus, Loader2, Mail, Search, X, Filter } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -43,6 +45,10 @@ const PIPELINE_STAGES = [
   { id: "geplaatst", name: "Geplaatst", color: "bg-teal-500/10" },
 ];
 
+const FUNCTIE_NIVEAUS = ["VIG", "HBO-V", "Verpleegkundige MBO", "Helpende", "Begeleider", "Persoonlijk begeleider", "GGZ-agoog"];
+const WERKVORMEN = ["ZZP", "Uitzendkracht", "ABCito constructie"];
+const ORGANISATIES = ["ABCzorg", "CitoZorg"];
+
 const Sollicitaties = () => {
   const [applications, setApplications] = useState<Application[]>([]);
   const [activeApplication, setActiveApplication] = useState<Application | null>(null);
@@ -51,6 +57,10 @@ const Sollicitaties = () => {
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [newApplicationDialogOpen, setNewApplicationDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterFunctieNiveau, setFilterFunctieNiveau] = useState<string>("all");
+  const [filterWerkvorm, setFilterWerkvorm] = useState<string>("all");
+  const [filterOrganisatie, setFilterOrganisatie] = useState<string>("all");
   const navigate = useNavigate();
 
   const getGreeting = () => {
@@ -183,8 +193,31 @@ const Sollicitaties = () => {
     }
   };
 
+  const getFilteredApplications = () => {
+    return applications.filter((app) => {
+      // Zoeken op naam of email
+      const searchMatch = searchQuery === "" || 
+        (app.extracted_data?.naam?.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (app.email_from?.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      // Filter op functieniveau
+      const functieMatch = filterFunctieNiveau === "all" || 
+        app.extracted_data?.functie_niveau === filterFunctieNiveau;
+      
+      // Filter op werkvorm
+      const werkvormMatch = filterWerkvorm === "all" || 
+        app.extracted_data?.werkvorm === filterWerkvorm;
+      
+      // Filter op organisatie
+      const organisatieMatch = filterOrganisatie === "all" || 
+        app.extracted_data?.assigned_organization === filterOrganisatie;
+      
+      return searchMatch && functieMatch && werkvormMatch && organisatieMatch;
+    });
+  };
+
   const getApplicationsForStage = (stage: string) => {
-    return applications.filter((app) => app.pipeline_stage === stage);
+    return getFilteredApplications().filter((app) => app.pipeline_stage === stage);
   };
 
   const handleApplicationClick = (application: Application) => {
@@ -219,16 +252,24 @@ const Sollicitaties = () => {
     );
   }
 
+  const filteredApplications = getFilteredApplications();
   const stageStats = getStageStats();
   const totalApplications = applications.length;
+  const displayedTotal = filteredApplications.length;
+  const displayedNew = filteredApplications.filter(app => app.pipeline_stage === 'nieuw').length;
+  const displayedApproved = filteredApplications.filter(app => app.pipeline_stage === 'goedgekeurd').length;
   const avgCompleteness = applications.length > 0
     ? Math.round(applications.reduce((sum, app) => sum + (app.completeness_score || 0), 0) / applications.length)
+    : 0;
+  const displayedAvgCompleteness = filteredApplications.length > 0
+    ? Math.round(filteredApplications.reduce((sum, app) => sum + (app.completeness_score || 0), 0) / filteredApplications.length)
     : 0;
   const newThisWeek = applications.filter(app => {
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
     return new Date(app.created_at) >= weekAgo;
   }).length;
+  const hasActiveFilters = searchQuery || filterFunctieNiveau !== "all" || filterWerkvorm !== "all" || filterOrganisatie !== "all";
 
   return (
     <SidebarProvider>
@@ -268,31 +309,109 @@ const Sollicitaties = () => {
               </div>
             </div>
 
+            {/* Zoek- en Filterbalk */}
+            <div className="flex flex-wrap gap-3 items-center p-4 bg-muted/20 rounded-lg border">
+              {/* Zoekbalk */}
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Zoek op naam of email..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              
+              {/* Functieniveau Filter */}
+              <Select value={filterFunctieNiveau} onValueChange={setFilterFunctieNiveau}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Functieniveau" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle niveaus</SelectItem>
+                  {FUNCTIE_NIVEAUS.map(niveau => (
+                    <SelectItem key={niveau} value={niveau}>{niveau}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              {/* Werkvorm Filter */}
+              <Select value={filterWerkvorm} onValueChange={setFilterWerkvorm}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Werkvorm" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle werkvormen</SelectItem>
+                  {WERKVORMEN.map(vorm => (
+                    <SelectItem key={vorm} value={vorm}>{vorm}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              {/* Organisatie Filter */}
+              <Select value={filterOrganisatie} onValueChange={setFilterOrganisatie}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="Organisatie" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle organisaties</SelectItem>
+                  {ORGANISATIES.map(org => (
+                    <SelectItem key={org} value={org}>{org}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              {/* Reset Filters Button */}
+              {hasActiveFilters && (
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setFilterFunctieNiveau("all");
+                    setFilterWerkvorm("all");
+                    setFilterOrganisatie("all");
+                  }}
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Reset
+                </Button>
+              )}
+            </div>
+
+            {/* Active Filters Indicator */}
+            {hasActiveFilters && (
+              <div className="text-sm text-muted-foreground flex items-center gap-2">
+                <Filter className="h-4 w-4" />
+                <span>{displayedTotal} van {totalApplications} sollicitaties getoond</span>
+              </div>
+            )}
+
             {/* Compact Stats Bar */}
             <div className="grid grid-cols-4 gap-3 mb-6">
               <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
                 <span className="text-2xl mb-1">📧</span>
-                <span className="text-2xl font-bold">{totalApplications}</span>
-                <span className="text-xs text-muted-foreground">Totaal</span>
+                <span className="text-2xl font-bold">{hasActiveFilters ? displayedTotal : totalApplications}</span>
+                <span className="text-xs text-muted-foreground">Totaal{hasActiveFilters ? ' (gefilterd)' : ''}</span>
               </div>
               
               <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
                 <span className="text-2xl mb-1">🆕</span>
-                <span className="text-2xl font-bold text-blue-600">{stageStats[0]?.count || 0}</span>
+                <span className="text-2xl font-bold text-blue-600">{hasActiveFilters ? displayedNew : stageStats[0]?.count || 0}</span>
                 <span className="text-xs text-muted-foreground">Nieuw</span>
               </div>
               
               <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
                 <span className="text-2xl mb-1">✅</span>
                 <span className="text-2xl font-bold text-green-600">
-                  {stageStats.find(s => s.id === 'goedgekeurd')?.count || 0}
+                  {hasActiveFilters ? displayedApproved : stageStats.find(s => s.id === 'goedgekeurd')?.count || 0}
                 </span>
                 <span className="text-xs text-muted-foreground">Goedgekeurd</span>
               </div>
               
               <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
                 <span className="text-2xl mb-1">📊</span>
-                <span className="text-2xl font-bold">{avgCompleteness}%</span>
+                <span className="text-2xl font-bold">{hasActiveFilters ? displayedAvgCompleteness : avgCompleteness}%</span>
                 <span className="text-xs text-muted-foreground">Gemiddelde compleetheid</span>
               </div>
             </div>
