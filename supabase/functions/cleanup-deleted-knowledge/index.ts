@@ -49,38 +49,60 @@ serve(async (req) => {
 
     const itemIds = deletedItems.map((item: any) => item.id);
 
-    // Step 1: Delete embeddings first
-    const { error: embeddingError } = await supabase
-      .from('knowledge_embeddings')
-      .delete()
-      .in('knowledge_id', itemIds);
+    // Step 1: Delete embeddings first (batch by 500)
+    const batchSize = 500;
+    let embeddingDeleteCount = 0;
+    
+    for (let i = 0; i < itemIds.length; i += batchSize) {
+      const batch = itemIds.slice(i, i + batchSize);
+      const { error: embeddingError, count } = await supabase
+        .from('knowledge_embeddings')
+        .delete({ count: 'exact' })
+        .in('knowledge_id', batch);
 
-    if (embeddingError) {
-      console.error('⚠️ Error deleting embeddings:', embeddingError);
-      // Continue anyway - embeddings might not exist
-    } else {
-      console.log(`✅ Deleted embeddings for ${itemIds.length} items`);
+      if (embeddingError) {
+        console.error(`⚠️ Error deleting embeddings batch ${i}-${i+batch.length}:`, embeddingError.message, embeddingError.details);
+      } else {
+        embeddingDeleteCount += count || 0;
+      }
     }
+    console.log(`✅ Deleted ${embeddingDeleteCount} embeddings`);
 
-    // Step 2: Delete knowledge versions
-    const { error: versionsError } = await supabase
-      .from('ai_knowledge_versions')
-      .delete()
-      .in('knowledge_id', itemIds);
+    // Step 2: Delete knowledge versions (batch by 500)
+    let versionDeleteCount = 0;
+    
+    for (let i = 0; i < itemIds.length; i += batchSize) {
+      const batch = itemIds.slice(i, i + batchSize);
+      const { error: versionsError, count } = await supabase
+        .from('ai_knowledge_versions')
+        .delete({ count: 'exact' })
+        .in('knowledge_id', batch);
 
-    if (versionsError) {
-      console.error('⚠️ Error deleting versions:', versionsError);
-    } else {
-      console.log(`✅ Deleted version history for ${itemIds.length} items`);
+      if (versionsError) {
+        console.error(`⚠️ Error deleting versions batch ${i}-${i+batch.length}:`, versionsError.message, versionsError.details);
+      } else {
+        versionDeleteCount += count || 0;
+      }
     }
+    console.log(`✅ Deleted ${versionDeleteCount} version history records`);
 
-    // Step 3: Hard delete the knowledge items
-    const { error: deleteError } = await supabase
-      .from('ai_knowledge_base')
-      .delete()
-      .in('id', itemIds);
+    // Step 3: Hard delete the knowledge items (batch by 500)
+    let knowledgeDeleteCount = 0;
+    
+    for (let i = 0; i < itemIds.length; i += batchSize) {
+      const batch = itemIds.slice(i, i + batchSize);
+      const { error: deleteError, count } = await supabase
+        .from('ai_knowledge_base')
+        .delete({ count: 'exact' })
+        .in('id', batch);
 
-    if (deleteError) throw deleteError;
+      if (deleteError) {
+        console.error(`⚠️ Error deleting knowledge batch ${i}-${i+batch.length}:`, deleteError.message, deleteError.details);
+        throw deleteError;
+      }
+      knowledgeDeleteCount += count || 0;
+    }
+    console.log(`✅ Deleted ${knowledgeDeleteCount} knowledge items`);
 
     console.log(`🗑️ Permanently deleted ${deletedItems.length} knowledge items`);
 
