@@ -7,15 +7,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { toast } from "sonner";
 import { 
   User, Phone, Mail, MapPin, Briefcase, Car, Calendar, 
-  Star, Edit, Trash2, CheckCircle2, X 
+  Star, Edit, Trash2, CheckCircle2, X, Link2 
 } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import { MatchingPanel } from "./MatchingPanel";
 
 interface Professional {
   id: string;
@@ -178,7 +180,7 @@ export function ProfessionalDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <span className="flex items-center gap-2">
@@ -205,7 +207,19 @@ export function ProfessionalDetailModal({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <Tabs defaultValue="details" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="details">
+              <User className="h-4 w-4 mr-2" />
+              Details
+            </TabsTrigger>
+            <TabsTrigger value="matching">
+              <Link2 className="h-4 w-4 mr-2" />
+              Plaatsing
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="details" className="space-y-6 mt-6">
           {/* Basis Informatie */}
           <div>
             <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
@@ -548,7 +562,16 @@ export function ProfessionalDetailModal({
               </Button>
             </div>
           )}
-        </div>
+          </TabsContent>
+
+          <TabsContent value="matching" className="mt-6">
+            <MatchingPanel 
+              professionalId={professional.id}
+              professionalName={professional.full_name}
+              onSuccess={onSuccess}
+            />
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

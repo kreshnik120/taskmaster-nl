@@ -20,6 +20,8 @@ import AfgerondeTaken from "./pages/AfgerondeTaken";
 import AiTraining from "./pages/AiTraining";
 import Professionals from "./pages/Professionals";
 import Sollicitaties from "./pages/Sollicitaties";
+import Klanten from "./pages/Klanten";
+import Plaatsingen from "./pages/Plaatsingen";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -85,6 +87,8 @@ const App = () => (
           <Route path="/ai-training" element={<AiTraining />} />
           <Route path="/professionals" element={<Professionals />} />
           <Route path="/sollicitaties" element={<Sollicitaties />} />
+          <Route path="/klanten" element={<Klanten />} />
+          <Route path="/plaatsingen" element={<Plaatsingen />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
