@@ -842,33 +842,45 @@ export type Database = {
       }
       clients: {
         Row: {
+          address: string | null
           company: string
           created_at: string
+          email: string | null
           id: string
           name: string
+          notes: string | null
           org_id: string
+          phone: string | null
           revenue_per_hour: number | null
           tier: number
           updated_at: string
           weekly_hours: number | null
         }
         Insert: {
+          address?: string | null
           company: string
           created_at?: string
+          email?: string | null
           id?: string
           name: string
+          notes?: string | null
           org_id: string
+          phone?: string | null
           revenue_per_hour?: number | null
           tier?: number
           updated_at?: string
           weekly_hours?: number | null
         }
         Update: {
+          address?: string | null
           company?: string
           created_at?: string
+          email?: string | null
           id?: string
           name?: string
+          notes?: string | null
           org_id?: string
+          phone?: string | null
           revenue_per_hour?: number | null
           tier?: number
           updated_at?: string
