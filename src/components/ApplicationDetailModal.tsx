@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2, Building2 } from "lucide-react";
+import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2, Building2, UserPlus } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
@@ -96,6 +96,9 @@ export function ApplicationDetailModal({
   // CV upload/download
   const [uploadingCV, setUploadingCV] = useState(false);
   const [downloadingCV, setDownloadingCV] = useState(false);
+  
+  // Convert to professional
+  const [convertingToProfessional, setConvertingToProfessional] = useState(false);
 
   // Load linked tasks
   useEffect(() => {
@@ -588,6 +591,104 @@ export function ApplicationDetailModal({
       toast.error("Fout bij aanmaken actie");
     } finally {
       setCreatingAction(false);
+    }
+  };
+
+  const handleConvertToProfessional = async () => {
+    if (!application.extracted_data?.naam || !application.extracted_data?.functie_niveau) {
+      toast.error("Naam en functie niveau zijn verplicht");
+      return;
+    }
+
+    setConvertingToProfessional(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Je moet ingelogd zijn");
+        return;
+      }
+
+      // Get organization ID
+      const { data: orgData } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!orgData) {
+        toast.error("Geen organisatie gevonden");
+        return;
+      }
+
+      // Check for duplicate professional by email
+      const { data: existingProfessional } = await supabase
+        .from('professionals')
+        .select('id, full_name')
+        .eq('email', application.email_from)
+        .maybeSingle();
+
+      if (existingProfessional) {
+        toast.error(`Professional bestaat al: ${existingProfessional.full_name}`);
+        setConvertingToProfessional(false);
+        return;
+      }
+
+      // Map application data to professional
+      const professionalData = {
+        org_id: orgData.org_id,
+        full_name: application.extracted_data.naam,
+        functie_niveau: application.extracted_data.functie_niveau,
+        werkvorm: application.extracted_data.werkvorm || null,
+        regio: application.extracted_data.regio || null,
+        telefoonnummer: application.extracted_data.telefoon || null,
+        email: application.email_from,
+        heeft_auto: application.extracted_data.eigen_vervoer || false,
+        skills: application.extracted_data.ervaring_sector || [],
+        status: 'beschikbaar',
+        tags: application.extracted_data.doelgroep_ervaring || []
+      };
+
+      // Create professional
+      const { data: newProfessional, error: professionalError } = await supabase
+        .from('professionals')
+        .insert(professionalData)
+        .select()
+        .single();
+
+      if (professionalError) throw professionalError;
+
+      // Link application to professional
+      const { error: updateError } = await supabase
+        .from('professional_applications')
+        .update({ professional_id: newProfessional.id })
+        .eq('id', application.id);
+
+      if (updateError) throw updateError;
+
+      // Log system event for AI learning
+      await supabase.from('system_events').insert({
+        event_type: 'professional_created_from_application',
+        entity_type: 'professional',
+        entity_id: newProfessional.id,
+        org_id: orgData.org_id,
+        user_id: user.id,
+        event_data: {
+          source_application_id: application.id,
+          functie_niveau: application.extracted_data.functie_niveau,
+          werkvorm: application.extracted_data.werkvorm,
+          regio: application.extracted_data.regio,
+          completeness_at_conversion: application.completeness_score
+        }
+      });
+
+      toast.success("Professional profiel aangemaakt!");
+      onApplicationUpdated();
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Error converting to professional:', error);
+      toast.error("Fout bij aanmaken professional profiel");
+    } finally {
+      setConvertingToProfessional(false);
     }
   };
 
@@ -1097,6 +1198,57 @@ export function ApplicationDetailModal({
                 </Button>
               )}
             </div>
+
+            {/* Convert to Professional - Only show when approved/placed and not yet converted */}
+            {(application.pipeline_stage === 'goedgekeurd' || application.pipeline_stage === 'geplaatst') && 
+             !application.professional_id && 
+             (application.completeness_score || 0) >= 80 && (
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
+                      <UserPlus className="h-4 w-4 text-green-600" />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-semibold text-green-900 mb-1">
+                      Klaar om Professional te worden!
+                    </h4>
+                    <p className="text-sm text-green-700 mb-3">
+                      Deze kandidaat is goedgekeurd en kan omgezet worden naar een professional profiel met alle gegevens.
+                    </p>
+                    <Button
+                      onClick={handleConvertToProfessional}
+                      disabled={convertingToProfessional}
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      size="sm"
+                    >
+                      {convertingToProfessional ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Profiel aanmaken...
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="h-4 w-4 mr-2" />
+                          Maak Professional Profiel
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Show linked professional if already converted */}
+            {application.professional_id && (
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <div className="flex items-center gap-2 text-sm text-blue-900">
+                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  <span className="font-medium">Gekoppeld aan professional profiel</span>
+                </div>
+              </div>
+            )}
 
             {/* Quick Action Buttons */}
             {!showActionForm && (
