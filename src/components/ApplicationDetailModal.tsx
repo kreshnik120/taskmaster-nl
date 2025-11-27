@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X } from "lucide-react";
+import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,6 +26,7 @@ interface Application {
   missing_info: any;
   extracted_data: any;
   professional_id: string | null;
+  cv_file_path: string | null;
   cv_file_name: string | null;
   created_at: string;
   updated_at: string | null;
@@ -90,6 +91,10 @@ export function ApplicationDetailModal({
     opmerkingen: "",
   });
   const [savingEdit, setSavingEdit] = useState(false);
+  
+  // CV upload/download
+  const [uploadingCV, setUploadingCV] = useState(false);
+  const [downloadingCV, setDownloadingCV] = useState(false);
 
   // Load linked tasks
   useEffect(() => {
@@ -347,6 +352,132 @@ export function ApplicationDetailModal({
       toast.error("Fout bij bijwerken van gegevens");
     } finally {
       setSavingEdit(false);
+    }
+  };
+
+  const handleCVUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    // Validatie: alleen PDF, max 10MB
+    if (file.type !== 'application/pdf') {
+      toast.error("Alleen PDF bestanden toegestaan");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Bestand mag maximaal 10MB zijn");
+      return;
+    }
+    
+    setUploadingCV(true);
+    try {
+      // Genereer unieke bestandsnaam
+      const filePath = `${application.id}/${Date.now()}_${file.name}`;
+      
+      // Upload naar Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('application-cvs')
+        .upload(filePath, file);
+      
+      if (uploadError) throw uploadError;
+      
+      // Update database record
+      const { error: updateError } = await supabase
+        .from('professional_applications')
+        .update({
+          cv_file_path: filePath,
+          cv_file_name: file.name,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', application.id);
+      
+      if (updateError) throw updateError;
+      
+      toast.success("CV succesvol geüpload");
+      onApplicationUpdated();
+    } catch (error) {
+      console.error('Error uploading CV:', error);
+      toast.error("Fout bij uploaden CV");
+    } finally {
+      setUploadingCV(false);
+    }
+  };
+
+  const handleCVDownload = async () => {
+    if (!application.cv_file_path) return;
+    
+    setDownloadingCV(true);
+    try {
+      const { data, error } = await supabase.storage
+        .from('application-cvs')
+        .download(application.cv_file_path);
+      
+      if (error) throw error;
+      
+      // Trigger browser download
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = application.cv_file_name || 'cv.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success("CV gedownload");
+    } catch (error) {
+      console.error('Error downloading CV:', error);
+      toast.error("Fout bij downloaden CV");
+    } finally {
+      setDownloadingCV(false);
+    }
+  };
+
+  const handleCVView = async () => {
+    if (!application.cv_file_path) return;
+    
+    try {
+      const { data } = await supabase.storage
+        .from('application-cvs')
+        .createSignedUrl(application.cv_file_path, 3600);
+      
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank');
+      }
+    } catch (error) {
+      console.error('Error viewing CV:', error);
+      toast.error("Fout bij openen CV");
+    }
+  };
+
+  const handleCVDelete = async () => {
+    if (!application.cv_file_path) return;
+    
+    try {
+      // Verwijder uit storage
+      const { error: deleteError } = await supabase.storage
+        .from('application-cvs')
+        .remove([application.cv_file_path]);
+      
+      if (deleteError) throw deleteError;
+      
+      // Update database
+      const { error: updateError } = await supabase
+        .from('professional_applications')
+        .update({
+          cv_file_path: null,
+          cv_file_name: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', application.id);
+      
+      if (updateError) throw updateError;
+      
+      toast.success("CV verwijderd");
+      onApplicationUpdated();
+    } catch (error) {
+      console.error('Error deleting CV:', error);
+      toast.error("Fout bij verwijderen CV");
     }
   };
 
@@ -789,13 +920,88 @@ export function ApplicationDetailModal({
             </div>
           )}
 
-          {/* CV File */}
-          {application.cv_file_name && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">{application.cv_file_name}</span>
+          {/* CV Section */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                CV Document
+              </span>
             </div>
-          )}
+            
+            {application.cv_file_path ? (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+                <FileText className="h-5 w-5 text-blue-600" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {application.cv_file_name}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCVView}
+                    title="Bekijken"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCVDownload}
+                    disabled={downloadingCV}
+                    title="Downloaden"
+                  >
+                    {downloadingCV ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCVDelete}
+                    className="text-destructive hover:text-destructive"
+                    title="Verwijderen"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="border-2 border-dashed rounded-lg p-6 text-center">
+                <input
+                  type="file"
+                  id="cv-upload"
+                  accept=".pdf"
+                  onChange={handleCVUpload}
+                  className="hidden"
+                  disabled={uploadingCV}
+                />
+                <label
+                  htmlFor="cv-upload"
+                  className="cursor-pointer flex flex-col items-center gap-2"
+                >
+                  {uploadingCV ? (
+                    <>
+                      <Loader2 className="h-8 w-8 text-muted-foreground animate-spin" />
+                      <span className="text-sm text-muted-foreground">Uploaden...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-8 w-8 text-muted-foreground" />
+                      <span className="text-sm font-medium">Klik om CV te uploaden</span>
+                      <span className="text-xs text-muted-foreground">
+                        PDF, maximaal 10MB
+                      </span>
+                    </>
+                  )}
+                </label>
+              </div>
+            )}
+          </div>
 
           {/* Email Body */}
           {application.email_body && (

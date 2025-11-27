@@ -25,6 +25,7 @@ interface Application {
   missing_info: any;
   extracted_data: any;
   professional_id: string | null;
+  cv_file_path: string | null;
   cv_file_name: string | null;
   created_at: string;
   updated_at: string | null;
