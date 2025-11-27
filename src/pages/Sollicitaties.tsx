@@ -134,16 +134,25 @@ const Sollicitaties = () => {
     }
 
     const applicationId = active.id as string;
-    const targetId = over.id as string;
     
-    // Valideer dat targetId een geldige stage is
+    // Bepaal de target kolom
+    // 1. Check of over.id zelf een geldige stage is
+    // 2. Zo niet, kijk naar de container waar het item in zit (bij drop op kaart)
+    let targetStage = over.id as string;
     const validStageIds = PIPELINE_STAGES.map(s => s.id);
-    if (!validStageIds.includes(targetId)) {
-      // User dropped on another card or outside valid column - ignore
-      return;
+    
+    if (!validStageIds.includes(targetStage)) {
+      // Over.id is een kaart-ID, gebruik de container
+      const containerId = over.data.current?.sortable?.containerId;
+      if (containerId && validStageIds.includes(containerId)) {
+        targetStage = containerId;
+      } else {
+        // Geen geldige drop target gevonden
+        return;
+      }
     }
 
-    const newStage = targetId;
+    const newStage = targetStage;
     
     const application = applications.find((a) => a.id === applicationId);
     if (!application || application.pipeline_stage === newStage) {

@@ -42,14 +42,34 @@ export async function convertApplicationToProfessional(
       return { success: false, error: "Not authenticated" };
     }
 
-    // Get organization ID
-    const { data: orgData } = await supabase
-      .from('user_organizations')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
+    // Bepaal org_id op basis van toegewezen bemiddelingsbureau
+    const assignedOrg = application.extracted_data?.assigned_organization;
+    let orgId: string | null = null;
+    
+    if (assignedOrg) {
+      // Haal de org_id op basis van bureau naam (ABCzorg of CitoZorg)
+      const { data: orgData } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('name', assignedOrg)
+        .maybeSingle();
+      
+      orgId = orgData?.id || null;
+    }
+    
+    // Fallback: eerste organisatie van gebruiker als geen bureau toegewezen
+    if (!orgId) {
+      const { data: userOrg } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle();
+      
+      orgId = userOrg?.org_id || null;
+    }
 
-    if (!orgData) {
+    if (!orgId) {
       if (showToast) {
         toast.error("Geen organisatie gevonden");
       }
@@ -77,7 +97,7 @@ export async function convertApplicationToProfessional(
 
     // Map application data to professional
     const professionalData = {
-      org_id: orgData.org_id,
+      org_id: orgId,
       full_name: application.extracted_data.naam,
       functie_niveau: application.extracted_data.functie_niveau,
       werkvorm: application.extracted_data.werkvorm || null,
@@ -112,7 +132,7 @@ export async function convertApplicationToProfessional(
       event_type: 'professional_created_from_application',
       entity_type: 'professional',
       entity_id: newProfessional.id,
-      org_id: orgData.org_id,
+      org_id: orgId,
       user_id: user.id,
       event_data: {
         source_application_id: application.id,
