@@ -1241,11 +1241,25 @@ export function ApplicationDetailModal({
             )}
 
             {/* Show linked professional if already converted */}
-            {application.professional_id && (
+            {application.professional_id && application.professionals && (
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <div className="flex items-center gap-2 text-sm text-blue-900">
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  <span className="font-medium">Gekoppeld aan professional profiel</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-sm text-blue-900">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <span className="font-medium">
+                      Gekoppeld aan professional: <strong>{application.professionals.full_name}</strong>
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="link"
+                    onClick={() => {
+                      window.location.href = `/professionals`;
+                    }}
+                    className="text-blue-600 hover:text-blue-700"
+                  >
+                    Bekijk profiel →
+                  </Button>
                 </div>
               </div>
             )}
