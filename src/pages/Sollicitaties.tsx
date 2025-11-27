@@ -353,13 +353,13 @@ const Sollicitaties = () => {
                 </SelectContent>
               </Select>
               
-              {/* Organisatie Filter */}
+              {/* Bureau Filter */}
               <Select value={filterOrganisatie} onValueChange={setFilterOrganisatie}>
                 <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="Organisatie" />
+                  <SelectValue placeholder="Bureau" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Alle organisaties</SelectItem>
+                  <SelectItem value="all">Alle bureaus</SelectItem>
                   {ORGANISATIES.map(org => (
                     <SelectItem key={org} value={org}>{org}</SelectItem>
                   ))}
