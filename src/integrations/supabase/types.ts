@@ -845,13 +845,17 @@ export type Database = {
           address: string | null
           company: string
           created_at: string
+          doelgroep: string[] | null
           email: string | null
+          gezochte_functies: string[] | null
           id: string
           name: string
           notes: string | null
           org_id: string
           phone: string | null
+          regio: string[] | null
           revenue_per_hour: number | null
+          sector: string[] | null
           tier: number
           updated_at: string
           weekly_hours: number | null
@@ -860,13 +864,17 @@ export type Database = {
           address?: string | null
           company: string
           created_at?: string
+          doelgroep?: string[] | null
           email?: string | null
+          gezochte_functies?: string[] | null
           id?: string
           name: string
           notes?: string | null
           org_id: string
           phone?: string | null
+          regio?: string[] | null
           revenue_per_hour?: number | null
+          sector?: string[] | null
           tier?: number
           updated_at?: string
           weekly_hours?: number | null
@@ -875,13 +883,17 @@ export type Database = {
           address?: string | null
           company?: string
           created_at?: string
+          doelgroep?: string[] | null
           email?: string | null
+          gezochte_functies?: string[] | null
           id?: string
           name?: string
           notes?: string | null
           org_id?: string
           phone?: string | null
+          regio?: string[] | null
           revenue_per_hour?: number | null
+          sector?: string[] | null
           tier?: number
           updated_at?: string
           weekly_hours?: number | null

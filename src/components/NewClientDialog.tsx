@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -23,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 
 const clientSchema = z.object({
   company: z.string().min(1, "Bedrijfsnaam is verplicht"),
@@ -49,12 +50,21 @@ const ORGANIZATIONS = [
   { id: "650e8400-e29b-41d4-a716-446655440001", name: "CitoZorg" },
 ];
 
+const SECTOREN = ["VVT", "GGZ", "GHZ", "Jeugdzorg", "Ziekenhuis/Klinisch", "Thuiszorg"];
+const DOELGROEPEN = ["Ouderen", "LVB", "Psychiatrie", "Somatiek", "Kinderen/Jeugd", "Verslaving"];
+const FUNCTIES = ["VIG", "HBO-V", "Verpleegkundige MBO", "Helpende", "Begeleider", "Persoonlijk begeleider", "GGZ-agoog"];
+
 export default function NewClientDialog({
   open,
   onOpenChange,
   onClientCreated,
 }: NewClientDialogProps) {
   const [submitting, setSubmitting] = useState(false);
+  const [regios, setRegios] = useState<string[]>([]);
+  const [newRegio, setNewRegio] = useState("");
+  const [sectors, setSectors] = useState<string[]>([]);
+  const [doelgroepen, setDoelgroepen] = useState<string[]>([]);
+  const [functies, setFuncties] = useState<string[]>([]);
 
   const {
     register,
@@ -77,6 +87,35 @@ export default function NewClientDialog({
   });
 
   const selectedOrgId = watch("org_id");
+  
+  const handleAddRegio = () => {
+    if (newRegio.trim() && !regios.includes(newRegio.trim())) {
+      setRegios([...regios, newRegio.trim()]);
+      setNewRegio("");
+    }
+  };
+  
+  const handleRemoveRegio = (regio: string) => {
+    setRegios(regios.filter(r => r !== regio));
+  };
+  
+  const toggleSector = (sector: string) => {
+    setSectors(prev => 
+      prev.includes(sector) ? prev.filter(s => s !== sector) : [...prev, sector]
+    );
+  };
+  
+  const toggleDoelgroep = (doelgroep: string) => {
+    setDoelgroepen(prev => 
+      prev.includes(doelgroep) ? prev.filter(d => d !== doelgroep) : [...prev, doelgroep]
+    );
+  };
+  
+  const toggleFunctie = (functie: string) => {
+    setFuncties(prev => 
+      prev.includes(functie) ? prev.filter(f => f !== functie) : [...prev, functie]
+    );
+  };
 
   const onSubmit = async (data: ClientFormData) => {
     setSubmitting(true);
@@ -87,7 +126,7 @@ export default function NewClientDialog({
         return;
       }
 
-      // Insert client
+      // Insert client with matching criteria
       const { error } = await supabase.from("clients").insert({
         company: data.company,
         name: data.name,
@@ -96,12 +135,20 @@ export default function NewClientDialog({
         phone: data.phone || null,
         address: data.address || null,
         notes: data.notes || null,
+        regio: regios,
+        sector: sectors,
+        doelgroep: doelgroepen,
+        gezochte_functies: functies,
       });
 
       if (error) throw error;
 
       toast.success("Klant succesvol toegevoegd");
       reset();
+      setRegios([]);
+      setSectors([]);
+      setDoelgroepen([]);
+      setFuncties([]);
       onClientCreated();
       onOpenChange(false);
     } catch (error: any) {
@@ -180,6 +227,94 @@ export default function NewClientDialog({
               {errors.org_id && (
                 <p className="text-sm text-destructive">{errors.org_id.message}</p>
               )}
+            </div>
+          </div>
+
+          {/* Matching Criteria */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold">Matching Criteria</h3>
+            
+            {/* Regio's */}
+            <div className="space-y-2">
+              <Label>Regio's</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={newRegio}
+                  onChange={(e) => setNewRegio(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddRegio())}
+                  placeholder="Bijv. Nijmegen, Utrecht..."
+                />
+                <Button type="button" onClick={handleAddRegio} variant="outline" size="sm">
+                  +
+                </Button>
+              </div>
+              {regios.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {regios.map((regio) => (
+                    <Badge key={regio} variant="secondary" className="cursor-pointer">
+                      {regio}
+                      <X 
+                        className="ml-1 h-3 w-3" 
+                        onClick={() => handleRemoveRegio(regio)}
+                      />
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Sector */}
+            <div className="space-y-2">
+              <Label>Sector</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {SECTOREN.map((sector) => (
+                  <Badge
+                    key={sector}
+                    variant={sectors.includes(sector) ? "default" : "outline"}
+                    className="cursor-pointer text-xs"
+                    onClick={() => toggleSector(sector)}
+                  >
+                    {sector}
+                    {sectors.includes(sector) && <X className="ml-1 h-3 w-3" />}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            {/* Doelgroep */}
+            <div className="space-y-2">
+              <Label>Doelgroep</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {DOELGROEPEN.map((dg) => (
+                  <Badge
+                    key={dg}
+                    variant={doelgroepen.includes(dg) ? "default" : "outline"}
+                    className="cursor-pointer text-xs"
+                    onClick={() => toggleDoelgroep(dg)}
+                  >
+                    {dg}
+                    {doelgroepen.includes(dg) && <X className="ml-1 h-3 w-3" />}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            {/* Gezochte functies */}
+            <div className="space-y-2">
+              <Label>Gezochte functies</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {FUNCTIES.map((functie) => (
+                  <Badge
+                    key={functie}
+                    variant={functies.includes(functie) ? "default" : "outline"}
+                    className="cursor-pointer text-xs"
+                    onClick={() => toggleFunctie(functie)}
+                  >
+                    {functie}
+                    {functies.includes(functie) && <X className="ml-1 h-3 w-3" />}
+                  </Badge>
+                ))}
+              </div>
             </div>
           </div>
 
