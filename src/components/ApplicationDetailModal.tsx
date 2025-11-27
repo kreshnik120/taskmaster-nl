@@ -69,6 +69,16 @@ export function ApplicationDetailModal({
   const [actionPriority, setActionPriority] = useState("MEDIUM");
   const [actionNotes, setActionNotes] = useState("");
   const [creatingAction, setCreatingAction] = useState(false);
+  
+  // Edit mode
+  const [editMode, setEditMode] = useState(false);
+  const [editData, setEditData] = useState({
+    telefoon: "",
+    regio: "",
+    functie_niveau: "",
+    werkvorm: "",
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Load linked tasks
   useEffect(() => {
@@ -76,6 +86,18 @@ export function ApplicationDetailModal({
       loadLinkedTasks();
     }
   }, [application?.id, open]);
+
+  // Initialize edit data
+  useEffect(() => {
+    if (application && editMode) {
+      setEditData({
+        telefoon: application.extracted_data?.telefoon || "",
+        regio: application.extracted_data?.regio || "",
+        functie_niveau: application.extracted_data?.functie_niveau || "",
+        werkvorm: application.extracted_data?.werkvorm || "",
+      });
+    }
+  }, [application, editMode]);
 
   const loadLinkedTasks = async () => {
     if (!application?.id) return;
@@ -124,10 +146,21 @@ export function ApplicationDetailModal({
   const handleStageChange = async (newStage: string) => {
     setUpdating(true);
     try {
+      // Map pipeline_stage to status (same mapping as handleDragEnd)
+      const stageToStatus: Record<string, string> = {
+        nieuw: "nieuw",
+        screening: "in_verwerking",
+        interview: "in_gesprek",
+        goedgekeurd: "klaar_voor_review",
+        geplaatst: "geaccepteerd",
+      };
+      const newStatus = stageToStatus[newStage] || "nieuw";
+
       const { error } = await supabase
         .from("professional_applications")
         .update({ 
           pipeline_stage: newStage,
+          status: newStatus,
           updated_at: new Date().toISOString()
         })
         .eq("id", application.id);
@@ -177,11 +210,77 @@ export function ApplicationDetailModal({
     return labels[type] || type;
   };
 
+  const handleSaveEdit = async () => {
+    if (!application?.id) return;
+
+    setSavingEdit(true);
+    try {
+      // Merge edit data with existing extracted_data
+      const updatedExtractedData = {
+        ...application.extracted_data,
+        ...editData,
+      };
+
+      // Calculate completeness score
+      const fields = {
+        naam: updatedExtractedData.naam,
+        email: application.email_from,
+        functie_niveau: updatedExtractedData.functie_niveau,
+        werkvorm: updatedExtractedData.werkvorm,
+        regio: updatedExtractedData.regio,
+        telefoon: updatedExtractedData.telefoon,
+        ervaring_sector: updatedExtractedData.ervaring_sector,
+        beschikbaarheid: updatedExtractedData.beschikbaarheid,
+      };
+
+      const weights = {
+        naam: 15,
+        email: 15,
+        functie_niveau: 20,
+        werkvorm: 15,
+        regio: 10,
+        telefoon: 10,
+        ervaring_sector: 10,
+        beschikbaarheid: 5,
+      };
+
+      let score = 0;
+      Object.entries(fields).forEach(([key, value]) => {
+        if (value) {
+          score += weights[key as keyof typeof weights] || 0;
+        }
+      });
+
+      const completeness_score = Math.round(score);
+
+      // Update application
+      const { error } = await supabase
+        .from("professional_applications")
+        .update({
+          extracted_data: updatedExtractedData,
+          completeness_score,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", application.id);
+
+      if (error) throw error;
+
+      toast.success("Gegevens bijgewerkt");
+      setEditMode(false);
+      onApplicationUpdated();
+    } catch (error) {
+      console.error("Error updating application:", error);
+      toast.error("Fout bij bijwerken van gegevens");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const handleCreateAction = async () => {
     if (!application?.id) return;
 
     // Validate action preconditions
-    if (actionType === "call" && !application.extracted_data?.telefoonnummer) {
+    if (actionType === "call" && !application.extracted_data?.telefoon) {
       toast.error("Telefoonnummer is vereist om deze actie aan te maken");
       return;
     }
@@ -288,43 +387,124 @@ export function ApplicationDetailModal({
 
             {/* Contactgegevens Section */}
             <div className="p-4 rounded-lg bg-muted/30 space-y-3">
-              <p className="text-sm font-semibold">Contactgegevens</p>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-muted-foreground" />
-                  <a 
-                    href={`mailto:${application.email_from}`}
-                    className="text-sm text-primary hover:underline"
-                    onClick={(e) => e.stopPropagation()}
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">Contactgegevens</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditMode(!editMode)}
+                >
+                  {editMode ? "Annuleren" : "Bewerk"}
+                </Button>
+              </div>
+              
+              {editMode ? (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground">Telefoonnummer</label>
+                    <Input
+                      placeholder="06..."
+                      value={editData.telefoon}
+                      onChange={(e) => setEditData({ ...editData, telefoon: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground">Regio</label>
+                    <Input
+                      placeholder="Utrecht, Amsterdam..."
+                      value={editData.regio}
+                      onChange={(e) => setEditData({ ...editData, regio: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground">Functieniveau</label>
+                    <Select 
+                      value={editData.functie_niveau} 
+                      onValueChange={(value) => setEditData({ ...editData, functie_niveau: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecteer functieniveau" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="VIG">VIG</SelectItem>
+                        <SelectItem value="HBO-V">HBO-V</SelectItem>
+                        <SelectItem value="Verpleegkundige MBO">Verpleegkundige MBO</SelectItem>
+                        <SelectItem value="Helpende">Helpende</SelectItem>
+                        <SelectItem value="Begeleider">Begeleider</SelectItem>
+                        <SelectItem value="Persoonlijk begeleider">Persoonlijk begeleider</SelectItem>
+                        <SelectItem value="GGZ-agoog">GGZ-agoog</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground">Werkvorm</label>
+                    <Select 
+                      value={editData.werkvorm} 
+                      onValueChange={(value) => setEditData({ ...editData, werkvorm: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecteer werkvorm" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ZZP">ZZP</SelectItem>
+                        <SelectItem value="Uitzendkracht">Uitzendkracht</SelectItem>
+                        <SelectItem value="ABCito constructie">ABCito constructie</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    onClick={handleSaveEdit}
+                    disabled={savingEdit}
+                    className="w-full"
                   >
-                    {application.email_from}
-                  </a>
+                    {savingEdit ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Opslaan...
+                      </>
+                    ) : (
+                      "Opslaan"
+                    )}
+                  </Button>
                 </div>
-                {application.extracted_data?.telefoonnummer && (
+              ) : (
+                <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    <Mail className="h-4 w-4 text-muted-foreground" />
                     <a 
-                      href={`tel:${application.extracted_data.telefoonnummer}`}
+                      href={`mailto:${application.email_from}`}
                       className="text-sm text-primary hover:underline"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {application.extracted_data.telefoonnummer}
+                      {application.email_from}
                     </a>
                   </div>
-                )}
-                {!application.extracted_data?.telefoonnummer && (
-                  <div className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Telefoonnummer niet bekend</span>
-                  </div>
-                )}
-                {application.extracted_data?.regio && (
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Regio: {application.extracted_data.regio}</span>
-                  </div>
-                )}
-              </div>
+                  {application.extracted_data?.telefoon && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-4 w-4 text-muted-foreground" />
+                      <a 
+                        href={`tel:${application.extracted_data.telefoon}`}
+                        className="text-sm text-primary hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {application.extracted_data.telefoon}
+                      </a>
+                    </div>
+                  )}
+                  {!application.extracted_data?.telefoon && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Telefoonnummer niet bekend</span>
+                    </div>
+                  )}
+                  {application.extracted_data?.regio && (
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">Regio: {application.extracted_data.regio}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Professional Link */}
@@ -454,16 +634,16 @@ export function ApplicationDetailModal({
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!application.extracted_data?.telefoonnummer}
+                  disabled={!application.extracted_data?.telefoon}
                   onClick={() => {
                     setActionType("call");
                     setShowActionForm(true);
                   }}
-                  title={!application.extracted_data?.telefoonnummer ? "Voeg eerst telefoonnummer toe" : ""}
+                  title={!application.extracted_data?.telefoon ? "Voeg eerst telefoonnummer toe" : ""}
                 >
                   <Phone className="h-4 w-4 mr-2" />
                   Bel kandidaat
-                  {!application.extracted_data?.telefoonnummer && (
+                  {!application.extracted_data?.telefoon && (
                     <AlertCircle className="h-3 w-3 ml-1 text-yellow-600" />
                   )}
                 </Button>
