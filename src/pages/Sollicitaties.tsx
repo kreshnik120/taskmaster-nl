@@ -179,6 +179,21 @@ const Sollicitaties = () => {
 
       const stage = PIPELINE_STAGES.find(s => s.id === newStage);
       toast.success(`Sollicitatie verplaatst naar ${stage?.name}`);
+
+      // Automatische conversie naar professional bij plaatsing
+      if (newStage === "geplaatst" && !application.professional_id && (application.completeness_score || 0) >= 80) {
+        const { convertApplicationToProfessional } = await import("@/lib/convertApplicationToProfessional");
+        
+        const result = await convertApplicationToProfessional(application, {
+          showToast: true,
+          silent: false
+        });
+
+        if (result.success) {
+          // Refresh applications to show the linked professional
+          loadApplications();
+        }
+      }
     } catch (err: any) {
       console.error("Error moving application:", err);
       console.error("Error details:", {
