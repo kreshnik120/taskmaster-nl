@@ -1139,6 +1139,22 @@ export function ApplicationDetailModal({
                   <ClipboardCheck className="h-4 w-4 mr-2" />
                   Check referenties
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={application.completeness_score === null || application.completeness_score < 100}
+                  onClick={() => {
+                    setActionType("contract");
+                    setShowActionForm(true);
+                  }}
+                  title={application.completeness_score !== null && application.completeness_score < 100 ? "Profiel moet 100% compleet zijn" : ""}
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Contract opmaken
+                  {(application.completeness_score === null || application.completeness_score < 100) && (
+                    <AlertCircle className="h-3 w-3 ml-1 text-yellow-600" />
+                  )}
+                </Button>
               </div>
             )}
 
@@ -1299,7 +1315,7 @@ export function ApplicationDetailModal({
                             <span>• {task.profiles.name}</span>
                           )}
                           {task.due_at && (
-                            <span>• Deadline: {format(new Date(task.due_at), "d MMM", { locale: nl })}</span>
+                            <span>• Deadline: {format(new Date(task.due_at), "d MMM HH:mm", { locale: nl })}</span>
                           )}
                         </div>
                       </div>

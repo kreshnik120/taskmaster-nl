@@ -61,6 +61,7 @@ const Sollicitaties = () => {
   const [filterFunctieNiveau, setFilterFunctieNiveau] = useState<string>("all");
   const [filterWerkvorm, setFilterWerkvorm] = useState<string>("all");
   const [filterOrganisatie, setFilterOrganisatie] = useState<string>("all");
+  const [filterRegio, setFilterRegio] = useState<string>("");
   const navigate = useNavigate();
 
   const getGreeting = () => {
@@ -212,7 +213,11 @@ const Sollicitaties = () => {
       const organisatieMatch = filterOrganisatie === "all" || 
         app.extracted_data?.assigned_organization === filterOrganisatie;
       
-      return searchMatch && functieMatch && werkvormMatch && organisatieMatch;
+      // Filter op regio
+      const regioMatch = filterRegio === "" || 
+        (app.extracted_data?.regio?.toLowerCase().includes(filterRegio.toLowerCase()));
+      
+      return searchMatch && functieMatch && werkvormMatch && organisatieMatch && regioMatch;
     });
   };
 
@@ -269,7 +274,7 @@ const Sollicitaties = () => {
     weekAgo.setDate(weekAgo.getDate() - 7);
     return new Date(app.created_at) >= weekAgo;
   }).length;
-  const hasActiveFilters = searchQuery || filterFunctieNiveau !== "all" || filterWerkvorm !== "all" || filterOrganisatie !== "all";
+  const hasActiveFilters = searchQuery || filterFunctieNiveau !== "all" || filterWerkvorm !== "all" || filterOrganisatie !== "all" || filterRegio !== "";
 
   return (
     <SidebarProvider>
@@ -361,6 +366,16 @@ const Sollicitaties = () => {
                 </SelectContent>
               </Select>
               
+              {/* Regio Filter */}
+              <div className="relative min-w-[150px]">
+                <Input
+                  placeholder="Filter op regio..."
+                  value={filterRegio}
+                  onChange={(e) => setFilterRegio(e.target.value)}
+                  className="h-10"
+                />
+              </div>
+              
               {/* Reset Filters Button */}
               {hasActiveFilters && (
                 <Button 
@@ -371,6 +386,7 @@ const Sollicitaties = () => {
                     setFilterFunctieNiveau("all");
                     setFilterWerkvorm("all");
                     setFilterOrganisatie("all");
+                    setFilterRegio("");
                   }}
                 >
                   <X className="h-4 w-4 mr-1" />
