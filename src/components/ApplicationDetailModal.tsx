@@ -294,6 +294,36 @@ export function ApplicationDetailModal({
     }));
   };
 
+  const handleQuickOrganizationAssign = async (organization: string) => {
+    if (!application?.id) return;
+
+    setUpdating(true);
+    try {
+      const updatedExtractedData = {
+        ...application.extracted_data,
+        assigned_organization: organization,
+      };
+
+      const { error } = await supabase
+        .from("professional_applications")
+        .update({
+          extracted_data: updatedExtractedData,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", application.id);
+
+      if (error) throw error;
+
+      toast.success(`Bemiddelingsbureau ingesteld op ${organization}`);
+      onApplicationUpdated();
+    } catch (error) {
+      console.error("Error assigning organization:", error);
+      toast.error("Fout bij toewijzen bemiddelingsbureau");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleSaveEdit = async () => {
     if (!application?.id) return;
 
@@ -897,18 +927,18 @@ export function ApplicationDetailModal({
 
                   <Separator className="my-4" />
 
-                  {/* Organisatie Toewijzing */}
+                  {/* Bemiddelingsbureau Toewijzing */}
                   <div className="space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground">Organisatie Toewijzing</p>
+                    <p className="text-xs font-semibold text-muted-foreground">Bemiddelingsbureau Toewijzing</p>
                     
                     <div className="space-y-1.5">
-                      <label className="text-xs text-muted-foreground">Inzet via organisatie</label>
+                      <label className="text-xs text-muted-foreground">Inzet via bureau</label>
                       <Select 
                         value={editData.assigned_organization} 
                         onValueChange={(value) => setEditData({ ...editData, assigned_organization: value })}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecteer organisatie" />
+                          <SelectValue placeholder="Kies ABCzorg of CitoZorg" />
                         </SelectTrigger>
                         <SelectContent>
                           {ORGANISATIES.map(org => (
@@ -917,7 +947,7 @@ export function ApplicationDetailModal({
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">
-                        Via welke organisatie wordt de kandidaat ingezet?
+                        Via welk bureau wordt deze kandidaat bemiddeld?
                       </p>
                     </div>
                   </div>
@@ -1005,11 +1035,30 @@ export function ApplicationDetailModal({
             {!application.extracted_data?.assigned_organization && (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-dashed">
                 <Building2 className="h-4 w-4 text-muted-foreground" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Organisatie nog niet toegewezen</p>
-                  <p className="text-xs text-primary cursor-pointer hover:underline" onClick={() => setEditMode(true)}>
-                    Klik om toe te wijzen
-                  </p>
+                <div className="flex-1">
+                  <p className="text-xs text-muted-foreground mb-2">Bemiddelingsbureau nog niet gekozen</p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleQuickOrganizationAssign("ABCzorg")}
+                      disabled={updating}
+                      className="border-blue-500 hover:bg-blue-500/10 text-xs"
+                    >
+                      {updating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                      ABCzorg
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleQuickOrganizationAssign("CitoZorg")}
+                      disabled={updating}
+                      className="border-purple-500 hover:bg-purple-500/10 text-xs"
+                    >
+                      {updating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                      CitoZorg
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
