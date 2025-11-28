@@ -365,129 +365,81 @@ const Kanban = () => {
     <>
       {/* Hero Section */}
       <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <div className="flex items-center gap-3 mb-2">
-                    <h1 className="text-4xl font-bold">
-                      {getGreeting()}, {user?.user_metadata?.name || 'daar'}
-                    </h1>
-                    {aiLoading && (
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground px-3 py-1 rounded-full bg-muted/50">
-                        <Sparkles className="h-4 w-4 animate-pulse" />
-                        AI scoring...
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-xl text-muted-foreground">
-                    {format(new Date(), "EEEE d MMMM", { locale: nl })}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => {
-                      const blockedColumn = columns.find(c => c.status === 'BLOCKED');
-                      if (blockedColumn) {
-                        document.getElementById(`column-${blockedColumn.id}`)?.scrollIntoView({ behavior: 'smooth' });
-                      }
-                    }}
-                    disabled={getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length === 0}
-                  >
-                    🔥 Toon blocked
-                  </Button>
-                  <Button onClick={() => setDialogOpen(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Nieuwe taak
-                  </Button>
-                </div>
-              </div>
-              
-              {/* Smart Summary */}
-              <div className="bg-muted/30 rounded-lg p-4 space-y-2">
-                <p className="text-sm">
-                  📊 Je hebt <strong>{tasks.filter(t => !t.completed_at).length} actieve taken</strong> verdeeld over {columns.length} kolommen
-                </p>
-                {getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length > 0 && (
-                  <p className="text-sm text-destructive">
-                    ⚠️ <strong>{getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length} geblokkeerde taken</strong> vereisen aandacht
-                  </p>
-                )}
-              </div>
-            </div>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h1 className="text-5xl font-bold mb-1">
+              {getGreeting()}, {user?.user_metadata?.name || 'daar'}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {format(new Date(), "EEEE d MMMM", { locale: nl })}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={() => setDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nieuwe taak
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => {
+                const blockedColumn = columns.find(c => c.status === 'BLOCKED');
+                if (blockedColumn) {
+                  document.getElementById(`column-${blockedColumn.id}`)?.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+              disabled={getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length === 0}
+              className="text-muted-foreground"
+            >
+              Toon blocked →
+            </Button>
+          </div>
+        </div>
+        
+        {/* Smart Summary */}
+        <div className="space-y-1">
+          <p className="text-sm text-muted-foreground">
+            Je hebt <strong className="text-foreground">{tasks.filter(t => !t.completed_at).length} actieve taken</strong>
+          </p>
+          {getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length > 0 && (
+            <p className="text-sm text-destructive">
+              <strong>{getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length} geblokkeerde taken</strong> vereisen aandacht
+            </p>
+          )}
+        </div>
+      </div>
 
-            {/* Compact Stats Bar */}
-            <div className="grid grid-cols-4 gap-3 mb-6">
-              <button
-                onClick={() => {
-                  const backlogColumn = columns.find(c => c.status === 'BACKLOG');
-                  if (backlogColumn) {
-                    document.getElementById(`column-${backlogColumn.id}`)?.scrollIntoView({ behavior: 'smooth' });
-                  }
-                }}
-                className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border-2 border-transparent hover:border-primary/20"
-              >
-                <span className="text-2xl mb-1">📋</span>
-                <span className="text-2xl font-bold">
-                  {getTasksForColumn(columns.find(c => c.status === 'BACKLOG')?.id || '').length}
-                </span>
-                <span className="text-xs text-muted-foreground">Backlog</span>
-              </button>
-              
-              <button
-                onClick={() => {
-                  const doingColumn = columns.find(c => c.status === 'DOING');
-                  if (doingColumn) {
-                    document.getElementById(`column-${doingColumn.id}`)?.scrollIntoView({ behavior: 'smooth' });
-                  }
-                }}
-                className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border-2 border-transparent hover:border-blue-500/20"
-              >
-                <span className="text-2xl mb-1">🏃</span>
-                <span className="text-2xl font-bold text-blue-600">
-                  {getTasksForColumn(columns.find(c => c.status === 'DOING')?.id || '').length + 
-                   getTasksForColumn(columns.find(c => c.status === 'REVIEW')?.id || '').length}
-                </span>
-                <span className="text-xs text-muted-foreground">Bezig</span>
-              </button>
-              
-              <button
-                onClick={() => {
-                  const blockedColumn = columns.find(c => c.status === 'BLOCKED');
-                  if (blockedColumn) {
-                    document.getElementById(`column-${blockedColumn.id}`)?.scrollIntoView({ behavior: 'smooth' });
-                  }
-                }}
-                className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border-2 border-transparent hover:border-destructive/20"
-                disabled={getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length === 0}
-              >
-                <span className="text-2xl mb-1">🚫</span>
-                <span className={`text-2xl font-bold ${
-                  getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length > 0 
-                    ? 'text-destructive' 
-                    : 'text-muted-foreground'
-                }`}>
-                  {getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length}
-                </span>
-                <span className="text-xs text-muted-foreground">Blocked</span>
-              </button>
-              
-              <button
-                onClick={() => {
-                  const doneColumn = columns.find(c => c.status === 'DONE');
-                  if (doneColumn) {
-                    document.getElementById(`column-${doneColumn.id}`)?.scrollIntoView({ behavior: 'smooth' });
-                  }
-                }}
-                className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border-2 border-transparent hover:border-green-500/20"
-              >
-                <span className="text-2xl mb-1">✅</span>
-                <span className="text-2xl font-bold text-green-600">
-                  {tasks.filter(t => t.completed_at && new Date(t.completed_at).toDateString() === new Date().toDateString()).length}
-                </span>
-                <span className="text-xs text-muted-foreground">Vandaag</span>
-              </button>
-            </div>
+      {/* Stats Bar */}
+      <div className="grid grid-cols-4 gap-3 mb-6">
+        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/10">
+          <span className="text-3xl font-bold">
+            {getTasksForColumn(columns.find(c => c.status === 'BACKLOG')?.id || '').length}
+          </span>
+          <span className="text-xs text-muted-foreground mt-1">Backlog</span>
+        </div>
+        
+        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/10">
+          <span className="text-3xl font-bold">
+            {getTasksForColumn(columns.find(c => c.status === 'DOING')?.id || '').length + 
+             getTasksForColumn(columns.find(c => c.status === 'REVIEW')?.id || '').length}
+          </span>
+          <span className="text-xs text-muted-foreground mt-1">Actief</span>
+        </div>
+        
+        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/10">
+          <span className="text-3xl font-bold">
+            {getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length}
+          </span>
+          <span className="text-xs text-muted-foreground mt-1">Blocked</span>
+        </div>
+        
+        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/10">
+          <span className="text-3xl font-bold">
+            {tasks.filter(t => t.completed_at && new Date(t.completed_at).toDateString() === new Date().toDateString()).length}
+          </span>
+          <span className="text-xs text-muted-foreground mt-1">Vandaag</span>
+        </div>
+      </div>
 
             <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
               <div className="flex gap-4 overflow-x-auto pb-4">

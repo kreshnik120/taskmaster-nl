@@ -87,7 +87,7 @@ export function KanbanColumn({ id, title, tasks, status, onUpdateName, onTaskCli
   };
 
   return (
-    <Card className="flex-shrink-0 w-80">
+    <Card className="flex-shrink-0 w-80 bg-card">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div 
@@ -95,20 +95,19 @@ export function KanbanColumn({ id, title, tasks, status, onUpdateName, onTaskCli
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
           >
-            <div className={`w-2 h-2 rounded-full ${statusColors[status]}`} />
             {isEditing ? (
               <Input
                 value={editedName}
                 onChange={(e) => setEditedName(e.target.value)}
                 onBlur={handleSave}
                 onKeyDown={handleKeyDown}
-                className="h-7 text-sm font-semibold"
+                className="h-7 text-sm font-medium"
                 autoFocus
                 maxLength={50}
               />
             ) : (
               <CardTitle 
-                className="text-sm font-semibold cursor-pointer hover:text-primary transition-colors flex items-center gap-2"
+                className="text-sm font-medium cursor-pointer hover:text-primary transition-colors flex items-center gap-2"
                 onClick={() => setIsEditing(true)}
               >
                 {title}
@@ -118,14 +117,17 @@ export function KanbanColumn({ id, title, tasks, status, onUpdateName, onTaskCli
               </CardTitle>
             )}
           </div>
-          <Badge variant="secondary" className="text-xs">
+          <Badge variant="secondary" className="text-xs text-muted-foreground bg-muted/50">
             {tasks.length}
           </Badge>
         </div>
       </CardHeader>
       <CardContent>
         <div ref={setNodeRef} className="space-y-2 min-h-[200px]">
-          <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+          {tasks.length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground py-8">Geen taken</p>
+          ) : (
+            <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
               {tasks.map((task) => (
                 <TaskCard 
                   key={task.id} 
@@ -134,7 +136,8 @@ export function KanbanColumn({ id, title, tasks, status, onUpdateName, onTaskCli
                   aiScore={task.aiScore}
                 />
               ))}
-          </SortableContext>
+            </SortableContext>
+          )}
         </div>
       </CardContent>
     </Card>
