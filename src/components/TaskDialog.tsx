@@ -236,7 +236,9 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
     }
   };
 
-  const handleNext = () => {
+  const handleNext = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     if (currentStep === 1 && !form.watch("title")) {
       toast.error("Vul de titel in");
       return;

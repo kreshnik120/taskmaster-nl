@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
@@ -6,7 +6,8 @@ import { TaskCard } from "@/components/TaskCard";
 import { TaskDialog } from "@/components/TaskDialog";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, Sparkles, AlertCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Plus, Loader2, Sparkles, AlertCircle, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -57,6 +58,8 @@ const Kanban = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { taskId } = useParams();
   
@@ -296,6 +299,14 @@ const Kanban = () => {
       filteredTasks = tasks.filter((task) => task.column_id === columnId);
     }
     
+    // Apply search filter
+    if (searchQuery) {
+      filteredTasks = filteredTasks.filter(task => 
+        task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    
     // Enrich tasks with AI scores
     return filteredTasks.map(task => ({
       ...task,
@@ -339,6 +350,30 @@ const Kanban = () => {
     loadData();
   };
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      
+      if (e.key === 'n' && !dialogOpen && !detailModalOpen) {
+        e.preventDefault();
+        setDialogOpen(true);
+      }
+      if (e.key === '/' && !dialogOpen && !detailModalOpen) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      if (e.key === 'Escape') {
+        setDialogOpen(false);
+        setDetailModalOpen(false);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [dialogOpen, detailModalOpen]);
+
   // Auto-open task modal from URL parameter
   useEffect(() => {
     if (taskId && tasks.length > 0 && !loading) {
@@ -375,6 +410,16 @@ const Kanban = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="relative w-64">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              ref={searchInputRef}
+              placeholder="Zoek taken... (druk /)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
           {getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length > 0 && (
             <Button
               variant="outline"
