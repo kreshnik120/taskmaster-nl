@@ -21,6 +21,7 @@ import { convertApplicationToProfessional } from "@/lib/convertApplicationToProf
 import { ApplicationActivityTimeline } from "@/components/recruitment/ApplicationActivityTimeline";
 import { EmailTemplateSuggestions } from "@/components/recruitment/EmailTemplateSuggestions";
 import { MatchScoreBreakdown } from "@/components/recruitment/MatchScoreBreakdown";
+import { ApplicationNotes } from "@/components/recruitment/ApplicationNotes";
 
 interface Application {
   id: string;
@@ -1721,6 +1722,16 @@ export function ApplicationDetailModal({
 
           {/* TAB 3: Activiteit & Communicatie */}
           <TabsContent value="activity" className="space-y-4">
+            {/* Team Notes */}
+            <div className="space-y-3">
+              <span className="text-sm font-medium flex items-center gap-2">
+                💬 Team Notities
+              </span>
+              <ApplicationNotes applicationId={application.id} />
+            </div>
+
+            <Separator />
+
             {/* Activity Timeline */}
             <div className="space-y-3">
               <span className="text-sm font-medium">Activiteit Timeline</span>
