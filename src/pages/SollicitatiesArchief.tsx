@@ -186,43 +186,33 @@ export default function SollicitatiesArchief() {
   }
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <div className="flex-1 overflow-auto">
-        <div className="container max-w-7xl mx-auto p-6 space-y-6">
+    <div className="space-y-6">
           {/* Hero Section */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-orange-500/10">
-                <Archive className="h-6 w-6 text-orange-600" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight">Archief</h1>
-                <p className="text-muted-foreground">
-                  Verwijderde en afgewezen sollicitaties
-                </p>
-              </div>
-            </div>
+          <div>
+            <h1 className="text-2xl font-semibold mb-1">Sollicitaties Archief</h1>
+            <p className="text-sm text-muted-foreground">
+              Verwijderde en afgewezen sollicitaties
+            </p>
           </div>
 
           {/* Stats Bar */}
-          <div className="grid grid-cols-4 gap-4">
-            <Card className="p-4">
-              <div className="text-sm text-muted-foreground">Totaal</div>
-              <div className="text-2xl font-bold">{applications.length}</div>
-            </Card>
-            <Card className="p-4">
-              <div className="text-sm text-muted-foreground">Afgewezen</div>
-              <div className="text-2xl font-bold text-orange-600">{rejectedCount}</div>
-            </Card>
-            <Card className="p-4">
-              <div className="text-sm text-muted-foreground">Verwijderd</div>
-              <div className="text-2xl font-bold text-red-600">{deletedCount}</div>
-            </Card>
-            <Card className="p-4">
-              <div className="text-sm text-muted-foreground">Getoond</div>
-              <div className="text-2xl font-bold">{filteredApplications.length}</div>
-            </Card>
+          <div className="grid grid-cols-4 gap-3">
+            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border">
+              <span className="text-3xl font-bold">{applications.length}</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">Totaal</span>
+            </div>
+            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border">
+              <span className={`text-3xl font-bold ${rejectedCount > 0 ? 'text-destructive' : ''}`}>{rejectedCount}</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">Afgewezen</span>
+            </div>
+            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border">
+              <span className={`text-3xl font-bold ${deletedCount > 0 ? 'text-destructive' : ''}`}>{deletedCount}</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">Verwijderd</span>
+            </div>
+            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border">
+              <span className="text-3xl font-bold">{filteredApplications.length}</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">Getoond</span>
+            </div>
           </div>
 
           {/* Search & Filter Bar */}
@@ -365,8 +355,6 @@ export default function SollicitatiesArchief() {
               ))
             )}
           </div>
-        </div>
-      </div>
 
       {/* Restore Confirmation Dialog */}
       <AlertDialog open={!!restoreId} onOpenChange={() => setRestoreId(null)}>
@@ -406,6 +394,6 @@ export default function SollicitatiesArchief() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </SidebarProvider>
+    </div>
   );
 }
