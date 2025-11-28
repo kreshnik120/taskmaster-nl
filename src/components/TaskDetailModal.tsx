@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock, User, FileText, ArrowRight, Edit, ListChecks, Mail, ExternalLink } from "lucide-react";
@@ -247,7 +247,12 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-start justify-between gap-4">
-              <DialogTitle className="text-2xl font-bold flex-1">{task.title}</DialogTitle>
+              <div className="flex-1">
+                <DialogTitle className="text-2xl font-bold">{task.title}</DialogTitle>
+                <DialogDescription className="sr-only">
+                  Details en processtappen voor deze taak
+                </DialogDescription>
+              </div>
               <Button variant="outline" size="sm" onClick={handleEdit}>
                 <Edit className="h-4 w-4 mr-2" />
                 Bewerken
