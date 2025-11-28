@@ -505,10 +505,9 @@ const Professionals = () => {
                 </CardContent>
               </Card>
             </div>
-        </div>
 
-        {/* Search & Filters */}
-        <div className="space-y-3">
+      {/* Search & Filters */}
+      <div className="space-y-3">
             <div className="flex gap-3 flex-wrap">
               <div className="flex-1 min-w-[200px] relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
@@ -584,8 +583,8 @@ const Professionals = () => {
             )}
           </div>
 
-        {/* Professional Cards */}
-        {filteredProfessionals.length === 0 ? (
+      {/* Professional Cards */}
+      {filteredProfessionals.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center">
                   <p className="text-muted-foreground mb-4">
@@ -695,8 +694,8 @@ const Professionals = () => {
                   </Card>
                 </motion.div>
               ))}
-            </div>
-          )}
+          </div>
+        )}
 
       <ProfessionalDetailModal
         professional={selectedProfessional}
