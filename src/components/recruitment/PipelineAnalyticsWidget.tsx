@@ -1,7 +1,10 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { TrendingUp, Clock, Target } from "lucide-react";
+import { TrendingUp, Clock, ChevronDown, ChevronRight } from "lucide-react";
+import { differenceInDays } from "date-fns";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useState, useEffect } from "react";
 
 interface Application {
   id: string;
@@ -15,6 +18,15 @@ interface PipelineAnalyticsWidgetProps {
 }
 
 export function PipelineAnalyticsWidget({ applications }: PipelineAnalyticsWidgetProps) {
+  const [isOpen, setIsOpen] = useState(() => {
+    const saved = localStorage.getItem('pipeline-analytics-open');
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pipeline-analytics-open', JSON.stringify(isOpen));
+  }, [isOpen]);
+
   // Count applications per stage
   const stageCounts = {
     nieuw: applications.filter(a => a.pipeline_stage === 'nieuw').length,
@@ -24,92 +36,103 @@ export function PipelineAnalyticsWidget({ applications }: PipelineAnalyticsWidge
     geplaatst: applications.filter(a => a.pipeline_stage === 'geplaatst').length,
   };
 
-  const total = applications.length;
+  const totalApps = applications.length;
+  const placedCount = stageCounts.geplaatst;
   
   // Calculate conversion rates
-  const conversionToScreening = total > 0 ? Math.round((stageCounts.screening + stageCounts.interview + stageCounts.goedgekeurd + stageCounts.geplaatst) / total * 100) : 0;
-  const conversionToInterview = total > 0 ? Math.round((stageCounts.interview + stageCounts.goedgekeurd + stageCounts.geplaatst) / total * 100) : 0;
-  const conversionToPlaced = total > 0 ? Math.round(stageCounts.geplaatst / total * 100) : 0;
+  const conversionToScreening = totalApps > 0 ? Math.round((stageCounts.screening + stageCounts.interview + stageCounts.goedgekeurd + stageCounts.geplaatst) / totalApps * 100) : 0;
+  const conversionToInterview = totalApps > 0 ? Math.round((stageCounts.interview + stageCounts.goedgekeurd + stageCounts.geplaatst) / totalApps * 100) : 0;
+  const conversionToPlaced = totalApps > 0 ? Math.round(stageCounts.geplaatst / totalApps * 100) : 0;
 
-  // Calculate average time in pipeline (days since created)
+  // Calculate average time in pipeline
   const avgDaysInPipeline = applications.length > 0
     ? Math.round(
         applications.reduce((sum, app) => {
           const created = new Date(app.created_at);
           const now = new Date();
-          const days = Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
+          const days = differenceInDays(now, created);
           return sum + days;
         }, 0) / applications.length
       )
     : 0;
 
   return (
-    <Card className="border-primary/20 shadow-sm hover:shadow-md transition-shadow">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <TrendingUp className="h-4 w-4 text-primary" />
-          Pipeline Analytics
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Conversion Funnel */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground font-medium">Nieuw → Screening</span>
-            <Badge variant="outline" className="text-xs font-semibold">
-              {conversionToScreening}%
-            </Badge>
-          </div>
-          <Progress 
-            value={conversionToScreening} 
-            className="h-3 bg-muted [&>div]:bg-gradient-to-r [&>div]:from-blue-500 [&>div]:to-yellow-500"
-          />
-          
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground font-medium">Screening → Interview</span>
-            <Badge variant="outline" className="text-xs font-semibold">
-              {conversionToInterview}%
-            </Badge>
-          </div>
-          <Progress 
-            value={conversionToInterview} 
-            className="h-3 bg-muted [&>div]:bg-gradient-to-r [&>div]:from-yellow-500 [&>div]:to-purple-500"
-          />
-          
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground font-medium">Interview → Geplaatst</span>
-            <Badge variant="outline" className="text-xs font-semibold">
-              {conversionToPlaced}%
-            </Badge>
-          </div>
-          <Progress 
-            value={conversionToPlaced} 
-            className="h-3 bg-muted [&>div]:bg-gradient-to-r [&>div]:from-purple-500 [&>div]:to-emerald-500"
-          />
-        </div>
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <Card className="border-muted">
+        <CollapsibleTrigger asChild>
+          <Button
+            variant="ghost"
+            className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              <span className="font-semibold">Pipeline Analytics</span>
+              <span className="text-xs text-muted-foreground">
+                ({placedCount}/{totalApps} geplaatst)
+              </span>
+            </div>
+            {isOpen ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+          </Button>
+        </CollapsibleTrigger>
 
-        {/* Average Time */}
-        <div className="flex items-center justify-between p-3 bg-gradient-to-br from-muted/50 to-muted/30 rounded-lg border border-border/50">
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Gem. doorlooptijd</span>
-          </div>
-          <Badge variant="secondary" className="font-semibold">
-            {avgDaysInPipeline} dagen
-          </Badge>
-        </div>
+        <CollapsibleContent>
+          <CardContent className="pt-0 pb-4 space-y-6">
+            {/* Conversion Funnel */}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">Nieuw → Screening</span>
+                  <span className="text-muted-foreground">{conversionToScreening}%</span>
+                </div>
+                <Progress value={conversionToScreening} className="h-3" />
+              </div>
 
-        {/* Success Rate */}
-        <div className="flex items-center justify-between p-3 bg-gradient-to-br from-green-500/10 to-emerald-500/5 rounded-lg border border-green-500/20">
-          <div className="flex items-center gap-2">
-            <Target className="h-4 w-4 text-green-600" />
-            <span className="text-sm font-medium">Plaatsingsratio</span>
-          </div>
-          <Badge variant="secondary" className="bg-green-500/20 text-green-700 font-semibold">
-            {conversionToPlaced}%
-          </Badge>
-        </div>
-      </CardContent>
-    </Card>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">Screening → Interview</span>
+                  <span className="text-muted-foreground">{conversionToInterview}%</span>
+                </div>
+                <Progress value={conversionToInterview} className="h-3" />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">Interview → Geplaatst</span>
+                  <span className="text-muted-foreground">{conversionToPlaced}%</span>
+                </div>
+                <Progress value={conversionToPlaced} className="h-3" />
+              </div>
+            </div>
+
+            {/* Key Metrics */}
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Clock className="h-4 w-4" />
+                  <span className="text-xs uppercase tracking-wide">Gemiddelde doorlooptijd</span>
+                </div>
+                <p className="text-2xl font-bold text-primary">
+                  {avgDaysInPipeline} <span className="text-sm font-normal text-muted-foreground">dagen</span>
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <TrendingUp className="h-4 w-4" />
+                  <span className="text-xs uppercase tracking-wide">Plaatsingsratio</span>
+                </div>
+                <p className="text-2xl font-bold text-primary">
+                  {Math.round((placedCount / Math.max(totalApps, 1)) * 100)}%
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   );
 }
