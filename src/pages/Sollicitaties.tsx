@@ -4,7 +4,7 @@ import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/
 import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { Plus, Loader2, Mail, Search, X, Filter } from "lucide-react";
+import { Plus, Loader2, Search, X, Filter } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,8 @@ import { ApplicationKanbanColumn } from "@/components/ApplicationKanbanColumn";
 import { ApplicationCard } from "@/components/ApplicationCard";
 import { ApplicationDetailModal } from "@/components/ApplicationDetailModal";
 import { NewApplicationDialog } from "@/components/NewApplicationDialog";
+import { KPICard } from "@/components/recruitment/KPICard";
+import { UrgencyActionPanel } from "@/components/recruitment/UrgencyActionPanel";
 import { PipelineAnalyticsWidget } from "@/components/recruitment/PipelineAnalyticsWidget";
 
 interface Application {
@@ -309,37 +311,59 @@ const Sollicitaties = () => {
           <SidebarTrigger className="mb-4" />
           <div className="flex flex-col h-full space-y-6">
             {/* Hero Section */}
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
+            <div className="space-y-6 mb-8">
+              {/* Greeting Row */}
+              <div className="flex items-start justify-between">
                 <div>
-                  <h1 className="text-4xl font-bold mb-2">
+                  <h1 className="text-3xl font-bold text-foreground mb-1">
                     {getGreeting()}, {user?.user_metadata?.name || 'daar'}
                   </h1>
-                  <p className="text-xl text-muted-foreground">
+                  <p className="text-muted-foreground">
                     {format(new Date(), "EEEE d MMMM", { locale: nl })}
                   </p>
                 </div>
-                <Button onClick={() => setNewApplicationDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
+                <Button onClick={() => setNewApplicationDialogOpen(true)} className="gap-2">
+                  <Plus className="h-4 w-4" />
                   Nieuwe sollicitatie
                 </Button>
               </div>
-              
-              {/* Smart Summary & Analytics */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
-                <div className="lg:col-span-2 bg-muted/30 rounded-lg p-4 space-y-2">
-                  <p className="text-sm">
-                    <Mail className="inline h-4 w-4 mr-1" />
-                    Je hebt <strong>{totalApplications} sollicitaties</strong> in de pipeline
-                  </p>
-                  {newThisWeek > 0 && (
-                    <p className="text-sm text-green-600">
-                      ✅ <strong>{newThisWeek} nieuwe sollicitaties</strong> deze week
-                    </p>
-                  )}
-                </div>
-                
-                <PipelineAnalyticsWidget applications={applications} />
+
+              {/* KPI Dashboard - 4 cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <KPICard
+                  icon="📧"
+                  title="Totaal Pipeline"
+                  value={totalApplications}
+                  subtitle="sollicitaties"
+                  gradient="from-blue-500/10 to-blue-500/5"
+                />
+                <KPICard
+                  icon="🆕"
+                  title="Nieuwe sollicitaties"
+                  value={stageStats[0]?.count || 0}
+                  subtitle="deze week"
+                  gradient="from-green-500/10 to-green-500/5"
+                />
+                <KPICard
+                  icon="✅"
+                  title="Goedgekeurd"
+                  value={stageStats.find(s => s.id === 'goedgekeurd')?.count || 0}
+                  subtitle="klaar voor plaatsing"
+                  gradient="from-emerald-500/10 to-emerald-500/5"
+                />
+                <KPICard
+                  icon="📊"
+                  title="Gem. Volledigheid"
+                  value={`${avgCompleteness}%`}
+                  trend={avgCompleteness >= 80 ? "good" : "warning"}
+                  gradient="from-purple-500/10 to-purple-500/5"
+                />
+              </div>
+
+              {/* Analytics Row - 2 columns */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <UrgencyActionPanel applications={filteredApplications} />
+                <PipelineAnalyticsWidget applications={filteredApplications} />
               </div>
             </div>
 
@@ -432,34 +456,6 @@ const Sollicitaties = () => {
               </div>
             )}
 
-            {/* Compact Stats Bar */}
-            <div className="grid grid-cols-4 gap-3 mb-6">
-              <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
-                <span className="text-2xl mb-1">📧</span>
-                <span className="text-2xl font-bold">{hasActiveFilters ? displayedTotal : totalApplications}</span>
-                <span className="text-xs text-muted-foreground">Totaal{hasActiveFilters ? ' (gefilterd)' : ''}</span>
-              </div>
-              
-              <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
-                <span className="text-2xl mb-1">🆕</span>
-                <span className="text-2xl font-bold text-blue-600">{hasActiveFilters ? displayedNew : stageStats[0]?.count || 0}</span>
-                <span className="text-xs text-muted-foreground">Nieuw</span>
-              </div>
-              
-              <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
-                <span className="text-2xl mb-1">✅</span>
-                <span className="text-2xl font-bold text-green-600">
-                  {hasActiveFilters ? displayedApproved : stageStats.find(s => s.id === 'goedgekeurd')?.count || 0}
-                </span>
-                <span className="text-xs text-muted-foreground">Goedgekeurd</span>
-              </div>
-              
-              <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
-                <span className="text-2xl mb-1">📊</span>
-                <span className="text-2xl font-bold">{hasActiveFilters ? displayedAvgCompleteness : avgCompleteness}%</span>
-                <span className="text-xs text-muted-foreground">Gemiddelde compleetheid</span>
-              </div>
-            </div>
 
             {/* Kanban Board */}
             <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>

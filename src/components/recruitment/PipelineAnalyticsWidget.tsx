@@ -44,7 +44,7 @@ export function PipelineAnalyticsWidget({ applications }: PipelineAnalyticsWidge
     : 0;
 
   return (
-    <Card className="border-primary/20">
+    <Card className="border-primary/20 shadow-sm hover:shadow-md transition-shadow">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <TrendingUp className="h-4 w-4 text-primary" />
@@ -55,48 +55,57 @@ export function PipelineAnalyticsWidget({ applications }: PipelineAnalyticsWidge
         {/* Conversion Funnel */}
         <div className="space-y-3">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Nieuw → Screening</span>
-            <Badge variant="outline" className="text-xs">
+            <span className="text-muted-foreground font-medium">Nieuw → Screening</span>
+            <Badge variant="outline" className="text-xs font-semibold">
               {conversionToScreening}%
             </Badge>
           </div>
-          <Progress value={conversionToScreening} className="h-2" />
+          <Progress 
+            value={conversionToScreening} 
+            className="h-3 bg-muted [&>div]:bg-gradient-to-r [&>div]:from-blue-500 [&>div]:to-yellow-500"
+          />
           
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Screening → Interview</span>
-            <Badge variant="outline" className="text-xs">
+            <span className="text-muted-foreground font-medium">Screening → Interview</span>
+            <Badge variant="outline" className="text-xs font-semibold">
               {conversionToInterview}%
             </Badge>
           </div>
-          <Progress value={conversionToInterview} className="h-2" />
+          <Progress 
+            value={conversionToInterview} 
+            className="h-3 bg-muted [&>div]:bg-gradient-to-r [&>div]:from-yellow-500 [&>div]:to-purple-500"
+          />
           
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Interview → Geplaatst</span>
-            <Badge variant="outline" className="text-xs">
+            <span className="text-muted-foreground font-medium">Interview → Geplaatst</span>
+            <Badge variant="outline" className="text-xs font-semibold">
               {conversionToPlaced}%
             </Badge>
           </div>
-          <Progress value={conversionToPlaced} className="h-2" />
+          <Progress 
+            value={conversionToPlaced} 
+            className="h-3 bg-muted [&>div]:bg-gradient-to-r [&>div]:from-purple-500 [&>div]:to-emerald-500"
+          />
         </div>
 
         {/* Average Time */}
-        <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+        <div className="flex items-center justify-between p-3 bg-gradient-to-br from-muted/50 to-muted/30 rounded-lg border border-border/50">
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">Gem. doorlooptijd</span>
           </div>
-          <Badge variant="secondary">
+          <Badge variant="secondary" className="font-semibold">
             {avgDaysInPipeline} dagen
           </Badge>
         </div>
 
         {/* Success Rate */}
-        <div className="flex items-center justify-between p-3 bg-green-500/10 rounded-lg">
+        <div className="flex items-center justify-between p-3 bg-gradient-to-br from-green-500/10 to-emerald-500/5 rounded-lg border border-green-500/20">
           <div className="flex items-center gap-2">
             <Target className="h-4 w-4 text-green-600" />
             <span className="text-sm font-medium">Plaatsingsratio</span>
           </div>
-          <Badge variant="secondary" className="bg-green-500/20 text-green-700">
+          <Badge variant="secondary" className="bg-green-500/20 text-green-700 font-semibold">
             {conversionToPlaced}%
           </Badge>
         </div>
