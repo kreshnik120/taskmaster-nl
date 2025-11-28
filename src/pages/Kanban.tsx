@@ -6,7 +6,7 @@ import { TaskCard } from "@/components/TaskCard";
 import { TaskDialog } from "@/components/TaskDialog";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, Sparkles } from "lucide-react";
+import { Plus, Loader2, Sparkles, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -363,24 +363,19 @@ const Kanban = () => {
 
   return (
     <>
-      {/* Hero Section */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h1 className="text-5xl font-bold mb-1">
-              {getGreeting()}, {user?.user_metadata?.name || 'daar'}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {format(new Date(), "EEEE d MMMM", { locale: nl })}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Nieuwe taak
-            </Button>
-            <Button 
-              variant="ghost" 
+      {/* Compact Header */}
+      <div className="flex items-center justify-between py-4 border-b mb-6">
+        <div>
+          <h1 className="text-xl font-medium text-foreground">Kanban bord</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {getTasksForColumn(columns.find(c => c.status === 'DOING')?.id || '').length + 
+             getTasksForColumn(columns.find(c => c.status === 'REVIEW')?.id || '').length} actief • {getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length} blocked • {tasks.filter(t => t.completed_at && new Date(t.completed_at).toDateString() === new Date().toDateString()).length} vandaag afgerond
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length > 0 && (
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => {
                 const blockedColumn = columns.find(c => c.status === 'BLOCKED');
@@ -388,56 +383,16 @@ const Kanban = () => {
                   document.getElementById(`column-${blockedColumn.id}`)?.scrollIntoView({ behavior: 'smooth' });
                 }
               }}
-              disabled={getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length === 0}
-              className="text-muted-foreground"
+              className="gap-2"
             >
-              Toon blocked →
+              <AlertCircle className="h-4 w-4 text-destructive" />
+              Toon blocked
             </Button>
-          </div>
-        </div>
-        
-        {/* Smart Summary */}
-        <div className="space-y-1">
-          <p className="text-sm text-muted-foreground">
-            Je hebt <strong className="text-foreground">{tasks.filter(t => !t.completed_at).length} actieve taken</strong>
-          </p>
-          {getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length > 0 && (
-            <p className="text-sm text-destructive">
-              <strong>{getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length} geblokkeerde taken</strong> vereisen aandacht
-            </p>
           )}
-        </div>
-      </div>
-
-      {/* Stats Bar */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/10">
-          <span className="text-3xl font-bold">
-            {getTasksForColumn(columns.find(c => c.status === 'BACKLOG')?.id || '').length}
-          </span>
-          <span className="text-xs text-muted-foreground mt-1">Backlog</span>
-        </div>
-        
-        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/10">
-          <span className="text-3xl font-bold">
-            {getTasksForColumn(columns.find(c => c.status === 'DOING')?.id || '').length + 
-             getTasksForColumn(columns.find(c => c.status === 'REVIEW')?.id || '').length}
-          </span>
-          <span className="text-xs text-muted-foreground mt-1">Actief</span>
-        </div>
-        
-        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/10">
-          <span className="text-3xl font-bold">
-            {getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length}
-          </span>
-          <span className="text-xs text-muted-foreground mt-1">Blocked</span>
-        </div>
-        
-        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/10">
-          <span className="text-3xl font-bold">
-            {tasks.filter(t => t.completed_at && new Date(t.completed_at).toDateString() === new Date().toDateString()).length}
-          </span>
-          <span className="text-xs text-muted-foreground mt-1">Vandaag</span>
+          <Button onClick={() => setDialogOpen(true)} size="sm" className="gap-2">
+            <Plus className="h-4 w-4" />
+            Nieuwe taak
+          </Button>
         </div>
       </div>
 
