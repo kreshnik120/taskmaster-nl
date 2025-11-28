@@ -106,8 +106,8 @@ export function KanbanColumn({ id, title, tasks, status, onUpdateName, onTaskCli
                 maxLength={50}
               />
             ) : (
-              <CardTitle 
-                className="text-sm font-medium cursor-pointer hover:text-primary transition-colors flex items-center gap-2"
+              <CardTitle
+                className="text-sm font-medium cursor-pointer hover:text-foreground/80 transition-colors flex items-center gap-2"
                 onClick={() => setIsEditing(true)}
               >
                 {title.charAt(0).toUpperCase() + title.slice(1)}

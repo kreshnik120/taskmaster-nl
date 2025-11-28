@@ -15,22 +15,22 @@ interface PriorityBadgeProps {
 const priorityConfig = {
   LOW: {
     label: "Laag",
-    color: "bg-priority-low text-priority-low-foreground border-priority-low/20",
+    color: "bg-muted/50 text-muted-foreground border-border",
     icon: ArrowDown,
   },
   MEDIUM: {
     label: "Gemiddeld",
-    color: "bg-priority-medium text-priority-medium-foreground border-priority-medium/20",
+    color: "bg-muted text-foreground border-border",
     icon: Minus,
   },
   HIGH: {
     label: "Hoog",
-    color: "bg-priority-high text-priority-high-foreground border-priority-high/20",
+    color: "bg-muted text-foreground border-border font-semibold",
     icon: ArrowUp,
   },
   CRITICAL: {
     label: "Kritiek",
-    color: "bg-priority-critical text-priority-critical-foreground border-priority-critical/20",
+    color: "bg-foreground/10 text-foreground border-foreground/30 font-bold",
     icon: ArrowUp,
   },
 };
