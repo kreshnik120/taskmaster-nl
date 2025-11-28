@@ -1,12 +1,9 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { GripVertical, Calendar, Sparkles } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { GripVertical, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { PriorityBadge } from "@/components/PriorityBadge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Badge } from "@/components/ui/badge";
 
 interface Task {
   id: string;
@@ -37,18 +34,7 @@ interface TaskCardProps {
   aiScore?: AIScore;
 }
 
-const priorityColors: Record<string, string> = {
-  LOW: "border-l-2 border-l-border",
-  MEDIUM: "border-l-2 border-l-muted-foreground/30",
-  HIGH: "border-l-3 border-l-muted-foreground/50",
-  CRITICAL: "border-l-4 border-l-foreground/70",
-};
-
-
-const getAiScoreBadgeColor = (label?: string) => {
-  // Monochrome styling - all variants use same neutral color
-  return "bg-muted/50 text-muted-foreground border-border";
-};
+// Removed priority colors and AI badge colors for clean, minimalist design
 
 export function TaskCard({ task, onClick, aiScore }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -73,79 +59,36 @@ export function TaskCard({ task, onClick, aiScore }: TaskCardProps) {
     <Card
       ref={setNodeRef}
       style={style}
-      onClick={handleCardClick}
-      className={`cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow ${
-        priorityColors[task.priority]
-      }`}
+      className="cursor-pointer hover:shadow-sm transition-shadow border-border/50"
+      {...attributes}
     >
-      <CardHeader className="p-3">
+      <CardContent className="p-4">
         <div className="flex items-start gap-2">
-          <div {...attributes} {...listeners} className="mt-1" data-drag-handle>
-            <GripVertical className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2 mb-1">
-              <CardTitle className="text-sm font-medium line-clamp-2 flex-1">{task.title}</CardTitle>
-              <div className="flex gap-1">
-                <PriorityBadge taskId={task.id} priority={task.priority} size="sm" />
-                {aiScore && (
-                  <TooltipProvider>
-                    <Tooltip delayDuration={200}>
-                      <TooltipTrigger asChild>
-                        <Badge 
-                          variant="outline" 
-                          className={`text-xs h-5 gap-1 ${getAiScoreBadgeColor(aiScore.label)}`}
-                        >
-                          <Sparkles className="h-3 w-3" />
-                          {Math.round(aiScore.priority_score)}
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-xs">
-                        <div className="space-y-2">
-                          <div className="font-semibold flex items-center gap-1">
-                            <Sparkles className="h-3 w-3" />
-                            AI Prioriteit Score: {Math.round(aiScore.priority_score)}
-                          </div>
-                          {aiScore.explanation && (
-                            <p className="text-xs">{aiScore.explanation}</p>
-                          )}
-                          {aiScore.breakdown && (
-                            <div className="text-xs space-y-1 pt-2 border-t">
-                              <div className="flex justify-between">
-                                <span>Klant Impact:</span>
-                                <span className="font-medium">{Math.round(aiScore.breakdown.klant_impact)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span>Omzet Bescherming:</span>
-                                <span className="font-medium">{Math.round(aiScore.breakdown.omzet_bescherming)}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span>Overgang:</span>
-                                <span className="font-medium">{Math.round(aiScore.breakdown.overgang_voorbereiding)}</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-              </div>
-            </div>
+          <button
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing hover:text-foreground/80 transition-colors"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <GripVertical className="h-4 w-4 text-muted-foreground/50" />
+          </button>
+          <div className="flex-1 min-w-0 space-y-1" onClick={handleCardClick}>
+            <p className="text-sm font-medium text-foreground truncate">
+              {task.title}
+            </p>
             {task.description && (
-              <CardDescription className="text-xs mt-1 line-clamp-2">
+              <p className="text-xs text-muted-foreground truncate">
                 {task.description}
-              </CardDescription>
+              </p>
             )}
             {task.due_at && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
-                <Calendar className="h-3 w-3" />
+              <div className="flex items-center gap-1 text-xs text-muted-foreground pt-1">
+                <Clock className="h-3 w-3" />
                 {format(new Date(task.due_at), "d MMM", { locale: nl })}
               </div>
             )}
           </div>
         </div>
-      </CardHeader>
+      </CardContent>
     </Card>
   );
 }
