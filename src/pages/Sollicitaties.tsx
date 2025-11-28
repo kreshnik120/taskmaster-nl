@@ -4,7 +4,7 @@ import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/
 import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { Plus, Loader2, Search, X, Filter, RotateCcw } from "lucide-react";
+import { Plus, Loader2, Search, X, Filter, RotateCcw, Undo2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -13,8 +13,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import confetti from "canvas-confetti";
 import { ApplicationKanbanColumn } from "@/components/ApplicationKanbanColumn";
-import { ApplicationCard } from "@/components/ApplicationCard";
+import { ApplicationCard, ApplicationCardSkeleton } from "@/components/ApplicationCard";
 import { ApplicationDetailModal } from "@/components/ApplicationDetailModal";
 import { NewApplicationDialog } from "@/components/NewApplicationDialog";
 import { MinimalMetricsBar } from "@/components/recruitment/MinimalMetricsBar";
@@ -67,6 +68,7 @@ const Sollicitaties = () => {
   const [filterWerkvorm, setFilterWerkvorm] = useState<string>("all");
   const [filterOrganisatie, setFilterOrganisatie] = useState<string>("all");
   const [filterRegio, setFilterRegio] = useState<string>("");
+  const [lastMove, setLastMove] = useState<{ applicationId: string; fromStage: string; toStage: string } | null>(null);
   const navigate = useNavigate();
 
   const getGreeting = () => {
@@ -164,6 +166,8 @@ const Sollicitaties = () => {
       return;
     }
 
+    const previousStage = application.pipeline_stage;
+
     // Map pipeline_stage to status (using valid enum values from database constraint)
     const stageToStatus: Record<string, string> = {
       nieuw: "nieuw",
@@ -191,8 +195,29 @@ const Sollicitaties = () => {
         prev.map((a) => (a.id === applicationId ? { ...a, pipeline_stage: newStage, status: newStatus } : a))
       );
 
+      // Save move for undo
+      setLastMove({ applicationId, fromStage: previousStage, toStage: newStage });
+
       const stage = PIPELINE_STAGES.find(s => s.id === newStage);
-      toast.success(`Sollicitatie verplaatst naar ${stage?.name}`);
+      
+      // Show toast with undo option
+      toast.success(`Sollicitatie verplaatst naar ${stage?.name}`, {
+        action: {
+          label: "Ongedaan maken",
+          onClick: () => handleUndoMove(applicationId, previousStage),
+        },
+        duration: 5000,
+      });
+
+      // Confetti bij plaatsing
+      if (newStage === "geplaatst") {
+        confetti({
+          particleCount: 50,
+          spread: 60,
+          origin: { y: 0.6 },
+          colors: ['#10b981', '#34d399', '#6ee7b7'],
+        });
+      }
 
       // Automatische conversie naar professional bij plaatsing
       if (newStage === "geplaatst" && !application.professional_id && (application.completeness_score || 0) >= 80) {
@@ -220,6 +245,42 @@ const Sollicitaties = () => {
         newStatus
       });
       toast.error(`Fout bij verplaatsen: ${err?.message || 'Onbekende fout'}`);
+    }
+  };
+
+  const handleUndoMove = async (applicationId: string, previousStage: string) => {
+    try {
+      const stageToStatus: Record<string, string> = {
+        nieuw: "nieuw",
+        screening: "in_verwerking",
+        interview: "in_gesprek",
+        goedgekeurd: "klaar_voor_review",
+        geplaatst: "geaccepteerd",
+      };
+
+      const previousStatus = stageToStatus[previousStage];
+
+      const { error } = await supabase
+        .from("professional_applications")
+        .update({ 
+          pipeline_stage: previousStage,
+          status: previousStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", applicationId);
+
+      if (error) throw error;
+
+      setApplications((prev) =>
+        prev.map((a) => (a.id === applicationId ? { ...a, pipeline_stage: previousStage, status: previousStatus } : a))
+      );
+
+      const stage = PIPELINE_STAGES.find(s => s.id === previousStage);
+      toast.success(`Sollicitatie teruggezet naar ${stage?.name}`);
+      setLastMove(null);
+    } catch (err: any) {
+      console.error("Error undoing move:", err);
+      toast.error(`Fout bij ongedaan maken: ${err?.message || 'Onbekende fout'}`);
     }
   };
 
@@ -275,10 +336,31 @@ const Sollicitaties = () => {
       <SidebarProvider>
         <div className="flex min-h-screen w-full">
           <AppSidebar />
-          <main className="flex-1 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Sollicitaties laden...</p>
+          <main className="flex-1 p-6 overflow-auto">
+            <SidebarTrigger className="mb-4" />
+            <div className="flex flex-col h-full space-y-6">
+              {/* Skeleton Hero Section */}
+              <div className="space-y-0">
+                <div className="flex items-start justify-between py-8">
+                  <div>
+                    <div className="h-9 w-48 bg-muted animate-pulse rounded mb-2" />
+                    <div className="h-5 w-32 bg-muted animate-pulse rounded" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Skeleton Kanban */}
+              <div className="flex-1 py-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="space-y-3">
+                      <div className="h-10 bg-muted animate-pulse rounded" />
+                      <ApplicationCardSkeleton />
+                      <ApplicationCardSkeleton />
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </main>
         </div>

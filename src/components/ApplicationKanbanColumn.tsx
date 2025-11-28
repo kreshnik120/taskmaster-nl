@@ -50,7 +50,7 @@ export function ApplicationKanbanColumn({
 
   return (
     <Card className={`min-w-[320px] flex flex-col bg-card border shadow-none ${borderColor}`}>
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-3 sticky top-0 z-10 bg-card/95 backdrop-blur-sm border-b">
         <CardTitle className="flex items-center justify-between text-base">
           <span className="font-medium text-foreground">{title}</span>
           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
