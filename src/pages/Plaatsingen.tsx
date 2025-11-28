@@ -8,10 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, Users, Building2, Calendar, TrendingUp, CheckCircle2, Clock } from "lucide-react";
+import { Search, Users, User, Building2, Calendar, TrendingUp, CheckCircle2, Clock, MapPin, Briefcase, Award } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import { PlacementDetailModal } from "@/components/PlacementDetailModal";
+import { motion } from "framer-motion";
 
 interface Placement {
   id: string;
@@ -19,14 +21,22 @@ interface Placement {
   client_id: string;
   status: string;
   match_score: number | null;
+  match_reasoning: any;
   created_at: string;
+  updated_at: string;
   professionals: {
     full_name: string;
     functie_niveau: string;
+    werkvorm: string | null;
+    regio: string | null;
+    telefoonnummer: string | null;
+    email: string | null;
   };
   clients: {
     name: string;
     company: string;
+    regio: string[];
+    sector: string[];
   };
 }
 
@@ -35,6 +45,8 @@ export default function Plaatsingen() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [selectedPlacement, setSelectedPlacement] = useState<Placement | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -53,8 +65,8 @@ export default function Plaatsingen() {
         .from("professional_client_matches")
         .select(`
           *,
-          professionals (full_name, functie_niveau),
-          clients (name, company)
+          professionals (full_name, functie_niveau, werkvorm, regio, telefoonnummer, email),
+          clients (name, company, regio, sector)
         `)
         .order("created_at", { ascending: false });
 
@@ -79,6 +91,7 @@ export default function Plaatsingen() {
 
       toast.success("Status bijgewerkt");
       loadPlacements();
+      setDetailModalOpen(false);
     } catch (error: any) {
       console.error("Error updating status:", error);
       toast.error("Fout bij bijwerken status");
@@ -142,31 +155,43 @@ export default function Plaatsingen() {
               </div>
             </div>
 
-            {/* Stats Bar */}
+            {/* Clickable Stats Bar */}
             <div className="flex items-center gap-4 text-sm flex-wrap">
-              <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setStatusFilter("all")}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors ${statusFilter === "all" ? "bg-muted" : ""}`}
+              >
                 <Users className="h-4 w-4 text-muted-foreground" />
                 <span className="font-medium">{stats.total}</span>
                 <span className="text-muted-foreground">totaal</span>
-              </div>
+              </button>
               <div className="h-4 w-px bg-border" />
-              <div className="flex items-center gap-2">
+              <button
+                onClick={() => setStatusFilter("active")}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors ${statusFilter === "active" ? "bg-muted" : ""}`}
+              >
                 <CheckCircle2 className="h-4 w-4 text-green-600" />
                 <span className="font-medium">{stats.active}</span>
                 <span className="text-muted-foreground">actief</span>
-              </div>
+              </button>
               <div className="h-4 w-px bg-border" />
-              <div className="flex items-center gap-2">
+              <button
+                onClick={() => setStatusFilter("suggested")}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors ${statusFilter === "suggested" ? "bg-muted" : ""}`}
+              >
                 <Clock className="h-4 w-4 text-blue-600" />
                 <span className="font-medium">{stats.suggested}</span>
                 <span className="text-muted-foreground">voorgesteld</span>
-              </div>
+              </button>
               <div className="h-4 w-px bg-border" />
-              <div className="flex items-center gap-2">
+              <button
+                onClick={() => setStatusFilter("completed")}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors ${statusFilter === "completed" ? "bg-muted" : ""}`}
+              >
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <span className="font-medium">{stats.completed}</span>
                 <span className="text-muted-foreground">afgerond</span>
-              </div>
+              </button>
             </div>
 
             {/* Filters */}
@@ -206,85 +231,139 @@ export default function Plaatsingen() {
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredPlacements.map((placement) => (
-                  <Card key={placement.id} className="hover:shadow-md transition-shadow">
-                    <CardContent className="p-6">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 space-y-3">
-                          <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-2">
-                              <Users className="h-4 w-4 text-muted-foreground" />
-                              <span className="font-medium">
-                                {placement.professionals?.full_name || "Onbekend"}
-                              </span>
-                            </div>
-                            <Badge variant="outline" className="text-xs">
-                              {placement.professionals?.functie_niveau}
-                            </Badge>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <Building2 className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm">{placement.clients?.name}</span>
-                            <span className="text-sm text-muted-foreground">
-                              ({placement.clients?.company})
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Calendar className="h-4 w-4" />
-                              <span>
-                                Aangemaakt {format(new Date(placement.created_at), "d MMM yyyy", { locale: nl })}
-                              </span>
-                            </div>
-
-                            {placement.match_score && (
-                              <div className="flex items-center gap-2 text-sm">
-                                <TrendingUp className="h-4 w-4 text-green-600" />
-                                <span>Match: {(placement.match_score * 100).toFixed(0)}%</span>
+                {filteredPlacements.map((placement, idx) => (
+                  <motion.div
+                    key={placement.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: idx * 0.03 }}
+                  >
+                    <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer" onClick={() => {
+                      setSelectedPlacement(placement);
+                      setDetailModalOpen(true);
+                    }}>
+                      <CardContent className="p-6">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 space-y-4">
+                            {/* Professional Info */}
+                            <div className="flex items-start gap-4">
+                              <div className="p-2 rounded-lg bg-primary/10">
+                                <User className="h-5 w-5 text-primary" />
                               </div>
-                            )}
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-1">
+                                  <span className="font-semibold text-lg">
+                                    {placement.professionals?.full_name || "Onbekend"}
+                                  </span>
+                                  <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-700 border-blue-200">
+                                    {placement.professionals?.functie_niveau}
+                                  </Badge>
+                                  {placement.professionals?.werkvorm && (
+                                    <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-200">
+                                      {placement.professionals.werkvorm}
+                                    </Badge>
+                                  )}
+                                </div>
+                                {placement.professionals?.regio && (
+                                  <p className="text-sm text-muted-foreground flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" />
+                                    {placement.professionals.regio}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Client Info */}
+                            <div className="flex items-start gap-4">
+                              <div className="p-2 rounded-lg bg-green-500/10">
+                                <Building2 className="h-5 w-5 text-green-600" />
+                              </div>
+                              <div className="flex-1">
+                                <div className="mb-1">
+                                  <span className="font-medium">{placement.clients?.name}</span>
+                                  <span className="text-sm text-muted-foreground ml-2">
+                                    ({placement.clients?.company})
+                                  </span>
+                                </div>
+                                {placement.clients?.sector && placement.clients.sector.length > 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {placement.clients.sector.slice(0, 3).map((s, idx) => (
+                                      <Badge key={idx} variant="outline" className="text-xs bg-purple-500/10 text-purple-700 border-purple-200">
+                                        {s}
+                                      </Badge>
+                                    ))}
+                                    {placement.clients.sector.length > 3 && (
+                                      <Badge variant="outline" className="text-xs">
+                                        +{placement.clients.sector.length - 3}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Meta Info */}
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4" />
+                                <span>
+                                  {format(new Date(placement.created_at), "d MMM yyyy", { locale: nl })}
+                                </span>
+                              </div>
+
+                              {placement.match_score && (
+                                <div className="flex items-center gap-2">
+                                  <Award className="h-4 w-4 text-green-600" />
+                                  <span className="font-medium text-green-600">
+                                    Match: {(placement.match_score * 100).toFixed(0)}%
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col items-end gap-3">
+                            <Badge variant={getStatusVariant(placement.status)} className="text-sm">
+                              {getStatusLabel(placement.status)}
+                            </Badge>
+
+                            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                              {placement.status === "suggested" && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => updateStatus(placement.id, "active")}
+                                >
+                                  Activeer
+                                </Button>
+                              )}
+                              {placement.status === "active" && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => updateStatus(placement.id, "completed")}
+                                >
+                                  Afronden
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         </div>
-
-                        <div className="flex flex-col items-end gap-3">
-                          <Badge variant={getStatusVariant(placement.status)}>
-                            {getStatusLabel(placement.status)}
-                          </Badge>
-
-                          <div className="flex gap-2">
-                            {placement.status === "suggested" && (
-                              <Button
-                                size="sm"
-                                onClick={() => updateStatus(placement.id, "active")}
-                              >
-                                Activeer
-                              </Button>
-                            )}
-                            {placement.status === "active" && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => updateStatus(placement.id, "completed")}
-                              >
-                                Afronden
-                              </Button>
-                            )}
-                            <Button size="sm" variant="ghost">
-                              Details
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
                 ))}
               </div>
             )}
           </div>
         </main>
       </div>
+      
+      <PlacementDetailModal
+        placement={selectedPlacement}
+        open={detailModalOpen}
+        onOpenChange={setDetailModalOpen}
+        onStatusChange={updateStatus}
+      />
     </SidebarProvider>
   );
 }

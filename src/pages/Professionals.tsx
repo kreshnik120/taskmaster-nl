@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Upload, Search, Pencil, Trash2, Phone, Mail, MapPin, Briefcase, Car, Users } from "lucide-react";
+import { motion } from "framer-motion";
 import { useUserRole } from "@/hooks/useUserRole";
 import {
   Dialog,
@@ -377,85 +378,92 @@ const Professionals = () => {
               </Card>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {filteredProfessionals.map((professional) => (
-                  <Card key={professional.id}>
-                    <CardHeader>
-                      <CardTitle className="flex items-center justify-between">
-                        <span>{professional.full_name}</span>
-                        {professional.rating && (
-                          <Badge variant="secondary">
-                            ⭐ {professional.rating}
-                          </Badge>
-                        )}
-                      </CardTitle>
-                    </CardHeader>
-                     <CardContent className="space-y-2">
-                      <div>
-                        <Badge>{professional.functie_niveau}</Badge>
-                        {professional.status === "actief" && (
-                          <Badge variant="outline" className="ml-2">
-                            Actief
-                          </Badge>
-                        )}
-                      </div>
-                      {professional.werkvorm && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Badge variant="secondary">{professional.werkvorm}</Badge>
-                        </div>
-                      )}
-                      {professional.regio && (
-                        <p className="text-sm text-muted-foreground flex items-center gap-1">
-                          <MapPin className="h-3 w-3" />
-                          {professional.regio}
-                        </p>
-                      )}
-                      {professional.telefoonnummer && (
-                        <p className="text-sm text-muted-foreground flex items-center gap-1">
-                          <Phone className="h-3 w-3" />
-                          {professional.telefoonnummer}
-                        </p>
-                      )}
-                      {professional.email && (
-                        <p className="text-sm text-muted-foreground flex items-center gap-1 truncate">
-                          <Mail className="h-3 w-3" />
-                          {professional.email}
-                        </p>
-                      )}
-                      {professional.heeft_auto && (
-                        <p className="text-sm text-muted-foreground flex items-center gap-1">
-                          <Car className="h-3 w-3" />
-                          Eigen vervoer
-                        </p>
-                      )}
-                      {professional.skills.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {professional.skills.slice(0, 3).map((skill, idx) => (
-                            <Badge key={idx} variant="outline" className="text-xs">
-                              {skill}
+                {filteredProfessionals.map((professional, idx) => (
+                  <motion.div
+                    key={professional.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: idx * 0.05 }}
+                  >
+                    <Card className="hover:scale-[1.02] hover:shadow-lg transition-all duration-200">
+                      <CardHeader>
+                        <CardTitle className="flex items-center justify-between">
+                          <span>{professional.full_name}</span>
+                          {professional.rating && (
+                            <Badge variant="secondary">
+                              ⭐ {professional.rating}
                             </Badge>
-                          ))}
-                          {professional.skills.length > 3 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{professional.skills.length - 3}
+                          )}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        <div>
+                          <Badge>{professional.functie_niveau}</Badge>
+                          {professional.status === "actief" && (
+                            <Badge variant="outline" className="ml-2">
+                              Actief
                             </Badge>
                           )}
                         </div>
-                      )}
-                      <div className="flex gap-2 mt-4 pt-4 border-t">
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          className="flex-1"
-                          onClick={() => {
-                            setSelectedProfessional(professional);
-                            setDetailModalOpen(true);
-                          }}
-                        >
-                          Bekijk Details
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+                        {professional.werkvorm && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <Badge variant="secondary">{professional.werkvorm}</Badge>
+                          </div>
+                        )}
+                        {professional.regio && (
+                          <p className="text-sm text-muted-foreground flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {professional.regio}
+                          </p>
+                        )}
+                        {professional.telefoonnummer && (
+                          <p className="text-sm text-muted-foreground flex items-center gap-1">
+                            <Phone className="h-3 w-3" />
+                            {professional.telefoonnummer}
+                          </p>
+                        )}
+                        {professional.email && (
+                          <p className="text-sm text-muted-foreground flex items-center gap-1 truncate">
+                            <Mail className="h-3 w-3" />
+                            {professional.email}
+                          </p>
+                        )}
+                        {professional.heeft_auto && (
+                          <p className="text-sm text-muted-foreground flex items-center gap-1">
+                            <Car className="h-3 w-3" />
+                            Eigen vervoer
+                          </p>
+                        )}
+                        {professional.skills.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {professional.skills.slice(0, 3).map((skill, idx) => (
+                              <Badge key={idx} variant="outline" className="text-xs">
+                                {skill}
+                              </Badge>
+                            ))}
+                            {professional.skills.length > 3 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{professional.skills.length - 3}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                        <div className="flex gap-2 mt-4 pt-4 border-t">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            className="flex-1"
+                            onClick={() => {
+                              setSelectedProfessional(professional);
+                              setDetailModalOpen(true);
+                            }}
+                          >
+                            Bekijk Details
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
                 ))}
               </div>
             )}
