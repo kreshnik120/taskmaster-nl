@@ -44,16 +44,16 @@ export function ApplicationKanbanColumn({
   });
 
   return (
-    <Card className={cn("min-w-[320px] flex flex-col", color)}>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <span>{title}</span>
+    <Card className="min-w-[320px] flex flex-col bg-card border shadow-none">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between text-base">
+          <span className="font-medium text-foreground">{title}</span>
           <span className="text-sm font-normal text-muted-foreground">
             {applications.length}
           </span>
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 overflow-auto">
+      <CardContent className="flex-1 overflow-auto pt-0">
         <SortableContext
           id={id}
           items={applications.map((app) => app.id)}

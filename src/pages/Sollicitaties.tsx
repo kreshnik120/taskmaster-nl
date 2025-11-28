@@ -41,11 +41,11 @@ interface Application {
 }
 
 const PIPELINE_STAGES = [
-  { id: "nieuw", name: "Nieuw", color: "bg-blue-500/10" },
-  { id: "screening", name: "Screening", color: "bg-yellow-500/10" },
-  { id: "interview", name: "Interview", color: "bg-purple-500/10" },
-  { id: "goedgekeurd", name: "Goedgekeurd", color: "bg-green-500/10" },
-  { id: "geplaatst", name: "Geplaatst", color: "bg-teal-500/10" },
+  { id: "nieuw", name: "Nieuw", color: "" },
+  { id: "screening", name: "Screening", color: "" },
+  { id: "interview", name: "Interview", color: "" },
+  { id: "goedgekeurd", name: "Goedgekeurd", color: "" },
+  { id: "geplaatst", name: "Geplaatst", color: "" },
 ];
 
 const FUNCTIE_NIVEAUS = ["VIG", "HBO-V", "Verpleegkundige MBO", "Helpende", "Begeleider", "Persoonlijk begeleider", "GGZ-agoog"];
@@ -347,7 +347,7 @@ const Sollicitaties = () => {
 
             {/* Search and Filter Bar */}
             <div className="space-y-6 pt-6">
-              <div className="flex flex-wrap gap-3 items-center p-4 bg-muted/20 rounded-lg border">
+              <div className="flex flex-wrap gap-3 items-center">
               {/* Zoekbalk */}
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -355,13 +355,13 @@ const Sollicitaties = () => {
                   placeholder="Zoek op naam of email..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 border-border/50"
                 />
               </div>
               
               {/* Functieniveau Filter */}
               <Select value={filterFunctieNiveau} onValueChange={setFilterFunctieNiveau}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-[180px] border-border/50">
                   <SelectValue placeholder="Functieniveau" />
                 </SelectTrigger>
                 <SelectContent>
@@ -374,7 +374,7 @@ const Sollicitaties = () => {
               
               {/* Werkvorm Filter */}
               <Select value={filterWerkvorm} onValueChange={setFilterWerkvorm}>
-                <SelectTrigger className="w-[160px]">
+                <SelectTrigger className="w-[160px] border-border/50">
                   <SelectValue placeholder="Werkvorm" />
                 </SelectTrigger>
                 <SelectContent>
@@ -387,7 +387,7 @@ const Sollicitaties = () => {
               
               {/* Bureau Filter */}
               <Select value={filterOrganisatie} onValueChange={setFilterOrganisatie}>
-                <SelectTrigger className="w-[150px]">
+                <SelectTrigger className="w-[150px] border-border/50">
                   <SelectValue placeholder="Bureau" />
                 </SelectTrigger>
                 <SelectContent>
@@ -404,7 +404,7 @@ const Sollicitaties = () => {
                   placeholder="Filter op regio..."
                   value={filterRegio}
                   onChange={(e) => setFilterRegio(e.target.value)}
-                  className="h-10"
+                  className="h-10 border-border/50"
                 />
               </div>
               
@@ -420,6 +420,7 @@ const Sollicitaties = () => {
                     setFilterOrganisatie("all");
                     setFilterRegio("");
                   }}
+                  className="text-muted-foreground"
                 >
                   <X className="h-4 w-4 mr-1" />
                   Reset
