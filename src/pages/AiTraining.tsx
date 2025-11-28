@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { Loader2, CheckCircle, Target, TrendingUp } from "lucide-react";
+import { Loader2, CheckCircle, Target, TrendingUp, BarChart3, Coins, Settings, Database, MessageSquare } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -150,27 +150,33 @@ const AiTraining = () => {
   }
 
   return (
-    <SidebarProvider>
+    <>
       <ValidationOnboardingWizard />
-      <div className="flex min-h-screen w-full">
-        <AppSidebar />
-        <main className="flex-1 p-6 overflow-auto">
-          <SidebarTrigger className="mb-4" />
-          <div className="max-w-6xl mx-auto space-y-6">
+      <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold mb-2">AI Training & Kennisbeheer</h1>
-              <p className="text-muted-foreground">
-                Train het AI systeem met bedrijfsspecifieke kennis en documenten
+              <h1 className="text-2xl font-semibold">AI Training</h1>
+              <p className="text-muted-foreground text-sm">
+                Kennisbeheer en AI training dashboard
               </p>
             </div>
 
             <Tabs defaultValue="overview" className="w-full">
               <TabsList className="grid w-full grid-cols-5">
-                <TabsTrigger value="overview">📊 Overzicht</TabsTrigger>
-                <TabsTrigger value="budget">💰 Budget</TabsTrigger>
-                <TabsTrigger value="management">🔧 Beheer</TabsTrigger>
-                <TabsTrigger value="knowledge">🗄️ Kennis</TabsTrigger>
-                <TabsTrigger value="training">💬 Training</TabsTrigger>
+                <TabsTrigger value="overview" className="gap-2">
+                  <BarChart3 className="h-4 w-4" /> Overzicht
+                </TabsTrigger>
+                <TabsTrigger value="budget" className="gap-2">
+                  <Coins className="h-4 w-4" /> Budget
+                </TabsTrigger>
+                <TabsTrigger value="management" className="gap-2">
+                  <Settings className="h-4 w-4" /> Beheer
+                </TabsTrigger>
+                <TabsTrigger value="knowledge" className="gap-2">
+                  <Database className="h-4 w-4" /> Kennis
+                </TabsTrigger>
+                <TabsTrigger value="training" className="gap-2">
+                  <MessageSquare className="h-4 w-4" /> Training
+                </TabsTrigger>
               </TabsList>
 
               {/* 📊 OVERZICHT */}
@@ -408,9 +414,7 @@ const AiTraining = () => {
               </TabsContent>
             </Tabs>
           </div>
-        </main>
-      </div>
-    </SidebarProvider>
+    </>
   );
 };
 
