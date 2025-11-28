@@ -701,65 +701,55 @@ const Dashboard = () => {
         </p>
       </motion.div>
 
-      {/* Stats Bar - Gradient Cards met Micro-animaties */}
+      {/* Stats Bar - Monochrome Cards */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.1 }}
         className="grid grid-cols-4 gap-4"
       >
-        {/* Open Tasks - Blue Gradient */}
-        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900
-                       hover:shadow-lg hover:scale-105 transition-all duration-300 cursor-default
-                       border border-blue-100 dark:border-blue-800">
-          <span className="text-4xl font-bold text-blue-600 dark:text-blue-400 
-                           group-hover:scale-110 transition-transform duration-200">
+        {/* Open Tasks */}
+        <div className="group flex flex-col items-center justify-center p-6 rounded-lg 
+                       bg-card border hover:bg-muted/50 transition-colors cursor-default">
+          <span className="text-3xl font-bold">
             {tasks.length}
           </span>
-          <span className="text-xs text-blue-600/70 dark:text-blue-400/70 mt-1 font-medium">
+          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
             Open
           </span>
         </div>
 
-        {/* Completed - Green Gradient */}
-        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900
-                       hover:shadow-lg hover:scale-105 transition-all duration-300 cursor-default
-                       border border-green-100 dark:border-green-800">
-          <span className="text-4xl font-bold text-green-600 dark:text-green-400 
-                           group-hover:scale-110 transition-transform duration-200">
+        {/* Completed */}
+        <div className="group flex flex-col items-center justify-center p-6 rounded-lg 
+                       bg-card border hover:bg-muted/50 transition-colors cursor-default">
+          <span className="text-3xl font-bold">
             {completedThisWeek}
           </span>
-          <span className="text-xs text-green-600/70 dark:text-green-400/70 mt-1 font-medium">
+          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
             Afgerond
           </span>
         </div>
 
-        {/* Hours Worked - Amber Gradient */}
-        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950 dark:to-amber-900
-                       hover:shadow-lg hover:scale-105 transition-all duration-300 cursor-default
-                       border border-amber-100 dark:border-amber-800">
-          <span className="text-4xl font-bold text-amber-600 dark:text-amber-400 
-                           group-hover:scale-110 transition-transform duration-200">
+        {/* Hours Worked */}
+        <div className="group flex flex-col items-center justify-center p-6 rounded-lg 
+                       bg-card border hover:bg-muted/50 transition-colors cursor-default">
+          <span className="text-3xl font-bold">
             {todayHours.split(' ')[0]}
           </span>
-          <span className="text-xs text-amber-600/70 dark:text-amber-400/70 mt-1 font-medium">
+          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
             Gewerkt
           </span>
         </div>
 
-        {/* Priority - Orange Gradient */}
-        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-950 dark:to-orange-900
-                       hover:shadow-lg hover:scale-105 transition-all duration-300 cursor-default
-                       border border-orange-100 dark:border-orange-800">
-          <span className="text-4xl font-bold text-orange-600 dark:text-orange-400 
-                           group-hover:scale-110 transition-transform duration-200">
+        {/* Priority */}
+        <div className="group flex flex-col items-center justify-center p-6 rounded-lg 
+                       bg-card border hover:bg-muted/50 transition-colors cursor-default">
+          <span className={`text-3xl font-bold ${
+            priorityBreakdown.critical + priorityBreakdown.high > 0 ? 'text-destructive' : ''
+          }`}>
             {priorityBreakdown.critical + priorityBreakdown.high}
           </span>
-          <span className="text-xs text-orange-600/70 dark:text-orange-400/70 mt-1 font-medium">
+          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
             Prioriteit
           </span>
         </div>
