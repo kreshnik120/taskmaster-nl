@@ -190,126 +190,52 @@ const AfgerondeTaken = () => {
   );
 
   return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full">
-        <AppSidebar />
-        <main className="flex-1 p-6">
-          <SidebarTrigger className="mb-4" />
-          
-          {/* Hero Section */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <h1 className="text-4xl font-bold">
-                    {getGreeting()}, {user?.user_metadata?.name || 'daar'}
-                  </h1>
-                  <Badge variant="secondary" className="flex items-center gap-1">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Archief
-                  </Badge>
-                </div>
-                <p className="text-xl text-muted-foreground">
-                  {format(new Date(), "EEEE d MMMM", { locale: nl })}
-                </p>
-              </div>
-            </div>
-            
-            {/* Celebration Summary */}
-            <div className="bg-gradient-to-r from-green-500/10 via-green-500/5 to-background rounded-lg p-4 border border-green-500/20">
-              <div className="flex items-start gap-3">
-                <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
-                <div className="space-y-2 flex-1">
-                  {loading ? (
-                    <p className="text-sm">Laden...</p>
-                  ) : tasks.length === 0 ? (
-                    <p className="text-sm">
-                      🎯 Nog geen afgeronde taken. Start vandaag met het voltooien van je eerste taak!
-                    </p>
-                  ) : (
-                    <>
-                      <p className="text-sm">
-                        🎉 <strong>{tasks.length} taken afgerond</strong> - geweldig werk!
-                      </p>
-                      {onTimeTasks.length > 0 && (
-                        <p className="text-sm text-green-600">
-                          ✅ <strong>{onTimeTasks.length} taken ({Math.round(onTimeTasks.length / tasks.length * 100)}%)</strong> tijdig voltooid
-                        </p>
-                      )}
-                      {lateTasks.length > 0 && (
-                        <p className="text-sm text-orange-600">
-                          ⚠️ <strong>{lateTasks.length} taken ({Math.round(lateTasks.length / tasks.length * 100)}%)</strong> te laat voltooid
-                        </p>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+    <div className="space-y-6">
+      {/* Hero Section */}
+      <div>
+        <h1 className="text-2xl font-semibold mb-1">Afgeronde Taken</h1>
+        <p className="text-sm text-muted-foreground">
+          Bekijk voltooide taken en prestaties
+        </p>
+      </div>
 
-          {/* Compact Stats Bar */}
-          <div className="grid grid-cols-4 gap-3 mb-6">
-            {/* Totaal Afgerond */}
-            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
-              <span className="text-2xl mb-1">✅</span>
-              <span className="text-2xl font-bold">
-                {tasks.length}
-              </span>
-              <span className="text-xs text-muted-foreground">Totaal Afgerond</span>
-            </div>
-            
-            {/* Tijdig Voltooid */}
-            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-green-500/10 border border-green-500/20">
-              <span className="text-2xl mb-1">🎯</span>
-              <span className="text-2xl font-bold text-green-600">
-                {onTimeTasks.length}
-              </span>
-              <span className="text-xs text-muted-foreground">Tijdig Voltooid</span>
-            </div>
-            
-            {/* Te Laat */}
-            <div className={`flex flex-col items-center justify-center p-4 rounded-lg ${
-              lateTasks.length > 0 ? 'bg-orange-500/10 border border-orange-500/20' : 'bg-muted/30'
-            }`}>
-              <span className="text-2xl mb-1">⚠️</span>
-              <span className={`text-2xl font-bold ${
-                lateTasks.length > 0 ? 'text-orange-600' : 'text-muted-foreground'
-              }`}>
-                {lateTasks.length}
-              </span>
-              <span className="text-xs text-muted-foreground">Te Laat</span>
-            </div>
-            
-            {/* Success Rate */}
-            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-primary/10 border border-primary/20">
-              <span className="text-2xl mb-1">📊</span>
-              <span className="text-2xl font-bold text-primary">
-                {tasks.length > 0 ? Math.round(onTimeTasks.length / tasks.length * 100) : 0}%
-              </span>
-              <span className="text-xs text-muted-foreground">Success Rate</span>
-            </div>
-          </div>
-          
-          <Card>
-            <CardHeader className="bg-muted/30">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-green-500/10">
-                    <CheckCircle2 className="h-6 w-6 text-green-600" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl">Afgeronde Taken</CardTitle>
-                    <CardDescription className="flex items-center gap-2 mt-1">
-                      {tasks.length > 0 ? (
-                        <span>Bekijk je voltooide taken en prestaties</span>
-                      ) : (
-                        <span>Start met het voltooien van taken om hier je geschiedenis te zien</span>
-                      )}
-                    </CardDescription>
-                  </div>
-                </div>
-              </div>
+      {/* Stats Bar */}
+      <div className="grid grid-cols-4 gap-3">
+        {/* Totaal */}
+        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border cursor-pointer hover:bg-muted/50 transition-colors">
+          <span className="text-3xl font-bold">{tasks.length}</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">Totaal</span>
+        </div>
+        
+        {/* Tijdig */}
+        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border cursor-pointer hover:bg-muted/50 transition-colors">
+          <span className="text-3xl font-bold">{onTimeTasks.length}</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">Tijdig</span>
+        </div>
+        
+        {/* Te Laat */}
+        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border cursor-pointer hover:bg-muted/50 transition-colors">
+          <span className={`text-3xl font-bold ${lateTasks.length > 0 ? 'text-destructive' : ''}`}>
+            {lateTasks.length}
+          </span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">Te Laat</span>
+        </div>
+        
+        {/* Success Rate */}
+        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border cursor-pointer hover:bg-muted/50 transition-colors">
+          <span className="text-3xl font-bold">
+            {tasks.length > 0 ? Math.round(onTimeTasks.length / tasks.length * 100) : 0}%
+          </span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">Success Rate</span>
+        </div>
+      </div>
+      
+      <Card>
+        <CardHeader>
+              <CardTitle className="text-lg">Alle afgeronde taken</CardTitle>
+              <CardDescription>
+                {tasks.length > 0 ? `${tasks.length} taken voltooid` : 'Geen taken voltooid'}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -361,9 +287,7 @@ const AfgerondeTaken = () => {
               )}
             </CardContent>
           </Card>
-        </main>
-      </div>
-    </SidebarProvider>
+    </div>
   );
 };
 
