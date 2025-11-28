@@ -106,7 +106,7 @@ export async function convertApplicationToProfessional(
       email: application.email_from,
       heeft_auto: application.extracted_data.eigen_vervoer || false,
       skills: application.extracted_data.ervaring_sector || [],
-      status: 'beschikbaar',
+      status: 'actief',
       tags: application.extracted_data.doelgroep_ervaring || []
     };
 
