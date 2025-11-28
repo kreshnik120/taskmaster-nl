@@ -468,7 +468,7 @@ export default function Lijst() {
   }
 
   return (
-    <>
+    <div className="space-y-6">
       {/* Hero Section */}
       <div className="mb-8">
             <div className="flex items-center justify-between mb-4">
@@ -839,7 +839,6 @@ export default function Lijst() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  </>
+  </div>
 );
-}
 }
