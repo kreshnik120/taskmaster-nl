@@ -330,8 +330,8 @@ const Professionals = () => {
 
   return (
     <div className="space-y-6">
-        {/* Hero Section */}
-        <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-background rounded-lg p-6 border border-border/50">
+      {/* Hero Section */}
+      <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-background rounded-lg p-6 border border-border/50">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold mb-2">Professionals</h1>
@@ -444,12 +444,12 @@ const Professionals = () => {
                     </div>
                   </DialogContent>
                 </Dialog>
-              )}
-            </div>
+            )}
           </div>
+        </div>
 
-          {/* KPI Dashboard */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* KPI Dashboard */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               {/* Total Professionals */}
               <Card className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 border-blue-200/50 hover:shadow-lg transition-shadow">
                 <CardContent className="p-6">
@@ -505,10 +505,10 @@ const Professionals = () => {
                 </CardContent>
               </Card>
             </div>
-          </div>
+        </div>
 
-          {/* Search & Filters */}
-          <div className="space-y-3">
+        {/* Search & Filters */}
+        <div className="space-y-3">
             <div className="flex gap-3 flex-wrap">
               <div className="flex-1 min-w-[200px] relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
@@ -584,8 +584,8 @@ const Professionals = () => {
             )}
           </div>
 
-          {/* Professional Cards */}
-          {filteredProfessionals.length === 0 ? (
+        {/* Professional Cards */}
+        {filteredProfessionals.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center">
                   <p className="text-muted-foreground mb-4">
@@ -698,15 +698,15 @@ const Professionals = () => {
             </div>
           )}
 
-          <ProfessionalDetailModal
-            professional={selectedProfessional}
-            open={detailModalOpen}
-            onOpenChange={setDetailModalOpen}
-            onSuccess={() => {
-              fetchProfessionals();
-              setDetailModalOpen(false);
-            }}
-        />
+      <ProfessionalDetailModal
+        professional={selectedProfessional}
+        open={detailModalOpen}
+        onOpenChange={setDetailModalOpen}
+        onSuccess={() => {
+          fetchProfessionals();
+          setDetailModalOpen(false);
+        }}
+      />
 
       <ProfessionalBulkActionBar
         selectedCount={selectedProfessionalIds.size}
