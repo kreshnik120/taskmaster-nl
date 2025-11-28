@@ -90,7 +90,7 @@ export function ApplicationCard({ application, onClick }: ApplicationCardProps) 
     <Card
       ref={setNodeRef}
       style={style}
-      className={`hover:shadow-sm transition-shadow cursor-pointer border-border/50 ${getCardBorder(completenessScore)}`}
+      className={`hover:scale-[1.01] hover:shadow-md active:scale-[0.99] transition-all duration-200 ease-out cursor-pointer border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2 ${getCardBorder(completenessScore)}`}
       onClick={onClick}
     >
       <CardContent className="p-4 space-y-2" {...attributes} {...listeners}>

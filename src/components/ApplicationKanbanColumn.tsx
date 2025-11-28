@@ -3,6 +3,7 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApplicationCard } from "./ApplicationCard";
 import { cn } from "@/lib/utils";
+import { Inbox } from "lucide-react";
 
 interface Application {
   id: string;
@@ -52,7 +53,13 @@ export function ApplicationKanbanColumn({
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-base">
           <span className="font-medium text-foreground">{title}</span>
-          <span className={`text-sm font-normal ${countColor}`}>
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+            id === 'nieuw' ? 'bg-blue-50 text-blue-600' :
+            id === 'screening' ? 'bg-amber-50 text-amber-600' :
+            id === 'interview' ? 'bg-sky-50 text-sky-600' :
+            id === 'goedgekeurd' ? 'bg-emerald-50 text-emerald-600' :
+            'bg-green-50 text-green-700'
+          }`}>
             {applications.length}
           </span>
         </CardTitle>
@@ -64,13 +71,21 @@ export function ApplicationKanbanColumn({
           strategy={verticalListSortingStrategy}
         >
           <div ref={setNodeRef} className="space-y-2 min-h-[200px]">
-            {applications.map((application) => (
-              <ApplicationCard
-                key={application.id}
-                application={application}
-                onClick={() => onApplicationClick(application)}
-              />
-            ))}
+            {applications.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <Inbox className="h-8 w-8 text-muted-foreground/30 mb-3" />
+                <p className="text-sm text-muted-foreground/60">Geen sollicitaties</p>
+                <p className="text-xs text-muted-foreground/40 mt-1">Sleep hier om toe te voegen</p>
+              </div>
+            ) : (
+              applications.map((application) => (
+                <ApplicationCard
+                  key={application.id}
+                  application={application}
+                  onClick={() => onApplicationClick(application)}
+                />
+              ))
+            )}
           </div>
         </SortableContext>
       </CardContent>

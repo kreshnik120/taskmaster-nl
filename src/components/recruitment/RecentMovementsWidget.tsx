@@ -1,5 +1,6 @@
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
+import { ChevronRight } from "lucide-react";
 
 interface Application {
   id: string;
@@ -61,19 +62,24 @@ export function RecentMovementsWidget({ applications }: RecentMovementsWidgetPro
           const stageColor = STAGE_COLORS[stage] || { dot: "bg-gray-400", text: "text-gray-600" };
           
           return (
-            <div key={app.id} className="grid grid-cols-[40%_25%_35%] gap-4 text-sm items-center hover:bg-muted/30 -mx-1 px-1 py-1.5 rounded cursor-pointer transition-colors">
-              <span className="font-medium text-foreground truncate">
-                {candidateName}
-              </span>
-              <span className="flex items-center gap-1.5 truncate">
-                <span className={`w-1.5 h-1.5 rounded-full ${stageColor.dot} flex-shrink-0`} />
-                <span className={`${stageColor.text} truncate`}>
-                  {STAGE_LABELS[stage] || stage}
+            <div key={app.id} className="group grid grid-cols-[1fr_auto] gap-4 text-sm items-center hover:bg-accent/50 -mx-2 px-2 py-1.5 rounded cursor-pointer transition-all duration-200">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="font-medium text-foreground truncate group-hover:font-semibold transition-all">
+                  {candidateName}
                 </span>
-              </span>
-              <span className="text-muted-foreground text-xs text-right">
-                {timeAgo}
-              </span>
+                <span className="flex items-center gap-1.5 shrink-0">
+                  <span className={`w-1.5 h-1.5 rounded-full ${stageColor.dot} flex-shrink-0`} />
+                  <span className={`${stageColor.text} text-xs`}>
+                    {STAGE_LABELS[stage] || stage}
+                  </span>
+                </span>
+              </div>
+              <div className="flex items-center gap-1 justify-end shrink-0">
+                <span className="text-muted-foreground text-xs">
+                  {timeAgo}
+                </span>
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+              </div>
             </div>
           );
         })}
