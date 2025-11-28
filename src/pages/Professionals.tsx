@@ -329,8 +329,7 @@ const Professionals = () => {
   }
 
   return (
-    <>
-      <div className="space-y-6">
+    <div className="space-y-6">
         {/* Hero Section */}
         <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-background rounded-lg p-6 border border-border/50">
         <div className="flex items-center justify-between">
@@ -718,8 +717,7 @@ const Professionals = () => {
         onBulkDelete={handleBulkDelete}
       />
     </div>
-  </>
-);
+  );
 };
 
 export default Professionals;
