@@ -329,7 +329,8 @@ const Professionals = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      <div className="space-y-6">
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-background rounded-lg p-6 border border-border/50">
         <div className="flex items-center justify-between">
@@ -581,8 +582,7 @@ const Professionals = () => {
                 <AlertCircle className="h-4 w-4" />
                 <span>{filteredProfessionals.length} van {professionals.length} professionals getoond</span>
               </div>
-              )}
-            </div>
+            )}
           </div>
 
           {/* Professional Cards */}
@@ -699,26 +699,27 @@ const Professionals = () => {
             </div>
           )}
 
-      <ProfessionalDetailModal
-        professional={selectedProfessional}
-        open={detailModalOpen}
-        onOpenChange={setDetailModalOpen}
-        onSuccess={() => {
-          fetchProfessionals();
-          setDetailModalOpen(false);
-        }}
-      />
+          <ProfessionalDetailModal
+            professional={selectedProfessional}
+            open={detailModalOpen}
+            onOpenChange={setDetailModalOpen}
+            onSuccess={() => {
+              fetchProfessionals();
+              setDetailModalOpen(false);
+            }}
+          />
 
-      <ProfessionalBulkActionBar
-        selectedCount={selectedProfessionalIds.size}
-        onClearSelection={handleClearSelection}
-        onBulkChangeStatus={handleBulkChangeStatus}
-        onBulkEmail={handleBulkEmail}
-        onBulkExport={handleBulkExport}
-        onBulkDelete={handleBulkDelete}
-      />
-    </div>
-  );
-};
+          <ProfessionalBulkActionBar
+            selectedCount={selectedProfessionalIds.size}
+            onClearSelection={handleClearSelection}
+            onBulkChangeStatus={handleBulkChangeStatus}
+            onBulkEmail={handleBulkEmail}
+            onBulkExport={handleBulkExport}
+            onBulkDelete={handleBulkDelete}
+          />
+        </div>
+      </>
+    );
+  }
 
-export default Professionals;
+  export default Professionals;

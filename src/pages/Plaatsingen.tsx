@@ -346,8 +346,7 @@ export default function Plaatsingen() {
                 ))}
           </div>
         )}
-      </div>
-
+      
       <PlacementDetailModal
         placement={selectedPlacement}
         open={detailModalOpen}
