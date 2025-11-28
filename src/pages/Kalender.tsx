@@ -4,11 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { format, startOfWeek, endOfDay, startOfDay, addDays, isSameDay, parseISO, getWeek, endOfWeek } from "date-fns";
 import { nl } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, User, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, User, Trash2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
+import { TaskDialog } from "@/components/TaskDialog";
 import { useToast } from "@/hooks/use-toast";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
@@ -56,6 +57,8 @@ export default function Kalender() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"5" | "7">("5");
+  const [newTaskDialogOpen, setNewTaskDialogOpen] = useState(false);
+  const [newTaskDate, setNewTaskDate] = useState<Date | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -168,6 +171,17 @@ export default function Kalender() {
     setDetailModalOpen(false);
   };
 
+  const handleDayClick = (day: Date) => {
+    setNewTaskDate(day);
+    setNewTaskDialogOpen(true);
+  };
+
+  const handleNewTaskCreated = () => {
+    fetchTasks();
+    setNewTaskDialogOpen(false);
+    setNewTaskDate(null);
+  };
+
   const handleDeleteReminder = async (reminderId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
@@ -208,21 +222,21 @@ export default function Kalender() {
         </ToggleGroup>
       </div>
 
-      {/* Monochrome Stats Bar */}
+      {/* Gradient KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <button onClick={goToToday} className="text-left rounded-lg border bg-card p-4 hover:bg-accent/50 transition-colors">
+        <button onClick={goToToday} className="text-left rounded-lg border bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/20 dark:to-background p-4 hover:shadow-md transition-all">
           <p className="text-sm text-muted-foreground mb-1">Vandaag</p>
           <p className="text-2xl font-semibold">{todayTasks}</p>
         </button>
-        <button className="text-left rounded-lg border bg-card p-4 hover:bg-accent/50 transition-colors">
+        <button className="text-left rounded-lg border bg-gradient-to-br from-green-50 to-white dark:from-green-950/20 dark:to-background p-4 hover:shadow-md transition-all">
           <p className="text-sm text-muted-foreground mb-1">Deze Week</p>
           <p className="text-2xl font-semibold">{tasks.length}</p>
         </button>
-        <button className="text-left rounded-lg border bg-card p-4 hover:bg-accent/50 transition-colors">
+        <button className="text-left rounded-lg border bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/20 dark:to-background p-4 hover:shadow-md transition-all">
           <p className="text-sm text-muted-foreground mb-1">Herinneringen</p>
           <p className="text-2xl font-semibold">{reminders.length}</p>
         </button>
-        <button className={cn("text-left rounded-lg border bg-card p-4 hover:bg-accent/50 transition-colors", urgentCount > 0 && "border-destructive/50")}>
+        <button className={cn("text-left rounded-lg border bg-gradient-to-br from-orange-50 to-white dark:from-orange-950/20 dark:to-background p-4 hover:shadow-md transition-all", urgentCount > 0 && "border-destructive/50")}>
           <p className="text-sm text-muted-foreground mb-1">Urgent</p>
           <p className={cn("text-2xl font-semibold", urgentCount > 0 && "text-destructive")}>{urgentCount}</p>
         </button>
@@ -246,8 +260,13 @@ export default function Kalender() {
         </div>
       </div>
 
-      {/* Clean Calendar Grid */}
-      <div className={`grid ${viewMode === "5" ? "grid-cols-5" : "grid-cols-7"} gap-4`}>
+      {/* Responsive Calendar Grid */}
+      <div className={cn(
+        "grid gap-4",
+        viewMode === "5" 
+          ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-5" 
+          : "grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7"
+      )}>
         {weekDays.map((day) => {
           const dayTasks = getTasksForDay(day);
           const dayReminders = getRemindersForDay(day);
@@ -266,16 +285,22 @@ export default function Kalender() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {dayTasks.length === 0 && dayReminders.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">Geen taken</p>
+                  <button 
+                    onClick={() => handleDayClick(day)}
+                    className="w-full text-sm text-muted-foreground text-center py-8 hover:bg-accent/50 rounded-lg transition-colors group"
+                  >
+                    <Plus className="h-5 w-5 mx-auto mb-2 opacity-50 group-hover:opacity-100" />
+                    <p>Klik om taak toe te voegen</p>
+                  </button>
                 ) : (
                   <>
                     {dayTasks.map((task) => (
-                      <div key={task.id} onClick={() => handleTaskClick(task)} className="p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors space-y-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="font-medium text-sm line-clamp-2 flex-1">{task.title}</p>
-                          <Badge variant={priorityConfig[task.priority as keyof typeof priorityConfig]?.variant || priorityConfig.medium.variant} className="text-xs whitespace-nowrap">
-                            {priorityConfig[task.priority as keyof typeof priorityConfig]?.label || priorityConfig.medium.label}
-                          </Badge>
+                      <div key={task.id} onClick={() => handleTaskClick(task)} className="p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors space-y-1.5">
+                        <p className="font-medium text-sm line-clamp-2">{task.title}</p>
+                        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                          <span>{priorityConfig[task.priority as keyof typeof priorityConfig]?.label || priorityConfig.medium.label}</span>
+                          {task.start_at && <span>{format(parseISO(task.start_at), 'HH:mm')}</span>}
+                          {!task.start_at && task.due_at && <span>{format(parseISO(task.due_at), 'HH:mm')}</span>}
                         </div>
                         {task.profiles && (
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -283,8 +308,6 @@ export default function Kalender() {
                             <span className="truncate">{task.profiles.name || task.profiles.email}</span>
                           </div>
                         )}
-                        {task.start_at && <p className="text-xs text-muted-foreground">Start: {format(parseISO(task.start_at), 'HH:mm')}</p>}
-                        {task.due_at && <p className="text-xs text-muted-foreground">Deadline: {format(parseISO(task.due_at), 'HH:mm')}</p>}
                       </div>
                     ))}
                     {dayReminders.map((reminder) => (
@@ -307,6 +330,13 @@ export default function Kalender() {
       </div>
 
       <TaskDetailModal task={selectedTask} open={detailModalOpen} onOpenChange={setDetailModalOpen} onTaskUpdated={handleTaskUpdated} />
+      <TaskDialog 
+        open={newTaskDialogOpen} 
+        onOpenChange={setNewTaskDialogOpen} 
+        onSuccess={handleNewTaskCreated}
+        defaultStartDate={newTaskDate || undefined}
+        defaultDueDate={newTaskDate || undefined}
+      />
     </div>
   );
 }
