@@ -19,30 +19,30 @@ export function ClientGroupingToggle({ value, onChange, counts }: ClientGrouping
         type="single"
         value={value}
         onValueChange={(val) => val && onChange(val as any)}
-        className="bg-muted/50 p-1 rounded-lg"
+        className="bg-muted/30 p-1 rounded-xl border border-border/50"
       >
-        <ToggleGroupItem value="bureau" className="data-[state=on]:bg-background data-[state=on]:shadow-sm">
+        <ToggleGroupItem value="bureau" className="rounded-lg px-4 py-1.5 text-sm font-medium text-foreground/70 data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm transition-all">
           Bureau
           {counts?.bureau !== undefined && (
-            <span className="ml-1.5 text-xs text-muted-foreground">({counts.bureau})</span>
+            <span className="ml-1.5 text-xs opacity-60">({counts.bureau})</span>
           )}
         </ToggleGroupItem>
-        <ToggleGroupItem value="matching" className="data-[state=on]:bg-background data-[state=on]:shadow-sm">
+        <ToggleGroupItem value="matching" className="rounded-lg px-4 py-1.5 text-sm font-medium text-foreground/70 data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm transition-all">
           Matching
           {counts?.matching !== undefined && (
-            <span className="ml-1.5 text-xs text-muted-foreground">({counts.matching})</span>
+            <span className="ml-1.5 text-xs opacity-60">({counts.matching})</span>
           )}
         </ToggleGroupItem>
-        <ToggleGroupItem value="regio" className="data-[state=on]:bg-background data-[state=on]:shadow-sm">
+        <ToggleGroupItem value="regio" className="rounded-lg px-4 py-1.5 text-sm font-medium text-foreground/70 data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm transition-all">
           Regio
           {counts?.regio !== undefined && (
-            <span className="ml-1.5 text-xs text-muted-foreground">({counts.regio})</span>
+            <span className="ml-1.5 text-xs opacity-60">({counts.regio})</span>
           )}
         </ToggleGroupItem>
-        <ToggleGroupItem value="alpha" className="data-[state=on]:bg-background data-[state=on]:shadow-sm">
+        <ToggleGroupItem value="alpha" className="rounded-lg px-4 py-1.5 text-sm font-medium text-foreground/70 data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm transition-all">
           A-Z
           {counts?.alpha !== undefined && (
-            <span className="ml-1.5 text-xs text-muted-foreground">({counts.alpha})</span>
+            <span className="ml-1.5 text-xs opacity-60">({counts.alpha})</span>
           )}
         </ToggleGroupItem>
       </ToggleGroup>
