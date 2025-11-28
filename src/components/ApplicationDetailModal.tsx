@@ -15,6 +15,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { convertApplicationToProfessional } from "@/lib/convertApplicationToProfessional";
+import { ApplicationActivityTimeline } from "@/components/recruitment/ApplicationActivityTimeline";
+import { EmailTemplateSuggestions } from "@/components/recruitment/EmailTemplateSuggestions";
+import { MatchScoreBreakdown } from "@/components/recruitment/MatchScoreBreakdown";
 
 interface Application {
   id: string;
@@ -63,6 +66,8 @@ export function ApplicationDetailModal({
   onOpenChange,
   onApplicationUpdated,
 }: ApplicationDetailModalProps) {
+  const candidateName = application.extracted_data?.naam || 'Kandidaat';
+  
   const [updating, setUpdating] = useState(false);
   const [linkedTasks, setLinkedTasks] = useState<LinkedTask[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
@@ -668,20 +673,20 @@ export function ApplicationDetailModal({
         const regioMatch = clientRegios.some((cr: string) => 
           applicantRegios.some((ar: string) => ar.includes(cr) || cr.includes(ar))
         );
+        
+        // Fallback: check of sollicitant regio voorkomt in klantnaam
+        const clientNameLower = (client.name || '').toLowerCase();
+        const clientCompanyLower = (client.company || '').toLowerCase();
+        const nameRegioMatch = applicantRegios.some((ar: string) => 
+          clientNameLower.includes(ar) || clientCompanyLower.includes(ar)
+        );
+        
         if (regioMatch && clientRegios.length > 0) {
           score += 30;
           reasons.push('Regio match');
-        } else {
-          // Fallback: check of sollicitant regio voorkomt in klantnaam
-          const clientNameLower = (client.name || '').toLowerCase();
-          const clientCompanyLower = (client.company || '').toLowerCase();
-          const nameRegioMatch = applicantRegios.some((ar: string) => 
-            clientNameLower.includes(ar) || clientCompanyLower.includes(ar)
-          );
-          if (nameRegioMatch) {
-            score += 20;
-            reasons.push('Regio in klantnaam');
-          }
+        } else if (nameRegioMatch) {
+          score += 20;
+          reasons.push('Regio in klantnaam');
         }
         
         // Sector matching (25%)
@@ -725,11 +730,53 @@ export function ApplicationDetailModal({
           reasons.push('Zelfde bureau');
         }
         
+        // Build score breakdown for each match
+        const breakdown = {
+          regio: {
+            score: regioMatch && clientRegios.length > 0 ? 30 : nameRegioMatch ? 20 : 0,
+            match: regioMatch || nameRegioMatch,
+            reason: regioMatch && clientRegios.length > 0 
+              ? 'Exacte regio match' 
+              : nameRegioMatch 
+                ? 'Regio gevonden in klantnaam' 
+                : 'Geen regio overlap'
+          },
+          sector: {
+            score: sectorOverlap > 0 ? Math.min(25, sectorOverlap * 10) : 0,
+            match: sectorOverlap > 0,
+            reason: sectorOverlap > 0 
+              ? `${sectorOverlap} sector(en) komen overeen` 
+              : 'Geen sector overlap'
+          },
+          doelgroep: {
+            score: doelgroepOverlap > 0 ? Math.min(20, doelgroepOverlap * 8) : 0,
+            match: doelgroepOverlap > 0,
+            reason: doelgroepOverlap > 0 
+              ? `${doelgroepOverlap} doelgroep(en) komen overeen` 
+              : 'Geen doelgroep overlap'
+          },
+          functie: {
+            score: (applicantFunctie && clientFuncties.includes(applicantFunctie)) ? 15 : 0,
+            match: applicantFunctie && clientFuncties.includes(applicantFunctie),
+            reason: (applicantFunctie && clientFuncties.includes(applicantFunctie))
+              ? 'Functieniveau wordt gezocht'
+              : 'Functieniveau niet gezocht'
+          },
+          bureau: {
+            score: (applicantOrg && clientOrgName === applicantOrg) ? 10 : 0,
+            match: applicantOrg && clientOrgName === applicantOrg,
+            reason: (applicantOrg && clientOrgName === applicantOrg)
+              ? 'Zelfde bemiddelingsbureau'
+              : 'Ander bemiddelingsbureau'
+          }
+        };
+        
         return { 
           ...client, 
           matchScore: Math.round(score), 
           matchReasons: reasons,
-          orgName: clientOrgName 
+          orgName: clientOrgName,
+          scoreBreakdown: breakdown
         };
       });
       
@@ -1681,6 +1728,23 @@ export function ApplicationDetailModal({
               </>
             )}
           </div>
+
+          <Separator />
+
+          {/* Activity Timeline */}
+          <div className="space-y-3">
+            <span className="text-sm font-medium">Activiteit Timeline</span>
+            <ApplicationActivityTimeline applicationId={application.id} />
+          </div>
+
+          <Separator />
+
+          {/* Email Templates */}
+          <EmailTemplateSuggestions 
+            pipelineStage={application.pipeline_stage}
+            candidateName={candidateName}
+            functieNiveau={application.extracted_data?.functie_niveau}
+          />
 
           <Separator />
 

@@ -12,6 +12,7 @@ interface Application {
   status: string;
   completeness_score: number | null;
   created_at: string;
+  updated_at: string | null;
   extracted_data?: {
     naam?: string;
     werkvorm?: string;
