@@ -41,6 +41,8 @@ interface TaskDialogProps {
   onSuccess: () => void;
   taskId?: string;
   columnId?: string;
+  defaultStartDate?: Date;
+  defaultDueDate?: Date;
 }
 
 interface Profile {
@@ -56,7 +58,7 @@ const PRIORITIES = [
   { value: "CRITICAL" as const, label: "Kritiek", icon: AlertCircle, color: "text-red-600" },
 ];
 
-export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: TaskDialogProps) {
+export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, defaultStartDate, defaultDueDate }: TaskDialogProps) {
   const [loading, setLoading] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [defaultOrgId, setDefaultOrgId] = useState<string | null>(null);
@@ -88,23 +90,26 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
       if (taskId) {
         loadTask();
       } else {
+        const startDateValue = defaultStartDate ? format(defaultStartDate, 'yyyy-MM-dd') : "";
+        const dueDateValue = defaultDueDate ? format(defaultDueDate, 'yyyy-MM-dd') : "";
+        
         form.reset({
           title: "",
           description: "",
           priority: "MEDIUM",
           assignee_id: "unassigned",
-          start_at: "",
+          start_at: startDateValue,
           start_time: "09:00",
-          due_at: "",
+          due_at: dueDateValue,
           due_time: "17:00",
           next_action: "",
         });
         setCurrentStep(1);
-        setStartDate(undefined);
-        setDueDate(undefined);
+        setStartDate(defaultStartDate);
+        setDueDate(defaultDueDate);
       }
     }
-  }, [open, taskId]);
+  }, [open, taskId, defaultStartDate, defaultDueDate]);
 
   const loadProfiles = async () => {
     const { data } = await supabase.from("profiles").select("id, name, email");

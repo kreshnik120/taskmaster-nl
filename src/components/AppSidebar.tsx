@@ -1,5 +1,5 @@
 import { Home, Kanban, List, Calendar, Clock, BarChart3, Trash2, CheckCircle2, Brain, Users, ChevronDown, ChevronUp, Briefcase, Building2, Link2, LogOut, RefreshCw, Archive } from "lucide-react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -122,6 +122,8 @@ const CollapsibleGroup = ({
   isOpen,
   onToggle
 }: CollapsibleGroupProps) => {
+  const location = useLocation();
+  
   const visibleItems = group.items.filter(item => {
     if (item.requiresAdmin && !isAdmin) return false;
     if (item.requiresEdit && !canEdit) return false;
@@ -143,12 +145,15 @@ const CollapsibleGroup = ({
         <SidebarMenu>
           {visibleItems.map(item => {
           const badgeCount = getBadgeCount(item.badge);
+          const isActive = item.url === "/" 
+            ? location.pathname === "/" 
+            : location.pathname === item.url;
+          
           return <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton asChild>
                   <NavLink 
                     to={item.url}
-                    end={item.url === "/"}
-                    className={({ isActive }) => cn(
+                    className={cn(
                       "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors",
                       isActive 
                         ? "bg-primary/10 text-primary font-medium" 
