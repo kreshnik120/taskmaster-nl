@@ -5,14 +5,14 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, Search, CheckCircle2 } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { nl } from "date-fns/locale";
 import NewClientDialog from "@/components/NewClientDialog";
 import ClientDetailModal from "@/components/ClientDetailModal";
+import { ClientMetricsBar } from "@/components/recruitment/ClientMetricsBar";
+import { ClientCard, ClientCardSkeleton } from "@/components/ClientCard";
+import { ClientMatchingUrgency } from "@/components/recruitment/ClientMatchingUrgency";
+import { RecentClientsWidget } from "@/components/recruitment/RecentClientsWidget";
 
 interface Client {
   id: string;
@@ -46,6 +46,51 @@ export default function Klanten() {
   useEffect(() => {
     loadClients();
   }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in input or textarea
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        // Allow Escape to clear search
+        if (e.key === "Escape" && searchQuery) {
+          setSearchQuery("");
+          e.preventDefault();
+        }
+        return;
+      }
+
+      // N = New Client
+      if (e.key === "n" || e.key === "N") {
+        setNewClientOpen(true);
+        e.preventDefault();
+      }
+
+      // / = Focus search
+      if (e.key === "/") {
+        document.querySelector<HTMLInputElement>('input[type="text"]')?.focus();
+        e.preventDefault();
+      }
+
+      // Escape = Close modals, clear search
+      if (e.key === "Escape") {
+        if (selectedClient) {
+          setSelectedClient(null);
+        } else if (newClientOpen) {
+          setNewClientOpen(false);
+        } else if (searchQuery) {
+          setSearchQuery("");
+        }
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [searchQuery, selectedClient, newClientOpen]);
 
   const loadClients = async () => {
     try {
@@ -101,6 +146,21 @@ export default function Klanten() {
     (c.gezochte_functies && c.gezochte_functies.length > 0)
   ).length;
   const matchingPercentage = clients.length > 0 ? Math.round((clientsWithMatching / clients.length) * 100) : 0;
+  const clientsWithoutMatching = clients.length - clientsWithMatching;
+
+  const handleQuickCall = (client: Client) => {
+    if (client.phone) {
+      window.location.href = `tel:${client.phone}`;
+      toast.success(`Bellen naar ${client.name}`);
+    }
+  };
+
+  const handleQuickEmail = (client: Client) => {
+    if (client.email) {
+      window.location.href = `mailto:${client.email}`;
+      toast.success(`Email naar ${client.name}`);
+    }
+  };
 
   return (
     <SidebarProvider>
@@ -122,36 +182,33 @@ export default function Klanten() {
                 <Button onClick={() => setNewClientOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Nieuwe klant
+                  <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                    N
+                  </kbd>
                 </Button>
               </div>
             </div>
 
-            {/* Stats Bar */}
-            <div className="flex items-center gap-4 text-sm flex-wrap">
-              <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">{clients.length}</span>
-                <span className="text-muted-foreground">klanten</span>
-              </div>
-              <div className="h-4 w-px bg-border" />
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{abczorgCount}</span>
-                <span className="text-muted-foreground">ABCzorg</span>
-              </div>
-              <div className="h-4 w-px bg-border" />
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{citozorgCount}</span>
-                <span className="text-muted-foreground">CitoZorg</span>
-              </div>
-              <div className="h-4 w-px bg-border" />
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className={`h-4 w-4 ${matchingPercentage >= 70 ? 'text-green-600' : 'text-amber-600'}`} />
-                <span className="font-medium">{clientsWithMatching}</span>
-                <span className="text-muted-foreground">van {clients.length} met matching data</span>
-                <span className={`font-medium ${matchingPercentage >= 70 ? 'text-green-600' : 'text-amber-600'}`}>
-                  ({matchingPercentage}%)
-                </span>
-              </div>
+            {/* Metrics Bar */}
+            <ClientMetricsBar
+              total={clients.length}
+              abczorgCount={abczorgCount}
+              citozorgCount={citozorgCount}
+              matchingPercentage={matchingPercentage}
+            />
+
+            {/* Urgency & Recent Clients Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-4">
+              <ClientMatchingUrgency
+                clientsWithoutData={clientsWithoutMatching}
+                onViewClick={() => setMatchingFilter("without")}
+              />
+              
+              <RecentClientsWidget
+                clients={clients}
+                isLoading={loading}
+                onClientClick={setSelectedClient}
+              />
             </div>
 
             {/* Search and Filter Bar */}
@@ -162,8 +219,11 @@ export default function Klanten() {
                   placeholder="Zoek op naam of bedrijf..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 pr-12"
                 />
+                <kbd className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                  /
+                </kbd>
               </div>
               <select
                 value={orgFilter}
@@ -187,8 +247,10 @@ export default function Klanten() {
 
             {/* Clients Grid */}
             {loading ? (
-              <div className="text-center py-12 text-muted-foreground">
-                Laden...
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[...Array(6)].map((_, i) => (
+                  <ClientCardSkeleton key={i} />
+                ))}
               </div>
             ) : filteredClients.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
@@ -196,81 +258,16 @@ export default function Klanten() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredClients.map((client) => {
-                  const hasMatchingData = (client.regio && client.regio.length > 0) ||
-                                         (client.sector && client.sector.length > 0) ||
-                                         (client.doelgroep && client.doelgroep.length > 0) ||
-                                         (client.gezochte_functies && client.gezochte_functies.length > 0);
-                  
-                  return (
-                    <Card key={client.id} className="hover:shadow-md transition-shadow">
-                      <CardHeader>
-                        <CardTitle className="flex items-start justify-between">
-                          <div className="space-y-1 flex-1">
-                            <div className="flex items-center gap-2">
-                              <Building2 className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-base">{client.name}</span>
-                              {hasMatchingData && (
-                                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground font-normal">
-                              {client.company}
-                            </p>
-                            
-                            {/* Matching data preview */}
-                            {hasMatchingData && (
-                              <div className="flex flex-wrap gap-1 mt-2">
-                                {client.regio?.slice(0, 2).map((r) => (
-                                  <Badge key={r} variant="secondary" className="text-xs">
-                                    {r}
-                                  </Badge>
-                                ))}
-                                {client.sector?.slice(0, 2).map((s) => (
-                                  <Badge key={s} variant="outline" className="text-xs">
-                                    {s}
-                                  </Badge>
-                                ))}
-                                {((client.regio?.length || 0) > 2 || (client.sector?.length || 0) > 2) && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    +meer
-                                  </Badge>
-                                )}
-                              </div>
-                            )}
-                            
-                            {/* Quick info */}
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {client.regio?.length || 0} regio's • {client.sector?.length || 0} sectoren
-                            </div>
-                          </div>
-                          <Badge 
-                            className={
-                              client.organizations?.name === "ABCzorg" 
-                                ? "bg-blue-600 hover:bg-blue-700 text-white" 
-                                : "bg-orange-500 hover:bg-orange-600 text-white"
-                            }
-                          >
-                            {client.organizations?.name || "Onbekend"}
-                          </Badge>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div className="text-xs text-muted-foreground">
-                          Toegevoegd {format(new Date(client.created_at), "d MMM yyyy", { locale: nl })}
-                        </div>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="w-full"
-                          onClick={() => setSelectedClient(client)}
-                        >
-                          Bekijk details
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                {filteredClients.map((client) => (
+                  <ClientCard
+                    key={client.id}
+                    client={client}
+                    searchQuery={searchQuery}
+                    onClick={() => setSelectedClient(client)}
+                    onQuickCall={() => handleQuickCall(client)}
+                    onQuickEmail={() => handleQuickEmail(client)}
+                  />
+                ))}
               </div>
             )}
           </div>
