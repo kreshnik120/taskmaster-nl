@@ -2,7 +2,8 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Calendar, CheckCircle2, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, ListTodo, User, Zap } from "lucide-react";
+import { Plus, Calendar, CheckCircle2, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, ListTodo, User, Zap, Sparkles } from "lucide-react";
+import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
@@ -509,6 +510,22 @@ const Dashboard = () => {
     CRITICAL: "Kritiek",
   };
 
+  // Skeleton loading component
+  const TaskSkeleton = () => (
+    <div className="border rounded-lg p-4 animate-pulse">
+      <div className="flex items-center justify-between">
+        <div className="flex-1 space-y-2">
+          <div className="h-4 bg-muted rounded w-2/3" />
+          <div className="h-3 bg-muted rounded w-1/3" />
+        </div>
+        <div className="flex gap-2">
+          <div className="h-6 w-16 bg-muted rounded-full" />
+          <div className="h-8 w-8 bg-muted rounded" />
+        </div>
+      </div>
+    </div>
+  );
+
   // Helper function voor context-aware greeting
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -570,8 +587,13 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      {/* Hero Section - Apple Style */}
-      <div className="mb-8">
+      {/* Hero Section - Apple Style with Entrance Animation */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="mb-8"
+      >
         <div className="flex items-start justify-between mb-4">
           <div>
             <h1 className="text-5xl font-bold mb-1">
@@ -628,30 +650,71 @@ const Dashboard = () => {
             <span>Geen openstaande taken</span>
           )}
         </p>
-      </div>
+      </motion.div>
 
-      {/* Stats Bar - Monochrome */}
-      <div className="grid grid-cols-4 gap-4">
-        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/10">
-          <span className="text-3xl font-bold">{tasks.length}</span>
-          <span className="text-xs text-muted-foreground mt-1">Open</span>
+      {/* Stats Bar - Gradient Cards met Micro-animaties */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
+        className="grid grid-cols-4 gap-4"
+      >
+        {/* Open Tasks - Blue Gradient */}
+        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
+                       bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900
+                       hover:shadow-lg hover:scale-105 transition-all duration-300 cursor-default
+                       border border-blue-100 dark:border-blue-800">
+          <span className="text-4xl font-bold text-blue-600 dark:text-blue-400 
+                           group-hover:scale-110 transition-transform duration-200">
+            {tasks.length}
+          </span>
+          <span className="text-xs text-blue-600/70 dark:text-blue-400/70 mt-1 font-medium">
+            Open
+          </span>
         </div>
 
-        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/10">
-          <span className="text-3xl font-bold">{completedThisWeek}</span>
-          <span className="text-xs text-muted-foreground mt-1">Afgerond</span>
+        {/* Completed - Green Gradient */}
+        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
+                       bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900
+                       hover:shadow-lg hover:scale-105 transition-all duration-300 cursor-default
+                       border border-green-100 dark:border-green-800">
+          <span className="text-4xl font-bold text-green-600 dark:text-green-400 
+                           group-hover:scale-110 transition-transform duration-200">
+            {completedThisWeek}
+          </span>
+          <span className="text-xs text-green-600/70 dark:text-green-400/70 mt-1 font-medium">
+            Afgerond
+          </span>
         </div>
 
-        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/10">
-          <span className="text-3xl font-bold">{todayHours.split(' ')[0]}</span>
-          <span className="text-xs text-muted-foreground mt-1">Gewerkt</span>
+        {/* Hours Worked - Amber Gradient */}
+        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
+                       bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950 dark:to-amber-900
+                       hover:shadow-lg hover:scale-105 transition-all duration-300 cursor-default
+                       border border-amber-100 dark:border-amber-800">
+          <span className="text-4xl font-bold text-amber-600 dark:text-amber-400 
+                           group-hover:scale-110 transition-transform duration-200">
+            {todayHours.split(' ')[0]}
+          </span>
+          <span className="text-xs text-amber-600/70 dark:text-amber-400/70 mt-1 font-medium">
+            Gewerkt
+          </span>
         </div>
 
-        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/10">
-          <span className="text-3xl font-bold">{priorityBreakdown.critical + priorityBreakdown.high}</span>
-          <span className="text-xs text-muted-foreground mt-1">Prioriteit</span>
+        {/* Priority - Orange Gradient */}
+        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
+                       bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-950 dark:to-orange-900
+                       hover:shadow-lg hover:scale-105 transition-all duration-300 cursor-default
+                       border border-orange-100 dark:border-orange-800">
+          <span className="text-4xl font-bold text-orange-600 dark:text-orange-400 
+                           group-hover:scale-110 transition-transform duration-200">
+            {priorityBreakdown.critical + priorityBreakdown.high}
+          </span>
+          <span className="text-xs text-orange-600/70 dark:text-orange-400/70 mt-1 font-medium">
+            Prioriteit
+          </span>
         </div>
-      </div>
+      </motion.div>
 
       {/* Active Process Steps Widget - Subtiel gepositioneerd */}
       <ActiveProcessWidget />
@@ -685,11 +748,28 @@ const Dashboard = () => {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p className="text-muted-foreground text-center py-8">Laden...</p>
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => <TaskSkeleton key={i} />)}
+            </div>
           ) : tasks.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">
-              Geen taken
-            </p>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3 }}
+              className="flex flex-col items-center justify-center py-16"
+            >
+              <div className="rounded-full bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 p-6 mb-4">
+                <CheckCircle2 className="h-12 w-12 text-green-500" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">Alles afgerond!</h3>
+              <p className="text-muted-foreground text-center max-w-sm mb-4">
+                Je hebt geen openstaande taken. Geniet van je vrije tijd of maak een nieuwe taak aan.
+              </p>
+              <Button onClick={() => setDialogOpen(true)} size="lg">
+                <Plus className="h-4 w-4 mr-2" />
+                Nieuwe taak
+              </Button>
+            </motion.div>
           ) : (
             <div className="space-y-3">
               {sortedTasks.map((task) => {
@@ -701,10 +781,16 @@ const Dashboard = () => {
                   : 0;
 
                 return (
-                  <div key={task.id} className="border rounded-lg bg-card">
+                  <motion.div 
+                    key={task.id} 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="border rounded-lg bg-card hover:shadow-md hover:border-primary/30 transition-all duration-200 group"
+                  >
                     <div
                       onClick={() => handleTaskClick(task)}
-                      className={`flex items-center justify-between p-3 hover:bg-accent/50 transition-colors cursor-pointer ${
+                      className={`flex items-center justify-between p-3 hover:bg-accent/30 transition-colors cursor-pointer ${
                         activeTimer ? "ring-2 ring-primary/50 bg-primary/5" : ""
                       }`}
                     >
@@ -739,7 +825,13 @@ const Dashboard = () => {
                           <p className="text-sm text-muted-foreground mt-1">{task.next_action}</p>
                         )}
                         {hasSubtasks && (
-                          <Progress value={progressPercentage} className="h-1.5 mt-2 [&>div]:bg-green-500 [&>div]:transition-all [&>div]:duration-500" />
+                          <Progress 
+                            value={progressPercentage} 
+                            className="h-2 mt-2" 
+                            style={{
+                              '--progress-color': progressPercentage === 100 ? 'hsl(var(--green-500))' : 'hsl(var(--primary))'
+                            } as React.CSSProperties}
+                          />
                         )}
                         {activeTimer && (
                           <p className="text-xs text-primary mt-1">
@@ -773,18 +865,18 @@ const Dashboard = () => {
                             )}
                           </Button>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCompleteTask(task.id);
-                          }}
-                          className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
-                          title="Markeer als afgerond"
-                        >
-                          <Check className="h-4 w-4" />
-                        </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCompleteTask(task.id);
+                            }}
+                            className="h-8 w-8 text-primary opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary/10 hover:scale-110"
+                            title="Markeer als afgerond"
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -857,13 +949,13 @@ const Dashboard = () => {
                               )}
                             </div>
                           ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                         </div>
+                       </div>
+                     )}
+                   </motion.div>
+                 );
+               })}
+             </div>
           )}
         </CardContent>
       </Card>
