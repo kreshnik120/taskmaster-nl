@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import confetti from "canvas-confetti";
 import { 
   Calendar, 
   Clock, 
@@ -92,6 +94,8 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const [loadingApplication, setLoadingApplication] = useState(false);
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
   const [nextReminder, setNextReminder] = useState<any>(null);
+  const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false);
+  const [completing, setCompleting] = useState(false);
   const [sectionsOpen, setSectionsOpen] = useState({
     info: true,
     description: true,
@@ -278,8 +282,11 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
     }
   };
 
-  const handleCompleteTask = async () => {
+  const handleConfirmComplete = async () => {
     if (!task?.id) return;
+    
+    setCompleting(true);
+    setConfirmCompleteOpen(false);
     
     try {
       const { error } = await supabase
@@ -292,9 +299,26 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
 
       if (error) throw error;
 
+      // 🎉 Confetti celebration!
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+
+      // Toast with undo option
       toast({
-        title: "✅ Taak afgerond",
-        description: "De taak is succesvol afgerond"
+        title: "🎉 Taak afgerond!",
+        description: task.title,
+        action: (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => undoComplete(task.id)}
+          >
+            Ongedaan maken
+          </Button>
+        )
       });
       
       onOpenChange(false);
@@ -304,6 +328,44 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
       toast({
         title: "Fout",
         description: "Kon taak niet afronden",
+        variant: "destructive"
+      });
+    } finally {
+      setCompleting(false);
+    }
+  };
+
+  const undoComplete = async (taskId: string) => {
+    try {
+      // Find the IN_PROGRESS column to restore the task
+      const { data: column } = await supabase
+        .from("columns")
+        .select("id, status")
+        .eq("status", "DOING")
+        .maybeSingle();
+
+      const { error } = await supabase
+        .from('tasks')
+        .update({ 
+          completed_at: null, 
+          status: column?.status || 'DOING',
+          column_id: column?.id || undefined
+        })
+        .eq('id', taskId);
+
+      if (error) throw error;
+      
+      toast({ 
+        title: "Taak hersteld", 
+        description: "Terug op je lijst" 
+      });
+      
+      onTaskUpdated();
+    } catch (error) {
+      console.error('Error undoing complete:', error);
+      toast({
+        title: "Fout",
+        description: "Kon taak niet herstellen",
         variant: "destructive"
       });
     }
@@ -375,9 +437,10 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
             {/* Quick Actions */}
             <div className="flex flex-wrap gap-2">
               <Button 
-                onClick={handleCompleteTask}
+                onClick={() => setConfirmCompleteOpen(true)}
                 className="flex-1 min-w-[200px]"
                 size="lg"
+                disabled={completing}
               >
                 <CheckCircle2 className="h-4 w-4 mr-2" />
                 Taak Afronden
@@ -595,6 +658,37 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={confirmCompleteOpen} onOpenChange={setConfirmCompleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Taak afronden?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {subtasks.filter(s => s.status !== 'completed' && s.status !== 'skipped').length > 0 ? (
+                <>
+                  ⚠️ Let op: er {subtasks.filter(s => s.status !== 'completed' && s.status !== 'skipped').length === 1 ? 'is' : 'zijn'} nog{' '}
+                  <strong>{subtasks.filter(s => s.status !== 'completed' && s.status !== 'skipped').length}</strong>{' '}
+                  {subtasks.filter(s => s.status !== 'completed' && s.status !== 'skipped').length === 1 ? 'subtaak' : 'subtaken'}{' '}
+                  niet afgerond.
+                </>
+              ) : (
+                "Weet je zeker dat je deze taak wilt afronden?"
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={completing}>Annuleren</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmComplete}
+              disabled={completing}
+            >
+              {subtasks.filter(s => s.status !== 'completed' && s.status !== 'skipped').length > 0 
+                ? "Toch afronden" 
+                : "Afronden"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <TaskDialog
         open={editDialogOpen}
