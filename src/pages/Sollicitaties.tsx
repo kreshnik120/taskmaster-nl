@@ -4,7 +4,7 @@ import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/
 import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { Plus, Loader2, Search, X, Filter, RotateCcw, Undo2 } from "lucide-react";
+import { Plus, Loader2, Search, X, Filter, RotateCcw, Undo2, BarChart3 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -19,13 +19,8 @@ import { ApplicationKanbanColumn } from "@/components/ApplicationKanbanColumn";
 import { ApplicationCard, ApplicationCardSkeleton } from "@/components/ApplicationCard";
 import { ApplicationDetailModal } from "@/components/ApplicationDetailModal";
 import { NewApplicationDialog } from "@/components/NewApplicationDialog";
-import { MinimalMetricsBar } from "@/components/recruitment/MinimalMetricsBar";
-import { UrgencyBanner } from "@/components/recruitment/UrgencyBanner";
-import { RecentMovementsWidget } from "@/components/recruitment/RecentMovementsWidget";
-import { PipelineFunnelMini } from "@/components/recruitment/PipelineFunnelMini";
 import { BulkActionBar } from "@/components/recruitment/BulkActionBar";
-import { RecruitmentAnalytics } from "@/components/recruitment/RecruitmentAnalytics";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { AnalyticsSheet } from "@/components/recruitment/AnalyticsSheet";
 
 interface Application {
   id: string;
@@ -76,16 +71,8 @@ const Sollicitaties = () => {
   const [filterRegio, setFilterRegio] = useState<string>("");
   const [lastMove, setLastMove] = useState<{ applicationId: string; fromStage: string; toStage: string } | null>(null);
   const [selectedApplicationIds, setSelectedApplicationIds] = useState<Set<string>>(new Set());
-  const [analyticsOpen, setAnalyticsOpen] = useState(() => {
-    const stored = localStorage.getItem('recruitment-analytics-open');
-    return stored === null ? false : stored === "true";
-  });
+  const [analyticsSheetOpen, setAnalyticsSheetOpen] = useState(false);
   const navigate = useNavigate();
-
-  // Save analytics open state to localStorage
-  useEffect(() => {
-    localStorage.setItem('recruitment-analytics-open', String(analyticsOpen));
-  }, [analyticsOpen]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -574,86 +561,31 @@ const Sollicitaties = () => {
         <main className="flex-1 p-6 overflow-auto">
           <SidebarTrigger className="mb-4" />
           <div className="flex flex-col h-full space-y-6">
-            {/* Hero Section - Apple Style Minimal */}
-            <div className="space-y-0">
-              {/* Greeting Row */}
-              <div className="flex items-start justify-between py-8">
-                <div>
-                  <h1 className="text-3xl font-semibold text-foreground mb-1">
-                    Sollicitaties
-                  </h1>
-                  <p className="text-sm text-muted-foreground">
-                    {format(new Date(), "EEEE d MMMM", { locale: nl })}
-                  </p>
-                </div>
-                <Button onClick={() => setNewApplicationDialogOpen(true)} size="sm" className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Nieuwe sollicitatie
-                  <kbd className="ml-1 inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-70">
-                    N
-                  </kbd>
-                </Button>
+            {/* Compact Header - Apple Minimalism */}
+            <div className="flex items-center justify-between py-4 border-b">
+              <div>
+                <h1 className="text-xl font-medium text-foreground">Sollicitaties</h1>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {displayedTotal} totaal • {displayedNew} nieuw • {displayedApproved} goedgekeurd • {displayedAvgCompleteness}% compleet
+                </p>
               </div>
-
-              {/* Minimal Metrics Bar */}
-              <MinimalMetricsBar 
-                totalApplications={displayedTotal}
-                newApplications={displayedNew}
-                approvedApplications={displayedApproved}
-                avgCompleteness={displayedAvgCompleteness}
-                trends={{
-                  total: 2,
-                  new: -1,
-                  approved: 1,
-                  completeness: 3,
-                }}
-              />
-
-              {/* Pipeline Funnel Mini-Chart */}
-              <PipelineFunnelMini 
-                applications={filteredApplications}
-                onStageClick={(stageKey) => {
-                  const element = document.getElementById(`column-${stageKey}`);
-                  element?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                }}
-              />
-
-              {/* Recruitment Analytics (Collapsible) */}
-              <Collapsible open={analyticsOpen} onOpenChange={setAnalyticsOpen}>
-                <CollapsibleTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full justify-between text-sm font-medium mt-2"
-                  >
-                    <span>Recruitment Analytics</span>
-                    <ChevronDown className={`h-4 w-4 transition-transform ${analyticsOpen ? '' : '-rotate-90'}`} />
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="mt-4">
-                    <RecruitmentAnalytics applications={filteredApplications} />
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-
-              {/* Urgency Banner - Only if urgent items exist */}
-              <div className="py-6">
-                <UrgencyBanner 
-                  applications={filteredApplications}
-                  onApplicationClick={handleApplicationClick}
-                />
-              </div>
-
-                {/* Recent Movements */}
-                <RecentMovementsWidget 
+              <div className="flex items-center gap-2">
+                <AnalyticsSheet 
                   applications={filteredApplications}
                   isLoading={loading}
+                  onApplicationClick={handleApplicationClick}
+                  open={analyticsSheetOpen}
+                  onOpenChange={setAnalyticsSheetOpen}
                 />
+                <Button onClick={() => setNewApplicationDialogOpen(true)} size="sm" className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Nieuw
+                </Button>
+              </div>
             </div>
 
-            {/* Search and Filter Bar - Progressive Disclosure */}
-            <div className="py-8">
+            {/* Search and Filter Bar */}
+            <div className="py-4">
               <div className="flex gap-3 items-center">
                 {/* Zoekbalk - Always visible */}
                 <div className="relative flex-1">
