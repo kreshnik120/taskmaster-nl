@@ -104,6 +104,43 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const { toast } = useToast();
   const { activeTimer, isLoading: timerLoading, elapsedTime, startTimer, stopTimer, isTimerActive } = useTaskTimer(task?.id || null);
 
+  // Keyboard shortcuts (e/c/t)
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in inputs
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+
+      if (e.key === 'e') {
+        // Edit task
+        e.preventDefault();
+        setEditDialogOpen(true);
+      } else if (e.key === 'c') {
+        // Complete task
+        e.preventDefault();
+        setConfirmCompleteOpen(true);
+      } else if (e.key === 't') {
+        // Toggle timer
+        e.preventDefault();
+        if (isTimerActive) {
+          stopTimer();
+        } else {
+          startTimer();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, isTimerActive, startTimer, stopTimer]);
+
   // Load subtasks and application when task changes
   useEffect(() => {
     if (task?.id && open) {
@@ -405,9 +442,18 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                   Bekijk en beheer alle details van deze taak
                 </DialogDescription>
               </div>
-              <Button variant="outline" size="sm" onClick={handleEdit} className="shrink-0">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleEdit} 
+                className="shrink-0"
+                aria-label="Bewerk taak (sneltoets: e)"
+              >
                 <Edit className="h-4 w-4 mr-2" />
                 Bewerken
+                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                  E
+                </kbd>
               </Button>
             </div>
           </DialogHeader>
@@ -441,9 +487,13 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 className="flex-1 min-w-[200px]"
                 size="lg"
                 disabled={completing}
+                aria-label="Taak afronden (sneltoets: c)"
               >
                 <CheckCircle2 className="h-4 w-4 mr-2" />
                 Taak Afronden
+                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                  C
+                </kbd>
               </Button>
               <Button 
                 variant={isTimerActive ? "destructive" : "outline"}
@@ -454,6 +504,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 size="lg"
                 onClick={isTimerActive ? stopTimer : () => startTimer()}
                 disabled={timerLoading}
+                aria-label={`Timer ${isTimerActive ? 'stoppen' : 'starten'} (sneltoets: t)`}
               >
                 {isTimerActive ? (
                   <>
@@ -466,6 +517,9 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                     Start Timer
                   </>
                 )}
+                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                  T
+                </kbd>
               </Button>
               <div className="flex items-center gap-2">
                 <Button 

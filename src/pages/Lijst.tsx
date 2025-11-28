@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, Filter, Plus, Check, Edit2, Clock, Trash2 } from "lucide-react";
+import { Loader2, Filter, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -23,6 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
 
 interface Task {
   id: string;
@@ -60,6 +61,15 @@ const priorityLabels = {
 };
 
 
+// Memoized timer cell to prevent parent re-renders
+const TimerCell = memo(({ activeTimer, currentTime, getRunningTime }: any) => (
+  <Badge variant="secondary" className="text-xs bg-primary/20">
+    <Clock className="h-3 w-3 mr-1" />
+    {getRunningTime(activeTimer.start)}
+  </Badge>
+));
+TimerCell.displayName = 'TimerCell';
+
 export default function Lijst() {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -79,6 +89,10 @@ export default function Lijst() {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number>(-1);
+  const tableRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     checkAuth();
@@ -419,13 +433,45 @@ export default function Lijst() {
     }
   };
 
-  const filteredTasks = tasks.filter((task) => {
-    if (filterPriority !== "all" && task.priority !== filterPriority) return false;
-    if (filterStatus === "completed" && !task.completed_at) return false;
-    if (filterStatus === "active" && task.completed_at) return false;
-    if (filterStatus === "accepted" && !task.accepted_by) return false;
-    return true;
-  });
+  // Memoized filtered and sorted tasks for performance
+  const filteredTasks = useMemo(() => {
+    let filtered = tasks.filter((task) => {
+      if (filterPriority !== "all" && task.priority !== filterPriority) return false;
+      if (filterStatus === "completed" && !task.completed_at) return false;
+      if (filterStatus === "active" && task.completed_at) return false;
+      if (filterStatus === "accepted" && !task.accepted_by) return false;
+      return true;
+    });
+
+    // Apply sorting
+    if (sortColumn) {
+      filtered = [...filtered].sort((a, b) => {
+        let aVal: any = a[sortColumn as keyof Task];
+        let bVal: any = b[sortColumn as keyof Task];
+
+        // Handle null/undefined
+        if (aVal === null || aVal === undefined) return sortDirection === 'asc' ? 1 : -1;
+        if (bVal === null || bVal === undefined) return sortDirection === 'asc' ? -1 : 1;
+
+        // Handle dates
+        if (sortColumn === 'start_at' || sortColumn === 'due_at') {
+          aVal = new Date(aVal).getTime();
+          bVal = new Date(bVal).getTime();
+        }
+
+        // Handle strings/numbers
+        if (typeof aVal === 'string') {
+          return sortDirection === 'asc' 
+            ? aVal.localeCompare(bVal) 
+            : bVal.localeCompare(aVal);
+        }
+
+        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+      });
+    }
+
+    return filtered;
+  }, [tasks, filterPriority, filterStatus, sortColumn, sortDirection]);
 
   const groupedTasks = () => {
     if (groupBy === "none") return { "Alle taken": filteredTasks };
@@ -451,6 +497,74 @@ export default function Lijst() {
 
   const groups = groupedTasks();
   const myTasksCount = filteredTasks.filter(t => t.assignee_id === currentUserId).length;
+
+  // Keyboard navigation (j/k for row navigation)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in inputs
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+
+      const flatTasks = Object.values(groups).flat();
+
+      if (e.key === 'j') {
+        // Move down
+        e.preventDefault();
+        setSelectedRowIndex(prev => {
+          const newIndex = Math.min(prev + 1, flatTasks.length - 1);
+          scrollToRow(newIndex);
+          return newIndex;
+        });
+      } else if (e.key === 'k') {
+        // Move up
+        e.preventDefault();
+        setSelectedRowIndex(prev => {
+          const newIndex = Math.max(prev - 1, 0);
+          scrollToRow(newIndex);
+          return newIndex;
+        });
+      } else if (e.key === 'Enter' && selectedRowIndex >= 0) {
+        // Open selected task
+        e.preventDefault();
+        const task = flatTasks[selectedRowIndex];
+        if (task) handleTaskClick(task);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [groups, selectedRowIndex]);
+
+  const scrollToRow = (index: number) => {
+    if (tableRef.current) {
+      const rows = tableRef.current.querySelectorAll('tbody tr[data-task-id]');
+      const row = rows[index];
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  };
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortColumn !== column) return null;
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="h-3 w-3 inline ml-1" />
+      : <ArrowDown className="h-3 w-3 inline ml-1" />;
+  };
 
   if (loading) {
     return (
@@ -598,7 +712,7 @@ export default function Lijst() {
         </div>
       </div>
 
-      <div className="space-y-8">
+      <div className="space-y-8" ref={tableRef}>
             {Object.entries(groups).map(([groupName, groupTasks]) => (
               <div key={groupName}>
                 {groupBy !== "none" && (
@@ -606,18 +720,42 @@ export default function Lijst() {
                     {groupName}
                   </h2>
                 )}
-                <div className="rounded-lg border bg-card">
+                <div className="rounded-lg border bg-card relative overflow-auto max-h-[calc(100vh-350px)]">
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
                       <TableRow>
                         <TableHead className="w-[50px]">ID</TableHead>
-                        <TableHead>Taak</TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                          onClick={() => handleSort('title')}
+                          aria-label="Sorteer op taak"
+                        >
+                          Taak <SortIcon column="title" />
+                        </TableHead>
                         <TableHead>Organisatie</TableHead>
                         <TableHead>Verantwoordelijke</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead>Prioriteit</TableHead>
-                        <TableHead>Start</TableHead>
-                        <TableHead>Eind</TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                          onClick={() => handleSort('priority')}
+                          aria-label="Sorteer op prioriteit"
+                        >
+                          Prioriteit <SortIcon column="priority" />
+                        </TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                          onClick={() => handleSort('start_at')}
+                          aria-label="Sorteer op startdatum"
+                        >
+                          Start <SortIcon column="start_at" />
+                        </TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-muted/50 transition-colors select-none"
+                          onClick={() => handleSort('due_at')}
+                          aria-label="Sorteer op einddatum"
+                        >
+                          Eind <SortIcon column="due_at" />
+                        </TableHead>
                         <TableHead className="min-w-[200px]">Volgende actie</TableHead>
                         <TableHead className="w-[120px]">Timer</TableHead>
                         <TableHead className="w-[100px]">Actie</TableHead>
@@ -632,15 +770,32 @@ export default function Lijst() {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        groupTasks.map((task) => {
+                        groupTasks.map((task, index) => {
                           const activeTimer = activeTimers[task.id];
+                          const globalIndex = Object.values(groups)
+                            .flat()
+                            .findIndex(t => t.id === task.id);
+                          const isSelected = globalIndex === selectedRowIndex;
                           return (
                             <TableRow 
-                              key={task.id} 
+                              key={task.id}
+                              data-task-id={task.id}
                               onClick={() => handleTaskClick(task)}
-                              className={`cursor-pointer hover:bg-muted/50 ${
-                                activeTimer ? "bg-primary/5" : ""
-                              }`}
+                              className={cn(
+                                "cursor-pointer transition-colors",
+                                "hover:bg-muted/50",
+                                "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
+                                activeTimer && "bg-primary/5",
+                                isSelected && "ring-2 ring-primary bg-primary/10"
+                              )}
+                              tabIndex={0}
+                              aria-label={`Taak: ${task.title}`}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleTaskClick(task);
+                                }
+                              }}
                             >
                             <TableCell className="font-mono text-xs text-muted-foreground">
                               {String(task.sequence_number).padStart(2, '0')}
@@ -725,10 +880,11 @@ export default function Lijst() {
                             </TableCell>
                             <TableCell>
                               {activeTimer ? (
-                                <Badge variant="secondary" className="text-xs bg-primary/20">
-                                  <Clock className="h-3 w-3 mr-1" />
-                                  {getRunningTime(activeTimer.start)}
-                                </Badge>
+                                <TimerCell 
+                                  activeTimer={activeTimer}
+                                  currentTime={currentTime}
+                                  getRunningTime={getRunningTime}
+                                />
                               ) : (
                                 <span className="text-muted-foreground text-xs">-</span>
                               )}
