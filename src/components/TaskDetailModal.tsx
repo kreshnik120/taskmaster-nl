@@ -21,9 +21,10 @@ import {
   ChevronDown,
   Info
 } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
 import { TaskDialog } from "./TaskDialog";
+import { ReminderDialog } from "./ReminderDialog";
 import { ProcessTimeline } from "./ProcessTimeline";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -89,6 +90,8 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const [loadingSubtasks, setLoadingSubtasks] = useState(false);
   const [linkedApplication, setLinkedApplication] = useState<LinkedApplication | null>(null);
   const [loadingApplication, setLoadingApplication] = useState(false);
+  const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
+  const [nextReminder, setNextReminder] = useState<any>(null);
   const [sectionsOpen, setSectionsOpen] = useState({
     info: true,
     description: true,
@@ -101,6 +104,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   useEffect(() => {
     if (task?.id && open) {
       loadSubtasks();
+      loadNextReminder();
       
       // Load linked application if exists
       if (task.application_id) {
@@ -154,6 +158,26 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
       console.error('Error loading linked application:', error);
     } finally {
       setLoadingApplication(false);
+    }
+  };
+
+  const loadNextReminder = async () => {
+    if (!task) return;
+
+    try {
+      const { data } = await supabase
+        .from("reminders")
+        .select("*")
+        .eq("task_id", task.id)
+        .gte("at", new Date().toISOString())
+        .order("at", { ascending: true })
+        .limit(1)
+        .single();
+
+      setNextReminder(data);
+    } catch (error) {
+      // No reminder found is okay
+      setNextReminder(null);
     }
   };
 
@@ -380,13 +404,25 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                   </>
                 )}
               </Button>
-              <Button 
-                variant="outline"
-                size="lg"
-              >
-                <Bell className="h-4 w-4 mr-2" />
-                Herinnering
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline"
+                  size="lg"
+                  onClick={() => setReminderDialogOpen(true)}
+                >
+                  <Bell className="h-4 w-4 mr-2" />
+                  Herinnering
+                </Button>
+                {nextReminder && (
+                  <Badge 
+                    variant="outline"
+                    className="animate-pulse bg-primary/10 text-primary border-primary"
+                  >
+                    <Bell className="h-3 w-3 mr-1" />
+                    {formatDistanceToNow(new Date(nextReminder.at), { locale: nl, addSuffix: true })}
+                  </Badge>
+                )}
+              </div>
             </div>
 
             {/* Linked Application */}
@@ -565,6 +601,16 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
         onOpenChange={setEditDialogOpen}
         onSuccess={handleEditSuccess}
         taskId={task.id}
+      />
+      
+      <ReminderDialog
+        open={reminderDialogOpen}
+        onOpenChange={setReminderDialogOpen}
+        taskId={task?.id}
+        onSuccess={() => {
+          loadNextReminder();
+          toast({ title: "Herinnering toegevoegd" });
+        }}
       />
     </>
   );

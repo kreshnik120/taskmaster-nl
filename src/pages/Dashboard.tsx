@@ -2,7 +2,9 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Calendar, CheckCircle2, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, ListTodo, User, Zap, Sparkles } from "lucide-react";
+import { Plus, Calendar, CheckCircle2, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, ListTodo, User, Zap, Sparkles, CheckSquare } from "lucide-react";
+import { TaskItem } from "@/components/TaskItem";
+import { UpcomingRemindersWidget } from "@/components/UpcomingRemindersWidget";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -719,6 +721,9 @@ const Dashboard = () => {
 
       {/* Active Process Steps Widget - Subtiel gepositioneerd */}
       <ActiveProcessWidget />
+
+      {/* Upcoming Reminders Widget */}
+      <UpcomingRemindersWidget />
 
       {/* Zone 1: Nu Doen - Primary Focus Tasks */}
       <Card>
