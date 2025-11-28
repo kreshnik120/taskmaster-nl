@@ -29,7 +29,7 @@ interface ClientCardProps {
   onClick: () => void;
   onQuickCall?: () => void;
   onQuickEmail?: () => void;
-  groupType?: "bureau" | "matching" | "regio" | "alpha";
+  groupType?: "bureau" | "sector" | "matching" | "regio" | "alpha";
 }
 
 export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQuickEmail, groupType }: ClientCardProps) {
@@ -108,11 +108,30 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
   const hasCompleteMatchingData = completenessScore === 4;
   const hasPartialMatchingData = completenessScore > 0 && completenessScore < 4;
 
+  // Visual weight based on completeness (opacity hierarchy)
+  const cardOpacity = completenessScore === 0 ? "opacity-70" : 
+                      completenessScore === 1 ? "opacity-80" : 
+                      completenessScore === 2 ? "opacity-90" : 
+                      "opacity-100";
+
+  // Sector color for subtle border accent
+  const getSectorBorderColor = () => {
+    if (!client.sector || client.sector.length === 0) return "";
+    const sector = client.sector[0];
+    if (sector === "GGZ") return "border-l-blue-500/20";
+    if (sector === "GHZ") return "border-l-green-500/20";
+    if (sector === "Jeugdzorg") return "border-l-orange-500/20";
+    if (sector === "VVT") return "border-l-purple-500/20";
+    if (sector === "Ziekenhuis") return "border-l-red-500/20";
+    if (sector === "Thuiszorg") return "border-l-cyan-500/20";
+    return "";
+  };
+
   return (
     <HoverCard openDelay={300}>
       <HoverCardTrigger asChild>
         <Card 
-          className="group cursor-pointer transition-all duration-200 hover:bg-muted/30 relative"
+          className={`group cursor-pointer transition-all duration-200 hover:bg-muted/30 relative border-l-2 ${getSectorBorderColor()} ${cardOpacity}`}
           onClick={onClick}
         >
           <CardContent className="p-3">
@@ -149,15 +168,18 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
                   </div>
                 </div>
 
-                {/* Metadata line - single line with bullets */}
-                {(client.regio?.length || client.sector?.length) && (
-                  <div className="text-xs text-muted-foreground">
-                    {[
-                      client.regio && client.regio.length > 0 ? client.regio[0] : null,
-                      client.sector && client.sector.length > 0 ? client.sector[0] : null
-                    ].filter(Boolean).join(' • ')}
-                  </div>
-                )}
+                {/* Metadata line - single line with bullets or empty state */}
+                <div className="text-xs text-muted-foreground">
+                  {client.regio && client.regio.length > 0 && client.sector && client.sector.length > 0 ? (
+                    [client.regio[0], client.sector[0]].join(' • ')
+                  ) : client.regio && client.regio.length > 0 ? (
+                    client.regio[0]
+                  ) : client.sector && client.sector.length > 0 ? (
+                    client.sector[0]
+                  ) : (
+                    <span className="italic">Geen matching data</span>
+                  )}
+                </div>
               </div>
             </div>
 
