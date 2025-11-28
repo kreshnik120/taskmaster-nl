@@ -23,6 +23,14 @@ const STAGE_LABELS: Record<string, string> = {
   geplaatst: "Geplaatst",
 };
 
+const STAGE_COLORS: Record<string, { dot: string; text: string }> = {
+  nieuw: { dot: "bg-blue-500", text: "text-blue-600" },
+  screening: { dot: "bg-amber-500", text: "text-amber-600" },
+  interview: { dot: "bg-sky-500", text: "text-sky-600" },
+  goedgekeurd: { dot: "bg-emerald-500", text: "text-emerald-600" },
+  geplaatst: { dot: "bg-green-600", text: "text-green-700" },
+};
+
 export function RecentMovementsWidget({ applications }: RecentMovementsWidgetProps) {
   const recentMoves = applications
     .filter(app => app.updated_at)
@@ -50,13 +58,18 @@ export function RecentMovementsWidget({ applications }: RecentMovementsWidgetPro
             locale: nl,
           });
 
+          const stageColor = STAGE_COLORS[stage] || { dot: "bg-gray-400", text: "text-gray-600" };
+          
           return (
             <div key={app.id} className="grid grid-cols-[40%_25%_35%] gap-4 text-sm items-center hover:bg-muted/30 -mx-1 px-1 py-1.5 rounded cursor-pointer transition-colors">
               <span className="font-medium text-foreground truncate">
                 {candidateName}
               </span>
-              <span className="text-muted-foreground truncate">
-                {STAGE_LABELS[stage] || stage}
+              <span className="flex items-center gap-1.5 truncate">
+                <span className={`w-1.5 h-1.5 rounded-full ${stageColor.dot} flex-shrink-0`} />
+                <span className={`${stageColor.text} truncate`}>
+                  {STAGE_LABELS[stage] || stage}
+                </span>
               </span>
               <span className="text-muted-foreground text-xs text-right">
                 {timeAgo}
