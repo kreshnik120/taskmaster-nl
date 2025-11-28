@@ -39,9 +39,9 @@ export function RecentMovementsWidget({ applications }: RecentMovementsWidgetPro
   }
 
   return (
-    <div className="py-8 border-b">
+    <div className="py-8">
       <h3 className="text-sm font-medium text-foreground mb-4">Recente activiteit</h3>
-      <div className="space-y-3">
+      <div className="space-y-2">
         {recentMoves.map((app) => {
           const candidateName = app.extracted_data?.naam || app.email_from.split('@')[0];
           const stage = app.pipeline_stage || 'nieuw';
@@ -51,16 +51,14 @@ export function RecentMovementsWidget({ applications }: RecentMovementsWidgetPro
           });
 
           return (
-            <div key={app.id} className="flex items-center justify-between text-sm">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <span className="font-medium text-foreground truncate">
-                  {candidateName}
-                </span>
-                <span className="text-foreground">
-                  {STAGE_LABELS[stage] || stage}
-                </span>
-              </div>
-              <span className="text-muted-foreground text-xs whitespace-nowrap ml-3">
+            <div key={app.id} className="grid grid-cols-[40%_25%_35%] gap-4 text-sm items-center hover:bg-muted/30 -mx-1 px-1 py-1.5 rounded cursor-pointer transition-colors">
+              <span className="font-medium text-foreground truncate">
+                {candidateName}
+              </span>
+              <span className="text-muted-foreground truncate">
+                {STAGE_LABELS[stage] || stage}
+              </span>
+              <span className="text-muted-foreground text-xs text-right">
                 {timeAgo}
               </span>
             </div>
