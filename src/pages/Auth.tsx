@@ -268,6 +268,21 @@ const Auth = () => {
       return;
     }
     
+    // Block common/predictable passwords
+    const commonPasswords = [
+      'password', '123456', 'qwerty', 'admin123', 'welkom01', 
+      'welkom123', 'zorg123', 'abczorg', 'citozott', 'wachtwoord',
+      'password123', '12345678', '123456789', 'qwerty123', 'abc123',
+      'letmein', 'monkey', 'dragon', 'master', 'trustno1', 'football',
+      'iloveyou', 'starwars', 'superman', 'batman', 'welcome'
+    ];
+    
+    if (commonPasswords.includes(password.toLowerCase())) {
+      setPasswordErrors(['Dit wachtwoord is te voorspelbaar en kan gemakkelijk worden geraden']);
+      toast.error('Kies een uniek wachtwoord - dit wachtwoord is te voorspelbaar');
+      return;
+    }
+    
     setLoading(true);
 
     try {
