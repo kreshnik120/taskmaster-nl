@@ -38,22 +38,16 @@ interface TaskCardProps {
 }
 
 const priorityColors: Record<string, string> = {
-  LOW: "border-l-4 border-l-priority-low",
-  MEDIUM: "border-l-4 border-l-priority-medium",
-  HIGH: "border-l-4 border-l-priority-high",
-  CRITICAL: "border-l-4 border-l-priority-critical",
+  LOW: "border-l-2 border-l-border",
+  MEDIUM: "border-l-2 border-l-muted-foreground/30",
+  HIGH: "border-l-3 border-l-muted-foreground/50",
+  CRITICAL: "border-l-4 border-l-foreground/70",
 };
 
 
 const getAiScoreBadgeColor = (label?: string) => {
-  switch (label) {
-    case "CRITICAL":
-      return "bg-red-500/10 text-red-600 border-red-500/20";
-    case "LOW_PRIORITY":
-      return "bg-blue-500/10 text-blue-600 border-blue-500/20";
-    default:
-      return "bg-amber-500/10 text-amber-600 border-amber-500/20";
-  }
+  // Monochrome styling - all variants use same neutral color
+  return "bg-muted/50 text-muted-foreground border-border";
 };
 
 export function TaskCard({ task, onClick, aiScore }: TaskCardProps) {
