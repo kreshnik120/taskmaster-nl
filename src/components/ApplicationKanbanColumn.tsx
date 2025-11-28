@@ -33,6 +33,7 @@ interface ApplicationKanbanColumnProps {
   borderColor: string;
   countColor: string;
   onApplicationClick: (application: Application) => void;
+  searchQuery?: string;
 }
 
 export function ApplicationKanbanColumn({
@@ -43,6 +44,7 @@ export function ApplicationKanbanColumn({
   borderColor,
   countColor,
   onApplicationClick,
+  searchQuery = "",
 }: ApplicationKanbanColumnProps) {
   const { setNodeRef } = useDroppable({
     id: id,
@@ -83,6 +85,7 @@ export function ApplicationKanbanColumn({
                   key={application.id}
                   application={application}
                   onClick={() => onApplicationClick(application)}
+                  searchQuery={searchQuery}
                 />
               ))
             )}

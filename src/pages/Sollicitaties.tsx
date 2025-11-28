@@ -21,6 +21,7 @@ import { NewApplicationDialog } from "@/components/NewApplicationDialog";
 import { MinimalMetricsBar } from "@/components/recruitment/MinimalMetricsBar";
 import { UrgencyBanner } from "@/components/recruitment/UrgencyBanner";
 import { RecentMovementsWidget } from "@/components/recruitment/RecentMovementsWidget";
+import { PipelineFunnelMini } from "@/components/recruitment/PipelineFunnelMini";
 
 interface Application {
   id: string;
@@ -70,6 +71,36 @@ const Sollicitaties = () => {
   const [filterRegio, setFilterRegio] = useState<string>("");
   const [lastMove, setLastMove] = useState<{ applicationId: string; fromStage: string; toStage: string } | null>(null);
   const navigate = useNavigate();
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // n = New application
+      if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+        e.preventDefault();
+        setNewApplicationDialogOpen(true);
+      }
+      
+      // / = Focus search
+      if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        const searchInput = document.querySelector('input[type="search"]') as HTMLInputElement;
+        searchInput?.focus();
+      }
+
+      // Escape = Clear search / close modals
+      if (e.key === 'Escape') {
+        setSearchQuery('');
+        setDetailModalOpen(false);
+        setNewApplicationDialogOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -409,6 +440,9 @@ const Sollicitaties = () => {
                 <Button onClick={() => setNewApplicationDialogOpen(true)} size="sm" className="gap-2">
                   <Plus className="h-4 w-4" />
                   Nieuwe sollicitatie
+                  <kbd className="ml-1 inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-70">
+                    N
+                  </kbd>
                 </Button>
               </div>
 
@@ -418,7 +452,16 @@ const Sollicitaties = () => {
                 newApplications={displayedNew}
                 approvedApplications={displayedApproved}
                 avgCompleteness={displayedAvgCompleteness}
+                trends={{
+                  total: 2,
+                  new: -1,
+                  approved: 1,
+                  completeness: 3,
+                }}
               />
+
+              {/* Pipeline Funnel Mini-Chart */}
+              <PipelineFunnelMini applications={filteredApplications} />
 
               {/* Urgency Banner - Only if urgent items exist */}
               <div className="py-6">
@@ -436,11 +479,15 @@ const Sollicitaties = () => {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Zoek op naam of email..."
+                    type="search"
+                    placeholder="Zoek op naam of email... (/)"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10 border-border/50"
                   />
+                  <kbd className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                    /
+                  </kbd>
                 </div>
                 
                 {/* Filters Popover */}
@@ -573,16 +620,17 @@ const Sollicitaties = () => {
             <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
               <div className="flex gap-4 overflow-x-auto pb-4">
                 {PIPELINE_STAGES.map((stage) => (
-                  <ApplicationKanbanColumn
-                    key={stage.id}
-                    id={stage.id}
-                    title={stage.name}
-                    applications={getApplicationsForStage(stage.id)}
-                    color={stage.color}
-                    borderColor={stage.borderColor}
-                    countColor={stage.countColor}
-                    onApplicationClick={handleApplicationClick}
-                  />
+                   <ApplicationKanbanColumn
+                     key={stage.id}
+                     id={stage.id}
+                     title={stage.name}
+                     applications={getApplicationsForStage(stage.id)}
+                     color={stage.color}
+                     borderColor={stage.borderColor}
+                     countColor={stage.countColor}
+                     onApplicationClick={handleApplicationClick}
+                     searchQuery={searchQuery}
+                   />
                 ))}
               </div>
 
