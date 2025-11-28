@@ -220,7 +220,7 @@ export function ActiveProcessWidget() {
                         urgency === 'soon' ? 'text-yellow-600' :
                         'text-muted-foreground'
                       }`}>
-                        📅 {format(parseISO(subtask.due_at), "d MMM yyyy 'om' HH:mm", { locale: nl })}
+                        {format(parseISO(subtask.due_at), "d MMM yyyy 'om' HH:mm", { locale: nl })}
                         {urgency === 'overdue' && ' - VERLOPEN'}
                         {urgency === 'urgent' && ' - URGENT'}
                       </div>
