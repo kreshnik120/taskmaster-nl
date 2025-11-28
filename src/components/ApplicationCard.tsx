@@ -1,10 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { GripVertical, User, FileText, Calendar, Clock } from "lucide-react";
-import { format } from "date-fns";
-import { nl } from "date-fns/locale";
 
 interface Application {
   id: string;
@@ -50,141 +46,68 @@ export function ApplicationCard({ application, onClick }: ApplicationCardProps) 
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const getCompletenessColor = (score: number | null) => {
-    if (!score) return "bg-gray-500";
-    if (score >= 80) return "bg-green-500";
-    if (score >= 50) return "bg-yellow-500";
-    return "bg-red-500";
-  };
-
-  const getStatusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      nieuw: "Nieuw",
-      in_behandeling: "In behandeling",
-      wacht_op_info: "Wacht op info",
-      compleet: "Compleet",
-      afgerond: "Afgerond",
-    };
-    return labels[status] || status;
-  };
-
   const candidateName = application.extracted_data?.naam || 'Onbekende kandidaat';
   const werkvorm = application.extracted_data?.werkvorm;
   const functieNiveau = application.extracted_data?.functie_niveau || application.professionals?.functie_niveau;
-
-  const getWerkvormColor = (werkvorm: string | undefined) => {
-    if (!werkvorm) return "bg-gray-100 text-gray-700";
-    if (werkvorm.toLowerCase().includes('zzp')) return "bg-blue-100 text-blue-700";
-    if (werkvorm.toLowerCase().includes('uitzend')) return "bg-purple-100 text-purple-700";
-    if (werkvorm.toLowerCase().includes('abcito')) return "bg-green-100 text-green-700";
-    return "bg-gray-100 text-gray-700";
-  };
-
-  // Calculate days in current stage
+  const assignedOrg = application.extracted_data?.assigned_organization;
+  
   const getDaysInStage = () => {
     const lastUpdate = new Date(application.updated_at || application.created_at);
     const now = new Date();
     const days = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
     return days;
   };
-
-  const getStageUrgencyBadge = () => {
-    const days = getDaysInStage();
-    if (days < 2) return { color: "bg-green-500", label: `${days}d` };
-    if (days < 5) return { color: "bg-yellow-500", label: `${days}d` };
-    return { color: "bg-red-500", label: `${days}d` };
+  
+  const daysInStage = getDaysInStage();
+  
+  const getStatusDotColor = () => {
+    if (daysInStage < 2) return "bg-muted-foreground/30";
+    if (daysInStage < 5) return "bg-muted-foreground/50";
+    return "bg-destructive/60";
   };
-
-  const urgency = getStageUrgencyBadge();
 
   return (
     <Card
       ref={setNodeRef}
       style={style}
-      className="hover:shadow-md transition-shadow"
+      className="hover:shadow-sm transition-shadow cursor-pointer border-border/50"
       onClick={onClick}
     >
-      <CardContent className="p-4 space-y-3">
-        {/* Drag Handle */}
-        <div 
-          {...attributes} 
-          {...listeners}
-          className="flex items-center justify-center cursor-grab active:cursor-grabbing -mx-4 -mt-4 mb-2 px-4 pt-3 pb-2 border-b"
-        >
-          <GripVertical className="h-4 w-4 text-muted-foreground" />
+      <CardContent className="p-4 space-y-2" {...attributes} {...listeners}>
+        {/* Header: Name + Completeness */}
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-foreground truncate">
+            {candidateName}
+          </p>
+          <span className={`text-sm font-medium ${
+            application.completeness_score === 100 
+              ? 'text-primary' 
+              : 'text-muted-foreground'
+          }`}>
+            {application.completeness_score || 0}%
+          </span>
         </div>
 
-        {/* Kandidaat Naam */}
-        <div className="flex items-start gap-2">
-          <User className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{candidateName}</p>
-            <p className="text-xs text-muted-foreground truncate">{application.email_from}</p>
-          </div>
+        {/* Email */}
+        <p className="text-xs text-muted-foreground truncate">
+          {application.email_from}
+        </p>
+
+        {/* Metadata row with bullets */}
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
+          {functieNiveau && <span>{functieNiveau}</span>}
+          {functieNiveau && werkvorm && <span>•</span>}
+          {werkvorm && <span>{werkvorm}</span>}
+          {assignedOrg && (functieNiveau || werkvorm) && <span>•</span>}
+          {assignedOrg && <span>{assignedOrg}</span>}
         </div>
 
-        {/* Werkvorm & Functieniveau */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {werkvorm && (
-            <Badge className={`text-xs ${getWerkvormColor(werkvorm)}`}>
-              {werkvorm}
-            </Badge>
-          )}
-          {functieNiveau && (
-            <span className="text-xs text-muted-foreground">{functieNiveau}</span>
-          )}
-          {application.extracted_data?.assigned_organization && (
-            <Badge 
-              className={`text-xs ${
-                application.extracted_data.assigned_organization === "ABCzorg" 
-                  ? "bg-blue-600 hover:bg-blue-700 text-white" 
-                  : "bg-orange-500 hover:bg-orange-600 text-white"
-              }`}
-            >
-              {application.extracted_data.assigned_organization}
-            </Badge>
-          )}
-        </div>
-
-        {/* Professional Link (if assigned) */}
-        {application.professionals && (
-          <div className="flex items-center gap-2 pt-1 border-t">
-            <User className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-            <p className="text-xs font-medium text-muted-foreground">
-              Gekoppeld: {application.professionals.full_name}
-            </p>
-          </div>
-        )}
-
-        {/* Status & Completeness */}
-        <div className="flex items-center justify-between gap-2">
-          <Badge variant="outline" className="text-xs">
-            {getStatusLabel(application.status)}
-          </Badge>
-          
-          {application.completeness_score !== null && (
-            <div className="flex items-center gap-1.5">
-              <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs font-medium">{application.completeness_score}%</span>
-              <div className={`h-2 w-2 rounded-full ${getCompletenessColor(application.completeness_score)}`} />
-            </div>
-          )}
-        </div>
-
-        {/* Time in Stage Badge */}
-        <div className="flex items-center gap-2 pt-1 border-t">
-          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">In deze fase:</span>
-          <div className="flex items-center gap-1">
-            <div className={`h-2 w-2 rounded-full ${urgency.color}`} />
-            <span className="text-xs font-medium">{urgency.label}</span>
-          </div>
-        </div>
-
-        {/* Created Date */}
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Calendar className="h-3.5 w-3.5" />
-          <span>{format(new Date(application.created_at), "d MMM yyyy", { locale: nl })}</span>
+        {/* Time in stage */}
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-xs text-muted-foreground">
+            In deze fase: {daysInStage}d
+          </span>
+          <div className={`h-1.5 w-1.5 rounded-full ${getStatusDotColor()}`} />
         </div>
       </CardContent>
     </Card>
