@@ -31,6 +31,7 @@ interface ClientSectionProps {
   onClientClick: (client: Client) => void;
   searchQuery: string;
   defaultOpen?: boolean;
+  gridClass?: string;
 }
 
 // Get section accent based on groupType and title
@@ -65,6 +66,7 @@ export function ClientSection({
   onClientClick,
   searchQuery,
   defaultOpen = true,
+  gridClass = "grid-cols-1 md:grid-cols-2 lg:grid-cols-3",
 }: ClientSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   
@@ -74,6 +76,18 @@ export function ClientSection({
   
   const percentage = totalClients > 0 ? Math.round((clients.length / totalClients) * 100) : 0;
   const accentClass = getSectionAccent(title, groupType);
+
+  // Calculate contextual insights
+  const completeClients = clients.filter(c => {
+    const hasRegio = c.regio && c.regio.length > 0;
+    const hasSector = c.sector && c.sector.length > 0;
+    const hasDoelgroep = c.doelgroep && c.doelgroep.length > 0;
+    const hasFuncties = c.gezochte_functies && c.gezochte_functies.length > 0;
+    return hasRegio && hasSector && hasDoelgroep && hasFuncties;
+  }).length;
+
+  const incompleteClients = clients.length - completeClients;
+  const completenessPercentage = clients.length > 0 ? Math.round((completeClients / clients.length) * 100) : 0;
 
   if (clients.length === 0) {
     return null;
@@ -92,11 +106,21 @@ export function ClientSection({
           <Badge variant="secondary" className="rounded-full px-3 py-0.5 font-medium">
             {clients.length}
           </Badge>
+          {completeClients > 0 && (
+            <span className="text-xs text-muted-foreground">
+              · {completeClients} compleet
+            </span>
+          )}
+          {incompleteClients > 0 && completenessPercentage < 50 && (
+            <Badge variant="outline" className="rounded-full px-2 py-0.5 text-xs text-amber-600 border-amber-300">
+              Vereist actie
+            </Badge>
+          )}
         </div>
         <span className="text-sm text-muted-foreground font-medium">{percentage}%</span>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 py-6">
+        <div className={`grid ${gridClass} gap-6 py-6`}>
           {clients.map((client) => (
             <ClientCard
               key={client.id}

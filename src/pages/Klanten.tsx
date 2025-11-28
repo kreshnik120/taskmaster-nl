@@ -15,6 +15,7 @@ import { ClientCard, ClientCardSkeleton } from "@/components/ClientCard";
 import { ClientMatchingUrgency } from "@/components/recruitment/ClientMatchingUrgency";
 import { RecentClientsWidget } from "@/components/recruitment/RecentClientsWidget";
 import { ClientGroupingToggle } from "@/components/recruitment/ClientGroupingToggle";
+import { DensityToggle } from "@/components/recruitment/DensityToggle";
 import { ClientSection } from "@/components/recruitment/ClientSection";
 
 interface Client {
@@ -47,6 +48,10 @@ export default function Klanten() {
   const [grouping, setGrouping] = useState<"bureau" | "sector" | "matching" | "regio" | "alpha">(() => {
     const saved = localStorage.getItem("klanten-grouping");
     return (saved as any) || "bureau";
+  });
+  const [density, setDensity] = useState<"compact" | "comfortable" | "spacious">(() => {
+    const saved = localStorage.getItem("klanten-density");
+    return (saved as any) || "compact";
   });
   const [allExpanded, setAllExpanded] = useState(true);
   const navigate = useNavigate();
@@ -228,6 +233,19 @@ export default function Klanten() {
     localStorage.setItem("klanten-grouping", newGrouping);
   };
 
+  // Save density preference to localStorage
+  const handleDensityChange = (newDensity: "compact" | "comfortable" | "spacious") => {
+    setDensity(newDensity);
+    localStorage.setItem("klanten-density", newDensity);
+  };
+
+  // Grid class based on density
+  const getGridClass = () => {
+    if (density === "compact") return "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
+    if (density === "comfortable") return "grid-cols-1 lg:grid-cols-2";
+    return "grid-cols-1";
+  };
+
   const abczorgCount = clients.filter(c => c.organizations?.name === "ABCzorg").length;
   const citozorgCount = clients.filter(c => c.organizations?.name === "CitoZorg").length;
   
@@ -355,8 +373,11 @@ export default function Klanten() {
             </div>
 
             {/* Grouping Toggle & Collapse Controls */}
-            <div className="mt-6 flex items-center justify-between">
-              <ClientGroupingToggle value={grouping} onChange={handleGroupingChange} />
+            <div className="mt-6 flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-3">
+                <ClientGroupingToggle value={grouping} onChange={handleGroupingChange} />
+                <DensityToggle value={density} onChange={handleDensityChange} />
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
@@ -389,11 +410,12 @@ export default function Klanten() {
                       clients={sectionClients}
                       totalClients={filteredClients.length}
                       groupType={grouping}
-                      onClientClick={(client) => {
+                     onClientClick={(client) => {
                         setSelectedClient(client);
                       }}
                       searchQuery={searchQuery}
                       defaultOpen={allExpanded}
+                      gridClass={getGridClass()}
                     />
                   ))
               )}

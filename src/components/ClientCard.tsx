@@ -1,10 +1,11 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Building2, Phone, Mail, MapPin } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Phone, Mail, MapPin } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
 
@@ -26,7 +27,7 @@ interface ClientCardProps {
     };
   };
   searchQuery?: string;
-  onClick: () => void;
+  onClick: (client: any) => void;
   onQuickCall?: () => void;
   onQuickEmail?: () => void;
   groupType?: "bureau" | "sector" | "matching" | "regio" | "alpha";
@@ -127,14 +128,41 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
     return "";
   };
 
+  const handleQuickCall = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (client.phone) {
+      window.location.href = `tel:${client.phone}`;
+    }
+  };
+
+  const handleQuickEmail = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (client.email) {
+      window.location.href = `mailto:${client.email}`;
+    }
+  };
+
+  const handleQuickMap = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (client.address) {
+      window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(client.address)}`, '_blank');
+    }
+  };
+
+  const handleEditClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onClick(client);
+  };
+
   return (
     <HoverCard openDelay={300}>
       <HoverCardTrigger asChild>
         <Card 
-          className={`group cursor-pointer transition-all duration-200 hover:bg-muted/30 relative border-l-2 ${getSectorBorderColor()} ${cardOpacity}`}
-          onClick={onClick}
+          className={`cursor-pointer transition-all duration-200 hover:bg-muted/30 border-l-2 ${getSectorBorderColor()} ${cardOpacity} flex flex-col overflow-hidden`}
+          onClick={() => onClick(client)}
         >
-          <CardContent className="p-3">
+          {/* Main content */}
+          <CardContent className="p-3 flex-1">
             <div className="flex items-start gap-3">
               {/* Avatar */}
               <Avatar className="h-10 w-10 flex-shrink-0">
@@ -145,17 +173,51 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
 
               {/* Content */}
               <div className="flex-1 min-w-0">
-                {/* Header with name and status dot */}
+                {/* Header with name and progress ring */}
                 <div className="flex items-center justify-between gap-2 mb-1">
                   <h3 className="font-semibold text-sm truncate">
                     {highlightText(client.name, searchQuery)}
                   </h3>
                   <div className="flex items-center gap-2">
+                    {/* Matching Progress Ring */}
                     {groupType !== "matching" && (
-                      <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${
-                        hasCompleteMatchingData ? 'bg-green-500' : 
-                        hasPartialMatchingData ? 'bg-amber-500' : 'bg-muted'
-                      }`} />
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <svg className="w-4 h-4 shrink-0" viewBox="0 0 16 16">
+                              <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-muted" />
+                              {completenessScore >= 1 && (
+                                <path d="M 8,1 A 7,7 0 0,1 15,8" fill="none" stroke="currentColor" strokeWidth="2" className="text-green-500" />
+                              )}
+                              {completenessScore >= 2 && (
+                                <path d="M 15,8 A 7,7 0 0,1 8,15" fill="none" stroke="currentColor" strokeWidth="2" className="text-green-500" />
+                              )}
+                              {completenessScore >= 3 && (
+                                <path d="M 8,15 A 7,7 0 0,1 1,8" fill="none" stroke="currentColor" strokeWidth="2" className="text-green-500" />
+                              )}
+                              {completenessScore === 4 && (
+                                <path d="M 1,8 A 7,7 0 0,1 8,1" fill="none" stroke="currentColor" strokeWidth="2" className="text-green-500" />
+                              )}
+                            </svg>
+                          </TooltipTrigger>
+                          <TooltipContent side="left">
+                            <div className="text-xs space-y-0.5">
+                              <div className={client.regio && client.regio.length > 0 ? "text-green-500" : "text-muted-foreground"}>
+                                {client.regio && client.regio.length > 0 ? "✓" : "○"} Regio
+                              </div>
+                              <div className={client.sector && client.sector.length > 0 ? "text-green-500" : "text-muted-foreground"}>
+                                {client.sector && client.sector.length > 0 ? "✓" : "○"} Sector
+                              </div>
+                              <div className={client.doelgroep && client.doelgroep.length > 0 ? "text-green-500" : "text-muted-foreground"}>
+                                {client.doelgroep && client.doelgroep.length > 0 ? "✓" : "○"} Doelgroep
+                              </div>
+                              <div className={client.gezochte_functies && client.gezochte_functies.length > 0 ? "text-green-500" : "text-muted-foreground"}>
+                                {client.gezochte_functies && client.gezochte_functies.length > 0 ? "✓" : "○"} Functies
+                              </div>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     )}
                     {groupType !== "bureau" && client.organizations?.name && (
                       <Badge 
@@ -168,7 +230,7 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
                   </div>
                 </div>
 
-                {/* Metadata line - single line with bullets or empty state */}
+                {/* Metadata line - single line with bullets or enhanced empty state */}
                 <div className="text-xs text-muted-foreground">
                   {client.regio && client.regio.length > 0 && client.sector && client.sector.length > 0 ? (
                     [client.regio[0], client.sector[0]].join(' • ')
@@ -177,42 +239,77 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
                   ) : client.sector && client.sector.length > 0 ? (
                     client.sector[0]
                   ) : (
-                    <span className="italic">Geen matching data</span>
+                    <button
+                      onClick={handleEditClick}
+                      className="italic text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      Voeg data toe →
+                    </button>
                   )}
                 </div>
               </div>
             </div>
-
-            {/* Hover Actions */}
-            <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              {client.phone && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onQuickCall?.();
-                  }}
-                >
-                  <Phone className="h-3 w-3" />
-                </Button>
-              )}
-              {client.email && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onQuickEmail?.();
-                  }}
-                >
-                  <Mail className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
           </CardContent>
+
+          {/* Always visible action footer */}
+          <div className="border-t border-border/50 px-3 py-2 flex items-center gap-1 bg-muted/20">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleQuickCall}
+                    disabled={!client.phone}
+                    className="h-7 px-2 disabled:opacity-40"
+                  >
+                    <Phone className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {client.phone ? "Bel klant" : "Geen telefoonnummer"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleQuickEmail}
+                    disabled={!client.email}
+                    className="h-7 px-2 disabled:opacity-40"
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {client.email ? "Email klant" : "Geen email adres"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleQuickMap}
+                    disabled={!client.address}
+                    className="h-7 px-2 disabled:opacity-40"
+                  >
+                    <MapPin className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {client.address ? "Bekijk op kaart" : "Geen adres"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </Card>
       </HoverCardTrigger>
       
@@ -281,25 +378,21 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
 // Skeleton variant
 export function ClientCardSkeleton() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-start gap-3">
-          <Skeleton className="h-10 w-10 rounded-full" />
+    <Card className="flex flex-col">
+      <CardContent className="p-3 flex-1">
+        <div className="flex items-start gap-3">
+          <Skeleton className="h-10 w-10 rounded-full flex-shrink-0" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-4 w-32" />
             <Skeleton className="h-3 w-48" />
-            <Skeleton className="h-3 w-24" />
           </div>
-          <Skeleton className="h-5 w-16" />
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex gap-1">
-          <Skeleton className="h-5 w-16" />
-          <Skeleton className="h-5 w-16" />
         </div>
-        <Skeleton className="h-3 w-32" />
       </CardContent>
+      <div className="border-t border-border/50 px-3 py-2 flex items-center gap-1">
+        <Skeleton className="h-7 w-7" />
+        <Skeleton className="h-7 w-7" />
+        <Skeleton className="h-7 w-7" />
+      </div>
     </Card>
   );
 }
