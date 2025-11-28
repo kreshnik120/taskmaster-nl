@@ -807,37 +807,39 @@ export default function Lijst() {
                     </TableBody>
                   </Table>
                 </div>
-              </div>
-            ))}
           </div>
-        </div>
+        ))}
+      </div>
+    </div>
 
-      {selectedTask && (
-        <TaskDetailModal
-          task={selectedTask}
-          open={detailModalOpen}
-          onOpenChange={setDetailModalOpen}
-          onTaskUpdated={handleTaskUpdated}
-        />
-      )}
-      
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Taak verwijderen</AlertDialogTitle>
-            <AlertDialogDescription>
-              Weet je zeker dat je de taak "{taskToDelete?.title}" wilt verwijderen? 
-              Deze actie kan ongedaan worden gemaakt vanuit de pagina "Verwijderde Taken".
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Annuleren</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteTask} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Verwijderen
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
-  );
+    {/* Modals */}
+    {selectedTask && (
+      <TaskDetailModal
+        task={selectedTask}
+        open={detailModalOpen}
+        onOpenChange={setDetailModalOpen}
+        onTaskUpdated={handleTaskUpdated}
+      />
+    )}
+    
+    <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Taak verwijderen</AlertDialogTitle>
+          <AlertDialogDescription>
+            Weet je zeker dat je de taak "{taskToDelete?.title}" wilt verwijderen? 
+            Deze actie kan ongedaan worden gemaakt vanuit de pagina "Verwijderde Taken".
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Annuleren</AlertDialogCancel>
+          <AlertDialogAction onClick={handleDeleteTask} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            Verwijderen
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  </>
+);
+}
 }
