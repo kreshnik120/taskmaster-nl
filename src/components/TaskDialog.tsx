@@ -10,10 +10,16 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, ArrowDown, Minus, ArrowUp, AlertCircle, CalendarIcon } from "lucide-react";
 import { SubtaskManager } from "./SubtaskManager";
+import { format } from "date-fns";
+import { nl } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 const taskSchema = z.object({
   title: z.string().min(1, "Titel is verplicht").max(200, "Titel mag maximaal 200 karakters zijn"),
@@ -21,7 +27,9 @@ const taskSchema = z.object({
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]),
   assignee_id: z.string().optional(),
   start_at: z.string().optional(),
+  start_time: z.string().optional(),
   due_at: z.string().optional(),
+  due_time: z.string().optional(),
   next_action: z.string().optional(),
 });
 
@@ -41,12 +49,22 @@ interface Profile {
   email: string | null;
 }
 
+const PRIORITIES = [
+  { value: "LOW" as const, label: "Laag", icon: ArrowDown, color: "text-muted-foreground" },
+  { value: "MEDIUM" as const, label: "Gemiddeld", icon: Minus, color: "text-blue-600" },
+  { value: "HIGH" as const, label: "Hoog", icon: ArrowUp, color: "text-orange-600" },
+  { value: "CRITICAL" as const, label: "Kritiek", icon: AlertCircle, color: "text-red-600" },
+];
+
 export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: TaskDialogProps) {
   const [loading, setLoading] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [defaultOrgId, setDefaultOrgId] = useState<string | null>(null);
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
   const [reminderKey, setReminderKey] = useState(0);
+  const [currentStep, setCurrentStep] = useState(1);
+  const [startDate, setStartDate] = useState<Date>();
+  const [dueDate, setDueDate] = useState<Date>();
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
@@ -56,7 +74,9 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
       priority: "MEDIUM",
       assignee_id: "unassigned",
       start_at: "",
+      start_time: "09:00",
       due_at: "",
+      due_time: "17:00",
       next_action: "",
     },
   });
@@ -74,9 +94,14 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
           priority: "MEDIUM",
           assignee_id: "unassigned",
           start_at: "",
+          start_time: "09:00",
           due_at: "",
+          due_time: "17:00",
           next_action: "",
         });
+        setCurrentStep(1);
+        setStartDate(undefined);
+        setDueDate(undefined);
       }
     }
   }, [open, taskId]);
@@ -120,13 +145,30 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
     }
 
     if (data) {
+      // Parse start_at and due_at
+      if (data.start_at) {
+        const startDateTime = new Date(data.start_at);
+        setStartDate(startDateTime);
+        form.setValue("start_at", format(startDateTime, "yyyy-MM-dd"));
+        form.setValue("start_time", format(startDateTime, "HH:mm"));
+      }
+      
+      if (data.due_at) {
+        const dueDateTime = new Date(data.due_at);
+        setDueDate(dueDateTime);
+        form.setValue("due_at", format(dueDateTime, "yyyy-MM-dd"));
+        form.setValue("due_time", format(dueDateTime, "HH:mm"));
+      }
+
       form.reset({
         title: data.title,
         description: data.description || "",
         priority: data.priority,
         assignee_id: data.assignee_id || "unassigned",
-        start_at: data.start_at ? data.start_at.slice(0, 16) : "",
-        due_at: data.due_at ? data.due_at.slice(0, 16) : "",
+        start_at: data.start_at ? format(new Date(data.start_at), "yyyy-MM-dd") : "",
+        start_time: data.start_at ? format(new Date(data.start_at), "HH:mm") : "09:00",
+        due_at: data.due_at ? format(new Date(data.due_at), "yyyy-MM-dd") : "",
+        due_time: data.due_at ? format(new Date(data.due_at), "HH:mm") : "17:00",
         next_action: data.next_action || "",
       });
     }
@@ -140,13 +182,30 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
 
     setLoading(true);
     try {
+      // Combine date and time for start_at and due_at
+      let startAtISO = null;
+      if (values.start_at) {
+        const [hours, minutes] = (values.start_time || "09:00").split(":");
+        const startDateTime = new Date(values.start_at);
+        startDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+        startAtISO = startDateTime.toISOString();
+      }
+
+      let dueAtISO = null;
+      if (values.due_at) {
+        const [hours, minutes] = (values.due_time || "17:00").split(":");
+        const dueDateTime = new Date(values.due_at);
+        dueDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+        dueAtISO = dueDateTime.toISOString();
+      }
+
       const taskData = {
         title: values.title,
         description: values.description || null,
         priority: values.priority,
         assignee_id: values.assignee_id && values.assignee_id !== "unassigned" ? values.assignee_id : null,
-        start_at: values.start_at || null,
-        due_at: values.due_at || null,
+        start_at: startAtISO,
+        due_at: dueAtISO,
         next_action: values.next_action || null,
         org_id: defaultOrgId,
         column_id: columnId || null,
@@ -167,11 +226,26 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
       onSuccess();
       onOpenChange(false);
       form.reset();
+      setCurrentStep(1);
+      setStartDate(undefined);
+      setDueDate(undefined);
     } catch (error: any) {
       toast.error("Fout: " + error.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleNext = () => {
+    if (currentStep === 1 && !form.watch("title")) {
+      toast.error("Vul de titel in");
+      return;
+    }
+    setCurrentStep(prev => Math.min(taskId ? 3 : 2, prev + 1));
+  };
+
+  const handleBack = () => {
+    setCurrentStep(prev => Math.max(1, prev - 1));
   };
 
   return (
@@ -180,157 +254,324 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
         <DialogHeader>
           <DialogTitle>{taskId ? "Taak bewerken" : "Nieuwe taak"}</DialogTitle>
         </DialogHeader>
+
+        {/* Progress Indicator */}
+        {!taskId && (
+          <div className="flex items-center justify-between mb-6">
+            {[1, 2].map((step) => (
+              <div key={step} className="flex items-center flex-1">
+                <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all ${
+                  step < currentStep 
+                    ? "bg-primary border-primary text-primary-foreground" 
+                    : step === currentStep 
+                      ? "bg-primary border-primary text-primary-foreground"
+                      : "border-muted-foreground/30 text-muted-foreground"
+                }`}>
+                  {step < currentStep ? (
+                    <CheckCircle2 className="h-5 w-5" />
+                  ) : (
+                    <span className="text-sm font-semibold">{step}</span>
+                  )}
+                </div>
+                {step < 2 && (
+                  <div className={`flex-1 h-0.5 mx-2 transition-all ${
+                    step < currentStep ? "bg-primary" : "bg-muted-foreground/30"
+                  }`} />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Titel *</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Bijv. Website ontwerp afmaken" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Beschrijving</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder="Geef een uitgebreide beschrijving van wat er gedaan moet worden..." rows={4} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="priority"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Prioriteit</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {/* Step 1: Basis informatie */}
+            {currentStep === 1 && (
+              <div className="space-y-4 animate-fade-in">
+                <h3 className="text-sm font-semibold text-foreground">Basis informatie</h3>
+                
+                <FormField
+                  control={form.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Titel <span className="text-destructive">*</span>
+                      </FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
+                        <Input placeholder="Bijv. Website ontwerp afmaken" {...field} />
                       </FormControl>
-                      <SelectContent>
-                        <SelectItem value="LOW">Laag</SelectItem>
-                        <SelectItem value="MEDIUM">Gemiddeld</SelectItem>
-                        <SelectItem value="HIGH">Hoog</SelectItem>
-                        <SelectItem value="CRITICAL">Kritiek</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name="assignee_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Verantwoordelijke</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Beschrijving</FormLabel>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecteer persoon" />
-                        </SelectTrigger>
+                        <Textarea placeholder="Geef een uitgebreide beschrijving van wat er gedaan moet worden..." rows={5} {...field} />
                       </FormControl>
-                      <SelectContent>
-                        <SelectItem value="unassigned">Niet toegewezen</SelectItem>
-                        {profiles.map((profile) => (
-                          <SelectItem key={profile.id} value={profile.id}>
-                            {profile.name || "Onbekend"}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="start_at"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Start datum/tijd</FormLabel>
-                    <FormControl>
-                      <Input type="datetime-local" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="due_at"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Deadline</FormLabel>
-                    <FormControl>
-                      <Input type="datetime-local" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <FormField
-              control={form.control}
-              name="next_action"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Volgende actie</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Bijv. Contact opnemen met klant, mockup maken..." {...field} />
-                  </FormControl>
-                  <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {taskId && (
-            <div className="pt-4 border-t space-y-4">
-              <SubtaskManager
-                taskId={taskId}
-                profiles={profiles}
-              />
-              
-              <div className="pt-4 border-t">
-                <ReminderList
-                  key={reminderKey}
-                  taskId={taskId}
-                  onAddClick={() => setReminderDialogOpen(true)}
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
-            </div>
-          )}
+            )}
 
-          <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+            {/* Step 2: Planning & Toewijzing */}
+            {currentStep === 2 && (
+              <div className="space-y-4 animate-fade-in">
+                <h3 className="text-sm font-semibold text-foreground">Planning & Toewijzing</h3>
+                
+                {/* Priority Badges */}
+                <FormField
+                  control={form.control}
+                  name="priority"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Prioriteit</FormLabel>
+                      <FormControl>
+                        <div className="flex flex-wrap gap-2">
+                          {PRIORITIES.map((priority) => {
+                            const Icon = priority.icon;
+                            const isSelected = field.value === priority.value;
+                            return (
+                              <Badge
+                                key={priority.value}
+                                variant="outline"
+                                className={cn(
+                                  "cursor-pointer transition-all px-3 py-1.5",
+                                  isSelected 
+                                    ? "bg-muted border-foreground" 
+                                    : "hover:bg-muted/50"
+                                )}
+                                onClick={() => field.onChange(priority.value)}
+                              >
+                                <Icon className={cn("h-4 w-4 mr-1.5", priority.color)} />
+                                {priority.label}
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="assignee_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Verantwoordelijke</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecteer persoon" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="unassigned">Niet toegewezen</SelectItem>
+                          {profiles.map((profile) => (
+                            <SelectItem key={profile.id} value={profile.id}>
+                              {profile.name || "Onbekend"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Start Date & Time */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="start_at"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Start datum</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "w-full pl-3 text-left font-normal",
+                                  !startDate && "text-muted-foreground"
+                                )}
+                              >
+                                {startDate ? format(startDate, "PPP", { locale: nl }) : "Selecteer datum"}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={startDate}
+                              onSelect={(date) => {
+                                setStartDate(date);
+                                field.onChange(date ? format(date, "yyyy-MM-dd") : "");
+                              }}
+                              initialFocus
+                              className="pointer-events-auto"
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="start_time"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Start tijd</FormLabel>
+                        <FormControl>
+                          <Input type="time" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Due Date & Time */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="due_at"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Deadline</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "w-full pl-3 text-left font-normal",
+                                  !dueDate && "text-muted-foreground"
+                                )}
+                              >
+                                {dueDate ? format(dueDate, "PPP", { locale: nl }) : "Selecteer datum"}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={dueDate}
+                              onSelect={(date) => {
+                                setDueDate(date);
+                                field.onChange(date ? format(date, "yyyy-MM-dd") : "");
+                              }}
+                              initialFocus
+                              className="pointer-events-auto"
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="due_time"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Deadline tijd</FormLabel>
+                        <FormControl>
+                          <Input type="time" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="next_action"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Volgende actie</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Bijv. Contact opnemen met klant, mockup maken..." {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
+            {/* Step 3: Subtaken & Herinneringen (alleen bij bewerken) */}
+            {taskId && currentStep === 3 && (
+              <div className="space-y-4 animate-fade-in">
+                <h3 className="text-sm font-semibold text-foreground">Subtaken & Herinneringen</h3>
+                
+                <SubtaskManager
+                  taskId={taskId}
+                  profiles={profiles}
+                />
+                
+                <div className="pt-4 border-t">
+                  <ReminderList
+                    key={reminderKey}
+                    taskId={taskId}
+                    onAddClick={() => setReminderDialogOpen(true)}
+                  />
+                </div>
+              </div>
+            )}
+
+            <DialogFooter className="gap-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => onOpenChange(false)} 
+                disabled={loading}
+              >
                 Annuleren
               </Button>
-              <Button type="submit" disabled={loading}>
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {taskId ? "Bijwerken" : "Aanmaken"}
-              </Button>
+              {currentStep > 1 && (
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  onClick={handleBack}
+                  disabled={loading}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Vorige
+                </Button>
+              )}
+              {currentStep < (taskId ? 3 : 2) ? (
+                <Button 
+                  type="button" 
+                  onClick={handleNext}
+                  disabled={loading}
+                >
+                  Volgende
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              ) : (
+                <Button type="submit" disabled={loading}>
+                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {taskId ? "Bijwerken" : "Aanmaken"}
+                </Button>
+              )}
             </DialogFooter>
           </form>
         </Form>
