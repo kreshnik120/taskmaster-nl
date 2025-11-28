@@ -4,7 +4,7 @@ import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/
 import { Button } from "@/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { Plus, Loader2, Search, X, Filter } from "lucide-react";
+import { Plus, Loader2, Search, X, Filter, RotateCcw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -379,8 +379,26 @@ const Sollicitaties = () => {
                       )}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-80" align="end">
+                  <PopoverContent className="w-96" align="end">
                     <div className="space-y-4">
+                      {/* Header */}
+                      <div className="flex items-center justify-between pb-3 border-b">
+                        <div className="flex items-center gap-2">
+                          <Filter className="h-4 w-4 text-muted-foreground" />
+                          <h4 className="font-medium text-sm">Filters</h4>
+                          {(filterFunctieNiveau !== "all" || filterWerkvorm !== "all" || filterOrganisatie !== "all" || filterRegio !== "") && (
+                            <Badge variant="secondary" className="h-5 px-1.5">
+                              {[
+                                filterFunctieNiveau !== "all",
+                                filterWerkvorm !== "all",
+                                filterOrganisatie !== "all",
+                                filterRegio !== ""
+                              ].filter(Boolean).length}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
                       <div>
                         <label className="text-sm font-medium text-foreground mb-2 block">Functieniveau</label>
                         <Select value={filterFunctieNiveau} onValueChange={setFilterFunctieNiveau}>
@@ -396,7 +414,7 @@ const Sollicitaties = () => {
                         </Select>
                       </div>
                       
-                      <div>
+                      <div className="pt-3 border-t">
                         <label className="text-sm font-medium text-foreground mb-2 block">Werkvorm</label>
                         <Select value={filterWerkvorm} onValueChange={setFilterWerkvorm}>
                           <SelectTrigger className="w-full">
@@ -411,7 +429,7 @@ const Sollicitaties = () => {
                         </Select>
                       </div>
                       
-                      <div>
+                      <div className="pt-3 border-t">
                         <label className="text-sm font-medium text-foreground mb-2 block">Bureau</label>
                         <Select value={filterOrganisatie} onValueChange={setFilterOrganisatie}>
                           <SelectTrigger className="w-full">
@@ -426,7 +444,7 @@ const Sollicitaties = () => {
                         </Select>
                       </div>
                       
-                      <div>
+                      <div className="pt-3 border-t">
                         <label className="text-sm font-medium text-foreground mb-2 block">Regio</label>
                         <Input
                           placeholder="Filter op regio..."
@@ -435,23 +453,25 @@ const Sollicitaties = () => {
                         />
                       </div>
                       
-                      {/* Reset Button */}
+                      {/* Wis Filters Knop */}
                       {hasActiveFilters && (
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => {
-                            setSearchQuery("");
-                            setFilterFunctieNiveau("all");
-                            setFilterWerkvorm("all");
-                            setFilterOrganisatie("all");
-                            setFilterRegio("");
-                          }}
-                          className="w-full"
-                        >
-                          <X className="h-4 w-4 mr-1" />
-                          Reset alle filters
-                        </Button>
+                        <div className="pt-3 border-t">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => {
+                              setSearchQuery("");
+                              setFilterFunctieNiveau("all");
+                              setFilterWerkvorm("all");
+                              setFilterOrganisatie("all");
+                              setFilterRegio("");
+                            }}
+                            className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <RotateCcw className="h-4 w-4 mr-2" />
+                            Wis alle filters
+                          </Button>
+                        </div>
                       )}
                     </div>
                   </PopoverContent>

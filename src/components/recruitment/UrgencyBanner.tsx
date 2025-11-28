@@ -43,15 +43,20 @@ export function UrgencyBanner({ applications, onViewDetails }: UrgencyBannerProp
   if (staleApps > 0) urgencyItems.push(`${staleApps} inactieve kandidaten`);
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 bg-muted/40 rounded-lg border">
+    <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-amber-50/50 to-transparent rounded-lg border border-amber-100/50">
       <div className="flex items-center gap-3">
-        <AlertCircle className="h-4 w-4 text-muted-foreground" />
+        <div className="relative">
+          <AlertCircle className="h-4 w-4 text-amber-600" />
+          {staleApps > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-destructive rounded-full animate-pulse" />
+          )}
+        </div>
         <p className="text-sm text-foreground">
           {urgencyItems.join(' • ')}
         </p>
       </div>
       {onViewDetails && (
-        <Button variant="ghost" size="sm" onClick={onViewDetails} className="text-sm">
+        <Button variant="ghost" size="sm" onClick={onViewDetails} className="text-sm hover:bg-amber-100/50 transition-colors">
           Bekijk →
         </Button>
       )}
