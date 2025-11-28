@@ -8,6 +8,7 @@ import { UpcomingRemindersWidget } from "@/components/UpcomingRemindersWidget";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import confetti from "canvas-confetti";
 import { Badge } from "@/components/ui/badge";
 import { TaskDialog } from "@/components/TaskDialog";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
@@ -312,6 +313,8 @@ const Dashboard = () => {
   };
 
   const handleCompleteTask = async (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    
     try {
       // Zoek de "Afgerond" kolom
       const { data: doneColumn } = await supabase
@@ -321,25 +324,68 @@ const Dashboard = () => {
         .limit(1)
         .single();
 
-      const updates: any = { completed_at: new Date().toISOString() };
-      
-      // Synchroniseer column_id met "Afgerond" kolom
-      if (doneColumn) {
-        updates.column_id = doneColumn.id;
-      }
-
       const { error } = await supabase
         .from("tasks")
-        .update(updates)
+        .update({ 
+          completed_at: new Date().toISOString(),
+          status: 'DONE',
+          column_id: doneColumn?.id 
+        })
         .eq("id", taskId);
 
       if (error) throw error;
 
-      toast.success("Taak afgerond");
+      // 🎉 Confetti celebration!
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+
+      // Toast met undo optie (sonner syntax)
+      toast.success("🎉 Taak afgerond!", {
+        description: task?.title,
+        action: {
+          label: "Ongedaan maken",
+          onClick: () => undoComplete(taskId)
+        }
+      });
+
       loadTasks();
     } catch (error) {
       console.error("Error completing task:", error);
       toast.error("Fout bij afronden van taak");
+    }
+  };
+
+  const undoComplete = async (taskId: string) => {
+    try {
+      // Find the IN_PROGRESS column to restore the task
+      const { data: column } = await supabase
+        .from("columns")
+        .select("id, status")
+        .eq("status", "DOING")
+        .maybeSingle();
+
+      const { error } = await supabase
+        .from('tasks')
+        .update({ 
+          completed_at: null, 
+          status: column?.status || 'DOING',
+          column_id: column?.id || undefined
+        })
+        .eq('id', taskId);
+
+      if (error) throw error;
+      
+      toast.success("Taak hersteld", { 
+        description: "Terug op je lijst" 
+      });
+      
+      loadTasks();
+    } catch (error) {
+      console.error('Error undoing complete:', error);
+      toast.error("Kon taak niet herstellen");
     }
   };
 
