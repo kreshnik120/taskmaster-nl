@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -320,12 +318,7 @@ export default function Klanten() {
   const hasActiveFilters = searchQuery || orgFilter !== 'all' || matchingFilter !== 'all';
 
   return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full">
-        <AppSidebar />
-        <main className="flex-1 overflow-auto">
-          <div className="p-6 space-y-6">
-            <SidebarTrigger className="mb-4" />
+    <div className="space-y-6">
 
             {/* Hero Section */}
             <div className="mb-8">
@@ -515,9 +508,6 @@ export default function Klanten() {
                   ))
               )}
             </div>
-          </div>
-        </main>
-      </div>
 
       <NewClientDialog
         open={newClientOpen}
@@ -533,6 +523,6 @@ export default function Klanten() {
           onUpdate={loadClients}
         />
       )}
-    </SidebarProvider>
+    </div>
   );
 }

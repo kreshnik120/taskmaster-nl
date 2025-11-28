@@ -7,9 +7,10 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { NotificationService } from "@/components/NotificationService";
 import { ChatWidget } from "@/components/AIAssistant/ChatWidget";
 import { supabase } from "@/integrations/supabase/client";
-import Index from "./pages/Index";
+import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { Layout } from "./components/Layout";
 import Kanban from "./pages/Kanban";
 import Lijst from "./pages/Lijst";
 import Kalender from "./pages/Kalender";
@@ -72,25 +73,30 @@ const App = () => (
       <BrowserRouter>
         <GlobalServicesMounter />
         <Routes>
-          <Route path="/" element={<Index />} />
-            <Route path="/auth" element={
-              <ErrorBoundary fallbackTitle="Login pagina crashte">
-                <Auth />
-              </ErrorBoundary>
-            } />
-          <Route path="/kanban/:taskId?" element={<Kanban />} />
-          <Route path="/lijst" element={<Lijst />} />
-          <Route path="/kalender" element={<Kalender />} />
-          <Route path="/tijdregistratie" element={<Tijdregistratie />} />
-          <Route path="/opvolging" element={<Opvolging />} />
-          <Route path="/verwijderd" element={<VerwijderdeTaken />} />
-          <Route path="/afgerond" element={<AfgerondeTaken />} />
-          <Route path="/ai-training" element={<AiTraining />} />
-          <Route path="/professionals" element={<Professionals />} />
-          <Route path="/sollicitaties" element={<Sollicitaties />} />
-          <Route path="/sollicitaties/archief" element={<SollicitatiesArchief />} />
-          <Route path="/klanten" element={<Klanten />} />
-          <Route path="/plaatsingen" element={<Plaatsingen />} />
+          <Route path="/auth" element={
+            <ErrorBoundary fallbackTitle="Login pagina crashte">
+              <Auth />
+            </ErrorBoundary>
+          } />
+          
+          {/* All authenticated routes wrapped in Layout */}
+          <Route element={<Layout />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/kanban/:taskId?" element={<Kanban />} />
+            <Route path="/lijst" element={<Lijst />} />
+            <Route path="/kalender" element={<Kalender />} />
+            <Route path="/tijdregistratie" element={<Tijdregistratie />} />
+            <Route path="/opvolging" element={<Opvolging />} />
+            <Route path="/verwijderd" element={<VerwijderdeTaken />} />
+            <Route path="/afgerond" element={<AfgerondeTaken />} />
+            <Route path="/ai-training" element={<AiTraining />} />
+            <Route path="/professionals" element={<Professionals />} />
+            <Route path="/sollicitaties" element={<Sollicitaties />} />
+            <Route path="/sollicitaties/archief" element={<SollicitatiesArchief />} />
+            <Route path="/klanten" element={<Klanten />} />
+            <Route path="/plaatsingen" element={<Plaatsingen />} />
+          </Route>
+          
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

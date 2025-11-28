@@ -2,8 +2,6 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/AppSidebar";
 import { Plus, Loader2, Search, X, Filter, RotateCcw, Undo2, BarChart3 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -500,38 +498,30 @@ const Sollicitaties = () => {
 
   if (loading || !user) {
     return (
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full">
-          <AppSidebar />
-          <main className="flex-1 p-6 overflow-auto">
-            <SidebarTrigger className="mb-4" />
-            <div className="flex flex-col h-full space-y-6">
-              {/* Skeleton Hero Section */}
-              <div className="space-y-0">
-                <div className="flex items-start justify-between py-8">
-                  <div>
-                    <div className="h-9 w-48 bg-muted animate-pulse rounded mb-2" />
-                    <div className="h-5 w-32 bg-muted animate-pulse rounded" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Skeleton Kanban */}
-              <div className="flex-1 py-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <div key={i} className="space-y-3">
-                      <div className="h-10 bg-muted animate-pulse rounded" />
-                      <ApplicationCardSkeleton />
-                      <ApplicationCardSkeleton />
-                    </div>
-                  ))}
-                </div>
-              </div>
+      <div className="flex flex-col h-full space-y-6">
+        {/* Skeleton Hero Section */}
+        <div className="space-y-0">
+          <div className="flex items-start justify-between py-8">
+            <div>
+              <div className="h-9 w-48 bg-muted animate-pulse rounded mb-2" />
+              <div className="h-5 w-32 bg-muted animate-pulse rounded" />
             </div>
-          </main>
+          </div>
         </div>
-      </SidebarProvider>
+
+        {/* Skeleton Kanban */}
+        <div className="flex-1 py-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="space-y-3">
+                <div className="h-10 bg-muted animate-pulse rounded" />
+                <ApplicationCardSkeleton />
+                <ApplicationCardSkeleton />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -555,12 +545,7 @@ const Sollicitaties = () => {
   const hasActiveFilters = searchQuery || filterFunctieNiveau !== "all" || filterWerkvorm !== "all" || filterOrganisatie !== "all" || filterRegio !== "";
 
   return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full">
-        <AppSidebar />
-        <main className="flex-1 p-6 overflow-auto">
-          <SidebarTrigger className="mb-4" />
-          <div className="flex flex-col h-full space-y-6">
+    <div className="flex flex-col h-full space-y-6">
             {/* Compact Header - Apple Minimalism */}
             <div className="flex items-center justify-between py-4 border-b">
               <div>
@@ -759,7 +744,6 @@ const Sollicitaties = () => {
                 ) : null}
               </DragOverlay>
             </DndContext>
-          </div>
 
           {selectedApplication && (
             <ApplicationDetailModal
@@ -785,9 +769,7 @@ const Sollicitaties = () => {
             onBulkEmail={handleBulkEmail}
             onBulkDelete={handleBulkDelete}
           />
-        </main>
-      </div>
-    </SidebarProvider>
+    </div>
   );
 };
 

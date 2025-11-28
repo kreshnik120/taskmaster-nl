@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -135,15 +133,9 @@ export default function Plaatsingen() {
   };
 
   return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full">
-        <AppSidebar />
-        <main className="flex-1 overflow-auto">
-          <div className="p-6 space-y-6">
-            <SidebarTrigger className="mb-4" />
-
-            {/* Hero Section */}
-            <div className="bg-gradient-to-r from-green-500/10 via-green-500/5 to-background rounded-lg p-6 border border-border/50">
+    <>
+      {/* Hero Section */}
+      <div className="bg-gradient-to-r from-green-500/10 via-green-500/5 to-background rounded-lg p-6 border border-border/50">
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-2xl font-bold mb-2">Plaatsingen</h1>
@@ -352,18 +344,16 @@ export default function Plaatsingen() {
                     </Card>
                   </motion.div>
                 ))}
-              </div>
-            )}
           </div>
-        </main>
+        )}
       </div>
-      
+
       <PlacementDetailModal
         placement={selectedPlacement}
         open={detailModalOpen}
         onOpenChange={setDetailModalOpen}
         onStatusChange={updateStatus}
       />
-    </SidebarProvider>
+    </>
   );
 }

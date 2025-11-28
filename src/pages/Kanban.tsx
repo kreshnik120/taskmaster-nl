@@ -6,8 +6,6 @@ import { TaskCard } from "@/components/TaskCard";
 import { TaskDialog } from "@/components/TaskDialog";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { Button } from "@/components/ui/button";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/AppSidebar";
 import { Plus, Loader2, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -356,29 +354,17 @@ const Kanban = () => {
 
   if (loading || !user) {
     return (
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full">
-          <AppSidebar />
-          <main className="flex-1 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Kanban bord laden...</p>
-            </div>
-          </main>
-        </div>
-      </SidebarProvider>
+      <div className="flex flex-col items-center gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Kanban bord laden...</p>
+      </div>
     );
   }
 
   return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full">
-        <AppSidebar />
-        <main className="flex-1 p-6 overflow-auto">
-          <SidebarTrigger className="mb-4" />
-          <div className="flex flex-col h-full space-y-6">
-            {/* Hero Section */}
-            <div className="mb-8">
+    <>
+      {/* Hero Section */}
+      <div className="mb-8">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <div className="flex items-center gap-3 mb-2">
@@ -527,9 +513,7 @@ const Kanban = () => {
                 )}
               </DragOverlay>
             </DndContext>
-          </div>
-        </main>
-      </div>
+
       <TaskDialog 
         open={dialogOpen} 
         onOpenChange={setDialogOpen} 
@@ -544,7 +528,7 @@ const Kanban = () => {
           onTaskUpdated={handleTaskUpdated}
         />
       )}
-    </SidebarProvider>
+    </>
   );
 };
 
