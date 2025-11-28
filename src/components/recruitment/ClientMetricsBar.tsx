@@ -75,48 +75,40 @@ export function ClientMetricsBar({
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-4">
-      {metrics.map((metric, index) => {
-        const Icon = metric.icon;
-        return (
-          <div
-            key={metric.label}
-            className="bg-card border border-border/50 rounded-lg p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02]"
-            style={{ animationDelay: `${index * 50}ms` }}
-          >
-            <div className="flex items-start justify-between mb-2">
-              <Icon className={`h-4 w-4 ${metric.color || "text-muted-foreground"}`} />
-              {metric.trend && (
-                <span className={metric.trend === "up" ? "text-green-600" : "text-destructive"}>
-                  {metric.trend === "up" ? (
-                    <TrendingUp className="h-3 w-3" />
-                  ) : (
-                    <TrendingDown className="h-3 w-3" />
-                  )}
-                </span>
-              )}
-            </div>
-            <div className={`text-2xl font-bold mb-1 ${metric.color || "text-foreground"}`}>
+    <div className="grid grid-cols-4 gap-8 py-6 border-b border-border">
+      {metrics.map((metric, index) => (
+        <div key={metric.label} className="text-center">
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <div className={`text-4xl font-semibold tabular-nums ${metric.color || "text-foreground"}`}>
               {metric.value}
             </div>
-            <div className="text-xs text-muted-foreground">{metric.label}</div>
-            
-            {/* Circular progress for Match Ready */}
-            {metric.label === "Match Ready" && (
-              <div className="mt-3">
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-600 ease-out ${
-                      matchingPercentage >= 70 ? "bg-green-600" : matchingPercentage >= 50 ? "bg-amber-600" : "bg-destructive"
-                    }`}
-                    style={{ width: `${animatedMatch}%` }}
-                  />
-                </div>
-              </div>
+            {metric.trend && (
+              <span className={metric.trend === "up" ? "text-green-600" : "text-destructive"}>
+                {metric.trend === "up" ? (
+                  <TrendingUp className="h-4 w-4" />
+                ) : (
+                  <TrendingDown className="h-4 w-4" />
+                )}
+              </span>
             )}
           </div>
-        );
-      })}
+          <div className="text-sm text-muted-foreground">{metric.label}</div>
+          
+          {/* Circular progress for Match Ready */}
+          {metric.label === "Match Ready" && (
+            <div className="mt-2 flex justify-center">
+              <div className="h-1 w-24 bg-muted rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-600 ease-out ${
+                    matchingPercentage >= 70 ? "bg-green-600" : matchingPercentage >= 50 ? "bg-amber-600" : "bg-destructive"
+                  }`}
+                  style={{ width: `${animatedMatch}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
