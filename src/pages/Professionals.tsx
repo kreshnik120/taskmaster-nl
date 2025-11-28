@@ -20,6 +20,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -63,6 +73,7 @@ const Professionals = () => {
   const [selectedProfessional, setSelectedProfessional] = useState<Professional | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedProfessionalIds, setSelectedProfessionalIds] = useState<Set<string>>(new Set());
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const { toast } = useToast();
   const { canEdit } = useUserRole();
 
@@ -284,11 +295,35 @@ const Professionals = () => {
   };
 
   const handleBulkDelete = async () => {
-    toast({
-      title: "Nog niet beschikbaar",
-      description: "Soft delete functionaliteit wordt toegevoegd in Fase 12 Prioriteit 7",
-      variant: "destructive",
-    });
+    if (selectedProfessionalIds.size === 0) return;
+    
+    const ids = Array.from(selectedProfessionalIds);
+    
+    try {
+      // Soft delete - set deleted_at timestamp
+      const { error } = await supabase
+        .from("professionals")
+        .update({ deleted_at: new Date().toISOString() })
+        .in("id", ids);
+
+      if (error) throw error;
+
+      toast({
+        title: "Verwijderd",
+        description: `${ids.length} professional(s) verwijderd`,
+      });
+      
+      handleClearSelection();
+      setDeleteConfirmOpen(false);
+      fetchProfessionals();
+    } catch (error) {
+      console.error("Error deleting professionals:", error);
+      toast({
+        title: "Fout",
+        description: "Kan professionals niet verwijderen",
+        variant: "destructive",
+      });
+    }
   };
 
   // KPI metrics
@@ -635,6 +670,25 @@ const Professionals = () => {
         onSuccess={fetchProfessionals}
       />
 
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Professionals verwijderen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Weet je zeker dat je {selectedProfessionalIds.size} professional(s) wilt verwijderen? 
+              Ze kunnen later worden hersteld via het archief.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDelete}>
+              Verwijderen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Bulk Action Bar */}
       <ProfessionalBulkActionBar
         selectedCount={selectedProfessionalIds.size}
@@ -642,7 +696,7 @@ const Professionals = () => {
         onBulkChangeStatus={handleBulkChangeStatus}
         onBulkEmail={handleBulkEmail}
         onBulkExport={handleBulkExport}
-        onBulkDelete={handleBulkDelete}
+        onBulkDelete={() => setDeleteConfirmOpen(true)}
       />
     </div>
   );
