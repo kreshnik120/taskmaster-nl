@@ -75,65 +75,62 @@ export function ClientMetricsBar({
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-8 py-6 border-b border-border">
-      {metrics.map((metric, index) => (
-        <div key={metric.label} className="text-center">
-          <div className="flex items-center justify-center gap-2 mb-1">
-            <div className={`text-4xl font-semibold tabular-nums ${metric.color || "text-foreground"}`}>
-              {metric.value}
-            </div>
-            {metric.trend && (
-              <span className={metric.trend === "up" ? "text-green-600" : "text-destructive"}>
-                {metric.trend === "up" ? (
-                  <TrendingUp className="h-4 w-4" />
-                ) : (
-                  <TrendingDown className="h-4 w-4" />
-                )}
-              </span>
+    <div className="grid grid-cols-4 gap-6 py-4 border-b border-border">
+      {metrics.map((metric) => {
+        const isMatchReady = metric.label === "Match Ready";
+        
+        return (
+          <div key={metric.label} className="flex items-center justify-center gap-3">
+            {isMatchReady && (
+              <div className="relative inline-flex items-center justify-center shrink-0">
+                <svg className="w-14 h-14 transform -rotate-90" viewBox="0 0 56 56">
+                  <circle
+                    cx="28"
+                    cy="28"
+                    r="24"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                    className="text-muted/20"
+                  />
+                  <circle
+                    cx="28"
+                    cy="28"
+                    r="24"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                    strokeDasharray={`${2 * Math.PI * 24}`}
+                    strokeDashoffset={`${2 * Math.PI * 24 * (1 - animatedMatch / 100)}`}
+                    className={`transition-all duration-500 ease-out ${
+                      matchingPercentage >= 70 ? "text-green-600" : matchingPercentage >= 50 ? "text-amber-600" : "text-destructive"
+                    }`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </div>
             )}
-          </div>
-          <div className="text-sm text-muted-foreground">{metric.label}</div>
-          
-      {/* Circular progress ring for Match Ready */}
-      {metric.label === "Match Ready" && (
-        <div className="mt-2 flex justify-center">
-          <div className="relative inline-flex items-center justify-center">
-            <svg className="w-20 h-20 transform -rotate-90" viewBox="0 0 80 80">
-              {/* Background circle */}
-              <circle
-                cx="40"
-                cy="40"
-                r="32"
-                stroke="currentColor"
-                strokeWidth="6"
-                fill="none"
-                className="text-muted/20"
-              />
-              {/* Progress circle */}
-              <circle
-                cx="40"
-                cy="40"
-                r="32"
-                stroke="currentColor"
-                strokeWidth="6"
-                fill="none"
-                strokeDasharray={`${2 * Math.PI * 32}`}
-                strokeDashoffset={`${2 * Math.PI * 32 * (1 - animatedMatch / 100)}`}
-                className={`transition-all duration-500 ease-out ${
-                  matchingPercentage >= 70 ? "text-green-600" : matchingPercentage >= 50 ? "text-amber-600" : "text-destructive"
-                }`}
-                strokeLinecap="round"
-              />
-            </svg>
-            {/* Percentage text inside ring */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-xl font-semibold tabular-nums">{animatedMatch}%</span>
+            
+            <div className={isMatchReady ? "text-left" : "text-center flex-1"}>
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <div className={`text-4xl font-semibold tabular-nums ${metric.color || "text-foreground"}`}>
+                  {isMatchReady ? `${animatedMatch}%` : metric.value}
+                </div>
+                {metric.trend && (
+                  <span className={metric.trend === "up" ? "text-green-600" : "text-destructive"}>
+                    {metric.trend === "up" ? (
+                      <TrendingUp className="h-4 w-4" />
+                    ) : (
+                      <TrendingDown className="h-4 w-4" />
+                    )}
+                  </span>
+                )}
+              </div>
+              <div className="text-sm text-muted-foreground">{metric.label}</div>
             </div>
           </div>
-        </div>
-      )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

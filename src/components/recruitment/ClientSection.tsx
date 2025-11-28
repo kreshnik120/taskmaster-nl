@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +57,11 @@ export function ClientSection({
   defaultOpen = true,
 }: ClientSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  
+  useEffect(() => {
+    setIsOpen(defaultOpen);
+  }, [defaultOpen]);
+  
   const percentage = totalClients > 0 ? Math.round((clients.length / totalClients) * 100) : 0;
   const accentClass = getSectionAccent(title, groupType);
 

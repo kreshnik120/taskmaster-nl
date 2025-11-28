@@ -14,7 +14,7 @@ interface ClientGroupingToggleProps {
 export function ClientGroupingToggle({ value, onChange, counts }: ClientGroupingToggleProps) {
   return (
     <div className="flex items-center gap-3">
-      <span className="text-sm text-muted-foreground">Groepeer op:</span>
+      <span className="text-sm text-muted-foreground">Weergave:</span>
       <ToggleGroup
         type="single"
         value={value}

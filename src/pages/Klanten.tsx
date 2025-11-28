@@ -5,6 +5,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import NewClientDialog from "@/components/NewClientDialog";
@@ -47,7 +48,16 @@ export default function Klanten() {
     const saved = localStorage.getItem("klanten-grouping");
     return (saved as any) || "bureau";
   });
+  const [allExpanded, setAllExpanded] = useState(true);
   const navigate = useNavigate();
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return "Goedemorgen";
+    if (hour >= 12 && hour < 17) return "Goedemiddag";
+    if (hour >= 17 && hour < 22) return "Goedenavond";
+    return "Goedenacht";
+  };
 
   useEffect(() => {
     loadClients();
@@ -233,11 +243,12 @@ export default function Klanten() {
 
             {/* Hero Section */}
             <div className="mb-8">
-              <h1 className="text-3xl font-bold mb-1">
-                Goedemiddag 👋
-              </h1>
-              <p className="text-muted-foreground">
-                Beheer opdrachtgevers en zorglocaties
+              <p className="text-sm text-muted-foreground mb-1">
+                {new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </p>
+              <h1 className="text-3xl font-bold tracking-tight">{getGreeting()}</h1>
+              <p className="text-muted-foreground mt-1">
+                {clients.length} klanten beheren
               </p>
             </div>
 
@@ -286,24 +297,29 @@ export default function Klanten() {
                   /
                 </kbd>
               </div>
-              <select
-                value={orgFilter}
-                onChange={(e) => setOrgFilter(e.target.value)}
-                className="px-3 py-2 border rounded-md bg-background text-sm"
-              >
-                <option value="">Alle bureaus</option>
-                <option value="ABCzorg">ABCzorg</option>
-                <option value="CitoZorg">CitoZorg</option>
-              </select>
-              <select
-                value={matchingFilter}
-                onChange={(e) => setMatchingFilter(e.target.value)}
-                className="px-3 py-2 border rounded-md bg-background text-sm"
-              >
-                <option value="">Alle klanten</option>
-                <option value="with">Met matching data</option>
-                <option value="without">Zonder matching data</option>
-              </select>
+
+              <Select value={orgFilter} onValueChange={setOrgFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Alle bureaus" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Alle bureaus</SelectItem>
+                  <SelectItem value="ABCzorg">ABCzorg</SelectItem>
+                  <SelectItem value="CitoZorg">CitoZorg</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={matchingFilter} onValueChange={setMatchingFilter}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Alle klanten" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Alle klanten</SelectItem>
+                  <SelectItem value="with">Met data</SelectItem>
+                  <SelectItem value="without">Zonder data</SelectItem>
+                </SelectContent>
+              </Select>
+
               <Button 
                 onClick={() => setNewClientOpen(true)}
                 className="shrink-0"
@@ -316,13 +332,21 @@ export default function Klanten() {
               </Button>
             </div>
 
-            {/* Grouping Toggle */}
-            <div className="mt-6">
+            {/* Grouping Toggle & Collapse Controls */}
+            <div className="mt-6 flex items-center justify-between">
               <ClientGroupingToggle value={grouping} onChange={handleGroupingChange} />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setAllExpanded(!allExpanded)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                {allExpanded ? 'Alles inklappen' : 'Alles uitklappen'}
+              </Button>
             </div>
 
             {/* Grouped Client Sections */}
-            <div className="space-y-8 mt-8">
+            <div className="space-y-10 mt-8">
               {loading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {[...Array(6)].map((_, i) => (
@@ -336,21 +360,19 @@ export default function Klanten() {
               ) : (
                 Object.entries(groupedClients)
                   .sort(([, a], [, b]) => b.length - a.length)
-                  .map(([sectionName, sectionClients], index) => (
-                    <div key={sectionName}>
-                      {index > 0 && <div className="border-t my-6" />}
-                      <ClientSection
-                        title={sectionName}
-                        clients={sectionClients}
-                        totalClients={filteredClients.length}
-                        groupType={grouping}
-                        onClientClick={(client) => {
-                          setSelectedClient(client);
-                        }}
-                        searchQuery={searchQuery}
-                        defaultOpen={true}
-                      />
-                    </div>
+                  .map(([sectionName, sectionClients]) => (
+                    <ClientSection
+                      key={sectionName}
+                      title={sectionName}
+                      clients={sectionClients}
+                      totalClients={filteredClients.length}
+                      groupType={grouping}
+                      onClientClick={(client) => {
+                        setSelectedClient(client);
+                      }}
+                      searchQuery={searchQuery}
+                      defaultOpen={allExpanded}
+                    />
                   ))
               )}
             </div>
