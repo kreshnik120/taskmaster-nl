@@ -145,25 +145,20 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
                   {highlightText(client.company, searchQuery)}
                 </p>
 
-                {/* Metadata line - single line with bullets */}
+                {/* Metadata line - single line with bullets, max 2 items */}
                 <div className="text-xs text-muted-foreground mb-2">
                   {[
                     client.regio && client.regio.length > 0 ? client.regio[0] : null,
-                    client.sector && client.sector.length > 0 ? client.sector[0] : null,
-                    getTimeIndicator(client.created_at)
+                    client.sector && client.sector.length > 0 ? client.sector[0] : null
                   ].filter(Boolean).join(' • ')}
                 </div>
 
-                {/* Matching completeness dot only */}
+                {/* Status dot only - no label */}
                 <div className="flex items-center gap-2">
                   <div className={`h-1.5 w-1.5 rounded-full ${
                     hasCompleteMatchingData ? 'bg-green-500' : 
                     hasPartialMatchingData ? 'bg-amber-500' : 'bg-muted'
                   }`} />
-                  <span className="text-xs text-muted-foreground">
-                    {hasCompleteMatchingData ? 'Volledig' : 
-                     hasPartialMatchingData ? 'Onvolledig' : 'Geen data'}
-                  </span>
                 </div>
               </div>
             </div>
