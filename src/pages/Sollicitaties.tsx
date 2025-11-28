@@ -18,6 +18,7 @@ import { NewApplicationDialog } from "@/components/NewApplicationDialog";
 import { KPICard } from "@/components/recruitment/KPICard";
 import { UrgencyActionPanel } from "@/components/recruitment/UrgencyActionPanel";
 import { PipelineAnalyticsWidget } from "@/components/recruitment/PipelineAnalyticsWidget";
+import { RecentMovementsWidget } from "@/components/recruitment/RecentMovementsWidget";
 
 interface Application {
   id: string;
@@ -360,15 +361,20 @@ const Sollicitaties = () => {
                 />
               </div>
 
-              {/* Analytics Row - 2 columns */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <UrgencyActionPanel applications={filteredApplications} />
-                <PipelineAnalyticsWidget applications={filteredApplications} />
+              {/* Two-column grid: Urgency Panel (60%) + Recent Movements (40%) */}
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                <div className="lg:col-span-3">
+                  <UrgencyActionPanel applications={filteredApplications} />
+                </div>
+                <div className="lg:col-span-2">
+                  <RecentMovementsWidget applications={filteredApplications} />
+                </div>
               </div>
             </div>
 
-            {/* Zoek- en Filterbalk */}
-            <div className="flex flex-wrap gap-3 items-center p-4 bg-muted/20 rounded-lg border">
+            {/* Search and Filter Bar */}
+            <div className="space-y-6">
+              <div className="flex flex-wrap gap-3 items-center p-4 bg-muted/20 rounded-lg border">
               {/* Zoekbalk */}
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -446,6 +452,10 @@ const Sollicitaties = () => {
                   Reset
                 </Button>
               )}
+              </div>
+
+              {/* Pipeline Analytics - Collapsible */}
+              <PipelineAnalyticsWidget applications={filteredApplications} />
             </div>
 
             {/* Active Filters Indicator */}

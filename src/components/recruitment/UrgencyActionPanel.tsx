@@ -1,7 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Mail, Calendar, CheckCircle2 } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { AlertCircle, Clock, Users, CheckCircle, Phone, Calendar, Zap } from "lucide-react";
+import { differenceInDays } from "date-fns";
 
 interface Application {
   id: string;
@@ -15,114 +16,157 @@ interface UrgencyActionPanelProps {
 }
 
 export function UrgencyActionPanel({ applications }: UrgencyActionPanelProps) {
-  // Calculate time in current stage
-  const getStaleApplications = () => {
-    const now = new Date();
-    return applications.filter(app => {
-      const lastUpdate = new Date(app.updated_at || app.created_at);
-      const daysDiff = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
-      return daysDiff > 5 && app.pipeline_stage !== 'geplaatst';
-    });
-  };
+  // Calculate stale applications (no activity for over 5 days)
+  const staleApps = applications.filter(app => {
+    const daysSinceUpdate = differenceInDays(new Date(), new Date(app.updated_at || app.created_at));
+    return daysSinceUpdate > 5;
+  });
 
-  const staleApps = getStaleApplications();
-  const screeningApps = applications.filter(a => a.pipeline_stage === 'screening');
-  const interviewApps = applications.filter(a => a.pipeline_stage === 'interview');
-  const approvedApps = applications.filter(a => a.pipeline_stage === 'goedgekeurd');
+  const screeningApps = applications.filter(app => app.pipeline_stage === 'screening');
+  const interviewApps = applications.filter(app => app.pipeline_stage === 'interview');
+  const approvedApps = applications.filter(app => app.pipeline_stage === 'goedgekeurd');
 
-  const alerts = [
-    {
-      id: 'stale',
-      severity: 'high',
-      icon: AlertTriangle,
-      title: `${staleApps.length} sollicitaties > 5 dagen zonder actie`,
-      visible: staleApps.length > 0,
-      color: 'text-red-600 bg-red-500/10'
-    },
-    {
-      id: 'screening',
-      severity: 'medium',
-      icon: Mail,
-      title: `${screeningApps.length} kandidaten wachten op screening`,
-      visible: screeningApps.length > 0,
-      color: 'text-orange-600 bg-orange-500/10'
-    }
-  ].filter(alert => alert.visible);
-
-  const quickActions = [
-    {
-      id: 'screening-emails',
-      label: `Verstuur screening emails (${screeningApps.length})`,
-      count: screeningApps.length,
-      icon: Mail,
-      variant: 'outline' as const,
-      visible: screeningApps.length > 0
-    },
-    {
-      id: 'plan-interviews',
-      label: `Plan interviews (${interviewApps.length})`,
-      count: interviewApps.length,
-      icon: Calendar,
-      variant: 'outline' as const,
-      visible: interviewApps.length > 0
-    },
-    {
-      id: 'review-approved',
-      label: `Review goedgekeurde kandidaten (${approvedApps.length})`,
-      count: approvedApps.length,
-      icon: CheckCircle2,
-      variant: 'outline' as const,
-      visible: approvedApps.length > 0
-    }
-  ].filter(action => action.visible);
+  const totalAlerts = staleApps.length + (screeningApps.length > 0 ? 1 : 0) + (interviewApps.length > 0 ? 1 : 0);
 
   return (
-    <Card className="border-primary/20">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <AlertTriangle className="h-4 w-4 text-orange-600" />
+    <Card className="h-full">
+      <CardHeader className="pb-4">
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <AlertCircle className="h-5 w-5 text-orange-500" />
           Urgente Acties
+          {totalAlerts > 0 && (
+            <span className="ml-auto inline-flex items-center justify-center w-7 h-7 text-sm font-bold text-white bg-orange-500 rounded-full">
+              {totalAlerts}
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Alerts */}
-        {alerts.length > 0 ? (
-          <div className="space-y-2">
-            {alerts.map(alert => (
-              <div
-                key={alert.id}
-                className={`flex items-start gap-3 p-3 rounded-lg border ${alert.color}`}
-              >
-                <alert.icon className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                <span className="text-sm font-medium">{alert.title}</span>
+        {/* Alerts Section */}
+        <div className="space-y-3">
+          {staleApps.length > 0 && (
+            <div className="p-4 rounded-lg bg-destructive/10 border-2 border-destructive/30 space-y-2">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 mt-0.5">
+                  <div className="w-10 h-10 rounded-full bg-destructive/20 flex items-center justify-center">
+                    <AlertCircle className="h-5 w-5 text-destructive" />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-destructive mb-1">Inactieve sollicitaties</h4>
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-bold text-lg text-destructive">{staleApps.length}</span> sollicitatie(s) zonder actie sinds meer dan 5 dagen
+                  </p>
+                </div>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg text-green-700">
-            <CheckCircle2 className="h-4 w-4" />
-            <span className="text-sm font-medium">Geen urgente acties</span>
-          </div>
-        )}
-
-        {/* Quick Actions */}
-        {quickActions.length > 0 && (
-          <div className="space-y-2 pt-2 border-t">
-            <div className="text-xs font-medium text-muted-foreground mb-2">
-              Snelle Acties
             </div>
-            {quickActions.map(action => (
-              <Button
-                key={action.id}
-                variant={action.variant}
-                size="sm"
-                className="w-full justify-start gap-2"
-              >
-                <action.icon className="h-4 w-4" />
-                {action.label}
-              </Button>
-            ))}
-          </div>
+          )}
+          
+          {screeningApps.length > 0 && (
+            <div className="p-4 rounded-lg bg-yellow-500/10 border-2 border-yellow-500/30 space-y-2">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 mt-0.5">
+                  <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center">
+                    <Clock className="h-5 w-5 text-yellow-600" />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-yellow-700 mb-1">Screening vereist</h4>
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-bold text-lg text-yellow-700">{screeningApps.length}</span> kandidaten wachten op eerste screening
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {interviewApps.length > 0 && (
+            <div className="p-4 rounded-lg bg-purple-500/10 border-2 border-purple-500/30 space-y-2">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 mt-0.5">
+                  <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
+                    <Users className="h-5 w-5 text-purple-600" />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-purple-700 mb-1">Interviews plannen</h4>
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-bold text-lg text-purple-700">{interviewApps.length}</span> kandidaten klaar voor interview
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {approvedApps.length > 0 && (
+            <div className="p-4 rounded-lg bg-green-500/10 border-2 border-green-500/30 space-y-2">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 mt-0.5">
+                  <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-green-700 mb-1">Klaar voor plaatsing</h4>
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-bold text-lg text-green-700">{approvedApps.length}</span> goedgekeurde kandidaten
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {totalAlerts === 0 && approvedApps.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
+                <CheckCircle className="h-8 w-8 text-green-500" />
+              </div>
+              <p className="font-medium">Geen urgente acties</p>
+              <p className="text-sm mt-1">Alle sollicitaties lopen op schema</p>
+            </div>
+          )}
+        </div>
+
+        {/* Quick Actions Section */}
+        {(screeningApps.length > 0 || interviewApps.length > 0 || approvedApps.length > 0) && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                <Zap className="h-4 w-4 text-primary" />
+                Snelle Acties
+              </h4>
+              <div className="grid grid-cols-1 gap-2">
+                {screeningApps.length > 0 && (
+                  <Button variant="outline" size="sm" className="justify-start h-auto py-3">
+                    <Phone className="h-4 w-4 mr-2" />
+                    <div className="text-left">
+                      <div className="font-medium">Stuur screening email</div>
+                      <div className="text-xs text-muted-foreground">{screeningApps.length} kandidaten</div>
+                    </div>
+                  </Button>
+                )}
+                {interviewApps.length > 0 && (
+                  <Button variant="outline" size="sm" className="justify-start h-auto py-3">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    <div className="text-left">
+                      <div className="font-medium">Plan interviews</div>
+                      <div className="text-xs text-muted-foreground">{interviewApps.length} kandidaten</div>
+                    </div>
+                  </Button>
+                )}
+                {approvedApps.length > 0 && (
+                  <Button variant="outline" size="sm" className="justify-start h-auto py-3">
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    <div className="text-left">
+                      <div className="font-medium">Bekijk plaatsingsmogelijkheden</div>
+                      <div className="text-xs text-muted-foreground">{approvedApps.length} kandidaten</div>
+                    </div>
+                  </Button>
+                )}
+              </div>
+            </div>
+          </>
         )}
       </CardContent>
     </Card>
