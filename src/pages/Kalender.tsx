@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/AppSidebar";
-import { format, startOfWeek, endOfDay, startOfDay, addDays, isSameDay, parseISO, getWeek } from "date-fns";
+import { cn } from "@/lib/utils";
+import { format, startOfWeek, endOfDay, startOfDay, addDays, isSameDay, parseISO, getWeek, endOfWeek } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, ChevronLeft, ChevronRight, User, Bell, X, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, User, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { useToast } from "@/hooks/use-toast";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { PriorityBadge } from "@/components/PriorityBadge";
 
 interface Task {
   id: string;
@@ -40,10 +40,10 @@ interface Reminder {
 }
 
 const priorityConfig = {
-  LOW: { label: "Laag", variant: "outline" as const, color: "border-l-priority-low" },
-  MEDIUM: { label: "Normaal", variant: "secondary" as const, color: "border-l-priority-medium" },
-  HIGH: { label: "Hoog", variant: "default" as const, color: "border-l-priority-high" },
-  CRITICAL: { label: "Kritiek", variant: "destructive" as const, color: "border-l-priority-critical" },
+  low: { label: "Laag", variant: "outline" as const },
+  medium: { label: "Normaal", variant: "secondary" as const },
+  high: { label: "Hoog", variant: "default" as const },
+  critical: { label: "Kritiek", variant: "destructive" as const },
 };
 
 export default function Kalender() {
@@ -55,15 +55,7 @@ export default function Kalender() {
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { locale: nl, weekStartsOn: 1 }));
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"5" | "7">("5"); // 5-dag of 7-dag weergave
-  const [user, setUser] = useState<any>(null);
-
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Goedemorgen";
-    if (hour < 18) return "Goedemiddag";
-    return "Goedenavond";
-  };
+  const [viewMode, setViewMode] = useState<"5" | "7">("5");
 
   useEffect(() => {
     checkAuth();
@@ -71,36 +63,15 @@ export default function Kalender() {
     fetchReminders();
   }, []);
 
-  // Real-time updates voor tasks en reminders
   useEffect(() => {
     const tasksChannel = supabase
       .channel('kalender-tasks-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tasks'
-        },
-        () => {
-          fetchTasks();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchTasks())
       .subscribe();
 
     const remindersChannel = supabase
       .channel('kalender-reminders-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'reminders'
-        },
-        () => {
-          fetchReminders();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reminders' }, () => fetchReminders())
       .subscribe();
 
     return () => {
@@ -111,17 +82,11 @@ export default function Kalender() {
 
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      navigate("/auth");
-    } else {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-    }
+    if (!session) navigate("/auth");
   };
 
   const fetchTasks = async () => {
     try {
-      // Get user's organization
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -140,20 +105,8 @@ export default function Kalender() {
       const { data, error } = await supabase
         .from("tasks")
         .select(`
-          id,
-          title,
-          description,
-          priority,
-          start_at,
-          due_at,
-          next_action,
-          assignee_id,
-          application_id,
-          recruitment_action_type,
-          profiles!tasks_assignee_id_fkey (
-            name,
-            email
-          )
+          id, title, description, priority, start_at, due_at, next_action, assignee_id, application_id, recruitment_action_type,
+          profiles!tasks_assignee_id_fkey (name, email)
         `)
         .eq("org_id", userOrgs.org_id)
         .is("deleted_at", null)
@@ -165,11 +118,7 @@ export default function Kalender() {
       setTasks(data || []);
     } catch (error) {
       console.error("Error fetching tasks:", error);
-      toast({
-        title: "Fout bij laden",
-        description: "Kon taken niet laden. Probeer het opnieuw.",
-        variant: "destructive",
-      });
+      toast({ title: "Fout bij laden", description: "Kon taken niet laden.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -177,59 +126,38 @@ export default function Kalender() {
 
   const fetchReminders = async () => {
     try {
-      // ⚡ OPTIMIZED: Only fetch shown reminders for current week (uses idx_reminders_task_subtask_shown)
-      const startOfWeek = startOfDay(currentWeekStart);
-      const endOfWeek = endOfDay(addDays(currentWeekStart, 6));
+      const startOfWeekDate = startOfDay(currentWeekStart);
+      const endOfWeekDate = endOfDay(addDays(currentWeekStart, 6));
 
       const { data, error } = await supabase
         .from("reminders")
-        .select(`
-          *,
-          tasks:task_id(title),
-          subtasks:subtask_id(title)
-        `)
+        .select(`*, tasks:task_id(title), subtasks:subtask_id(title)`)
         .not("shown_at", "is", null)
-        .gte("at", startOfWeek.toISOString())
-        .lte("at", endOfWeek.toISOString())
+        .gte("at", startOfWeekDate.toISOString())
+        .lte("at", endOfWeekDate.toISOString())
         .order("at", { ascending: true })
         .limit(100);
 
       if (error) throw error;
       setReminders(data || []);
     } catch (error) {
-      console.error("⚠️ Error fetching reminders:", error);
+      console.error("Error fetching reminders:", error);
     }
   };
 
   const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
-  const weekDays = viewMode === "5" ? allWeekDays.slice(0, 5) : allWeekDays; // Ma-Vr of Ma-Zo
+  const weekDays = viewMode === "5" ? allWeekDays.slice(0, 5) : allWeekDays;
 
-  const getTasksForDay = (day: Date) => {
-    return tasks.filter((task) => {
-      if (task.start_at && isSameDay(parseISO(task.start_at), day)) return true;
-      if (task.due_at && isSameDay(parseISO(task.due_at), day)) return true;
-      return false;
-    });
-  };
+  const getTasksForDay = (day: Date) => tasks.filter((task) => 
+    (task.start_at && isSameDay(parseISO(task.start_at), day)) || (task.due_at && isSameDay(parseISO(task.due_at), day))
+  );
 
-  const getRemindersForDay = (day: Date) => {
-    return reminders.filter((reminder) => {
-      return isSameDay(parseISO(reminder.at), day);
-    });
-  };
+  const getRemindersForDay = (day: Date) => reminders.filter((reminder) => isSameDay(parseISO(reminder.at), day));
 
-  const goToPreviousWeek = () => {
-    setCurrentWeekStart(addDays(currentWeekStart, -7));
-  };
-
-  const goToNextWeek = () => {
-    setCurrentWeekStart(addDays(currentWeekStart, 7));
-  };
-
-  const goToToday = () => {
-    setCurrentWeekStart(startOfWeek(new Date(), { locale: nl, weekStartsOn: 1 }));
-  };
-
+  const goToPreviousWeek = () => setCurrentWeekStart(addDays(currentWeekStart, -7));
+  const goToNextWeek = () => setCurrentWeekStart(addDays(currentWeekStart, 7));
+  const goToToday = () => setCurrentWeekStart(startOfWeek(new Date(), { locale: nl, weekStartsOn: 1 }));
+  
   const handleTaskClick = (task: Task) => {
     setSelectedTask(task);
     setDetailModalOpen(true);
@@ -242,289 +170,143 @@ export default function Kalender() {
 
   const handleDeleteReminder = async (reminderId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    
     try {
-      const { error } = await supabase
-        .from('reminders')
-        .delete()
-        .eq('id', reminderId);
-
+      const { error } = await supabase.from('reminders').delete().eq('id', reminderId);
       if (error) throw error;
-
-      toast({
-        title: "Herinnering verwijderd",
-        description: "De herinnering is succesvol verwijderd.",
-      });
-
+      toast({ title: "Herinnering verwijderd", description: "De herinnering is succesvol verwijderd." });
       fetchReminders();
     } catch (error) {
       console.error('Error deleting reminder:', error);
-      toast({
-        title: "Fout",
-        description: "Er is een fout opgetreden bij het verwijderen van de herinnering.",
-        variant: "destructive",
-      });
+      toast({ title: "Fout", description: "Er is een fout opgetreden.", variant: "destructive" });
     }
   };
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex items-center justify-center h-64">
+        <p className="text-muted-foreground">Taken laden...</p>
       </div>
     );
   }
 
+  const weekNumber = getWeek(currentWeekStart, { locale: nl });
+  const todayTasks = getTasksForDay(new Date()).length;
+  const urgentCount = tasks.filter(t => t.priority === 'high' || t.priority === 'critical').length;
+
   return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full">
-        <AppSidebar />
-        <main className="flex-1 overflow-auto bg-background p-6">
-          {/* Hero Section */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <h1 className="text-4xl font-bold">
-                    {getGreeting()}, {user?.user_metadata?.name || 'daar'}
-                  </h1>
-                </div>
-                <p className="text-xl text-muted-foreground">
-                  Week {getWeek(currentWeekStart, { locale: nl })} - {format(currentWeekStart, "MMMM yyyy", { locale: nl })}
-                </p>
-              </div>
-              
-              {/* Week Navigatie + View Toggle */}
-              <div className="flex items-center gap-3">
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={goToToday}>
-                    Vandaag
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={goToNextWeek}>
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-                
-                <ToggleGroup type="single" value={viewMode} onValueChange={(value) => value && setViewMode(value as "5" | "7")}>
-                  <ToggleGroupItem value="5" aria-label="Werkweek" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
-                    Ma-Vr
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="7" aria-label="Volle week" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
-                    Ma-Zo
-                  </ToggleGroupItem>
-                </ToggleGroup>
-              </div>
-            </div>
-            
-            {/* Smart Summary */}
-            <div className="bg-muted/30 rounded-lg p-4 space-y-2">
-              <p className="text-sm">
-                📅 Je hebt <strong>{tasks.length} taken</strong> deze week verdeeld over {weekDays.length} dagen
-              </p>
-              {tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length > 0 && (
-                <p className="text-sm text-destructive">
-                  ⚠️ <strong>{tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length} high priority taken</strong> vereisen aandacht
-                </p>
-              )}
-              {reminders.length > 0 && (
-                <p className="text-sm text-primary">
-                  🔔 <strong>{reminders.length} herinneringen</strong> ingesteld deze week
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Compact Stats Bar */}
-          <div className="grid grid-cols-4 gap-3 mb-6">
-            <button
-              onClick={goToToday}
-              className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors border-2 border-transparent hover:border-primary/20"
-            >
-              <span className="text-2xl mb-1">📅</span>
-              <span className="text-2xl font-bold">
-                {getTasksForDay(new Date()).length}
-              </span>
-              <span className="text-xs text-muted-foreground">Vandaag</span>
-            </button>
-            
-            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
-              <span className="text-2xl mb-1">📋</span>
-              <span className="text-2xl font-bold">
-                {tasks.length}
-              </span>
-              <span className="text-xs text-muted-foreground">Deze Week</span>
-            </div>
-            
-            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
-              <span className="text-2xl mb-1">🔔</span>
-              <span className="text-2xl font-bold text-primary">
-                {reminders.length}
-              </span>
-              <span className="text-xs text-muted-foreground">Reminders</span>
-            </div>
-            
-            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/30">
-              <span className="text-2xl mb-1">⚠️</span>
-              <span className={`text-2xl font-bold ${
-                tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length > 0 
-                  ? 'text-destructive' 
-                  : 'text-muted-foreground'
-              }`}>
-                {tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length}
-              </span>
-              <span className="text-xs text-muted-foreground">High Priority</span>
-            </div>
-          </div>
-
-          <div className={`grid ${viewMode === "5" ? "grid-cols-5" : "grid-cols-7"} gap-4`}>
-            {weekDays.map((day) => {
-              const dayTasks = getTasksForDay(day);
-              const isToday = isSameDay(day, new Date());
-
-              return (
-                <div
-                  key={day.toISOString()}
-                  className={`min-h-[500px] rounded-lg border bg-card p-4 ${
-                    isToday ? "border-primary ring-2 ring-primary/20" : ""
-                  }`}
-                >
-                  <div className="mb-4 text-center">
-                    <div className="text-sm font-medium text-muted-foreground">
-                      {format(day, "EEEE", { locale: nl })}
-                    </div>
-                    <div className={`text-2xl font-bold ${isToday ? "text-primary" : ""}`}>
-                      {format(day, "d", { locale: nl })}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {format(day, "MMM yyyy", { locale: nl })}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    {dayTasks.length === 0 && getRemindersForDay(day).length === 0 ? (
-                      <p className="text-center text-sm text-muted-foreground">
-                        Geen taken
-                      </p>
-                    ) : (
-                      <>
-                        {dayTasks.map((task) => {
-                          const priorityInfo = priorityConfig[task.priority as keyof typeof priorityConfig] || priorityConfig.MEDIUM;
-                          const taskReminders = getRemindersForDay(day).filter(r => r.task_id === task.id);
-                          
-                          return (
-                            <div key={task.id} className="space-y-1">
-                              {/* Main Task */}
-                              <div
-                                onClick={() => handleTaskClick(task)}
-                                className={`rounded-md border-l-4 ${priorityInfo.color} bg-card p-3 hover:shadow-lg hover:scale-[1.02] cursor-pointer transition-all duration-200 space-y-2`}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <p className="text-sm font-semibold flex-1 break-words">{task.title}</p>
-                                  <PriorityBadge taskId={task.id} priority={task.priority} size="sm" />
-                                </div>
-                                
-                                {task.profiles && (
-                                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                    <User className="h-3 w-3" />
-                                    <span className="truncate">{task.profiles.name || task.profiles.email}</span>
-                                  </div>
-                                )}
-                                
-                                <div className="space-y-1">
-                                  {task.start_at && (
-                                    <p className="text-xs text-muted-foreground">
-                                      ⏰ {format(parseISO(task.start_at), "HH:mm")}
-                                    </p>
-                                  )}
-                                  {task.due_at && (
-                                    <p className="text-xs text-muted-foreground">
-                                      ⏱️ {format(parseISO(task.due_at), "HH:mm")}
-                                    </p>
-                                  )}
-                                </div>
-                                
-                                {task.next_action && (
-                                  <p className="text-xs text-primary font-medium break-words">
-                                    → {task.next_action}
-                                  </p>
-                                )}
-                              </div>
-
-                              {/* Reminders for this task - shown smaller beneath */}
-                              {taskReminders.map((reminder) => (
-                                <div
-                                  key={reminder.id}
-                                  className={`group ml-4 rounded border-l-2 ${priorityInfo.color} bg-primary/5 p-1.5 px-2 hover:bg-primary/10 transition-colors relative`}
-                                >
-                                  <div className="flex items-center gap-1.5">
-                                    <Bell className="w-3 h-3 text-primary flex-shrink-0" />
-                                    <p className="text-[11px] font-medium text-primary/90 truncate flex-1">
-                                      {reminder.title || "Herinnering"}
-                                    </p>
-                                    <p className="text-[10px] text-muted-foreground">
-                                      {format(parseISO(reminder.at), "HH:mm")}
-                                    </p>
-                                    <button
-                                      onClick={(e) => handleDeleteReminder(reminder.id, e)}
-                                      className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-destructive/10 rounded"
-                                      title="Verwijder herinnering"
-                                    >
-                                      <X className="w-3 h-3 text-destructive" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          );
-                        })}
-
-                        {/* Standalone Reminders (not linked to displayed tasks) */}
-                        {getRemindersForDay(day)
-                          .filter(reminder => !dayTasks.some(task => task.id === reminder.task_id))
-                          .map((reminder) => (
-                            <div
-                              key={reminder.id}
-                              className="group rounded border-l-2 border-l-primary/50 bg-primary/5 p-2 hover:bg-primary/10 transition-colors relative"
-                            >
-                              <div className="flex items-center gap-2">
-                                <Bell className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium text-primary/90 truncate">
-                                    {reminder.title || reminder.tasks?.title || reminder.subtasks?.title}
-                                  </p>
-                                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                                    {format(parseISO(reminder.at), "HH:mm")}
-                                  </p>
-                                </div>
-                                <button
-                                  onClick={(e) => handleDeleteReminder(reminder.id, e)}
-                                  className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-destructive/10 rounded"
-                                  title="Verwijder herinnering"
-                                >
-                                  <Trash2 className="w-3 h-3 text-destructive" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </main>
+    <div className="space-y-6">
+      {/* Minimal Hero Section */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Kalender</h1>
+          <p className="text-muted-foreground">Week {weekNumber} · {tasks.length} taken gepland</p>
+        </div>
+        
+        <ToggleGroup type="single" value={viewMode} onValueChange={(value) => value && setViewMode(value as "5" | "7")}>
+          <ToggleGroupItem value="5" aria-label="Werkweek">Ma-Vr</ToggleGroupItem>
+          <ToggleGroupItem value="7" aria-label="Volle week">Ma-Zo</ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
-      <TaskDetailModal
-        task={selectedTask}
-        open={detailModalOpen}
-        onOpenChange={setDetailModalOpen}
-        onTaskUpdated={handleTaskUpdated}
-      />
-    </SidebarProvider>
+      {/* Monochrome Stats Bar */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <button onClick={goToToday} className="text-left rounded-lg border bg-card p-4 hover:bg-accent/50 transition-colors">
+          <p className="text-sm text-muted-foreground mb-1">Vandaag</p>
+          <p className="text-2xl font-semibold">{todayTasks}</p>
+        </button>
+        <button className="text-left rounded-lg border bg-card p-4 hover:bg-accent/50 transition-colors">
+          <p className="text-sm text-muted-foreground mb-1">Deze Week</p>
+          <p className="text-2xl font-semibold">{tasks.length}</p>
+        </button>
+        <button className="text-left rounded-lg border bg-card p-4 hover:bg-accent/50 transition-colors">
+          <p className="text-sm text-muted-foreground mb-1">Herinneringen</p>
+          <p className="text-2xl font-semibold">{reminders.length}</p>
+        </button>
+        <button className={cn("text-left rounded-lg border bg-card p-4 hover:bg-accent/50 transition-colors", urgentCount > 0 && "border-destructive/50")}>
+          <p className="text-sm text-muted-foreground mb-1">Urgent</p>
+          <p className={cn("text-2xl font-semibold", urgentCount > 0 && "text-destructive")}>{urgentCount}</p>
+        </button>
+      </div>
+
+      {/* Compact Week Navigation */}
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" size="sm" onClick={goToPreviousWeek}>
+          <ChevronLeft className="h-4 w-4 mr-1" />Vorige
+        </Button>
+        <div className="text-center">
+          <p className="text-sm font-medium">
+            {format(currentWeekStart, 'd MMM', { locale: nl })} - {format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'd MMM yyyy', { locale: nl })}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" onClick={goToToday}>Vandaag</Button>
+          <Button variant="ghost" size="sm" onClick={goToNextWeek}>
+            Volgende<ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Clean Calendar Grid */}
+      <div className={`grid ${viewMode === "5" ? "grid-cols-5" : "grid-cols-7"} gap-4`}>
+        {weekDays.map((day) => {
+          const dayTasks = getTasksForDay(day);
+          const dayReminders = getRemindersForDay(day);
+          const isToday = isSameDay(day, new Date());
+
+          return (
+            <Card key={day.toISOString()} className={cn("overflow-hidden transition-all hover:shadow-md min-h-[500px]", isToday && "ring-2 ring-primary")}>
+              <CardHeader className={cn("pb-3", isToday && "bg-accent/50")}>
+                <CardTitle className="text-lg flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    {format(day, 'EEEE', { locale: nl })}
+                    {isToday && <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full">Vandaag</span>}
+                  </span>
+                  <span className="text-sm font-normal text-muted-foreground">{format(day, 'd MMM', { locale: nl })}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {dayTasks.length === 0 && dayReminders.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">Geen taken</p>
+                ) : (
+                  <>
+                    {dayTasks.map((task) => (
+                      <div key={task.id} onClick={() => handleTaskClick(task)} className="p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors space-y-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-medium text-sm line-clamp-2 flex-1">{task.title}</p>
+                          <Badge variant={priorityConfig[task.priority as keyof typeof priorityConfig]?.variant || priorityConfig.medium.variant} className="text-xs whitespace-nowrap">
+                            {priorityConfig[task.priority as keyof typeof priorityConfig]?.label || priorityConfig.medium.label}
+                          </Badge>
+                        </div>
+                        {task.profiles && (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <User className="h-3 w-3" />
+                            <span className="truncate">{task.profiles.name || task.profiles.email}</span>
+                          </div>
+                        )}
+                        {task.start_at && <p className="text-xs text-muted-foreground">Start: {format(parseISO(task.start_at), 'HH:mm')}</p>}
+                        {task.due_at && <p className="text-xs text-muted-foreground">Deadline: {format(parseISO(task.due_at), 'HH:mm')}</p>}
+                      </div>
+                    ))}
+                    {dayReminders.map((reminder) => (
+                      <div key={reminder.id} className="p-3 rounded-lg border bg-muted/30 space-y-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-medium text-sm line-clamp-2 flex-1">{reminder.title || "Herinnering"}</p>
+                          <Button variant="ghost" size="sm" onClick={(e) => handleDeleteReminder(reminder.id, e)} className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive">
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{format(parseISO(reminder.at), 'HH:mm')}</p>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      <TaskDetailModal task={selectedTask} open={detailModalOpen} onOpenChange={setDetailModalOpen} onTaskUpdated={handleTaskUpdated} />
+    </div>
   );
 }
