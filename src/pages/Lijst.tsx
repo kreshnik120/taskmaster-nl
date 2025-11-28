@@ -5,7 +5,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, Filter, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { Loader2, Filter, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown, User } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -348,6 +349,12 @@ export default function Lijst() {
         updates.accepted_by = null;
         updates.accepted_at = null;
       }
+      
+      // Auto-accept bij self-assignment
+      if (assigneeId === currentUserId) {
+        updates.accepted_by = currentUserId;
+        updates.accepted_at = new Date().toISOString();
+      }
 
       const { error } = await supabase
         .from("tasks")
@@ -356,7 +363,7 @@ export default function Lijst() {
 
       if (error) throw error;
 
-      toast.success("Verantwoordelijke bijgewerkt");
+      toast.success(assigneeId === currentUserId ? "Taak toegewezen en geaccepteerd" : "Verantwoordelijke bijgewerkt");
       setEditingAssignee(null);
       fetchTasks();
     } catch (error) {
@@ -371,28 +378,25 @@ export default function Lijst() {
     return "unassigned";
   };
 
-  const getStatusBadge = (task: Task) => {
-    const status = getTaskStatus(task);
-    
-    if (status === "accepted") {
-      return (
-        <span className="text-xs text-foreground">
-          Geaccepteerd
-        </span>
-      );
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return "?";
+    return name
+      .split(" ")
+      .map(part => part[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  const formatPeriod = (start: string | null, end: string | null) => {
+    if (start && end) {
+      const startDate = format(new Date(start), "d MMM", { locale: nl });
+      const endDate = format(new Date(end), "d MMM", { locale: nl });
+      return `${startDate} - ${endDate}`;
     }
-    if (status === "assigned") {
-      return (
-        <span className="text-xs text-muted-foreground">
-          Toegewezen
-        </span>
-      );
-    }
-    return (
-      <span className="text-xs text-muted-foreground">
-        Niet toegewezen
-      </span>
-    );
+    if (start) return `Vanaf ${format(new Date(start), "d MMM", { locale: nl })}`;
+    if (end) return `Tot ${format(new Date(end), "d MMM", { locale: nl })}`;
+    return "—";
   };
 
   const handleTaskClick = (task: Task) => {
@@ -732,9 +736,8 @@ export default function Lijst() {
                         >
                           Taak <SortIcon column="title" />
                         </TableHead>
-                        <TableHead>Organisatie</TableHead>
-                        <TableHead>Verantwoordelijke</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead className="hidden md:table-cell">Organisatie</TableHead>
+                        <TableHead>Eigenaar</TableHead>
                         <TableHead 
                           className="cursor-pointer hover:bg-muted/50 transition-colors select-none"
                           onClick={() => handleSort('priority')}
@@ -742,22 +745,9 @@ export default function Lijst() {
                         >
                           Prioriteit <SortIcon column="priority" />
                         </TableHead>
-                        <TableHead 
-                          className="cursor-pointer hover:bg-muted/50 transition-colors select-none"
-                          onClick={() => handleSort('start_at')}
-                          aria-label="Sorteer op startdatum"
-                        >
-                          Start <SortIcon column="start_at" />
-                        </TableHead>
-                        <TableHead 
-                          className="cursor-pointer hover:bg-muted/50 transition-colors select-none"
-                          onClick={() => handleSort('due_at')}
-                          aria-label="Sorteer op einddatum"
-                        >
-                          Eind <SortIcon column="due_at" />
-                        </TableHead>
+                        <TableHead className="hidden sm:table-cell">Periode</TableHead>
                         <TableHead className="min-w-[200px]">Volgende actie</TableHead>
-                        <TableHead className="w-[120px]">Timer</TableHead>
+                        <TableHead className="w-[120px] hidden lg:table-cell">Timer</TableHead>
                         <TableHead className="w-[100px]">Actie</TableHead>
                         <TableHead className="w-[80px] text-center">Afgerond</TableHead>
                       </TableRow>
@@ -765,7 +755,7 @@ export default function Lijst() {
                     <TableBody>
                       {groupTasks.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={10} className="text-center text-muted-foreground">
+                          <TableCell colSpan={9} className="text-center text-muted-foreground">
                             Geen taken gevonden
                           </TableCell>
                         </TableRow>
@@ -801,10 +791,10 @@ export default function Lijst() {
                               {String(task.sequence_number).padStart(2, '0')}
                             </TableCell>
                             <TableCell className="font-medium">{task.title}</TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">
                         {task.organizations?.name || "-"}
                       </TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         {editingAssignee === task.id ? (
                           <Select
                             value={task.assignee_id || "none"}
@@ -824,30 +814,45 @@ export default function Lijst() {
                               ))}
                             </SelectContent>
                           </Select>
+                        ) : !task.assignee_id ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingAssignee(task.id);
+                            }}
+                          >
+                            Wijs toe
+                          </Button>
                         ) : (
                           <div 
-                            className="cursor-pointer hover:bg-muted/50 rounded px-2 py-1"
-                            onClick={() => setEditingAssignee(task.id)}
+                            className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-2 py-1 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingAssignee(task.id);
+                            }}
                           >
-                            {task.profiles?.name || "-"}
+                            <Avatar className="h-7 w-7">
+                              <AvatarFallback className="bg-primary/10 text-xs font-medium">
+                                {getInitials(task.profiles?.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-sm">{task.profiles?.name}</span>
+                            {task.accepted_by ? (
+                              <Check className="h-3 w-3 text-green-600" />
+                            ) : (
+                              <div className="h-2 w-2 rounded-full bg-amber-500" />
+                            )}
                           </div>
                         )}
                       </TableCell>
                       <TableCell>
-                        {getStatusBadge(task)}
-                      </TableCell>
-                      <TableCell>
                         <PriorityBadge taskId={task.id} priority={task.priority} size="md" />
                       </TableCell>
-                            <TableCell>
-                              {task.start_at
-                                ? format(new Date(task.start_at), "dd MMM yyyy", { locale: nl })
-                                : "-"}
-                            </TableCell>
-                            <TableCell>
-                              {task.due_at
-                                ? format(new Date(task.due_at), "dd MMM yyyy", { locale: nl })
-                                : "-"}
+                            <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
+                              {formatPeriod(task.start_at, task.due_at)}
                             </TableCell>
                             <TableCell className="min-w-[200px]">
                               {editingAction === task.id ? (
@@ -878,7 +883,7 @@ export default function Lijst() {
                                 </div>
                               )}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="hidden lg:table-cell">
                               {activeTimer ? (
                                 <TimerCell 
                                   activeTimer={activeTimer}
@@ -889,22 +894,35 @@ export default function Lijst() {
                                 <span className="text-muted-foreground text-xs">-</span>
                               )}
                             </TableCell>
-                            <TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center gap-2">
-                                {!task.accepted_by && task.assignee_id && (
+                                {!task.assignee_id ? (
                                   <Button
                                     size="sm"
-                                    variant="outline"
+                                    variant="default"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleUpdateAssignee(task.id, currentUserId);
+                                    }}
+                                    className="h-8"
+                                  >
+                                    <User className="h-3 w-3 mr-1" />
+                                    Claim
+                                  </Button>
+                                ) : !task.accepted_by && task.assignee_id === currentUserId ? (
+                                  <Button
+                                    size="sm"
+                                    variant="default"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       handleAcceptTask(task.id);
                                     }}
-                                    className="h-8 text-xs"
+                                    className="h-8"
                                   >
                                     <Check className="h-3 w-3 mr-1" />
                                     Accepteren
                                   </Button>
-                                )}
+                                ) : null}
                                 <Button
                                   size="sm"
                                   variant="ghost"
@@ -914,11 +932,11 @@ export default function Lijst() {
                                   }}
                                   className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                                 >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                  <Trash2 className="h-3 w-3" />
+                                 </Button>
                               </div>
                             </TableCell>
-                            <TableCell className="text-center">
+                            <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
                               <Checkbox
                                 checked={!!task.completed_at}
                                 onCheckedChange={() => handleToggleComplete(task.id, task.completed_at)}
