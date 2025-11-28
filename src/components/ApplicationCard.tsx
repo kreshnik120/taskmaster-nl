@@ -1,6 +1,9 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
+import { GripVertical } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 interface Application {
   id: string;
@@ -86,44 +89,112 @@ export function ApplicationCard({ application, onClick }: ApplicationCardProps) 
     return `${weeks} ${weeks === 1 ? 'week' : 'weken'}`;
   };
 
+  // Get initials from candidate name
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(part => part[0])
+      .join('')
+      .substring(0, 2)
+      .toUpperCase();
+  };
+
+  // Generate consistent color based on name
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      'bg-blue-100 text-blue-700',
+      'bg-green-100 text-green-700',
+      'bg-purple-100 text-purple-700',
+      'bg-amber-100 text-amber-700',
+      'bg-rose-100 text-rose-700',
+      'bg-cyan-100 text-cyan-700',
+    ];
+    const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return colors[hash % colors.length];
+  };
+
   return (
     <Card
       ref={setNodeRef}
       style={style}
-      className={`hover:scale-[1.01] hover:shadow-md active:scale-[0.99] transition-all duration-200 ease-out cursor-pointer border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2 ${getCardBorder(completenessScore)}`}
-      onClick={onClick}
+      className={`hover:scale-[1.01] hover:shadow-md active:scale-[0.99] transition-all duration-200 ease-out border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2 ${getCardBorder(completenessScore)}`}
     >
-      <CardContent className="p-4 space-y-2" {...attributes} {...listeners}>
-        {/* Header: Name + Completeness */}
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium text-foreground truncate">
-            {candidateName}
-          </p>
-          <span className={`text-sm font-medium ${getCompletenessColor(completenessScore)}`}>
-            {completenessScore}%
-          </span>
+      <CardContent className="p-4 space-y-2">
+        <div className="flex items-start gap-2">
+          {/* Drag Handle - Only this part is draggable */}
+          <div
+            {...attributes}
+            {...listeners}
+            className="flex-shrink-0 pt-1 cursor-grab active:cursor-grabbing opacity-30 hover:opacity-60 transition-opacity"
+          >
+            <GripVertical className="h-4 w-4 text-muted-foreground" />
+          </div>
+
+          {/* Card Content - Clickable */}
+          <div className="flex-1 min-w-0 space-y-2 cursor-pointer" onClick={onClick}>
+            {/* Header: Avatar + Name + Completeness */}
+            <div className="flex items-center gap-2">
+              <Avatar className="h-6 w-6 flex-shrink-0">
+                <AvatarFallback className={`text-xs font-medium ${getAvatarColor(candidateName)}`}>
+                  {getInitials(candidateName)}
+                </AvatarFallback>
+              </Avatar>
+              <p className="text-sm font-medium text-foreground truncate flex-1">
+                {candidateName}
+              </p>
+              <span className={`text-sm font-medium flex-shrink-0 ${getCompletenessColor(completenessScore)}`}>
+                {completenessScore}%
+              </span>
+            </div>
+
+            {/* Email */}
+            <p className="text-xs text-muted-foreground truncate">
+              {application.email_from}
+            </p>
+
+            {/* Metadata row with bullets */}
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
+              {functieNiveau && <span>{functieNiveau}</span>}
+              {functieNiveau && werkvorm && <span>•</span>}
+              {werkvorm && <span>{werkvorm}</span>}
+              {assignedOrg && (functieNiveau || werkvorm) && <span>•</span>}
+              {assignedOrg && <span>{assignedOrg}</span>}
+            </div>
+
+            {/* Time in stage */}
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xs text-muted-foreground">
+                {getHumanizedTime()}
+              </span>
+              <div className={`h-1.5 w-1.5 rounded-full ${getStatusDotColor()}`} />
+            </div>
+          </div>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
 
-        {/* Email */}
-        <p className="text-xs text-muted-foreground truncate">
-          {application.email_from}
-        </p>
-
-        {/* Metadata row with bullets */}
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
-          {functieNiveau && <span>{functieNiveau}</span>}
-          {functieNiveau && werkvorm && <span>•</span>}
-          {werkvorm && <span>{werkvorm}</span>}
-          {assignedOrg && (functieNiveau || werkvorm) && <span>•</span>}
-          {assignedOrg && <span>{assignedOrg}</span>}
-        </div>
-
-        {/* Time in stage */}
-        <div className="flex items-center justify-between pt-1">
-          <span className="text-xs text-muted-foreground">
-            {getHumanizedTime()}
-          </span>
-          <div className={`h-1.5 w-1.5 rounded-full ${getStatusDotColor()}`} />
+// Skeleton loading component
+export function ApplicationCardSkeleton() {
+  return (
+    <Card className="border-border/50">
+      <CardContent className="p-4 space-y-2">
+        <div className="flex items-start gap-2">
+          <Skeleton className="h-4 w-4 mt-1" />
+          <div className="flex-1 space-y-2">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-6 w-6 rounded-full" />
+              <Skeleton className="h-4 w-32 flex-1" />
+              <Skeleton className="h-4 w-10" />
+            </div>
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-24" />
+            <div className="flex justify-between pt-1">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-1.5 w-1.5 rounded-full" />
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>
