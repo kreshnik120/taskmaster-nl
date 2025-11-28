@@ -3,12 +3,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2, Building2, UserPlus } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2, Building2, UserPlus, ChevronDown, ChevronUp } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
@@ -60,6 +63,44 @@ interface LinkedTask {
   } | null;
 }
 
+// Semantic color mapping
+const getSectorColor = (sector: string) => {
+  const colors: Record<string, string> = {
+    "VVT": "bg-blue-100 text-blue-700 border-blue-300",
+    "GGZ": "bg-purple-100 text-purple-700 border-purple-300",
+    "GHZ": "bg-green-100 text-green-700 border-green-300",
+    "Jeugdzorg": "bg-orange-100 text-orange-700 border-orange-300",
+    "Ziekenhuis/Klinisch": "bg-red-100 text-red-700 border-red-300",
+    "Thuiszorg": "bg-teal-100 text-teal-700 border-teal-300",
+  };
+  return colors[sector] || "bg-muted text-foreground";
+};
+
+const getDoelgroepColor = (doelgroep: string) => {
+  const colors: Record<string, string> = {
+    "Ouderen": "bg-amber-100 text-amber-700 border-amber-300",
+    "LVB": "bg-emerald-100 text-emerald-700 border-emerald-300",
+    "Psychiatrie": "bg-indigo-100 text-indigo-700 border-indigo-300",
+    "Somatiek": "bg-rose-100 text-rose-700 border-rose-300",
+    "Kinderen/Jeugd": "bg-cyan-100 text-cyan-700 border-cyan-300",
+    "Verslaving": "bg-slate-100 text-slate-700 border-slate-300",
+  };
+  return colors[doelgroep] || "bg-muted text-foreground";
+};
+
+const getFunctieColor = (functie: string) => {
+  const colors: Record<string, string> = {
+    "VIG": "bg-blue-100 text-blue-700 border-blue-300",
+    "HBO-V": "bg-purple-100 text-purple-700 border-purple-300",
+    "Verpleegkundige MBO": "bg-green-100 text-green-700 border-green-300",
+    "Helpende": "bg-orange-100 text-orange-700 border-orange-300",
+    "Begeleider": "bg-cyan-100 text-cyan-700 border-cyan-300",
+    "Persoonlijk begeleider": "bg-pink-100 text-pink-700 border-pink-300",
+    "GGZ-agoog": "bg-indigo-100 text-indigo-700 border-indigo-300",
+  };
+  return colors[functie] || "bg-muted text-foreground";
+};
+
 export function ApplicationDetailModal({
   application,
   open,
@@ -71,6 +112,33 @@ export function ApplicationDetailModal({
   const [updating, setUpdating] = useState(false);
   const [linkedTasks, setLinkedTasks] = useState<LinkedTask[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
+  
+  // Collapsible sections (localStorage persistence)
+  const [contactOpen, setContactOpen] = useState(() => {
+    const saved = localStorage.getItem('app-modal-contact-open');
+    return saved ? JSON.parse(saved) : true;
+  });
+  const [extractedOpen, setExtractedOpen] = useState(() => {
+    const saved = localStorage.getItem('app-modal-extracted-open');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [actionsOpen, setActionsOpen] = useState(() => {
+    const saved = localStorage.getItem('app-modal-actions-open');
+    return saved ? JSON.parse(saved) : true;
+  });
+  
+  // Save to localStorage when changed
+  useEffect(() => {
+    localStorage.setItem('app-modal-contact-open', JSON.stringify(contactOpen));
+  }, [contactOpen]);
+  
+  useEffect(() => {
+    localStorage.setItem('app-modal-extracted-open', JSON.stringify(extractedOpen));
+  }, [extractedOpen]);
+  
+  useEffect(() => {
+    localStorage.setItem('app-modal-actions-open', JSON.stringify(actionsOpen));
+  }, [actionsOpen]);
   
   // Action creation form
   const [showActionForm, setShowActionForm] = useState(false);
@@ -142,7 +210,6 @@ export function ApplicationDetailModal({
     
     setLoadingTasks(true);
     try {
-      // Fetch tasks without join to avoid ambiguity
       const { data: tasksData, error: tasksError } = await supabase
         .from('tasks')
         .select('id, title, status, priority, due_at, recruitment_action_type, assignee_id')
@@ -152,7 +219,6 @@ export function ApplicationDetailModal({
 
       if (tasksError) throw tasksError;
 
-      // Fetch profile names for assignees
       const assigneeIds = tasksData?.map(t => t.assignee_id).filter(Boolean) || [];
       let profilesMap = new Map();
 
@@ -165,7 +231,6 @@ export function ApplicationDetailModal({
         profilesData?.forEach(p => profilesMap.set(p.id, p));
       }
 
-      // Map tasks with profile data
       const mappedTasks: LinkedTask[] = (tasksData || []).map(task => ({
         ...task,
         profiles: task.assignee_id && profilesMap.has(task.assignee_id)
@@ -184,7 +249,6 @@ export function ApplicationDetailModal({
   const handleStageChange = async (newStage: string) => {
     setUpdating(true);
     try {
-      // Map pipeline_stage to status (same mapping as handleDragEnd)
       const stageToStatus: Record<string, string> = {
         nieuw: "nieuw",
         screening: "in_verwerking",
@@ -248,45 +312,12 @@ export function ApplicationDetailModal({
     return labels[type] || type;
   };
 
-  // Constants for dropdowns and badges
-  const SECTOREN = [
-    "VVT",
-    "GGZ", 
-    "GHZ",
-    "Jeugdzorg",
-    "Ziekenhuis/Klinisch",
-    "Thuiszorg",
-  ];
-
-  const DOELGROEPEN = [
-    "Ouderen",
-    "LVB",
-    "Psychiatrie",
-    "Somatiek",
-    "Kinderen/Jeugd",
-    "Verslaving",
-  ];
-
-  const BESCHIKBAARHEDEN = [
-    "<24 uur/week",
-    "24-32 uur/week",
-    "32-40 uur/week",
-    "Flexibel",
-  ];
-
-  const BRONNEN = [
-    "Indeed",
-    "LinkedIn",
-    "Eigen netwerk",
-    "Website",
-    "Referral",
-    "Telefonisch",
-    "Anders",
-  ];
-
+  const SECTOREN = ["VVT", "GGZ", "GHZ", "Jeugdzorg", "Ziekenhuis/Klinisch", "Thuiszorg"];
+  const DOELGROEPEN = ["Ouderen", "LVB", "Psychiatrie", "Somatiek", "Kinderen/Jeugd", "Verslaving"];
+  const BESCHIKBAARHEDEN = ["<24 uur/week", "24-32 uur/week", "32-40 uur/week", "Flexibel"];
+  const BRONNEN = ["Indeed", "LinkedIn", "Eigen netwerk", "Website", "Referral", "Telefonisch", "Anders"];
   const ORGANISATIES = ["ABCzorg", "CitoZorg"];
 
-  // Toggle functions for multi-select badges
   const toggleSector = (sector: string) => {
     setEditData(prev => ({
       ...prev,
@@ -340,7 +371,6 @@ export function ApplicationDetailModal({
 
     setSavingEdit(true);
     try {
-      // Merge edit data with existing extracted_data
       const updatedExtractedData = {
         ...application.extracted_data,
         telefoon: editData.telefoon || null,
@@ -356,7 +386,6 @@ export function ApplicationDetailModal({
         assigned_organization: editData.assigned_organization || null,
       };
 
-      // Calculate completeness score
       const fields = {
         naam: updatedExtractedData.naam,
         email: application.email_from,
@@ -390,7 +419,6 @@ export function ApplicationDetailModal({
 
       const completeness_score = Math.round(score);
 
-      // Update application
       const { error } = await supabase
         .from("professional_applications")
         .update({
@@ -417,7 +445,6 @@ export function ApplicationDetailModal({
     const file = event.target.files?.[0];
     if (!file) return;
     
-    // Validatie: alleen PDF, max 10MB
     if (file.type !== 'application/pdf') {
       toast.error("Alleen PDF bestanden toegestaan");
       return;
@@ -429,17 +456,14 @@ export function ApplicationDetailModal({
     
     setUploadingCV(true);
     try {
-      // Genereer unieke bestandsnaam
       const filePath = `${application.id}/${Date.now()}_${file.name}`;
       
-      // Upload naar Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('application-cvs')
         .upload(filePath, file);
       
       if (uploadError) throw uploadError;
       
-      // Update database record
       const { error: updateError } = await supabase
         .from('professional_applications')
         .update({
@@ -472,7 +496,6 @@ export function ApplicationDetailModal({
       
       if (error) throw error;
       
-      // Trigger browser download
       const url = URL.createObjectURL(data);
       const a = document.createElement('a');
       a.href = url;
@@ -512,14 +535,12 @@ export function ApplicationDetailModal({
     if (!application.cv_file_path) return;
     
     try {
-      // Verwijder uit storage
       const { error: deleteError } = await supabase.storage
         .from('application-cvs')
         .remove([application.cv_file_path]);
       
       if (deleteError) throw deleteError;
       
-      // Update database
       const { error: updateError } = await supabase
         .from('professional_applications')
         .update({
@@ -542,13 +563,11 @@ export function ApplicationDetailModal({
   const handleCreateAction = async () => {
     if (!application?.id) return;
 
-    // Validate action preconditions
     if (actionType === "call" && !application.extracted_data?.telefoon) {
       toast.error("Telefoonnummer is vereist om deze actie aan te maken");
       return;
     }
 
-    // Determine title based on action type
     let title = "";
     const candidateName = application.professionals?.full_name || application.email_from;
     
@@ -577,7 +596,6 @@ export function ApplicationDetailModal({
 
     setCreatingAction(true);
     try {
-      // Get current user and org
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
@@ -589,7 +607,6 @@ export function ApplicationDetailModal({
 
       if (!orgData) throw new Error("No organization found");
 
-      // Combine date and time if both are set
       let dueAt = null;
       if (actionDueDate) {
         const [hours, minutes] = actionDueTime.split(':').map(Number);
@@ -598,7 +615,6 @@ export function ApplicationDetailModal({
         dueAt = combined.toISOString();
       }
 
-      // Create task linked to application
       const { error } = await supabase.from('tasks').insert([{
         org_id: orgData.org_id,
         application_id: application.id,
@@ -616,7 +632,6 @@ export function ApplicationDetailModal({
 
       toast.success("Actie aangemaakt");
       
-      // Reset form
       setShowActionForm(false);
       setCustomTitle("");
       setActionNotes("");
@@ -625,7 +640,6 @@ export function ApplicationDetailModal({
       setActionDueDate(undefined);
       setActionDueTime("09:00");
       
-      // Reload tasks
       loadLinkedTasks();
     } catch (error) {
       console.error('Error creating action:', error);
@@ -657,7 +671,6 @@ export function ApplicationDetailModal({
 
       const extractedData = application.extracted_data;
       
-      // Normalize applicant regions
       const applicantRegios = (extractedData.regio || '')
         .toLowerCase()
         .split(',')
@@ -668,13 +681,11 @@ export function ApplicationDetailModal({
         let score = 0;
         let reasons: string[] = [];
         
-        // Regio matching (30% voor exacte match, 20% voor naam-match)
         const clientRegios = (client.regio || []).map((r: string) => r.toLowerCase());
         const regioMatch = clientRegios.some((cr: string) => 
           applicantRegios.some((ar: string) => ar.includes(cr) || cr.includes(ar))
         );
         
-        // Fallback: check of sollicitant regio voorkomt in klantnaam
         const clientNameLower = (client.name || '').toLowerCase();
         const clientCompanyLower = (client.company || '').toLowerCase();
         const nameRegioMatch = applicantRegios.some((ar: string) => 
@@ -689,7 +700,6 @@ export function ApplicationDetailModal({
           reasons.push('Regio in klantnaam');
         }
         
-        // Sector matching (25%)
         const clientSectors = client.sector || [];
         const applicantSectors = extractedData.ervaring_sector || [];
         const sectorOverlap = clientSectors.filter((s: string) => 
@@ -701,7 +711,6 @@ export function ApplicationDetailModal({
           reasons.push(`${sectorOverlap} sector(en) match`);
         }
         
-        // Doelgroep matching (20%)
         const clientDoelgroepen = client.doelgroep || [];
         const applicantDoelgroepen = extractedData.doelgroep_ervaring || [];
         const doelgroepOverlap = clientDoelgroepen.filter((d: string) => 
@@ -713,7 +722,6 @@ export function ApplicationDetailModal({
           reasons.push(`${doelgroepOverlap} doelgroep(en) match`);
         }
         
-        // Functieniveau matching (15%)
         const clientFuncties = client.gezochte_functies || [];
         const applicantFunctie = extractedData.functie_niveau;
         if (applicantFunctie && clientFuncties.includes(applicantFunctie)) {
@@ -721,7 +729,6 @@ export function ApplicationDetailModal({
           reasons.push('Functieniveau match');
         }
         
-        // Bemiddelingsbureau matching (10%) - altijd als bonus
         const clientOrgId = client.org_id;
         const clientOrgName = clientOrgId === '650e8400-e29b-41d4-a716-446655440000' ? 'ABCzorg' : 'CitoZorg';
         const applicantOrg = extractedData.assigned_organization;
@@ -730,7 +737,6 @@ export function ApplicationDetailModal({
           reasons.push('Zelfde bureau');
         }
         
-        // Build score breakdown for each match
         const breakdown = {
           regio: {
             score: regioMatch && clientRegios.length > 0 ? 30 : nameRegioMatch ? 20 : 0,
@@ -780,7 +786,6 @@ export function ApplicationDetailModal({
         };
       });
       
-      // Sort by score, take top 5 with score >= 10
       const topMatches = scored
         .filter(c => c.matchScore >= 10)
         .sort((a, b) => b.matchScore - a.matchScore)
@@ -817,7 +822,7 @@ export function ApplicationDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             <Mail className="h-5 w-5" />
@@ -825,339 +830,465 @@ export function ApplicationDetailModal({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* Header Info */}
-          <div className="space-y-3">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1 space-y-2">
-                <p className="text-lg font-semibold">{application.email_from}</p>
-                {application.email_subject && (
-                  <p className="text-sm text-muted-foreground">{application.email_subject}</p>
-                )}
-              </div>
-              <Badge variant="outline" className="shrink-0">
-                {getStatusLabel(application.status)}
-              </Badge>
+        {/* Header Metadata */}
+        <div className="space-y-2">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <p className="text-lg font-semibold">{application.email_from}</p>
+              {application.email_subject && (
+                <p className="text-sm text-muted-foreground">{application.email_subject}</p>
+              )}
             </div>
+            <div className="flex gap-2">
+              <Badge variant="outline">{getStageLabel(application.pipeline_stage)}</Badge>
+              <Badge variant="outline">{getStatusLabel(application.status)}</Badge>
+            </div>
+          </div>
 
-            {/* Contactgegevens Section */}
-            <div className="p-4 rounded-lg bg-muted/30 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">Contactgegevens</p>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setEditMode(!editMode)}
-                >
-                  {editMode ? "Annuleren" : "Bewerk"}
-                </Button>
-              </div>
-              
-              {editMode ? (
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <label className="text-xs text-muted-foreground">Telefoonnummer</label>
-                    <Input
-                      placeholder="06..."
-                      value={editData.telefoon}
-                      onChange={(e) => setEditData({ ...editData, telefoon: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs text-muted-foreground">Regio</label>
-                    <Input
-                      placeholder="Utrecht, Amsterdam..."
-                      value={editData.regio}
-                      onChange={(e) => setEditData({ ...editData, regio: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs text-muted-foreground">Functieniveau</label>
-                    <Select 
-                      value={editData.functie_niveau} 
-                      onValueChange={(value) => setEditData({ ...editData, functie_niveau: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecteer functieniveau" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="VIG">VIG</SelectItem>
-                        <SelectItem value="HBO-V">HBO-V</SelectItem>
-                        <SelectItem value="Verpleegkundige MBO">Verpleegkundige MBO</SelectItem>
-                        <SelectItem value="Helpende">Helpende</SelectItem>
-                        <SelectItem value="Begeleider">Begeleider</SelectItem>
-                        <SelectItem value="Persoonlijk begeleider">Persoonlijk begeleider</SelectItem>
-                        <SelectItem value="GGZ-agoog">GGZ-agoog</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs text-muted-foreground">Werkvorm</label>
-                    <Select 
-                      value={editData.werkvorm} 
-                      onValueChange={(value) => setEditData({ ...editData, werkvorm: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecteer werkvorm" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ZZP">ZZP</SelectItem>
-                        <SelectItem value="Uitzendkracht">Uitzendkracht</SelectItem>
-                        <SelectItem value="ABCito constructie">ABCito constructie</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+          {/* Organization Badge */}
+          {application.extracted_data?.assigned_organization && (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-950/20 border border-blue-200">
+              <Building2 className="h-3.5 w-3.5 text-blue-600" />
+              <span className="text-xs font-medium text-blue-700 dark:text-blue-400">
+                {application.extracted_data.assigned_organization}
+              </span>
+            </div>
+          )}
+        </div>
 
-                  <Separator className="my-4" />
+        <Separator />
 
-                  {/* Professionele Achtergrond */}
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground">Professionele Achtergrond</p>
-                    
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-muted-foreground">Ervaring sector</label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {SECTOREN.map((sector) => (
-                          <Badge
-                            key={sector}
-                            variant={editData.ervaring_sector.includes(sector) ? "default" : "outline"}
-                            className="cursor-pointer text-xs"
-                            onClick={() => toggleSector(sector)}
-                          >
-                            {sector}
-                            {editData.ervaring_sector.includes(sector) && (
-                              <X className="ml-1 h-3 w-3" />
-                            )}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
+        {/* Tabbed Interface */}
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="overview">Overzicht</TabsTrigger>
+            <TabsTrigger value="actions">Acties & Matching</TabsTrigger>
+            <TabsTrigger value="activity">Activiteit</TabsTrigger>
+          </TabsList>
 
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-muted-foreground">Doelgroep ervaring</label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {DOELGROEPEN.map((dg) => (
-                          <Badge
-                            key={dg}
-                            variant={editData.doelgroep_ervaring.includes(dg) ? "default" : "outline"}
-                            className="cursor-pointer text-xs"
-                            onClick={() => toggleDoelgroep(dg)}
-                          >
-                            {dg}
-                            {editData.doelgroep_ervaring.includes(dg) && (
-                              <X className="ml-1 h-3 w-3" />
-                            )}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <Separator className="my-4" />
-
-                  {/* Werkvorm & Beschikbaarheid */}
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground">Werkvorm & Beschikbaarheid</p>
-                    
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-muted-foreground">Beschikbaarheid</label>
-                      <Select 
-                        value={editData.beschikbaarheid} 
-                        onValueChange={(value) => setEditData({ ...editData, beschikbaarheid: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecteer beschikbaarheid" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {BESCHIKBAARHEDEN.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="eigen_vervoer_edit"
-                        checked={editData.eigen_vervoer}
-                        onCheckedChange={(checked) => setEditData({ ...editData, eigen_vervoer: checked as boolean })}
-                      />
-                      <label htmlFor="eigen_vervoer_edit" className="text-xs cursor-pointer">
-                        Eigen vervoer beschikbaar
-                      </label>
-                    </div>
-                  </div>
-
-                  <Separator className="my-4" />
-
-                  {/* Bron & Opmerkingen */}
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground">Bron & Opmerkingen</p>
-                    
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-muted-foreground">Bron sollicitatie</label>
-                      <Select 
-                        value={editData.bron} 
-                        onValueChange={(value) => setEditData({ ...editData, bron: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecteer bron" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {BRONNEN.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-muted-foreground">Opmerkingen</label>
-                      <Textarea
-                        placeholder="Aanvullende opmerkingen..."
-                        value={editData.opmerkingen}
-                        onChange={(e) => setEditData({ ...editData, opmerkingen: e.target.value })}
-                        rows={3}
-                      />
-                    </div>
-                  </div>
-
-                  <Separator className="my-4" />
-
-                  {/* Bemiddelingsbureau Toewijzing */}
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground">Bemiddelingsbureau Toewijzing</p>
-                    
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-muted-foreground">Inzet via bureau</label>
-                      <Select 
-                        value={editData.assigned_organization} 
-                        onValueChange={(value) => setEditData({ ...editData, assigned_organization: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Kies ABCzorg of CitoZorg" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ORGANISATIES.map(org => (
-                            <SelectItem key={org} value={org}>{org}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Via welk bureau wordt deze kandidaat bemiddeld?
-                      </p>
-                    </div>
-                  </div>
-
-                  <Button
-                    onClick={handleSaveEdit}
-                    disabled={savingEdit}
-                    className="w-full mt-4"
-                  >
-                    {savingEdit ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Opslaan...
-                      </>
-                    ) : (
-                      "Opslaan"
-                    )}
-                  </Button>
+          {/* TAB 1: Overzicht */}
+          <TabsContent value="overview" className="space-y-4">
+            {/* Completeness Score */}
+            {application.completeness_score !== null && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Compleetheid</span>
+                  <span className="text-sm font-semibold">{application.completeness_score}%</span>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <a 
-                      href={`mailto:${application.email_from}`}
-                      className="text-sm text-primary hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {application.email_from}
-                    </a>
-                  </div>
-                  {application.extracted_data?.telefoon && (
-                    <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      <a 
-                        href={`tel:${application.extracted_data.telefoon}`}
-                        className="text-sm text-primary hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {application.extracted_data.telefoon}
-                      </a>
-                    </div>
-                  )}
-                  {!application.extracted_data?.telefoon && (
-                    <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Telefoonnummer niet bekend</span>
-                    </div>
-                  )}
-                  {application.extracted_data?.regio && (
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full transition-all ${
+                      application.completeness_score >= 80
+                        ? "bg-green-500"
+                        : application.completeness_score >= 50
+                        ? "bg-yellow-500"
+                        : "bg-red-500"
+                    }`}
+                    style={{ width: `${application.completeness_score}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Missing Info */}
+            {application.missing_info && Array.isArray(application.missing_info) && application.missing_info.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <AlertCircle className="h-4 w-4 text-yellow-600" />
+                  <span>Ontbrekende informatie</span>
+                </div>
+                <ul className="space-y-1 pl-6">
+                  {application.missing_info.map((item: string, index: number) => (
+                    <li key={index} className="text-sm text-muted-foreground list-disc">
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Contactgegevens - Collapsible */}
+            <Collapsible open={contactOpen} onOpenChange={setContactOpen}>
+              <div className="rounded-lg border">
+                <CollapsibleTrigger className="w-full">
+                  <div className="flex items-center justify-between p-4">
                     <div className="flex items-center gap-2">
                       <User className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">Regio: {application.extracted_data.regio}</span>
+                      <span className="text-sm font-semibold">Contactgegevens</span>
                     </div>
-                  )}
+                    <div className="flex items-center gap-2">
+                      {!editMode && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditMode(true);
+                          }}
+                        >
+                          Bewerk
+                        </Button>
+                      )}
+                      {contactOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </div>
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="px-4 pb-4 space-y-3">
+                    {editMode ? (
+                      <div className="space-y-3">
+                        <Input
+                          placeholder="Telefoonnummer"
+                          value={editData.telefoon}
+                          onChange={(e) => setEditData({ ...editData, telefoon: e.target.value })}
+                        />
+                        <Input
+                          placeholder="Regio"
+                          value={editData.regio}
+                          onChange={(e) => setEditData({ ...editData, regio: e.target.value })}
+                        />
+                        <Select 
+                          value={editData.functie_niveau} 
+                          onValueChange={(value) => setEditData({ ...editData, functie_niveau: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Functieniveau" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="VIG">VIG</SelectItem>
+                            <SelectItem value="HBO-V">HBO-V</SelectItem>
+                            <SelectItem value="Verpleegkundige MBO">Verpleegkundige MBO</SelectItem>
+                            <SelectItem value="Helpende">Helpende</SelectItem>
+                            <SelectItem value="Begeleider">Begeleider</SelectItem>
+                            <SelectItem value="Persoonlijk begeleider">Persoonlijk begeleider</SelectItem>
+                            <SelectItem value="GGZ-agoog">GGZ-agoog</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Select 
+                          value={editData.werkvorm} 
+                          onValueChange={(value) => setEditData({ ...editData, werkvorm: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Werkvorm" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ZZP">ZZP</SelectItem>
+                            <SelectItem value="Uitzendkracht">Uitzendkracht</SelectItem>
+                            <SelectItem value="ABCito constructie">ABCito constructie</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs">Ervaring sector</Label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {SECTOREN.map((sector) => (
+                              <Badge
+                                key={sector}
+                                variant="outline"
+                                className={`cursor-pointer transition-all text-xs ${getSectorColor(sector)} ${
+                                  editData.ervaring_sector.includes(sector) ? "" : "opacity-50"
+                                }`}
+                                onClick={() => toggleSector(sector)}
+                              >
+                                {sector}
+                                {editData.ervaring_sector.includes(sector) && (
+                                  <X className="ml-1 h-3 w-3" />
+                                )}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs">Doelgroep ervaring</Label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {DOELGROEPEN.map((dg) => (
+                              <Badge
+                                key={dg}
+                                variant="outline"
+                                className={`cursor-pointer transition-all text-xs ${getDoelgroepColor(dg)} ${
+                                  editData.doelgroep_ervaring.includes(dg) ? "" : "opacity-50"
+                                }`}
+                                onClick={() => toggleDoelgroep(dg)}
+                              >
+                                {dg}
+                                {editData.doelgroep_ervaring.includes(dg) && (
+                                  <X className="ml-1 h-3 w-3" />
+                                )}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+
+                        <Select 
+                          value={editData.beschikbaarheid} 
+                          onValueChange={(value) => setEditData({ ...editData, beschikbaarheid: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Beschikbaarheid" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {BESCHIKBAARHEDEN.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="eigen_vervoer_edit"
+                            checked={editData.eigen_vervoer}
+                            onCheckedChange={(checked) => setEditData({ ...editData, eigen_vervoer: checked as boolean })}
+                          />
+                          <Label htmlFor="eigen_vervoer_edit" className="cursor-pointer text-sm">
+                            Eigen vervoer beschikbaar
+                          </Label>
+                        </div>
+
+                        <Select 
+                          value={editData.bron} 
+                          onValueChange={(value) => setEditData({ ...editData, bron: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Bron" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {BRONNEN.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+
+                        <Textarea
+                          placeholder="Opmerkingen..."
+                          value={editData.opmerkingen}
+                          onChange={(e) => setEditData({ ...editData, opmerkingen: e.target.value })}
+                          rows={3}
+                        />
+
+                        <Select 
+                          value={editData.assigned_organization} 
+                          onValueChange={(value) => setEditData({ ...editData, assigned_organization: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Bemiddelingsbureau" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ORGANISATIES.map(org => (
+                              <SelectItem key={org} value={org}>{org}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={handleSaveEdit}
+                            disabled={savingEdit}
+                            className="flex-1"
+                          >
+                            {savingEdit ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Opslaan...
+                              </>
+                            ) : (
+                              "Opslaan"
+                            )}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => setEditMode(false)}
+                            disabled={savingEdit}
+                          >
+                            Annuleren
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Mail className="h-4 w-4 text-muted-foreground" />
+                          <a 
+                            href={`mailto:${application.email_from}`}
+                            className="text-sm text-primary hover:underline"
+                          >
+                            {application.email_from}
+                          </a>
+                        </div>
+                        {application.extracted_data?.telefoon && (
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-4 w-4 text-muted-foreground" />
+                            <a 
+                              href={`tel:${application.extracted_data.telefoon}`}
+                              className="text-sm text-primary hover:underline"
+                            >
+                              {application.extracted_data.telefoon}
+                            </a>
+                          </div>
+                        )}
+                        {application.extracted_data?.regio && (
+                          <div className="flex items-center gap-2">
+                            <User className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm">Regio: {application.extracted_data.regio}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
+
+            {/* Extracted Data - Collapsible */}
+            <Collapsible open={extractedOpen} onOpenChange={setExtractedOpen}>
+              <div className="rounded-lg border">
+                <CollapsibleTrigger className="w-full">
+                  <div className="flex items-center justify-between p-4">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <span className="text-sm font-semibold">Geëxtraheerde gegevens</span>
+                    </div>
+                    {extractedOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="px-4 pb-4">
+                    {application.extracted_data && Object.keys(application.extracted_data).length > 0 && (
+                      <div className="space-y-3">
+                        {application.extracted_data.functie_niveau && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground w-32">Functieniveau:</span>
+                            <Badge variant="outline" className={getFunctieColor(application.extracted_data.functie_niveau)}>
+                              {application.extracted_data.functie_niveau}
+                            </Badge>
+                          </div>
+                        )}
+                        {application.extracted_data.ervaring_sector && application.extracted_data.ervaring_sector.length > 0 && (
+                          <div className="flex items-start gap-2">
+                            <span className="text-xs text-muted-foreground w-32">Sectoren:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {application.extracted_data.ervaring_sector.map((s: string) => (
+                                <Badge key={s} variant="outline" className={getSectorColor(s)}>{s}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {application.extracted_data.doelgroep_ervaring && application.extracted_data.doelgroep_ervaring.length > 0 && (
+                          <div className="flex items-start gap-2">
+                            <span className="text-xs text-muted-foreground w-32">Doelgroepen:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {application.extracted_data.doelgroep_ervaring.map((d: string) => (
+                                <Badge key={d} variant="outline" className={getDoelgroepColor(d)}>{d}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {application.extracted_data.werkvorm && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground w-32">Werkvorm:</span>
+                            <span className="text-sm font-medium">{application.extracted_data.werkvorm}</span>
+                          </div>
+                        )}
+                        {application.extracted_data.beschikbaarheid && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground w-32">Beschikbaarheid:</span>
+                            <span className="text-sm font-medium">{application.extracted_data.beschikbaarheid}</span>
+                          </div>
+                        )}
+                        {application.extracted_data.eigen_vervoer && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground w-32">Eigen vervoer:</span>
+                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
+
+            {/* CV Section */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  CV Document
+                </span>
+              </div>
+              
+              {application.cv_file_path ? (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border">
+                  <FileText className="h-5 w-5 text-blue-600" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {application.cv_file_name}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleCVView}
+                      title="Bekijken"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleCVDownload}
+                      disabled={downloadingCV}
+                      title="Downloaden"
+                    >
+                      {downloadingCV ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleCVDelete}
+                      className="text-destructive hover:text-destructive"
+                      title="Verwijderen"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="border-2 border-dashed rounded-lg p-6 text-center">
+                  <input
+                    type="file"
+                    id="cv-upload"
+                    accept=".pdf"
+                    onChange={handleCVUpload}
+                    className="hidden"
+                    disabled={uploadingCV}
+                  />
+                  <label
+                    htmlFor="cv-upload"
+                    className="cursor-pointer flex flex-col items-center gap-2"
+                  >
+                    {uploadingCV ? (
+                      <>
+                        <Loader2 className="h-8 w-8 text-muted-foreground animate-spin" />
+                        <span className="text-sm text-muted-foreground">Uploaden...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-8 w-8 text-muted-foreground" />
+                        <span className="text-sm font-medium">Klik om CV te uploaden</span>
+                        <span className="text-xs text-muted-foreground">
+                          PDF, maximaal 10MB
+                        </span>
+                      </>
+                    )}
+                  </label>
                 </div>
               )}
             </div>
 
-            {/* Professional Link */}
-            {application.professionals && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
-                <User className="h-4 w-4 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">{application.professionals.full_name}</p>
-                  <p className="text-xs text-muted-foreground">{application.professionals.functie_niveau}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Toegewezen Organisatie */}
-            {application.extracted_data?.assigned_organization && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20">
-                <Building2 className="h-4 w-4 text-blue-600" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Inzet via</p>
-                  <p className="text-sm font-medium text-blue-700 dark:text-blue-400">
-                    {application.extracted_data.assigned_organization}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Geen organisatie toegewezen indicator */}
-            {!application.extracted_data?.assigned_organization && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 border border-dashed">
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-                <div className="flex-1">
-                  <p className="text-xs text-muted-foreground mb-2">Bemiddelingsbureau nog niet gekozen</p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleQuickOrganizationAssign("ABCzorg")}
-                      disabled={updating}
-                      className="border-blue-500 hover:bg-blue-500/10 text-xs"
-                    >
-                      {updating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                      ABCzorg
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleQuickOrganizationAssign("CitoZorg")}
-                      disabled={updating}
-                      className="border-purple-500 hover:bg-purple-500/10 text-xs"
-                    >
-                      {updating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                      CitoZorg
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Metadata */}
-            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t">
               <div className="flex items-center gap-1.5">
                 <Calendar className="h-3.5 w-3.5" />
                 <span>Aangemaakt: {format(new Date(application.created_at), "d MMM yyyy HH:mm", { locale: nl })}</span>
@@ -1169,183 +1300,15 @@ export function ApplicationDetailModal({
                 </div>
               )}
             </div>
-          </div>
+          </TabsContent>
 
-          <Separator />
-
-          {/* Completeness Score */}
-          {application.completeness_score !== null && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Compleetheid</span>
-                <span className="text-sm font-semibold">{application.completeness_score}%</span>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full transition-all ${
-                    application.completeness_score >= 80
-                      ? "bg-green-500"
-                      : application.completeness_score >= 50
-                      ? "bg-yellow-500"
-                      : "bg-red-500"
-                  }`}
-                  style={{ width: `${application.completeness_score}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Missing Info */}
-          {application.missing_info && Array.isArray(application.missing_info) && application.missing_info.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <AlertCircle className="h-4 w-4 text-yellow-600" />
-                <span>Ontbrekende informatie</span>
-              </div>
-              <ul className="space-y-1 pl-6">
-                {application.missing_info.map((item: string, index: number) => (
-                  <li key={index} className="text-sm text-muted-foreground list-disc">
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Extracted Data */}
-          {application.extracted_data && Object.keys(application.extracted_data).length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                <span>Geëxtraheerde gegevens</span>
-              </div>
-              <div className="p-3 rounded-lg bg-muted/50 space-y-2 text-sm">
-                {Object.entries(application.extracted_data).map(([key, value]) => (
-                  <div key={key} className="flex justify-between">
-                    <span className="text-muted-foreground capitalize">{key.replace(/_/g, ' ')}:</span>
-                    <span className="font-medium">{String(value)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* CV Section */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                CV Document
-              </span>
-            </div>
-            
-            {application.cv_file_path ? (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
-                <FileText className="h-5 w-5 text-blue-600" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">
-                    {application.cv_file_name}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleCVView}
-                    title="Bekijken"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleCVDownload}
-                    disabled={downloadingCV}
-                    title="Downloaden"
-                  >
-                    {downloadingCV ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Download className="h-4 w-4" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleCVDelete}
-                    className="text-destructive hover:text-destructive"
-                    title="Verwijderen"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="border-2 border-dashed rounded-lg p-6 text-center">
-                <input
-                  type="file"
-                  id="cv-upload"
-                  accept=".pdf"
-                  onChange={handleCVUpload}
-                  className="hidden"
-                  disabled={uploadingCV}
-                />
-                <label
-                  htmlFor="cv-upload"
-                  className="cursor-pointer flex flex-col items-center gap-2"
-                >
-                  {uploadingCV ? (
-                    <>
-                      <Loader2 className="h-8 w-8 text-muted-foreground animate-spin" />
-                      <span className="text-sm text-muted-foreground">Uploaden...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-8 w-8 text-muted-foreground" />
-                      <span className="text-sm font-medium">Klik om CV te uploaden</span>
-                      <span className="text-xs text-muted-foreground">
-                        PDF, maximaal 10MB
-                      </span>
-                    </>
-                  )}
-                </label>
-              </div>
-            )}
-          </div>
-
-          {/* Email Body */}
-          {application.email_body && (
-            <div className="space-y-2">
-              <span className="text-sm font-medium">E-mail inhoud</span>
-              <div className="p-3 rounded-lg bg-muted/50 text-sm whitespace-pre-wrap max-h-[200px] overflow-y-auto">
-                {application.email_body}
-              </div>
-            </div>
-          )}
-
-          <Separator />
-
-          {/* Actions Section */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Acties</span>
-              {!showActionForm && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowActionForm(true)}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Maak actie aan
-                </Button>
-              )}
-            </div>
-
-            {/* Convert to Professional - Only show when approved/placed and not yet converted */}
+          {/* TAB 2: Acties & Matching */}
+          <TabsContent value="actions" className="space-y-4">
+            {/* Convert to Professional */}
             {(application.pipeline_stage === 'goedgekeurd' || application.pipeline_stage === 'geplaatst') && 
              !application.professional_id && 
              (application.completeness_score || 0) >= 80 && (
-              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4 mb-6">
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 mt-0.5">
                     <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
@@ -1357,7 +1320,7 @@ export function ApplicationDetailModal({
                       Klaar om Professional te worden!
                     </h4>
                     <p className="text-sm text-green-700 mb-3">
-                      Deze kandidaat is goedgekeurd en kan omgezet worden naar een professional profiel met alle gegevens.
+                      Deze kandidaat is goedgekeurd en kan omgezet worden naar een professional profiel.
                     </p>
                     <Button
                       onClick={handleConvertToProfessional}
@@ -1382,93 +1345,61 @@ export function ApplicationDetailModal({
               </div>
             )}
 
-            {/* Show linked professional if already converted */}
-            {application.professional_id && application.professionals && (
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-sm text-blue-900">
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    <span className="font-medium">
-                      Gekoppeld aan professional: <strong>{application.professionals.full_name}</strong>
-                    </span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="link"
-                    onClick={() => {
-                      window.location.href = `/professionals`;
-                    }}
-                    className="text-blue-600 hover:text-blue-700"
-                  >
-                    Bekijk profiel →
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Quick Action Buttons */}
-            {!showActionForm && (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!application.extracted_data?.telefoon}
-                  onClick={() => {
-                    setActionType("call");
-                    setShowActionForm(true);
-                  }}
-                  title={!application.extracted_data?.telefoon ? "Voeg eerst telefoonnummer toe" : ""}
-                >
-                  <Phone className="h-4 w-4 mr-2" />
-                  Bel kandidaat
-                  {!application.extracted_data?.telefoon && (
-                    <AlertCircle className="h-3 w-3 ml-1 text-yellow-600" />
-                  )}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setActionType("interview");
-                    setShowActionForm(true);
-                  }}
-                >
-                  <CalendarClock className="h-4 w-4 mr-2" />
-                  Plan interview
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setActionType("reference_check");
-                    setShowActionForm(true);
-                  }}
-                >
-                  <ClipboardCheck className="h-4 w-4 mr-2" />
-                  Check referenties
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={application.completeness_score === null || application.completeness_score < 100}
-                  onClick={() => {
-                    setActionType("contract");
-                    setShowActionForm(true);
-                  }}
-                  title={application.completeness_score !== null && application.completeness_score < 100 ? "Profiel moet 100% compleet zijn" : ""}
-                >
-                  <FileText className="h-4 w-4 mr-2" />
-                  Contract opmaken
-                  {(application.completeness_score === null || application.completeness_score < 100) && (
-                    <AlertCircle className="h-3 w-3 ml-1 text-yellow-600" />
-                  )}
-                </Button>
-              </div>
-            )}
+            {/* Quick Actions */}
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setActionType("call");
+                  setShowActionForm(true);
+                }}
+                disabled={!application.extracted_data?.telefoon}
+              >
+                <Phone className="h-4 w-4 mr-2" />
+                Bel kandidaat
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setActionType("interview");
+                  setShowActionForm(true);
+                }}
+              >
+                <CalendarClock className="h-4 w-4 mr-2" />
+                Plan interview
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setActionType("contract");
+                  setShowActionForm(true);
+                }}
+                disabled={(application.completeness_score || 0) < 100}
+              >
+                <ClipboardCheck className="h-4 w-4 mr-2" />
+                Contract opmaken
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setActionType("custom");
+                  setShowActionForm(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Aangepaste actie
+              </Button>
+            </div>
 
             {/* Action Creation Form */}
             {showActionForm && (
-              <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+              <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
+                <h4 className="text-sm font-semibold">Nieuwe Actie</h4>
+                
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Actie type</label>
                   <Select value={actionType} onValueChange={setActionType}>
@@ -1476,11 +1407,11 @@ export function ApplicationDetailModal({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="call">📞 Bel kandidaat</SelectItem>
-                      <SelectItem value="interview">📅 Plan interview</SelectItem>
-                      <SelectItem value="reference_check">📋 Check referenties</SelectItem>
-                      <SelectItem value="contract">📄 Contract opmaken</SelectItem>
-                      <SelectItem value="custom">✏️ Aangepast</SelectItem>
+                      <SelectItem value="call">Bel kandidaat</SelectItem>
+                      <SelectItem value="interview">Plan interview</SelectItem>
+                      <SelectItem value="contract">Contract opmaken</SelectItem>
+                      <SelectItem value="reference_check">Check referenties</SelectItem>
+                      <SelectItem value="custom">Aangepaste actie</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1489,9 +1420,9 @@ export function ApplicationDetailModal({
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Titel</label>
                     <Input
+                      placeholder="Bijv. Voer telefonisch intake gesprek"
                       value={customTitle}
                       onChange={(e) => setCustomTitle(e.target.value)}
-                      placeholder="Bijv. Stuur informatiebrochure"
                     />
                   </div>
                 )}
@@ -1593,230 +1524,239 @@ export function ApplicationDetailModal({
                 </div>
               </div>
             )}
-          </div>
 
-          <Separator />
+            <Separator />
 
-          {/* Client Matching Section */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium flex items-center gap-2">
-                ✨ Passende Klanten
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={findMatchingClients}
-                disabled={matchingLoading}
-              >
-                {matchingLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Zoeken...
-                  </>
-                ) : (
-                  "Zoek Matches"
-                )}
-              </Button>
-            </div>
-
-            {showMatches && (
-              <>
-                {matchingLoading ? (
-                  <div className="text-sm text-muted-foreground">Zoeken naar passende klanten...</div>
-                ) : matchedClients.length > 0 ? (
-                  <>
-                    <div className="text-xs text-muted-foreground flex items-center gap-2 pb-2">
-                      📍 Op basis van: {application.extracted_data?.regio || 'Regio'} • {application.extracted_data?.functie_niveau || 'Functieniveau'} • {(application.extracted_data?.ervaring_sector || []).slice(0, 2).join('/')}
+            {/* Linked Tasks - Collapsible */}
+            {linkedTasks.length > 0 && (
+              <Collapsible open={actionsOpen} onOpenChange={setActionsOpen}>
+                <div className="rounded-lg border">
+                  <CollapsibleTrigger className="w-full">
+                    <div className="flex items-center justify-between p-4">
+                      <span className="text-sm font-medium">Lopende acties ({linkedTasks.length})</span>
+                      {actionsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </div>
-                    <div className="space-y-3">
-                      {matchedClients.map((client) => (
-                        <div
-                          key={client.id}
-                          className="p-4 rounded-lg border bg-card hover:bg-accent/30 transition-colors space-y-2"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 space-y-2">
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="px-4 pb-4 space-y-2">
+                      {loadingTasks ? (
+                        <div className="text-sm text-muted-foreground">Laden...</div>
+                      ) : (
+                        linkedTasks.map((task) => (
+                          <div
+                            key={task.id}
+                            className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                          >
+                            <div className="flex-1 space-y-1">
                               <div className="flex items-center gap-2">
-                                <Building2 className="h-4 w-4 text-muted-foreground" />
-                                <p className="text-sm font-semibold">{client.company}</p>
-                                <Badge variant="default" className="text-xs">
-                                  {client.matchScore}% match
-                                </Badge>
-                              </div>
-                              
-                              <div className="text-xs text-muted-foreground space-y-1">
-                                {client.sector && client.sector.length > 0 && (
-                                  <div className="flex items-center gap-1">
-                                    <span className="font-medium">Sector:</span>
-                                    <span>{client.sector.join(', ')}</span>
-                                  </div>
-                                )}
-                                {client.doelgroep && client.doelgroep.length > 0 && (
-                                  <div className="flex items-center gap-1">
-                                    <span className="font-medium">Doelgroep:</span>
-                                    <span>{client.doelgroep.join(', ')}</span>
-                                  </div>
-                                )}
-                                {client.regio && client.regio.length > 0 && (
-                                  <div className="flex items-center gap-1">
-                                    <span className="font-medium">Regio:</span>
-                                    <span>{client.regio.join(', ')}</span>
-                                  </div>
-                                )}
-                                <div className="flex items-center gap-1">
-                                  <span className="font-medium">Bureau:</span>
+                                <p className="text-sm font-medium">{task.title}</p>
+                                {task.recruitment_action_type && (
                                   <Badge variant="outline" className="text-xs">
-                                    {client.orgName}
+                                    {getActionTypeLabel(task.recruitment_action_type)}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                <span>Status: {task.status}</span>
+                                {task.profiles?.name && (
+                                  <span>• {task.profiles.name}</span>
+                                )}
+                                {task.due_at && (
+                                  <span>• Deadline: {format(new Date(task.due_at), "d MMM HH:mm", { locale: nl })}</span>
+                                )}
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                window.location.href = `/lijst?task=${task.id}`;
+                              }}
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </CollapsibleContent>
+                </div>
+              </Collapsible>
+            )}
+
+            <Separator />
+
+            {/* Client Matching */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium flex items-center gap-2">
+                  ✨ Passende Klanten
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={findMatchingClients}
+                  disabled={matchingLoading}
+                >
+                  {matchingLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Zoeken...
+                    </>
+                  ) : (
+                    "Zoek Matches"
+                  )}
+                </Button>
+              </div>
+
+              {showMatches && (
+                <>
+                  {matchingLoading ? (
+                    <div className="text-sm text-muted-foreground">Zoeken naar passende klanten...</div>
+                  ) : matchedClients.length > 0 ? (
+                    <>
+                      <div className="text-xs text-muted-foreground flex items-center gap-2 pb-2">
+                        📍 Op basis van: {application.extracted_data?.regio || 'Regio'} • {application.extracted_data?.functie_niveau || 'Functieniveau'} • {(application.extracted_data?.ervaring_sector || []).slice(0, 2).join('/')}
+                      </div>
+                      <div className="space-y-3">
+                        {matchedClients.map((client) => (
+                          <div
+                            key={client.id}
+                            className="p-4 rounded-lg border bg-card hover:bg-accent/30 transition-colors space-y-2"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                                  <p className="text-sm font-semibold">{client.company}</p>
+                                  <Badge variant="default" className="text-xs">
+                                    {client.matchScore}% match
                                   </Badge>
                                 </div>
-                              </div>
-
-                              {client.matchReasons && client.matchReasons.length > 0 && (
-                                <div className="flex flex-wrap gap-1 pt-1">
-                                  {client.matchReasons.map((reason: string, idx: number) => (
-                                    <Badge key={idx} variant="secondary" className="text-xs">
-                                      ✓ {reason}
+                                
+                                <div className="text-xs text-muted-foreground space-y-1">
+                                  {client.sector && client.sector.length > 0 && (
+                                    <div className="flex items-center gap-1">
+                                      <span className="font-medium">Sector:</span>
+                                      <span>{client.sector.join(', ')}</span>
+                                    </div>
+                                  )}
+                                  {client.doelgroep && client.doelgroep.length > 0 && (
+                                    <div className="flex items-center gap-1">
+                                      <span className="font-medium">Doelgroep:</span>
+                                      <span>{client.doelgroep.join(', ')}</span>
+                                    </div>
+                                  )}
+                                  {client.regio && client.regio.length > 0 && (
+                                    <div className="flex items-center gap-1">
+                                      <span className="font-medium">Regio:</span>
+                                      <span>{client.regio.join(', ')}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex items-center gap-1">
+                                    <span className="font-medium">Bureau:</span>
+                                    <Badge variant="outline" className="text-xs">
+                                      {client.orgName}
                                     </Badge>
-                                  ))}
+                                  </div>
                                 </div>
-                              )}
+
+                                {client.matchReasons && client.matchReasons.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 pt-1">
+                                    {client.matchReasons.map((reason: string, idx: number) => (
+                                      <Badge key={idx} variant="secondary" className="text-xs">
+                                        ✓ {reason}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div className="flex gap-2 pt-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  window.location.href = `/klanten`;
+                                }}
+                              >
+                                Bekijk Klant
+                              </Button>
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => {
+                                  toast.info("Direct koppelen functionaliteit komt binnenkort");
+                                }}
+                              >
+                                Direct Koppelen
+                              </Button>
                             </div>
                           </div>
-                          
-                          <div className="flex gap-2 pt-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                window.location.href = `/klanten`;
-                              }}
-                            >
-                              Bekijk Klant
-                            </Button>
-                            <Button
-                              variant="default"
-                              size="sm"
-                              onClick={() => {
-                                toast.info("Direct koppelen functionaliteit komt binnenkort");
-                              }}
-                            >
-                              Direct Koppelen
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <div className="space-y-2 p-3 rounded-lg bg-muted/30">
-                    <p className="text-sm text-muted-foreground">
-                      Geen passende klanten gevonden
-                    </p>
-                    <p className="text-sm text-amber-600">
-                      💡 Tip: Voeg regio's en sectoren toe aan klanten voor betere matching.{" "}
-                      <Button 
-                        variant="link" 
-                        className="h-auto p-0 text-amber-600 hover:text-amber-700"
-                        onClick={() => window.location.href = '/klanten'}
-                      >
-                        Naar Klanten →
-                      </Button>
-                    </p>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-
-          <Separator />
-
-          {/* Activity Timeline */}
-          <div className="space-y-3">
-            <span className="text-sm font-medium">Activiteit Timeline</span>
-            <ApplicationActivityTimeline applicationId={application.id} />
-          </div>
-
-          <Separator />
-
-          {/* Email Templates */}
-          <EmailTemplateSuggestions 
-            pipelineStage={application.pipeline_stage}
-            candidateName={candidateName}
-            functieNiveau={application.extracted_data?.functie_niveau}
-          />
-
-          <Separator />
-
-          {/* Linked Tasks */}
-          {linkedTasks.length > 0 && (
-            <div className="space-y-3">
-              <span className="text-sm font-medium">Lopende acties ({linkedTasks.length})</span>
-              <div className="space-y-2">
-                {loadingTasks ? (
-                  <div className="text-sm text-muted-foreground">Laden...</div>
-                ) : (
-                  linkedTasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
-                    >
-                      <div className="flex-1 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium">{task.title}</p>
-                          {task.recruitment_action_type && (
-                            <Badge variant="outline" className="text-xs">
-                              {getActionTypeLabel(task.recruitment_action_type)}
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span>Status: {task.status}</span>
-                          {task.profiles?.name && (
-                            <span>• {task.profiles.name}</span>
-                          )}
-                          {task.due_at && (
-                            <span>• Deadline: {format(new Date(task.due_at), "d MMM HH:mm", { locale: nl })}</span>
-                          )}
-                        </div>
+                        ))}
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          // Navigate to task - for now just show in Lijstweergave
-                          window.location.href = `/lijst?task=${task.id}`;
-                        }}
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
+                    </>
+                  ) : (
+                    <div className="space-y-2 p-3 rounded-lg bg-muted/30">
+                      <p className="text-sm text-muted-foreground">
+                        Geen passende klanten gevonden
+                      </p>
+                      <p className="text-sm text-amber-600">
+                        💡 Tip: Voeg regio's en sectoren toe aan klanten voor betere matching.{" "}
+                        <Button 
+                          variant="link" 
+                          className="h-auto p-0 text-amber-600 hover:text-amber-700"
+                          onClick={() => window.location.href = '/klanten'}
+                        >
+                          Naar Klanten →
+                        </Button>
+                      </p>
                     </div>
-                  ))
-                )}
+                  )}
+                </>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* TAB 3: Activiteit & Communicatie */}
+          <TabsContent value="activity" className="space-y-4">
+            {/* Activity Timeline */}
+            <div className="space-y-3">
+              <span className="text-sm font-medium">Activiteit Timeline</span>
+              <ApplicationActivityTimeline applicationId={application.id} />
+            </div>
+
+            <Separator />
+
+            {/* Email Templates */}
+            <EmailTemplateSuggestions 
+              pipelineStage={application.pipeline_stage}
+              candidateName={candidateName}
+              functieNiveau={application.extracted_data?.functie_niveau}
+            />
+
+            <Separator />
+
+            {/* Pipeline Stage Actions */}
+            <div className="space-y-3">
+              <span className="text-sm font-medium">Verplaats naar:</span>
+              <div className="flex flex-wrap gap-2">
+                {["nieuw", "screening", "interview", "goedgekeurd", "geplaatst"].map((stage) => (
+                  <Button
+                    key={stage}
+                    variant={application.pipeline_stage === stage ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleStageChange(stage)}
+                    disabled={updating || application.pipeline_stage === stage}
+                  >
+                    {getStageLabel(stage)}
+                  </Button>
+                ))}
               </div>
             </div>
-          )}
-
-          <Separator />
-
-          {/* Pipeline Stage Actions */}
-          <div className="space-y-3">
-            <span className="text-sm font-medium">Verplaats naar:</span>
-            <div className="flex flex-wrap gap-2">
-              {["nieuw", "screening", "interview", "goedgekeurd", "geplaatst"].map((stage) => (
-                <Button
-                  key={stage}
-                  variant={application.pipeline_stage === stage ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => handleStageChange(stage)}
-                  disabled={updating || application.pipeline_stage === stage}
-                >
-                  {getStageLabel(stage)}
-                </Button>
-              ))}
-            </div>
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
