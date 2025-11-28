@@ -79,13 +79,7 @@ export default function Klanten() {
     setSearchParams(params);
   };
 
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12) return "Goedemorgen";
-    if (hour >= 12 && hour < 17) return "Goedemiddag";
-    if (hour >= 17 && hour < 22) return "Goedenavond";
-    return "Goedenacht";
-  };
+  // getGreeting removed - not needed for minimal hero design
 
   useEffect(() => {
     loadClients();
@@ -320,14 +314,11 @@ export default function Klanten() {
   return (
     <div className="space-y-6">
 
-            {/* Hero Section */}
+            {/* Hero Section - Apple Design Minimal */}
             <div className="mb-8">
-              <p className="text-sm text-muted-foreground mb-1">
-                {new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}
-              </p>
-              <h1 className="text-3xl font-bold tracking-tight">{getGreeting()}</h1>
-              <p className="text-muted-foreground mt-1">
-                {clients.length} klanten beheren
+              <h1 className="text-2xl font-semibold">Klanten</h1>
+              <p className="text-muted-foreground text-sm">
+                {clients.length} klanten in je portfolio
               </p>
             </div>
 

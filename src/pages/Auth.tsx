@@ -19,8 +19,44 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, Check, X } from "lucide-react";
+import { z } from "zod";
+
+/**
+ * Password strength validation schema (min 12 chars + complexity)
+ */
+const passwordSchema = z.string()
+  .min(12, 'Wachtwoord moet minimaal 12 tekens bevatten')
+  .regex(/[A-Z]/, 'Minimaal 1 hoofdletter vereist')
+  .regex(/[a-z]/, 'Minimaal 1 kleine letter vereist')
+  .regex(/[0-9]/, 'Minimaal 1 cijfer vereist')
+  .regex(/[^A-Za-z0-9]/, 'Minimaal 1 speciaal teken vereist (!@#$%^&*)');
+
+/**
+ * Calculate password strength score (0-100%)
+ */
+const calculatePasswordStrength = (pwd: string): number => {
+  let strength = 0;
+  if (pwd.length >= 12) strength += 20;
+  if (/[A-Z]/.test(pwd)) strength += 20;
+  if (/[a-z]/.test(pwd)) strength += 20;
+  if (/[0-9]/.test(pwd)) strength += 20;
+  if (/[^A-Za-z0-9]/.test(pwd)) strength += 20;
+  return strength;
+};
+
+/**
+ * Get password strength requirements status
+ */
+const getPasswordRequirements = (pwd: string) => ({
+  length: pwd.length >= 12,
+  uppercase: /[A-Z]/.test(pwd),
+  lowercase: /[a-z]/.test(pwd),
+  digit: /[0-9]/.test(pwd),
+  special: /[^A-Za-z0-9]/.test(pwd),
+});
 
 /**
  * Translate common Supabase authentication errors to Dutch.
@@ -86,6 +122,8 @@ const Auth = () => {
   const [resetMode, setResetMode] = useState(false);
   const [backendOffline, setBackendOffline] = useState(false);
   const [healthCheckAttempts, setHealthCheckAttempts] = useState(0);
+  const [passwordStrength, setPasswordStrength] = useState(0);
+  const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
   const [lastHealthCheck, setLastHealthCheck] = useState<{
     timestamp: Date;
     success: boolean;
@@ -220,6 +258,16 @@ const Auth = () => {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate password strength before submission
+    const validation = passwordSchema.safeParse(password);
+    if (!validation.success) {
+      const errors = validation.error.errors.map(e => e.message);
+      setPasswordErrors(errors);
+      toast.error('Wachtwoord voldoet niet aan de vereisten');
+      return;
+    }
+    
     setLoading(true);
 
     try {
@@ -555,10 +603,81 @@ const Auth = () => {
                     id="signup-password"
                     type="password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      const pwd = e.target.value;
+                      setPassword(pwd);
+                      setPasswordStrength(calculatePasswordStrength(pwd));
+                      
+                      // Clear errors on valid password
+                      const validation = passwordSchema.safeParse(pwd);
+                      if (validation.success) {
+                        setPasswordErrors([]);
+                      }
+                    }}
                     required
-                    minLength={6}
+                    minLength={12}
                   />
+                  
+                  {/* Password Strength Meter */}
+                  {password && (
+                    <div className="space-y-3 mt-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Wachtwoord sterkte</span>
+                          <span className={
+                            passwordStrength === 100 ? "text-green-600 font-medium" :
+                            passwordStrength >= 60 ? "text-amber-600 font-medium" :
+                            "text-red-600 font-medium"
+                          }>
+                            {passwordStrength === 100 ? "Sterk" :
+                             passwordStrength >= 60 ? "Gemiddeld" :
+                             "Zwak"}
+                          </span>
+                        </div>
+                        <Progress 
+                          value={passwordStrength} 
+                          className="h-2"
+                        />
+                      </div>
+                      
+                      {/* Requirements Checklist */}
+                      <div className="space-y-1.5 text-xs">
+                        {Object.entries(getPasswordRequirements(password)).map(([key, met]) => (
+                          <div 
+                            key={key} 
+                            className={`flex items-center gap-2 ${met ? 'text-green-600' : 'text-muted-foreground'}`}
+                          >
+                            {met ? (
+                              <Check className="h-3.5 w-3.5" />
+                            ) : (
+                              <X className="h-3.5 w-3.5" />
+                            )}
+                            <span>
+                              {key === 'length' && 'Minimaal 12 tekens'}
+                              {key === 'uppercase' && 'Minimaal 1 hoofdletter'}
+                              {key === 'lowercase' && 'Minimaal 1 kleine letter'}
+                              {key === 'digit' && 'Minimaal 1 cijfer'}
+                              {key === 'special' && 'Minimaal 1 speciaal teken'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Error Messages */}
+                      {passwordErrors.length > 0 && (
+                        <Alert variant="destructive" className="py-2">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription className="text-xs">
+                            <ul className="list-disc list-inside space-y-0.5">
+                              {passwordErrors.map((error, i) => (
+                                <li key={i}>{error}</li>
+                              ))}
+                            </ul>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? (
