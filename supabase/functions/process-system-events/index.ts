@@ -68,34 +68,55 @@ serve(async (req) => {
         if (analysis.shouldCreateKnowledge) {
           console.log(`✨ Creating knowledge from event ${event.id}...`);
           
-          // Redact PII eerst
-          const { data: redactedValue } = await supabase
-            .rpc('redact_pii', { input_text: JSON.stringify(analysis.value) });
+          // Bepaal org_id met fallback strategie
+          let orgId = event.org_id;
           
-          const finalValue = redactedValue ? JSON.parse(redactedValue) : analysis.value;
+          // Fallback 1: probeer org_id uit event_data
+          if (!orgId && event.event_data?.org_id) {
+            orgId = event.event_data.org_id;
+            console.log(`📋 Using org_id from event_data: ${orgId}`);
+          }
           
-          // Insert knowledge
-          const { error: kbError } = await supabase
-            .from('ai_knowledge_base')
-            .insert({
-              org_id: event.org_id,
-              user_id: event.user_id || '00000000-0000-0000-0000-000000000000',
-              category: analysis.category,
-              key: analysis.key,
-              value: finalValue,
-              confidence_score: analysis.confidence,
-              source: `system_event:${event.event_type}`,
-              source_reference: event.id,
-              role_tags: analysis.role_tags || [],
-              stability_score: analysis.stability_score || 0.8
-            });
+          // Fallback 2: probeer org_id uit metadata
+          if (!orgId && event.metadata?.org_id) {
+            orgId = event.metadata.org_id;
+            console.log(`📋 Using org_id from metadata: ${orgId}`);
+          }
           
-          if (!kbError) {
-            knowledgeCreatedCount++;
-            console.log(`✅ Knowledge created from event ${event.id}`);
+          // Skip knowledge creation als org_id niet beschikbaar
+          if (!orgId) {
+            console.warn(`⚠️ Skipping knowledge creation for event ${event.id}: org_id not available`);
+            errors.push(`Event ${event.id}: Cannot create knowledge without org_id`);
           } else {
-            console.error(`❌ Failed to create knowledge for event ${event.id}:`, kbError);
-            errors.push(`Event ${event.id}: ${kbError.message}`);
+            // Redact PII eerst
+            const { data: redactedValue } = await supabase
+              .rpc('redact_pii', { input_text: JSON.stringify(analysis.value) });
+            
+            const finalValue = redactedValue ? JSON.parse(redactedValue) : analysis.value;
+            
+            // Insert knowledge
+            const { error: kbError } = await supabase
+              .from('ai_knowledge_base')
+              .insert({
+                org_id: orgId,
+                user_id: event.user_id,
+                category: analysis.category,
+                key: analysis.key,
+                value: finalValue,
+                confidence_score: analysis.confidence,
+                source: `system_event:${event.event_type}`,
+                source_reference: event.id,
+                role_tags: analysis.role_tags || [],
+                stability_score: analysis.stability_score || 0.8
+              });
+            
+            if (!kbError) {
+              knowledgeCreatedCount++;
+              console.log(`✅ Knowledge created from event ${event.id}`);
+            } else {
+              console.error(`❌ Failed to create knowledge for event ${event.id}:`, kbError);
+              errors.push(`Event ${event.id}: ${kbError.message}`);
+            }
           }
         }
         
