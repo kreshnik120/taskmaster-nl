@@ -5,10 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Search, Users, User, Building2, Calendar, TrendingUp, CheckCircle2, Clock, MapPin, Briefcase, Award } from "lucide-react";
+import { Search, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
 import { PlacementDetailModal } from "@/components/PlacementDetailModal";
 import { motion } from "framer-motion";
@@ -133,219 +132,168 @@ export default function Plaatsingen() {
   };
 
   return (
-    <>
-      {/* Hero Section */}
-      <div className="bg-gradient-to-r from-green-500/10 via-green-500/5 to-background rounded-lg p-6 border border-border/50">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-2xl font-bold mb-2">Plaatsingen</h1>
-                  <p className="text-muted-foreground">
-                    Beheer actieve koppelingen tussen professionals en klanten
-                  </p>
-                </div>
-                <TrendingUp className="h-8 w-8 text-green-600" />
-              </div>
-            </div>
+    <div className="space-y-6">
+      {/* Hero Section - Minimal */}
+      <div className="space-y-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Plaatsingen</h1>
+        <p className="text-muted-foreground">
+          {stats.active} actieve {stats.active === 1 ? 'koppeling' : 'koppelingen'}
+        </p>
+      </div>
 
-            {/* Clickable Stats Bar */}
-            <div className="flex items-center gap-4 text-sm flex-wrap">
-              <button 
-                onClick={() => setStatusFilter("all")}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors ${statusFilter === "all" ? "bg-muted" : ""}`}
+      {/* Stats Bar - Monochrome KPIs */}
+      <div className="flex items-center gap-4 text-sm flex-wrap">
+        <button 
+          onClick={() => setStatusFilter("all")}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors ${statusFilter === "all" ? "bg-muted" : ""}`}
+        >
+          <span className="font-medium">{stats.total}</span>
+          <span className="text-muted-foreground">totaal</span>
+        </button>
+        <div className="h-4 w-px bg-border" />
+        <button
+          onClick={() => setStatusFilter("active")}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors ${statusFilter === "active" ? "bg-muted" : ""}`}
+        >
+          <span className="font-medium">{stats.active}</span>
+          <span className="text-muted-foreground">actief</span>
+        </button>
+        <div className="h-4 w-px bg-border" />
+        <button
+          onClick={() => setStatusFilter("suggested")}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors ${statusFilter === "suggested" ? "bg-muted" : ""}`}
+        >
+          <span className="font-medium">{stats.suggested}</span>
+          <span className="text-muted-foreground">voorgesteld</span>
+        </button>
+        <div className="h-4 w-px bg-border" />
+        <button
+          onClick={() => setStatusFilter("completed")}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors ${statusFilter === "completed" ? "bg-muted" : ""}`}
+        >
+          <span className="font-medium">{stats.completed}</span>
+          <span className="text-muted-foreground">afgerond</span>
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Zoek op professional of klant..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alle statussen</SelectItem>
+            <SelectItem value="suggested">Voorgesteld</SelectItem>
+            <SelectItem value="active">Actief</SelectItem>
+            <SelectItem value="completed">Afgerond</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Placements List - Apple Minimal Cards */}
+      {loading ? (
+        <div className="text-center py-12 text-muted-foreground">
+          Laden...
+        </div>
+      ) : filteredPlacements.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          {searchQuery || statusFilter !== "all" 
+            ? "Geen plaatsingen gevonden met deze filters" 
+            : "Nog geen plaatsingen"}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredPlacements.map((placement, idx) => {
+            const statusDot = placement.status === "active" ? "●" : placement.status === "suggested" ? "○" : "◌";
+            const sinceDate = formatDistanceToNow(new Date(placement.created_at), { locale: nl, addSuffix: false });
+            
+            return (
+              <motion.div
+                key={placement.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: idx * 0.03 }}
               >
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">{stats.total}</span>
-                <span className="text-muted-foreground">totaal</span>
-              </button>
-              <div className="h-4 w-px bg-border" />
-              <button
-                onClick={() => setStatusFilter("active")}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors ${statusFilter === "active" ? "bg-muted" : ""}`}
-              >
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                <span className="font-medium">{stats.active}</span>
-                <span className="text-muted-foreground">actief</span>
-              </button>
-              <div className="h-4 w-px bg-border" />
-              <button
-                onClick={() => setStatusFilter("suggested")}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors ${statusFilter === "suggested" ? "bg-muted" : ""}`}
-              >
-                <Clock className="h-4 w-4 text-blue-600" />
-                <span className="font-medium">{stats.suggested}</span>
-                <span className="text-muted-foreground">voorgesteld</span>
-              </button>
-              <div className="h-4 w-px bg-border" />
-              <button
-                onClick={() => setStatusFilter("completed")}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors ${statusFilter === "completed" ? "bg-muted" : ""}`}
-              >
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">{stats.completed}</span>
-                <span className="text-muted-foreground">afgerond</span>
-              </button>
-            </div>
-
-            {/* Filters */}
-            <div className="flex gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Zoek op professional of klant..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle statussen</SelectItem>
-                  <SelectItem value="suggested">Voorgesteld</SelectItem>
-                  <SelectItem value="active">Actief</SelectItem>
-                  <SelectItem value="completed">Afgerond</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Placements List */}
-            {loading ? (
-              <div className="text-center py-12 text-muted-foreground">
-                Laden...
-              </div>
-            ) : filteredPlacements.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                {searchQuery || statusFilter !== "all" 
-                  ? "Geen plaatsingen gevonden met deze filters" 
-                  : "Nog geen plaatsingen"}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {filteredPlacements.map((placement, idx) => (
-                  <motion.div
-                    key={placement.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: idx * 0.03 }}
-                  >
-                    <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer" onClick={() => {
-                      setSelectedPlacement(placement);
-                      setDetailModalOpen(true);
-                    }}>
-                      <CardContent className="p-6">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 space-y-4">
-                            {/* Professional Info */}
-                            <div className="flex items-start gap-4">
-                              <div className="p-2 rounded-lg bg-primary/10">
-                                <User className="h-5 w-5 text-primary" />
-                              </div>
-                              <div className="flex-1">
-                                <div className="flex items-center gap-3 mb-1">
-                                  <span className="font-semibold text-lg">
-                                    {placement.professionals?.full_name || "Onbekend"}
-                                  </span>
-                                  <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-700 border-blue-200">
-                                    {placement.professionals?.functie_niveau}
-                                  </Badge>
-                                  {placement.professionals?.werkvorm && (
-                                    <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-200">
-                                      {placement.professionals.werkvorm}
-                                    </Badge>
-                                  )}
-                                </div>
-                                {placement.professionals?.regio && (
-                                  <p className="text-sm text-muted-foreground flex items-center gap-1">
-                                    <MapPin className="h-3 w-3" />
-                                    {placement.professionals.regio}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Client Info */}
-                            <div className="flex items-start gap-4">
-                              <div className="p-2 rounded-lg bg-green-500/10">
-                                <Building2 className="h-5 w-5 text-green-600" />
-                              </div>
-                              <div className="flex-1">
-                                <div className="mb-1">
-                                  <span className="font-medium">{placement.clients?.name}</span>
-                                  <span className="text-sm text-muted-foreground ml-2">
-                                    ({placement.clients?.company})
-                                  </span>
-                                </div>
-                                {placement.clients?.sector && placement.clients.sector.length > 0 && (
-                                  <div className="flex flex-wrap gap-1">
-                                    {placement.clients.sector.slice(0, 3).map((s, idx) => (
-                                      <Badge key={idx} variant="outline" className="text-xs bg-purple-500/10 text-purple-700 border-purple-200">
-                                        {s}
-                                      </Badge>
-                                    ))}
-                                    {placement.clients.sector.length > 3 && (
-                                      <Badge variant="outline" className="text-xs">
-                                        +{placement.clients.sector.length - 3}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Meta Info */}
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <div className="flex items-center gap-2">
-                                <Calendar className="h-4 w-4" />
-                                <span>
-                                  {format(new Date(placement.created_at), "d MMM yyyy", { locale: nl })}
-                                </span>
-                              </div>
-
-                              {placement.match_score && (
-                                <div className="flex items-center gap-2">
-                                  <Award className="h-4 w-4 text-green-600" />
-                                  <span className="font-medium text-green-600">
-                                    Match: {(placement.match_score * 100).toFixed(0)}%
-                                  </span>
-                                </div>
-                              )}
-                            </div>
+                <Card 
+                  className="hover:shadow-md transition-all duration-200 cursor-pointer border-border/50" 
+                  onClick={() => {
+                    setSelectedPlacement(placement);
+                    setDetailModalOpen(true);
+                  }}
+                >
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 space-y-3">
+                        {/* Professional Info - Minimal */}
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-base">
+                              {placement.professionals?.full_name || "Onbekend"}
+                            </span>
+                            <span className="text-muted-foreground">{statusDot}</span>
                           </div>
-
-                          <div className="flex flex-col items-end gap-3">
-                            <Badge variant={getStatusVariant(placement.status)} className="text-sm">
-                              {getStatusLabel(placement.status)}
-                            </Badge>
-
-                            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                              {placement.status === "suggested" && (
-                                <Button
-                                  size="sm"
-                                  onClick={() => updateStatus(placement.id, "active")}
-                                >
-                                  Activeer
-                                </Button>
-                              )}
-                              {placement.status === "active" && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => updateStatus(placement.id, "completed")}
-                                >
-                                  Afronden
-                                </Button>
-                              )}
-                            </div>
+                          <div className="text-sm text-muted-foreground">
+                            {placement.professionals?.functie_niveau}
+                            {placement.professionals?.werkvorm && (
+                              <> · {placement.professionals.werkvorm}</>
+                            )}
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                ))}
-          </div>
-        )}
+
+                        {/* Client Info - Minimal with Arrow */}
+                        <div className="flex items-center gap-2 text-sm">
+                          <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="font-medium">{placement.clients?.name}</span>
+                        </div>
+
+                        {/* Meta Info - Monochrome */}
+                        <div className="text-sm text-muted-foreground">
+                          Sinds {sinceDate}
+                          {placement.match_score && (
+                            <> · Match {(placement.match_score * 100).toFixed(0)}%</>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons - Subtle */}
+                      <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                        {placement.status === "suggested" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateStatus(placement.id, "active")}
+                          >
+                            Activeer
+                          </Button>
+                        )}
+                        {placement.status === "active" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateStatus(placement.id, "completed")}
+                          >
+                            Afronden
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
       
       <PlacementDetailModal
         placement={selectedPlacement}
@@ -353,6 +301,6 @@ export default function Plaatsingen() {
         onOpenChange={setDetailModalOpen}
         onStatusChange={updateStatus}
       />
-    </>
+    </div>
   );
 }
