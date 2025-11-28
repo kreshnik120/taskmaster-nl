@@ -13,6 +13,8 @@ import { ClientMetricsBar } from "@/components/recruitment/ClientMetricsBar";
 import { ClientCard, ClientCardSkeleton } from "@/components/ClientCard";
 import { ClientMatchingUrgency } from "@/components/recruitment/ClientMatchingUrgency";
 import { RecentClientsWidget } from "@/components/recruitment/RecentClientsWidget";
+import { ClientGroupingToggle } from "@/components/recruitment/ClientGroupingToggle";
+import { ClientSection } from "@/components/recruitment/ClientSection";
 
 interface Client {
   id: string;
@@ -41,6 +43,10 @@ export default function Klanten() {
   const [matchingFilter, setMatchingFilter] = useState<string>("");
   const [newClientOpen, setNewClientOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [grouping, setGrouping] = useState<"bureau" | "matching" | "regio" | "alpha">(() => {
+    const saved = localStorage.getItem("klanten-grouping");
+    return (saved as any) || "bureau";
+  });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -134,6 +140,61 @@ export default function Klanten() {
     
     return matchesSearch && matchesOrg && matchesMatchingFilter;
   });
+
+  // Group clients based on selected grouping
+  const groupClients = (clients: Client[], groupBy: "bureau" | "matching" | "regio" | "alpha") => {
+    const getCompletenessScore = (client: Client) => {
+      let score = 0;
+      if (client.regio && client.regio.length > 0) score++;
+      if (client.sector && client.sector.length > 0) score++;
+      if (client.doelgroep && client.doelgroep.length > 0) score++;
+      if (client.gezochte_functies && client.gezochte_functies.length > 0) score++;
+      return score;
+    };
+
+    switch (groupBy) {
+      case "bureau":
+        return {
+          ABCzorg: clients.filter((c) => c.organizations?.name === "ABCzorg"),
+          CitoZorg: clients.filter((c) => c.organizations?.name === "CitoZorg"),
+        };
+      case "matching":
+        return {
+          Volledig: clients.filter((c) => getCompletenessScore(c) === 4),
+          "Deels ingevuld": clients.filter((c) => {
+            const score = getCompletenessScore(c);
+            return score > 0 && score < 4;
+          }),
+          "Geen data": clients.filter((c) => getCompletenessScore(c) === 0),
+        };
+      case "regio": {
+        const grouped: Record<string, Client[]> = {};
+        clients.forEach((client) => {
+          const region = client.regio?.[0] || "Onbekend";
+          if (!grouped[region]) grouped[region] = [];
+          grouped[region].push(client);
+        });
+        return grouped;
+      }
+      case "alpha": {
+        const grouped: Record<string, Client[]> = {};
+        clients.forEach((client) => {
+          const letter = client.company[0]?.toUpperCase() || "#";
+          if (!grouped[letter]) grouped[letter] = [];
+          grouped[letter].push(client);
+        });
+        return grouped;
+      }
+    }
+  };
+
+  const groupedClients = groupClients(filteredClients, grouping);
+
+  // Save grouping preference to localStorage
+  const handleGroupingChange = (newGrouping: "bureau" | "matching" | "regio" | "alpha") => {
+    setGrouping(newGrouping);
+    localStorage.setItem("klanten-grouping", newGrouping);
+  };
 
   const abczorgCount = clients.filter(c => c.organizations?.name === "ABCzorg").length;
   const citozorgCount = clients.filter(c => c.organizations?.name === "CitoZorg").length;
@@ -255,31 +316,42 @@ export default function Klanten() {
               </Button>
             </div>
 
-            {/* Clients Grid */}
-            {loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...Array(6)].map((_, i) => (
-                  <ClientCardSkeleton key={i} />
-                ))}
-              </div>
-            ) : filteredClients.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                {searchQuery ? "Geen klanten gevonden" : "Nog geen klanten"}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredClients.map((client) => (
-                  <ClientCard
-                    key={client.id}
-                    client={client}
-                    searchQuery={searchQuery}
-                    onClick={() => setSelectedClient(client)}
-                    onQuickCall={() => handleQuickCall(client)}
-                    onQuickEmail={() => handleQuickEmail(client)}
-                  />
-                ))}
-              </div>
-            )}
+            {/* Grouping Toggle */}
+            <div className="mt-6">
+              <ClientGroupingToggle value={grouping} onChange={handleGroupingChange} />
+            </div>
+
+            {/* Grouped Client Sections */}
+            <div className="space-y-6 mt-8">
+              {loading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[...Array(6)].map((_, i) => (
+                    <ClientCardSkeleton key={i} />
+                  ))}
+                </div>
+              ) : filteredClients.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  {searchQuery ? "Geen klanten gevonden" : "Nog geen klanten"}
+                </div>
+              ) : (
+                Object.entries(groupedClients)
+                  .sort(([, a], [, b]) => b.length - a.length)
+                  .map(([sectionName, sectionClients]) => (
+                    <ClientSection
+                      key={sectionName}
+                      title={sectionName}
+                      clients={sectionClients}
+                      totalClients={filteredClients.length}
+                      groupType={grouping}
+                      onClientClick={(client) => {
+                        setSelectedClient(client);
+                      }}
+                      searchQuery={searchQuery}
+                      defaultOpen={true}
+                    />
+                  ))
+              )}
+            </div>
           </div>
         </main>
       </div>
