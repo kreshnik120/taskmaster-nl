@@ -23,7 +23,7 @@ export function MinimalMetricsBar({
       </div>
       
       <div className="text-center">
-        <div className="text-4xl font-semibold text-foreground mb-1">
+        <div className="text-4xl font-semibold text-blue-600 mb-1">
           {newApplications}
         </div>
         <div className="text-sm text-muted-foreground">
@@ -32,7 +32,7 @@ export function MinimalMetricsBar({
       </div>
       
       <div className="text-center">
-        <div className="text-4xl font-semibold text-foreground mb-1">
+        <div className="text-4xl font-semibold text-emerald-600 mb-1">
           {approvedApplications}
         </div>
         <div className="text-sm text-muted-foreground">

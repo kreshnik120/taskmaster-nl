@@ -50,6 +50,18 @@ export function ApplicationCard({ application, onClick }: ApplicationCardProps) 
   const werkvorm = application.extracted_data?.werkvorm;
   const functieNiveau = application.extracted_data?.functie_niveau || application.professionals?.functie_niveau;
   const assignedOrg = application.extracted_data?.assigned_organization;
+  const completenessScore = application.completeness_score || 0;
+  
+  const getCompletenessColor = (score: number) => {
+    if (score === 100) return "text-emerald-600";
+    if (score >= 80) return "text-blue-600";
+    return "text-amber-600";
+  };
+  
+  const getCardBorder = (score: number) => {
+    if (score === 100) return "border-l-2 border-l-emerald-400";
+    return "";
+  };
   
   const getDaysInStage = () => {
     const lastUpdate = new Date(application.updated_at || application.created_at);
@@ -78,7 +90,7 @@ export function ApplicationCard({ application, onClick }: ApplicationCardProps) 
     <Card
       ref={setNodeRef}
       style={style}
-      className="hover:shadow-sm transition-shadow cursor-pointer border-border/50"
+      className={`hover:shadow-sm transition-shadow cursor-pointer border-border/50 ${getCardBorder(completenessScore)}`}
       onClick={onClick}
     >
       <CardContent className="p-4 space-y-2" {...attributes} {...listeners}>
@@ -87,12 +99,8 @@ export function ApplicationCard({ application, onClick }: ApplicationCardProps) 
           <p className="text-sm font-medium text-foreground truncate">
             {candidateName}
           </p>
-          <span className={`text-sm font-medium ${
-            application.completeness_score === 100 
-              ? 'text-primary' 
-              : 'text-muted-foreground'
-          }`}>
-            {application.completeness_score || 0}%
+          <span className={`text-sm font-medium ${getCompletenessColor(completenessScore)}`}>
+            {completenessScore}%
           </span>
         </div>
 

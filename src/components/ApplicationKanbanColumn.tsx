@@ -29,6 +29,8 @@ interface ApplicationKanbanColumnProps {
   title: string;
   applications: Application[];
   color: string;
+  borderColor: string;
+  countColor: string;
   onApplicationClick: (application: Application) => void;
 }
 
@@ -37,6 +39,8 @@ export function ApplicationKanbanColumn({
   title,
   applications,
   color,
+  borderColor,
+  countColor,
   onApplicationClick,
 }: ApplicationKanbanColumnProps) {
   const { setNodeRef } = useDroppable({
@@ -44,11 +48,11 @@ export function ApplicationKanbanColumn({
   });
 
   return (
-    <Card className="min-w-[320px] flex flex-col bg-card border shadow-none">
+    <Card className={`min-w-[320px] flex flex-col bg-card border shadow-none ${borderColor}`}>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-base">
           <span className="font-medium text-foreground">{title}</span>
-          <span className="text-sm font-normal text-muted-foreground">
+          <span className={`text-sm font-normal ${countColor}`}>
             {applications.length}
           </span>
         </CardTitle>
