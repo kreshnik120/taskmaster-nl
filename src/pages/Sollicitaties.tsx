@@ -15,9 +15,8 @@ import { ApplicationKanbanColumn } from "@/components/ApplicationKanbanColumn";
 import { ApplicationCard } from "@/components/ApplicationCard";
 import { ApplicationDetailModal } from "@/components/ApplicationDetailModal";
 import { NewApplicationDialog } from "@/components/NewApplicationDialog";
-import { KPICard } from "@/components/recruitment/KPICard";
-import { UrgencyActionPanel } from "@/components/recruitment/UrgencyActionPanel";
-import { PipelineAnalyticsWidget } from "@/components/recruitment/PipelineAnalyticsWidget";
+import { MinimalMetricsBar } from "@/components/recruitment/MinimalMetricsBar";
+import { UrgencyBanner } from "@/components/recruitment/UrgencyBanner";
 import { RecentMovementsWidget } from "@/components/recruitment/RecentMovementsWidget";
 
 interface Application {
@@ -311,69 +310,43 @@ const Sollicitaties = () => {
         <main className="flex-1 p-6 overflow-auto">
           <SidebarTrigger className="mb-4" />
           <div className="flex flex-col h-full space-y-6">
-            {/* Hero Section */}
-            <div className="space-y-6 mb-8">
+            {/* Hero Section - Apple Style Minimal */}
+            <div className="space-y-0">
               {/* Greeting Row */}
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between py-8">
                 <div>
-                  <h1 className="text-3xl font-bold text-foreground mb-1">
-                    {getGreeting()}, {user?.user_metadata?.name || 'daar'}
+                  <h1 className="text-3xl font-semibold text-foreground mb-1">
+                    Sollicitaties
                   </h1>
-                  <p className="text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     {format(new Date(), "EEEE d MMMM", { locale: nl })}
                   </p>
                 </div>
-                <Button onClick={() => setNewApplicationDialogOpen(true)} className="gap-2">
+                <Button onClick={() => setNewApplicationDialogOpen(true)} size="sm" className="gap-2">
                   <Plus className="h-4 w-4" />
                   Nieuwe sollicitatie
                 </Button>
               </div>
 
-              {/* KPI Dashboard - 4 cards */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <KPICard
-                  icon="📧"
-                  title="Totaal Pipeline"
-                  value={totalApplications}
-                  subtitle="sollicitaties"
-                  gradient="from-blue-500/10 to-blue-500/5"
-                />
-                <KPICard
-                  icon="🆕"
-                  title="Nieuwe sollicitaties"
-                  value={stageStats[0]?.count || 0}
-                  subtitle="deze week"
-                  gradient="from-green-500/10 to-green-500/5"
-                />
-                <KPICard
-                  icon="✅"
-                  title="Goedgekeurd"
-                  value={stageStats.find(s => s.id === 'goedgekeurd')?.count || 0}
-                  subtitle="klaar voor plaatsing"
-                  gradient="from-emerald-500/10 to-emerald-500/5"
-                />
-                <KPICard
-                  icon="📊"
-                  title="Gem. Volledigheid"
-                  value={`${avgCompleteness}%`}
-                  trend={avgCompleteness >= 80 ? "good" : "warning"}
-                  gradient="from-purple-500/10 to-purple-500/5"
-                />
+              {/* Minimal Metrics Bar */}
+              <MinimalMetricsBar 
+                totalApplications={displayedTotal}
+                newApplications={displayedNew}
+                approvedApplications={displayedApproved}
+                avgCompleteness={displayedAvgCompleteness}
+              />
+
+              {/* Urgency Banner - Only if urgent items exist */}
+              <div className="py-6">
+                <UrgencyBanner applications={filteredApplications} />
               </div>
 
-              {/* Two-column grid: Urgency Panel (60%) + Recent Movements (40%) */}
-              <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                <div className="lg:col-span-3">
-                  <UrgencyActionPanel applications={filteredApplications} />
-                </div>
-                <div className="lg:col-span-2">
-                  <RecentMovementsWidget applications={filteredApplications} />
-                </div>
-              </div>
+              {/* Recent Movements */}
+              <RecentMovementsWidget applications={filteredApplications} />
             </div>
 
             {/* Search and Filter Bar */}
-            <div className="space-y-6">
+            <div className="space-y-6 pt-6">
               <div className="flex flex-wrap gap-3 items-center p-4 bg-muted/20 rounded-lg border">
               {/* Zoekbalk */}
               <div className="relative flex-1 min-w-[200px]">
@@ -453,9 +426,6 @@ const Sollicitaties = () => {
                 </Button>
               )}
               </div>
-
-              {/* Pipeline Analytics - Collapsible */}
-              <PipelineAnalyticsWidget applications={filteredApplications} />
             </div>
 
             {/* Active Filters Indicator */}
