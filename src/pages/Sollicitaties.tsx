@@ -15,6 +15,7 @@ import { ApplicationKanbanColumn } from "@/components/ApplicationKanbanColumn";
 import { ApplicationCard } from "@/components/ApplicationCard";
 import { ApplicationDetailModal } from "@/components/ApplicationDetailModal";
 import { NewApplicationDialog } from "@/components/NewApplicationDialog";
+import { PipelineAnalyticsWidget } from "@/components/recruitment/PipelineAnalyticsWidget";
 
 interface Application {
   id: string;
@@ -324,17 +325,21 @@ const Sollicitaties = () => {
                 </Button>
               </div>
               
-              {/* Smart Summary */}
-              <div className="bg-muted/30 rounded-lg p-4 space-y-2">
-                <p className="text-sm">
-                  <Mail className="inline h-4 w-4 mr-1" />
-                  Je hebt <strong>{totalApplications} sollicitaties</strong> in de pipeline
-                </p>
-                {newThisWeek > 0 && (
-                  <p className="text-sm text-green-600">
-                    ✅ <strong>{newThisWeek} nieuwe sollicitaties</strong> deze week
+              {/* Smart Summary & Analytics */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
+                <div className="lg:col-span-2 bg-muted/30 rounded-lg p-4 space-y-2">
+                  <p className="text-sm">
+                    <Mail className="inline h-4 w-4 mr-1" />
+                    Je hebt <strong>{totalApplications} sollicitaties</strong> in de pipeline
                   </p>
-                )}
+                  {newThisWeek > 0 && (
+                    <p className="text-sm text-green-600">
+                      ✅ <strong>{newThisWeek} nieuwe sollicitaties</strong> deze week
+                    </p>
+                  )}
+                </div>
+                
+                <PipelineAnalyticsWidget applications={applications} />
               </div>
             </div>
 

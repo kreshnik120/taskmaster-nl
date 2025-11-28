@@ -2,7 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { GripVertical, User, FileText, Calendar } from "lucide-react";
+import { GripVertical, User, FileText, Calendar, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 
@@ -14,6 +14,7 @@ interface Application {
   status: string;
   completeness_score: number | null;
   created_at: string;
+  updated_at: string | null;
   extracted_data?: {
     naam?: string;
     werkvorm?: string;
@@ -78,6 +79,23 @@ export function ApplicationCard({ application, onClick }: ApplicationCardProps) 
     if (werkvorm.toLowerCase().includes('abcito')) return "bg-green-100 text-green-700";
     return "bg-gray-100 text-gray-700";
   };
+
+  // Calculate days in current stage
+  const getDaysInStage = () => {
+    const lastUpdate = new Date(application.updated_at || application.created_at);
+    const now = new Date();
+    const days = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
+    return days;
+  };
+
+  const getStageUrgencyBadge = () => {
+    const days = getDaysInStage();
+    if (days < 2) return { color: "bg-green-500", label: `${days}d` };
+    if (days < 5) return { color: "bg-yellow-500", label: `${days}d` };
+    return { color: "bg-red-500", label: `${days}d` };
+  };
+
+  const urgency = getStageUrgencyBadge();
 
   return (
     <Card
@@ -151,6 +169,16 @@ export function ApplicationCard({ application, onClick }: ApplicationCardProps) 
               <div className={`h-2 w-2 rounded-full ${getCompletenessColor(application.completeness_score)}`} />
             </div>
           )}
+        </div>
+
+        {/* Time in Stage Badge */}
+        <div className="flex items-center gap-2 pt-1 border-t">
+          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">In deze fase:</span>
+          <div className="flex items-center gap-1">
+            <div className={`h-2 w-2 rounded-full ${urgency.color}`} />
+            <span className="text-xs font-medium">{urgency.label}</span>
+          </div>
         </div>
 
         {/* Created Date */}
