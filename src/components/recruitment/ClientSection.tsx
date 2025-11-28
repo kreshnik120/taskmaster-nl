@@ -27,16 +27,26 @@ interface ClientSectionProps {
   title: string;
   clients: Client[];
   totalClients: number;
-  groupType: "bureau" | "matching" | "regio" | "alpha";
+  groupType: "bureau" | "sector" | "matching" | "regio" | "alpha";
   onClientClick: (client: Client) => void;
   searchQuery: string;
   defaultOpen?: boolean;
 }
 
+// Get section accent based on groupType and title
 const getSectionAccent = (title: string, groupType: string): string => {
   if (groupType === "bureau") {
     if (title === "ABCzorg") return "border-l-blue-500";
     if (title === "CitoZorg") return "border-l-orange-500";
+  }
+  if (groupType === "sector") {
+    // Semantic sector colors
+    if (title === "GGZ") return "border-l-blue-500";
+    if (title === "GHZ") return "border-l-green-500";
+    if (title === "Jeugdzorg") return "border-l-orange-500";
+    if (title === "VVT") return "border-l-purple-500";
+    if (title === "Ziekenhuis") return "border-l-red-500";
+    if (title === "Thuiszorg") return "border-l-cyan-500";
   }
   if (groupType === "matching") {
     if (title === "Volledig") return "border-l-green-500";

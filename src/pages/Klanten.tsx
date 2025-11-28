@@ -44,7 +44,7 @@ export default function Klanten() {
   const [matchingFilter, setMatchingFilter] = useState<string>("all");
   const [newClientOpen, setNewClientOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [grouping, setGrouping] = useState<"bureau" | "matching" | "regio" | "alpha">(() => {
+  const [grouping, setGrouping] = useState<"bureau" | "sector" | "matching" | "regio" | "alpha">(() => {
     const saved = localStorage.getItem("klanten-grouping");
     return (saved as any) || "bureau";
   });
@@ -152,7 +152,7 @@ export default function Klanten() {
   });
 
   // Group clients based on selected grouping
-  const groupClients = (clients: Client[], groupBy: "bureau" | "matching" | "regio" | "alpha") => {
+  const groupClients = (clients: Client[]) => {
     const getCompletenessScore = (client: Client) => {
       let score = 0;
       if (client.regio && client.regio.length > 0) score++;
@@ -162,46 +162,68 @@ export default function Klanten() {
       return score;
     };
 
-    switch (groupBy) {
-      case "bureau":
-        return {
-          ABCzorg: clients.filter((c) => c.organizations?.name === "ABCzorg"),
-          CitoZorg: clients.filter((c) => c.organizations?.name === "CitoZorg"),
-        };
-      case "matching":
-        return {
-          Volledig: clients.filter((c) => getCompletenessScore(c) === 4),
-          "Deels ingevuld": clients.filter((c) => {
-            const score = getCompletenessScore(c);
-            return score > 0 && score < 4;
-          }),
-          "Geen data": clients.filter((c) => getCompletenessScore(c) === 0),
-        };
-      case "regio": {
-        const grouped: Record<string, Client[]> = {};
-        clients.forEach((client) => {
-          const region = client.regio?.[0] || "Onbekend";
-          if (!grouped[region]) grouped[region] = [];
-          grouped[region].push(client);
-        });
-        return grouped;
-      }
-      case "alpha": {
-        const grouped: Record<string, Client[]> = {};
-        clients.forEach((client) => {
-          const letter = client.company[0]?.toUpperCase() || "#";
-          if (!grouped[letter]) grouped[letter] = [];
-          grouped[letter].push(client);
-        });
-        return grouped;
-      }
+    if (grouping === "bureau") {
+      return {
+        ABCzorg: clients.filter((c) => c.organizations?.name === "ABCzorg"),
+        CitoZorg: clients.filter((c) => c.organizations?.name === "CitoZorg"),
+      };
     }
+
+    if (grouping === "sector") {
+      const groups: Record<string, Client[]> = {};
+      
+      clients.forEach(client => {
+        const primarySector = client.sector && client.sector.length > 0 
+          ? client.sector[0] 
+          : "Geen sector";
+        
+        if (!groups[primarySector]) {
+          groups[primarySector] = [];
+        }
+        groups[primarySector].push(client);
+      });
+      
+      return groups;
+    }
+    
+    if (grouping === "matching") {
+      return {
+        Volledig: clients.filter((c) => getCompletenessScore(c) === 4),
+        "Deels ingevuld": clients.filter((c) => {
+          const score = getCompletenessScore(c);
+          return score > 0 && score < 4;
+        }),
+        "Geen data": clients.filter((c) => getCompletenessScore(c) === 0),
+      };
+    }
+    
+    if (grouping === "regio") {
+      const grouped: Record<string, Client[]> = {};
+      clients.forEach((client) => {
+        const region = client.regio?.[0] || "Onbekend";
+        if (!grouped[region]) grouped[region] = [];
+        grouped[region].push(client);
+      });
+      return grouped;
+    }
+    
+    if (grouping === "alpha") {
+      const grouped: Record<string, Client[]> = {};
+      clients.forEach((client) => {
+        const letter = client.company[0]?.toUpperCase() || "#";
+        if (!grouped[letter]) grouped[letter] = [];
+        grouped[letter].push(client);
+      });
+      return grouped;
+    }
+
+    return {};
   };
 
-  const groupedClients = groupClients(filteredClients, grouping);
+  const groupedClients = groupClients(filteredClients);
 
   // Save grouping preference to localStorage
-  const handleGroupingChange = (newGrouping: "bureau" | "matching" | "regio" | "alpha") => {
+  const handleGroupingChange = (newGrouping: "bureau" | "sector" | "matching" | "regio" | "alpha") => {
     setGrouping(newGrouping);
     localStorage.setItem("klanten-grouping", newGrouping);
   };

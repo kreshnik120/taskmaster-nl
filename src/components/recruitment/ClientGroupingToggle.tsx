@@ -1,10 +1,11 @@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 interface ClientGroupingToggleProps {
-  value: "bureau" | "matching" | "regio" | "alpha";
-  onChange: (value: "bureau" | "matching" | "regio" | "alpha") => void;
+  value: "bureau" | "sector" | "matching" | "regio" | "alpha";
+  onChange: (value: "bureau" | "sector" | "matching" | "regio" | "alpha") => void;
   counts?: {
     bureau?: number;
+    sector?: number;
     matching?: number;
     regio?: number;
     alpha?: number;
@@ -25,6 +26,12 @@ export function ClientGroupingToggle({ value, onChange, counts }: ClientGrouping
           Bureau
           {counts?.bureau !== undefined && (
             <span className="ml-1.5 text-xs opacity-60">({counts.bureau})</span>
+          )}
+        </ToggleGroupItem>
+        <ToggleGroupItem value="sector" className="rounded-lg px-4 py-1.5 text-sm font-medium text-foreground/70 data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm transition-all">
+          Sector
+          {counts?.sector !== undefined && (
+            <span className="ml-1.5 text-xs opacity-60">({counts.sector})</span>
           )}
         </ToggleGroupItem>
         <ToggleGroupItem value="matching" className="rounded-lg px-4 py-1.5 text-sm font-medium text-foreground/70 data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm transition-all">
