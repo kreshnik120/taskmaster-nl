@@ -65,6 +65,14 @@ export function ApplicationCard({ application, onClick }: ApplicationCardProps) 
     if (daysInStage < 5) return "bg-muted-foreground/50";
     return "bg-destructive/60";
   };
+  
+  const getHumanizedTime = () => {
+    if (daysInStage === 0) return "Vandaag";
+    if (daysInStage === 1) return "Gisteren";
+    if (daysInStage < 7) return `${daysInStage} dagen`;
+    const weeks = Math.floor(daysInStage / 7);
+    return `${weeks} ${weeks === 1 ? 'week' : 'weken'}`;
+  };
 
   return (
     <Card
@@ -105,7 +113,7 @@ export function ApplicationCard({ application, onClick }: ApplicationCardProps) 
         {/* Time in stage */}
         <div className="flex items-center justify-between pt-1">
           <span className="text-xs text-muted-foreground">
-            In deze fase: {daysInStage}d
+            {getHumanizedTime()}
           </span>
           <div className={`h-1.5 w-1.5 rounded-full ${getStatusDotColor()}`} />
         </div>

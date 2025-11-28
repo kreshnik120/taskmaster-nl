@@ -18,7 +18,7 @@ export function MinimalMetricsBar({
           {totalApplications}
         </div>
         <div className="text-sm text-muted-foreground">
-          Totaal Pipeline
+          Totaal
         </div>
       </div>
       
@@ -45,7 +45,7 @@ export function MinimalMetricsBar({
           {avgCompleteness}%
         </div>
         <div className="text-sm text-muted-foreground">
-          Volledigheid
+          Compleet
         </div>
       </div>
     </div>

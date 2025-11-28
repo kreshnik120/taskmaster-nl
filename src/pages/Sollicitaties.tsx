@@ -7,6 +7,8 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { Plus, Loader2, Search, X, Filter } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -345,97 +347,124 @@ const Sollicitaties = () => {
               <RecentMovementsWidget applications={filteredApplications} />
             </div>
 
-            {/* Search and Filter Bar */}
-            <div className="space-y-6 pt-6">
-              <div className="flex flex-wrap gap-3 items-center">
-              {/* Zoekbalk */}
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Zoek op naam of email..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 border-border/50"
-                />
+            {/* Search and Filter Bar - Progressive Disclosure */}
+            <div className="py-8">
+              <div className="flex gap-3 items-center">
+                {/* Zoekbalk - Always visible */}
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Zoek op naam of email..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 border-border/50"
+                  />
+                </div>
+                
+                {/* Filters Popover */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="default" className="gap-2 border-border/50">
+                      <Filter className="h-4 w-4" />
+                      Filters
+                      {(filterFunctieNiveau !== "all" || filterWerkvorm !== "all" || filterOrganisatie !== "all" || filterRegio !== "") && (
+                        <Badge variant="secondary" className="ml-1 h-5 px-1.5">
+                          {[
+                            filterFunctieNiveau !== "all",
+                            filterWerkvorm !== "all",
+                            filterOrganisatie !== "all",
+                            filterRegio !== ""
+                          ].filter(Boolean).length}
+                        </Badge>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80" align="end">
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-sm font-medium text-foreground mb-2 block">Functieniveau</label>
+                        <Select value={filterFunctieNiveau} onValueChange={setFilterFunctieNiveau}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Alle niveaus" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Alle niveaus</SelectItem>
+                            {FUNCTIE_NIVEAUS.map(niveau => (
+                              <SelectItem key={niveau} value={niveau}>{niveau}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div>
+                        <label className="text-sm font-medium text-foreground mb-2 block">Werkvorm</label>
+                        <Select value={filterWerkvorm} onValueChange={setFilterWerkvorm}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Alle werkvormen" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Alle werkvormen</SelectItem>
+                            {WERKVORMEN.map(vorm => (
+                              <SelectItem key={vorm} value={vorm}>{vorm}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div>
+                        <label className="text-sm font-medium text-foreground mb-2 block">Bureau</label>
+                        <Select value={filterOrganisatie} onValueChange={setFilterOrganisatie}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Alle bureaus" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Alle bureaus</SelectItem>
+                            {ORGANISATIES.map(org => (
+                              <SelectItem key={org} value={org}>{org}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div>
+                        <label className="text-sm font-medium text-foreground mb-2 block">Regio</label>
+                        <Input
+                          placeholder="Filter op regio..."
+                          value={filterRegio}
+                          onChange={(e) => setFilterRegio(e.target.value)}
+                        />
+                      </div>
+                      
+                      {/* Reset Button */}
+                      {hasActiveFilters && (
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            setSearchQuery("");
+                            setFilterFunctieNiveau("all");
+                            setFilterWerkvorm("all");
+                            setFilterOrganisatie("all");
+                            setFilterRegio("");
+                          }}
+                          className="w-full"
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          Reset alle filters
+                        </Button>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
               
-              {/* Functieniveau Filter */}
-              <Select value={filterFunctieNiveau} onValueChange={setFilterFunctieNiveau}>
-                <SelectTrigger className="w-[180px] border-border/50">
-                  <SelectValue placeholder="Functieniveau" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle niveaus</SelectItem>
-                  {FUNCTIE_NIVEAUS.map(niveau => (
-                    <SelectItem key={niveau} value={niveau}>{niveau}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              {/* Werkvorm Filter */}
-              <Select value={filterWerkvorm} onValueChange={setFilterWerkvorm}>
-                <SelectTrigger className="w-[160px] border-border/50">
-                  <SelectValue placeholder="Werkvorm" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle werkvormen</SelectItem>
-                  {WERKVORMEN.map(vorm => (
-                    <SelectItem key={vorm} value={vorm}>{vorm}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              {/* Bureau Filter */}
-              <Select value={filterOrganisatie} onValueChange={setFilterOrganisatie}>
-                <SelectTrigger className="w-[150px] border-border/50">
-                  <SelectValue placeholder="Bureau" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle bureaus</SelectItem>
-                  {ORGANISATIES.map(org => (
-                    <SelectItem key={org} value={org}>{org}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              {/* Regio Filter */}
-              <div className="relative min-w-[150px]">
-                <Input
-                  placeholder="Filter op regio..."
-                  value={filterRegio}
-                  onChange={(e) => setFilterRegio(e.target.value)}
-                  className="h-10 border-border/50"
-                />
-              </div>
-              
-              {/* Reset Filters Button */}
+              {/* Active Filters Indicator */}
               {hasActiveFilters && (
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setFilterFunctieNiveau("all");
-                    setFilterWerkvorm("all");
-                    setFilterOrganisatie("all");
-                    setFilterRegio("");
-                  }}
-                  className="text-muted-foreground"
-                >
-                  <X className="h-4 w-4 mr-1" />
-                  Reset
-                </Button>
+                <div className="text-sm text-muted-foreground mt-3">
+                  {displayedTotal} van {totalApplications} sollicitaties getoond
+                </div>
               )}
-              </div>
             </div>
-
-            {/* Active Filters Indicator */}
-            {hasActiveFilters && (
-              <div className="text-sm text-muted-foreground flex items-center gap-2">
-                <Filter className="h-4 w-4" />
-                <span>{displayedTotal} van {totalApplications} sollicitaties getoond</span>
-              </div>
-            )}
 
 
             {/* Kanban Board */}
