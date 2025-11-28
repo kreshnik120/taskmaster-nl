@@ -110,13 +110,17 @@ interface CollapsibleGroupProps {
   validationCount?: number;
   canEdit: boolean;
   isAdmin: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
 }
 const CollapsibleGroup = ({
   group,
   activeTaskCount,
   validationCount,
   canEdit,
-  isAdmin
+  isAdmin,
+  isOpen,
+  onToggle
 }: CollapsibleGroupProps) => {
   const visibleItems = group.items.filter(item => {
     if (item.requiresAdmin && !isAdmin) return false;
@@ -124,14 +128,12 @@ const CollapsibleGroup = ({
     return true;
   });
   if (visibleItems.length === 0) return null;
-  const shouldBeOpen = group.defaultOpen === true ? true : group.defaultOpen === 'conditional' ? visibleItems.length > 0 : false;
-  const [isOpen, setIsOpen] = useState(shouldBeOpen);
   const getBadgeCount = (badgeType?: string) => {
     if (badgeType === 'taskCount') return activeTaskCount;
     if (badgeType === 'validationCount') return validationCount;
     return undefined;
   };
-  return <Collapsible open={isOpen} onOpenChange={setIsOpen} className="mb-2">
+  return <Collapsible open={isOpen} onOpenChange={onToggle} className="mb-2">
       <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-2 text-[11px] font-medium tracking-wide text-muted-foreground/70 hover:text-foreground transition-colors group rounded-md hover:bg-sidebar-accent/50">
         <span>{group.label}</span>
         <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", isOpen && "transform rotate-180")} />
@@ -176,6 +178,19 @@ export function AppSidebar() {
   } = useUserRole();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const queryClient = useQueryClient();
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    "Dagelijks werk": true,
+    "Recruitment": true,
+    "Archief & Beheer": false,
+  });
+
+  const toggleGroup = (label: string) => {
+    setOpenGroups(prev => ({
+      ...prev,
+      [label]: !prev[label]
+    }));
+  };
   useEffect(() => {
     const fetchUser = async () => {
       const {
@@ -309,7 +324,9 @@ export function AppSidebar() {
                   activeTaskCount={activeTaskCount} 
                   validationCount={validationCount} 
                   canEdit={canEdit()} 
-                  isAdmin={isAdmin()} 
+                  isAdmin={isAdmin()}
+                  isOpen={openGroups[group.label] ?? false}
+                  onToggle={() => toggleGroup(group.label)}
                 />
               </div>
             ))}
