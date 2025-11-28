@@ -810,8 +810,8 @@ export default function Lijst() {
               </div>
             ))}
           </div>
-        </main>
-      </div>
+        </div>
+
       {selectedTask && (
         <TaskDetailModal
           task={selectedTask}
