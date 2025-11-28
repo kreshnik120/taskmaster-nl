@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
+import { ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -22,6 +23,9 @@ import { MinimalMetricsBar } from "@/components/recruitment/MinimalMetricsBar";
 import { UrgencyBanner } from "@/components/recruitment/UrgencyBanner";
 import { RecentMovementsWidget } from "@/components/recruitment/RecentMovementsWidget";
 import { PipelineFunnelMini } from "@/components/recruitment/PipelineFunnelMini";
+import { BulkActionBar } from "@/components/recruitment/BulkActionBar";
+import { RecruitmentAnalytics } from "@/components/recruitment/RecruitmentAnalytics";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface Application {
   id: string;
@@ -70,7 +74,17 @@ const Sollicitaties = () => {
   const [filterOrganisatie, setFilterOrganisatie] = useState<string>("all");
   const [filterRegio, setFilterRegio] = useState<string>("");
   const [lastMove, setLastMove] = useState<{ applicationId: string; fromStage: string; toStage: string } | null>(null);
+  const [selectedApplicationIds, setSelectedApplicationIds] = useState<Set<string>>(new Set());
+  const [analyticsOpen, setAnalyticsOpen] = useState(() => {
+    const stored = localStorage.getItem('recruitment-analytics-open');
+    return stored === null ? false : stored === "true";
+  });
   const navigate = useNavigate();
+
+  // Save analytics open state to localStorage
+  useEffect(() => {
+    localStorage.setItem('recruitment-analytics-open', String(analyticsOpen));
+  }, [analyticsOpen]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -157,6 +171,26 @@ const Sollicitaties = () => {
       toast.error("Er is een fout opgetreden bij het laden van sollicitaties");
     }
   };
+
+  // Real-time updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('applications-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'professional_applications' },
+        (payload) => {
+          console.log('Realtime update:', payload);
+          // Reload applications on any change
+          loadApplications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const handleDragStart = (event: DragStartEvent) => {
     const application = applications.find((a) => a.id === event.active.id);
@@ -355,6 +389,93 @@ const Sollicitaties = () => {
     loadApplications();
   };
 
+  // Bulk actions handlers
+  const handleSelectApplication = (id: string, selected: boolean) => {
+    setSelectedApplicationIds(prev => {
+      const next = new Set(prev);
+      if (selected) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  const handleClearSelection = () => {
+    setSelectedApplicationIds(new Set());
+  };
+
+  const handleBulkMove = async (toStage: string) => {
+    const stageToStatus: Record<string, string> = {
+      nieuw: "nieuw",
+      screening: "in_verwerking",
+      interview: "in_gesprek",
+      goedgekeurd: "klaar_voor_review",
+      geplaatst: "geaccepteerd",
+    };
+
+    const newStatus = stageToStatus[toStage];
+
+    try {
+      const { error } = await supabase
+        .from("professional_applications")
+        .update({ 
+          pipeline_stage: toStage,
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .in("id", Array.from(selectedApplicationIds));
+
+      if (error) throw error;
+
+      toast.success(`${selectedApplicationIds.size} sollicitaties verplaatst`);
+      setSelectedApplicationIds(new Set());
+      loadApplications();
+    } catch (err: any) {
+      console.error("Error bulk moving:", err);
+      toast.error(`Fout bij verplaatsen: ${err?.message}`);
+    }
+  };
+
+  const handleBulkAssignBureau = async (bureau: string) => {
+    try {
+      const updates = Array.from(selectedApplicationIds).map(async (id) => {
+        const app = applications.find(a => a.id === id);
+        if (!app) return;
+
+        const updatedData = {
+          ...app.extracted_data,
+          assigned_organization: bureau,
+        };
+
+        return supabase
+          .from("professional_applications")
+          .update({ extracted_data: updatedData })
+          .eq("id", id);
+      });
+
+      await Promise.all(updates);
+
+      toast.success(`${selectedApplicationIds.size} sollicitaties toegewezen aan ${bureau}`);
+      setSelectedApplicationIds(new Set());
+      loadApplications();
+    } catch (err: any) {
+      console.error("Error bulk assigning:", err);
+      toast.error(`Fout bij toewijzen: ${err?.message}`);
+    }
+  };
+
+  const handleBulkEmail = () => {
+    const selectedEmails = applications
+      .filter(app => selectedApplicationIds.has(app.id))
+      .map(app => app.email_from)
+      .join(';');
+    
+    window.location.href = `mailto:${selectedEmails}`;
+    toast.success(`Email openen met ${selectedApplicationIds.size} ontvangers`);
+  };
+
   const getStageStats = () => {
     return PIPELINE_STAGES.map(stage => ({
       ...stage,
@@ -468,6 +589,25 @@ const Sollicitaties = () => {
                   element?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 }}
               />
+
+              {/* Recruitment Analytics (Collapsible) */}
+              <Collapsible open={analyticsOpen} onOpenChange={setAnalyticsOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-between text-sm font-medium mt-2"
+                  >
+                    <span>Recruitment Analytics</span>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${analyticsOpen ? '' : '-rotate-90'}`} />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="mt-4">
+                    <RecruitmentAnalytics applications={filteredApplications} />
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
 
               {/* Urgency Banner - Only if urgent items exist */}
               <div className="py-6">
@@ -640,9 +780,11 @@ const Sollicitaties = () => {
                      color={stage.color}
                      borderColor={stage.borderColor}
                      countColor={stage.countColor}
-                     onApplicationClick={handleApplicationClick}
-                     searchQuery={searchQuery}
-                   />
+                  onApplicationClick={handleApplicationClick}
+                  searchQuery={searchQuery}
+                  selectedApplicationIds={selectedApplicationIds}
+                  onSelectApplication={handleSelectApplication}
+                />
                 ))}
               </div>
 
@@ -672,6 +814,15 @@ const Sollicitaties = () => {
             open={newApplicationDialogOpen}
             onOpenChange={setNewApplicationDialogOpen}
             onApplicationCreated={handleApplicationUpdated}
+          />
+
+          {/* Bulk Action Bar */}
+          <BulkActionBar
+            selectedCount={selectedApplicationIds.size}
+            onClearSelection={handleClearSelection}
+            onBulkMove={handleBulkMove}
+            onBulkAssignBureau={handleBulkAssignBureau}
+            onBulkEmail={handleBulkEmail}
           />
         </main>
       </div>
