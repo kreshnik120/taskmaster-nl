@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { ReminderDialog } from "./ReminderDialog";
 import { ReminderList } from "./ReminderList";
 import { Button } from "@/components/ui/button";
@@ -255,6 +255,9 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId }: 
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{taskId ? "Taak bewerken" : "Nieuwe taak"}</DialogTitle>
+          <DialogDescription>
+            {taskId ? "Wijzig de details van deze taak." : "Maak een nieuwe taak aan met titel, beschrijving en planning."}
+          </DialogDescription>
         </DialogHeader>
 
         {/* Progress Indicator */}
