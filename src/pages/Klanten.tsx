@@ -40,8 +40,8 @@ export default function Klanten() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [orgFilter, setOrgFilter] = useState<string>("");
-  const [matchingFilter, setMatchingFilter] = useState<string>("");
+  const [orgFilter, setOrgFilter] = useState<string>("all");
+  const [matchingFilter, setMatchingFilter] = useState<string>("all");
   const [newClientOpen, setNewClientOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [grouping, setGrouping] = useState<"bureau" | "matching" | "regio" | "alpha">(() => {
@@ -137,14 +137,14 @@ export default function Klanten() {
   const filteredClients = clients.filter(client => {
     const matchesSearch = client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       client.company.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesOrg = !orgFilter || client.organizations?.name === orgFilter;
+    const matchesOrg = orgFilter === "all" || client.organizations?.name === orgFilter;
     
     // Matching filter
     const hasMatchingData = (client.regio && client.regio.length > 0) ||
                            (client.sector && client.sector.length > 0) ||
                            (client.doelgroep && client.doelgroep.length > 0) ||
                            (client.gezochte_functies && client.gezochte_functies.length > 0);
-    const matchesMatchingFilter = !matchingFilter || 
+    const matchesMatchingFilter = matchingFilter === "all" || 
       (matchingFilter === "with" && hasMatchingData) ||
       (matchingFilter === "without" && !hasMatchingData);
     
@@ -303,7 +303,7 @@ export default function Klanten() {
                   <SelectValue placeholder="Alle bureaus" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Alle bureaus</SelectItem>
+                  <SelectItem value="all">Alle bureaus</SelectItem>
                   <SelectItem value="ABCzorg">ABCzorg</SelectItem>
                   <SelectItem value="CitoZorg">CitoZorg</SelectItem>
                 </SelectContent>
@@ -314,7 +314,7 @@ export default function Klanten() {
                   <SelectValue placeholder="Alle klanten" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Alle klanten</SelectItem>
+                  <SelectItem value="all">Alle klanten</SelectItem>
                   <SelectItem value="with">Met data</SelectItem>
                   <SelectItem value="without">Zonder data</SelectItem>
                 </SelectContent>
