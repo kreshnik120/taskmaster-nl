@@ -11,11 +11,29 @@ import { Pencil, ChevronDown, Inbox } from "lucide-react";
 interface Task {
   id: string;
   title: string;
-  description?: string;
+  description: string | null;
   priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-  assignee_id?: string;
-  due_at?: string;
+  assignee_id: string | null;
+  due_at: string | null;
+  completed_at: string | null;
   order_key: string;
+  column_id?: string;
+  application_id: string | null;
+  recruitment_action_type: string | null;
+  start_at: string | null;
+  next_action: string | null;
+  created_at: string;
+  updated_at: string;
+  profiles: {
+    name: string | null;
+    email: string | null;
+  } | null;
+  task_scoring_metadata?: {
+    estimated_value_eur: number | null;
+    complexity_score: number | null;
+    business_impact_score: number | null;
+    market_demand_factor: number | null;
+  } | null;
   aiScore?: {
     priority_score: number;
     label: "NORMAL" | "CRITICAL" | "LOW_PRIORITY";

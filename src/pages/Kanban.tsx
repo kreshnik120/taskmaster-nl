@@ -27,6 +27,8 @@ interface Task {
   recruitment_action_type: string | null;
   start_at: string | null;
   next_action: string | null;
+  created_at: string;
+  updated_at: string;
   profiles: {
     name: string | null;
     email: string | null;
