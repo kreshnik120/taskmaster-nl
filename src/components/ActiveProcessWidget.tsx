@@ -141,31 +141,11 @@ export function ActiveProcessWidget() {
   };
 
   if (loading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            Actieve Processtappen
-          </CardTitle>
-          <CardDescription>Laden...</CardDescription>
-        </CardHeader>
-      </Card>
-    );
+    return null;
   }
 
   if (activeSubtasks.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            Actieve Processtappen
-          </CardTitle>
-          <CardDescription>Geen actieve processtappen</CardDescription>
-        </CardHeader>
-      </Card>
-    );
+    return null;
   }
 
   // Group by task

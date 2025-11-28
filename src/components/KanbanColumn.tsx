@@ -110,7 +110,7 @@ export function KanbanColumn({ id, title, tasks, status, onUpdateName, onTaskCli
                 className="text-sm font-medium cursor-pointer hover:text-primary transition-colors flex items-center gap-2"
                 onClick={() => setIsEditing(true)}
               >
-                {title}
+                {title.charAt(0).toUpperCase() + title.slice(1)}
                 {isHovered && onUpdateName && (
                   <Pencil className="w-3 h-3 text-muted-foreground" />
                 )}

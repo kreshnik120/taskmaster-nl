@@ -70,7 +70,7 @@ const Dashboard = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"high-to-low" | "low-to-high">("high-to-low");
-  const [todayHours, setTodayHours] = useState<string>("0u");
+  const [todayHours, setTodayHours] = useState<string>("0 uur");
   const [completedThisWeek, setCompletedThisWeek] = useState<number>(0);
   const [activeTimers, setActiveTimers] = useState<Record<string, { user_id: string; start: string; profiles: { name: string | null } | null }>>({});
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -79,6 +79,15 @@ const Dashboard = () => {
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const lastUserActionRef = useRef<number>(0);
   const [activatingFunctions, setActivatingFunctions] = useState(false);
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    };
+    getUser();
+  }, []);
 
   useEffect(() => {
     loadTasks();
@@ -213,7 +222,7 @@ const Dashboard = () => {
       const totalMinutes = data.reduce((sum, entry) => sum + (entry.duration_min || 0), 0);
       const hours = Math.floor(totalMinutes / 60);
       const minutes = totalMinutes % 60;
-      setTodayHours(minutes > 0 ? `${hours}u ${minutes}m` : `${hours}u`);
+      setTodayHours(minutes > 0 ? `${hours} uur ${minutes}m` : `${hours} uur`);
     }
   };
 
@@ -566,7 +575,7 @@ const Dashboard = () => {
         <div className="flex items-start justify-between mb-4">
           <div>
             <h1 className="text-5xl font-bold mb-1">
-              {getGreeting()}
+              {getGreeting()}, {user?.user_metadata?.name || 'daar'}
             </h1>
             <p className="text-sm text-muted-foreground">
               {format(new Date(), "EEEE d MMMM", { locale: nl })}
@@ -634,7 +643,7 @@ const Dashboard = () => {
         </div>
 
         <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-muted/10">
-          <span className="text-3xl font-bold">{todayHours}</span>
+          <span className="text-3xl font-bold">{todayHours.split(' ')[0]}</span>
           <span className="text-xs text-muted-foreground mt-1">Gewerkt</span>
         </div>
 
@@ -658,7 +667,7 @@ const Dashboard = () => {
               <CardDescription>
                 {tasks.length > 0 
                   ? `${tasks.length} ${tasks.length === 1 ? 'taak' : 'taken'} die aandacht ${tasks.length === 1 ? 'vraagt' : 'vragen'}`
-                  : 'Geen taken - je bent helemaal bij!'
+                  : 'Geen openstaande taken'
                 }
               </CardDescription>
             </div>
@@ -679,7 +688,7 @@ const Dashboard = () => {
             <p className="text-muted-foreground text-center py-8">Laden...</p>
           ) : tasks.length === 0 ? (
             <p className="text-muted-foreground text-center py-8">
-              Geen openstaande taken. Klik op "Nieuwe taak" om te beginnen!
+              Geen taken
             </p>
           ) : (
             <div className="space-y-3">
