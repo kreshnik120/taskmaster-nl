@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 
 interface Application {
@@ -36,9 +37,11 @@ interface ApplicationCardProps {
   application: Application;
   onClick: () => void;
   searchQuery?: string;
+  isSelected?: boolean;
+  onSelect?: (selected: boolean) => void;
 }
 
-export function ApplicationCard({ application, onClick, searchQuery = "" }: ApplicationCardProps) {
+export function ApplicationCard({ application, onClick, searchQuery = "", isSelected = false, onSelect }: ApplicationCardProps) {
   const { toast } = useToast();
   
   const {
@@ -164,6 +167,17 @@ export function ApplicationCard({ application, onClick, searchQuery = "" }: Appl
           >
             <CardContent className="p-4 space-y-2">
               <div className="flex items-start gap-2">
+                {/* Checkbox (if onSelect provided) */}
+                {onSelect && (
+                  <div className="flex-shrink-0 pt-1" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={isSelected}
+                      onCheckedChange={onSelect}
+                      className="data-[state=checked]:bg-primary"
+                    />
+                  </div>
+                )}
+
                 {/* Drag Handle */}
                 <div
                   {...attributes}
