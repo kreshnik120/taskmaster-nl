@@ -2,13 +2,31 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Clock, User, FileText, ArrowRight, Edit, ListChecks, Mail, ExternalLink } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { 
+  Calendar, 
+  Clock, 
+  User, 
+  FileText, 
+  ArrowRight, 
+  Edit, 
+  ListChecks, 
+  Mail, 
+  ExternalLink,
+  Play,
+  CheckCircle2,
+  Bell,
+  ChevronDown,
+  Info
+} from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { TaskDialog } from "./TaskDialog";
 import { ProcessTimeline } from "./ProcessTimeline";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 interface Subtask {
   id: string;
@@ -69,6 +87,11 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const [loadingSubtasks, setLoadingSubtasks] = useState(false);
   const [linkedApplication, setLinkedApplication] = useState<LinkedApplication | null>(null);
   const [loadingApplication, setLoadingApplication] = useState(false);
+  const [sectionsOpen, setSectionsOpen] = useState({
+    info: true,
+    description: true,
+    steps: true
+  });
   const { toast } = useToast();
 
   // Load subtasks and application when task changes
@@ -228,9 +251,45 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
     }
   };
 
+  const handleCompleteTask = async () => {
+    if (!task?.id) return;
+    
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ 
+          completed_at: new Date().toISOString(),
+          status: 'DONE'
+        })
+        .eq('id', task.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "✅ Taak afgerond",
+        description: "De taak is succesvol afgerond"
+      });
+      
+      onOpenChange(false);
+      onTaskUpdated();
+    } catch (error) {
+      console.error('Error completing task:', error);
+      toast({
+        title: "Fout",
+        description: "Kon taak niet afronden",
+        variant: "destructive"
+      });
+    }
+  };
+
   if (!task) return null;
 
   const priorityInfo = priorityConfig[task.priority as keyof typeof priorityConfig] || priorityConfig.MEDIUM;
+  
+  // Calculate progress
+  const completedCount = subtasks.filter(s => s.status === 'completed').length;
+  const totalCount = subtasks.length;
+  const progressPercentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
   const handleEdit = () => {
     setEditDialogOpen(true);
@@ -241,19 +300,23 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
     onTaskUpdated();
   };
 
+  const toggleSection = (section: keyof typeof sectionsOpen) => {
+    setSectionsOpen(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
-                <DialogTitle className="text-2xl font-bold">{task.title}</DialogTitle>
-                <DialogDescription className="sr-only">
-                  Details en processtappen voor deze taak
+                <DialogTitle className="text-2xl font-bold leading-tight">{task.title}</DialogTitle>
+                <DialogDescription className="mt-1 text-sm text-muted-foreground">
+                  Bekijk en beheer alle details van deze taak
                 </DialogDescription>
               </div>
-              <Button variant="outline" size="sm" onClick={handleEdit}>
+              <Button variant="outline" size="sm" onClick={handleEdit} className="shrink-0">
                 <Edit className="h-4 w-4 mr-2" />
                 Bewerken
               </Button>
@@ -261,13 +324,61 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
           </DialogHeader>
 
           <div className="space-y-6">
-            {/* Linked Application Badge */}
+            {/* Progress Indicator */}
+            {subtasks.length > 0 && (
+              <div className="p-4 rounded-lg bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/20 space-y-3 animate-fade-in">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ListChecks className="h-5 w-5 text-primary" />
+                    <span className="font-semibold text-foreground">Voortgang</span>
+                  </div>
+                  <span className="text-sm font-medium text-muted-foreground">
+                    {completedCount} van {totalCount} afgerond
+                  </span>
+                </div>
+                <Progress value={progressPercentage} className="h-2" />
+                <p className="text-xs text-muted-foreground">
+                  {progressPercentage === 100 
+                    ? "🎉 Alle stappen zijn voltooid!" 
+                    : `${Math.round(progressPercentage)}% voltooid`}
+                </p>
+              </div>
+            )}
+
+            {/* Quick Actions */}
+            <div className="flex flex-wrap gap-2">
+              <Button 
+                onClick={handleCompleteTask}
+                className="flex-1 min-w-[200px]"
+                size="lg"
+              >
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                Taak Afronden
+              </Button>
+              <Button 
+                variant="outline" 
+                className="flex-1 min-w-[200px]"
+                size="lg"
+              >
+                <Play className="h-4 w-4 mr-2" />
+                Start Timer
+              </Button>
+              <Button 
+                variant="outline"
+                size="lg"
+              >
+                <Bell className="h-4 w-4 mr-2" />
+                Herinnering
+              </Button>
+            </div>
+
+            {/* Linked Application */}
             {linkedApplication && (
-              <div className="p-4 border rounded-lg bg-accent/20 space-y-2">
+              <div className="p-4 rounded-lg bg-accent/30 border border-accent space-y-2 animate-fade-in">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Mail className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium">Gekoppeld aan sollicitatie</span>
+                    <span className="text-sm font-semibold">Gekoppeld aan sollicitatie</span>
                   </div>
                   <Button
                     variant="ghost"
@@ -295,87 +406,138 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               </div>
             )}
 
-            {/* Priority */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-muted-foreground">Prioriteit:</span>
-              <Badge variant={priorityInfo.variant}>{priorityInfo.label}</Badge>
-            </div>
-
-            {/* Assignee */}
-            {task.profiles && (
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium text-muted-foreground">Toegewezen aan:</span>
-                <span className="text-sm">{task.profiles.name || task.profiles.email}</span>
-              </div>
-            )}
-
-            {/* Dates */}
-            <div className="space-y-2">
-              {task.start_at && (
+            {/* Basic Info Section */}
+            <Collapsible 
+              open={sectionsOpen.info} 
+              onOpenChange={() => toggleSection('info')}
+            >
+              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-accent/50 transition-colors group">
                 <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium text-muted-foreground">Start:</span>
-                  <span className="text-sm">
-                    {format(parseISO(task.start_at), "EEEE d MMMM yyyy 'om' HH:mm", { locale: nl })}
-                  </span>
+                  <Info className="h-5 w-5 text-primary" />
+                  <h3 className="font-semibold text-foreground">Basis informatie</h3>
                 </div>
-              )}
-              {task.due_at && (
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium text-muted-foreground">Deadline:</span>
-                  <span className="text-sm">
-                    {format(parseISO(task.due_at), "EEEE d MMMM yyyy 'om' HH:mm", { locale: nl })}
-                  </span>
+                <ChevronDown className={cn(
+                  "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                  sectionsOpen.info && "rotate-180"
+                )} />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-4 space-y-3 animate-accordion-down">
+                {/* Priority */}
+                <div className="flex items-center gap-3 px-3">
+                  <span className="text-sm font-medium text-muted-foreground min-w-[100px]">Prioriteit</span>
+                  <Badge variant={priorityInfo.variant}>{priorityInfo.label}</Badge>
                 </div>
-              )}
-            </div>
 
-            {/* Description */}
+                {/* Assignee */}
+                {task.profiles && (
+                  <div className="flex items-center gap-3 px-3">
+                    <span className="text-sm font-medium text-muted-foreground min-w-[100px]">Toegewezen aan</span>
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">{task.profiles.name || task.profiles.email}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Start Date */}
+                {task.start_at && (
+                  <div className="flex items-center gap-3 px-3">
+                    <span className="text-sm font-medium text-muted-foreground min-w-[100px]">Start</span>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">
+                        {format(parseISO(task.start_at), "EEEE d MMMM yyyy 'om' HH:mm", { locale: nl })}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Due Date */}
+                {task.due_at && (
+                  <div className="flex items-center gap-3 px-3">
+                    <span className="text-sm font-medium text-muted-foreground min-w-[100px]">Deadline</span>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm">
+                        {format(parseISO(task.due_at), "EEEE d MMMM yyyy 'om' HH:mm", { locale: nl })}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* Description Section */}
             {task.description && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium text-muted-foreground">Beschrijving:</span>
-                </div>
-                <div className="bg-muted/50 rounded-lg p-4">
-                  <p className="text-sm whitespace-pre-wrap">{task.description}</p>
-                </div>
-              </div>
+              <Collapsible 
+                open={sectionsOpen.description} 
+                onOpenChange={() => toggleSection('description')}
+              >
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-accent/50 transition-colors group">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-primary" />
+                    <h3 className="font-semibold text-foreground">Beschrijving</h3>
+                  </div>
+                  <ChevronDown className={cn(
+                    "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                    sectionsOpen.description && "rotate-180"
+                  )} />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-4 animate-accordion-down">
+                  <div className="bg-muted/50 rounded-lg p-4 mx-3">
+                    <p className="text-sm whitespace-pre-wrap leading-relaxed">{task.description}</p>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             )}
 
             {/* Next Action */}
             {task.next_action && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium text-muted-foreground">Volgende actie:</span>
-                </div>
-                <div className="bg-primary/10 border-l-4 border-primary rounded-lg p-4">
-                  <p className="text-sm font-medium">{task.next_action}</p>
+              <div className="p-4 rounded-lg bg-gradient-to-r from-primary/10 to-primary/5 border-l-4 border-primary animate-fade-in">
+                <div className="flex items-start gap-3">
+                  <ArrowRight className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-semibold text-foreground">Volgende actie</h3>
+                    <p className="text-sm text-foreground/90">{task.next_action}</p>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Process Steps */}
+            {/* Process Steps Section */}
             {subtasks.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <ListChecks className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium text-muted-foreground">Processtappen:</span>
-                </div>
-                {loadingSubtasks ? (
-                  <div className="text-sm text-muted-foreground">Laden...</div>
-                ) : (
-                  <ProcessTimeline 
-                    subtasks={subtasks}
-                    onCompleteStep={handleCompleteStep}
-                    onSkipStep={handleSkipStep}
-                    onResetStep={handleResetStep}
-                  />
-                )}
-              </div>
+              <Collapsible 
+                open={sectionsOpen.steps} 
+                onOpenChange={() => toggleSection('steps')}
+              >
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-accent/50 transition-colors group">
+                  <div className="flex items-center gap-2">
+                    <ListChecks className="h-5 w-5 text-primary" />
+                    <h3 className="font-semibold text-foreground">Processtappen</h3>
+                    <Badge variant="secondary" className="ml-2">
+                      {completedCount}/{totalCount}
+                    </Badge>
+                  </div>
+                  <ChevronDown className={cn(
+                    "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                    sectionsOpen.steps && "rotate-180"
+                  )} />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-4 animate-accordion-down">
+                  {loadingSubtasks ? (
+                    <div className="text-sm text-muted-foreground px-3">Laden...</div>
+                  ) : (
+                    <div className="px-3">
+                      <ProcessTimeline 
+                        subtasks={subtasks}
+                        onCompleteStep={handleCompleteStep}
+                        onSkipStep={handleSkipStep}
+                        onResetStep={handleResetStep}
+                      />
+                    </div>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
             )}
           </div>
         </DialogContent>
