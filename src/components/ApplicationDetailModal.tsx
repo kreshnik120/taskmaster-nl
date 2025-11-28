@@ -746,7 +746,7 @@ export function ApplicationDetailModal({
         }
         
         const clientOrgId = client.org_id;
-        const clientOrgName = clientOrgId === '650e8400-e29b-41d4-a716-446655440000' ? 'ABCzorg' : 'CitoZorg';
+        const clientOrgName = clientOrgId === '550e8400-e29b-41d4-a716-446655440000' ? 'ABCzorg' : 'CitoZorg';
         const applicantOrg = extractedData.assigned_organization;
         if (applicantOrg && clientOrgName === applicantOrg) {
           score += 10;
@@ -1684,7 +1684,7 @@ export function ApplicationDetailModal({
                               <div className="flex-1 space-y-2">
                                 <div className="flex items-center gap-2">
                                   <Building2 className="h-4 w-4 text-muted-foreground" />
-                                  <p className="text-sm font-semibold">{client.company}</p>
+                                  <p className="text-sm font-semibold">{client.name}</p>
                                   <Badge variant="default" className="text-xs">
                                     {client.matchScore}% match
                                   </Badge>
