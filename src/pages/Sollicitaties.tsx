@@ -461,15 +461,27 @@ const Sollicitaties = () => {
               />
 
               {/* Pipeline Funnel Mini-Chart */}
-              <PipelineFunnelMini applications={filteredApplications} />
+              <PipelineFunnelMini 
+                applications={filteredApplications}
+                onStageClick={(stageKey) => {
+                  const element = document.getElementById(`column-${stageKey}`);
+                  element?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }}
+              />
 
               {/* Urgency Banner - Only if urgent items exist */}
               <div className="py-6">
-                <UrgencyBanner applications={filteredApplications} />
+                <UrgencyBanner 
+                  applications={filteredApplications}
+                  onApplicationClick={handleApplicationClick}
+                />
               </div>
 
-              {/* Recent Movements */}
-              <RecentMovementsWidget applications={filteredApplications} />
+                {/* Recent Movements */}
+                <RecentMovementsWidget 
+                  applications={filteredApplications}
+                  isLoading={loading}
+                />
             </div>
 
             {/* Search and Filter Bar - Progressive Disclosure */}
