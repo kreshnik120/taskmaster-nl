@@ -1,7 +1,5 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { AppSidebar } from "@/components/AppSidebar";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -324,46 +322,32 @@ const Professionals = () => {
 
   if (loading) {
     return (
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full">
-          <AppSidebar />
-          <main className="flex-1 p-8">
-            <div className="flex items-center justify-center h-full">
-              <p>Laden...</p>
-            </div>
-          </main>
-        </div>
-      </SidebarProvider>
+      <div className="flex items-center justify-center h-full">
+        <p>Laden...</p>
+      </div>
     );
   }
 
   return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full">
-      <AppSidebar />
-      <main className="flex-1 overflow-auto">
-        <div className="p-6 space-y-6">
-          <SidebarTrigger className="mb-4" />
-
-          {/* Hero Section */}
-          <div className="space-y-6">
-            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-background rounded-lg p-6 border border-border/50">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-2xl font-bold mb-2">Professionals</h1>
-                  <p className="text-muted-foreground">
-                    Beheer jouw ZZP'ers en flexwerkers
-                  </p>
-                </div>
-              {canEdit() && (
-                <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Toevoegen
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div className="space-y-6">
+      {/* Hero Section */}
+      <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-background rounded-lg p-6 border border-border/50">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold mb-2">Professionals</h1>
+            <p className="text-muted-foreground">
+              Beheer jouw ZZP'ers en flexwerkers
+            </p>
+          </div>
+          {canEdit() && (
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Toevoegen
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                       <DialogTitle>Nieuwe Professional</DialogTitle>
                       <DialogDescription>
@@ -461,11 +445,11 @@ const Professionals = () => {
                   </DialogContent>
                 </Dialog>
               )}
-              </div>
             </div>
+          </div>
 
-            {/* KPI Dashboard */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {/* KPI Dashboard */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               {/* Total Professionals */}
               <Card className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 border-blue-200/50 hover:shadow-lg transition-shadow">
                 <CardContent className="p-6">
@@ -597,10 +581,12 @@ const Professionals = () => {
                 <AlertCircle className="h-4 w-4" />
                 <span>{filteredProfessionals.length} van {professionals.length} professionals getoond</span>
               </div>
-            )}
+              )}
+            </div>
           </div>
 
-            {filteredProfessionals.length === 0 ? (
+          {/* Professional Cards */}
+          {filteredProfessionals.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center">
                   <p className="text-muted-foreground mb-4">
@@ -707,15 +693,12 @@ const Professionals = () => {
                           </Button>
                         </div>
                       </CardContent>
-                    </Card>
-                  </motion.div>
-                ))}
-              </div>
-            )}
-          </div>
-        </main>
-      </div>
-      
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+          )}
+
       <ProfessionalDetailModal
         professional={selectedProfessional}
         open={detailModalOpen}
@@ -725,7 +708,16 @@ const Professionals = () => {
           setDetailModalOpen(false);
         }}
       />
-    </SidebarProvider>
+
+      <ProfessionalBulkActionBar
+        selectedCount={selectedProfessionalIds.size}
+        onClearSelection={handleClearSelection}
+        onBulkChangeStatus={handleBulkChangeStatus}
+        onBulkEmail={handleBulkEmail}
+        onBulkExport={handleBulkExport}
+        onBulkDelete={handleBulkDelete}
+      />
+    </div>
   );
 };
 
