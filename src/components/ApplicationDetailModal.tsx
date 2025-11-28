@@ -12,6 +12,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2, Building2, UserPlus, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
@@ -179,6 +189,10 @@ export function ApplicationDetailModal({
   const [matchedClients, setMatchedClients] = useState<any[]>([]);
   const [matchingLoading, setMatchingLoading] = useState(false);
   const [showMatches, setShowMatches] = useState(false);
+  
+  // Delete confirmation
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Load linked tasks
   useEffect(() => {
@@ -287,6 +301,7 @@ export function ApplicationDetailModal({
       interview: "Interview",
       goedgekeurd: "Goedgekeurd",
       geplaatst: "Geplaatst",
+      afgewezen: "Afgewezen",
     };
     return labels[stage] || stage;
   };
@@ -821,14 +836,53 @@ export function ApplicationDetailModal({
     }
   };
 
+  const handleDelete = async () => {
+    try {
+      setDeleting(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("professional_applications")
+        .update({ 
+          deleted_at: new Date().toISOString(),
+          deleted_by: user.id 
+        })
+        .eq("id", application.id);
+
+      if (error) throw error;
+
+      toast.success("Sollicitatie verwijderd");
+      onApplicationUpdated();
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Error deleting application:", error);
+      toast.error("Kon sollicitatie niet verwijderen");
+    } finally {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            <Mail className="h-5 w-5" />
-            Sollicitatie Details
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-3">
+              <Mail className="h-5 w-5" />
+              Sollicitatie Details
+            </DialogTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Verwijderen
+            </Button>
+          </div>
         </DialogHeader>
 
         {/* Header Metadata */}
@@ -1753,7 +1807,7 @@ export function ApplicationDetailModal({
             <div className="space-y-3">
               <span className="text-sm font-medium">Verplaats naar:</span>
               <div className="flex flex-wrap gap-2">
-                {["nieuw", "screening", "interview", "goedgekeurd", "geplaatst"].map((stage) => (
+                {["nieuw", "screening", "interview", "goedgekeurd", "geplaatst", "afgewezen"].map((stage) => (
                   <Button
                     key={stage}
                     variant={application.pipeline_stage === stage ? "default" : "outline"}
@@ -1769,6 +1823,28 @@ export function ApplicationDetailModal({
           </TabsContent>
         </Tabs>
       </DialogContent>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sollicitatie verwijderen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              De sollicitatie wordt verplaatst naar het archief. Je kunt deze later herstellen als dat nodig is.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Annuleer</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Verwijderen..." : "Verwijderen"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

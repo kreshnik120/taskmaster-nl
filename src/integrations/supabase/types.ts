@@ -1916,6 +1916,8 @@ export type Database = {
           created_at: string | null
           cv_file_name: string | null
           cv_file_path: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           email_body: string | null
           email_from: string
           email_subject: string | null
@@ -1925,6 +1927,8 @@ export type Database = {
           org_id: string | null
           pipeline_stage: string | null
           professional_id: string | null
+          rejected_at: string | null
+          rejection_reason: string | null
           status: string
           updated_at: string | null
         }
@@ -1933,6 +1937,8 @@ export type Database = {
           created_at?: string | null
           cv_file_name?: string | null
           cv_file_path?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           email_body?: string | null
           email_from: string
           email_subject?: string | null
@@ -1942,6 +1948,8 @@ export type Database = {
           org_id?: string | null
           pipeline_stage?: string | null
           professional_id?: string | null
+          rejected_at?: string | null
+          rejection_reason?: string | null
           status?: string
           updated_at?: string | null
         }
@@ -1950,6 +1958,8 @@ export type Database = {
           created_at?: string | null
           cv_file_name?: string | null
           cv_file_path?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           email_body?: string | null
           email_from?: string
           email_subject?: string | null
@@ -1959,6 +1969,8 @@ export type Database = {
           org_id?: string | null
           pipeline_stage?: string | null
           professional_id?: string | null
+          rejected_at?: string | null
+          rejection_reason?: string | null
           status?: string
           updated_at?: string | null
         }
