@@ -344,7 +344,7 @@ const Tijdregistratie = () => {
       </div>
 
       {/* Stats Bar - Monochrome KPIs */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Vandaag */}
         <Card className="cursor-pointer hover:bg-accent/50 transition-colors">
           <CardContent className="pt-6">
