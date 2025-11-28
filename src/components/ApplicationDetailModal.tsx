@@ -853,8 +853,9 @@ export function ApplicationDetailModal({
       if (error) throw error;
 
       toast.success("Sollicitatie verwijderd");
+      setDeleteDialogOpen(false);
       onApplicationUpdated();
-      onOpenChange(false);
+      setTimeout(() => onOpenChange(false), 100);
     } catch (error) {
       console.error("Error deleting application:", error);
       toast.error("Kon sollicitatie niet verwijderen");
