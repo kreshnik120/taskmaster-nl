@@ -54,6 +54,7 @@ const PIPELINE_STAGES = [
   { id: "interview", name: "Interview", color: "", borderColor: "border-t-2 border-t-sky-400", countColor: "text-sky-600" },
   { id: "goedgekeurd", name: "Goedgekeurd", color: "", borderColor: "border-t-2 border-t-emerald-400", countColor: "text-emerald-600" },
   { id: "geplaatst", name: "Geplaatst", color: "", borderColor: "border-t-2 border-t-green-500", countColor: "text-green-700" },
+  { id: "afgewezen", name: "Afgewezen", color: "", borderColor: "border-t-2 border-t-red-400", countColor: "text-red-600" },
 ];
 
 const FUNCTIE_NIVEAUS = ["VIG", "HBO-V", "Verpleegkundige MBO", "Helpende", "Begeleider", "Persoonlijk begeleider", "GGZ-agoog"];
@@ -476,6 +477,32 @@ const Sollicitaties = () => {
     toast.success(`Email openen met ${selectedApplicationIds.size} ontvangers`);
   };
 
+  const handleBulkDelete = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const updates = Array.from(selectedApplicationIds).map((id) => {
+        return supabase
+          .from("professional_applications")
+          .update({ 
+            deleted_at: new Date().toISOString(),
+            deleted_by: user.id 
+          })
+          .eq("id", id);
+      });
+
+      await Promise.all(updates);
+
+      toast.success(`${selectedApplicationIds.size} sollicitaties verwijderd`);
+      setSelectedApplicationIds(new Set());
+      loadApplications();
+    } catch (err: any) {
+      console.error("Error bulk deleting:", err);
+      toast.error(`Fout bij verwijderen: ${err?.message}`);
+    }
+  };
+
   const getStageStats = () => {
     return PIPELINE_STAGES.map(stage => ({
       ...stage,
@@ -823,6 +850,7 @@ const Sollicitaties = () => {
             onBulkMove={handleBulkMove}
             onBulkAssignBureau={handleBulkAssignBureau}
             onBulkEmail={handleBulkEmail}
+            onBulkDelete={handleBulkDelete}
           />
         </main>
       </div>

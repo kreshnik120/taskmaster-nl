@@ -19,6 +19,7 @@ interface BulkActionBarProps {
   onBulkMove: (toStage: string) => void;
   onBulkAssignBureau: (bureau: string) => void;
   onBulkEmail: () => void;
+  onBulkDelete: () => void;
 }
 
 const PIPELINE_STAGES = [
@@ -37,6 +38,7 @@ export function BulkActionBar({
   onBulkMove,
   onBulkAssignBureau,
   onBulkEmail,
+  onBulkDelete,
 }: BulkActionBarProps) {
   const [moveToStage, setMoveToStage] = useState<string>("");
   const [assignBureau, setAssignBureau] = useState<string>("");
@@ -112,6 +114,17 @@ export function BulkActionBar({
             >
               <Send className="h-4 w-4 mr-2" />
               Email verzenden
+            </Button>
+
+            {/* Bulk Delete */}
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-9"
+              onClick={onBulkDelete}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Verwijderen
             </Button>
           </div>
 
