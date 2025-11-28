@@ -15,22 +15,22 @@ interface PriorityBadgeProps {
 const priorityConfig = {
   LOW: {
     label: "Laag",
-    color: "bg-muted/50 text-muted-foreground border-border",
+    color: "text-muted-foreground",
     icon: ArrowDown,
   },
   MEDIUM: {
     label: "Gemiddeld",
-    color: "bg-muted text-foreground border-border",
+    color: "text-foreground",
     icon: Minus,
   },
   HIGH: {
     label: "Hoog",
-    color: "bg-muted text-foreground border-border font-semibold",
+    color: "text-foreground font-semibold",
     icon: ArrowUp,
   },
   CRITICAL: {
     label: "Kritiek",
-    color: "bg-foreground/10 text-foreground border-foreground/30 font-bold",
+    color: "text-foreground font-bold",
     icon: ArrowUp,
   },
 };
@@ -85,10 +85,10 @@ export function PriorityBadge({ taskId, priority, editable = true, size = "md" }
 
   if (!editable) {
     return (
-      <Badge className={`${config.color} ${sizeClasses[size]} inline-flex items-center font-semibold border`}>
+      <div className={`${config.color} ${sizeClasses[size]} inline-flex items-center gap-1.5`}>
         <Icon size={iconSizes[size]} className="shrink-0" />
-        <span>{config.label}</span>
-      </Badge>
+        <span className="text-xs">{config.label}</span>
+      </div>
     );
   }
 
@@ -122,12 +122,12 @@ export function PriorityBadge({ taskId, priority, editable = true, size = "md" }
   }
 
   return (
-    <Badge
-      className={`${config.color} ${sizeClasses[size]} inline-flex items-center font-semibold border cursor-pointer hover:opacity-80 transition-opacity`}
+    <div
+      className={`${config.color} ${sizeClasses[size]} inline-flex items-center gap-1.5 cursor-pointer hover:opacity-70 transition-opacity`}
       onClick={() => setIsEditing(true)}
     >
       <Icon size={iconSizes[size]} className="shrink-0" />
-      <span>{config.label}</span>
-    </Badge>
+      <span className="text-xs">{config.label}</span>
+    </div>
   );
 }
