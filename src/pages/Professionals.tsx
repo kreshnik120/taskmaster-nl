@@ -3,14 +3,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Upload, Search, Pencil, Trash2, Phone, Mail, MapPin, Briefcase, Car, Users, CheckCircle, Link2, BarChart3, TrendingUp, AlertCircle, X } from "lucide-react";
+import { Plus, Search, ChevronDown, X, Users, CheckCircle, UserPlus } from "lucide-react";
 import { ProfessionalBulkActionBar } from "@/components/recruitment/ProfessionalBulkActionBar";
+import { ProfessionalCard } from "@/components/recruitment/ProfessionalCard";
 import { motion } from "framer-motion";
 import { useUserRole } from "@/hooks/useUserRole";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -296,20 +296,11 @@ const Professionals = () => {
   const activeCount = professionals.filter(p => p.status === "actief").length;
   const withActivePlacementCount = 0; // TODO: Calculate from professional_clients
   const availableCount = professionals.filter(p => p.status === "actief").length - withActivePlacementCount;
-  const avgCompleteness = professionals.length > 0 
-    ? Math.round(professionals.reduce((sum, p) => {
-        let score = 0;
-        if (p.full_name) score += 15;
-        if (p.email) score += 15;
-        if (p.telefoonnummer) score += 15;
-        if (p.functie_niveau) score += 20;
-        if (p.werkvorm) score += 15;
-        if (p.regio) score += 10;
-        if (p.heeft_auto !== null) score += 5;
-        if (p.skills && p.skills.length > 0) score += 5;
-        return sum + score;
-      }, 0) / professionals.length)
-    : 0;
+  
+  const newInLast7Days = professionals.filter(p => {
+    const daysSinceCreated = Math.floor((new Date().getTime() - new Date(p.created_at).getTime()) / (1000 * 60 * 60 * 24));
+    return daysSinceCreated <= 7;
+  }).length;
 
   const hasActiveFilters = filterFunctie !== "all" || filterWerkvorm !== "all" || filterStatus !== "all" || filterRegio !== "";
 
@@ -318,6 +309,17 @@ const Professionals = () => {
     setFilterWerkvorm("all");
     setFilterStatus("all");
     setFilterRegio("");
+  };
+
+  const handleKpiClick = (filterType: string) => {
+    if (filterType === "all") {
+      resetFilters();
+    } else if (filterType === "beschikbaar") {
+      setFilterStatus("actief");
+    } else if (filterType === "nieuw") {
+      // Show only new professionals (created in last 7 days)
+      resetFilters();
+    }
   };
 
   if (loading) {
@@ -330,383 +332,310 @@ const Professionals = () => {
 
   return (
     <div className="space-y-6">
-      {/* Hero Section */}
-      <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-background rounded-lg p-6 border border-border/50">
+      {/* Hero Section - Minimal */}
+      <div className="space-y-2">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold mb-2">Professionals</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Professionals</h1>
             <p className="text-muted-foreground">
-              Beheer jouw ZZP'ers en flexwerkers
+              {professionals.length} professionals in je netwerk
             </p>
           </div>
           {canEdit() && (
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
-                <Button>
+                <Button size="sm">
                   <Plus className="w-4 h-4 mr-2" />
                   Toevoegen
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                      <DialogTitle>Nieuwe Professional</DialogTitle>
-                      <DialogDescription>
-                        Voeg een nieuwe professional toe aan het systeem
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="full_name">Volledige naam *</Label>
-                        <Input
-                          id="full_name"
-                          value={newProfessional.full_name}
-                          onChange={(e) =>
-                            setNewProfessional({ ...newProfessional, full_name: e.target.value })
-                          }
-                          placeholder="John Doe"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="functie_niveau">Functieniveau *</Label>
-                        <Select
-                          value={newProfessional.functie_niveau}
-                          onValueChange={(value) =>
-                            setNewProfessional({ ...newProfessional, functie_niveau: value })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecteer functieniveau" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="VIG">VIG</SelectItem>
-                            <SelectItem value="HBO-V">HBO-V</SelectItem>
-                            <SelectItem value="Verpleegkundige MBO">Verpleegkundige MBO</SelectItem>
-                            <SelectItem value="Helpende">Helpende</SelectItem>
-                            <SelectItem value="Begeleider">Begeleider</SelectItem>
-                            <SelectItem value="Persoonlijk begeleider">Persoonlijk begeleider</SelectItem>
-                            <SelectItem value="GGZ-agoog">GGZ-agoog</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="grid gap-2">
-                          <Label htmlFor="email">Email</Label>
-                          <Input
-                            id="email"
-                            type="email"
-                            value={newProfessional.email}
-                            onChange={(e) =>
-                              setNewProfessional({ ...newProfessional, email: e.target.value })
-                            }
-                            placeholder="professional@example.com"
-                          />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="telefoonnummer">Telefoonnummer</Label>
-                          <Input
-                            id="telefoonnummer"
-                            value={newProfessional.telefoonnummer}
-                            onChange={(e) =>
-                              setNewProfessional({ ...newProfessional, telefoonnummer: e.target.value })
-                            }
-                            placeholder="+31612345678"
-                          />
-                        </div>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="regio">Regio</Label>
-                        <Input
-                          id="regio"
-                          value={newProfessional.regio}
-                          onChange={(e) =>
-                            setNewProfessional({ ...newProfessional, regio: e.target.value })
-                          }
-                          placeholder="Amsterdam"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="skills">Vaardigheden (kommagescheiden)</Label>
-                        <Input
-                          id="skills"
-                          value={newProfessional.skills}
-                          onChange={(e) =>
-                            setNewProfessional({ ...newProfessional, skills: e.target.value })
-                          }
-                          placeholder="Wondverzorging, Medicatie, ..."
-                        />
-                      </div>
+                <DialogHeader>
+                  <DialogTitle>Nieuwe Professional</DialogTitle>
+                  <DialogDescription>
+                    Voeg een nieuwe professional toe aan het systeem
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="full_name">Volledige naam *</Label>
+                    <Input
+                      id="full_name"
+                      value={newProfessional.full_name}
+                      onChange={(e) =>
+                        setNewProfessional({ ...newProfessional, full_name: e.target.value })
+                      }
+                      placeholder="John Doe"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="functie_niveau">Functieniveau *</Label>
+                    <Select
+                      value={newProfessional.functie_niveau}
+                      onValueChange={(value) =>
+                        setNewProfessional({ ...newProfessional, functie_niveau: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecteer functieniveau" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="VIG">VIG</SelectItem>
+                        <SelectItem value="HBO-V">HBO-V</SelectItem>
+                        <SelectItem value="Verpleegkundige MBO">Verpleegkundige MBO</SelectItem>
+                        <SelectItem value="Helpende">Helpende</SelectItem>
+                        <SelectItem value="Begeleider">Begeleider</SelectItem>
+                        <SelectItem value="Persoonlijk begeleider">Persoonlijk begeleider</SelectItem>
+                        <SelectItem value="GGZ-agoog">GGZ-agoog</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={newProfessional.email}
+                        onChange={(e) =>
+                          setNewProfessional({ ...newProfessional, email: e.target.value })
+                        }
+                        placeholder="professional@example.com"
+                      />
                     </div>
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                        Annuleren
-                      </Button>
-                      <Button onClick={handleAddProfessional}>Toevoegen</Button>
+                    <div className="grid gap-2">
+                      <Label htmlFor="telefoonnummer">Telefoonnummer</Label>
+                      <Input
+                        id="telefoonnummer"
+                        value={newProfessional.telefoonnummer}
+                        onChange={(e) =>
+                          setNewProfessional({ ...newProfessional, telefoonnummer: e.target.value })
+                        }
+                        placeholder="+31612345678"
+                      />
                     </div>
-                  </DialogContent>
-                </Dialog>
-            )}
-          </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="regio">Regio</Label>
+                    <Input
+                      id="regio"
+                      value={newProfessional.regio}
+                      onChange={(e) =>
+                        setNewProfessional({ ...newProfessional, regio: e.target.value })
+                      }
+                      placeholder="Amsterdam"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="skills">Vaardigheden (kommagescheiden)</Label>
+                    <Input
+                      id="skills"
+                      value={newProfessional.skills}
+                      onChange={(e) =>
+                        setNewProfessional({ ...newProfessional, skills: e.target.value })
+                      }
+                      placeholder="Wondverzorging, Medicatie, ..."
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                    Annuleren
+                  </Button>
+                  <Button onClick={handleAddProfessional}>Toevoegen</Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
+      </div>
+
+      {/* Stats Bar - Monochrome KPIs */}
+      <div className="grid gap-3 md:grid-cols-4">
+        <Card 
+          className="border-border hover:shadow-sm transition-all cursor-pointer"
+          onClick={() => handleKpiClick("all")}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-1">
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="text-2xl font-semibold">{totalCount}</div>
+            <div className="text-sm text-muted-foreground">Totaal</div>
+          </CardContent>
+        </Card>
+
+        <Card 
+          className="border-border hover:shadow-sm transition-all cursor-pointer"
+          onClick={() => handleKpiClick("beschikbaar")}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-1">
+              <CheckCircle className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="text-2xl font-semibold">{availableCount}</div>
+            <div className="text-sm text-muted-foreground">Beschikbaar</div>
+          </CardContent>
+        </Card>
+
+        <Card 
+          className="border-border hover:shadow-sm transition-all cursor-pointer"
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-1">
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="text-2xl font-semibold">{withActivePlacementCount}</div>
+            <div className="text-sm text-muted-foreground">Gekoppeld</div>
+          </CardContent>
+        </Card>
+
+        <Card 
+          className="border-border hover:shadow-sm transition-all cursor-pointer"
+          onClick={() => handleKpiClick("nieuw")}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-1">
+              <UserPlus className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="text-2xl font-semibold">{newInLast7Days}</div>
+            <div className="text-sm text-muted-foreground">Nieuw (7d)</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filter Bar - Inline */}
+      <div className="flex items-center gap-3 relative">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Zoek op naam..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10 h-9 border-border"
+          />
         </div>
 
-        {/* KPI Dashboard */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {/* Total Professionals */}
-              <Card className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 border-blue-200/50 hover:shadow-lg transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Totaal Professionals</p>
-                      <p className="text-3xl font-bold">{totalCount}</p>
-                    </div>
-                    <Users className="h-8 w-8 text-blue-600" />
-                  </div>
-                </CardContent>
-              </Card>
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-2">
+              <span className="text-sm">Filters</span>
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="absolute right-0 mt-2 z-10">
+            <Card className="w-[400px] p-4 shadow-lg">
+              <div className="space-y-3">
+                <Select value={filterFunctie} onValueChange={setFilterFunctie}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Functieniveau" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle functies</SelectItem>
+                    <SelectItem value="VIG">VIG</SelectItem>
+                    <SelectItem value="HBO-V">HBO-V</SelectItem>
+                    <SelectItem value="Verpleegkundige MBO">Verpleegkundige MBO</SelectItem>
+                    <SelectItem value="Helpende">Helpende</SelectItem>
+                    <SelectItem value="Begeleider">Begeleider</SelectItem>
+                    <SelectItem value="Persoonlijk begeleider">Persoonlijk begeleider</SelectItem>
+                    <SelectItem value="GGZ-agoog">GGZ-agoog</SelectItem>
+                  </SelectContent>
+                </Select>
 
-              {/* Active & Available */}
-              <Card className="bg-gradient-to-br from-green-500/10 to-green-500/5 border-green-200/50 hover:shadow-lg transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Actief & Beschikbaar</p>
-                      <p className="text-3xl font-bold">{availableCount}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{activeCount} totaal actief</p>
-                    </div>
-                    <CheckCircle className="h-8 w-8 text-green-600" />
-                  </div>
-                </CardContent>
-              </Card>
+                <Select value={filterWerkvorm} onValueChange={setFilterWerkvorm}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Werkvorm" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle werkvormen</SelectItem>
+                    <SelectItem value="ZZP">ZZP</SelectItem>
+                    <SelectItem value="Uitzendkracht">Uitzendkracht</SelectItem>
+                    <SelectItem value="ABCito constructie">ABCito constructie</SelectItem>
+                  </SelectContent>
+                </Select>
 
-              {/* With Active Placement */}
-              <Card className="bg-gradient-to-br from-purple-500/10 to-purple-500/5 border-purple-200/50 hover:shadow-lg transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Met Actieve Plaatsing</p>
-                      <p className="text-3xl font-bold">{withActivePlacementCount}</p>
-                      <p className="text-xs text-muted-foreground mt-1">Momenteel ingezet</p>
-                    </div>
-                    <Link2 className="h-8 w-8 text-purple-600" />
-                  </div>
-                </CardContent>
-              </Card>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alle statussen</SelectItem>
+                    <SelectItem value="actief">Actief</SelectItem>
+                    <SelectItem value="inactief">Inactief</SelectItem>
+                    <SelectItem value="op_pauze">Op pauze</SelectItem>
+                  </SelectContent>
+                </Select>
 
-              {/* Profile Completeness */}
-              <Card className="bg-gradient-to-br from-orange-500/10 to-orange-500/5 border-orange-200/50 hover:shadow-lg transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Profiel Volledigheid</p>
-                      <p className="text-3xl font-bold">{avgCompleteness}%</p>
-                      <p className="text-xs text-muted-foreground mt-1">Gemiddeld</p>
-                    </div>
-                    <BarChart3 className="h-8 w-8 text-orange-600" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-      {/* Search & Filters */}
-      <div className="space-y-3">
-            <div className="flex gap-3 flex-wrap">
-              <div className="flex-1 min-w-[200px] relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                 <Input
-                  placeholder="Zoek op naam..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  type="text"
+                  placeholder="Filter op regio..."
+                  value={filterRegio}
+                  onChange={(e) => setFilterRegio(e.target.value)}
                 />
               </div>
-              
-              <Select value={filterFunctie} onValueChange={setFilterFunctie}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Functie" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle functies</SelectItem>
-                  <SelectItem value="VIG">VIG</SelectItem>
-                  <SelectItem value="HBO-V">HBO-V</SelectItem>
-                  <SelectItem value="Verpleegkundige MBO">Verpleegkundige MBO</SelectItem>
-                  <SelectItem value="Helpende">Helpende</SelectItem>
-                  <SelectItem value="Begeleider">Begeleider</SelectItem>
-                  <SelectItem value="Persoonlijk begeleider">Persoonlijk begeleider</SelectItem>
-                  <SelectItem value="GGZ-agoog">GGZ-agoog</SelectItem>
-                </SelectContent>
-              </Select>
+            </Card>
+          </CollapsibleContent>
+        </Collapsible>
 
-              <Select value={filterWerkvorm} onValueChange={setFilterWerkvorm}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Werkvorm" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle werkvormen</SelectItem>
-                  <SelectItem value="ZZP">ZZP</SelectItem>
-                  <SelectItem value="Uitzendkracht">Uitzendkracht</SelectItem>
-                  <SelectItem value="ABCito constructie">ABCito constructie</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle statussen</SelectItem>
-                  <SelectItem value="actief">Actief</SelectItem>
-                  <SelectItem value="inactief">Inactief</SelectItem>
-                  <SelectItem value="op_pauze">Op pauze</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Input
-                placeholder="Filter regio..."
-                value={filterRegio}
-                onChange={(e) => setFilterRegio(e.target.value)}
-                className="w-[160px]"
-              />
-
-              {hasActiveFilters && (
-                <Button variant="outline" onClick={resetFilters}>
-                  <X className="w-4 h-4 mr-2" />
-                  Reset filters
-                </Button>
-              )}
-            </div>
-
-            {/* Active Filter Indicator */}
-            {hasActiveFilters && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <AlertCircle className="h-4 w-4" />
-                <span>{filteredProfessionals.length} van {professionals.length} professionals getoond</span>
-              </div>
-            )}
-          </div>
-
-      {/* Professional Cards */}
-      {filteredProfessionals.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <p className="text-muted-foreground mb-4">
-                    Geen professionals gevonden
-                  </p>
-                  <Button onClick={() => setIsAddDialogOpen(true)}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Eerste professional toevoegen
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {filteredProfessionals.map((professional, idx) => (
-                   <motion.div
-                     key={professional.id}
-                     initial={{ opacity: 0, y: 20 }}
-                     animate={{ opacity: 1, y: 0 }}
-                     transition={{ duration: 0.3, delay: idx * 0.05 }}
-                   >
-                     <Card className="hover:scale-[1.02] hover:shadow-lg transition-all duration-200 relative">
-                       {/* Checkbox for bulk selection */}
-                       <div className="absolute top-3 left-3 z-10">
-                         <Checkbox
-                           checked={selectedProfessionalIds.has(professional.id)}
-                           onCheckedChange={(checked) => handleSelectProfessional(professional.id, !!checked)}
-                           className="bg-background border-2"
-                         />
-                       </div>
-
-                       <CardHeader className="pl-12">
-                         <CardTitle className="flex items-center justify-between">
-                           <span>{professional.full_name}</span>
-                           {professional.rating && (
-                             <Badge variant="secondary">
-                               ⭐ {professional.rating}
-                             </Badge>
-                           )}
-                         </CardTitle>
-                       </CardHeader>
-                      <CardContent className="space-y-2">
-                        <div>
-                          <Badge>{professional.functie_niveau}</Badge>
-                          {professional.status === "actief" && (
-                            <Badge variant="outline" className="ml-2">
-                              Actief
-                            </Badge>
-                          )}
-                        </div>
-                        {professional.werkvorm && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <Badge variant="secondary">{professional.werkvorm}</Badge>
-                          </div>
-                        )}
-                        {professional.regio && (
-                          <p className="text-sm text-muted-foreground flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            {professional.regio}
-                          </p>
-                        )}
-                        {professional.telefoonnummer && (
-                          <p className="text-sm text-muted-foreground flex items-center gap-1">
-                            <Phone className="h-3 w-3" />
-                            {professional.telefoonnummer}
-                          </p>
-                        )}
-                        {professional.email && (
-                          <p className="text-sm text-muted-foreground flex items-center gap-1 truncate">
-                            <Mail className="h-3 w-3" />
-                            {professional.email}
-                          </p>
-                        )}
-                        {professional.heeft_auto && (
-                          <p className="text-sm text-muted-foreground flex items-center gap-1">
-                            <Car className="h-3 w-3" />
-                            Eigen vervoer
-                          </p>
-                        )}
-                        {professional.skills.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {professional.skills.slice(0, 3).map((skill, idx) => (
-                              <Badge key={idx} variant="outline" className="text-xs">
-                                {skill}
-                              </Badge>
-                            ))}
-                            {professional.skills.length > 3 && (
-                              <Badge variant="outline" className="text-xs">
-                                +{professional.skills.length - 3}
-                              </Badge>
-                            )}
-                          </div>
-                        )}
-                        <div className="flex gap-2 mt-4 pt-4 border-t">
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            className="flex-1"
-                            onClick={() => {
-                              setSelectedProfessional(professional);
-                              setDetailModalOpen(true);
-                            }}
-                          >
-                            Bekijk Details
-                          </Button>
-                        </div>
-                      </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-          </div>
+        {hasActiveFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={resetFilters}
+            className="gap-2"
+          >
+            <X className="h-4 w-4" />
+            Reset
+          </Button>
         )}
+      </div>
 
+      {/* Active Filter Indicator */}
+      {hasActiveFilters && (
+        <div className="text-sm text-muted-foreground">
+          {filteredProfessionals.length} van {professionals.length} professionals
+        </div>
+      )}
+
+      {/* Professionals Grid - Minimal Cards */}
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        {filteredProfessionals.map((professional) => (
+          <motion.div
+            key={professional.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.15 }}
+          >
+            <ProfessionalCard
+              professional={professional}
+              isSelected={selectedProfessionalIds.has(professional.id)}
+              onSelect={handleSelectProfessional}
+              onClick={() => {
+                setSelectedProfessional(professional);
+                setDetailModalOpen(true);
+              }}
+            />
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Empty State */}
+      {filteredProfessionals.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          <p>Geen professionals gevonden</p>
+        </div>
+      )}
+
+      {/* Detail Modal */}
       <ProfessionalDetailModal
         professional={selectedProfessional}
         open={detailModalOpen}
         onOpenChange={setDetailModalOpen}
-        onSuccess={() => {
-          fetchProfessionals();
-          setDetailModalOpen(false);
-        }}
+        onSuccess={fetchProfessionals}
       />
 
+      {/* Bulk Action Bar */}
       <ProfessionalBulkActionBar
         selectedCount={selectedProfessionalIds.size}
         onClearSelection={handleClearSelection}
