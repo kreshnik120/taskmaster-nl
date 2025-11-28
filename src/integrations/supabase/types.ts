@@ -887,6 +887,7 @@ export type Database = {
           email: string | null
           gezochte_functies: string[] | null
           id: string
+          is_active: boolean | null
           name: string
           notes: string | null
           org_id: string
@@ -906,6 +907,7 @@ export type Database = {
           email?: string | null
           gezochte_functies?: string[] | null
           id?: string
+          is_active?: boolean | null
           name: string
           notes?: string | null
           org_id: string
@@ -925,6 +927,7 @@ export type Database = {
           email?: string | null
           gezochte_functies?: string[] | null
           id?: string
+          is_active?: boolean | null
           name?: string
           notes?: string | null
           org_id?: string
@@ -2238,6 +2241,7 @@ export type Database = {
           btw_nummer: string | null
           cao_akkoord: boolean | null
           created_at: string
+          deleted_at: string | null
           email: string | null
           full_name: string
           functie_niveau: string
@@ -2266,6 +2270,7 @@ export type Database = {
           btw_nummer?: string | null
           cao_akkoord?: boolean | null
           created_at?: string
+          deleted_at?: string | null
           email?: string | null
           full_name: string
           functie_niveau: string
@@ -2294,6 +2299,7 @@ export type Database = {
           btw_nummer?: string | null
           cao_akkoord?: boolean | null
           created_at?: string
+          deleted_at?: string | null
           email?: string | null
           full_name?: string
           functie_niveau?: string
