@@ -15,6 +15,7 @@ import {
   Mail, 
   ExternalLink,
   Play,
+  Square,
   CheckCircle2,
   Bell,
   ChevronDown,
@@ -27,6 +28,7 @@ import { ProcessTimeline } from "./ProcessTimeline";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useTaskTimer } from "@/hooks/useTaskTimer";
 
 interface Subtask {
   id: string;
@@ -93,6 +95,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
     steps: true
   });
   const { toast } = useToast();
+  const { activeTimer, isLoading: timerLoading, elapsedTime, startTimer, stopTimer, isTimerActive } = useTaskTimer(task?.id || null);
 
   // Load subtasks and application when task changes
   useEffect(() => {
@@ -356,12 +359,26 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 Taak Afronden
               </Button>
               <Button 
-                variant="outline" 
-                className="flex-1 min-w-[200px]"
+                variant={isTimerActive ? "destructive" : "outline"}
+                className={cn(
+                  "flex-1 min-w-[200px] transition-all",
+                  isTimerActive && "animate-pulse border-2"
+                )}
                 size="lg"
+                onClick={isTimerActive ? stopTimer : () => startTimer()}
+                disabled={timerLoading}
               >
-                <Play className="h-4 w-4 mr-2" />
-                Start Timer
+                {isTimerActive ? (
+                  <>
+                    <Square className="h-4 w-4 mr-2" />
+                    Stop Timer ({elapsedTime})
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4 mr-2" />
+                    Start Timer
+                  </>
+                )}
               </Button>
               <Button 
                 variant="outline"

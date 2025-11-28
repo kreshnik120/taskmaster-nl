@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { TaskDialog } from "@/components/TaskDialog";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { ActiveProcessWidget } from "@/components/ActiveProcessWidget";
+import { QuickTimerButton } from "@/components/QuickTimerButton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -865,6 +866,7 @@ const Dashboard = () => {
                             )}
                           </Button>
                         )}
+                        <QuickTimerButton taskId={task.id} />
                           <Button
                             variant="ghost"
                             size="icon"
