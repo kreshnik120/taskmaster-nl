@@ -29,9 +29,10 @@ interface ClientCardProps {
   onClick: () => void;
   onQuickCall?: () => void;
   onQuickEmail?: () => void;
+  groupType?: "bureau" | "matching" | "regio" | "alpha";
 }
 
-export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQuickEmail }: ClientCardProps) {
+export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQuickEmail, groupType }: ClientCardProps) {
   const hasMatchingData = (client.regio && client.regio.length > 0) ||
     (client.sector && client.sector.length > 0) ||
     (client.doelgroep && client.doelgroep.length > 0) ||
@@ -111,10 +112,10 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
     <HoverCard openDelay={300}>
       <HoverCardTrigger asChild>
         <Card 
-          className="group cursor-pointer transition-all duration-200 hover:shadow-md relative"
+          className="group cursor-pointer transition-all duration-200 hover:bg-muted/30 relative"
           onClick={onClick}
         >
-          <CardContent className="p-4">
+          <CardContent className="p-3">
             <div className="flex items-start gap-3">
               {/* Avatar */}
               <Avatar className="h-10 w-10 flex-shrink-0">
@@ -125,41 +126,38 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
 
               {/* Content */}
               <div className="flex-1 min-w-0">
-                {/* Header with name and org badge */}
-                <div className="flex items-start justify-between gap-2 mb-0.5">
+                {/* Header with name and status dot */}
+                <div className="flex items-center justify-between gap-2 mb-1">
                   <h3 className="font-semibold text-sm truncate">
                     {highlightText(client.name, searchQuery)}
                   </h3>
-                  {client.organizations?.name && (
-                    <Badge 
-                      variant="secondary" 
-                      className={client.organizations.name === 'ABCzorg' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'}
-                    >
-                      {client.organizations.name}
-                    </Badge>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {groupType !== "matching" && (
+                      <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${
+                        hasCompleteMatchingData ? 'bg-green-500' : 
+                        hasPartialMatchingData ? 'bg-amber-500' : 'bg-muted'
+                      }`} />
+                    )}
+                    {groupType !== "bureau" && client.organizations?.name && (
+                      <Badge 
+                        variant="secondary" 
+                        className={`text-xs ${client.organizations.name === 'ABCzorg' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'}`}
+                      >
+                        {client.organizations.name}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
 
-                {/* Company name */}
-                <p className="text-sm text-muted-foreground mb-2 truncate">
-                  {highlightText(client.company, searchQuery)}
-                </p>
-
-                {/* Metadata line - single line with bullets, max 2 items */}
-                <div className="text-xs text-muted-foreground mb-2">
-                  {[
-                    client.regio && client.regio.length > 0 ? client.regio[0] : null,
-                    client.sector && client.sector.length > 0 ? client.sector[0] : null
-                  ].filter(Boolean).join(' • ')}
-                </div>
-
-                {/* Status dot only - no label */}
-                <div className="flex items-center gap-2">
-                  <div className={`h-1.5 w-1.5 rounded-full ${
-                    hasCompleteMatchingData ? 'bg-green-500' : 
-                    hasPartialMatchingData ? 'bg-amber-500' : 'bg-muted'
-                  }`} />
-                </div>
+                {/* Metadata line - single line with bullets */}
+                {(client.regio?.length || client.sector?.length) && (
+                  <div className="text-xs text-muted-foreground">
+                    {[
+                      client.regio && client.regio.length > 0 ? client.regio[0] : null,
+                      client.sector && client.sector.length > 0 ? client.sector[0] : null
+                    ].filter(Boolean).join(' • ')}
+                  </div>
+                )}
               </div>
             </div>
 

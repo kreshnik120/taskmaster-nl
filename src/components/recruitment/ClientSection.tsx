@@ -46,20 +46,6 @@ const getSectionAccent = (title: string, groupType: string): string => {
   return "";
 };
 
-const getSectionIcon = (title: string, groupType: string): string => {
-  if (groupType === "bureau") {
-    if (title === "ABCzorg") return "🔵";
-    if (title === "CitoZorg") return "🟠";
-  }
-  if (groupType === "matching") {
-    if (title === "Volledig") return "✅";
-    if (title === "Deels ingevuld") return "⚠️";
-    if (title === "Geen data") return "❌";
-  }
-  if (groupType === "regio") return "📍";
-  if (groupType === "alpha") return "🔤";
-  return "";
-};
 
 export function ClientSection({
   title,
@@ -73,7 +59,6 @@ export function ClientSection({
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const percentage = totalClients > 0 ? Math.round((clients.length / totalClients) * 100) : 0;
   const accentClass = getSectionAccent(title, groupType);
-  const icon = getSectionIcon(title, groupType);
 
   if (clients.length === 0) {
     return null;
@@ -81,21 +66,19 @@ export function ClientSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className={`border-l-4 ${accentClass} pl-4`}>
-      <CollapsibleTrigger className="flex items-center justify-between w-full py-3 border-b hover:bg-muted/50 transition-colors -ml-4 pl-4 pr-4">
+      <CollapsibleTrigger className="flex items-center justify-between w-full py-4 px-4 -ml-4 rounded-lg hover:bg-muted/30 transition-colors">
         <div className="flex items-center gap-3">
           {isOpen ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            <ChevronDown className="h-5 w-5 text-muted-foreground transition-transform" />
           ) : (
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform" />
           )}
-          <span className="text-sm">
-            {icon} {title}
-          </span>
-          <Badge variant="secondary" className="font-normal">
+          <span className="text-lg font-semibold tracking-tight">{title}</span>
+          <Badge variant="secondary" className="rounded-full px-3 py-0.5 font-medium">
             {clients.length}
           </Badge>
         </div>
-        <span className="text-xs text-muted-foreground">{percentage}% van totaal</span>
+        <span className="text-sm text-muted-foreground font-medium">{percentage}%</span>
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 py-6">
@@ -105,6 +88,7 @@ export function ClientSection({
               client={client}
               onClick={() => onClientClick(client)}
               searchQuery={searchQuery}
+              groupType={groupType}
             />
           ))}
         </div>

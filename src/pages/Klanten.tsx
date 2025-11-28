@@ -322,7 +322,7 @@ export default function Klanten() {
             </div>
 
             {/* Grouped Client Sections */}
-            <div className="space-y-6 mt-8">
+            <div className="space-y-8 mt-8">
               {loading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {[...Array(6)].map((_, i) => (
@@ -336,19 +336,21 @@ export default function Klanten() {
               ) : (
                 Object.entries(groupedClients)
                   .sort(([, a], [, b]) => b.length - a.length)
-                  .map(([sectionName, sectionClients]) => (
-                    <ClientSection
-                      key={sectionName}
-                      title={sectionName}
-                      clients={sectionClients}
-                      totalClients={filteredClients.length}
-                      groupType={grouping}
-                      onClientClick={(client) => {
-                        setSelectedClient(client);
-                      }}
-                      searchQuery={searchQuery}
-                      defaultOpen={true}
-                    />
+                  .map(([sectionName, sectionClients], index) => (
+                    <div key={sectionName}>
+                      {index > 0 && <div className="border-t my-6" />}
+                      <ClientSection
+                        title={sectionName}
+                        clients={sectionClients}
+                        totalClients={filteredClients.length}
+                        groupType={grouping}
+                        onClientClick={(client) => {
+                          setSelectedClient(client);
+                        }}
+                        searchQuery={searchQuery}
+                        defaultOpen={true}
+                      />
+                    </div>
                   ))
               )}
             </div>
