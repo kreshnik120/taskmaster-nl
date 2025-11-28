@@ -1,11 +1,12 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Clock, Building2, Mail, Phone, MapPin } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronDown, Mail, Phone, MapPin } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
+import { useState } from "react";
 
 interface Client {
   id: string;
@@ -76,57 +77,35 @@ export function RecentClientsWidget({
     return formatDistanceToNow(created, { addSuffix: true, locale: nl });
   };
 
+  const [isOpen, setIsOpen] = useState(false);
+
   if (isLoading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            Recente Klanten
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="flex items-center gap-3">
-              <Skeleton className="h-8 w-8 rounded-full" />
-              <div className="flex-1 space-y-1">
-                <Skeleton className="h-3 w-32" />
-                <Skeleton className="h-3 w-24" />
-              </div>
+      <div className="space-y-3">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <Skeleton className="h-8 w-8 rounded-full" />
+            <div className="flex-1 space-y-1">
+              <Skeleton className="h-3 w-32" />
+              <Skeleton className="h-3 w-24" />
             </div>
-          ))}
-        </CardContent>
-      </Card>
+          </div>
+        ))}
+      </div>
     );
   }
 
   if (recentClients.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            Recente Klanten
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground text-center py-4">
-            Nog geen recente klanten
-          </p>
-        </CardContent>
-      </Card>
-    );
+    return null;
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base flex items-center gap-2">
-          <Clock className="h-4 w-4" />
-          Recente Klanten
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-1">
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full">
+        <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-0' : '-rotate-90'}`} />
+        Recente klanten ({recentClients.length})
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-3 space-y-1">
         {recentClients.map((client, index) => (
           <HoverCard key={client.id} openDelay={300}>
             <HoverCardTrigger asChild>
@@ -227,7 +206,7 @@ export function RecentClientsWidget({
             </HoverCardContent>
           </HoverCard>
         ))}
-      </CardContent>
-    </Card>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

@@ -190,21 +190,29 @@ export default function Klanten() {
 
             {/* Urgency Banner */}
             {clientsWithoutMatching > 0 && (
-              <ClientMatchingUrgency
-                clientsWithoutData={clientsWithoutMatching}
-                onViewClick={() => setMatchingFilter("without")}
-              />
+              <div className="mt-6">
+                <ClientMatchingUrgency
+                  clientsWithoutData={clientsWithoutMatching}
+                  firstClientName={clients.find(c => !c.regio || c.regio.length === 0 || !c.sector || c.sector.length === 0)?.name}
+                  firstClientInitials={clients.find(c => !c.regio || c.regio.length === 0 || !c.sector || c.sector.length === 0)?.company.slice(0, 2).toUpperCase()}
+                  firstClientPhone={clients.find(c => !c.regio || c.regio.length === 0 || !c.sector || c.sector.length === 0)?.phone}
+                  firstClientEmail={clients.find(c => !c.regio || c.regio.length === 0 || !c.sector || c.sector.length === 0)?.email}
+                  onViewClick={() => setMatchingFilter("without")}
+                />
+              </div>
             )}
 
-            {/* Recent Clients Widget */}
-            <RecentClientsWidget
-              clients={clients}
-              isLoading={loading}
-              onClientClick={setSelectedClient}
-            />
+            {/* Recent Clients Widget - Collapsible */}
+            <div className="mt-6">
+              <RecentClientsWidget
+                clients={clients}
+                isLoading={loading}
+                onClientClick={setSelectedClient}
+              />
+            </div>
 
             {/* Search and Filter Bar */}
-            <div className="flex gap-3 flex-wrap items-center">
+            <div className="flex gap-3 flex-wrap items-center mt-8">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -249,7 +257,7 @@ export default function Klanten() {
 
             {/* Clients Grid */}
             {loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[...Array(6)].map((_, i) => (
                   <ClientCardSkeleton key={i} />
                 ))}
@@ -259,7 +267,7 @@ export default function Klanten() {
                 {searchQuery ? "Geen klanten gevonden" : "Nog geen klanten"}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredClients.map((client) => (
                   <ClientCard
                     key={client.id}
