@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Phone, Mail, MapPin } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
+import { motion } from "framer-motion";
 
 interface ClientCardProps {
   client: {
@@ -31,9 +32,10 @@ interface ClientCardProps {
   onQuickCall?: () => void;
   onQuickEmail?: () => void;
   groupType?: "bureau" | "sector" | "matching" | "regio" | "alpha";
+  index?: number;
 }
 
-export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQuickEmail, groupType }: ClientCardProps) {
+export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQuickEmail, groupType, index = 0 }: ClientCardProps) {
   const hasMatchingData = (client.regio && client.regio.length > 0) ||
     (client.sector && client.sector.length > 0) ||
     (client.doelgroep && client.doelgroep.length > 0) ||
@@ -157,10 +159,19 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
   return (
     <HoverCard openDelay={300}>
       <HoverCardTrigger asChild>
-        <Card 
-          className={`cursor-pointer transition-all duration-200 hover:bg-muted/30 border-l-2 ${getSectorBorderColor()} ${cardOpacity} flex flex-col overflow-hidden`}
-          onClick={() => onClick(client)}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ 
+            duration: 0.3, 
+            delay: index * 0.05,
+            ease: [0.4, 0, 0.2, 1]
+          }}
         >
+          <Card 
+            className={`cursor-pointer transition-all duration-200 hover:bg-muted/30 hover:shadow-md hover:-translate-y-0.5 border-l-2 ${getSectorBorderColor()} ${cardOpacity} flex flex-col overflow-hidden`}
+            onClick={() => onClick(client)}
+          >
           {/* Main content */}
           <CardContent className="p-3 flex-1">
             <div className="flex items-start gap-3">
@@ -261,7 +272,7 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
                     size="sm"
                     onClick={handleQuickCall}
                     disabled={!client.phone}
-                    className="h-7 px-2 disabled:opacity-40"
+                    className="h-7 px-2 disabled:opacity-40 hover:scale-105 hover:bg-primary/10 transition-all duration-200"
                   >
                     <Phone className="h-3.5 w-3.5" />
                   </Button>
@@ -280,7 +291,7 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
                     size="sm"
                     onClick={handleQuickEmail}
                     disabled={!client.email}
-                    className="h-7 px-2 disabled:opacity-40"
+                    className="h-7 px-2 disabled:opacity-40 hover:scale-105 hover:bg-primary/10 transition-all duration-200"
                   >
                     <Mail className="h-3.5 w-3.5" />
                   </Button>
@@ -299,7 +310,7 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
                     size="sm"
                     onClick={handleQuickMap}
                     disabled={!client.address}
-                    className="h-7 px-2 disabled:opacity-40"
+                    className="h-7 px-2 disabled:opacity-40 hover:scale-105 hover:bg-primary/10 transition-all duration-200"
                   >
                     <MapPin className="h-3.5 w-3.5" />
                   </Button>
@@ -311,6 +322,7 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
             </TooltipProvider>
           </div>
         </Card>
+        </motion.div>
       </HoverCardTrigger>
       
       <HoverCardContent className="w-80" side="top">

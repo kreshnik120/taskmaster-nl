@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import NewClientDialog from "@/components/NewClientDialog";
 import ClientDetailModal from "@/components/ClientDetailModal";
@@ -40,9 +41,6 @@ interface Client {
 export default function Klanten() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [orgFilter, setOrgFilter] = useState<string>("all");
-  const [matchingFilter, setMatchingFilter] = useState<string>("all");
   const [newClientOpen, setNewClientOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [grouping, setGrouping] = useState<"bureau" | "sector" | "matching" | "regio" | "alpha">(() => {
@@ -55,6 +53,33 @@ export default function Klanten() {
   });
   const [allExpanded, setAllExpanded] = useState(true);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Sync filters with URL
+  const searchQuery = searchParams.get('search') || '';
+  const orgFilter = searchParams.get('org') || 'all';
+  const matchingFilter = searchParams.get('matching') || 'all';
+  
+  const setSearchQuery = (value: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (value) params.set('search', value);
+    else params.delete('search');
+    setSearchParams(params);
+  };
+  
+  const setOrgFilter = (value: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (value !== 'all') params.set('org', value);
+    else params.delete('org');
+    setSearchParams(params);
+  };
+  
+  const setMatchingFilter = (value: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (value !== 'all') params.set('matching', value);
+    else params.delete('matching');
+    setSearchParams(params);
+  };
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -272,6 +297,27 @@ export default function Klanten() {
       toast.success(`Email naar ${client.name}`);
     }
   };
+  
+  // Metric click handlers for filtering
+  const handleMetricClick = (metric: 'total' | 'abczorg' | 'citozorg' | 'matching') => {
+    if (metric === 'total') {
+      setOrgFilter('all');
+      setMatchingFilter('all');
+    } else if (metric === 'abczorg') {
+      setOrgFilter('ABCzorg');
+    } else if (metric === 'citozorg') {
+      setOrgFilter('CitoZorg');
+    } else if (metric === 'matching') {
+      setMatchingFilter('with');
+      setGrouping('matching');
+    }
+  };
+  
+  const clearAllFilters = () => {
+    setSearchParams(new URLSearchParams());
+  };
+  
+  const hasActiveFilters = searchQuery || orgFilter !== 'all' || matchingFilter !== 'all';
 
   return (
     <SidebarProvider>
@@ -298,6 +344,7 @@ export default function Klanten() {
               abczorgCount={abczorgCount}
               citozorgCount={citozorgCount}
               matchingPercentage={matchingPercentage}
+              onMetricClick={handleMetricClick}
             />
 
             {/* Urgency Banner */}
@@ -371,6 +418,54 @@ export default function Klanten() {
                 </kbd>
               </Button>
             </div>
+
+            {/* Active Filter Chips */}
+            {hasActiveFilters && (
+              <div className="flex items-center gap-2 flex-wrap mt-4">
+                <span className="text-xs text-muted-foreground">Actieve filters:</span>
+                {searchQuery && (
+                  <Badge variant="secondary" className="gap-2">
+                    Zoekterm: {searchQuery}
+                    <button 
+                      onClick={() => setSearchQuery('')}
+                      className="hover:bg-muted-foreground/20 rounded-full p-0.5 transition-colors"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {orgFilter !== 'all' && (
+                  <Badge variant="secondary" className="gap-2">
+                    Bureau: {orgFilter}
+                    <button 
+                      onClick={() => setOrgFilter('all')}
+                      className="hover:bg-muted-foreground/20 rounded-full p-0.5 transition-colors"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {matchingFilter !== 'all' && (
+                  <Badge variant="secondary" className="gap-2">
+                    Data: {matchingFilter === 'with' ? 'Met data' : 'Zonder data'}
+                    <button 
+                      onClick={() => setMatchingFilter('all')}
+                      className="hover:bg-muted-foreground/20 rounded-full p-0.5 transition-colors"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={clearAllFilters}
+                  className="h-7 px-3 text-xs"
+                >
+                  Wis filters
+                </Button>
+              </div>
+            )}
 
             {/* Grouping Toggle & Collapse Controls */}
             <div className="mt-6 flex items-center justify-between flex-wrap gap-4">

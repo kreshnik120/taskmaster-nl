@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { ClientCard } from "@/components/ClientCard";
+import { Progress } from "@/components/ui/progress";
 
 interface Client {
   id: string;
@@ -107,9 +108,21 @@ export function ClientSection({
             {clients.length}
           </Badge>
           {completeClients > 0 && (
-            <span className="text-xs text-muted-foreground">
-              · {completeClients} compleet
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                · {completeClients} compleet
+              </span>
+              <div className="w-16 h-1.5">
+                <Progress 
+                  value={completenessPercentage} 
+                  className={`h-1.5 ${
+                    completenessPercentage >= 70 ? 'bg-green-100' : 
+                    completenessPercentage >= 40 ? 'bg-amber-100' : 
+                    'bg-red-100'
+                  }`}
+                />
+              </div>
+            </div>
           )}
           {incompleteClients > 0 && completenessPercentage < 50 && (
             <Badge variant="outline" className="rounded-full px-2 py-0.5 text-xs text-amber-600 border-amber-300">
@@ -121,13 +134,14 @@ export function ClientSection({
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className={`grid ${gridClass} gap-6 py-6`}>
-          {clients.map((client) => (
+          {clients.map((client, index) => (
             <ClientCard
               key={client.id}
               client={client}
               onClick={() => onClientClick(client)}
               searchQuery={searchQuery}
               groupType={groupType}
+              index={index}
             />
           ))}
         </div>
