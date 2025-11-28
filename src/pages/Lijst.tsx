@@ -376,22 +376,22 @@ export default function Lijst() {
     
     if (status === "accepted") {
       return (
-        <Badge variant="default" className="bg-green-600">
+        <span className="text-xs text-foreground">
           Geaccepteerd
-        </Badge>
+        </span>
       );
     }
     if (status === "assigned") {
       return (
-        <Badge variant="secondary">
+        <span className="text-xs text-muted-foreground">
           Toegewezen
-        </Badge>
+        </span>
       );
     }
     return (
-      <Badge variant="outline">
+      <span className="text-xs text-muted-foreground">
         Niet toegewezen
-      </Badge>
+      </span>
     );
   };
 
@@ -587,7 +587,7 @@ export default function Lijst() {
         </div>
 
         {/* Integrated Filters */}
-        <div className="flex gap-4 items-end mb-6">
+        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-end mb-6">
           <div className="flex-1">
             <label className="text-sm font-medium mb-2 block">
               Groepeer op
@@ -642,13 +642,13 @@ export default function Lijst() {
         </div>
 
         {/* Compact Stats Bar */}
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <button
             onClick={() => {
               setFilterStatus('active');
               setFilterPriority('all');
             }}
-            className={`flex flex-col items-center justify-center p-4 rounded-lg bg-card border hover:bg-muted/50 transition-colors ${
+            className={`flex flex-col items-center justify-center p-4 rounded-lg border bg-gradient-to-br from-blue-50 to-white hover:shadow-md transition-all ${
               filterStatus === 'active' ? 'ring-2 ring-primary' : ''
             }`}
           >
@@ -663,7 +663,7 @@ export default function Lijst() {
               setFilterStatus('completed');
               setFilterPriority('all');
             }}
-            className={`flex flex-col items-center justify-center p-4 rounded-lg bg-card border hover:bg-muted/50 transition-colors ${
+            className={`flex flex-col items-center justify-center p-4 rounded-lg border bg-gradient-to-br from-green-50 to-white hover:shadow-md transition-all ${
               filterStatus === 'completed' ? 'ring-2 ring-primary' : ''
             }`}
           >
@@ -678,7 +678,7 @@ export default function Lijst() {
               setFilterPriority('HIGH');
               setFilterStatus('all');
             }}
-            className={`flex flex-col items-center justify-center p-4 rounded-lg bg-card border hover:bg-muted/50 transition-colors ${
+            className={`flex flex-col items-center justify-center p-4 rounded-lg border bg-gradient-to-br from-orange-50 to-white hover:shadow-md transition-all ${
               filterPriority === 'HIGH' ? 'ring-2 ring-primary' : ''
             }`}
             disabled={tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length === 0}
@@ -701,7 +701,7 @@ export default function Lijst() {
                 toast.info(`${myTasksCount} taken aan jou toegewezen`);
               }
             }}
-            className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border hover:bg-muted/50 transition-colors"
+            className="flex flex-col items-center justify-center p-4 rounded-lg border bg-gradient-to-br from-purple-50 to-white hover:shadow-md transition-all"
             disabled={myTasksCount === 0}
           >
             <span className="text-2xl font-bold">
