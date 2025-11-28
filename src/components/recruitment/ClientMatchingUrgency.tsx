@@ -13,35 +13,26 @@ export function ClientMatchingUrgency({
   if (clientsWithoutData === 0) return null;
 
   return (
-    <div className="bg-amber-600/10 border border-amber-600/30 rounded-lg p-4 flex items-center gap-4">
-      <div className="flex items-center gap-3 flex-1">
-        <div className="relative">
-          <AlertCircle className="h-5 w-5 text-amber-600" />
-          <span className="absolute -top-1 -right-1 flex h-3 w-3">
+    <div className="flex items-center gap-3 py-2 px-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/30 rounded-md">
+      <div className="flex items-center gap-2 flex-1">
+        <div className="relative flex-shrink-0">
+          <div className="h-2 w-2 rounded-full bg-amber-500" />
+          <span className="absolute inset-0 flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
           </span>
         </div>
-        
-        <div className="flex-1">
-          <p className="text-sm font-medium text-foreground">
-            {clientsWithoutData} {clientsWithoutData === 1 ? "klant" : "klanten"} zonder matching data
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Voeg regio's, sectoren en doelgroepen toe voor betere matching
-          </p>
-        </div>
+        <span className="text-sm text-foreground">
+          {clientsWithoutData} {clientsWithoutData === 1 ? "klant" : "klanten"} zonder matching data
+        </span>
       </div>
       
-      <Button 
-        variant="outline" 
-        size="sm"
+      <button 
         onClick={onViewClick}
-        className="shrink-0 hover:bg-amber-600/10 hover:border-amber-600/50"
+        className="text-sm text-primary hover:underline flex items-center gap-1"
       >
-        Bekijk klanten
-        <ChevronRight className="h-4 w-4 ml-1" />
-      </Button>
+        Bekijk
+        <ChevronRight className="h-3 w-3" />
+      </button>
     </div>
   );
 }

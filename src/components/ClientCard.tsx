@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Building2, Phone, Mail, MapPin, CheckCircle2, Clock } from "lucide-react";
+import { Building2, Phone, Mail, MapPin } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
 
@@ -104,108 +104,93 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
     client.gezochte_functies && client.gezochte_functies.length > 0,
   ].filter(Boolean).length;
 
+  const hasCompleteMatchingData = completenessScore === 4;
+  const hasPartialMatchingData = completenessScore > 0 && completenessScore < 4;
+
   return (
     <HoverCard openDelay={300}>
       <HoverCardTrigger asChild>
         <Card 
-          className="group cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-[1.01] hover:border-primary/30"
+          className="group cursor-pointer transition-all duration-200 hover:shadow-md relative"
           onClick={onClick}
         >
-          <CardHeader>
-            <CardTitle className="flex items-start gap-3">
-              <Avatar className={`${getAvatarColor(client.company)} h-10 w-10 shrink-0`}>
-                <AvatarFallback className="text-white font-semibold">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              {/* Avatar */}
+              <Avatar className="h-10 w-10 flex-shrink-0">
+                <AvatarFallback className={getAvatarColor(client.company)}>
                   {getInitials(client.company)}
                 </AvatarFallback>
               </Avatar>
-              
-              <div className="flex-1 min-w-0 space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-base font-semibold truncate">
+
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                {/* Header with name and org badge */}
+                <div className="flex items-start justify-between gap-2 mb-0.5">
+                  <h3 className="font-semibold text-sm truncate">
                     {highlightText(client.name, searchQuery)}
-                  </span>
-                  {hasMatchingData && (
-                    <div 
-                      className={`h-2 w-2 rounded-full shrink-0 ${
-                        completenessScore === 4 ? "bg-green-600" : "bg-amber-600"
-                      }`}
-                      title={`${completenessScore}/4 matching criteria ingevuld`}
-                    />
+                  </h3>
+                  {client.organizations?.name && (
+                    <Badge 
+                      variant="secondary" 
+                      className={client.organizations.name === 'ABCzorg' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'}
+                    >
+                      {client.organizations.name}
+                    </Badge>
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground font-normal truncate">
+
+                {/* Company name */}
+                <p className="text-sm text-muted-foreground mb-2 truncate">
                   {highlightText(client.company, searchQuery)}
                 </p>
-                
-                {/* Time indicator */}
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Clock className="h-3 w-3" />
-                  {getTimeIndicator(client.created_at)}
+
+                {/* Metadata line - single line with bullets */}
+                <div className="text-xs text-muted-foreground mb-2">
+                  {[
+                    client.regio && client.regio.length > 0 ? client.regio[0] : null,
+                    client.sector && client.sector.length > 0 ? client.sector[0] : null,
+                    getTimeIndicator(client.created_at)
+                  ].filter(Boolean).join(' • ')}
+                </div>
+
+                {/* Matching completeness dot only */}
+                <div className="flex items-center gap-2">
+                  <div className={`h-1.5 w-1.5 rounded-full ${
+                    hasCompleteMatchingData ? 'bg-green-500' : 
+                    hasPartialMatchingData ? 'bg-amber-500' : 'bg-muted'
+                  }`} />
+                  <span className="text-xs text-muted-foreground">
+                    {hasCompleteMatchingData ? 'Volledig' : 
+                     hasPartialMatchingData ? 'Onvolledig' : 'Geen data'}
+                  </span>
                 </div>
               </div>
-              
-              <Badge 
-                className={
-                  client.organizations?.name === "ABCzorg" 
-                    ? "bg-blue-600 hover:bg-blue-700 text-white shrink-0" 
-                    : "bg-orange-500 hover:bg-orange-600 text-white shrink-0"
-                }
-              >
-                {client.organizations?.name || "Onbekend"}
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          
-          <CardContent className="space-y-3">
-            {/* Matching data preview */}
-            {hasMatchingData && (
-              <div className="flex flex-wrap gap-1">
-                {client.regio?.slice(0, 2).map((r) => (
-                  <Badge key={r} variant="secondary" className="text-xs">
-                    {r}
-                  </Badge>
-                ))}
-                {client.sector?.slice(0, 2).map((s) => (
-                  <Badge key={s} variant="outline" className="text-xs">
-                    {s}
-                  </Badge>
-                ))}
-                {((client.regio?.length || 0) > 2 || (client.sector?.length || 0) > 2) && (
-                  <Badge variant="secondary" className="text-xs">
-                    +meer
-                  </Badge>
-                )}
-              </div>
-            )}
-            
-            {/* Quick stats */}
-            <div className="text-xs text-muted-foreground">
-              {client.regio?.length || 0} regio's • {client.sector?.length || 0} sectoren
             </div>
-            
-            {/* Hover-only quick actions */}
-            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-              {client.phone && onQuickCall && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-8 px-2"
+
+            {/* Hover Actions */}
+            <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {client.phone && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onQuickCall();
+                    onQuickCall?.();
                   }}
                 >
                   <Phone className="h-3 w-3" />
                 </Button>
               )}
-              {client.email && onQuickEmail && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-8 px-2"
+              {client.email && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onQuickEmail();
+                    onQuickEmail?.();
                   }}
                 >
                   <Mail className="h-3 w-3" />

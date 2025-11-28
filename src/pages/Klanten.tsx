@@ -171,22 +171,13 @@ export default function Klanten() {
             <SidebarTrigger className="mb-4" />
 
             {/* Hero Section */}
-            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-background rounded-lg p-6 border border-border/50">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-2xl font-bold mb-2">Klanten</h1>
-                  <p className="text-muted-foreground">
-                    Beheer opdrachtgevers en zorglocaties
-                  </p>
-                </div>
-                <Button onClick={() => setNewClientOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Nieuwe klant
-                  <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
-                    N
-                  </kbd>
-                </Button>
-              </div>
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold mb-1">
+                Goedemiddag 👋
+              </h1>
+              <p className="text-muted-foreground">
+                Beheer opdrachtgevers en zorglocaties
+              </p>
             </div>
 
             {/* Metrics Bar */}
@@ -197,22 +188,23 @@ export default function Klanten() {
               matchingPercentage={matchingPercentage}
             />
 
-            {/* Urgency & Recent Clients Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-4">
+            {/* Urgency Banner */}
+            {clientsWithoutMatching > 0 && (
               <ClientMatchingUrgency
                 clientsWithoutData={clientsWithoutMatching}
                 onViewClick={() => setMatchingFilter("without")}
               />
-              
-              <RecentClientsWidget
-                clients={clients}
-                isLoading={loading}
-                onClientClick={setSelectedClient}
-              />
-            </div>
+            )}
+
+            {/* Recent Clients Widget */}
+            <RecentClientsWidget
+              clients={clients}
+              isLoading={loading}
+              onClientClick={setSelectedClient}
+            />
 
             {/* Search and Filter Bar */}
-            <div className="flex gap-3 flex-wrap">
+            <div className="flex gap-3 flex-wrap items-center">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -243,6 +235,16 @@ export default function Klanten() {
                 <option value="with">Met matching data</option>
                 <option value="without">Zonder matching data</option>
               </select>
+              <Button 
+                onClick={() => setNewClientOpen(true)}
+                className="shrink-0"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Nieuwe klant
+                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-background/20 bg-background/20 px-1.5 font-mono text-[10px] font-medium opacity-100">
+                  N
+                </kbd>
+              </Button>
             </div>
 
             {/* Clients Grid */}
