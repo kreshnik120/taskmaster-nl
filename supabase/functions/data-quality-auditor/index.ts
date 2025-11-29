@@ -357,39 +357,72 @@ serve(async (req) => {
         severity = 'low';
       }
       
-      // Report audit results with UPSERT to prevent duplicates
+      // Report audit results - conditional insert/update to handle partial unique constraint
       const alertTitle = summary.length > 0
         ? `Data Quality Audit: ${issues.length} issues, ${summary.join(', ')}`
         : `Data Quality Audit: ${issues.length} issues found`;
 
-      await supabase
+      // Check if active alert exists
+      const { data: existingAlert } = await supabase
         .from('business_intelligence')
-        .upsert({
-          org_id: orgId,
-          intelligence_type: 'data_quality_audit',
-          type: 'data_quality',
-          severity: severity,
-          title: alertTitle,
-          description: issues.join(', '),
-          priority: (fixedItemsCount > 0 || archivedCount > 0 || boostedCount > 0) ? 'medium' : 'high',
-          status: 'active',
-          impact_score: impactScore,
-          last_updated_at: new Date().toISOString(),
-          data: {
-            timestamp: new Date().toISOString(),
-            outdated_count: outdated?.length || 0,
-            low_confidence_count: lowConfidence?.length || 0,
-            unvalidated_count: unvalidatedItems.length,
-            failed_validation_count: failed?.length || 0,
-            auto_fixed_count: fixedItemsCount,
-            auto_archived_count: archivedCount,
-            confidence_boosted_count: boostedCount,
-            total_issues: issues.length
-          }
-        }, {
-          onConflict: 'intelligence_type,title,org_id',
-          ignoreDuplicates: false
-        });
+        .select('id')
+        .eq('intelligence_type', 'data_quality_audit')
+        .eq('org_id', orgId)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (existingAlert) {
+        // Update existing alert
+        await supabase
+          .from('business_intelligence')
+          .update({
+            title: alertTitle,
+            description: issues.join(', '),
+            severity: severity,
+            priority: (fixedItemsCount > 0 || archivedCount > 0 || boostedCount > 0) ? 'medium' : 'high',
+            impact_score: impactScore,
+            last_updated_at: new Date().toISOString(),
+            data: {
+              timestamp: new Date().toISOString(),
+              outdated_count: outdated?.length || 0,
+              low_confidence_count: lowConfidence?.length || 0,
+              unvalidated_count: unvalidatedItems.length,
+              failed_validation_count: failed?.length || 0,
+              auto_fixed_count: fixedItemsCount,
+              auto_archived_count: archivedCount,
+              confidence_boosted_count: boostedCount,
+              total_issues: issues.length
+            }
+          })
+          .eq('id', existingAlert.id);
+      } else {
+        // Insert new alert
+        await supabase
+          .from('business_intelligence')
+          .insert({
+            org_id: orgId,
+            intelligence_type: 'data_quality_audit',
+            type: 'data_quality',
+            severity: severity,
+            title: alertTitle,
+            description: issues.join(', '),
+            priority: (fixedItemsCount > 0 || archivedCount > 0 || boostedCount > 0) ? 'medium' : 'high',
+            status: 'active',
+            impact_score: impactScore,
+            last_updated_at: new Date().toISOString(),
+            data: {
+              timestamp: new Date().toISOString(),
+              outdated_count: outdated?.length || 0,
+              low_confidence_count: lowConfidence?.length || 0,
+              unvalidated_count: unvalidatedItems.length,
+              failed_validation_count: failed?.length || 0,
+              auto_fixed_count: fixedItemsCount,
+              auto_archived_count: archivedCount,
+              confidence_boosted_count: boostedCount,
+              total_issues: issues.length
+            }
+          });
+      }
     }
 
     // Log function call

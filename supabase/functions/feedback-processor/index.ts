@@ -158,34 +158,65 @@ serve(async (req) => {
         severity = 'low';
       }
       
-      // Use upsert to prevent duplicate key violations
-      const { error: biError } = await supabaseClient
+      // Conditional insert/update to handle partial unique constraint
+      const { data: existingAlert } = await supabaseClient
         .from('business_intelligence')
-        .upsert({
-          org_id: orgId,
-          intelligence_type: 'feedback_processing',
-          type: 'knowledge',
-          severity: severity,
-          title: 'Feedback Loop Results',
-          description: `Processed ${negativeProcessed} negative and ${positiveProcessed} positive feedback events`,
-          priority: errors > 5 ? 'high' : (errors > 0 ? 'medium' : 'low'),
-          status: 'active',
-          impact_score: impactScore,
-          detected_at: new Date().toISOString(),
-          last_updated_at: new Date().toISOString(),
-          data: {
-            negative_processed: negativeProcessed,
-            positive_processed: positiveProcessed,
-            errors: errors,
-            total_events: feedbackEvents?.length || 0
-          }
-        }, {
-          onConflict: 'intelligence_type,title,org_id',
-          ignoreDuplicates: false
-        });
+        .select('id')
+        .eq('intelligence_type', 'feedback_processing')
+        .eq('org_id', orgId)
+        .eq('status', 'active')
+        .maybeSingle();
 
-      if (biError) {
-        console.error('Failed to log to business intelligence:', biError);
+      if (existingAlert) {
+        // Update existing alert
+        const { error: biError } = await supabaseClient
+          .from('business_intelligence')
+          .update({
+            title: 'Feedback Loop Results',
+            description: `Processed ${negativeProcessed} negative and ${positiveProcessed} positive feedback events`,
+            severity: severity,
+            priority: errors > 5 ? 'high' : (errors > 0 ? 'medium' : 'low'),
+            impact_score: impactScore,
+            last_updated_at: new Date().toISOString(),
+            data: {
+              negative_processed: negativeProcessed,
+              positive_processed: positiveProcessed,
+              errors: errors,
+              total_events: feedbackEvents?.length || 0
+            }
+          })
+          .eq('id', existingAlert.id);
+
+        if (biError) {
+          console.error('Failed to update business intelligence:', biError);
+        }
+      } else {
+        // Insert new alert
+        const { error: biError } = await supabaseClient
+          .from('business_intelligence')
+          .insert({
+            org_id: orgId,
+            intelligence_type: 'feedback_processing',
+            type: 'knowledge',
+            severity: severity,
+            title: 'Feedback Loop Results',
+            description: `Processed ${negativeProcessed} negative and ${positiveProcessed} positive feedback events`,
+            priority: errors > 5 ? 'high' : (errors > 0 ? 'medium' : 'low'),
+            status: 'active',
+            impact_score: impactScore,
+            detected_at: new Date().toISOString(),
+            last_updated_at: new Date().toISOString(),
+            data: {
+              negative_processed: negativeProcessed,
+              positive_processed: positiveProcessed,
+              errors: errors,
+              total_events: feedbackEvents?.length || 0
+            }
+          });
+
+        if (biError) {
+          console.error('Failed to log to business intelligence:', biError);
+        }
       }
     }
 

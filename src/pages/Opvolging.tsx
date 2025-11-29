@@ -270,15 +270,15 @@ export default function Opvolging() {
         )}
       </div>
 
-      {/* Monochrome Stats Bar */}
-      <div className="grid grid-cols-4 gap-3">
+      {/* Gradient Stats Bar - Responsive */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* Achterstallig */}
         <button
           onClick={() => setActiveFilter(activeFilter === "achterstallig" ? null : "achterstallig")}
-          className={`p-4 rounded-lg border transition-all text-left ${
+          className={`p-4 rounded-lg border transition-all text-left bg-gradient-to-br from-red-50 to-white hover:shadow-md ${
             activeFilter === "achterstallig"
-              ? "bg-accent border-accent-foreground"
-              : "bg-card hover:bg-accent/50"
+              ? "ring-2 ring-red-500 ring-offset-2"
+              : ""
           }`}
         >
           <div className="space-y-1">
@@ -290,10 +290,10 @@ export default function Opvolging() {
         {/* Deze Week */}
         <button
           onClick={() => setActiveFilter(activeFilter === "deze-week" ? null : "deze-week")}
-          className={`p-4 rounded-lg border transition-all text-left ${
+          className={`p-4 rounded-lg border transition-all text-left bg-gradient-to-br from-amber-50 to-white hover:shadow-md ${
             activeFilter === "deze-week"
-              ? "bg-accent border-accent-foreground"
-              : "bg-card hover:bg-accent/50"
+              ? "ring-2 ring-amber-500 ring-offset-2"
+              : ""
           }`}
         >
           <div className="space-y-1">
@@ -305,10 +305,10 @@ export default function Opvolging() {
         {/* Met Actie */}
         <button
           onClick={() => setActiveFilter(activeFilter === "met-actie" ? null : "met-actie")}
-          className={`p-4 rounded-lg border transition-all text-left ${
+          className={`p-4 rounded-lg border transition-all text-left bg-gradient-to-br from-blue-50 to-white hover:shadow-md ${
             activeFilter === "met-actie"
-              ? "bg-accent border-accent-foreground"
-              : "bg-card hover:bg-accent/50"
+              ? "ring-2 ring-blue-500 ring-offset-2"
+              : ""
           }`}
         >
           <div className="space-y-1">
@@ -318,7 +318,7 @@ export default function Opvolging() {
         </button>
         
         {/* AI Score */}
-        <div className="p-4 rounded-lg border bg-card">
+        <div className="p-4 rounded-lg border bg-gradient-to-br from-purple-50 to-white">
           <div className="space-y-1">
             <p className="text-2xl font-semibold">{avgScore}</p>
             <p className="text-xs text-muted-foreground">Gem. AI Score</p>
