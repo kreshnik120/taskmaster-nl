@@ -485,8 +485,8 @@ const Professionals = () => {
         </div>
       </div>
 
-      {/* Stats Bar - Monochrome KPIs */}
-      <div className="grid gap-3 md:grid-cols-4">
+      {/* Stats Bar - Monochrome KPIs - Responsive */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card 
           className="border-border hover:shadow-sm transition-all cursor-pointer"
           onClick={() => handleKpiClick("all")}
