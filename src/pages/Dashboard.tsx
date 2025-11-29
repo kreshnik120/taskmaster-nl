@@ -701,16 +701,16 @@ const Dashboard = () => {
         </p>
       </motion.div>
 
-      {/* Stats Bar - Monochrome Cards */}
+      {/* Stats Bar - Gradient KPI Cards */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.1 }}
-        className="grid grid-cols-4 gap-4"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4"
       >
         {/* Open Tasks */}
         <div className="group flex flex-col items-center justify-center p-6 rounded-lg 
-                       bg-card border hover:bg-muted/50 transition-colors cursor-default">
+                       bg-gradient-to-br from-blue-50 to-white hover:shadow-md transition-all cursor-default">
           <span className="text-3xl font-bold">
             {tasks.length}
           </span>
@@ -721,7 +721,7 @@ const Dashboard = () => {
 
         {/* Completed */}
         <div className="group flex flex-col items-center justify-center p-6 rounded-lg 
-                       bg-card border hover:bg-muted/50 transition-colors cursor-default">
+                       bg-gradient-to-br from-green-50 to-white hover:shadow-md transition-all cursor-default">
           <span className="text-3xl font-bold">
             {completedThisWeek}
           </span>
@@ -732,7 +732,7 @@ const Dashboard = () => {
 
         {/* Hours Worked */}
         <div className="group flex flex-col items-center justify-center p-6 rounded-lg 
-                       bg-card border hover:bg-muted/50 transition-colors cursor-default">
+                       bg-gradient-to-br from-amber-50 to-white hover:shadow-md transition-all cursor-default">
           <span className="text-3xl font-bold">
             {todayHours.split(' ')[0]}
           </span>
@@ -743,7 +743,7 @@ const Dashboard = () => {
 
         {/* Priority */}
         <div className="group flex flex-col items-center justify-center p-6 rounded-lg 
-                       bg-card border hover:bg-muted/50 transition-colors cursor-default">
+                       bg-gradient-to-br from-orange-50 to-white hover:shadow-md transition-all cursor-default">
           <span className={`text-3xl font-bold ${
             priorityBreakdown.critical + priorityBreakdown.high > 0 ? 'text-destructive' : ''
           }`}>

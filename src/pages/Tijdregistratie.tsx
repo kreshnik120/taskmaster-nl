@@ -343,73 +343,62 @@ const Tijdregistratie = () => {
         </p>
       </div>
 
-      {/* Stats Bar - Monochrome KPIs */}
+      {/* Stats Bar - Gradient KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Vandaag */}
-        <Card className="cursor-pointer hover:bg-accent/50 transition-colors">
-          <CardContent className="pt-6">
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Vandaag</p>
-              <p className="text-2xl font-semibold">
-                {formatMinutes(
-                  timeEntries
-                    .filter(e => {
-                      const entryDate = new Date(e.start);
-                      const today = new Date();
-                      return entryDate.toDateString() === today.toDateString();
-                    })
-                    .reduce((sum, e) => sum + (e.duration_min || 0), 0)
-                )}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col justify-center p-6 rounded-lg 
+                       bg-gradient-to-br from-blue-50 to-white hover:shadow-md transition-all cursor-pointer">
+          <p className="text-sm text-muted-foreground">Vandaag</p>
+          <p className="text-2xl font-semibold mt-2">
+            {formatMinutes(
+              timeEntries
+                .filter(e => {
+                  const entryDate = new Date(e.start);
+                  const today = new Date();
+                  return entryDate.toDateString() === today.toDateString();
+                })
+                .reduce((sum, e) => sum + (e.duration_min || 0), 0)
+            )}
+          </p>
+        </div>
 
         {/* Deze Week */}
-        <Card className="cursor-pointer hover:bg-accent/50 transition-colors">
-          <CardContent className="pt-6">
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Deze Week</p>
-              <p className="text-2xl font-semibold">
-                {formatMinutes(
-                  timeEntries
-                    .filter(e => {
-                      const entryDate = new Date(e.start);
-                      const today = new Date();
-                      const weekStart = new Date(today);
-                      weekStart.setDate(today.getDate() - today.getDay() + 1);
-                      return entryDate >= weekStart;
-                    })
-                    .reduce((sum, e) => sum + (e.duration_min || 0), 0)
-                )}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col justify-center p-6 rounded-lg 
+                       bg-gradient-to-br from-green-50 to-white hover:shadow-md transition-all cursor-pointer">
+          <p className="text-sm text-muted-foreground">Deze Week</p>
+          <p className="text-2xl font-semibold mt-2">
+            {formatMinutes(
+              timeEntries
+                .filter(e => {
+                  const entryDate = new Date(e.start);
+                  const today = new Date();
+                  const weekStart = new Date(today);
+                  weekStart.setDate(today.getDate() - today.getDay() + 1);
+                  return entryDate >= weekStart;
+                })
+                .reduce((sum, e) => sum + (e.duration_min || 0), 0)
+            )}
+          </p>
+        </div>
 
         {/* Registraties */}
-        <Card className="cursor-pointer hover:bg-accent/50 transition-colors">
-          <CardContent className="pt-6">
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Registraties</p>
-              <p className="text-2xl font-semibold">{timeEntries.length}</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col justify-center p-6 rounded-lg 
+                       bg-gradient-to-br from-amber-50 to-white hover:shadow-md transition-all cursor-pointer">
+          <p className="text-sm text-muted-foreground">Registraties</p>
+          <p className="text-2xl font-semibold mt-2">{timeEntries.length}</p>
+        </div>
 
         {/* Actieve Timer */}
-        <Card className={`cursor-pointer transition-colors ${
-          activeTimer ? 'border-primary bg-primary/5' : 'hover:bg-accent/50'
+        <div className={`flex flex-col justify-center p-6 rounded-lg transition-all cursor-pointer ${
+          activeTimer 
+            ? 'bg-gradient-to-br from-purple-50 to-white border-2 border-primary shadow-md' 
+            : 'bg-gradient-to-br from-purple-50 to-white hover:shadow-md'
         }`}>
-          <CardContent className="pt-6">
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Actieve Timer</p>
-              <p className={`text-2xl font-semibold ${activeTimer ? 'text-primary' : ''}`}>
-                {activeTimer ? getRunningTime().split(' ')[0] : '0u'}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+          <p className="text-sm text-muted-foreground">Actieve Timer</p>
+          <p className={`text-2xl font-semibold mt-2 ${activeTimer ? 'text-primary' : ''}`}>
+            {activeTimer ? getRunningTime().split(' ')[0] : '0u'}
+          </p>
+        </div>
       </div>
 
       {/* Timer Card - Clean */}
