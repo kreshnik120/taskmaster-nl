@@ -95,12 +95,25 @@ export async function convertApplicationToProfessional(
       };
     }
 
+    // Map form values to database enum values
+    const werkvormMapping: Record<string, string> = {
+      'abcito': 'ABCito constructie',
+      'uitzend': 'Uitzendkracht',
+      'uitzendkracht': 'Uitzendkracht',
+      'zzp': 'ZZP',
+      'beide': 'Beide'
+    };
+
+    const mappedWerkvorm = application.extracted_data.werkvorm 
+      ? (werkvormMapping[application.extracted_data.werkvorm.toLowerCase()] || application.extracted_data.werkvorm)
+      : null;
+
     // Map application data to professional
     const professionalData = {
       org_id: orgId,
       full_name: application.extracted_data.naam,
       functie_niveau: application.extracted_data.functie_niveau,
-      werkvorm: application.extracted_data.werkvorm || null,
+      werkvorm: mappedWerkvorm,
       regio: application.extracted_data.regio || null,
       telefoonnummer: application.extracted_data.telefoon || null,
       email: application.email_from,

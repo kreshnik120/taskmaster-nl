@@ -19,6 +19,17 @@ import { ApplicationDetailModal } from "@/components/ApplicationDetailModal";
 import { NewApplicationDialog } from "@/components/NewApplicationDialog";
 import { BulkActionBar } from "@/components/recruitment/BulkActionBar";
 import { AnalyticsSheet } from "@/components/recruitment/AnalyticsSheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ClientSelectionDialog } from "@/components/ClientSelectionDialog";
 
 interface Application {
   id: string;
@@ -70,6 +81,16 @@ const Sollicitaties = () => {
   const [lastMove, setLastMove] = useState<{ applicationId: string; fromStage: string; toStage: string } | null>(null);
   const [selectedApplicationIds, setSelectedApplicationIds] = useState<Set<string>>(new Set());
   const [analyticsSheetOpen, setAnalyticsSheetOpen] = useState(false);
+  const [confirmGoedgekeurdDialog, setConfirmGoedgekeurdDialog] = useState<{
+    open: boolean;
+    application: Application | null;
+    previousStage: string;
+  }>({ open: false, application: null, previousStage: '' });
+  const [selectClientDialog, setSelectClientDialog] = useState<{
+    open: boolean;
+    application: Application | null;
+    previousStage: string;
+  }>({ open: false, application: null, previousStage: '' });
   const navigate = useNavigate();
 
   // Keyboard shortcuts
@@ -261,113 +282,281 @@ const Sollicitaties = () => {
         duration: 5000,
       });
 
-      // Special handling for "goedgekeurd" - convert to professional + create task
+      // Special handling for "goedgekeurd" - show confirmation dialog
       if (newStage === "goedgekeurd") {
-        // Mini confetti (groen)
-        confetti({
-          particleCount: 30,
-          spread: 45,
-          origin: { y: 0.6 },
-          colors: ['#22c55e', '#16a34a', '#4ade80'],
+        setConfirmGoedgekeurdDialog({
+          open: true,
+          application,
+          previousStage
         });
-
-        // Automatisch professional aanmaken als nog niet bestaat
-        let professionalCreated = false;
-        if (!application.professional_id && (application.completeness_score || 0) >= 80) {
-          const { convertApplicationToProfessional } = await import("@/lib/convertApplicationToProfessional");
-          
-          const result = await convertApplicationToProfessional(application, {
-            showToast: false,
-            silent: true
-          });
-
-          if (result.success) {
-            professionalCreated = true;
-            application.professional_id = result.professionalId;
-          }
-        }
-
-        // Haal AI suggestie op voor taak
-        const { data: suggestionData } = await supabase.functions.invoke(
-          'suggest-recruitment-actions',
-          { 
-            body: { 
-              application_id: application.id, 
-              old_stage: previousStage, 
-              new_stage: newStage 
-            } 
-          }
-        );
-
-        // Maak automatisch taak aan
-        if (suggestionData?.suggestion) {
-          const { data: { user } } = await supabase.auth.getUser();
-          const { data: userOrg } = await supabase
-            .from('user_organizations')
-            .select('org_id')
-            .eq('user_id', user?.id)
-            .limit(1)
-            .maybeSingle();
-
-          if (userOrg?.org_id) {
-            await supabase.from('tasks').insert({
-              org_id: userOrg.org_id,
-              title: suggestionData.suggestion.title,
-              description: suggestionData.suggestion.description,
-              priority: suggestionData.suggestion.priority?.toLowerCase() || 'medium',
-              application_id: application.id,
-              recruitment_action_type: suggestionData.suggestion.recruitment_action_type,
-              reporter_id: user?.id,
-              status: 'todo'
-            });
-          }
-        }
-
-        // Smart toast met acties
-        const candidateName = application.extracted_data?.naam || application.email_from;
-        toast.success(`${candidateName} is goedgekeurd! 🎉`, {
-          description: professionalCreated 
-            ? "Professional profiel aangemaakt. Klaar voor matching!"
-            : suggestionData?.suggestion?.title || "Contract kan worden opgemaakt",
-          action: {
-            label: "Bekijk Matching",
-            onClick: () => {
-              setSelectedApplication(application);
-            },
-          },
-          duration: 8000,
-        });
-
-        // Refresh om nieuwe professional te tonen
-        loadApplications();
+        return; // Stop here, wait for confirmation
       }
 
-      // Grote confetti bij plaatsing
+      // Special handling for "geplaatst" - show client selection dialog
       if (newStage === "geplaatst") {
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 },
-          colors: ['#10b981', '#34d399', '#6ee7b7'],
-        });
+        if (!application.professional_id) {
+          toast.error("Eerst professional profiel aanmaken", {
+            description: "Verplaats eerst naar Goedgekeurd om een professional profiel aan te maken"
+          });
+          return;
+        }
         
-        const candidateName = application.extracted_data?.naam || application.email_from;
-        toast.success(`${candidateName} is geplaatst! 🎊`, {
-          description: "Ga naar Plaatsingen om de koppeling te beheren"
+        setSelectClientDialog({
+          open: true,
+          application,
+          previousStage
         });
+        return; // Stop here, wait for client selection
       }
     } catch (err: any) {
       console.error("Error moving application:", err);
-      console.error("Error details:", {
-        message: err?.message,
-        code: err?.code,
-        details: err?.details,
-        hint: err?.hint,
-        applicationId,
-        newStage,
-        newStatus
+      toast.error("Fout bij verplaatsen sollicitatie");
+    }
+  };
+
+  // Handle goedgekeurd confirmation
+  const handleConfirmGoedgekeurd = async () => {
+    const { application, previousStage } = confirmGoedgekeurdDialog;
+    if (!application) return;
+
+    try {
+      const newStage = "goedgekeurd";
+      
+      // Update database
+      const { error: updateError } = await supabase
+        .from("professional_applications")
+        .update({ pipeline_stage: newStage })
+        .eq("id", application.id);
+
+      if (updateError) throw updateError;
+
+      // Close dialog
+      setConfirmGoedgekeurdDialog({ open: false, application: null, previousStage: '' });
+
+      toast.success("Status bijgewerkt", {
+        description: `Sollicitatie verplaatst naar ${newStage}`,
+        duration: 5000,
       });
-      toast.error(`Fout bij verplaatsen: ${err?.message || 'Onbekende fout'}`);
+
+      // Now execute goedgekeurd flow
+      // Mini confetti (groen)
+      confetti({
+        particleCount: 30,
+        spread: 45,
+        origin: { y: 0.6 },
+        colors: ['#22c55e', '#16a34a', '#4ade80'],
+      });
+
+      // Automatisch professional aanmaken als nog niet bestaat
+      let professionalCreated = false;
+      if (!application.professional_id && (application.completeness_score || 0) >= 80) {
+        const { convertApplicationToProfessional } = await import("@/lib/convertApplicationToProfessional");
+        
+        const result = await convertApplicationToProfessional(application, {
+          showToast: false,
+          silent: true
+        });
+
+        if (result.success) {
+          professionalCreated = true;
+          application.professional_id = result.professionalId;
+        }
+      }
+
+      // Haal AI suggestie op voor taak
+      const { data: suggestionData } = await supabase.functions.invoke(
+        'suggest-recruitment-actions',
+        { 
+          body: { 
+            application_id: application.id, 
+            old_stage: previousStage, 
+            new_stage: newStage 
+          } 
+        }
+      );
+
+      // Priority mapping van edge function naar database enum (uppercase)
+      const priorityMapping: Record<string, 'LOW' | 'MEDIUM' | 'HIGH'> = {
+        'critical': 'HIGH',
+        'high': 'HIGH', 
+        'medium': 'MEDIUM',
+        'low': 'LOW'
+      };
+
+      // Maak automatisch taak aan
+      if (suggestionData?.suggestion) {
+        const { data: { user } } = await supabase.auth.getUser();
+        const { data: userOrg } = await supabase
+          .from('user_organizations')
+          .select('org_id')
+          .eq('user_id', user?.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (userOrg?.org_id) {
+          const mappedPriority = priorityMapping[suggestionData.suggestion.priority?.toLowerCase()] || 'MEDIUM';
+          
+          const { error: taskError } = await supabase.from('tasks').insert([{
+            org_id: userOrg.org_id,
+            title: suggestionData.suggestion.title,
+            description: suggestionData.suggestion.description,
+            priority: mappedPriority,
+            application_id: application.id,
+            recruitment_action_type: suggestionData.suggestion.recruitment_action_type,
+            reporter_id: user?.id,
+            status: 'todo'
+          }]);
+
+          if (taskError) {
+            console.error("Error creating task:", taskError);
+          }
+        }
+      }
+
+      // Smart toast met acties
+      const candidateName = application.extracted_data?.naam || application.email_from;
+      toast.success(`${candidateName} is goedgekeurd! 🎉`, {
+        description: professionalCreated 
+          ? "Professional profiel aangemaakt. Klaar voor matching!"
+          : suggestionData?.suggestion?.title || "Contract kan worden opgemaakt",
+        action: {
+          label: "Bekijk Matching",
+          onClick: () => {
+            setSelectedApplication(application);
+          },
+        },
+        duration: 8000,
+      });
+
+      // Refresh om nieuwe professional te tonen
+      loadApplications();
+    } catch (err: any) {
+      console.error("Error in goedgekeurd confirmation:", err);
+      toast.error(`Fout bij verwerking: ${err?.message || 'Onbekende fout'}`);
+    }
+  };
+
+  // Handle goedgekeurd cancel
+  const handleCancelGoedgekeurd = async () => {
+    const { application, previousStage } = confirmGoedgekeurdDialog;
+    if (!application) return;
+
+    // Revert to previous stage
+    try {
+      const stageToStatus: Record<string, string> = {
+        nieuw: "nieuw",
+        screening: "in_verwerking",
+        interview: "in_gesprek",
+        goedgekeurd: "klaar_voor_review",
+        geplaatst: "geaccepteerd",
+      };
+
+      const previousStatus = stageToStatus[previousStage];
+
+      await supabase
+        .from("professional_applications")
+        .update({ 
+          pipeline_stage: previousStage,
+          status: previousStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", application.id);
+
+      setConfirmGoedgekeurdDialog({ open: false, application: null, previousStage: '' });
+      loadApplications();
+      toast.info("Geannuleerd - sollicitatie niet verplaatst");
+    } catch (err: any) {
+      console.error("Error canceling:", err);
+      toast.error("Fout bij annuleren");
+    }
+  };
+
+  // Handle client selection for "geplaatst"
+  const handleSelectClient = async (clientId: string) => {
+    const { application } = selectClientDialog;
+    if (!application || !application.professional_id) return;
+
+    try {
+      // Create placement
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: userOrg } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', user?.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (!userOrg?.org_id) {
+        toast.error("Geen organisatie gevonden");
+        return;
+      }
+
+      const { error: placementError } = await supabase
+        .from('professional_clients')
+        .insert({
+          professional_id: application.professional_id,
+          client_id: clientId,
+          start_date: new Date().toISOString().split('T')[0],
+          is_active: true
+        });
+
+      if (placementError) throw placementError;
+
+      // Close dialog
+      setSelectClientDialog({ open: false, application: null, previousStage: '' });
+
+      // Show confetti
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#10b981', '#34d399', '#6ee7b7'],
+      });
+
+      const candidateName = application.extracted_data?.naam || application.email_from;
+      toast.success(`${candidateName} is geplaatst! 🎊`, {
+        description: "Plaatsing aangemaakt. Ga naar Plaatsingen voor details.",
+        duration: 8000,
+      });
+
+      loadApplications();
+    } catch (err: any) {
+      console.error("Error creating placement:", err);
+      toast.error(`Fout bij plaatsing: ${err?.message || 'Onbekende fout'}`);
+    }
+  };
+
+  const handleCancelClientSelection = async () => {
+    const { application, previousStage } = selectClientDialog;
+    if (!application) return;
+
+    // Revert to previous stage
+    try {
+      const stageToStatus: Record<string, string> = {
+        nieuw: "nieuw",
+        screening: "in_verwerking",
+        interview: "in_gesprek",
+        goedgekeurd: "klaar_voor_review",
+        geplaatst: "geaccepteerd",
+      };
+
+      const previousStatus = stageToStatus[previousStage];
+
+      await supabase
+        .from("professional_applications")
+        .update({ 
+          pipeline_stage: previousStage,
+          status: previousStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", application.id);
+
+      setSelectClientDialog({ open: false, application: null, previousStage: '' });
+      loadApplications();
+      toast.info("Geannuleerd - sollicitatie niet verplaatst");
+    } catch (err: any) {
+      console.error("Error canceling:", err);
+      toast.error("Fout bij annuleren");
     }
   };
 
@@ -840,6 +1029,53 @@ const Sollicitaties = () => {
             onBulkEmail={handleBulkEmail}
             onBulkDelete={handleBulkDelete}
           />
+
+          {/* Goedgekeurd Confirmation Dialog */}
+          <AlertDialog open={confirmGoedgekeurdDialog.open} onOpenChange={(open) => {
+            if (!open) handleCancelGoedgekeurd();
+          }}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Professional Profiel Aanmaken?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Door deze kandidaat naar "Goedgekeurd" te verplaatsen wordt automatisch een professional profiel aangemaakt.
+                  
+                  <div className="mt-4 p-3 bg-muted rounded-md">
+                    <strong>{confirmGoedgekeurdDialog.application?.extracted_data?.naam}</strong><br/>
+                    <span className="text-sm text-muted-foreground">
+                      {confirmGoedgekeurdDialog.application?.extracted_data?.functie_niveau} • {confirmGoedgekeurdDialog.application?.extracted_data?.werkvorm}
+                    </span>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={handleCancelGoedgekeurd}>
+                  Annuleren
+                </AlertDialogCancel>
+                <AlertDialogAction onClick={handleConfirmGoedgekeurd}>
+                  Ja, maak professional aan
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Client Selection Dialog */}
+          <AlertDialog open={selectClientDialog.open} onOpenChange={(open) => {
+            if (!open) handleCancelClientSelection();
+          }}>
+            <AlertDialogContent className="max-w-2xl">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Selecteer Klant voor Plaatsing</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Kies een klant om {selectClientDialog.application?.extracted_data?.naam} aan te koppelen.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <ClientSelectionDialog
+                onSelect={handleSelectClient}
+                onCancel={handleCancelClientSelection}
+              />
+            </AlertDialogContent>
+          </AlertDialog>
     </div>
   );
 };
