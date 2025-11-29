@@ -261,29 +261,100 @@ const Sollicitaties = () => {
         duration: 5000,
       });
 
-      // Confetti bij plaatsing
+      // Special handling for "goedgekeurd" - convert to professional + create task
+      if (newStage === "goedgekeurd") {
+        // Mini confetti (groen)
+        confetti({
+          particleCount: 30,
+          spread: 45,
+          origin: { y: 0.6 },
+          colors: ['#22c55e', '#16a34a', '#4ade80'],
+        });
+
+        // Automatisch professional aanmaken als nog niet bestaat
+        let professionalCreated = false;
+        if (!application.professional_id && (application.completeness_score || 0) >= 80) {
+          const { convertApplicationToProfessional } = await import("@/lib/convertApplicationToProfessional");
+          
+          const result = await convertApplicationToProfessional(application, {
+            showToast: false,
+            silent: true
+          });
+
+          if (result.success) {
+            professionalCreated = true;
+            application.professional_id = result.professionalId;
+          }
+        }
+
+        // Haal AI suggestie op voor taak
+        const { data: suggestionData } = await supabase.functions.invoke(
+          'suggest-recruitment-actions',
+          { 
+            body: { 
+              application_id: application.id, 
+              old_stage: previousStage, 
+              new_stage: newStage 
+            } 
+          }
+        );
+
+        // Maak automatisch taak aan
+        if (suggestionData?.suggestion) {
+          const { data: { user } } = await supabase.auth.getUser();
+          const { data: userOrg } = await supabase
+            .from('user_organizations')
+            .select('org_id')
+            .eq('user_id', user?.id)
+            .limit(1)
+            .maybeSingle();
+
+          if (userOrg?.org_id) {
+            await supabase.from('tasks').insert({
+              org_id: userOrg.org_id,
+              title: suggestionData.suggestion.title,
+              description: suggestionData.suggestion.description,
+              priority: suggestionData.suggestion.priority?.toLowerCase() || 'medium',
+              application_id: application.id,
+              recruitment_action_type: suggestionData.suggestion.recruitment_action_type,
+              reporter_id: user?.id,
+              status: 'todo'
+            });
+          }
+        }
+
+        // Smart toast met acties
+        const candidateName = application.extracted_data?.naam || application.email_from;
+        toast.success(`${candidateName} is goedgekeurd! 🎉`, {
+          description: professionalCreated 
+            ? "Professional profiel aangemaakt. Klaar voor matching!"
+            : suggestionData?.suggestion?.title || "Contract kan worden opgemaakt",
+          action: {
+            label: "Bekijk Matching",
+            onClick: () => {
+              setSelectedApplication(application);
+            },
+          },
+          duration: 8000,
+        });
+
+        // Refresh om nieuwe professional te tonen
+        loadApplications();
+      }
+
+      // Grote confetti bij plaatsing
       if (newStage === "geplaatst") {
         confetti({
-          particleCount: 50,
-          spread: 60,
+          particleCount: 100,
+          spread: 70,
           origin: { y: 0.6 },
           colors: ['#10b981', '#34d399', '#6ee7b7'],
         });
-      }
-
-      // Automatische conversie naar professional bij plaatsing
-      if (newStage === "geplaatst" && !application.professional_id && (application.completeness_score || 0) >= 80) {
-        const { convertApplicationToProfessional } = await import("@/lib/convertApplicationToProfessional");
         
-        const result = await convertApplicationToProfessional(application, {
-          showToast: true,
-          silent: false
+        const candidateName = application.extracted_data?.naam || application.email_from;
+        toast.success(`${candidateName} is geplaatst! 🎊`, {
+          description: "Ga naar Plaatsingen om de koppeling te beheren"
         });
-
-        if (result.success) {
-          // Refresh applications to show the linked professional
-          loadApplications();
-        }
       }
     } catch (err: any) {
       console.error("Error moving application:", err);
