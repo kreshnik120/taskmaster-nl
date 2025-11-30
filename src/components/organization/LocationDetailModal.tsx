@@ -13,8 +13,12 @@ interface Sublocation {
   sector: string[] | null;
   gekoppelde_bv_org_id: string | null;
   hourly_rates_count?: number;
+  tarieven_min?: number;
+  tarieven_max?: number;
   telefoon?: string | null;
   adres?: string | null;
+  capaciteit_min?: number | null;
+  capaciteit_max?: number | null;
 }
 
 interface Location {
@@ -138,7 +142,14 @@ export function LocationDetailModal({
               location.sublocations.map((sublocation) => (
                 <SublocationCard
                   key={sublocation.id}
-                  sublocation={sublocation}
+                  sublocation={{
+                    ...sublocation,
+                    hourly_rates_count: sublocation.hourly_rates_count,
+                    tarieven_min: sublocation.tarieven_min,
+                    tarieven_max: sublocation.tarieven_max,
+                    capaciteit_min: sublocation.capaciteit_min,
+                    capaciteit_max: sublocation.capaciteit_max,
+                  }}
                   organizationName={organizationName}
                   locationName={location.naam}
                   onSublocationClick={onSublocationClick}

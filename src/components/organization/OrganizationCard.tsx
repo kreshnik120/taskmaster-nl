@@ -1,8 +1,9 @@
-import { Building2, ChevronDown, ChevronRight, MapPin } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, MapPin, Euro } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { LocationCard } from "./LocationCard";
+import { getOrganizationName, getOrganizationBadgeColor } from "@/lib/organizationMapping";
 
 interface Organization {
   id: string;
@@ -17,6 +18,8 @@ interface Location {
   naam: string;
   plaats: string | null;
   provincie: string | null;
+  telefoon: string | null;
+  contactpersoon_naam: string | null;
   sublocations?: Sublocation[];
 }
 
@@ -67,17 +70,44 @@ export function OrganizationCard({
     0
   ) || 0;
 
+  // Aggregeer sector badges van alle sublocaties
+  const allSectors = Array.from(
+    new Set(
+      organization.locations?.flatMap(loc => 
+        loc.sublocations?.flatMap(sub => sub.sector || []) || []
+      ) || []
+    )
+  ).slice(0, 3); // Toon maximaal 3 sectoren
+
+  // Count per bureau
+  const abczorgCount = organization.locations?.reduce((sum, loc) => 
+    sum + (loc.sublocations?.filter(sub => getOrganizationName(sub.gekoppelde_bv_org_id) === "ABCzorg")?.length || 0), 0) || 0;
+  const citozorgCount = organization.locations?.reduce((sum, loc) => 
+    sum + (loc.sublocations?.filter(sub => getOrganizationName(sub.gekoppelde_bv_org_id) === "CitoZorg")?.length || 0), 0) || 0;
+
+  // Totaal aantal tarieven
+  const totalRates = organization.locations?.reduce((sum, loc) => 
+    sum + (loc.sublocations?.reduce((subSum, sub) => subSum + (sub.hourly_rates_count || 0), 0) || 0), 0) || 0;
+
   return (
     <div className="space-y-2">
       <Card
-        className="p-4 hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-primary/60"
+        className="p-4 hover:shadow-lg hover:bg-accent/5 transition-all duration-200 cursor-pointer border-l-4 border-l-primary/60"
         onClick={handleCardClick}
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3 flex-1">
-            <div className="mt-1">
-              <Building2 className="h-5 w-5 text-primary" />
-            </div>
+            {organization.logo_url ? (
+              <img
+                src={organization.logo_url}
+                alt={organization.name}
+                className="h-10 w-10 rounded-lg object-cover mt-0.5"
+              />
+            ) : (
+              <div className="mt-1">
+                <Building2 className="h-5 w-5 text-primary" />
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <h3 className="font-semibold text-lg truncate">
@@ -89,7 +119,7 @@ export function OrganizationCard({
                   </Badge>
                 )}
               </div>
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <div className="flex items-center gap-3 text-sm text-muted-foreground mb-2">
                 <span>
                   {locationsCount} {locationsCount === 1 ? "hoofdlocatie" : "hoofdlocaties"}
                 </span>
@@ -97,6 +127,30 @@ export function OrganizationCard({
                 <span>
                   {sublocationsCount} {sublocationsCount === 1 ? "sublocatie" : "sublocaties"}
                 </span>
+              </div>
+              {/* Bureau counts en sector badges */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {abczorgCount > 0 && (
+                  <Badge variant="outline" className={getOrganizationBadgeColor("ABCzorg")}>
+                    ABCzorg {abczorgCount}
+                  </Badge>
+                )}
+                {citozorgCount > 0 && (
+                  <Badge variant="outline" className={getOrganizationBadgeColor("CitoZorg")}>
+                    CitoZorg {citozorgCount}
+                  </Badge>
+                )}
+                {allSectors.map((sector) => (
+                  <Badge key={sector} variant="outline" className="text-xs">
+                    {sector}
+                  </Badge>
+                ))}
+                {totalRates > 0 && (
+                  <Badge className="text-xs bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20">
+                    <Euro className="h-3 w-3 mr-1" />
+                    {totalRates} {totalRates === 1 ? "tarief" : "tarieven"}
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
