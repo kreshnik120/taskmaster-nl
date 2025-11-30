@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, Filter, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown, User, Search } from "lucide-react";
+import { Loader2, Filter, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown, User, Search, UserPlus } from "lucide-react";
 import { motion } from "framer-motion";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -824,8 +824,8 @@ export default function Lijst() {
                               data-task-id={task.id}
                               onClick={() => handleTaskClick(task)}
                               className={cn(
-                                "cursor-pointer transition-colors",
-                                "hover:bg-muted/50",
+                                "group cursor-pointer transition-colors",
+                                "hover:bg-muted/30",
                                 "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
                                 activeTimer && "bg-primary/5",
                                 isSelected && "ring-2 ring-primary bg-primary/10"
@@ -867,17 +867,17 @@ export default function Lijst() {
                             </SelectContent>
                           </Select>
                         ) : !task.assignee_id ? (
-                          <Button
+                          <Badge
                             variant="outline"
-                            size="sm"
-                            className="h-8"
+                            className="text-muted-foreground cursor-pointer hover:bg-muted"
                             onClick={(e) => {
                               e.stopPropagation();
                               setEditingAssignee(task.id);
                             }}
                           >
-                            Wijs toe
-                          </Button>
+                            <UserPlus className="h-3 w-3 mr-1" />
+                            Niet toegewezen
+                          </Badge>
                         ) : (
                           <div 
                             className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-2 py-1 transition-colors"
@@ -888,7 +888,7 @@ export default function Lijst() {
                           >
                             <Avatar className="h-7 w-7">
                               <AvatarFallback className="bg-primary/10 text-xs font-medium">
-                                {getInitials(task.profiles?.name)}
+                                {getInitials(task.profiles?.name) || "NA"}
                               </AvatarFallback>
                             </Avatar>
                             <span className="text-sm">{task.profiles?.name}</span>
@@ -947,11 +947,11 @@ export default function Lijst() {
                               )}
                             </TableCell>
                             <TableCell onClick={(e) => e.stopPropagation()}>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1">
                                 {!task.assignee_id ? (
                                   <Button
                                     size="sm"
-                                    variant="default"
+                                    variant="outline"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       handleUpdateAssignee(task.id, currentUserId);
@@ -964,7 +964,7 @@ export default function Lijst() {
                                 ) : !task.accepted_by && task.assignee_id === currentUserId ? (
                                   <Button
                                     size="sm"
-                                    variant="default"
+                                    variant="outline"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       handleAcceptTask(task.id);
@@ -982,7 +982,7 @@ export default function Lijst() {
                                     e.stopPropagation();
                                     openDeleteDialog(task);
                                   }}
-                                  className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
                                 >
                                   <Trash2 className="h-3 w-3" />
                                  </Button>
