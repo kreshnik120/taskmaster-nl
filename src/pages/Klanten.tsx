@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, X } from "lucide-react";
+import { Plus, Search, X, Users, Building2, Target } from "lucide-react";
 import { toast } from "sonner";
 import NewClientDialog from "@/components/NewClientDialog";
 import ClientDetailModal from "@/components/ClientDetailModal";
-import { ClientMetricsBar } from "@/components/recruitment/ClientMetricsBar";
+import { KPICard } from "@/components/ui/kpi-card";
 import { ClientCard, ClientCardSkeleton } from "@/components/ClientCard";
 import { ClientMatchingUrgency } from "@/components/recruitment/ClientMatchingUrgency";
 import { RecentClientsWidget } from "@/components/recruitment/RecentClientsWidget";
@@ -322,14 +322,41 @@ export default function Klanten() {
               </p>
             </div>
 
-            {/* Metrics Bar */}
-            <ClientMetricsBar
-              total={clients.length}
-              abczorgCount={abczorgCount}
-              citozorgCount={citozorgCount}
-              matchingPercentage={matchingPercentage}
-              onMetricClick={handleMetricClick}
-            />
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <KPICard
+                icon={Users}
+                title="Totaal"
+                value={clients.length}
+                subtitle="klanten"
+                variant="count"
+                onClick={() => handleMetricClick('total')}
+              />
+              <KPICard
+                icon={Building2}
+                title="ABCzorg"
+                value={abczorgCount}
+                subtitle="klanten"
+                variant="success"
+                onClick={() => handleMetricClick('abczorg')}
+              />
+              <KPICard
+                icon={Building2}
+                title="CitoZorg"
+                value={citozorgCount}
+                subtitle="klanten"
+                variant="time"
+                onClick={() => handleMetricClick('citozorg')}
+              />
+              <KPICard
+                icon={Target}
+                title="Met matchdata"
+                value={matchingPercentage}
+                subtitle="%"
+                variant="urgent"
+                onClick={() => handleMetricClick('matching')}
+              />
+            </div>
 
             {/* Urgency Banner */}
             {clientsWithoutMatching > 0 && (
