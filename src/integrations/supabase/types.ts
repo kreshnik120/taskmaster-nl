@@ -888,6 +888,7 @@ export type Database = {
           gezochte_functies: string[] | null
           id: string
           is_active: boolean | null
+          logo_url: string | null
           name: string
           notes: string | null
           org_id: string
@@ -908,6 +909,7 @@ export type Database = {
           gezochte_functies?: string[] | null
           id?: string
           is_active?: boolean | null
+          logo_url?: string | null
           name: string
           notes?: string | null
           org_id: string
@@ -928,6 +930,7 @@ export type Database = {
           gezochte_functies?: string[] | null
           id?: string
           is_active?: boolean | null
+          logo_url?: string | null
           name?: string
           notes?: string | null
           org_id?: string

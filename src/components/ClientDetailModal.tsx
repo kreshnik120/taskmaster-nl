@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Building2, Mail, Phone, MapPin, Edit2, Save, X, Plus, ChevronDown } from "lucide-react";
+import { Building2, Mail, Phone, MapPin, Edit2, Save, X, Plus, ChevronDown, Upload, ImageIcon } from "lucide-react";
 
 interface ClientDetailModalProps {
   open: boolean;
@@ -24,6 +24,7 @@ interface ClientDetailModalProps {
     phone?: string | null;
     address?: string | null;
     notes?: string | null;
+    logo_url?: string | null;
     regio?: string[] | null;
     sector?: string[] | null;
     doelgroep?: string[] | null;
@@ -71,6 +72,7 @@ const FUNCTIE_COLORS: Record<string, { selected: string; outline: string }> = {
 export default function ClientDetailModal({ open, onOpenChange, client, onUpdate }: ClientDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   // Form state
   const [name, setName] = useState(client.name);
@@ -79,6 +81,7 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
   const [phone, setPhone] = useState(client.phone || "");
   const [address, setAddress] = useState(client.address || "");
   const [notes, setNotes] = useState(client.notes || "");
+  const [logoUrl, setLogoUrl] = useState(client.logo_url || "");
   const [regios, setRegios] = useState<string[]>(client.regio || []);
   const [sectoren, setSectoren] = useState<string[]>(client.sector || []);
   const [doelgroepen, setDoelgroepen] = useState<string[]>(client.doelgroep || []);
@@ -140,6 +143,50 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [open, isEditing]);
 
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error("Alleen afbeeldingen zijn toegestaan");
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Afbeelding mag maximaal 2MB zijn");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${client.id}-${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      // Upload to storage
+      const { error: uploadError } = await supabase.storage
+        .from('client-logos')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('client-logos')
+        .getPublicUrl(filePath);
+
+      setLogoUrl(publicUrl);
+      toast.success("Logo geüpload");
+    } catch (error: any) {
+      console.error("Error uploading logo:", error);
+      toast.error("Kon logo niet uploaden");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -152,6 +199,7 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
           phone: phone || null,
           address: address || null,
           notes: notes || null,
+          logo_url: logoUrl || null,
           regio: regios.length > 0 ? regios : null,
           sector: sectoren.length > 0 ? sectoren : null,
           doelgroep: doelgroepen.length > 0 ? doelgroepen : null,
@@ -179,6 +227,7 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
     setPhone(client.phone || "");
     setAddress(client.address || "");
     setNotes(client.notes || "");
+    setLogoUrl(client.logo_url || "");
     setRegios(client.regio || []);
     setSectoren(client.sector || []);
     setDoelgroepen(client.doelgroep || []);
@@ -404,6 +453,72 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
                       <span className="px-3 py-1.5 bg-muted/30 rounded-md">{client.address}</span>
                     )}
                   </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* Logo Upload in Collapsible */}
+            <Collapsible defaultOpen={isEditing || !!logoUrl}>
+              <CollapsibleTrigger className="flex items-center justify-between w-full group hover:opacity-70 transition-opacity">
+                <h3 className="font-medium text-sm">Logo</h3>
+                <ChevronDown className="h-4 w-4 transition-transform group-data-[state=open]:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-3 mt-4">
+                <div className="flex items-center gap-4">
+                  {logoUrl ? (
+                    <div className="flex items-center gap-3">
+                      <img 
+                        src={logoUrl} 
+                        alt={company} 
+                        className="h-16 w-16 object-contain rounded-md border border-border"
+                      />
+                      {isEditing && (
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="logo-upload" className="cursor-pointer">
+                            <Button type="button" size="sm" variant="outline" disabled={uploading} asChild>
+                              <span>
+                                <Upload className="h-3 w-3 mr-2" />
+                                {uploading ? "Uploaden..." : "Wijzig logo"}
+                              </span>
+                            </Button>
+                          </Label>
+                          <Button 
+                            type="button" 
+                            size="sm" 
+                            variant="ghost" 
+                            onClick={() => setLogoUrl("")}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <X className="h-3 w-3 mr-2" />
+                            Verwijder
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ) : isEditing ? (
+                    <Label htmlFor="logo-upload" className="cursor-pointer">
+                      <div className="flex items-center gap-2 px-4 py-8 border-2 border-dashed border-border rounded-md hover:border-primary hover:bg-accent/50 transition-all">
+                        <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                        <div className="text-sm">
+                          <span className="text-primary font-medium">Upload logo</span>
+                          <p className="text-xs text-muted-foreground">JPG, PNG of SVG (max 2MB)</p>
+                        </div>
+                      </div>
+                    </Label>
+                  ) : (
+                    <button onClick={() => handleInlineAdd('contact')} className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+                      <Plus className="h-3 w-3" />
+                      <span>Voeg logo toe →</span>
+                    </button>
+                  )}
+                  <input
+                    id="logo-upload"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    className="hidden"
+                    disabled={uploading}
+                  />
                 </div>
               </CollapsibleContent>
             </Collapsible>

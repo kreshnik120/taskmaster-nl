@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ interface ClientCardProps {
     email?: string | null;
     phone?: string | null;
     address?: string | null;
+    logo_url?: string | null;
     regio?: string[] | null;
     sector?: string[] | null;
     doelgroep?: string[] | null;
@@ -170,6 +171,9 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
             <div className="flex items-start gap-3">
               {/* Avatar */}
               <Avatar className="h-10 w-10 flex-shrink-0">
+                {client.logo_url && (
+                  <AvatarImage src={client.logo_url} alt={client.company} />
+                )}
                 <AvatarFallback className={getSectorAvatarColor()}>
                   {getInitials(client.company)}
                 </AvatarFallback>

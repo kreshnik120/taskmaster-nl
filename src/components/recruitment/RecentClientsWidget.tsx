@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -17,6 +17,7 @@ interface Client {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+  logo_url?: string | null;
   regio?: string[] | null;
   sector?: string[] | null;
   doelgroep?: string[] | null;
@@ -116,6 +117,9 @@ export function RecentClientsWidget({
                 onClick={() => onClientClick(client)}
               >
                 <Avatar className={`${getAvatarColor(client.company)} h-8 w-8`}>
+                  {client.logo_url && (
+                    <AvatarImage src={client.logo_url} alt={client.company} />
+                  )}
                   <AvatarFallback className="text-white text-xs font-semibold">
                     {getInitials(client.company)}
                   </AvatarFallback>
