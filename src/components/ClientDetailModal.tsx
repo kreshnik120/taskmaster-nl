@@ -95,7 +95,14 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
           *,
           client_locations (
             *,
-            client_sublocations (*)
+            client_sublocations (
+              *,
+              hourly_rates (
+                id,
+                basis_tarief,
+                uursoort_naam
+              )
+            )
           )
         `)
         .eq("id", client.client_org_id)
@@ -820,9 +827,15 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
                       <p className="text-sm text-muted-foreground">KVK: {linkedOrg.kvk_nummer}</p>
                     )}
                     <div className="flex gap-4 text-sm text-muted-foreground mt-2">
-                      <span>{linkedOrg.client_locations?.length || 0} locatie(s)</span>
+                      {(() => {
+                        const locationCount = linkedOrg.client_locations?.length || 0;
+                        return <span>{locationCount} {locationCount === 1 ? 'locatie' : 'locaties'}</span>;
+                      })()}
                       <span>
-                        {linkedOrg.client_locations?.reduce((acc: number, loc: any) => acc + (loc.client_sublocations?.length || 0), 0) || 0} sublocatie(s)
+                        {(() => {
+                          const sublocationCount = linkedOrg.client_locations?.reduce((acc: number, loc: any) => acc + (loc.client_sublocations?.length || 0), 0) || 0;
+                          return `${sublocationCount} ${sublocationCount === 1 ? 'sublocatie' : 'sublocaties'}`;
+                        })()}
                       </span>
                     </div>
                   </div>
@@ -848,28 +861,37 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
                       {linkedOrg.client_locations.map((location: any) => (
                         <div key={location.id}>
                           {location.client_sublocations && location.client_sublocations.length > 0 ? (
-                            location.client_sublocations.map((sublocation: any) => (
-                              <SublocationCard
-                                key={sublocation.id}
-                                sublocation={{
-                                  id: sublocation.id,
-                                  naam: sublocation.naam,
-                                  plaats: sublocation.plaats,
-                                  doelgroep: sublocation.doelgroep,
-                                  sector: sublocation.sector,
-                                  gekoppelde_bv_org_id: sublocation.gekoppelde_bv_org_id,
-                                  telefoon: sublocation.telefoon,
-                                  adres: sublocation.adres,
-                                  hourly_rates_count: 0,
-                                }}
-                                organizationName={linkedOrg.name}
-                                locationName={location.naam}
-                                onSublocationClick={() => {
-                                  setSelectedSublocation(sublocation);
-                                  setIsSublocationModalOpen(true);
-                                }}
-                              />
-                            ))
+                            location.client_sublocations.map((sublocation: any) => {
+                              const hourlyRates = sublocation.hourly_rates || [];
+                              const tarieven = hourlyRates.map((r: any) => r.basis_tarief).filter((t: any) => t != null);
+                              
+                              return (
+                                <SublocationCard
+                                  key={sublocation.id}
+                                  sublocation={{
+                                    id: sublocation.id,
+                                    naam: sublocation.naam,
+                                    plaats: sublocation.plaats,
+                                    doelgroep: sublocation.doelgroep,
+                                    sector: sublocation.sector,
+                                    gekoppelde_bv_org_id: sublocation.gekoppelde_bv_org_id,
+                                    telefoon: sublocation.telefoon,
+                                    adres: sublocation.adres,
+                                    capaciteit_min: sublocation.capaciteit_min,
+                                    capaciteit_max: sublocation.capaciteit_max,
+                                    hourly_rates_count: hourlyRates.length,
+                                    tarieven_min: tarieven.length > 0 ? Math.min(...tarieven) : undefined,
+                                    tarieven_max: tarieven.length > 0 ? Math.max(...tarieven) : undefined,
+                                  }}
+                                  organizationName={linkedOrg.name}
+                                  locationName={location.naam}
+                                  onSublocationClick={() => {
+                                    setSelectedSublocation(sublocation);
+                                    setIsSublocationModalOpen(true);
+                                  }}
+                                />
+                              );
+                            })
                           ) : (
                             <p className="text-sm text-muted-foreground text-center py-4">
                               Geen sublocaties gevonden voor {location.naam}
