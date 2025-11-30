@@ -677,6 +677,86 @@ export type Database = {
           },
         ]
       }
+      assignments: {
+        Row: {
+          ai_match_reasoning: Json | null
+          ai_match_score: number | null
+          created_at: string
+          created_by: string | null
+          end_date: string | null
+          hourly_rate_id: string | null
+          id: string
+          notes: string | null
+          professional_id: string
+          start_date: string
+          status: string
+          sublocation_id: string
+          updated_at: string
+          weekly_hours: number
+        }
+        Insert: {
+          ai_match_reasoning?: Json | null
+          ai_match_score?: number | null
+          created_at?: string
+          created_by?: string | null
+          end_date?: string | null
+          hourly_rate_id?: string | null
+          id?: string
+          notes?: string | null
+          professional_id: string
+          start_date: string
+          status?: string
+          sublocation_id: string
+          updated_at?: string
+          weekly_hours?: number
+        }
+        Update: {
+          ai_match_reasoning?: Json | null
+          ai_match_score?: number | null
+          created_at?: string
+          created_by?: string | null
+          end_date?: string | null
+          hourly_rate_id?: string | null
+          id?: string
+          notes?: string | null
+          professional_id?: string
+          start_date?: string
+          status?: string
+          sublocation_id?: string
+          updated_at?: string
+          weekly_hours?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignments_hourly_rate_id_fkey"
+            columns: ["hourly_rate_id"]
+            isOneToOne: false
+            referencedRelation: "hourly_rates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_sublocation_id_fkey"
+            columns: ["sublocation_id"]
+            isOneToOne: false
+            referencedRelation: "client_sublocations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attachments: {
         Row: {
           created_at: string
@@ -3629,6 +3709,68 @@ export type Database = {
       }
     }
     Views: {
+      assignment_details: {
+        Row: {
+          ai_match_reasoning: Json | null
+          ai_match_score: number | null
+          basis_tarief: number | null
+          bemiddelingsbureau: string | null
+          btw_percentage: number | null
+          created_at: string | null
+          doelgroep: string[] | null
+          end_date: string | null
+          functie_niveau: string | null
+          hourly_rate_id: string | null
+          id: string | null
+          kvk_nummer: string | null
+          location_name: string | null
+          location_plaats: string | null
+          notes: string | null
+          organization_name: string | null
+          professional_id: string | null
+          professional_name: string | null
+          sector: string[] | null
+          start_date: string | null
+          status: string | null
+          sublocation_id: string | null
+          sublocation_name: string | null
+          sublocation_plaats: string | null
+          updated_at: string | null
+          uursoort_naam: string | null
+          weekly_hours: number | null
+          werkvorm: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignments_hourly_rate_id_fkey"
+            columns: ["hourly_rate_id"]
+            isOneToOne: false
+            referencedRelation: "hourly_rates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_sublocation_id_fkey"
+            columns: ["sublocation_id"]
+            isOneToOne: false
+            referencedRelation: "client_sublocations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       autonomous_system_status: {
         Row: {
           component: string | null

@@ -17,6 +17,7 @@ import { ClientGroupingToggle } from "@/components/recruitment/ClientGroupingTog
 import { DensityToggle } from "@/components/recruitment/DensityToggle";
 import { ClientSection } from "@/components/recruitment/ClientSection";
 import { OrganizationCard } from "@/components/organization/OrganizationCard";
+import { OrganizationDetailModal } from "@/components/organization/OrganizationDetailModal";
 
 interface Client {
   id: string;
@@ -42,6 +43,9 @@ export default function Klanten() {
   const [loading, setLoading] = useState(true);
   const [newClientOpen, setNewClientOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [selectedOrganization, setSelectedOrganization] = useState<any | null>(null);
+  const [isOrgModalOpen, setIsOrgModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "hierarchy">(() => {
     const saved = localStorage.getItem("klanten-view-mode");
     return (saved as any) || "cards";
@@ -91,6 +95,12 @@ export default function Klanten() {
   };
 
   // getGreeting removed - not needed for minimal hero design
+
+  // Helper: Open client detail modal
+  const handleClientClick = (client: Client) => {
+    setSelectedClient(client);
+    setIsDetailModalOpen(true);
+  };
 
   useEffect(() => {
     loadClients();
@@ -640,9 +650,7 @@ export default function Klanten() {
                         clients={sectionClients}
                         totalClients={filteredClients.length}
                         groupType={grouping}
-                       onClientClick={(client) => {
-                          setSelectedClient(client);
-                        }}
+                        onClientClick={handleClientClick}
                         searchQuery={searchQuery}
                         defaultOpen={allExpanded}
                         gridClass={getGridClass()}
@@ -676,12 +684,12 @@ export default function Klanten() {
                 ) : (
                   <div className="space-y-3">
                     {organizations.map((org) => (
-                      <OrganizationCard
+                       <OrganizationCard
                         key={org.id}
                         organization={org}
                         onOrganizationClick={(org) => {
-                          console.log("Open organization modal", org);
-                          // TODO: Open OrganizationDetailModal
+                          setSelectedOrganization(org);
+                          setIsOrgModalOpen(true);
                         }}
                         onLocationClick={(location) => {
                           console.log("Open location modal", location);
@@ -706,12 +714,18 @@ export default function Klanten() {
 
       {selectedClient && (
         <ClientDetailModal
-          open={!!selectedClient}
-          onOpenChange={(open) => !open && setSelectedClient(null)}
+          open={isDetailModalOpen}
+          onOpenChange={setIsDetailModalOpen}
           client={selectedClient}
           onUpdate={loadClients}
         />
       )}
+      
+      <OrganizationDetailModal
+        organization={selectedOrganization}
+        open={isOrgModalOpen}
+        onOpenChange={setIsOrgModalOpen}
+      />
     </div>
   );
 }
