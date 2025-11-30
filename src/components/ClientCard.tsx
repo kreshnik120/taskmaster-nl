@@ -51,19 +51,22 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
       .toUpperCase();
   };
 
-  // Avatar color based on bureau (ABCzorg = green, CitoZorg = orange)
-  const getAvatarColor = (bureauName?: string) => {
-    if (bureauName === 'ABCzorg') return "bg-green-600";
-    if (bureauName === 'CitoZorg') return "bg-amber-600";
-    // Fallback to hash-based color for non-bureau organizations
-    const colors = [
-      "bg-blue-600",
-      "bg-green-600",
-      "bg-purple-600",
-      "bg-indigo-600",
-    ];
-    const hash = (bureauName || client.company).split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return colors[hash % colors.length];
+  // Avatar color based on sector (semantic meaning for healthcare staffing)
+  const getSectorAvatarColor = () => {
+    if (client.sector && client.sector.length > 0) {
+      const sector = client.sector[0];
+      switch (sector) {
+        case "GGZ": return "bg-blue-600";
+        case "GHZ": return "bg-emerald-600";
+        case "Jeugdzorg": return "bg-orange-500";
+        case "VVT": return "bg-purple-600";
+        case "Ziekenhuis": return "bg-red-500";
+        case "Thuiszorg": return "bg-cyan-600";
+        default: return "bg-slate-500";
+      }
+    }
+    // Fallback: neutral gray for clients without sector
+    return "bg-slate-400";
   };
 
   // Highlight matching text
@@ -118,18 +121,7 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
                       completenessScore === 2 ? "opacity-90" : 
                       "opacity-100";
 
-  // Sector color for subtle border accent
-  const getSectorBorderColor = () => {
-    if (!client.sector || client.sector.length === 0) return "";
-    const sector = client.sector[0];
-    if (sector === "GGZ") return "border-l-blue-500/20";
-    if (sector === "GHZ") return "border-l-green-500/20";
-    if (sector === "Jeugdzorg") return "border-l-orange-500/20";
-    if (sector === "VVT") return "border-l-purple-500/20";
-    if (sector === "Ziekenhuis") return "border-l-red-500/20";
-    if (sector === "Thuiszorg") return "border-l-cyan-500/20";
-    return "";
-  };
+  // Removed: sector border is now redundant as sector is shown via avatar color
 
   const handleQuickCall = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -170,7 +162,7 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
           }}
         >
           <Card 
-            className={`cursor-pointer transition-all duration-200 hover:bg-muted/30 hover:shadow-md hover:-translate-y-0.5 border-l-2 ${getSectorBorderColor()} ${cardOpacity} flex flex-col overflow-hidden`}
+            className={`cursor-pointer transition-all duration-200 hover:bg-muted/30 hover:shadow-md hover:-translate-y-0.5 ${cardOpacity} flex flex-col overflow-hidden`}
             onClick={() => onClick(client)}
           >
           {/* Main content */}
@@ -178,7 +170,7 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
             <div className="flex items-start gap-3">
               {/* Avatar */}
               <Avatar className="h-10 w-10 flex-shrink-0">
-                <AvatarFallback className={getAvatarColor(client.organizations?.name)}>
+                <AvatarFallback className={getSectorAvatarColor()}>
                   {getInitials(client.company)}
                 </AvatarFallback>
               </Avatar>
