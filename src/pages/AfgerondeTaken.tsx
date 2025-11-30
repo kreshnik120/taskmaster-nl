@@ -56,6 +56,7 @@ const AfgerondeTaken = () => {
   const [tasks, setTasks] = useState<CompletedTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<string>("all");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -205,18 +206,24 @@ const AfgerondeTaken = () => {
           title="Totaal"
           value={tasks.length}
           variant="count"
+          onClick={() => setActiveTab(activeTab === "all" ? "all" : "all")}
+          isActive={activeTab === "all"}
         />
         <KPICard
           icon={Clock}
           title="Tijdig"
           value={onTimeTasks.length}
           variant="success"
+          onClick={() => setActiveTab(activeTab === "ontime" ? "all" : "ontime")}
+          isActive={activeTab === "ontime"}
         />
         <KPICard
           icon={AlertCircle}
           title="Te Laat"
           value={lateTasks.length}
           variant="urgent"
+          onClick={() => setActiveTab(activeTab === "late" ? "all" : "late")}
+          isActive={activeTab === "late"}
         />
         <KPICard
           icon={TrendingUp}
@@ -224,6 +231,7 @@ const AfgerondeTaken = () => {
           value={tasks.length > 0 ? Math.round(onTimeTasks.length / tasks.length * 100) : 0}
           suffix="%"
           variant="time"
+          onClick={() => toast.info("Dit is je totale succes percentage")}
         />
       </div>
       
@@ -242,7 +250,7 @@ const AfgerondeTaken = () => {
                   Geen afgeronde taken gevonden
                 </div>
               ) : (
-                <Tabs defaultValue="all" className="w-full">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                   <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="all">
                       Alle ({tasks.length})
