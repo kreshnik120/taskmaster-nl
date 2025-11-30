@@ -281,51 +281,48 @@ export default function Opvolging() {
       {/* Gradient Stats Bar - Responsive */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* Achterstallig */}
-        <Card
+        <div
           onClick={() => setActiveFilter(activeFilter === "achterstallig" ? null : "achterstallig")}
-          className={cn("border-t-4 border-t-red-400/60 dark:border-t-red-500/50 bg-gradient-to-br from-red-50 to-red-100/50 dark:from-red-950/30 dark:to-red-900/20 border-red-200 dark:border-red-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-red-500/10 transition-all cursor-pointer",
+          className={cn("group flex flex-col items-center justify-center p-6 rounded-xl bg-gradient-to-br from-red-50/80 to-white/60 dark:from-red-950/30 dark:to-background/60 backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-red-400/60 dark:border-t-red-500/50 hover:shadow-lg hover:shadow-red-500/10 hover:scale-[1.02] transition-all duration-200 cursor-pointer",
             activeFilter === "achterstallig" && "ring-2 ring-red-500"
           )}
         >
-          <CardContent className="p-4">
-            <div className="text-3xl font-bold text-red-900 dark:text-red-100">{animatedOverdueTasks}</div>
-            <div className="text-xs text-red-700 dark:text-red-300 uppercase tracking-wide">Achterstallig</div>
-          </CardContent>
-        </Card>
+          <span className="text-3xl font-bold text-red-600 dark:text-red-400">{animatedOverdueTasks}</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Achterstallig</span>
+        </div>
         
         {/* Deze Week */}
-        <Card
+        <div
           onClick={() => setActiveFilter(activeFilter === "deze-week" ? null : "deze-week")}
-          className={cn("border-t-4 border-t-amber-400/60 dark:border-t-amber-500/50 bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20 border-amber-200 dark:border-amber-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-amber-500/10 transition-all cursor-pointer",
+          className={cn("group flex flex-col items-center justify-center p-6 rounded-xl bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60 backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-amber-400/60 dark:border-t-amber-500/50 hover:shadow-lg hover:shadow-amber-500/10 hover:scale-[1.02] transition-all duration-200 cursor-pointer",
             activeFilter === "deze-week" && "ring-2 ring-amber-500"
           )}
         >
-          <CardContent className="p-4">
-            <div className="text-3xl font-bold text-amber-900 dark:text-amber-100">{animatedUpcomingTasks}</div>
-            <div className="text-xs text-amber-700 dark:text-amber-300 uppercase tracking-wide">Deze Week</div>
-          </CardContent>
-        </Card>
+          <span className="text-3xl font-bold text-amber-600 dark:text-amber-400">{animatedUpcomingTasks}</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Deze Week</span>
+        </div>
         
         {/* Met Actie */}
-        <Card
+        <div
           onClick={() => setActiveFilter(activeFilter === "met-actie" ? null : "met-actie")}
-          className={cn("border-t-4 border-t-blue-400/60 dark:border-t-blue-500/50 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 border-blue-200 dark:border-blue-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-blue-500/10 transition-all cursor-pointer",
+          className={cn("group flex flex-col items-center justify-center p-6 rounded-xl bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-blue-400/60 dark:border-t-blue-500/50 hover:shadow-lg hover:shadow-blue-500/10 hover:scale-[1.02] transition-all duration-200 cursor-pointer",
             activeFilter === "met-actie" && "ring-2 ring-blue-500"
           )}
         >
-          <CardContent className="p-4">
-            <div className="text-3xl font-bold text-blue-900 dark:text-blue-100">{animatedWithAction}</div>
-            <div className="text-xs text-blue-700 dark:text-blue-300 uppercase tracking-wide">Met Actie</div>
-          </CardContent>
-        </Card>
+          <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">{animatedWithAction}</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Met Actie</span>
+        </div>
         
         {/* Gem. AI Score */}
-        <Card className="border-t-4 border-t-purple-400/60 dark:border-t-purple-500/50 bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 border-purple-200 dark:border-purple-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-purple-500/10 transition-all">
-          <CardContent className="p-4">
-            <div className="text-3xl font-bold text-purple-900 dark:text-purple-100">{animatedAvgScore}</div>
-            <div className="text-xs text-purple-700 dark:text-purple-300 uppercase tracking-wide">Gem. AI Score</div>
-          </CardContent>
-        </Card>
+        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
+                       bg-gradient-to-br from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60 
+                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-green-400/60 dark:border-t-green-500/50
+                       hover:shadow-lg hover:shadow-green-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
+          <span className="text-3xl font-bold text-green-600 dark:text-green-400">
+            {scoringLoading ? '...' : animatedAvgScore}
+          </span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Gem. AI Score</span>
+        </div>
       </div>
 
       {/* Focus Taken - Top 10 Met Filter */}
