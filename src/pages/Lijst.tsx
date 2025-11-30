@@ -4,10 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
+import { KPICard } from "@/components/ui/kpi-card";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, Filter, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown, User, Search, UserPlus, CheckCircle2, X, Users } from "lucide-react";
+import { Loader2, Filter, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown, User, Search, UserPlus, CheckCircle2, X, Users, ListTodo, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -863,39 +864,36 @@ export default function Lijst() {
 
         {/* Compact Stats Bar */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                         bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 
-                         backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-blue-400/60 dark:border-t-blue-500/50
-                         hover:shadow-lg hover:shadow-blue-500/10 hover:scale-[1.02] transition-all duration-200 cursor-pointer" onClick={() => { setFilterStatus('active'); setFilterPriority('all'); }}>
-            <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-              {animatedOpenTasks}
-            </span>
-            <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Open</span>
-          </div>
-          
-          <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                         bg-gradient-to-br from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60 
-                         backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-green-400/60 dark:border-t-green-500/50
-                         hover:shadow-lg hover:shadow-green-500/10 hover:scale-[1.02] transition-all duration-200 cursor-pointer" onClick={() => { setFilterStatus('completed'); setFilterPriority('all'); }}>
-            <span className="text-3xl font-bold text-green-600 dark:text-green-400">
-              {animatedCompletedToday}
-            </span>
-            <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Vandaag</span>
-          </div>
-          
-          <div className={cn("group flex flex-col items-center justify-center p-6 rounded-xl bg-gradient-to-br from-orange-50/80 to-white/60 dark:from-orange-950/30 dark:to-background/60 backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-orange-400/60 dark:border-t-orange-500/50 hover:shadow-lg hover:shadow-orange-500/10 hover:scale-[1.02] transition-all duration-200", highPriorityCount === 0 && "opacity-50 cursor-not-allowed", highPriorityCount > 0 && "cursor-pointer")} onClick={() => { if (highPriorityCount > 0) { setFilterPriority('HIGH'); setFilterStatus('all'); } }}>
-            <span className={cn("text-3xl font-bold", highPriorityCount > 0 ? "text-destructive" : "text-orange-600 dark:text-orange-400")}>
-              {animatedHighPriority}
-            </span>
-            <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">High Priority</span>
-          </div>
-          
-          <div className={cn("group flex flex-col items-center justify-center p-6 rounded-xl bg-gradient-to-br from-purple-50/80 to-white/60 dark:from-purple-950/30 dark:to-background/60 backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-purple-400/60 dark:border-t-purple-500/50 hover:shadow-lg hover:shadow-purple-500/10 hover:scale-[1.02] transition-all duration-200", myTasksCountValue === 0 && "opacity-50 cursor-not-allowed", myTasksCountValue > 0 && "cursor-pointer")} onClick={() => { if (myTasksCountValue > 0) { setFilterStatus('all'); setFilterPriority('all'); toast.info(`${myTasksCountValue} taken aan jou toegewezen`); } }}>
-            <span className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-              {animatedMyTasks}
-            </span>
-            <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Mijn Taken</span>
-          </div>
+          <KPICard 
+            icon={ListTodo} 
+            title="Open" 
+            value={animatedOpenTasks} 
+            variant="count"
+            onClick={() => { setFilterStatus('active'); setFilterPriority('all'); }}
+          />
+          <KPICard 
+            icon={CheckCircle2} 
+            title="Vandaag" 
+            value={animatedCompletedToday} 
+            variant="success"
+            onClick={() => { setFilterStatus('completed'); setFilterPriority('all'); }}
+          />
+          <KPICard 
+            icon={AlertTriangle} 
+            title="High Priority" 
+            value={animatedHighPriority} 
+            variant="urgent"
+            onClick={() => { if (highPriorityCount > 0) { setFilterPriority('HIGH'); setFilterStatus('all'); } }}
+            className={cn(highPriorityCount === 0 && "opacity-50 cursor-not-allowed")}
+          />
+          <KPICard 
+            icon={User} 
+            title="Mijn Taken" 
+            value={animatedMyTasks} 
+            variant="personal"
+            onClick={() => { if (myTasksCountValue > 0) { setFilterStatus('all'); setFilterPriority('all'); toast.info(`${myTasksCountValue} taken aan jou toegewezen`); } }}
+            className={cn(myTasksCountValue === 0 && "opacity-50 cursor-not-allowed")}
+          />
         </div>
       </motion.div>
 

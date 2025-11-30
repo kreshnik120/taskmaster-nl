@@ -51,17 +51,18 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
       .toUpperCase();
   };
 
-  // Color hash for consistent avatar colors
-  const getAvatarColor = (name: string) => {
+  // Avatar color based on bureau (ABCzorg = blue, CitoZorg = green)
+  const getAvatarColor = (bureauName?: string) => {
+    if (bureauName === 'ABCzorg') return "bg-blue-600";
+    if (bureauName === 'CitoZorg') return "bg-green-600";
+    // Fallback to hash-based color for non-bureau organizations
     const colors = [
       "bg-blue-600",
       "bg-green-600",
       "bg-purple-600",
-      "bg-orange-600",
-      "bg-pink-600",
       "bg-indigo-600",
     ];
-    const hash = name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const hash = (bureauName || client.company).split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
     return colors[hash % colors.length];
   };
 
@@ -177,7 +178,7 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
             <div className="flex items-start gap-3">
               {/* Avatar */}
               <Avatar className="h-10 w-10 flex-shrink-0">
-                <AvatarFallback className={getAvatarColor(client.company)}>
+                <AvatarFallback className={getAvatarColor(client.organizations?.name)}>
                   {getInitials(client.company)}
                 </AvatarFallback>
               </Avatar>
@@ -233,7 +234,7 @@ export function ClientCard({ client, searchQuery = "", onClick, onQuickCall, onQ
                     {groupType !== "bureau" && client.organizations?.name && (
                       <Badge 
                         variant="secondary" 
-                        className={`text-xs ${client.organizations.name === 'ABCzorg' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'}`}
+                        className={`text-xs ${client.organizations.name === 'ABCzorg' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'}`}
                       >
                         {client.organizations.name}
                       </Badge>

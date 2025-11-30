@@ -100,10 +100,10 @@ export function ClientMetricsBar({
       shadow: "hover:shadow-blue-500/10"
     };
     if (label === "CitoZorg") return { 
-      gradient: "from-orange-50/80 to-white/60 dark:from-orange-950/30 dark:to-background/60",
-      border: "border-t-orange-400/60 dark:border-t-orange-500/50",
-      text: "text-orange-600 dark:text-orange-400",
-      shadow: "hover:shadow-orange-500/10"
+      gradient: "from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60",
+      border: "border-t-green-400/60 dark:border-t-green-500/50",
+      text: "text-green-600 dark:text-green-400",
+      shadow: "hover:shadow-green-500/10"
     };
     if (label === "Match Ready") {
       if (matchingPercentage >= 70) return { 
