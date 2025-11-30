@@ -206,6 +206,35 @@ export default function Kalender() {
     }
   };
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in input/textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // n = Open nieuwe taak dialog
+      if (e.key === 'n' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        setNewTaskDialogOpen(true);
+      }
+
+      // Esc = Sluit modals/dialogs
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (detailModalOpen) {
+          setDetailModalOpen(false);
+        } else if (newTaskDialogOpen) {
+          setNewTaskDialogOpen(false);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [detailModalOpen, newTaskDialogOpen]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">

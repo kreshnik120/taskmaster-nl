@@ -244,6 +244,25 @@ export default function Opvolging() {
   const animatedWithAction = useCountUp({ end: tasksWithNextAction.length, duration: 600 });
   const animatedAvgScore = useCountUp({ end: avgScore, duration: 600 });
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in input/textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // Esc = Reset filters
+      if (e.key === 'Escape' && activeFilter) {
+        e.preventDefault();
+        setActiveFilter(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeFilter]);
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">

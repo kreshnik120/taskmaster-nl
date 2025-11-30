@@ -635,7 +635,7 @@ export default function Lijst() {
   const animatedHighPriority = useCountUp({ end: highPriorityCount, duration: 600 });
   const animatedMyTasks = useCountUp({ end: myTasksCountValue, duration: 600 });
 
-  // Keyboard navigation (j/k for row navigation)
+  // Unified keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger shortcuts when typing in inputs
@@ -644,6 +644,42 @@ export default function Lijst() {
         e.target instanceof HTMLTextAreaElement ||
         e.target instanceof HTMLSelectElement
       ) {
+        return;
+      }
+
+      // Cmd+K / Ctrl+K = Focus search
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
+
+      // n = Open nieuwe taak dialog
+      if (e.key === 'n' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        navigate('/lijst?new=true');
+        return;
+      }
+
+      // / = Focus search
+      if (e.key === '/') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
+
+      // Esc = Sluit modals + clear selection
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (detailModalOpen) {
+          setDetailModalOpen(false);
+        } else if (deleteDialogOpen) {
+          setDeleteDialogOpen(false);
+        } else if (selectedTaskIds.size > 0) {
+          setSelectedTaskIds(new Set());
+        } else if (searchQuery) {
+          setSearchQuery('');
+        }
         return;
       }
 
@@ -675,7 +711,7 @@ export default function Lijst() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [groups, selectedRowIndex]);
+  }, [groups, selectedRowIndex, detailModalOpen, deleteDialogOpen, selectedTaskIds, searchQuery, navigate]);
 
   const scrollToRow = (index: number) => {
     if (tableRef.current) {
@@ -717,18 +753,6 @@ export default function Lijst() {
     high: tasks.filter(t => t.priority === 'HIGH' && !t.completed_at).length,
   };
 
-  // Cmd+K keyboard shortcut
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   if (loading) {
     return (
