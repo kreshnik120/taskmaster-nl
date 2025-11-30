@@ -2,6 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { MapPin, Building, Mail, Phone, Euro } from "lucide-react";
 import { SublocationCard } from "./SublocationCard";
 
@@ -67,8 +68,22 @@ export function LocationDetailModal({
             </div>
             <div className="flex-1">
               <DialogTitle className="text-2xl">{location.naam}</DialogTitle>
-              <div className="text-sm text-muted-foreground mt-1">
-                {organizationName} → {location.naam}
+              <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto p-0 hover:bg-transparent hover:text-foreground transition-colors font-normal"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNavigateToOrganization?.();
+                  }}
+                >
+                  {organizationName}
+                </Button>
+                <span className="text-foreground">→</span>
+                <span className="text-foreground font-medium">
+                  {location.naam}
+                </span>
               </div>
             </div>
           </div>
@@ -154,7 +169,7 @@ export function LocationDetailModal({
                   }}
                   organizationName={organizationName}
                   locationName={location.naam}
-                  onSublocationClick={onSublocationClick}
+                  onSublocationClick={(sub) => onSublocationClick?.(sub)}
                 />
               ))
             ) : (
