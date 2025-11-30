@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useCountUp } from "@/hooks/useCountUp";
+import { useNavigate } from "react-router-dom";
 import { Plus, Search, ChevronDown, X, Users, CheckCircle, UserPlus, TrendingUp } from "lucide-react";
 import { ProfessionalBulkActionBar } from "@/components/recruitment/ProfessionalBulkActionBar";
 import { ProfessionalCard } from "@/components/recruitment/ProfessionalCard";
@@ -78,6 +79,7 @@ const Professionals = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const { toast } = useToast();
   const { canEdit } = useUserRole();
+  const navigate = useNavigate();
 
   const [newProfessional, setNewProfessional] = useState({
     full_name: "",
@@ -356,6 +358,8 @@ const Professionals = () => {
     } else if (filterType === "nieuw") {
       // Show only new professionals (created in last 7 days)
       resetFilters();
+    } else if (filterType === "gekoppeld") {
+      navigate("/plaatsingen");
     }
   };
 
@@ -503,12 +507,13 @@ const Professionals = () => {
           variant="success"
           onClick={() => handleKpiClick("beschikbaar")}
         />
-        <KPICard
-          icon={TrendingUp}
-          title="Gekoppeld"
-          value={withActivePlacementCount}
-          variant="time"
-        />
+            <KPICard
+              icon={TrendingUp}
+              title="Gekoppeld"
+              value={withActivePlacementCount}
+              variant="time"
+              onClick={() => handleKpiClick("gekoppeld")}
+            />
         <KPICard
           icon={UserPlus}
           title="Nieuw (7d)"
