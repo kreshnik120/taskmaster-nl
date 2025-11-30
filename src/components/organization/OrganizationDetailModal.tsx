@@ -68,6 +68,8 @@ interface Sublocation {
   gezochte_functies: string[] | null;
   gekoppelde_bv_org_id: string | null;
   hourly_rates_count?: number;
+  tarieven_min?: number;
+  tarieven_max?: number;
   publieke_opmerking: string | null;
   capaciteit_min: number | null;
   capaciteit_max: number | null;
@@ -210,9 +212,9 @@ export function OrganizationDetailModal({
             </TabsList>
 
             <TabsContent value="algemeen" className="space-y-4">
-              {/* Overzicht KPI's */}
+              {/* Overzicht KPI's - Premium gradient style */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <Card>
+                <Card className="border-t-4 border-t-blue-400/60 bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background hover:shadow-md transition-shadow backdrop-blur-sm">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <Building className="h-4 w-4 text-blue-600" />
@@ -224,7 +226,7 @@ export function OrganizationDetailModal({
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="border-t-4 border-t-green-400/60 bg-gradient-to-br from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background hover:shadow-md transition-shadow backdrop-blur-sm">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <MapPin className="h-4 w-4 text-green-600" />
@@ -236,7 +238,7 @@ export function OrganizationDetailModal({
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="border-t-4 border-t-amber-400/60 bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background hover:shadow-md transition-shadow backdrop-blur-sm">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <Euro className="h-4 w-4 text-amber-600" />
@@ -248,7 +250,7 @@ export function OrganizationDetailModal({
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="border-t-4 border-t-purple-400/60 bg-gradient-to-br from-purple-50/80 to-white/60 dark:from-purple-950/30 dark:to-background hover:shadow-md transition-shadow backdrop-blur-sm">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <Briefcase className="h-4 w-4 text-purple-600" />
@@ -338,7 +340,14 @@ export function OrganizationDetailModal({
                 location.sublocations.map((sublocation) => (
                   <SublocationCard
                     key={sublocation.id}
-                    sublocation={sublocation}
+                    sublocation={{
+                      ...sublocation,
+                      hourly_rates_count: sublocation.hourly_rates_count,
+                      tarieven_min: sublocation.tarieven_min,
+                      tarieven_max: sublocation.tarieven_max,
+                      capaciteit_min: sublocation.capaciteit_min,
+                      capaciteit_max: sublocation.capaciteit_max,
+                    }}
                     organizationName={organization.name}
                     locationName={location.naam}
                     onSublocationClick={handleSublocationClick}
@@ -371,7 +380,7 @@ export function OrganizationDetailModal({
                       </h3>
                       <div className="space-y-2">
                         {assignments.filter(a => a.status === 'active').map((assignment) => (
-                          <Card key={assignment.id} className="border-l-4 border-l-green-400">
+                          <Card key={assignment.id} className="border-l-4 border-l-green-400 hover:shadow-md transition-shadow">
                             <CardContent className="p-4">
                               <div className="flex items-start justify-between">
                                 <div className="space-y-1">
@@ -423,7 +432,7 @@ export function OrganizationDetailModal({
                       </h3>
                       <div className="space-y-2">
                         {assignments.filter(a => a.status === 'proposed').map((assignment) => (
-                          <Card key={assignment.id} className="border-l-4 border-l-amber-400">
+                          <Card key={assignment.id} className="border-l-4 border-l-amber-400 hover:shadow-md transition-shadow">
                             <CardContent className="p-4">
                               <div className="flex items-start justify-between">
                                 <div className="space-y-1">
