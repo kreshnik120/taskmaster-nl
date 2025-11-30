@@ -352,6 +352,21 @@ export function ProfessionalDetailModal({
           </TabsList>
 
           <TabsContent value="profiel" className="space-y-4 mt-6">
+            {/* Large Avatar Section */}
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Profiel Foto
+              </h3>
+              <div className="flex items-center justify-center p-6 rounded-lg border border-border/50 bg-gradient-to-br from-muted/30 to-muted/10 backdrop-blur-sm">
+                <Avatar className="h-[120px] w-[120px] shadow-lg">
+                  <AvatarFallback className={`${getFunctieAvatarColor(professional.functie_niveau)} text-4xl`}>
+                    {getInitials(professional.full_name)}
+                  </AvatarFallback>
+                </Avatar>
+              </div>
+            </div>
+
             {/* Basis Info - Collapsible */}
             <Collapsible open={basicsOpen} onOpenChange={setBasicsOpen}>
               <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-muted/50 rounded-lg transition-colors">
