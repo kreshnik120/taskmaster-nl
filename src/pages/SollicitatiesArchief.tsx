@@ -25,7 +25,10 @@ import {
   Building2,
   MapPin,
   AlertCircle,
+  XCircle,
+  Filter,
 } from "lucide-react";
+import { KPICard } from "@/components/ui/kpi-card";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import {
@@ -191,23 +194,31 @@ export default function SollicitatiesArchief() {
           </div>
 
           {/* Stats Bar */}
-          <div className="grid grid-cols-4 gap-3">
-            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border">
-              <span className="text-3xl font-bold">{applications.length}</span>
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">Totaal</span>
-            </div>
-            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border">
-              <span className={`text-3xl font-bold ${rejectedCount > 0 ? 'text-destructive' : ''}`}>{rejectedCount}</span>
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">Afgewezen</span>
-            </div>
-            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border">
-              <span className={`text-3xl font-bold ${deletedCount > 0 ? 'text-destructive' : ''}`}>{deletedCount}</span>
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">Verwijderd</span>
-            </div>
-            <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border">
-              <span className="text-3xl font-bold">{filteredApplications.length}</span>
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">Getoond</span>
-            </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KPICard
+              icon={Archive}
+              title="Totaal"
+              value={applications.length}
+              variant="count"
+            />
+            <KPICard
+              icon={XCircle}
+              title="Afgewezen"
+              value={rejectedCount}
+              variant="urgent"
+            />
+            <KPICard
+              icon={Trash2}
+              title="Verwijderd"
+              value={deletedCount}
+              variant="time"
+            />
+            <KPICard
+              icon={Filter}
+              title="Getoond"
+              value={filteredApplications.length}
+              variant="personal"
+            />
           </div>
 
           {/* Search & Filter Bar */}

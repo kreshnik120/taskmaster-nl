@@ -4,8 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Undo2, Trash2, CheckCircle2 } from "lucide-react";
+import { Undo2, Trash2, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
 import { format } from "date-fns";
+import { KPICard } from "@/components/ui/kpi-card";
 import { nl } from "date-fns/locale";
 import {
   AlertDialog,
@@ -164,41 +165,36 @@ const VerwijderdeTaken = () => {
       </div>
 
       {/* Stats Bar */}
-      <div className="grid grid-cols-4 gap-3">
-        {/* Totaal */}
-        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border cursor-pointer hover:bg-muted/50 transition-colors">
-          <span className="text-3xl font-bold">{tasks.length}</span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Totaal</span>
-        </div>
-        
-        {/* Kritiek */}
-        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border cursor-pointer hover:bg-muted/50 transition-colors">
-          <span className={`text-3xl font-bold ${
-            tasks.filter(t => t.priority === 'CRITICAL').length > 0 ? 'text-destructive' : ''
-          }`}>
-            {tasks.filter(t => t.priority === 'CRITICAL').length}
-          </span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Kritiek</span>
-        </div>
-        
-        {/* Recent */}
-        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border cursor-pointer hover:bg-muted/50 transition-colors">
-          <span className="text-3xl font-bold">
-            {tasks.filter(t => {
-              const deletedDate = new Date(t.deleted_at);
-              const threeDaysAgo = new Date();
-              threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-              return deletedDate >= threeDaysAgo;
-            }).length}
-          </span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Recent</span>
-        </div>
-        
-        {/* Herstelbaar */}
-        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border cursor-pointer hover:bg-muted/50 transition-colors">
-          <span className="text-3xl font-bold">{tasks.length}</span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Herstelbaar</span>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KPICard
+          icon={Trash2}
+          title="Totaal"
+          value={tasks.length}
+          variant="count"
+        />
+        <KPICard
+          icon={AlertTriangle}
+          title="Kritiek"
+          value={tasks.filter(t => t.priority === 'CRITICAL').length}
+          variant="urgent"
+        />
+        <KPICard
+          icon={Clock}
+          title="Recent"
+          value={tasks.filter(t => {
+            const deletedDate = new Date(t.deleted_at);
+            const threeDaysAgo = new Date();
+            threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+            return deletedDate >= threeDaysAgo;
+          }).length}
+          variant="time"
+        />
+        <KPICard
+          icon={Undo2}
+          title="Herstelbaar"
+          value={tasks.length}
+          variant="success"
+        />
       </div>
 
           <Card>
