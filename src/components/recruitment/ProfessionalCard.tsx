@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Phone, Mail } from "lucide-react";
+import { Phone, Mail, MapPin } from "lucide-react";
 
 interface Professional {
   id: string;
@@ -19,6 +19,7 @@ interface Professional {
   created_at: string;
   telefoonnummer?: string | null;
   email?: string | null;
+  skills?: string[];
 }
 
 interface ProfessionalCardProps {
@@ -84,6 +85,25 @@ export function ProfessionalCard({
     }
   };
 
+  const handleLocationClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (professional.regio) {
+      window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(professional.regio)}`, '_blank');
+    }
+  };
+
+  const getSectorColor = (sector: string) => {
+    const colors: Record<string, string> = {
+      "VVT": "bg-blue-500/10 text-blue-700 border-blue-200",
+      "GGZ": "bg-purple-500/10 text-purple-700 border-purple-200",
+      "GHZ": "bg-green-500/10 text-green-700 border-green-200",
+      "Jeugdzorg": "bg-orange-500/10 text-orange-700 border-orange-200",
+      "Ziekenhuis": "bg-red-500/10 text-red-700 border-red-200",
+      "Thuiszorg": "bg-teal-500/10 text-teal-700 border-teal-200",
+    };
+    return colors[sector] || "bg-muted";
+  };
+
   return (
     <HoverCard openDelay={300}>
       <HoverCardTrigger asChild>
@@ -131,9 +151,29 @@ export function ProfessionalCard({
 
                 {/* Region */}
                 {professional.regio && (
-                  <p className="text-sm text-muted-foreground/80 mb-3">
+                  <p className="text-sm text-muted-foreground/80 mb-2">
                     {professional.regio}
                   </p>
+                )}
+
+                {/* Skills badges - max 2 + overflow */}
+                {professional.skills && professional.skills.length > 0 && (
+                  <div className="flex gap-1.5 flex-wrap mb-3">
+                    {professional.skills.slice(0, 2).map((skill, idx) => (
+                      <Badge 
+                        key={idx} 
+                        variant="outline" 
+                        className={`text-xs ${getSectorColor(skill)}`}
+                      >
+                        {skill}
+                      </Badge>
+                    ))}
+                    {professional.skills.length > 2 && (
+                      <Badge variant="secondary" className="text-xs">
+                        +{professional.skills.length - 2}
+                      </Badge>
+                    )}
+                  </div>
                 )}
 
                 {/* Time in Status - Subtle gray */}
@@ -180,6 +220,24 @@ export function ProfessionalCard({
                 </TooltipTrigger>
                 <TooltipContent>
                   {professional.email || "Geen e-mailadres"}
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleLocationClick}
+                    disabled={!professional.regio}
+                    className="flex-1 h-8 text-xs"
+                  >
+                    <MapPin className="h-3.5 w-3.5 mr-1.5" />
+                    Locatie
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {professional.regio || "Geen regio"}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -229,6 +287,24 @@ export function ProfessionalCard({
           {professional.regio && (
             <div className="text-sm text-muted-foreground">
               <span className="font-medium">Regio:</span> {professional.regio}
+            </div>
+          )}
+
+          {/* Skills/Sector badges in HoverCard */}
+          {professional.skills && professional.skills.length > 0 && (
+            <div>
+              <div className="text-sm font-medium mb-1.5">Sector Ervaring</div>
+              <div className="flex gap-1.5 flex-wrap">
+                {professional.skills.map((skill, idx) => (
+                  <Badge 
+                    key={idx} 
+                    variant="outline" 
+                    className={`text-xs ${getSectorColor(skill)}`}
+                  >
+                    {skill}
+                  </Badge>
+                ))}
+              </div>
             </div>
           )}
         </div>
