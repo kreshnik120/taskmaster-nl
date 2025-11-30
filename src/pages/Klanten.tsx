@@ -16,6 +16,7 @@ import { RecentClientsWidget } from "@/components/recruitment/RecentClientsWidge
 import { ClientGroupingToggle } from "@/components/recruitment/ClientGroupingToggle";
 import { DensityToggle } from "@/components/recruitment/DensityToggle";
 import { ClientSection } from "@/components/recruitment/ClientSection";
+import { OrganizationCard } from "@/components/organization/OrganizationCard";
 
 interface Client {
   id: string;
@@ -103,7 +104,7 @@ export default function Klanten() {
       const { data: session } = await supabase.auth.getSession();
       if (!session?.session) return;
 
-      // Load organizations, locations, and sublocations
+      // Load organizations with locations and sublocations
       const { data: orgsData } = await supabase
         .from("client_organizations")
         .select("*")
@@ -116,10 +117,25 @@ export default function Klanten() {
       
       const { data: sublocsData } = await supabase
         .from("client_sublocations")
-        .select("*")
+        .select(`
+          *,
+          hourly_rates:hourly_rates(count)
+        `)
         .order("naam");
 
-      setOrganizations(orgsData || []);
+      // Build hierarchy structure
+      const orgsWithHierarchy = orgsData?.map(org => ({
+        ...org,
+        locations: locsData?.filter(loc => loc.client_org_id === org.id).map(loc => ({
+          ...loc,
+          sublocations: sublocsData?.filter(sub => sub.location_id === loc.id).map(sub => ({
+            ...sub,
+            hourly_rates_count: sub.hourly_rates?.[0]?.count || 0
+          }))
+        }))
+      })) || [];
+
+      setOrganizations(orgsWithHierarchy);
       setLocations(locsData || []);
       setSublocations(sublocsData || []);
     } catch (error: any) {
@@ -435,28 +451,28 @@ export default function Klanten() {
                     icon={Building2}
                     title="Organisaties"
                     value={organizations.length}
-                    subtitle="klantorganisaties"
+                    subtitle={organizations.length === 1 ? "organisatie" : "organisaties"}
                     variant="count"
                   />
                   <KPICard
                     icon={Building2}
                     title="Hoofdlocaties"
                     value={locations.length}
-                    subtitle="locaties"
+                    subtitle={locations.length === 1 ? "locatie" : "locaties"}
                     variant="success"
                   />
                   <KPICard
                     icon={Target}
                     title="Sublocaties"
                     value={sublocations.length}
-                    subtitle="werklocaties"
+                    subtitle={sublocations.length === 1 ? "sublocatie" : "sublocaties"}
                     variant="time"
                   />
                   <KPICard
                     icon={Target}
                     title="Met tarieven"
-                    value={0}
-                    subtitle="sublocaties"
+                    value={sublocations.filter((s: any) => s.hourly_rates?.[0]?.count > 0).length}
+                    subtitle={sublocations.filter((s: any) => s.hourly_rates?.[0]?.count > 0).length === 1 ? "sublocatie" : "sublocaties"}
                     variant="urgent"
                   />
                 </>
@@ -659,27 +675,24 @@ export default function Klanten() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {organizations.map((org) => {
-                      const orgLocations = locations.filter(l => l.client_org_id === org.id);
-                      return (
-                        <div key={org.id} className="border rounded-lg p-4 bg-card hover:bg-muted/30 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                              <Building2 className="h-6 w-6 text-primary" />
-                            </div>
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-base">{org.name}</h3>
-                              <p className="text-sm text-muted-foreground">
-                                {org.kvk_nummer ? `KVK: ${org.kvk_nummer}` : 'Geen KVK'} · {orgLocations.length} locatie{orgLocations.length !== 1 ? 's' : ''}
-                              </p>
-                            </div>
-                            <Badge variant="secondary">
-                              {sublocations.filter(s => orgLocations.some(l => l.id === s.location_id)).length} sublocaties
-                            </Badge>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {organizations.map((org) => (
+                      <OrganizationCard
+                        key={org.id}
+                        organization={org}
+                        onOrganizationClick={(org) => {
+                          console.log("Open organization modal", org);
+                          // TODO: Open OrganizationDetailModal
+                        }}
+                        onLocationClick={(location) => {
+                          console.log("Open location modal", location);
+                          // TODO: Open LocationDetailModal
+                        }}
+                        onSublocationClick={(sublocation) => {
+                          console.log("Open sublocation modal", sublocation);
+                          // TODO: Open SublocationDetailModal
+                        }}
+                      />
+                    ))}
                   </div>
                 )
               )}
