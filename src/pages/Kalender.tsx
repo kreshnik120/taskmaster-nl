@@ -233,30 +233,37 @@ export default function Kalender() {
 
       {/* Gradient KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="border-t-4 border-t-blue-400/60 dark:border-t-blue-500/50 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 border-blue-200 dark:border-blue-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-blue-500/10 transition-all cursor-pointer" onClick={goToToday}>
-          <CardContent className="p-4">
-            <div className="text-3xl font-bold text-blue-900 dark:text-blue-100">{animatedTodayTasks}</div>
-            <div className="text-xs text-blue-700 dark:text-blue-300 uppercase tracking-wide">Vandaag</div>
-          </CardContent>
-        </Card>
-        <Card className="border-t-4 border-t-green-400/60 dark:border-t-green-500/50 bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/30 dark:to-green-900/20 border-green-200 dark:border-green-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-green-500/10 transition-all">
-          <CardContent className="p-4">
-            <div className="text-3xl font-bold text-green-900 dark:text-green-100">{animatedWeekTasks}</div>
-            <div className="text-xs text-green-700 dark:text-green-300 uppercase tracking-wide">Deze Week</div>
-          </CardContent>
-        </Card>
-        <Card className="border-t-4 border-t-amber-400/60 dark:border-t-amber-500/50 bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20 border-amber-200 dark:border-amber-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-amber-500/10 transition-all">
-          <CardContent className="p-4">
-            <div className="text-3xl font-bold text-amber-900 dark:text-amber-100">{animatedReminders}</div>
-            <div className="text-xs text-amber-700 dark:text-amber-300 uppercase tracking-wide">Herinneringen</div>
-          </CardContent>
-        </Card>
-        <Card className="border-t-4 border-t-orange-400/60 dark:border-t-orange-500/50 bg-gradient-to-br from-orange-50 to-orange-100/50 dark:from-orange-950/30 dark:to-orange-900/20 border-orange-200 dark:border-orange-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-orange-500/10 transition-all">
-          <CardContent className="p-4">
-            <div className={cn("text-3xl font-bold", urgentCount > 0 ? "text-red-900 dark:text-red-100" : "text-orange-900 dark:text-orange-100")}>{animatedUrgentTasks}</div>
-            <div className={cn("text-xs uppercase tracking-wide", urgentCount > 0 ? "text-red-700 dark:text-red-300" : "text-orange-700 dark:text-orange-300")}>Urgent</div>
-          </CardContent>
-        </Card>
+        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
+                       bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 
+                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-blue-400/60 dark:border-t-blue-500/50
+                       hover:shadow-lg hover:shadow-blue-500/10 hover:scale-[1.02] transition-all duration-200 cursor-pointer" onClick={goToToday}>
+          <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">{animatedTodayTasks}</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Vandaag</span>
+        </div>
+        
+        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
+                       bg-gradient-to-br from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60 
+                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-green-400/60 dark:border-t-green-500/50
+                       hover:shadow-lg hover:shadow-green-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
+          <span className="text-3xl font-bold text-green-600 dark:text-green-400">{animatedWeekTasks}</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Deze Week</span>
+        </div>
+        
+        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
+                       bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60 
+                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-amber-400/60 dark:border-t-amber-500/50
+                       hover:shadow-lg hover:shadow-amber-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
+          <span className="text-3xl font-bold text-amber-600 dark:text-amber-400">{animatedReminders}</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Herinneringen</span>
+        </div>
+        
+        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
+                       bg-gradient-to-br from-orange-50/80 to-white/60 dark:from-orange-950/30 dark:to-background/60 
+                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-orange-400/60 dark:border-t-orange-500/50
+                       hover:shadow-lg hover:shadow-orange-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
+          <span className={cn("text-3xl font-bold", urgentCount > 0 ? "text-destructive" : "text-orange-600 dark:text-orange-400")}>{animatedUrgentTasks}</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Urgent</span>
+        </div>
       </div>
 
       {/* Compact Week Navigation */}
