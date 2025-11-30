@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, X, Users, Building2, Target } from "lucide-react";
+import { Plus, Search, X, Users, Building2, Target, LayoutGrid, Network } from "lucide-react";
 import { toast } from "sonner";
 import NewClientDialog from "@/components/NewClientDialog";
 import ClientDetailModal from "@/components/ClientDetailModal";
@@ -41,6 +41,10 @@ export default function Klanten() {
   const [loading, setLoading] = useState(true);
   const [newClientOpen, setNewClientOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [viewMode, setViewMode] = useState<"cards" | "hierarchy">(() => {
+    const saved = localStorage.getItem("klanten-view-mode");
+    return (saved as any) || "cards";
+  });
   const [grouping, setGrouping] = useState<"bureau" | "sector" | "matching" | "regio" | "alpha">(() => {
     const saved = localStorage.getItem("klanten-grouping");
     return (saved as any) || "bureau";
@@ -50,6 +54,12 @@ export default function Klanten() {
     return (saved as any) || "compact";
   });
   const [allExpanded, setAllExpanded] = useState(true);
+  
+  // Hierarchy data (will be loaded from database)
+  const [organizations, setOrganizations] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [sublocations, setSublocations] = useState<any[]>([]);
+  
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   
@@ -83,7 +93,45 @@ export default function Klanten() {
 
   useEffect(() => {
     loadClients();
-  }, []);
+    if (viewMode === "hierarchy") {
+      loadHierarchyData();
+    }
+  }, [viewMode]);
+  
+  const loadHierarchyData = async () => {
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session?.session) return;
+
+      // Load organizations, locations, and sublocations
+      const { data: orgsData } = await supabase
+        .from("client_organizations")
+        .select("*")
+        .order("name");
+      
+      const { data: locsData } = await supabase
+        .from("client_locations")
+        .select("*")
+        .order("naam");
+      
+      const { data: sublocsData } = await supabase
+        .from("client_sublocations")
+        .select("*")
+        .order("naam");
+
+      setOrganizations(orgsData || []);
+      setLocations(locsData || []);
+      setSublocations(sublocsData || []);
+    } catch (error: any) {
+      console.error("Error loading hierarchy data:", error);
+      toast.error("Kon hiërarchische data niet laden");
+    }
+  };
+  
+  const handleViewModeChange = (mode: "cards" | "hierarchy") => {
+    setViewMode(mode);
+    localStorage.setItem("klanten-view-mode", mode);
+  };
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -322,40 +370,97 @@ export default function Klanten() {
               </p>
             </div>
 
+            {/* View Toggle */}
+            <div className="flex items-center gap-2 mb-6">
+              <Button
+                variant={viewMode === "cards" ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleViewModeChange("cards")}
+                className="gap-2"
+              >
+                <LayoutGrid className="h-4 w-4" />
+                Kaarten
+              </Button>
+              <Button
+                variant={viewMode === "hierarchy" ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleViewModeChange("hierarchy")}
+                className="gap-2"
+              >
+                <Network className="h-4 w-4" />
+                Hiërarchie
+              </Button>
+            </div>
+
             {/* KPI Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <KPICard
-                icon={Users}
-                title="Totaal"
-                value={clients.length}
-                subtitle="klanten"
-                variant="count"
-                onClick={() => handleMetricClick('total')}
-              />
-              <KPICard
-                icon={Building2}
-                title="ABCzorg"
-                value={abczorgCount}
-                subtitle="klanten"
-                variant="success"
-                onClick={() => handleMetricClick('abczorg')}
-              />
-              <KPICard
-                icon={Building2}
-                title="CitoZorg"
-                value={citozorgCount}
-                subtitle="klanten"
-                variant="time"
-                onClick={() => handleMetricClick('citozorg')}
-              />
-              <KPICard
-                icon={Target}
-                title="Met matchdata"
-                value={matchingPercentage}
-                subtitle="%"
-                variant="urgent"
-                onClick={() => handleMetricClick('matching')}
-              />
+              {viewMode === "cards" ? (
+                <>
+                  <KPICard
+                    icon={Users}
+                    title="Totaal"
+                    value={clients.length}
+                    subtitle="klanten"
+                    variant="count"
+                    onClick={() => handleMetricClick('total')}
+                  />
+                  <KPICard
+                    icon={Building2}
+                    title="ABCzorg"
+                    value={abczorgCount}
+                    subtitle="klanten"
+                    variant="success"
+                    onClick={() => handleMetricClick('abczorg')}
+                  />
+                  <KPICard
+                    icon={Building2}
+                    title="CitoZorg"
+                    value={citozorgCount}
+                    subtitle="klanten"
+                    variant="time"
+                    onClick={() => handleMetricClick('citozorg')}
+                  />
+                  <KPICard
+                    icon={Target}
+                    title="Met matchdata"
+                    value={matchingPercentage}
+                    subtitle="%"
+                    variant="urgent"
+                    onClick={() => handleMetricClick('matching')}
+                  />
+                </>
+              ) : (
+                <>
+                  <KPICard
+                    icon={Building2}
+                    title="Organisaties"
+                    value={organizations.length}
+                    subtitle="klantorganisaties"
+                    variant="count"
+                  />
+                  <KPICard
+                    icon={Building2}
+                    title="Hoofdlocaties"
+                    value={locations.length}
+                    subtitle="locaties"
+                    variant="success"
+                  />
+                  <KPICard
+                    icon={Target}
+                    title="Sublocaties"
+                    value={sublocations.length}
+                    subtitle="werklocaties"
+                    variant="time"
+                  />
+                  <KPICard
+                    icon={Target}
+                    title="Met tarieven"
+                    value={0}
+                    subtitle="sublocaties"
+                    variant="urgent"
+                  />
+                </>
+              )}
             </div>
 
             {/* Urgency Banner */}
@@ -478,52 +583,105 @@ export default function Klanten() {
               </div>
             )}
 
-            {/* Grouping Toggle & Collapse Controls */}
-            <div className="mt-6 flex items-center justify-between flex-wrap gap-4">
-              <div className="flex items-center gap-3">
-                <ClientGroupingToggle value={grouping} onChange={handleGroupingChange} />
-                <DensityToggle value={density} onChange={handleDensityChange} />
+            {/* Grouping Toggle & Collapse Controls - Only for Cards view */}
+            {viewMode === "cards" && (
+              <div className="mt-6 flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-3">
+                  <ClientGroupingToggle value={grouping} onChange={handleGroupingChange} />
+                  <DensityToggle value={density} onChange={handleDensityChange} />
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAllExpanded(!allExpanded)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  {allExpanded ? 'Alles inklappen' : 'Alles uitklappen'}
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setAllExpanded(!allExpanded)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                {allExpanded ? 'Alles inklappen' : 'Alles uitklappen'}
-              </Button>
-            </div>
+            )}
 
-            {/* Grouped Client Sections */}
+            {/* Client grid or hierarchy view */}
             <div className="space-y-10 mt-8">
-              {loading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {[...Array(6)].map((_, i) => (
-                    <ClientCardSkeleton key={i} />
-                  ))}
-                </div>
-              ) : filteredClients.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  {searchQuery ? "Geen klanten gevonden" : "Nog geen klanten"}
-                </div>
+              {viewMode === "cards" ? (
+                loading ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[...Array(6)].map((_, i) => (
+                      <ClientCardSkeleton key={i} />
+                    ))}
+                  </div>
+                ) : filteredClients.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    {searchQuery ? "Geen klanten gevonden" : "Nog geen klanten"}
+                  </div>
+                ) : (
+                  Object.entries(groupedClients)
+                    .sort(([, a], [, b]) => b.length - a.length)
+                    .map(([sectionName, sectionClients]) => (
+                      <ClientSection
+                        key={sectionName}
+                        title={sectionName}
+                        clients={sectionClients}
+                        totalClients={filteredClients.length}
+                        groupType={grouping}
+                       onClientClick={(client) => {
+                          setSelectedClient(client);
+                        }}
+                        searchQuery={searchQuery}
+                        defaultOpen={allExpanded}
+                        gridClass={getGridClass()}
+                      />
+                    ))
+                )
               ) : (
-                Object.entries(groupedClients)
-                  .sort(([, a], [, b]) => b.length - a.length)
-                  .map(([sectionName, sectionClients]) => (
-                    <ClientSection
-                      key={sectionName}
-                      title={sectionName}
-                      clients={sectionClients}
-                      totalClients={filteredClients.length}
-                      groupType={grouping}
-                     onClientClick={(client) => {
-                        setSelectedClient(client);
-                      }}
-                      searchQuery={searchQuery}
-                      defaultOpen={allExpanded}
-                      gridClass={getGridClass()}
-                    />
-                  ))
+                // Hierarchy View
+                loading ? (
+                  <div className="space-y-4">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="border rounded-lg p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="h-12 w-12 rounded-full bg-muted animate-pulse" />
+                          <div className="flex-1 space-y-2">
+                            <div className="h-4 w-48 bg-muted animate-pulse rounded" />
+                            <div className="h-3 w-32 bg-muted animate-pulse rounded" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : organizations.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
+                    <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p className="text-lg font-medium">Nog geen klantorganisaties</p>
+                    <p className="text-sm mt-2">
+                      Hiërarchische structuur is nog leeg
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {organizations.map((org) => {
+                      const orgLocations = locations.filter(l => l.client_org_id === org.id);
+                      return (
+                        <div key={org.id} className="border rounded-lg p-4 bg-card hover:bg-muted/30 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <Building2 className="h-6 w-6 text-primary" />
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="font-semibold text-base">{org.name}</h3>
+                              <p className="text-sm text-muted-foreground">
+                                {org.kvk_nummer ? `KVK: ${org.kvk_nummer}` : 'Geen KVK'} · {orgLocations.length} locatie{orgLocations.length !== 1 ? 's' : ''}
+                              </p>
+                            </div>
+                            <Badge variant="secondary">
+                              {sublocations.filter(s => orgLocations.some(l => l.id === s.location_id)).length} sublocaties
+                            </Badge>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
               )}
             </div>
 
