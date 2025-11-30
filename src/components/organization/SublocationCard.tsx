@@ -2,6 +2,7 @@ import { Building, Euro, Phone, Mail, MapPin as MapPinIcon } from "lucide-react"
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getOrganizationName, getOrganizationBadgeColor } from "@/lib/organizationMapping";
 
 interface Sublocation {
   id: string;
@@ -21,11 +22,6 @@ interface SublocationCardProps {
   locationName: string;
   onSublocationClick?: (sublocation: Sublocation) => void;
 }
-
-const ORG_NAMES: Record<string, string> = {
-  "550e8400-e29b-41d4-a716-446655440000": "ABCzorg",
-  "7c9e6679-7425-40de-944b-e07fc1f90ae7": "CitoZorg",
-};
 
 export function SublocationCard({
   sublocation,
@@ -54,9 +50,8 @@ export function SublocationCard({
     }
   };
 
-  const bemiddelaar = sublocation.gekoppelde_bv_org_id
-    ? ORG_NAMES[sublocation.gekoppelde_bv_org_id] || "Onbekend"
-    : "Niet toegewezen";
+  const bemiddelaar = getOrganizationName(sublocation.gekoppelde_bv_org_id);
+  const bemiddelaarColor = getOrganizationBadgeColor(bemiddelaar);
 
   return (
     <Card
@@ -77,16 +72,7 @@ export function SublocationCard({
               {bemiddelaar && (
                 <>
                   <span>·</span>
-                  <Badge
-                    variant="outline"
-                    className={`text-xs ${
-                      bemiddelaar === "ABCzorg"
-                        ? "border-blue-300 text-blue-700"
-                        : bemiddelaar === "CitoZorg"
-                        ? "border-green-300 text-green-700"
-                        : "border-gray-300 text-gray-600"
-                    }`}
-                  >
+                  <Badge variant="outline" className={`text-xs ${bemiddelaarColor}`}>
                     {bemiddelaar}
                   </Badge>
                 </>
