@@ -275,18 +275,27 @@ export default function Kalender() {
           title="Deze Week"
           value={animatedWeekTasks}
           variant="success"
+          onClick={goToToday}
         />
         <KPICard
           icon={Clock}
           title="Herinneringen"
           value={animatedReminders}
           variant="time"
+          onClick={() => {
+            const reminderSection = document.querySelector('[data-reminders]');
+            reminderSection?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }}
         />
         <KPICard
           icon={AlertCircle}
           title="Urgent"
           value={animatedUrgentTasks}
           variant="urgent"
+          onClick={() => {
+            const urgentTasks = document.querySelector('[data-urgent-task]');
+            urgentTasks?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }}
         />
       </div>
 
@@ -342,8 +351,13 @@ export default function Kalender() {
                   </button>
                 ) : (
                   <>
-                    {dayTasks.map((task) => (
-                      <div key={task.id} onClick={() => handleTaskClick(task)} className="p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors space-y-1.5">
+                    {dayTasks.map((task, taskIndex) => (
+                      <div 
+                        key={task.id} 
+                        onClick={() => handleTaskClick(task)} 
+                        className="p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors space-y-1.5"
+                        {...(taskIndex === 0 && (task.priority === 'high' || task.priority === 'critical') && { 'data-urgent-task': true })}
+                      >
                         <p className="font-medium text-sm line-clamp-2">{task.title}</p>
                         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                           <span>{priorityConfig[task.priority as keyof typeof priorityConfig]?.label || priorityConfig.medium.label}</span>
@@ -358,8 +372,12 @@ export default function Kalender() {
                         )}
                       </div>
                     ))}
-                    {dayReminders.map((reminder) => (
-                      <div key={reminder.id} className="p-3 rounded-lg border bg-muted/30 space-y-1">
+                    {dayReminders.map((reminder, reminderIndex) => (
+                      <div 
+                        key={reminder.id} 
+                        className="p-3 rounded-lg border bg-muted/30 space-y-1"
+                        {...(reminderIndex === 0 && { 'data-reminders': true })}
+                      >
                         <div className="flex items-start justify-between gap-2">
                           <p className="font-medium text-sm line-clamp-2 flex-1">{reminder.title || "Herinnering"}</p>
                           <Button variant="ghost" size="sm" onClick={(e) => handleDeleteReminder(reminder.id, e)} className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive">

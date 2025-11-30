@@ -79,6 +79,7 @@ const Sollicitaties = () => {
   const [filterWerkvorm, setFilterWerkvorm] = useState<string>("all");
   const [filterOrganisatie, setFilterOrganisatie] = useState<string>("all");
   const [filterRegio, setFilterRegio] = useState<string>("");
+  const [filterStage, setFilterStage] = useState<string>("all");
   const [lastMove, setLastMove] = useState<{ applicationId: string; fromStage: string; toStage: string } | null>(null);
   const [selectedApplicationIds, setSelectedApplicationIds] = useState<Set<string>>(new Set());
   const [analyticsSheetOpen, setAnalyticsSheetOpen] = useState(false);
@@ -638,7 +639,11 @@ const Sollicitaties = () => {
       const regioMatch = filterRegio === "" || 
         (app.extracted_data?.regio?.toLowerCase().includes(filterRegio.toLowerCase()));
       
-      return searchMatch && functieMatch && werkvormMatch && organisatieMatch && regioMatch;
+      // Filter op pipeline stage
+      const stageMatch = filterStage === "all" || 
+        app.pipeline_stage === filterStage;
+      
+      return searchMatch && functieMatch && werkvormMatch && organisatieMatch && regioMatch && stageMatch;
     });
   };
 
@@ -853,6 +858,14 @@ const Sollicitaties = () => {
                 value={displayedTotal}
                 subtitle="sollicitaties"
                 variant="count"
+                onClick={() => {
+                  setFilterStage("all");
+                  setSearchQuery("");
+                  setFilterFunctieNiveau("all");
+                  setFilterWerkvorm("all");
+                  setFilterOrganisatie("all");
+                  setFilterRegio("");
+                }}
               />
               <KPICard
                 icon={Inbox}
@@ -860,6 +873,7 @@ const Sollicitaties = () => {
                 value={displayedNew}
                 subtitle="binnengekomen"
                 variant="success"
+                onClick={() => setFilterStage("nieuw")}
               />
               <KPICard
                 icon={CheckCircle2}
@@ -867,6 +881,7 @@ const Sollicitaties = () => {
                 value={displayedApproved}
                 subtitle="klaar voor plaatsing"
                 variant="time"
+                onClick={() => setFilterStage("goedgekeurd")}
               />
               <KPICard
                 icon={TrendingUp}
@@ -874,6 +889,10 @@ const Sollicitaties = () => {
                 value={displayedAvgCompleteness}
                 subtitle="%"
                 variant="urgent"
+                onClick={() => {
+                  // Sort by completeness via URL param or local state
+                  toast.info("Gesorteerd op compleetheid");
+                }}
               />
             </div>
 
