@@ -457,71 +457,68 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
               </CollapsibleContent>
             </Collapsible>
 
-            {/* Logo Upload in Collapsible */}
-            <Collapsible defaultOpen={isEditing || !!logoUrl}>
-              <CollapsibleTrigger className="flex items-center justify-between w-full group hover:opacity-70 transition-opacity">
-                <h3 className="font-medium text-sm">Logo</h3>
-                <ChevronDown className="h-4 w-4 transition-transform group-data-[state=open]:rotate-180" />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-3 mt-4">
-                <div className="flex items-center gap-4">
-                  {logoUrl ? (
-                    <div className="flex items-center gap-3">
-                      <img 
-                        src={logoUrl} 
-                        alt={company} 
-                        className="h-16 w-16 object-contain rounded-md border border-border"
-                      />
-                      {isEditing && (
-                        <div className="flex flex-col gap-2">
-                          <Label htmlFor="logo-upload" className="cursor-pointer">
-                            <Button type="button" size="sm" variant="outline" disabled={uploading} asChild>
-                              <span>
-                                <Upload className="h-3 w-3 mr-2" />
-                                {uploading ? "Uploaden..." : "Wijzig logo"}
-                              </span>
-                            </Button>
-                          </Label>
-                          <Button 
-                            type="button" 
-                            size="sm" 
-                            variant="ghost" 
-                            onClick={() => setLogoUrl("")}
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <X className="h-3 w-3 mr-2" />
-                            Verwijder
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ) : isEditing ? (
-                    <Label htmlFor="logo-upload" className="cursor-pointer">
-                      <div className="flex items-center gap-2 px-4 py-8 border-2 border-dashed border-border rounded-md hover:border-primary hover:bg-accent/50 transition-all">
-                        <ImageIcon className="h-5 w-5 text-muted-foreground" />
-                        <div className="text-sm">
-                          <span className="text-primary font-medium">Upload logo</span>
-                          <p className="text-xs text-muted-foreground">JPG, PNG of SVG (max 2MB)</p>
-                        </div>
-                      </div>
-                    </Label>
-                  ) : (
-                    <button onClick={() => handleInlineAdd('contact')} className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
-                      <Plus className="h-3 w-3" />
-                      <span>Voeg logo toe →</span>
-                    </button>
-                  )}
-                  <input
-                    id="logo-upload"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleLogoUpload}
-                    className="hidden"
-                    disabled={uploading}
+            {/* Logo Section - Always Visible */}
+            <div className="space-y-3">
+              <h3 className="font-medium text-sm flex items-center gap-2">
+                <ImageIcon className="h-4 w-4" />
+                Logo
+              </h3>
+              
+              {logoUrl ? (
+                <div className="flex items-center gap-3">
+                  <img 
+                    src={logoUrl} 
+                    alt={company} 
+                    className="w-20 h-20 object-contain rounded-lg border shadow-sm"
                   />
+                  {isEditing && (
+                    <div className="flex gap-2">
+                      <Label htmlFor="logo-upload" className="cursor-pointer">
+                        <div className="px-3 py-1.5 text-sm border rounded hover:bg-muted transition-colors">
+                          Wijzig
+                        </div>
+                      </Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setLogoUrl("")}
+                      >
+                        Verwijder
+                      </Button>
+                    </div>
+                  )}
                 </div>
-              </CollapsibleContent>
-            </Collapsible>
+              ) : isEditing ? (
+                <Label htmlFor="logo-upload" className="cursor-pointer block">
+                  <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg py-4 hover:border-primary/50 hover:bg-muted/30 transition-all text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <ImageIcon className="h-10 w-10 text-muted-foreground" />
+                      <div className="text-sm">
+                        <span className="text-foreground font-medium">Klik om logo te uploaden</span>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          JPG, PNG of SVG · max 2MB
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </Label>
+              ) : (
+                <button onClick={() => handleInlineAdd('contact')} className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+                  <Plus className="h-3 w-3" />
+                  <span>Voeg logo toe →</span>
+                </button>
+              )}
+              
+              <input
+                id="logo-upload"
+                type="file"
+                accept="image/*"
+                onChange={handleLogoUpload}
+                className="hidden"
+                disabled={uploading}
+              />
+            </div>
 
             {/* Notities in Collapsible */}
             <Collapsible defaultOpen={!!client.notes}>
