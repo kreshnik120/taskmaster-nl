@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { TaskDialog } from "@/components/TaskDialog";
 import { useToast } from "@/hooks/use-toast";
+import { useCountUp } from "@/hooks/useCountUp";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 interface Task {

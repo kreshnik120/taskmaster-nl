@@ -10,6 +10,7 @@ import { Loader2, Clock } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { useCountUp } from "@/hooks/useCountUp";
 import { useAiScoring } from "@/hooks/useAiScoring";
 
 interface Task {

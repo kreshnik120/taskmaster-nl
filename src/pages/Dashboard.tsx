@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
+import { useCountUp } from "@/hooks/useCountUp";
 
 // Deployment trigger - 2025-10-03 23:21
 
@@ -591,6 +592,12 @@ const Dashboard = () => {
     low: tasks.filter(t => t.priority === 'LOW').length,
   };
 
+  // Animated counters for KPIs
+  const animatedOpenTasks = useCountUp({ end: tasks.length, duration: 600 });
+  const animatedCompletedTasks = useCountUp({ end: completedThisWeek, duration: 600 });
+  const animatedHoursWorked = useCountUp({ end: Math.round(parseFloat(todayHours.split(' ')[0]) * 10) / 10, duration: 600 });
+  const animatedHighPriority = useCountUp({ end: priorityBreakdown.critical + priorityBreakdown.high, duration: 600 });
+
   const activateAllFunctions = async () => {
     setActivatingFunctions(true);
     
@@ -711,10 +718,10 @@ const Dashboard = () => {
         {/* Open Tasks */}
         <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
                        bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10
-                       hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-default">
+                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-blue-400/60 dark:border-t-blue-500/50
+                       hover:shadow-lg hover:shadow-blue-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
           <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-            {tasks.length}
+            {animatedOpenTasks}
           </span>
           <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
             Open
@@ -724,10 +731,10 @@ const Dashboard = () => {
         {/* Completed */}
         <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
                        bg-gradient-to-br from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10
-                       hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-default">
+                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-green-400/60 dark:border-t-green-500/50
+                       hover:shadow-lg hover:shadow-green-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
           <span className="text-3xl font-bold text-green-600 dark:text-green-400">
-            {completedThisWeek}
+            {animatedCompletedTasks}
           </span>
           <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
             Afgerond
@@ -737,10 +744,10 @@ const Dashboard = () => {
         {/* Hours Worked */}
         <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
                        bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10
-                       hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-default">
+                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-amber-400/60 dark:border-t-amber-500/50
+                       hover:shadow-lg hover:shadow-amber-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
           <span className="text-3xl font-bold text-amber-600 dark:text-amber-400">
-            {todayHours.split(' ')[0]}
+            {animatedHoursWorked.toFixed(1)}
           </span>
           <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
             Gewerkt
@@ -750,12 +757,12 @@ const Dashboard = () => {
         {/* Priority */}
         <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
                        bg-gradient-to-br from-orange-50/80 to-white/60 dark:from-orange-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10
-                       hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-default">
+                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-orange-400/60 dark:border-t-orange-500/50
+                       hover:shadow-lg hover:shadow-orange-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
           <span className={`text-3xl font-bold ${
             priorityBreakdown.critical + priorityBreakdown.high > 0 ? 'text-destructive' : 'text-orange-600 dark:text-orange-400'
           }`}>
-            {priorityBreakdown.critical + priorityBreakdown.high}
+            {animatedHighPriority}
           </span>
           <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
             Prioriteit
