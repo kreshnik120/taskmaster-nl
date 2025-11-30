@@ -82,9 +82,10 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedSublocation, setSelectedSublocation] = useState<any>(null);
-  const [selectedLocation, setSelectedLocation] = useState<any>(null);
   const [isSublocationModalOpen, setIsSublocationModalOpen] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState<any>(null);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [selectedOrganization, setSelectedOrganization] = useState<any>(null);
   const [isOrganizationModalOpen, setIsOrganizationModalOpen] = useState(false);
 
   // Fetch linked organization and sublocations
@@ -917,20 +918,6 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
         </Tabs>
       </DialogContent>
 
-      {/* Location Detail Modal */}
-      {selectedLocation && (
-        <LocationDetailModal
-          open={isLocationModalOpen}
-          onOpenChange={setIsLocationModalOpen}
-          location={selectedLocation}
-          organizationName={linkedOrg?.name || ""}
-          onSublocationClick={(sublocation) => {
-            setSelectedSublocation(sublocation);
-            setIsSublocationModalOpen(true);
-          }}
-        />
-      )}
-
       {/* Sublocation Detail Modal */}
       {selectedSublocation && (
         <SublocationDetailModal
@@ -943,6 +930,44 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
               loc.client_sublocations?.some((sub: any) => sub.id === selectedSublocation.id)
             )?.naam || ""
           }
+          organizationId={linkedOrg?.id}
+          locationId={
+            linkedOrg?.client_locations?.find((loc: any) =>
+              loc.client_sublocations?.some((sub: any) => sub.id === selectedSublocation.id)
+            )?.id
+          }
+          onNavigateToOrganization={() => {
+            setIsSublocationModalOpen(false);
+            setIsOrganizationModalOpen(true);
+          }}
+          onNavigateToLocation={() => {
+            const location = linkedOrg?.client_locations?.find((loc: any) =>
+              loc.client_sublocations?.some((sub: any) => sub.id === selectedSublocation.id)
+            );
+            if (location) {
+              setIsSublocationModalOpen(false);
+              setSelectedLocation(location);
+              setIsLocationModalOpen(true);
+            }
+          }}
+        />
+      )}
+
+      {/* Location Detail Modal */}
+      {selectedLocation && (
+        <LocationDetailModal
+          open={isLocationModalOpen}
+          onOpenChange={setIsLocationModalOpen}
+          location={selectedLocation}
+          organizationName={linkedOrg?.name || ""}
+          onNavigateToOrganization={() => {
+            setIsLocationModalOpen(false);
+            setIsOrganizationModalOpen(true);
+          }}
+          onSublocationClick={(sublocation) => {
+            setSelectedSublocation(sublocation);
+            setIsSublocationModalOpen(true);
+          }}
         />
       )}
 
