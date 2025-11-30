@@ -8,9 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Building2, Mail, Phone, MapPin, Edit2, Save, X, Plus, ChevronDown, Upload, ImageIcon } from "lucide-react";
+import { Mail, Phone, MapPin, Edit2, Save, X, Plus, ChevronDown, Upload, ImageIcon } from "lucide-react";
 
 interface ClientDetailModalProps {
   open: boolean;
@@ -73,6 +74,33 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  // Avatar helpers (consistent with ClientCard)
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .slice(0, 2)
+      .map(word => word[0])
+      .join("")
+      .toUpperCase();
+  };
+
+  const getSectorAvatarColor = () => {
+    const currentSector = isEditing ? sectoren : (client.sector || []);
+    if (currentSector && currentSector.length > 0) {
+      const sector = currentSector[0];
+      switch (sector) {
+        case "GGZ": return "bg-blue-600";
+        case "GHZ": return "bg-emerald-600";
+        case "Jeugdzorg": return "bg-orange-500";
+        case "VVT": return "bg-purple-600";
+        case "Ziekenhuis": return "bg-red-500";
+        case "Thuiszorg": return "bg-cyan-600";
+        default: return "bg-slate-500";
+      }
+    }
+    return "bg-slate-400";
+  };
 
   // Form state
   const [name, setName] = useState(client.name);
@@ -276,7 +304,15 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Building2 className="h-5 w-5" />
+              {/* Avatar with logo or initials */}
+              <Avatar className="h-12 w-12">
+                {client.logo_url && (
+                  <AvatarImage src={client.logo_url} alt={client.company} />
+                )}
+                <AvatarFallback className={getSectorAvatarColor()}>
+                  {getInitials(client.company)}
+                </AvatarFallback>
+              </Avatar>
               <span>{client.name}</span>
               <Badge 
                 className={
@@ -452,7 +488,7 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
               </CollapsibleContent>
             </Collapsible>
 
-            {/* Logo Section - Always Visible */}
+            {/* Logo Section - Always Visible with Premium Styling */}
             <div className="space-y-3">
               <h3 className="font-medium text-sm flex items-center gap-2">
                 <ImageIcon className="h-4 w-4" />
@@ -460,14 +496,19 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
               </h3>
               
               {logoUrl ? (
-                <div className="flex items-center gap-3">
-                  <img 
-                    src={logoUrl} 
-                    alt={company} 
-                    className="w-20 h-20 object-contain rounded-lg border shadow-sm"
-                  />
+                <div className="flex items-start gap-4">
+                  {/* Premium logo container - 120px */}
+                  <div className="relative group">
+                    <div className="w-30 h-30 rounded-lg border border-border/50 backdrop-blur-sm bg-gradient-to-br from-background/80 to-muted/40 shadow-lg flex items-center justify-center p-4 overflow-hidden">
+                      <img 
+                        src={logoUrl} 
+                        alt={company} 
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  </div>
                   {isEditing && (
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2 pt-2">
                       <Label htmlFor="logo-upload" className="cursor-pointer">
                         <div className="px-3 py-1.5 text-sm border rounded hover:bg-muted transition-colors">
                           Wijzig
@@ -499,9 +540,13 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
                   </div>
                 </Label>
               ) : (
-                <div className="flex items-center gap-2 text-muted-foreground italic text-sm">
-                  <ImageIcon className="h-4 w-4" />
-                  <span>Geen logo ingesteld</span>
+                /* Large initials avatar fallback - 120px */
+                <div className="w-30 h-30 rounded-lg border border-border/50 backdrop-blur-sm bg-gradient-to-br from-background/80 to-muted/40 shadow-lg flex items-center justify-center">
+                  <Avatar className="h-24 w-24">
+                    <AvatarFallback className={`${getSectorAvatarColor()} text-4xl`}>
+                      {getInitials(client.company)}
+                    </AvatarFallback>
+                  </Avatar>
                 </div>
               )}
               
