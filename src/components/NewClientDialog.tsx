@@ -292,14 +292,14 @@ export default function NewClientDialog({
 
                 <div className="space-y-2">
                   <Label htmlFor="org_id">
-                    Organisatie <span className="text-destructive">*</span>
+                    Bemiddelingsbureau <span className="text-destructive">*</span>
                   </Label>
                   <Select
                     value={selectedOrgId}
                     onValueChange={(value) => setValue("org_id", value)}
                   >
                     <SelectTrigger className="focus:ring-2 focus:ring-primary transition-all">
-                      <SelectValue placeholder="Kies organisatie" />
+                      <SelectValue placeholder="Kies bemiddelingsbureau" />
                     </SelectTrigger>
                     <SelectContent>
                       {ORGANIZATIONS.map((org) => (

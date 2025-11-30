@@ -90,9 +90,6 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
 
   // Collapsible state - smart defaults
   const [contactOpen, setContactOpen] = useState(true);
-  const [matchingOpen, setMatchingOpen] = useState(
-    !client.regio?.length || !client.sector?.length || !client.doelgroep?.length || !client.gezochte_functies?.length
-  );
 
   // Calculate completeness score
   const calculateCompleteness = () => {
@@ -269,8 +266,6 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
     setTimeout(() => {
       if (section === 'contact') {
         setContactOpen(true);
-      } else if (section === 'matching') {
-        setMatchingOpen(true);
       }
     }, 100);
   };
@@ -504,10 +499,10 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
                   </div>
                 </Label>
               ) : (
-                <button onClick={() => handleInlineAdd('contact')} className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
-                  <Plus className="h-3 w-3" />
-                  <span>Voeg logo toe →</span>
-                </button>
+                <div className="flex items-center gap-2 text-muted-foreground italic text-sm">
+                  <ImageIcon className="h-4 w-4" />
+                  <span>Geen logo ingesteld</span>
+                </div>
               )}
               
               <input
@@ -546,173 +541,169 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
 
           {/* Matching Tab */}
           <TabsContent value="matching" className="space-y-6 mt-6">
-            <Collapsible open={matchingOpen} onOpenChange={setMatchingOpen}>
-              <CollapsibleTrigger className="flex items-center justify-between w-full group hover:opacity-70 transition-opacity">
-                <h3 className="font-medium text-sm">Matching Criteria</h3>
-                <ChevronDown className={`h-4 w-4 transition-transform ${matchingOpen ? 'rotate-180' : ''}`} />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-5 mt-4">
-                {/* Regio's */}
-                <div>
-                  <Label className="text-xs text-muted-foreground">Regio's</Label>
-                  {isEditing ? (
-                    <div className="space-y-2 mt-2">
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="Bijv. Utrecht, Nijmegen"
-                          value={newRegio}
-                          onChange={(e) => setNewRegio(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addRegio())}
-                        />
-                        <Button size="sm" onClick={addRegio}>
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {regios.map((regio) => (
-                          <Badge key={regio} variant="secondary" className="cursor-pointer" onClick={() => removeRegio(regio)}>
-                            {regio} <X className="h-3 w-3 ml-1" />
-                          </Badge>
-                        ))}
-                      </div>
+            <div className="space-y-5">
+              <h3 className="font-medium text-sm">Matching Criteria</h3>
+              
+              {/* Regio's */}
+              <div>
+                <Label className="text-xs text-muted-foreground">Regio's</Label>
+                {isEditing ? (
+                  <div className="space-y-2 mt-2">
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Bijv. Utrecht, Nijmegen"
+                        value={newRegio}
+                        onChange={(e) => setNewRegio(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addRegio())}
+                      />
+                      <Button size="sm" onClick={addRegio}>
+                        <Plus className="h-4 w-4" />
+                      </Button>
                     </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {(client.regio || []).length > 0 ? (
-                        client.regio?.map((r) => (
-                          <Badge key={r} variant="secondary">{r}</Badge>
-                        ))
-                      ) : (
-                        <button onClick={() => handleInlineAdd('matching')} className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
-                          <Plus className="h-3 w-3" />
-                          <span>Voeg regio's toe →</span>
-                        </button>
-                      )}
+                    <div className="flex flex-wrap gap-2">
+                      {regios.map((regio) => (
+                        <Badge key={regio} variant="secondary" className="cursor-pointer" onClick={() => removeRegio(regio)}>
+                          {regio} <X className="h-3 w-3 ml-1" />
+                        </Badge>
+                      ))}
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {(client.regio || []).length > 0 ? (
+                      client.regio?.map((r) => (
+                        <Badge key={r} variant="secondary">{r}</Badge>
+                      ))
+                    ) : (
+                      <button onClick={() => handleInlineAdd('matching')} className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+                        <Plus className="h-3 w-3" />
+                        <span>Voeg regio's toe →</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
 
-                {/* Sectoren */}
-                <div>
-                  <Label className="text-xs text-muted-foreground">Sectoren</Label>
-                  {isEditing ? (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {SECTOREN.map((sector) => {
-                        const isSelected = sectoren.includes(sector);
-                        const colors = SECTOR_COLORS[sector] || { selected: "bg-primary text-primary-foreground", outline: "border-primary text-primary" };
+              {/* Sectoren */}
+              <div>
+                <Label className="text-xs text-muted-foreground">Sectoren</Label>
+                {isEditing ? (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {SECTOREN.map((sector) => {
+                      const isSelected = sectoren.includes(sector);
+                      const colors = SECTOR_COLORS[sector] || { selected: "bg-primary text-primary-foreground", outline: "border-primary text-primary" };
+                      return (
+                        <Badge
+                          key={sector}
+                          variant="outline"
+                          className={`cursor-pointer transition-all ${isSelected ? colors.selected : colors.outline}`}
+                          onClick={() => toggleSector(sector)}
+                        >
+                          {sector}
+                          {isSelected && <X className="h-3 w-3 ml-1" />}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {(client.sector || []).length > 0 ? (
+                      client.sector?.map((s) => {
+                        const colors = SECTOR_COLORS[s] || { selected: "bg-secondary text-secondary-foreground", outline: "" };
                         return (
-                          <Badge
-                            key={sector}
-                            variant="outline"
-                            className={`cursor-pointer transition-all ${isSelected ? colors.selected : colors.outline}`}
-                            onClick={() => toggleSector(sector)}
-                          >
-                            {sector}
-                            {isSelected && <X className="h-3 w-3 ml-1" />}
-                          </Badge>
+                          <Badge key={s} variant="outline" className={colors.outline}>{s}</Badge>
                         );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {(client.sector || []).length > 0 ? (
-                        client.sector?.map((s) => {
-                          const colors = SECTOR_COLORS[s] || { selected: "bg-secondary text-secondary-foreground", outline: "" };
-                          return (
-                            <Badge key={s} variant="outline" className={colors.outline}>{s}</Badge>
-                          );
-                        })
-                      ) : (
-                        <button onClick={() => handleInlineAdd('matching')} className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
-                          <Plus className="h-3 w-3" />
-                          <span>Voeg sectoren toe →</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
+                      })
+                    ) : (
+                      <button onClick={() => handleInlineAdd('matching')} className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+                        <Plus className="h-3 w-3" />
+                        <span>Voeg sectoren toe →</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
 
-                {/* Doelgroepen */}
-                <div>
-                  <Label className="text-xs text-muted-foreground">Doelgroepen</Label>
-                  {isEditing ? (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {DOELGROEPEN.map((doelgroep) => {
-                        const isSelected = doelgroepen.includes(doelgroep);
-                        const colors = DOELGROEP_COLORS[doelgroep] || { selected: "bg-primary text-primary-foreground", outline: "border-primary text-primary" };
+              {/* Doelgroepen */}
+              <div>
+                <Label className="text-xs text-muted-foreground">Doelgroepen</Label>
+                {isEditing ? (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {DOELGROEPEN.map((doelgroep) => {
+                      const isSelected = doelgroepen.includes(doelgroep);
+                      const colors = DOELGROEP_COLORS[doelgroep] || { selected: "bg-primary text-primary-foreground", outline: "border-primary text-primary" };
+                      return (
+                        <Badge
+                          key={doelgroep}
+                          variant="outline"
+                          className={`cursor-pointer transition-all ${isSelected ? colors.selected : colors.outline}`}
+                          onClick={() => toggleDoelgroep(doelgroep)}
+                        >
+                          {doelgroep}
+                          {isSelected && <X className="h-3 w-3 ml-1" />}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {(client.doelgroep || []).length > 0 ? (
+                      client.doelgroep?.map((d) => {
+                        const colors = DOELGROEP_COLORS[d] || { selected: "bg-secondary text-secondary-foreground", outline: "" };
                         return (
-                          <Badge
-                            key={doelgroep}
-                            variant="outline"
-                            className={`cursor-pointer transition-all ${isSelected ? colors.selected : colors.outline}`}
-                            onClick={() => toggleDoelgroep(doelgroep)}
-                          >
-                            {doelgroep}
-                            {isSelected && <X className="h-3 w-3 ml-1" />}
-                          </Badge>
+                          <Badge key={d} variant="outline" className={colors.outline}>{d}</Badge>
                         );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {(client.doelgroep || []).length > 0 ? (
-                        client.doelgroep?.map((d) => {
-                          const colors = DOELGROEP_COLORS[d] || { selected: "bg-secondary text-secondary-foreground", outline: "" };
-                          return (
-                            <Badge key={d} variant="outline" className={colors.outline}>{d}</Badge>
-                          );
-                        })
-                      ) : (
-                        <button onClick={() => handleInlineAdd('matching')} className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
-                          <Plus className="h-3 w-3" />
-                          <span>Voeg doelgroepen toe →</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
+                      })
+                    ) : (
+                      <button onClick={() => handleInlineAdd('matching')} className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+                        <Plus className="h-3 w-3" />
+                        <span>Voeg doelgroepen toe →</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
 
-                {/* Gezochte Functies */}
-                <div>
-                  <Label className="text-xs text-muted-foreground">Gezochte Functies</Label>
-                  {isEditing ? (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {FUNCTIES.map((functie) => {
-                        const isSelected = functies.includes(functie);
-                        const colors = FUNCTIE_COLORS[functie] || { selected: "bg-primary text-primary-foreground", outline: "border-primary text-primary" };
+              {/* Gezochte functies */}
+              <div>
+                <Label className="text-xs text-muted-foreground">Gezochte functies</Label>
+                {isEditing ? (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {FUNCTIES.map((functie) => {
+                      const isSelected = functies.includes(functie);
+                      const colors = FUNCTIE_COLORS[functie] || { selected: "bg-primary text-primary-foreground", outline: "border-primary text-primary" };
+                      return (
+                        <Badge
+                          key={functie}
+                          variant="outline"
+                          className={`cursor-pointer transition-all ${isSelected ? colors.selected : colors.outline}`}
+                          onClick={() => toggleFunctie(functie)}
+                        >
+                          {functie}
+                          {isSelected && <X className="h-3 w-3 ml-1" />}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {(client.gezochte_functies || []).length > 0 ? (
+                      client.gezochte_functies?.map((f) => {
+                        const colors = FUNCTIE_COLORS[f] || { selected: "bg-secondary text-secondary-foreground", outline: "" };
                         return (
-                          <Badge
-                            key={functie}
-                            variant="outline"
-                            className={`cursor-pointer transition-all ${isSelected ? colors.selected : colors.outline}`}
-                            onClick={() => toggleFunctie(functie)}
-                          >
-                            {functie}
-                            {isSelected && <X className="h-3 w-3 ml-1" />}
-                          </Badge>
+                          <Badge key={f} variant="outline" className={colors.outline}>{f}</Badge>
                         );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {(client.gezochte_functies || []).length > 0 ? (
-                        client.gezochte_functies?.map((f) => {
-                          const colors = FUNCTIE_COLORS[f] || { selected: "bg-secondary text-secondary-foreground", outline: "" };
-                          return (
-                            <Badge key={f} variant="outline" className={colors.outline}>{f}</Badge>
-                          );
-                        })
-                      ) : (
-                        <button onClick={() => handleInlineAdd('matching')} className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
-                          <Plus className="h-3 w-3" />
-                          <span>Voeg functies toe →</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+                      })
+                    ) : (
+                      <button onClick={() => handleInlineAdd('matching')} className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+                        <Plus className="h-3 w-3" />
+                        <span>Voeg functies toe →</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
       </DialogContent>

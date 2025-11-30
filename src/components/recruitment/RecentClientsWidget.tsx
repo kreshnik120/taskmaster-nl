@@ -116,11 +116,11 @@ export function RecentClientsWidget({
                 }`}
                 onClick={() => onClientClick(client)}
               >
-                <Avatar className={`${getAvatarColor(client.company)} h-8 w-8`}>
+                <Avatar className="h-8 w-8">
                   {client.logo_url && (
                     <AvatarImage src={client.logo_url} alt={client.company} />
                   )}
-                  <AvatarFallback className="text-white text-xs font-semibold">
+                  <AvatarFallback className={`${getAvatarColor(client.company)} text-white text-xs font-semibold`}>
                     {getInitials(client.company)}
                   </AvatarFallback>
                 </Avatar>
