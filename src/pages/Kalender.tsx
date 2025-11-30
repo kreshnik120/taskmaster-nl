@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { format, startOfWeek, endOfDay, startOfDay, addDays, isSameDay, parseISO, getWeek, endOfWeek } from "date-fns";
 import { nl } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, User, Trash2, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, User, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import { TaskDialog } from "@/components/TaskDialog";
 import { useToast } from "@/hooks/use-toast";
 import { useCountUp } from "@/hooks/useCountUp";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { KPICard } from "@/components/ui/kpi-card";
 
 interface Task {
   id: string;
@@ -260,39 +261,33 @@ export default function Kalender() {
         </ToggleGroup>
       </div>
 
-      {/* Gradient KPI Cards */}
+      {/* KPI Cards met Icons */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-blue-400/60 dark:border-t-blue-500/50
-                       hover:shadow-lg hover:shadow-blue-500/10 hover:scale-[1.02] transition-all duration-200 cursor-pointer" onClick={goToToday}>
-          <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">{animatedTodayTasks}</span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Vandaag</span>
-        </div>
-        
-        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-green-400/60 dark:border-t-green-500/50
-                       hover:shadow-lg hover:shadow-green-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
-          <span className="text-3xl font-bold text-green-600 dark:text-green-400">{animatedWeekTasks}</span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Deze Week</span>
-        </div>
-        
-        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-amber-400/60 dark:border-t-amber-500/50
-                       hover:shadow-lg hover:shadow-amber-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
-          <span className="text-3xl font-bold text-amber-600 dark:text-amber-400">{animatedReminders}</span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Herinneringen</span>
-        </div>
-        
-        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-orange-50/80 to-white/60 dark:from-orange-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-orange-400/60 dark:border-t-orange-500/50
-                       hover:shadow-lg hover:shadow-orange-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
-          <span className={cn("text-3xl font-bold", urgentCount > 0 ? "text-destructive" : "text-orange-600 dark:text-orange-400")}>{animatedUrgentTasks}</span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Urgent</span>
-        </div>
+        <KPICard
+          icon={Calendar}
+          title="Vandaag"
+          value={animatedTodayTasks}
+          variant="count"
+          onClick={goToToday}
+        />
+        <KPICard
+          icon={CheckCircle2}
+          title="Deze Week"
+          value={animatedWeekTasks}
+          variant="success"
+        />
+        <KPICard
+          icon={Clock}
+          title="Herinneringen"
+          value={animatedReminders}
+          variant="time"
+        />
+        <KPICard
+          icon={AlertCircle}
+          title="Urgent"
+          value={animatedUrgentTasks}
+          variant="urgent"
+        />
       </div>
 
       {/* Compact Week Navigation */}
