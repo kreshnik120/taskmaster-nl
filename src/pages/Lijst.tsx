@@ -7,7 +7,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, Filter, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown, User } from "lucide-react";
+import { Loader2, Filter, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown, User, Search } from "lucide-react";
+import { motion } from "framer-motion";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -95,7 +96,9 @@ export default function Lijst() {
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [selectedRowIndex, setSelectedRowIndex] = useState<number>(-1);
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const tableRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     checkAuth();
@@ -442,6 +445,15 @@ export default function Lijst() {
   // Memoized filtered and sorted tasks for performance
   const filteredTasks = useMemo(() => {
     let filtered = tasks.filter((task) => {
+      // Search filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesTitle = task.title?.toLowerCase().includes(query);
+        const matchesDescription = task.description?.toLowerCase().includes(query);
+        const matchesAssignee = task.profiles?.name?.toLowerCase().includes(query);
+        if (!matchesTitle && !matchesDescription && !matchesAssignee) return false;
+      }
+      
       if (filterPriority !== "all" && task.priority !== filterPriority) return false;
       if (filterStatus === "completed" && !task.completed_at) return false;
       if (filterStatus === "active" && task.completed_at) return false;
@@ -477,7 +489,7 @@ export default function Lijst() {
     }
 
     return filtered;
-  }, [tasks, filterPriority, filterStatus, sortColumn, sortDirection]);
+  }, [tasks, filterPriority, filterStatus, sortColumn, sortDirection, searchQuery]);
 
   const groupedTasks = () => {
     if (groupBy === "none") return { "Alle taken": filteredTasks };
@@ -584,6 +596,33 @@ export default function Lijst() {
       : <ArrowDown className="h-3 w-3 inline ml-1" />;
   };
 
+  // Helper function voor context-aware greeting
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Goedemorgen";
+    if (hour < 18) return "Goedemiddag";
+    return "Goedenavond";
+  };
+
+  // Priority breakdown voor smart summary
+  const priorityBreakdown = {
+    critical: tasks.filter(t => t.priority === 'CRITICAL' && !t.completed_at).length,
+    high: tasks.filter(t => t.priority === 'HIGH' && !t.completed_at).length,
+  };
+
+  // Cmd+K keyboard shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   if (loading) {
     return (
       <div className="flex flex-col items-center gap-3">
@@ -595,13 +634,45 @@ export default function Lijst() {
 
   return (
     <div className="space-y-6">
-      {/* Hero Section */}
-      <div className="mb-8">
+      {/* Hero Section with Motion */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="mb-8"
+      >
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold">Lijst</h1>
-          <p className="text-muted-foreground">
-            {filteredTasks.length} taken in de lijst
+          <h1 className="text-5xl font-bold mb-1">
+            {getGreeting()}{user?.user_metadata?.name ? `, ${user.user_metadata.name}` : ''}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {filteredTasks.length} taken{priorityBreakdown.critical + priorityBreakdown.high > 0 && ` • ${priorityBreakdown.critical + priorityBreakdown.high} hoge prioriteit`}
           </p>
+        </div>
+
+        {/* Search Bar */}
+        <div className="mb-6">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Zoek taken... (Cmd+K)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 px-2"
+                onClick={() => setSearchQuery("")}
+              >
+                Wis
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Integrated Filters */}
@@ -695,7 +766,7 @@ export default function Lijst() {
             <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Mijn Taken</span>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       <div className="space-y-8" ref={tableRef}>
             {Object.entries(groups).map(([groupName, groupTasks]) => (
