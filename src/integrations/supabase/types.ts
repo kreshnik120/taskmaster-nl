@@ -1172,6 +1172,7 @@ export type Database = {
       clients: {
         Row: {
           address: string | null
+          client_org_id: string | null
           company: string
           created_at: string
           doelgroep: string[] | null
@@ -1193,6 +1194,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          client_org_id?: string | null
           company: string
           created_at?: string
           doelgroep?: string[] | null
@@ -1214,6 +1216,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          client_org_id?: string | null
           company?: string
           created_at?: string
           doelgroep?: string[] | null
@@ -1234,6 +1237,13 @@ export type Database = {
           weekly_hours?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "clients_client_org_id_fkey"
+            columns: ["client_org_id"]
+            isOneToOne: false
+            referencedRelation: "client_organizations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "clients_org_id_fkey"
             columns: ["org_id"]
