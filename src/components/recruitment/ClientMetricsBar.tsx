@@ -85,10 +85,58 @@ export function ClientMetricsBar({
     },
   ];
 
+  // Define gradient and border colors per metric
+  const getMetricColors = (label: string) => {
+    if (label === "Totaal") return { 
+      gradient: "from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60",
+      border: "border-t-blue-400/60 dark:border-t-blue-500/50",
+      text: "text-blue-600 dark:text-blue-400",
+      shadow: "hover:shadow-blue-500/10"
+    };
+    if (label === "ABCzorg") return { 
+      gradient: "from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60",
+      border: "border-t-blue-400/60 dark:border-t-blue-500/50",
+      text: "text-blue-600 dark:text-blue-400",
+      shadow: "hover:shadow-blue-500/10"
+    };
+    if (label === "CitoZorg") return { 
+      gradient: "from-orange-50/80 to-white/60 dark:from-orange-950/30 dark:to-background/60",
+      border: "border-t-orange-400/60 dark:border-t-orange-500/50",
+      text: "text-orange-600 dark:text-orange-400",
+      shadow: "hover:shadow-orange-500/10"
+    };
+    if (label === "Match Ready") {
+      if (matchingPercentage >= 70) return { 
+        gradient: "from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60",
+        border: "border-t-green-400/60 dark:border-t-green-500/50",
+        text: "text-green-600 dark:text-green-400",
+        shadow: "hover:shadow-green-500/10"
+      };
+      if (matchingPercentage >= 50) return { 
+        gradient: "from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60",
+        border: "border-t-amber-400/60 dark:border-t-amber-500/50",
+        text: "text-amber-600 dark:text-amber-400",
+        shadow: "hover:shadow-amber-500/10"
+      };
+      return { 
+        gradient: "from-red-50/80 to-white/60 dark:from-red-950/30 dark:to-background/60",
+        border: "border-t-red-400/60 dark:border-t-red-500/50",
+        text: "text-red-600 dark:text-red-400",
+        shadow: "hover:shadow-red-500/10"
+      };
+    }
+    return { 
+      gradient: "from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60",
+      border: "border-t-blue-400/60 dark:border-t-blue-500/50",
+      text: "text-blue-600 dark:text-blue-400",
+      shadow: "hover:shadow-blue-500/10"
+    };
+  };
+
   return (
-    <div className="grid grid-cols-4 gap-6 py-4 border-b border-border">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {metrics.map((metric) => {
-        const isMatchReady = metric.label === "Match Ready";
+        const colors = getMetricColors(metric.label);
         
         return (
           <TooltipProvider key={metric.label}>
@@ -96,55 +144,18 @@ export function ClientMetricsBar({
               <TooltipTrigger asChild>
                 <button
                   onClick={() => onMetricClick?.(metric.key)}
-                  className="flex items-center justify-center gap-3 transition-all duration-200 hover:scale-105 cursor-pointer rounded-lg p-2 hover:bg-muted/30"
+                  className={`group flex flex-col items-center justify-center p-6 rounded-xl 
+                    bg-gradient-to-br ${colors.gradient}
+                    backdrop-blur-sm border border-white/50 dark:border-white/10 
+                    border-t-4 ${colors.border}
+                    hover:shadow-lg ${colors.shadow} hover:scale-[1.02] transition-all duration-200 cursor-pointer`}
                 >
-                  {isMatchReady && (
-                    <div className="relative inline-flex items-center justify-center shrink-0">
-                      <svg className="w-14 h-14 transform -rotate-90" viewBox="0 0 56 56">
-                        <circle
-                          cx="28"
-                          cy="28"
-                          r="24"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                          fill="none"
-                          className="text-muted/20"
-                        />
-                        <circle
-                          cx="28"
-                          cy="28"
-                          r="24"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                          fill="none"
-                          strokeDasharray={`${2 * Math.PI * 24}`}
-                          strokeDashoffset={`${2 * Math.PI * 24 * (1 - animatedMatch / 100)}`}
-                          className={`transition-all duration-500 ease-out ${
-                            matchingPercentage >= 70 ? "text-green-600" : matchingPercentage >= 50 ? "text-amber-600" : "text-destructive"
-                          }`}
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                    </div>
-                  )}
-                  
-                  <div className={isMatchReady ? "text-left" : "text-center flex-1"}>
-                    <div className="flex items-center justify-center gap-2 mb-1">
-                      <div className={`text-4xl font-semibold tabular-nums ${metric.color || "text-foreground"}`}>
-                        {isMatchReady ? `${animatedMatch}%` : metric.value}
-                      </div>
-                      {metric.trend && (
-                        <span className={metric.trend === "up" ? "text-green-600" : "text-destructive"}>
-                          {metric.trend === "up" ? (
-                            <TrendingUp className="h-4 w-4" />
-                          ) : (
-                            <TrendingDown className="h-4 w-4" />
-                          )}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-sm text-muted-foreground">{metric.label}</div>
-                  </div>
+                  <span className={`text-3xl font-bold ${colors.text}`}>
+                    {metric.label === "Match Ready" ? `${animatedMatch}%` : metric.value}
+                  </span>
+                  <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
+                    {metric.label}
+                  </span>
                 </button>
               </TooltipTrigger>
               <TooltipContent>
