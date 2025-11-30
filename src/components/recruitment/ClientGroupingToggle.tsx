@@ -23,7 +23,7 @@ export function ClientGroupingToggle({ value, onChange, counts }: ClientGrouping
         className="bg-muted/30 p-1 rounded-xl border border-border/50"
       >
         <ToggleGroupItem value="bureau" className="rounded-lg px-4 py-1.5 text-sm font-medium text-foreground/70 data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm transition-all">
-          Bureau
+          ABC/Cito
           {counts?.bureau !== undefined && (
             <span className="ml-1.5 text-xs opacity-60">({counts.bureau})</span>
           )}
