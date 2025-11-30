@@ -28,10 +28,10 @@ interface MenuGroup {
   items: MenuItem[];
 }
 const menuGroups: MenuGroup[] = [{
-  label: "Dagelijks werk",
+  label: "Mijn Werk",
   defaultOpen: true,
   items: [{
-    title: "Mijn dag",
+    title: "Dashboard",
     url: "/",
     icon: Home,
     badge: 'taskCount'
@@ -51,10 +51,6 @@ const menuGroups: MenuGroup[] = [{
     title: "Tijdregistratie",
     url: "/tijdregistratie",
     icon: Clock
-  }, {
-    title: "Opvolging",
-    url: "/opvolging",
-    icon: BarChart3
   }]
 }, {
   label: "Recruitment",
@@ -81,7 +77,21 @@ const menuGroups: MenuGroup[] = [{
     requiresEdit: true
   }]
 }, {
-  label: "Archief & Beheer",
+  label: "Analyse & AI",
+  defaultOpen: 'conditional',
+  items: [{
+    title: "Opvolging",
+    url: "/opvolging",
+    icon: BarChart3
+  }, {
+    title: "AI Training",
+    url: "/ai-training",
+    icon: Brain,
+    badge: 'validationCount',
+    requiresAdmin: true
+  }]
+}, {
+  label: "Archief",
   defaultOpen: false,
   items: [{
     title: "Afgeronde taken",
@@ -96,12 +106,6 @@ const menuGroups: MenuGroup[] = [{
     url: "/sollicitaties-archief",
     icon: Archive,
     requiresEdit: true
-  }, {
-    title: "AI Training",
-    url: "/ai-training",
-    icon: Brain,
-    badge: 'validationCount',
-    requiresAdmin: true
   }]
 }];
 interface CollapsibleGroupProps {
@@ -185,9 +189,10 @@ export function AppSidebar() {
   const queryClient = useQueryClient();
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    "Dagelijks werk": true,
+    "Mijn Werk": true,
     "Recruitment": true,
-    "Archief & Beheer": false,
+    "Analyse & AI": isAdmin(),
+    "Archief": false,
   });
 
   const toggleGroup = (label: string) => {
