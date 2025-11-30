@@ -409,10 +409,54 @@ const Kanban = () => {
     <>
       {/* KPI Stats Bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <KPICard icon={ListTodo} title="Actieve taken" value={activeTasks} variant="count" />
-        <KPICard icon={AlertCircle} title="Geblokkeerd" value={blockedCount} variant="urgent" />
-        <KPICard icon={Clock} title="In Review" value={reviewCount} variant="time" />
-        <KPICard icon={CheckCircle2} title="Vandaag afgerond" value={completedToday} variant="success" />
+        <KPICard 
+          icon={ListTodo} 
+          title="Actieve taken" 
+          value={activeTasks} 
+          variant="count"
+          onClick={() => {
+            const firstColumn = columns[0];
+            if (firstColumn) {
+              document.getElementById(`column-${firstColumn.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }}
+        />
+        <KPICard 
+          icon={AlertCircle} 
+          title="Geblokkeerd" 
+          value={blockedCount} 
+          variant="urgent"
+          onClick={() => {
+            const blockedColumn = columns.find(c => c.status === 'BLOCKED');
+            if (blockedColumn) {
+              document.getElementById(`column-${blockedColumn.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }}
+        />
+        <KPICard 
+          icon={Clock} 
+          title="In Review" 
+          value={reviewCount} 
+          variant="time"
+          onClick={() => {
+            const reviewColumn = columns.find(c => c.status === 'REVIEW');
+            if (reviewColumn) {
+              document.getElementById(`column-${reviewColumn.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }}
+        />
+        <KPICard 
+          icon={CheckCircle2} 
+          title="Vandaag afgerond" 
+          value={completedToday} 
+          variant="success"
+          onClick={() => {
+            const doneColumn = columns.find(c => c.status === 'DONE');
+            if (doneColumn) {
+              document.getElementById(`column-${doneColumn.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }}
+        />
       </div>
 
       {/* Compact Header */}

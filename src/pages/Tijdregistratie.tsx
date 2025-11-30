@@ -396,6 +396,7 @@ const Tijdregistratie = () => {
           value={animatedTodayMinutes}
           subtitle={formatMinutes(animatedTodayMinutes)}
           variant="count"
+          onClick={() => setFilterPeriod("today")}
         />
         <KPICard
           icon={Clock}
@@ -403,12 +404,14 @@ const Tijdregistratie = () => {
           value={animatedWeekMinutes}
           subtitle={formatMinutes(animatedWeekMinutes)}
           variant="success"
+          onClick={() => setFilterPeriod("week")}
         />
         <KPICard
           icon={ListChecks}
           title="Registraties"
           value={animatedEntries}
           variant="time"
+          onClick={() => setFilterPeriod("all")}
         />
         <KPICard
           icon={Timer}
@@ -417,11 +420,15 @@ const Tijdregistratie = () => {
           subtitle={activeTimer ? getRunningTime() : '0u 0m'}
           variant="personal"
           className={cn(activeTimer && "ring-2 ring-purple-500")}
+          onClick={() => {
+            const timerSection = document.querySelector('[data-timer-card]');
+            timerSection?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }}
         />
       </div>
 
       {/* Timer Card - Clean */}
-      <Card>
+      <Card data-timer-card>
         <CardHeader>
           <CardTitle>Timer</CardTitle>
         </CardHeader>

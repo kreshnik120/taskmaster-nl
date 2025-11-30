@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -71,6 +72,7 @@ interface Task {
 }
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -723,6 +725,7 @@ const Dashboard = () => {
           title="Afgerond"
           value={animatedCompletedTasks}
           variant="success"
+          onClick={() => navigate("/afgerond")}
         />
         <KPICard
           icon={Clock}
@@ -730,12 +733,17 @@ const Dashboard = () => {
           value={animatedHoursWorked}
           subtitle={`${animatedHoursWorked.toFixed(1)} uur`}
           variant="time"
+          onClick={() => navigate("/tijdregistratie")}
         />
         <KPICard
           icon={Zap}
           title="Prioriteit"
           value={animatedHighPriority}
           variant="urgent"
+          onClick={() => {
+            const prioritySection = document.querySelector('.space-y-3');
+            prioritySection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
         />
       </div>
 
