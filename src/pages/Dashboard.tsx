@@ -709,9 +709,11 @@ const Dashboard = () => {
         className="grid grid-cols-2 md:grid-cols-4 gap-4"
       >
         {/* Open Tasks */}
-        <div className="group flex flex-col items-center justify-center p-6 rounded-lg 
-                       bg-gradient-to-br from-blue-50 to-white hover:shadow-md transition-all cursor-default">
-          <span className="text-3xl font-bold">
+        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
+                       bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 
+                       backdrop-blur-sm border border-white/50 dark:border-white/10
+                       hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-default">
+          <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">
             {tasks.length}
           </span>
           <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
@@ -720,9 +722,11 @@ const Dashboard = () => {
         </div>
 
         {/* Completed */}
-        <div className="group flex flex-col items-center justify-center p-6 rounded-lg 
-                       bg-gradient-to-br from-green-50 to-white hover:shadow-md transition-all cursor-default">
-          <span className="text-3xl font-bold">
+        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
+                       bg-gradient-to-br from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60 
+                       backdrop-blur-sm border border-white/50 dark:border-white/10
+                       hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-default">
+          <span className="text-3xl font-bold text-green-600 dark:text-green-400">
             {completedThisWeek}
           </span>
           <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
@@ -731,9 +735,11 @@ const Dashboard = () => {
         </div>
 
         {/* Hours Worked */}
-        <div className="group flex flex-col items-center justify-center p-6 rounded-lg 
-                       bg-gradient-to-br from-amber-50 to-white hover:shadow-md transition-all cursor-default">
-          <span className="text-3xl font-bold">
+        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
+                       bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60 
+                       backdrop-blur-sm border border-white/50 dark:border-white/10
+                       hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-default">
+          <span className="text-3xl font-bold text-amber-600 dark:text-amber-400">
             {todayHours.split(' ')[0]}
           </span>
           <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
@@ -742,10 +748,12 @@ const Dashboard = () => {
         </div>
 
         {/* Priority */}
-        <div className="group flex flex-col items-center justify-center p-6 rounded-lg 
-                       bg-gradient-to-br from-orange-50 to-white hover:shadow-md transition-all cursor-default">
+        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
+                       bg-gradient-to-br from-orange-50/80 to-white/60 dark:from-orange-950/30 dark:to-background/60 
+                       backdrop-blur-sm border border-white/50 dark:border-white/10
+                       hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-default">
           <span className={`text-3xl font-bold ${
-            priorityBreakdown.critical + priorityBreakdown.high > 0 ? 'text-destructive' : ''
+            priorityBreakdown.critical + priorityBreakdown.high > 0 ? 'text-destructive' : 'text-orange-600 dark:text-orange-400'
           }`}>
             {priorityBreakdown.critical + priorityBreakdown.high}
           </span>

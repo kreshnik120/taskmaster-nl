@@ -275,14 +275,16 @@ export default function Opvolging() {
         {/* Achterstallig */}
         <button
           onClick={() => setActiveFilter(activeFilter === "achterstallig" ? null : "achterstallig")}
-          className={`p-4 rounded-lg border transition-all text-left bg-gradient-to-br from-red-50 to-white hover:shadow-md ${
+          className={`p-4 rounded-xl border border-white/50 dark:border-white/10 transition-all duration-200 text-left 
+                      bg-gradient-to-br from-red-50/80 to-white/60 dark:from-red-950/30 dark:to-background/60 
+                      backdrop-blur-sm hover:shadow-md hover:scale-[1.02] ${
             activeFilter === "achterstallig"
               ? "ring-2 ring-red-500 ring-offset-2"
               : ""
           }`}
         >
           <div className="space-y-1">
-            <p className="text-2xl font-semibold">{overdueTasks.length}</p>
+            <p className="text-2xl font-semibold text-red-600 dark:text-red-400">{overdueTasks.length}</p>
             <p className="text-xs text-muted-foreground">Achterstallig</p>
           </div>
         </button>
@@ -290,14 +292,16 @@ export default function Opvolging() {
         {/* Deze Week */}
         <button
           onClick={() => setActiveFilter(activeFilter === "deze-week" ? null : "deze-week")}
-          className={`p-4 rounded-lg border transition-all text-left bg-gradient-to-br from-amber-50 to-white hover:shadow-md ${
+          className={`p-4 rounded-xl border border-white/50 dark:border-white/10 transition-all duration-200 text-left 
+                      bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60 
+                      backdrop-blur-sm hover:shadow-md hover:scale-[1.02] ${
             activeFilter === "deze-week"
               ? "ring-2 ring-amber-500 ring-offset-2"
               : ""
           }`}
         >
           <div className="space-y-1">
-            <p className="text-2xl font-semibold">{upcomingTasks.length}</p>
+            <p className="text-2xl font-semibold text-amber-600 dark:text-amber-400">{upcomingTasks.length}</p>
             <p className="text-xs text-muted-foreground">Deze Week</p>
           </div>
         </button>
@@ -305,22 +309,26 @@ export default function Opvolging() {
         {/* Met Actie */}
         <button
           onClick={() => setActiveFilter(activeFilter === "met-actie" ? null : "met-actie")}
-          className={`p-4 rounded-lg border transition-all text-left bg-gradient-to-br from-blue-50 to-white hover:shadow-md ${
+          className={`p-4 rounded-xl border border-white/50 dark:border-white/10 transition-all duration-200 text-left 
+                      bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 
+                      backdrop-blur-sm hover:shadow-md hover:scale-[1.02] ${
             activeFilter === "met-actie"
               ? "ring-2 ring-blue-500 ring-offset-2"
               : ""
           }`}
         >
           <div className="space-y-1">
-            <p className="text-2xl font-semibold">{tasksWithNextAction.length}</p>
+            <p className="text-2xl font-semibold text-blue-600 dark:text-blue-400">{tasksWithNextAction.length}</p>
             <p className="text-xs text-muted-foreground">Met Actie</p>
           </div>
         </button>
         
         {/* AI Score */}
-        <div className="p-4 rounded-lg border bg-gradient-to-br from-purple-50 to-white">
+        <div className="p-4 rounded-xl border border-white/50 dark:border-white/10 
+                        bg-gradient-to-br from-purple-50/80 to-white/60 dark:from-purple-950/30 dark:to-background/60 
+                        backdrop-blur-sm">
           <div className="space-y-1">
-            <p className="text-2xl font-semibold">{avgScore}</p>
+            <p className="text-2xl font-semibold text-purple-600 dark:text-purple-400">{avgScore}</p>
             <p className="text-xs text-muted-foreground">Gem. AI Score</p>
           </div>
         </div>

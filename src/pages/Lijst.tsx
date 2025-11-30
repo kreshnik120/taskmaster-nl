@@ -652,11 +652,13 @@ export default function Lijst() {
               setFilterStatus('active');
               setFilterPriority('all');
             }}
-            className={`flex flex-col items-center justify-center p-4 rounded-lg border bg-gradient-to-br from-blue-50 to-white hover:shadow-md transition-all ${
+            className={`flex flex-col items-center justify-center p-4 rounded-xl border border-white/50 dark:border-white/10 
+                       bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 
+                       backdrop-blur-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 ${
               filterStatus === 'active' ? 'ring-2 ring-primary' : ''
             }`}
           >
-            <span className="text-2xl font-bold">
+            <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
               {tasks.filter(t => !t.completed_at && !t.accepted_by).length}
             </span>
             <span className="text-xs text-muted-foreground">Open</span>
@@ -667,11 +669,13 @@ export default function Lijst() {
               setFilterStatus('completed');
               setFilterPriority('all');
             }}
-            className={`flex flex-col items-center justify-center p-4 rounded-lg border bg-gradient-to-br from-green-50 to-white hover:shadow-md transition-all ${
+            className={`flex flex-col items-center justify-center p-4 rounded-xl border border-white/50 dark:border-white/10 
+                       bg-gradient-to-br from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60 
+                       backdrop-blur-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 ${
               filterStatus === 'completed' ? 'ring-2 ring-primary' : ''
             }`}
           >
-            <span className="text-2xl font-bold">
+            <span className="text-2xl font-bold text-green-600 dark:text-green-400">
               {tasks.filter(t => t.completed_at && new Date(t.completed_at).toDateString() === new Date().toDateString()).length}
             </span>
             <span className="text-xs text-muted-foreground">Vandaag</span>
@@ -682,7 +686,9 @@ export default function Lijst() {
               setFilterPriority('HIGH');
               setFilterStatus('all');
             }}
-            className={`flex flex-col items-center justify-center p-4 rounded-lg border bg-gradient-to-br from-orange-50 to-white hover:shadow-md transition-all ${
+            className={`flex flex-col items-center justify-center p-4 rounded-xl border border-white/50 dark:border-white/10 
+                       bg-gradient-to-br from-orange-50/80 to-white/60 dark:from-orange-950/30 dark:to-background/60 
+                       backdrop-blur-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 ${
               filterPriority === 'HIGH' ? 'ring-2 ring-primary' : ''
             }`}
             disabled={tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length === 0}
@@ -690,7 +696,7 @@ export default function Lijst() {
             <span className={`text-2xl font-bold ${
               tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length > 0 
                 ? 'text-destructive' 
-                : ''
+                : 'text-orange-600 dark:text-orange-400'
             }`}>
               {tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length}
             </span>
@@ -705,10 +711,12 @@ export default function Lijst() {
                 toast.info(`${myTasksCount} taken aan jou toegewezen`);
               }
             }}
-            className="flex flex-col items-center justify-center p-4 rounded-lg border bg-gradient-to-br from-purple-50 to-white hover:shadow-md transition-all"
+            className="flex flex-col items-center justify-center p-4 rounded-xl border border-white/50 dark:border-white/10 
+                       bg-gradient-to-br from-purple-50/80 to-white/60 dark:from-purple-950/30 dark:to-background/60 
+                       backdrop-blur-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200"
             disabled={myTasksCount === 0}
           >
-            <span className="text-2xl font-bold">
+            <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">
               {myTasksCount}
             </span>
             <span className="text-xs text-muted-foreground">Mijn Taken</span>
