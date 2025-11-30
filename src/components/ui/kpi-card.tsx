@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { useCountUp } from "@/hooks/useCountUp";
 import { LucideIcon } from "lucide-react";
 
-type KPIVariant = "count" | "success" | "time" | "urgent";
+type KPIVariant = "count" | "success" | "time" | "urgent" | "personal";
 
 interface KPICardProps {
   icon: LucideIcon;
@@ -49,6 +49,13 @@ const variantConfig: Record<KPIVariant, {
     textColor: "text-orange-600 dark:text-orange-400",
     iconColor: "text-orange-500",
     shadowColor: "hover:shadow-orange-500/10",
+  },
+  personal: {
+    gradient: "from-purple-500/80 to-white/60 dark:from-purple-500/30 dark:to-background/60",
+    borderColor: "border-t-purple-400/60",
+    textColor: "text-purple-600 dark:text-purple-400",
+    iconColor: "text-purple-500",
+    shadowColor: "hover:shadow-purple-500/10",
   },
 };
 

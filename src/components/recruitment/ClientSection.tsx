@@ -39,7 +39,7 @@ interface ClientSectionProps {
 const getSectionAccent = (title: string, groupType: string): string => {
   if (groupType === "bureau") {
     if (title === "ABCzorg") return "border-l-blue-500";
-    if (title === "CitoZorg") return "border-l-orange-500";
+    if (title === "CitoZorg") return "border-l-green-500";
   }
   if (groupType === "sector") {
     // Semantic sector colors
