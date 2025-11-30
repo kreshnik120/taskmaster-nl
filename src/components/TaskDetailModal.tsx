@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -102,6 +103,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
     steps: true
   });
   const { toast } = useToast();
+  const navigate = useNavigate();
   const { activeTimer, isLoading: timerLoading, elapsedTime, startTimer, stopTimer, isTimerActive } = useTaskTimer(task?.id || null);
 
   // Keyboard shortcuts (e/c/t)
@@ -554,7 +556,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                     variant="ghost"
                     size="sm"
                     onClick={() => {
-                      window.location.href = `/sollicitaties?application=${linkedApplication.id}`;
+                      navigate(`/sollicitaties?application=${linkedApplication.id}`);
                     }}
                   >
                     <ExternalLink className="h-4 w-4" />

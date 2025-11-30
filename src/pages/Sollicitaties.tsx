@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2, Search, X, Filter, RotateCcw, Undo2, BarChart3 } from "lucide-react";
@@ -92,6 +92,7 @@ const Sollicitaties = () => {
     previousStage: string;
   }>({ open: false, application: null, previousStage: '' });
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -199,6 +200,23 @@ const Sollicitaties = () => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // Auto-open application from URL parameter
+  useEffect(() => {
+    const applicationId = searchParams.get('application');
+    if (applicationId && applications.length > 0 && !loading) {
+      // Find the application in our data
+      const targetApp = applications.find(app => app.id === applicationId);
+      if (targetApp) {
+        // Open the detail modal for this application
+        setSelectedApplication(targetApp);
+        setDetailModalOpen(true);
+        
+        // Clean up URL (remove query param)
+        setSearchParams({});
+      }
+    }
+  }, [searchParams, applications, loading, setSearchParams]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const application = applications.find((a) => a.id === event.active.id);
