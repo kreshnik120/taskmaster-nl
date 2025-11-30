@@ -172,6 +172,17 @@ export function OrganizationDetailModal({
                       KVK: {organization.kvk_nummer}
                     </Badge>
                   )}
+                  {/* Bureau badges */}
+                  {abczorgCount > 0 && (
+                    <Badge variant="outline" className={getOrganizationBadgeColor("ABCzorg")}>
+                      ABCzorg
+                    </Badge>
+                  )}
+                  {citozorgCount > 0 && (
+                    <Badge variant="outline" className={getOrganizationBadgeColor("CitoZorg")}>
+                      CitoZorg
+                    </Badge>
+                  )}
                   {organization.website && (
                     <a
                       href={organization.website}
@@ -250,54 +261,64 @@ export function OrganizationDetailModal({
                 </Card>
               </div>
 
-              {/* Organisatie details */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Organisatiegegevens</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {organization.centrale_facturatie_email && (
+              {/* Organisatie details - alleen tonen als er data is */}
+              {organization.centrale_facturatie_email && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Organisatiegegevens</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
                     <div className="flex items-center gap-2 text-sm">
                       <Mail className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">Centrale facturatie:</span>
                       <span className="font-medium">{organization.centrale_facturatie_email}</span>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
 
-              {/* Gekoppelde bureaus */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Gekoppelde bemiddelingsbureaus</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <div className="font-medium">ABCzorg</div>
-                        <div className="text-sm text-muted-foreground">
-                          {abczorgCount} {abczorgCount === 1 ? 'sublocatie' : 'sublocaties'}
+              {/* Gekoppelde bureaus - compact en gefilterd */}
+              {(abczorgCount > 0 || citozorgCount > 0) && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Gekoppelde bemiddelingsbureaus</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {abczorgCount > 0 && (
+                        <div className="flex items-center gap-2 px-4 py-2 border rounded-lg">
+                          <Badge variant="outline" className="border-blue-300 text-blue-700">
+                            ABCzorg
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">
+                            • {abczorgCount} {abczorgCount === 1 ? 'sublocatie' : 'sublocaties'}
+                          </span>
                         </div>
-                      </div>
-                      <Badge variant="outline" className="border-blue-300 text-blue-700">
-                        ABCzorg
-                      </Badge>
-                    </div>
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <div className="font-medium">CitoZorg</div>
-                        <div className="text-sm text-muted-foreground">
-                          {citozorgCount} {citozorgCount === 1 ? 'sublocatie' : 'sublocaties'}
+                      )}
+                      {citozorgCount > 0 && (
+                        <div className="flex items-center gap-2 px-4 py-2 border rounded-lg">
+                          <Badge variant="outline" className="border-green-300 text-green-700">
+                            CitoZorg
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">
+                            • {citozorgCount} {citozorgCount === 1 ? 'sublocatie' : 'sublocaties'}
+                          </span>
                         </div>
-                      </div>
-                      <Badge variant="outline" className="border-green-300 text-green-700">
-                        CitoZorg
-                      </Badge>
+                      )}
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
+              
+              {/* Geen werklocaties melding */}
+              {abczorgCount === 0 && citozorgCount === 0 && (
+                <Card>
+                  <CardContent className="py-8 text-center text-muted-foreground">
+                    <Building className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>Nog geen werklocaties geconfigureerd</p>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
 
             <TabsContent value="locaties" className="space-y-3">
