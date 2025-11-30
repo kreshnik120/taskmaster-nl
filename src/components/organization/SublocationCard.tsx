@@ -1,8 +1,9 @@
-import { Building, Euro, Phone, Mail, MapPin as MapPinIcon, Users } from "lucide-react";
+import { Building, Euro, Phone, Mail, MapPin as MapPinIcon, Users, Copy } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getOrganizationName, getOrganizationBadgeColor } from "@/lib/organizationMapping";
+import { useToast } from "@/hooks/use-toast";
 
 // Sector color mappings (consistent with ClientDetailModal)
 const SECTOR_COLORS: Record<string, string> = {
@@ -43,6 +44,8 @@ export function SublocationCard({
   locationName,
   onSublocationClick,
 }: SublocationCardProps) {
+  const { toast } = useToast();
+  
   const handleCardClick = () => {
     if (onSublocationClick) {
       onSublocationClick(sublocation);
@@ -64,12 +67,23 @@ export function SublocationCard({
     }
   };
 
+  const handleCopyPhone = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (sublocation.telefoon) {
+      navigator.clipboard.writeText(sublocation.telefoon);
+      toast({
+        title: "Telefoonnummer gekopieerd",
+        description: sublocation.telefoon,
+      });
+    }
+  };
+
   const bemiddelaar = getOrganizationName(sublocation.gekoppelde_bv_org_id);
   const bemiddelaarColor = getOrganizationBadgeColor(bemiddelaar);
 
   return (
     <Card
-      className="p-3 hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-green-400/60"
+      className="p-3 hover:shadow-lg hover:bg-accent/5 transition-all duration-200 cursor-pointer border-l-4 border-l-green-400/60"
       onClick={handleCardClick}
     >
       <div className="flex items-start justify-between gap-4">
@@ -132,16 +146,20 @@ export function SublocationCard({
                   )}
                 </div>
               )}
-              {/* Tarieven count en range */}
-              {sublocation.hourly_rates_count !== undefined && sublocation.hourly_rates_count > 0 && (
-                <Badge variant="outline" className="text-xs">
+              {/* Tarieven count en range - prominente styling */}
+              {sublocation.hourly_rates_count !== undefined && sublocation.hourly_rates_count > 0 ? (
+                <Badge className="text-xs bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20 font-medium">
                   <Euro className="h-3 w-3 mr-1" />
                   {sublocation.hourly_rates_count} {sublocation.hourly_rates_count === 1 ? "tarief" : "tarieven"}
                   {sublocation.tarieven_min !== undefined && sublocation.tarieven_max !== undefined && (
-                    <span className="ml-1 opacity-70">
+                    <span className="ml-1">
                       (€{sublocation.tarieven_min}-€{sublocation.tarieven_max})
                     </span>
                   )}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-xs opacity-50">
+                  Nog geen tarieven
                 </Badge>
               )}
             </div>
@@ -149,15 +167,26 @@ export function SublocationCard({
         </div>
         <div className="flex items-center gap-1 shrink-0">
           {sublocation.telefoon && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 w-8 p-0"
-              onClick={handleQuickCall}
-              title="Bel direct"
-            >
-              <Phone className="h-3.5 w-3.5" />
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 p-0"
+                onClick={handleCopyPhone}
+                title="Kopieer telefoonnummer"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 p-0"
+                onClick={handleQuickCall}
+                title="Bel direct"
+              >
+                <Phone className="h-3.5 w-3.5" />
+              </Button>
+            </>
           )}
           {sublocation.adres && sublocation.plaats && (
             <Button
