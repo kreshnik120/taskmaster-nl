@@ -11,7 +11,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Mail, Phone, MapPin, Edit2, Save, X, Plus, ChevronDown, Upload, ImageIcon } from "lucide-react";
+import { Mail, Phone, MapPin, Edit2, Save, X, Plus, ChevronDown, Upload, ImageIcon, Building2, ArrowRight } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { SublocationCard } from "./organization/SublocationCard";
+import { SublocationDetailModal } from "./organization/SublocationDetailModal";
+import { OrganizationDetailModal } from "./organization/OrganizationDetailModal";
 
 interface ClientDetailModalProps {
   open: boolean;
@@ -21,6 +25,7 @@ interface ClientDetailModalProps {
     name: string;
     company: string;
     org_id: string;
+    client_org_id?: string | null;
     email?: string | null;
     phone?: string | null;
     address?: string | null;
@@ -74,6 +79,33 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [selectedSublocation, setSelectedSublocation] = useState<any>(null);
+  const [isSublocationModalOpen, setIsSublocationModalOpen] = useState(false);
+  const [isOrganizationModalOpen, setIsOrganizationModalOpen] = useState(false);
+
+  // Fetch linked organization and sublocations
+  const { data: linkedOrg, isLoading: loadingOrg } = useQuery({
+    queryKey: ["client-organization", client.client_org_id],
+    queryFn: async () => {
+      if (!client.client_org_id) return null;
+      
+      const { data, error } = await supabase
+        .from("client_organizations")
+        .select(`
+          *,
+          client_locations (
+            *,
+            client_sublocations (*)
+          )
+        `)
+        .eq("id", client.client_org_id)
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!client.client_org_id && open,
+  });
 
   // Avatar helpers (consistent with ClientCard)
   const getInitials = (name: string) => {
@@ -385,6 +417,14 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
           <TabsList className="w-full justify-start border-b border-border rounded-none bg-transparent p-0">
             <TabsTrigger value="overview" className="rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
               Overzicht
+            </TabsTrigger>
+            <TabsTrigger value="werklocaties" className="rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
+              Werklocaties
+              {linkedOrg && (
+                <Badge variant="secondary" className="ml-2 h-5 px-1.5 text-xs">
+                  {linkedOrg.client_locations?.reduce((acc: number, loc: any) => acc + (loc.client_sublocations?.length || 0), 0)}
+                </Badge>
+              )}
             </TabsTrigger>
             <TabsTrigger value="matching" className="rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary">
               Matching
@@ -750,8 +790,140 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
               </div>
             </div>
           </TabsContent>
+
+          {/* Werklocaties Tab */}
+          <TabsContent value="werklocaties" className="space-y-6 mt-6">
+            {loadingOrg ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Werklocaties laden...
+              </div>
+            ) : !linkedOrg ? (
+              <div className="text-center py-8 space-y-4">
+                <Building2 className="h-12 w-12 mx-auto text-muted-foreground/40" />
+                <div>
+                  <p className="text-muted-foreground">Deze klant is nog niet gekoppeld aan een organisatie</p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Koppel deze klant aan een organisatie om werklocaties en tarieven te bekijken
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Organization info */}
+                <div className="flex items-start justify-between p-4 border border-border rounded-lg bg-muted/30">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-5 w-5 text-muted-foreground" />
+                      <h3 className="font-medium">{linkedOrg.name}</h3>
+                    </div>
+                    {linkedOrg.kvk_nummer && (
+                      <p className="text-sm text-muted-foreground">KVK: {linkedOrg.kvk_nummer}</p>
+                    )}
+                    <div className="flex gap-4 text-sm text-muted-foreground mt-2">
+                      <span>{linkedOrg.client_locations?.length || 0} locatie(s)</span>
+                      <span>
+                        {linkedOrg.client_locations?.reduce((acc: number, loc: any) => acc + (loc.client_sublocations?.length || 0), 0) || 0} sublocatie(s)
+                      </span>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsOrganizationModalOpen(true)}
+                    className="gap-2"
+                  >
+                    Bekijk organisatie
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {/* Sublocations */}
+                <div className="space-y-4">
+                  <h4 className="font-medium text-sm flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    Werklocaties
+                  </h4>
+                  {linkedOrg.client_locations && linkedOrg.client_locations.length > 0 ? (
+                    <div className="grid gap-3">
+                      {linkedOrg.client_locations.map((location: any) => (
+                        <div key={location.id}>
+                          {location.client_sublocations && location.client_sublocations.length > 0 ? (
+                            location.client_sublocations.map((sublocation: any) => (
+                              <SublocationCard
+                                key={sublocation.id}
+                                sublocation={{
+                                  id: sublocation.id,
+                                  naam: sublocation.naam,
+                                  plaats: sublocation.plaats,
+                                  doelgroep: sublocation.doelgroep,
+                                  sector: sublocation.sector,
+                                  gekoppelde_bv_org_id: sublocation.gekoppelde_bv_org_id,
+                                  telefoon: sublocation.telefoon,
+                                  adres: sublocation.adres,
+                                  hourly_rates_count: 0,
+                                }}
+                                organizationName={linkedOrg.name}
+                                locationName={location.naam}
+                                onSublocationClick={() => {
+                                  setSelectedSublocation(sublocation);
+                                  setIsSublocationModalOpen(true);
+                                }}
+                              />
+                            ))
+                          ) : (
+                            <p className="text-sm text-muted-foreground text-center py-4">
+                              Geen sublocaties gevonden voor {location.naam}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                      Geen locaties gevonden voor deze organisatie
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </TabsContent>
         </Tabs>
       </DialogContent>
+
+      {/* Sublocation Detail Modal */}
+      {selectedSublocation && (
+        <SublocationDetailModal
+          open={isSublocationModalOpen}
+          onOpenChange={setIsSublocationModalOpen}
+          sublocation={selectedSublocation}
+          organizationName={linkedOrg?.name || ""}
+          locationName={
+            linkedOrg?.client_locations?.find((loc: any) =>
+              loc.client_sublocations?.some((sub: any) => sub.id === selectedSublocation.id)
+            )?.naam || ""
+          }
+        />
+      )}
+
+      {/* Organization Detail Modal */}
+      {linkedOrg && (
+        <OrganizationDetailModal
+          open={isOrganizationModalOpen}
+          onOpenChange={setIsOrganizationModalOpen}
+          organization={{
+            id: linkedOrg.id,
+            name: linkedOrg.name,
+            kvk_nummer: linkedOrg.kvk_nummer,
+            logo_url: linkedOrg.logo_url,
+            website: linkedOrg.website,
+            centrale_facturatie_email: linkedOrg.centrale_facturatie_email,
+            locations: (linkedOrg.client_locations || []).map((loc: any) => ({
+              ...loc,
+              sublocations: loc.client_sublocations || [],
+            })),
+          }}
+        />
+      )}
     </Dialog>
   );
 }

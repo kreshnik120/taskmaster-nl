@@ -24,6 +24,7 @@ interface Client {
   name: string;
   company: string;
   org_id: string;
+  client_org_id?: string | null;
   created_at: string;
   email?: string | null;
   phone?: string | null;
