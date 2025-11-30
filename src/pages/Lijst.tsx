@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, Filter, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown, User, Search, UserPlus } from "lucide-react";
+import { Loader2, Filter, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown, User, Search, UserPlus, CheckCircle2, X, Users } from "lucide-react";
 import { motion } from "framer-motion";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -99,6 +99,9 @@ export default function Lijst() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const tableRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+  const [bulkAssignee, setBulkAssignee] = useState<string | null>(null);
+  const [bulkPriority, setBulkPriority] = useState<string | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -404,6 +407,18 @@ export default function Lijst() {
     return "—";
   };
 
+  const getDateUrgency = (dueAt: string | null) => {
+    if (!dueAt) return { status: 'none', className: '', badge: null };
+    const due = new Date(dueAt);
+    const now = new Date();
+    const diffDays = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) return { status: 'overdue', className: 'text-red-600 dark:text-red-400 font-medium', badge: 'Verlopen' };
+    if (diffDays === 0) return { status: 'today', className: 'text-orange-600 dark:text-orange-400 font-medium', badge: 'Vandaag' };
+    if (diffDays === 1) return { status: 'tomorrow', className: 'text-amber-600 dark:text-amber-400', badge: 'Morgen' };
+    return { status: 'normal', className: 'text-muted-foreground', badge: null };
+  };
+
   const handleTaskClick = (task: Task) => {
     setSelectedTask(task);
     setDetailModalOpen(true);
@@ -439,6 +454,98 @@ export default function Lijst() {
     } catch (error) {
       console.error("Error deleting task:", error);
       toast.error("Fout bij verwijderen van taak");
+    }
+  };
+
+  // Bulk actions
+  const toggleTaskSelection = (taskId: string) => {
+    setSelectedTaskIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId);
+      } else {
+        newSet.add(taskId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleAllTasks = () => {
+    if (selectedTaskIds.size === filteredTasks.length) {
+      setSelectedTaskIds(new Set());
+    } else {
+      setSelectedTaskIds(new Set(filteredTasks.map(t => t.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!currentUserId || selectedTaskIds.size === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from("tasks")
+        .update({
+          deleted_at: new Date().toISOString(),
+          deleted_by: currentUserId,
+        })
+        .in("id", Array.from(selectedTaskIds));
+
+      if (error) throw error;
+
+      toast.success(`${selectedTaskIds.size} taken verwijderd`);
+      setSelectedTaskIds(new Set());
+      fetchTasks();
+    } catch (error) {
+      console.error("Error bulk deleting:", error);
+      toast.error("Fout bij verwijderen van taken");
+    }
+  };
+
+  const handleBulkAssign = async (assigneeId: string | null) => {
+    if (selectedTaskIds.size === 0) return;
+
+    try {
+      const updates: any = { assignee_id: assigneeId || null };
+      if (!assigneeId) {
+        updates.accepted_by = null;
+        updates.accepted_at = null;
+      }
+
+      const { error } = await supabase
+        .from("tasks")
+        .update(updates)
+        .in("id", Array.from(selectedTaskIds));
+
+      if (error) throw error;
+
+      toast.success(`${selectedTaskIds.size} taken toegewezen`);
+      setSelectedTaskIds(new Set());
+      setBulkAssignee(null);
+      fetchTasks();
+    } catch (error) {
+      console.error("Error bulk assigning:", error);
+      toast.error("Fout bij toewijzen van taken");
+    }
+  };
+
+  const handleBulkPriority = async (priority: string) => {
+    if (selectedTaskIds.size === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from("tasks")
+        .update({ priority: priority as "CRITICAL" | "HIGH" | "LOW" | "MEDIUM" })
+        .in("id", Array.from(selectedTaskIds));
+
+      if (error) throw error;
+
+      toast.success(`${selectedTaskIds.size} taken bijgewerkt`);
+      setSelectedTaskIds(new Set());
+      setBulkPriority(null);
+      fetchTasks();
+    } catch (error) {
+      console.error("Error bulk updating priority:", error);
+      toast.error("Fout bij bijwerken van prioriteit");
     }
   };
 
@@ -768,6 +875,85 @@ export default function Lijst() {
         </div>
       </motion.div>
 
+      {/* Bulk Actions Floating Bar */}
+      {selectedTaskIds.size > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50"
+        >
+          <Card className="shadow-2xl border-2 border-primary/20">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="text-sm font-semibold">
+                    {selectedTaskIds.size} geselecteerd
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedTaskIds(new Set())}
+                    className="h-8 w-8 p-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div className="h-6 w-px bg-border" />
+
+                <Select value={bulkAssignee || "none"} onValueChange={(v) => {
+                  if (v === "none") {
+                    handleBulkAssign(null);
+                  } else {
+                    handleBulkAssign(v);
+                  }
+                }}>
+                  <SelectTrigger className="w-[180px] h-9">
+                    <SelectValue placeholder="Toewijzen aan..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Niet toegewezen</SelectItem>
+                    {profiles.map((profile) => (
+                      <SelectItem key={profile.id} value={profile.id}>
+                        {profile.name || "Naamloos"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={bulkPriority || "none"} onValueChange={(v) => {
+                  if (v !== "none") {
+                    handleBulkPriority(v);
+                  }
+                }}>
+                  <SelectTrigger className="w-[140px] h-9">
+                    <SelectValue placeholder="Prioriteit..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none" disabled>Kies prioriteit</SelectItem>
+                    <SelectItem value="LOW">Laag</SelectItem>
+                    <SelectItem value="MEDIUM">Gemiddeld</SelectItem>
+                    <SelectItem value="HIGH">Hoog</SelectItem>
+                    <SelectItem value="CRITICAL">Kritiek</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleBulkDelete}
+                  className="h-9"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Verwijderen
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
       <div className="space-y-8" ref={tableRef}>
             {Object.entries(groups).map(([groupName, groupTasks]) => (
               <div key={groupName}>
@@ -776,10 +962,53 @@ export default function Lijst() {
                     {groupName}
                   </h2>
                 )}
+                {groupTasks.length === 0 ? (
+                  <Card className="border-dashed">
+                    <CardContent className="flex flex-col items-center justify-center py-16">
+                      <CheckCircle2 className="h-16 w-16 text-muted-foreground/40 mb-4" />
+                      <h3 className="text-lg font-medium mb-2">
+                        {searchQuery || filterPriority !== 'all' || filterStatus !== 'all' 
+                          ? "Geen taken gevonden" 
+                          : "Geen taken"}
+                      </h3>
+                      <p className="text-sm text-muted-foreground mb-6 text-center max-w-sm">
+                        {searchQuery || filterPriority !== 'all' || filterStatus !== 'all'
+                          ? "Probeer je filters te wissen om meer resultaten te zien"
+                          : "Klik op de knop hieronder om je eerste taak aan te maken"}
+                      </p>
+                      <div className="flex gap-3">
+                        {(searchQuery || filterPriority !== 'all' || filterStatus !== 'all') && (
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setSearchQuery("");
+                              setFilterPriority("all");
+                              setFilterStatus("all");
+                            }}
+                          >
+                            <X className="h-4 w-4 mr-2" />
+                            Filters wissen
+                          </Button>
+                        )}
+                        <Button onClick={() => navigate("/kanban")}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Nieuwe taak
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
                 <div className="rounded-lg border bg-card relative overflow-auto max-h-[calc(100vh-350px)]">
                   <Table>
                     <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
                       <TableRow>
+                        <TableHead className="w-[50px]">
+                          <Checkbox
+                            checked={selectedTaskIds.size === filteredTasks.length && filteredTasks.length > 0}
+                            onCheckedChange={toggleAllTasks}
+                            aria-label="Selecteer alle taken"
+                          />
+                        </TableHead>
                         <TableHead className="w-[50px]">ID</TableHead>
                         <TableHead 
                           className="cursor-pointer hover:bg-muted/50 transition-colors select-none"
@@ -803,16 +1032,9 @@ export default function Lijst() {
                         <TableHead className="w-[100px]">Actie</TableHead>
                         <TableHead className="w-[80px] text-center">Afgerond</TableHead>
                       </TableRow>
-                    </TableHeader>
+                     </TableHeader>
                     <TableBody>
-                      {groupTasks.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={9} className="text-center text-muted-foreground">
-                            Geen taken gevonden
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        groupTasks.map((task, index) => {
+                      {groupTasks.map((task, index) => {
                           const activeTimer = activeTimers[task.id];
                           const globalIndex = Object.values(groups)
                             .flat()
@@ -839,6 +1061,13 @@ export default function Lijst() {
                                 }
                               }}
                             >
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <Checkbox
+                                checked={selectedTaskIds.has(task.id)}
+                                onCheckedChange={() => toggleTaskSelection(task.id)}
+                                aria-label={`Selecteer taak ${task.title}`}
+                              />
+                            </TableCell>
                             <TableCell className="font-mono text-xs text-muted-foreground">
                               {String(task.sequence_number).padStart(2, '0')}
                             </TableCell>
@@ -903,9 +1132,26 @@ export default function Lijst() {
                       <TableCell>
                         <PriorityBadge taskId={task.id} priority={task.priority} size="md" />
                       </TableCell>
-                            <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
-                              {formatPeriod(task.start_at, task.due_at)}
-                            </TableCell>
+                             <TableCell className="hidden sm:table-cell">
+                               {(() => {
+                                 const urgency = getDateUrgency(task.due_at);
+                                 return (
+                                   <div className="flex items-center gap-2">
+                                     <span className={urgency.className}>
+                                       {formatPeriod(task.start_at, task.due_at)}
+                                     </span>
+                                     {urgency.badge && (
+                                       <Badge 
+                                         variant={urgency.status === 'overdue' ? 'destructive' : 'secondary'}
+                                         className="text-xs"
+                                       >
+                                         {urgency.badge}
+                                       </Badge>
+                                     )}
+                                   </div>
+                                 );
+                               })()}
+                             </TableCell>
                             <TableCell className="min-w-[200px]">
                               {editingAction === task.id ? (
                                 <div className="flex items-center gap-2">
@@ -995,16 +1241,16 @@ export default function Lijst() {
                                 className="mx-auto"
                               />
                             </TableCell>
-                          </TableRow>
+                             </TableRow>
                           );
-                        })
-                      )}
+                        })}
                     </TableBody>
                   </Table>
                 </div>
+                )}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
       {/* Modals */}
       {selectedTask && (
