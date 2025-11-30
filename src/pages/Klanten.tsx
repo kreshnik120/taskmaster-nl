@@ -18,6 +18,8 @@ import { DensityToggle } from "@/components/recruitment/DensityToggle";
 import { ClientSection } from "@/components/recruitment/ClientSection";
 import { OrganizationCard } from "@/components/organization/OrganizationCard";
 import { OrganizationDetailModal } from "@/components/organization/OrganizationDetailModal";
+import { LocationDetailModal } from "@/components/organization/LocationDetailModal";
+import { SublocationDetailModal } from "@/components/organization/SublocationDetailModal";
 
 interface Client {
   id: string;
@@ -47,6 +49,10 @@ export default function Klanten() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedOrganization, setSelectedOrganization] = useState<any | null>(null);
   const [isOrgModalOpen, setIsOrgModalOpen] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState<any | null>(null);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [selectedSublocation, setSelectedSublocation] = useState<any | null>(null);
+  const [isSublocationModalOpen, setIsSublocationModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "hierarchy">(() => {
     const saved = localStorage.getItem("klanten-view-mode");
     return (saved as any) || "cards";
@@ -101,6 +107,27 @@ export default function Klanten() {
   const handleClientClick = (client: Client) => {
     setSelectedClient(client);
     setIsDetailModalOpen(true);
+  };
+
+  // Hierarchy view: Location click handler
+  const handleLocationClick = (location: any, organization?: any) => {
+    setSelectedLocation(location);
+    if (organization) {
+      setSelectedOrganization(organization);
+    }
+    setIsLocationModalOpen(true);
+  };
+
+  // Hierarchy view: Sublocation click handler
+  const handleSublocationClick = (sublocation: any, location?: any, organization?: any) => {
+    setSelectedSublocation(sublocation);
+    if (location) {
+      setSelectedLocation(location);
+    }
+    if (organization) {
+      setSelectedOrganization(organization);
+    }
+    setIsSublocationModalOpen(true);
   };
 
   useEffect(() => {
@@ -696,7 +723,7 @@ export default function Klanten() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {organizations.map((org) => (
+                     {organizations.map((org) => (
                        <OrganizationCard
                         key={org.id}
                         organization={org}
@@ -704,16 +731,16 @@ export default function Klanten() {
                           setSelectedOrganization(org);
                           setIsOrgModalOpen(true);
                         }}
-                        onLocationClick={(location) => {
-                          console.log("Open location modal", location);
-                          // TODO: Open LocationDetailModal
-                        }}
+                        onLocationClick={(location) => handleLocationClick(location, org)}
                         onSublocationClick={(sublocation) => {
-                          console.log("Open sublocation modal", sublocation);
-                          // TODO: Open SublocationDetailModal
+                          // Find the location containing this sublocation
+                          const location = org.locations?.find((loc: any) => 
+                            loc.sublocations?.some((sub: any) => sub.id === sublocation.id)
+                          );
+                          handleSublocationClick(sublocation, location, org);
                         }}
                       />
-                    ))}
+                     ))}
                   </div>
                 )
               )}
@@ -738,6 +765,36 @@ export default function Klanten() {
         organization={selectedOrganization}
         open={isOrgModalOpen}
         onOpenChange={setIsOrgModalOpen}
+      />
+      
+      <LocationDetailModal
+        location={selectedLocation}
+        organizationName={selectedOrganization?.name || ""}
+        open={isLocationModalOpen}
+        onOpenChange={setIsLocationModalOpen}
+        onSublocationClick={handleSublocationClick}
+        onNavigateToOrganization={() => {
+          setIsLocationModalOpen(false);
+          setIsOrgModalOpen(true);
+        }}
+      />
+      
+      <SublocationDetailModal
+        sublocation={selectedSublocation}
+        organizationName={selectedOrganization?.name || ""}
+        locationName={selectedLocation?.naam || ""}
+        organizationId={selectedOrganization?.id}
+        locationId={selectedLocation?.id}
+        open={isSublocationModalOpen}
+        onOpenChange={setIsSublocationModalOpen}
+        onNavigateToOrganization={() => {
+          setIsSublocationModalOpen(false);
+          setIsOrgModalOpen(true);
+        }}
+        onNavigateToLocation={() => {
+          setIsSublocationModalOpen(false);
+          setIsLocationModalOpen(true);
+        }}
       />
     </div>
   );
