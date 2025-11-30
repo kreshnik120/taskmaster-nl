@@ -9,11 +9,12 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { toast } from "sonner";
 import { 
-  User, Phone, Mail, MapPin, Briefcase, Car, Calendar, 
+  Phone, Mail, MapPin, Briefcase, Car, Calendar, User,
   Star, Edit, Trash2, CheckCircle2, X, Link2, ChevronDown, Award
 } from "lucide-react";
 import { format } from "date-fns";
@@ -88,6 +89,29 @@ const getSectorColor = (sector: string) => {
     "Thuiszorg": "bg-teal-500/10 text-teal-700 border-teal-200",
   };
   return colors[sector] || "bg-muted";
+};
+
+// Helper functions for avatar
+const getInitials = (name: string) => {
+  return name
+    .split(" ")
+    .map(n => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+};
+
+const getFunctieAvatarColor = (functieNiveau: string) => {
+  switch (functieNiveau) {
+    case "VIG": return "bg-blue-600 text-white";
+    case "HBO-V": return "bg-purple-600 text-white";
+    case "Verpleegkundige MBO": return "bg-green-600 text-white";
+    case "Helpende": return "bg-orange-500 text-white";
+    case "Begeleider": return "bg-cyan-600 text-white";
+    case "Persoonlijk begeleider": return "bg-pink-600 text-white";
+    case "GGZ-agoog": return "bg-indigo-600 text-white";
+    default: return "bg-gray-500 text-white";
+  }
 };
 
 export function ProfessionalDetailModal({ 
@@ -243,8 +267,21 @@ export function ProfessionalDetailModal({
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <User className="h-5 w-5" />
-              <span>{isEditing ? "Bewerk Professional" : professional.full_name}</span>
+              <Avatar className="h-12 w-12">
+                <AvatarFallback className={getFunctieAvatarColor(professional.functie_niveau)}>
+                  {getInitials(professional.full_name)}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <div className="text-xl font-semibold">
+                  {isEditing ? "Bewerk Professional" : professional.full_name}
+                </div>
+                {!isEditing && (
+                  <div className="text-sm text-muted-foreground font-normal">
+                    {professional.functie_niveau}
+                  </div>
+                )}
+              </div>
               {/* Completeness indicator */}
               <div className="relative w-10 h-10">
                 <svg className="w-10 h-10 -rotate-90">
