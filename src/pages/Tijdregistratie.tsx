@@ -396,6 +396,7 @@ const Tijdregistratie = () => {
           value={animatedTodayMinutes}
           subtitle={formatMinutes(animatedTodayMinutes)}
           variant="count"
+          isActive={filterPeriod === "today"}
           onClick={() => setFilterPeriod("today")}
         />
         <KPICard
@@ -404,6 +405,7 @@ const Tijdregistratie = () => {
           value={animatedWeekMinutes}
           subtitle={formatMinutes(animatedWeekMinutes)}
           variant="success"
+          isActive={filterPeriod === "week"}
           onClick={() => setFilterPeriod("week")}
         />
         <KPICard

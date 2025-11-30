@@ -14,6 +14,7 @@ interface KPICardProps {
   variant?: KPIVariant;
   onClick?: () => void;
   className?: string;
+  isActive?: boolean;
 }
 
 const variantConfig: Record<KPIVariant, {
@@ -22,6 +23,7 @@ const variantConfig: Record<KPIVariant, {
   textColor: string;
   iconColor: string;
   shadowColor: string;
+  ringColor: string;
 }> = {
   count: {
     gradient: "from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60",
@@ -29,6 +31,7 @@ const variantConfig: Record<KPIVariant, {
     textColor: "text-blue-600 dark:text-blue-400",
     iconColor: "text-blue-500",
     shadowColor: "hover:shadow-blue-500/10",
+    ringColor: "ring-blue-500",
   },
   success: {
     gradient: "from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60",
@@ -36,6 +39,7 @@ const variantConfig: Record<KPIVariant, {
     textColor: "text-green-600 dark:text-green-400",
     iconColor: "text-green-500",
     shadowColor: "hover:shadow-green-500/10",
+    ringColor: "ring-green-500",
   },
   time: {
     gradient: "from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60",
@@ -43,6 +47,7 @@ const variantConfig: Record<KPIVariant, {
     textColor: "text-amber-600 dark:text-amber-400",
     iconColor: "text-amber-500",
     shadowColor: "hover:shadow-amber-500/10",
+    ringColor: "ring-amber-500",
   },
   urgent: {
     gradient: "from-orange-50/80 to-white/60 dark:from-orange-950/30 dark:to-background/60",
@@ -50,6 +55,7 @@ const variantConfig: Record<KPIVariant, {
     textColor: "text-orange-600 dark:text-orange-400",
     iconColor: "text-orange-500",
     shadowColor: "hover:shadow-orange-500/10",
+    ringColor: "ring-orange-500",
   },
   personal: {
     gradient: "from-purple-50/80 to-white/60 dark:from-purple-950/30 dark:to-background/60",
@@ -57,6 +63,7 @@ const variantConfig: Record<KPIVariant, {
     textColor: "text-purple-600 dark:text-purple-400",
     iconColor: "text-purple-500",
     shadowColor: "hover:shadow-purple-500/10",
+    ringColor: "ring-purple-500",
   },
 };
 
@@ -69,6 +76,7 @@ export function KPICard({
   variant = "count",
   onClick,
   className,
+  isActive = false,
 }: KPICardProps) {
   const animatedValue = useCountUp({ end: value, duration: 600 });
   const config = variantConfig[variant];
@@ -82,6 +90,7 @@ export function KPICard({
         "border-t-4",
         config.shadowColor,
         onClick && "cursor-pointer hover:scale-[1.02]",
+        isActive && `ring-2 ring-offset-2 ${config.ringColor}`,
         className
       )}
       onClick={onClick}
