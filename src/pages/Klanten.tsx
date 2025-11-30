@@ -130,20 +130,32 @@ export default function Klanten() {
         .from("client_sublocations")
         .select(`
           *,
-          hourly_rates:hourly_rates(count)
+          hourly_rates(
+            id,
+            basis_tarief
+          )
         `)
         .order("naam");
 
-      // Build hierarchy structure
+      // Build hierarchy structure with tariff calculations
       const orgsWithHierarchy = orgsData?.map(org => ({
         ...org,
-        locations: locsData?.filter(loc => loc.client_org_id === org.id).map(loc => ({
-          ...loc,
-          sublocations: sublocsData?.filter(sub => sub.location_id === loc.id).map(sub => ({
-            ...sub,
-            hourly_rates_count: sub.hourly_rates?.[0]?.count || 0
-          }))
-        }))
+        locations: locsData?.filter(loc => loc.client_org_id === org.id).map(loc => {
+          const locationSubs = sublocsData?.filter(sub => sub.location_id === loc.id) || [];
+          return {
+            ...loc,
+            sublocations: locationSubs.map(sub => {
+              const rates = (sub.hourly_rates || []) as any[];
+              const tarieven = rates.map(r => r.basis_tarief).filter(t => t != null);
+              return {
+                ...sub,
+                hourly_rates_count: rates.length,
+                tarieven_min: tarieven.length > 0 ? Math.min(...tarieven) : undefined,
+                tarieven_max: tarieven.length > 0 ? Math.max(...tarieven) : undefined,
+              };
+            })
+          };
+        })
       })) || [];
 
       setOrganizations(orgsWithHierarchy);

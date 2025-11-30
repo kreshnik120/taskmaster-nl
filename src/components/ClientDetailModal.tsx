@@ -14,7 +14,9 @@ import { toast } from "sonner";
 import { Mail, Phone, MapPin, Edit2, Save, X, Plus, ChevronDown, Upload, ImageIcon, Building2, ArrowRight } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { SublocationCard } from "./organization/SublocationCard";
+import { LocationCard } from "./organization/LocationCard";
 import { SublocationDetailModal } from "./organization/SublocationDetailModal";
+import { LocationDetailModal } from "./organization/LocationDetailModal";
 import { OrganizationDetailModal } from "./organization/OrganizationDetailModal";
 
 interface ClientDetailModalProps {
@@ -80,7 +82,9 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedSublocation, setSelectedSublocation] = useState<any>(null);
+  const [selectedLocation, setSelectedLocation] = useState<any>(null);
   const [isSublocationModalOpen, setIsSublocationModalOpen] = useState(false);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [isOrganizationModalOpen, setIsOrganizationModalOpen] = useState(false);
 
   // Fetch linked organization and sublocations
@@ -850,55 +854,56 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
                   </Button>
                 </div>
 
-                {/* Sublocations */}
+                {/* Locations with full hierarchy */}
                 <div className="space-y-4">
                   <h4 className="font-medium text-sm flex items-center gap-2">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
                     Werklocaties
                   </h4>
                   {linkedOrg.client_locations && linkedOrg.client_locations.length > 0 ? (
-                    <div className="grid gap-3">
-                      {linkedOrg.client_locations.map((location: any) => (
-                        <div key={location.id}>
-                          {location.client_sublocations && location.client_sublocations.length > 0 ? (
-                            location.client_sublocations.map((sublocation: any) => {
-                              const hourlyRates = sublocation.hourly_rates || [];
-                              const tarieven = hourlyRates.map((r: any) => r.basis_tarief).filter((t: any) => t != null);
-                              
-                              return (
-                                <SublocationCard
-                                  key={sublocation.id}
-                                  sublocation={{
-                                    id: sublocation.id,
-                                    naam: sublocation.naam,
-                                    plaats: sublocation.plaats,
-                                    doelgroep: sublocation.doelgroep,
-                                    sector: sublocation.sector,
-                                    gekoppelde_bv_org_id: sublocation.gekoppelde_bv_org_id,
-                                    telefoon: sublocation.telefoon,
-                                    adres: sublocation.adres,
-                                    capaciteit_min: sublocation.capaciteit_min,
-                                    capaciteit_max: sublocation.capaciteit_max,
-                                    hourly_rates_count: hourlyRates.length,
-                                    tarieven_min: tarieven.length > 0 ? Math.min(...tarieven) : undefined,
-                                    tarieven_max: tarieven.length > 0 ? Math.max(...tarieven) : undefined,
-                                  }}
-                                  organizationName={linkedOrg.name}
-                                  locationName={location.naam}
-                                  onSublocationClick={() => {
-                                    setSelectedSublocation(sublocation);
-                                    setIsSublocationModalOpen(true);
-                                  }}
-                                />
-                              );
-                            })
-                          ) : (
-                            <p className="text-sm text-muted-foreground text-center py-4">
-                              Geen sublocaties gevonden voor {location.naam}
-                            </p>
-                          )}
-                        </div>
-                      ))}
+                    <div className="space-y-3">
+                      {linkedOrg.client_locations.map((location: any) => {
+                        // Prepare sublocations with tariff calculations
+                        const enrichedSublocations = (location.client_sublocations || []).map((sublocation: any) => {
+                          const hourlyRates = sublocation.hourly_rates || [];
+                          const tarieven = hourlyRates.map((r: any) => r.basis_tarief).filter((t: any) => t != null);
+                          
+                          return {
+                            id: sublocation.id,
+                            naam: sublocation.naam,
+                            plaats: sublocation.plaats,
+                            doelgroep: sublocation.doelgroep,
+                            sector: sublocation.sector,
+                            gekoppelde_bv_org_id: sublocation.gekoppelde_bv_org_id,
+                            telefoon: sublocation.telefoon,
+                            adres: sublocation.adres,
+                            capaciteit_min: sublocation.capaciteit_min,
+                            capaciteit_max: sublocation.capaciteit_max,
+                            hourly_rates_count: hourlyRates.length,
+                            tarieven_min: tarieven.length > 0 ? Math.min(...tarieven) : undefined,
+                            tarieven_max: tarieven.length > 0 ? Math.max(...tarieven) : undefined,
+                          };
+                        });
+
+                        return (
+                          <LocationCard
+                            key={location.id}
+                            location={{
+                              ...location,
+                              sublocations: enrichedSublocations,
+                            }}
+                            organizationName={linkedOrg.name}
+                            onLocationClick={(loc) => {
+                              setSelectedLocation(loc);
+                              setIsLocationModalOpen(true);
+                            }}
+                            onSublocationClick={(sublocation) => {
+                              setSelectedSublocation(sublocation);
+                              setIsSublocationModalOpen(true);
+                            }}
+                          />
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground text-center py-8">
@@ -911,6 +916,20 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
           </TabsContent>
         </Tabs>
       </DialogContent>
+
+      {/* Location Detail Modal */}
+      {selectedLocation && (
+        <LocationDetailModal
+          open={isLocationModalOpen}
+          onOpenChange={setIsLocationModalOpen}
+          location={selectedLocation}
+          organizationName={linkedOrg?.name || ""}
+          onSublocationClick={(sublocation) => {
+            setSelectedSublocation(sublocation);
+            setIsSublocationModalOpen(true);
+          }}
+        />
+      )}
 
       {/* Sublocation Detail Modal */}
       {selectedSublocation && (

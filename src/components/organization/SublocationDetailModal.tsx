@@ -2,7 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Building, MapPin, Phone, Mail, Euro, Users, Briefcase } from "lucide-react";
+import { Building, MapPin, Phone, Mail, Euro, Users, Briefcase, ChevronRight } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -124,8 +124,19 @@ export function SublocationDetailModal({
               </div>
               <div className="flex-1">
                 <DialogTitle className="text-2xl">{sublocation.naam}</DialogTitle>
-                <div className="text-sm text-muted-foreground mt-1">
-                  {organizationName} → {locationName} → {sublocation.naam}
+                {/* Breadcrumb navigation */}
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-2">
+                  <span className="hover:text-primary transition-colors cursor-default">
+                    {organizationName}
+                  </span>
+                  <ChevronRight className="h-3 w-3" />
+                  <span className="hover:text-primary transition-colors cursor-default">
+                    {locationName}
+                  </span>
+                  <ChevronRight className="h-3 w-3" />
+                  <span className="text-foreground font-medium">
+                    {sublocation.naam}
+                  </span>
                 </div>
               </div>
             </div>
