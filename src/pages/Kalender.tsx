@@ -84,6 +84,23 @@ export default function Kalender() {
     };
   }, []);
 
+  // Calculate values for animated counters (before early return)
+  const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
+  const weekDays = viewMode === "5" ? allWeekDays.slice(0, 5) : allWeekDays;
+  
+  const getTasksForDay = (day: Date) => tasks.filter((task) => 
+    (task.start_at && isSameDay(parseISO(task.start_at), day)) || (task.due_at && isSameDay(parseISO(task.due_at), day))
+  );
+  
+  const todayTasks = !loading ? getTasksForDay(new Date()).length : 0;
+  const urgentCount = !loading ? tasks.filter(t => t.priority === 'high' || t.priority === 'critical').length : 0;
+
+  // Animated counters - always called in same order
+  const animatedTodayTasks = useCountUp({ end: todayTasks, duration: 600 });
+  const animatedWeekTasks = useCountUp({ end: tasks.length, duration: 600 });
+  const animatedReminders = useCountUp({ end: reminders.length, duration: 600 });
+  const animatedUrgentTasks = useCountUp({ end: urgentCount, duration: 600 });
+
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) navigate("/auth");
@@ -149,13 +166,6 @@ export default function Kalender() {
     }
   };
 
-  const allWeekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
-  const weekDays = viewMode === "5" ? allWeekDays.slice(0, 5) : allWeekDays;
-
-  const getTasksForDay = (day: Date) => tasks.filter((task) => 
-    (task.start_at && isSameDay(parseISO(task.start_at), day)) || (task.due_at && isSameDay(parseISO(task.due_at), day))
-  );
-
   const getRemindersForDay = (day: Date) => reminders.filter((reminder) => isSameDay(parseISO(reminder.at), day));
 
   const goToPreviousWeek = () => setCurrentWeekStart(addDays(currentWeekStart, -7));
@@ -205,14 +215,6 @@ export default function Kalender() {
   }
 
   const weekNumber = getWeek(currentWeekStart, { locale: nl });
-  const todayTasks = getTasksForDay(new Date()).length;
-  const urgentCount = tasks.filter(t => t.priority === 'high' || t.priority === 'critical').length;
-
-  // Animated counters
-  const animatedTodayTasks = useCountUp({ end: todayTasks, duration: 600 });
-  const animatedWeekTasks = useCountUp({ end: tasks.length, duration: 600 });
-  const animatedReminders = useCountUp({ end: reminders.length, duration: 600 });
-  const animatedUrgentTasks = useCountUp({ end: urgentCount, duration: 600 });
 
   return (
     <div className="space-y-6">
