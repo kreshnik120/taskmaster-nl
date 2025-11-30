@@ -14,6 +14,7 @@ import { TaskDialog } from "@/components/TaskDialog";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { ActiveProcessWidget } from "@/components/ActiveProcessWidget";
 import { QuickTimerButton } from "@/components/QuickTimerButton";
+import { KPICard } from "@/components/ui/kpi-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -709,59 +710,33 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Stats Bar - Gradient KPI Cards */}
+      {/* KPI Cards met Icons */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {/* Open Tasks */}
-        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-blue-400/60 dark:border-t-blue-500/50
-                       hover:shadow-lg hover:shadow-blue-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
-          <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-            {animatedOpenTasks}
-          </span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
-            Open
-          </span>
-        </div>
-
-        {/* Completed */}
-        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-green-400/60 dark:border-t-green-500/50
-                       hover:shadow-lg hover:shadow-green-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
-          <span className="text-3xl font-bold text-green-600 dark:text-green-400">
-            {animatedCompletedTasks}
-          </span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
-            Afgerond
-          </span>
-        </div>
-
-        {/* Hours Worked */}
-        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-amber-400/60 dark:border-t-amber-500/50
-                       hover:shadow-lg hover:shadow-amber-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
-          <span className="text-3xl font-bold text-amber-600 dark:text-amber-400">
-            {animatedHoursWorked.toFixed(1)}
-          </span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
-            Gewerkt
-          </span>
-        </div>
-
-        {/* High Priority */}
-        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-orange-50/80 to-white/60 dark:from-orange-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-orange-400/60 dark:border-t-orange-500/50
-                       hover:shadow-lg hover:shadow-orange-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
-          <span className="text-3xl font-bold text-orange-600 dark:text-orange-400">
-            {animatedHighPriority}
-          </span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
-            Prioriteit
-          </span>
-        </div>
+        <KPICard
+          icon={ListTodo}
+          title="Open"
+          value={animatedOpenTasks}
+          variant="count"
+        />
+        <KPICard
+          icon={CheckCircle2}
+          title="Afgerond"
+          value={animatedCompletedTasks}
+          variant="success"
+        />
+        <KPICard
+          icon={Clock}
+          title="Gewerkt"
+          value={animatedHoursWorked}
+          subtitle={`${animatedHoursWorked.toFixed(1)} uur`}
+          variant="time"
+        />
+        <KPICard
+          icon={Zap}
+          title="Prioriteit"
+          value={animatedHighPriority}
+          variant="urgent"
+        />
       </div>
 
       {/* Active Process Steps Widget - Subtiel gepositioneerd */}

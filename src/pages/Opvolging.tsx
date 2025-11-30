@@ -7,12 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format, differenceInDays } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, Clock } from "lucide-react";
+import { Loader2, Clock, AlertCircle, Calendar, CheckCircle2, TrendingUp } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useCountUp } from "@/hooks/useCountUp";
 import { useAiScoring } from "@/hooks/useAiScoring";
+import { KPICard } from "@/components/ui/kpi-card";
 
 interface Task {
   id: string;
@@ -297,51 +298,38 @@ export default function Opvolging() {
         )}
       </div>
 
-      {/* Gradient Stats Bar - Responsive */}
+      {/* KPI Cards met Icons */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {/* Achterstallig */}
-        <div
+        <KPICard
+          icon={AlertCircle}
+          title="Achterstallig"
+          value={animatedOverdueTasks}
+          variant="urgent"
           onClick={() => setActiveFilter(activeFilter === "achterstallig" ? null : "achterstallig")}
-          className={cn("group flex flex-col items-center justify-center p-6 rounded-xl bg-gradient-to-br from-red-50/80 to-white/60 dark:from-red-950/30 dark:to-background/60 backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-red-400/60 dark:border-t-red-500/50 hover:shadow-lg hover:shadow-red-500/10 hover:scale-[1.02] transition-all duration-200 cursor-pointer",
-            activeFilter === "achterstallig" && "ring-2 ring-red-500"
-          )}
-        >
-          <span className="text-3xl font-bold text-red-600 dark:text-red-400">{animatedOverdueTasks}</span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Achterstallig</span>
-        </div>
-        
-        {/* Deze Week */}
-        <div
+          className={cn(activeFilter === "achterstallig" && "ring-2 ring-orange-500")}
+        />
+        <KPICard
+          icon={Calendar}
+          title="Deze Week"
+          value={animatedUpcomingTasks}
+          variant="time"
           onClick={() => setActiveFilter(activeFilter === "deze-week" ? null : "deze-week")}
-          className={cn("group flex flex-col items-center justify-center p-6 rounded-xl bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60 backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-amber-400/60 dark:border-t-amber-500/50 hover:shadow-lg hover:shadow-amber-500/10 hover:scale-[1.02] transition-all duration-200 cursor-pointer",
-            activeFilter === "deze-week" && "ring-2 ring-amber-500"
-          )}
-        >
-          <span className="text-3xl font-bold text-amber-600 dark:text-amber-400">{animatedUpcomingTasks}</span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Deze Week</span>
-        </div>
-        
-        {/* Met Actie */}
-        <div
+          className={cn(activeFilter === "deze-week" && "ring-2 ring-amber-500")}
+        />
+        <KPICard
+          icon={CheckCircle2}
+          title="Met Actie"
+          value={animatedWithAction}
+          variant="count"
           onClick={() => setActiveFilter(activeFilter === "met-actie" ? null : "met-actie")}
-          className={cn("group flex flex-col items-center justify-center p-6 rounded-xl bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-blue-400/60 dark:border-t-blue-500/50 hover:shadow-lg hover:shadow-blue-500/10 hover:scale-[1.02] transition-all duration-200 cursor-pointer",
-            activeFilter === "met-actie" && "ring-2 ring-blue-500"
-          )}
-        >
-          <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">{animatedWithAction}</span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Met Actie</span>
-        </div>
-        
-        {/* Gem. AI Score */}
-        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-green-400/60 dark:border-t-green-500/50
-                       hover:shadow-lg hover:shadow-green-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
-          <span className="text-3xl font-bold text-green-600 dark:text-green-400">
-            {scoringLoading ? '...' : animatedAvgScore}
-          </span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Gem. AI Score</span>
-        </div>
+          className={cn(activeFilter === "met-actie" && "ring-2 ring-blue-500")}
+        />
+        <KPICard
+          icon={TrendingUp}
+          title="Gem. AI Score"
+          value={scoringLoading ? 0 : animatedAvgScore}
+          variant="success"
+        />
       </div>
 
       {/* Focus Taken - Top 10 Met Filter */}

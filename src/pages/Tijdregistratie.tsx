@@ -10,9 +10,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useCountUp } from "@/hooks/useCountUp";
-import { Loader2, Play, Square, Clock, Trash2 } from "lucide-react";
+import { Loader2, Play, Square, Clock, Trash2, Calendar, ListChecks, Timer } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import { KPICard } from "@/components/ui/kpi-card";
 
 interface Task {
   id: string;
@@ -387,46 +388,36 @@ const Tijdregistratie = () => {
         </p>
       </div>
 
-      {/* Stats Bar - Gradient KPI Cards with Animations */}
+      {/* KPI Cards met Icons */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {/* Vandaag */}
-        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-blue-400/60 dark:border-t-blue-500/50
-                       hover:shadow-lg hover:shadow-blue-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
-          <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-            {formatMinutes(animatedTodayMinutes)}
-          </span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Vandaag</span>
-        </div>
-
-        {/* Deze Week */}
-        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-green-400/60 dark:border-t-green-500/50
-                       hover:shadow-lg hover:shadow-green-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
-          <span className="text-3xl font-bold text-green-600 dark:text-green-400">
-            {formatMinutes(animatedWeekMinutes)}
-          </span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Deze Week</span>
-        </div>
-
-        {/* Registraties */}
-        <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-amber-400/60 dark:border-t-amber-500/50
-                       hover:shadow-lg hover:shadow-amber-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
-          <span className="text-3xl font-bold text-amber-600 dark:text-amber-400">{animatedEntries}</span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Registraties</span>
-        </div>
-
-        {/* Actieve Timer */}
-        <div className={cn("group flex flex-col items-center justify-center p-6 rounded-xl bg-gradient-to-br from-purple-50/80 to-white/60 dark:from-purple-950/30 dark:to-background/60 backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-purple-400/60 dark:border-t-purple-500/50 hover:shadow-lg hover:shadow-purple-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default", activeTimer && "ring-2 ring-purple-500")}>
-          <span className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-            {activeTimer ? getRunningTime().split(' ')[0] : '0u'}
-          </span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Actieve Timer</span>
-        </div>
+        <KPICard
+          icon={Calendar}
+          title="Vandaag"
+          value={animatedTodayMinutes}
+          subtitle={formatMinutes(animatedTodayMinutes)}
+          variant="count"
+        />
+        <KPICard
+          icon={Clock}
+          title="Deze Week"
+          value={animatedWeekMinutes}
+          subtitle={formatMinutes(animatedWeekMinutes)}
+          variant="success"
+        />
+        <KPICard
+          icon={ListChecks}
+          title="Registraties"
+          value={animatedEntries}
+          variant="time"
+        />
+        <KPICard
+          icon={Timer}
+          title="Actieve Timer"
+          value={activeTimer ? Math.floor((currentTime.getTime() - new Date(activeTimer.start).getTime()) / 1000 / 3600) : 0}
+          subtitle={activeTimer ? getRunningTime() : '0u 0m'}
+          variant="personal"
+          className={cn(activeTimer && "ring-2 ring-purple-500")}
+        />
       </div>
 
       {/* Timer Card - Clean */}
