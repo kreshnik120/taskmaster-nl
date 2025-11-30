@@ -79,11 +79,12 @@ export function ApplicationKanbanColumn({
                   <span className="font-medium text-foreground">{title}</span>
                 </div>
                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                  id === 'nieuw' ? 'bg-blue-50 text-blue-600' :
-                  id === 'screening' ? 'bg-amber-50 text-amber-600' :
-                  id === 'interview' ? 'bg-sky-50 text-sky-600' :
-                  id === 'goedgekeurd' ? 'bg-emerald-50 text-emerald-600' :
-                  'bg-green-50 text-green-700'
+                  id === 'nieuw' ? 'bg-recruitment-nieuw/10 text-recruitment-nieuw' :
+                  id === 'screening' ? 'bg-recruitment-screening/10 text-recruitment-screening' :
+                  id === 'interview' ? 'bg-recruitment-interview/10 text-recruitment-interview' :
+                  id === 'goedgekeurd' ? 'bg-recruitment-goedgekeurd/10 text-recruitment-goedgekeurd' :
+                  id === 'geplaatst' ? 'bg-recruitment-geplaatst/10 text-recruitment-geplaatst' :
+                  'bg-recruitment-afgewezen/10 text-recruitment-afgewezen'
                 }`}>
                   {applications.length}
                 </span>

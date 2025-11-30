@@ -7,7 +7,8 @@ import { TaskDialog } from "@/components/TaskDialog";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Loader2, Sparkles, AlertCircle, Search } from "lucide-react";
+import { KPICard } from "@/components/ui/kpi-card";
+import { Plus, Loader2, Sparkles, AlertCircle, Search, ListTodo, Clock, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -398,15 +399,28 @@ const Kanban = () => {
     );
   }
 
+  const activeTasks = getTasksForColumn(columns.find(c => c.status === 'DOING')?.id || '').length + 
+                      getTasksForColumn(columns.find(c => c.status === 'REVIEW')?.id || '').length;
+  const blockedCount = getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length;
+  const reviewCount = getTasksForColumn(columns.find(c => c.status === 'REVIEW')?.id || '').length;
+  const completedToday = tasks.filter(t => t.completed_at && new Date(t.completed_at).toDateString() === new Date().toDateString()).length;
+
   return (
     <>
+      {/* KPI Stats Bar */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <KPICard icon={ListTodo} title="Actieve taken" value={activeTasks} variant="count" />
+        <KPICard icon={AlertCircle} title="Geblokkeerd" value={blockedCount} variant="urgent" />
+        <KPICard icon={Clock} title="In Review" value={reviewCount} variant="time" />
+        <KPICard icon={CheckCircle2} title="Vandaag afgerond" value={completedToday} variant="success" />
+      </div>
+
       {/* Compact Header */}
       <div className="flex items-center justify-between py-4 border-b mb-6">
         <div>
           <h1 className="text-xl font-medium text-foreground">Kanban bord</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {getTasksForColumn(columns.find(c => c.status === 'DOING')?.id || '').length + 
-             getTasksForColumn(columns.find(c => c.status === 'REVIEW')?.id || '').length} actief • {getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length} blocked • {tasks.filter(t => t.completed_at && new Date(t.completed_at).toDateString() === new Date().toDateString()).length} vandaag afgerond
+            {activeTasks} actief • {blockedCount} blocked • {completedToday} vandaag afgerond
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -420,7 +434,7 @@ const Kanban = () => {
               className="pl-9"
             />
           </div>
-          {getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length > 0 && (
+          {blockedCount > 0 && (
             <Button
               variant="outline"
               size="sm"
