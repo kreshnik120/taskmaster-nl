@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search, ArrowRight } from "lucide-react";
+import { Search, ArrowRight, Users, Activity, Lightbulb, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
 import { PlacementDetailModal } from "@/components/PlacementDetailModal";
 import { motion } from "framer-motion";
+import { KPICard } from "@/components/ui/kpi-card";
 
 interface Placement {
   id: string;
@@ -141,39 +142,40 @@ export default function Plaatsingen() {
         </p>
       </div>
 
-      {/* Stats Bar - Monochrome KPIs */}
-      <div className="flex items-center gap-4 text-sm flex-wrap">
-        <button 
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KPICard
+          icon={Users}
+          title="Totaal"
+          value={stats.total}
+          subtitle="plaatsingen"
+          variant="count"
           onClick={() => setStatusFilter("all")}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors ${statusFilter === "all" ? "bg-muted" : ""}`}
-        >
-          <span className="font-medium">{stats.total}</span>
-          <span className="text-muted-foreground">totaal</span>
-        </button>
-        <div className="h-4 w-px bg-border" />
-        <button
+        />
+        <KPICard
+          icon={Activity}
+          title="Actief"
+          value={stats.active}
+          subtitle="koppelingen"
+          variant="success"
           onClick={() => setStatusFilter("active")}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors ${statusFilter === "active" ? "bg-muted" : ""}`}
-        >
-          <span className="font-medium">{stats.active}</span>
-          <span className="text-muted-foreground">actief</span>
-        </button>
-        <div className="h-4 w-px bg-border" />
-        <button
+        />
+        <KPICard
+          icon={Lightbulb}
+          title="Voorgesteld"
+          value={stats.suggested}
+          subtitle="suggesties"
+          variant="time"
           onClick={() => setStatusFilter("suggested")}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors ${statusFilter === "suggested" ? "bg-muted" : ""}`}
-        >
-          <span className="font-medium">{stats.suggested}</span>
-          <span className="text-muted-foreground">voorgesteld</span>
-        </button>
-        <div className="h-4 w-px bg-border" />
-        <button
+        />
+        <KPICard
+          icon={CheckCircle2}
+          title="Afgerond"
+          value={stats.completed}
+          subtitle="plaatsingen"
+          variant="urgent"
           onClick={() => setStatusFilter("completed")}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors ${statusFilter === "completed" ? "bg-muted" : ""}`}
-        >
-          <span className="font-medium">{stats.completed}</span>
-          <span className="text-muted-foreground">afgerond</span>
-        </button>
+        />
       </div>
 
       {/* Filters */}

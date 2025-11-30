@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, Search, X, Filter, RotateCcw, Undo2, BarChart3 } from "lucide-react";
+import { Plus, Loader2, Search, X, Filter, RotateCcw, Undo2, BarChart3, Users, Inbox, CheckCircle2, TrendingUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -30,6 +30,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ClientSelectionDialog } from "@/components/ClientSelectionDialog";
+import { KPICard } from "@/components/ui/kpi-card";
 
 interface Application {
   id: string;
@@ -825,12 +826,9 @@ const Sollicitaties = () => {
   return (
     <div className="flex flex-col h-full space-y-6">
             {/* Compact Header - Apple Minimalism */}
-            <div className="flex items-center justify-between py-4 border-b">
+            <div className="flex items-center justify-between py-4">
               <div>
                 <h1 className="text-xl font-medium text-foreground">Sollicitaties</h1>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  {displayedTotal} totaal • {displayedNew} nieuw • {displayedApproved} goedgekeurd • {displayedAvgCompleteness}% compleet
-                </p>
               </div>
               <div className="flex items-center gap-2">
                 <AnalyticsSheet 
@@ -845,6 +843,38 @@ const Sollicitaties = () => {
                   Nieuw
                 </Button>
               </div>
+            </div>
+
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <KPICard
+                icon={Users}
+                title="Totaal"
+                value={displayedTotal}
+                subtitle="sollicitaties"
+                variant="count"
+              />
+              <KPICard
+                icon={Inbox}
+                title="Nieuw"
+                value={displayedNew}
+                subtitle="binnengekomen"
+                variant="success"
+              />
+              <KPICard
+                icon={CheckCircle2}
+                title="Goedgekeurd"
+                value={displayedApproved}
+                subtitle="klaar voor plaatsing"
+                variant="time"
+              />
+              <KPICard
+                icon={TrendingUp}
+                title="Compleetheid"
+                value={displayedAvgCompleteness}
+                subtitle="%"
+                variant="urgent"
+              />
             </div>
 
             {/* Search and Filter Bar */}
