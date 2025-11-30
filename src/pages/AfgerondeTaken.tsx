@@ -4,8 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Undo2, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { Undo2, Clock, CheckCircle2, AlertCircle, TrendingUp } from "lucide-react";
 import { format, parseISO } from "date-fns";
+import { KPICard } from "@/components/ui/kpi-card";
 import { nl } from "date-fns/locale";
 import {
   Table,
@@ -198,34 +199,32 @@ const AfgerondeTaken = () => {
       </div>
 
       {/* Stats Bar */}
-      <div className="grid grid-cols-4 gap-3">
-        {/* Totaal */}
-        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border cursor-pointer hover:bg-muted/50 transition-colors">
-          <span className="text-3xl font-bold">{tasks.length}</span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Totaal</span>
-        </div>
-        
-        {/* Tijdig */}
-        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border cursor-pointer hover:bg-muted/50 transition-colors">
-          <span className="text-3xl font-bold">{onTimeTasks.length}</span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Tijdig</span>
-        </div>
-        
-        {/* Te Laat */}
-        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border cursor-pointer hover:bg-muted/50 transition-colors">
-          <span className={`text-3xl font-bold ${lateTasks.length > 0 ? 'text-destructive' : ''}`}>
-            {lateTasks.length}
-          </span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Te Laat</span>
-        </div>
-        
-        {/* Success Rate */}
-        <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-card border cursor-pointer hover:bg-muted/50 transition-colors">
-          <span className="text-3xl font-bold">
-            {tasks.length > 0 ? Math.round(onTimeTasks.length / tasks.length * 100) : 0}%
-          </span>
-          <span className="text-xs text-muted-foreground uppercase tracking-wider">Success Rate</span>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KPICard
+          icon={CheckCircle2}
+          title="Totaal"
+          value={tasks.length}
+          variant="count"
+        />
+        <KPICard
+          icon={Clock}
+          title="Tijdig"
+          value={onTimeTasks.length}
+          variant="success"
+        />
+        <KPICard
+          icon={AlertCircle}
+          title="Te Laat"
+          value={lateTasks.length}
+          variant="urgent"
+        />
+        <KPICard
+          icon={TrendingUp}
+          title="Success Rate"
+          value={tasks.length > 0 ? Math.round(onTimeTasks.length / tasks.length * 100) : 0}
+          suffix="%"
+          variant="time"
+        />
       </div>
       
       <Card>

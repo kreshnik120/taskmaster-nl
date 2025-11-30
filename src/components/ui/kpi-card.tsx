@@ -10,6 +10,7 @@ interface KPICardProps {
   title: string;
   value: number;
   subtitle?: string;
+  suffix?: string;
   variant?: KPIVariant;
   onClick?: () => void;
   className?: string;
@@ -64,6 +65,7 @@ export function KPICard({
   title,
   value,
   subtitle,
+  suffix,
   variant = "count",
   onClick,
   className,
@@ -96,7 +98,7 @@ export function KPICard({
         
         <div className="space-y-1">
           <div className={cn("text-3xl font-bold", config.textColor)}>
-            {animatedValue}
+            {animatedValue}{suffix}
           </div>
           <div className="text-sm font-medium text-muted-foreground">
             {title}
