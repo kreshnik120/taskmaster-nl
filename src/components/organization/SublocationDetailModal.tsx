@@ -2,11 +2,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Building, MapPin, Phone, Mail, Euro, Users, Briefcase, ChevronRight } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getOrganizationName, getOrganizationBadgeColor } from "@/lib/organizationMapping";
+import { SublocationMatchingPanel } from "./SublocationMatchingPanel";
 
 interface Sublocation {
   id: string;
@@ -39,8 +41,12 @@ interface SublocationDetailModalProps {
   sublocation: Sublocation | null;
   organizationName: string;
   locationName: string;
+  organizationId?: string;
+  locationId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onNavigateToOrganization?: () => void;
+  onNavigateToLocation?: () => void;
 }
 
 // WTT schema voor tarieven berekening
@@ -88,8 +94,12 @@ export function SublocationDetailModal({
   sublocation,
   organizationName,
   locationName,
+  organizationId,
+  locationId,
   open,
   onOpenChange,
+  onNavigateToOrganization,
+  onNavigateToLocation,
 }: SublocationDetailModalProps) {
   const { data: rates, isLoading: ratesLoading } = useQuery({
     queryKey: ["hourly-rates", sublocation?.id],
@@ -126,13 +136,29 @@ export function SublocationDetailModal({
                 <DialogTitle className="text-2xl">{sublocation.naam}</DialogTitle>
                 {/* Breadcrumb navigation */}
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-2">
-                  <span className="hover:text-primary transition-colors cursor-default">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto p-0 hover:bg-transparent hover:text-foreground transition-colors font-normal"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNavigateToOrganization?.();
+                    }}
+                  >
                     {organizationName}
-                  </span>
+                  </Button>
                   <ChevronRight className="h-3 w-3" />
-                  <span className="hover:text-primary transition-colors cursor-default">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto p-0 hover:bg-transparent hover:text-foreground transition-colors font-normal"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNavigateToLocation?.();
+                    }}
+                  >
                     {locationName}
-                  </span>
+                  </Button>
                   <ChevronRight className="h-3 w-3" />
                   <span className="text-foreground font-medium">
                     {sublocation.naam}
@@ -147,12 +173,13 @@ export function SublocationDetailModal({
         </DialogHeader>
 
         <Tabs defaultValue="gegevens" className="mt-4">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="gegevens">Gegevens</TabsTrigger>
             <TabsTrigger value="tarieven">
               Tarieven {rates && rates.length > 0 && `(${rates.length})`}
             </TabsTrigger>
             <TabsTrigger value="werk">Werkbeschrijving</TabsTrigger>
+            <TabsTrigger value="plaatsingen">Plaatsingen</TabsTrigger>
           </TabsList>
 
           <TabsContent value="gegevens" className="space-y-4">
@@ -345,6 +372,17 @@ export function SublocationDetailModal({
                 )}
               </div>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="plaatsingen">
+            <SublocationMatchingPanel 
+              sublocationId={sublocation.id}
+              sublocationName={sublocation.naam}
+              gezochte_functies={sublocation.gezochte_functies || []}
+              sector={sublocation.sector || []}
+              doelgroep={sublocation.doelgroep || []}
+              plaats={sublocation.plaats || ''}
+            />
           </TabsContent>
         </Tabs>
       </DialogContent>

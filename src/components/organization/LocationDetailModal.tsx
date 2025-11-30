@@ -42,6 +42,7 @@ interface LocationDetailModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSublocationClick?: (sublocation: Sublocation) => void;
+  onNavigateToOrganization?: () => void;
 }
 
 export function LocationDetailModal({
@@ -50,6 +51,7 @@ export function LocationDetailModal({
   open,
   onOpenChange,
   onSublocationClick,
+  onNavigateToOrganization,
 }: LocationDetailModalProps) {
   if (!location) return null;
 
