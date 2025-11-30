@@ -77,6 +77,7 @@ const Professionals = () => {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedProfessionalIds, setSelectedProfessionalIds] = useState<Set<string>>(new Set());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [activeKpi, setActiveKpi] = useState<string | null>(null);
   const { toast } = useToast();
   const { canEdit } = useUserRole();
   const navigate = useNavigate();
@@ -352,12 +353,20 @@ const Professionals = () => {
 
   const handleKpiClick = (filterType: string) => {
     if (filterType === "all") {
+      setActiveKpi(null);
       resetFilters();
     } else if (filterType === "beschikbaar") {
-      setFilterStatus("actief");
+      setActiveKpi(activeKpi === "beschikbaar" ? null : "beschikbaar");
+      if (activeKpi === "beschikbaar") {
+        resetFilters();
+      } else {
+        setFilterStatus("actief");
+      }
     } else if (filterType === "nieuw") {
-      // Show only new professionals (created in last 7 days)
-      resetFilters();
+      setActiveKpi(activeKpi === "nieuw" ? null : "nieuw");
+      if (activeKpi === "nieuw") {
+        resetFilters();
+      }
     } else if (filterType === "gekoppeld") {
       navigate("/plaatsingen");
     }
@@ -498,6 +507,7 @@ const Professionals = () => {
           title="Totaal"
           value={totalCount}
           variant="count"
+          isActive={activeKpi === "all"}
           onClick={() => handleKpiClick("all")}
         />
         <KPICard
@@ -505,6 +515,7 @@ const Professionals = () => {
           title="Beschikbaar"
           value={availableCount}
           variant="success"
+          isActive={activeKpi === "beschikbaar"}
           onClick={() => handleKpiClick("beschikbaar")}
         />
             <KPICard
@@ -519,6 +530,7 @@ const Professionals = () => {
           title="Nieuw (7d)"
           value={newInLast7Days}
           variant="personal"
+          isActive={activeKpi === "nieuw"}
           onClick={() => handleKpiClick("nieuw")}
         />
       </div>

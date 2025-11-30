@@ -867,22 +867,24 @@ const Sollicitaties = () => {
                   setFilterRegio("");
                 }}
               />
-              <KPICard
-                icon={Inbox}
-                title="Nieuw"
-                value={displayedNew}
-                subtitle="binnengekomen"
-                variant="success"
-                onClick={() => setFilterStage("nieuw")}
-              />
-              <KPICard
-                icon={CheckCircle2}
-                title="Goedgekeurd"
-                value={displayedApproved}
-                subtitle="klaar voor plaatsing"
-                variant="time"
-                onClick={() => setFilterStage("goedgekeurd")}
-              />
+          <KPICard
+            icon={Inbox}
+            title="Nieuw"
+            value={displayedNew}
+            subtitle="binnengekomen"
+            variant="success"
+            isActive={filterStage === "nieuw"}
+            onClick={() => setFilterStage(filterStage === "nieuw" ? "all" : "nieuw")}
+          />
+            <KPICard
+              icon={CheckCircle2}
+              title="Goedgekeurd"
+              value={displayedApproved}
+              subtitle="klaar voor plaatsing"
+              variant="time"
+              isActive={filterStage === "goedgekeurd"}
+              onClick={() => setFilterStage(filterStage === "goedgekeurd" ? "all" : "goedgekeurd")}
+            />
               <KPICard
                 icon={TrendingUp}
                 title="Compleetheid"

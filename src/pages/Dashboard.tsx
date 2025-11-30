@@ -89,6 +89,7 @@ const Dashboard = () => {
   const lastUserActionRef = useRef<number>(0);
   const [activatingFunctions, setActivatingFunctions] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [activeKpi, setActiveKpi] = useState<string | null>(null);
 
   useEffect(() => {
     const getUser = async () => {
@@ -719,6 +720,8 @@ const Dashboard = () => {
           title="Open"
           value={animatedOpenTasks}
           variant="count"
+          isActive={activeKpi === "open"}
+          onClick={() => setActiveKpi(activeKpi === "open" ? null : "open")}
         />
         <KPICard
           icon={CheckCircle2}
@@ -740,7 +743,9 @@ const Dashboard = () => {
           title="Prioriteit"
           value={animatedHighPriority}
           variant="urgent"
+          isActive={activeKpi === "prioriteit"}
           onClick={() => {
+            setActiveKpi(activeKpi === "prioriteit" ? null : "prioriteit");
             const prioritySection = document.querySelector('.space-y-3');
             prioritySection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }}

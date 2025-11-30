@@ -61,6 +61,7 @@ export default function Kalender() {
   const [viewMode, setViewMode] = useState<"5" | "7">("5");
   const [newTaskDialogOpen, setNewTaskDialogOpen] = useState(false);
   const [newTaskDate, setNewTaskDate] = useState<Date | null>(null);
+  const [activeKpi, setActiveKpi] = useState<string | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -282,7 +283,9 @@ export default function Kalender() {
           title="Herinneringen"
           value={animatedReminders}
           variant="time"
+          isActive={activeKpi === "herinneringen"}
           onClick={() => {
+            setActiveKpi(activeKpi === "herinneringen" ? null : "herinneringen");
             const reminderSection = document.querySelector('[data-reminders]');
             reminderSection?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }}
@@ -292,7 +295,9 @@ export default function Kalender() {
           title="Urgent"
           value={animatedUrgentTasks}
           variant="urgent"
+          isActive={activeKpi === "urgent"}
           onClick={() => {
+            setActiveKpi(activeKpi === "urgent" ? null : "urgent");
             const urgentTasks = document.querySelector('[data-urgent-task]');
             urgentTasks?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }}
