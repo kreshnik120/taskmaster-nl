@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { AppSidebar } from "@/components/AppSidebar";
-import { SidebarProvider } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -176,12 +174,9 @@ export default function SollicitatiesArchief() {
 
   if (loading) {
     return (
-      <SidebarProvider>
-        <AppSidebar />
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-muted-foreground">Laden...</p>
-        </div>
-      </SidebarProvider>
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-muted-foreground">Laden...</p>
+      </div>
     );
   }
 
