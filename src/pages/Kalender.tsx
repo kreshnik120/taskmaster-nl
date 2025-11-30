@@ -224,21 +224,21 @@ export default function Kalender() {
 
       {/* Gradient KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <button onClick={goToToday} className="text-left rounded-lg border bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/20 dark:to-background p-4 hover:shadow-md transition-all">
+        <button onClick={goToToday} className="text-left rounded-xl border border-white/50 dark:border-white/10 bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 backdrop-blur-sm p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-200">
           <p className="text-sm text-muted-foreground mb-1">Vandaag</p>
-          <p className="text-2xl font-semibold">{todayTasks}</p>
+          <p className="text-2xl font-semibold text-blue-600 dark:text-blue-400">{todayTasks}</p>
         </button>
-        <button className="text-left rounded-lg border bg-gradient-to-br from-green-50 to-white dark:from-green-950/20 dark:to-background p-4 hover:shadow-md transition-all">
+        <button className="text-left rounded-xl border border-white/50 dark:border-white/10 bg-gradient-to-br from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60 backdrop-blur-sm p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-200">
           <p className="text-sm text-muted-foreground mb-1">Deze Week</p>
-          <p className="text-2xl font-semibold">{tasks.length}</p>
+          <p className="text-2xl font-semibold text-green-600 dark:text-green-400">{tasks.length}</p>
         </button>
-        <button className="text-left rounded-lg border bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/20 dark:to-background p-4 hover:shadow-md transition-all">
+        <button className="text-left rounded-xl border border-white/50 dark:border-white/10 bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60 backdrop-blur-sm p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-200">
           <p className="text-sm text-muted-foreground mb-1">Herinneringen</p>
-          <p className="text-2xl font-semibold">{reminders.length}</p>
+          <p className="text-2xl font-semibold text-amber-600 dark:text-amber-400">{reminders.length}</p>
         </button>
-        <button className={cn("text-left rounded-lg border bg-gradient-to-br from-orange-50 to-white dark:from-orange-950/20 dark:to-background p-4 hover:shadow-md transition-all", urgentCount > 0 && "border-destructive/50")}>
+        <button className={cn("text-left rounded-xl border border-white/50 dark:border-white/10 bg-gradient-to-br from-orange-50/80 to-white/60 dark:from-orange-950/30 dark:to-background/60 backdrop-blur-sm p-4 hover:shadow-md hover:scale-[1.02] transition-all duration-200", urgentCount > 0 && "border-destructive/50")}>
           <p className="text-sm text-muted-foreground mb-1">Urgent</p>
-          <p className={cn("text-2xl font-semibold", urgentCount > 0 && "text-destructive")}>{urgentCount}</p>
+          <p className={cn("text-2xl font-semibold", urgentCount > 0 ? "text-destructive" : "text-orange-600 dark:text-orange-400")}>{urgentCount}</p>
         </button>
       </div>
 

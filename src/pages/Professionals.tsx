@@ -485,58 +485,58 @@ const Professionals = () => {
         </div>
       </div>
 
-      {/* Stats Bar - Monochrome KPIs - Responsive */}
+      {/* Stats Bar - Moderne Gradient KPIs - Responsive */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card 
-          className="border-border hover:shadow-sm transition-all cursor-pointer"
+        <button 
+          className="p-4 rounded-xl border border-white/50 dark:border-white/10 
+                     bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 
+                     backdrop-blur-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-pointer text-left"
           onClick={() => handleKpiClick("all")}
         >
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-1">
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div className="text-2xl font-semibold">{totalCount}</div>
-            <div className="text-sm text-muted-foreground">Totaal</div>
-          </CardContent>
-        </Card>
+          <div className="flex items-center justify-between mb-1">
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <div className="text-2xl font-semibold text-blue-600 dark:text-blue-400">{totalCount}</div>
+          <div className="text-sm text-muted-foreground">Totaal</div>
+        </button>
 
-        <Card 
-          className="border-border hover:shadow-sm transition-all cursor-pointer"
+        <button 
+          className="p-4 rounded-xl border border-white/50 dark:border-white/10 
+                     bg-gradient-to-br from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60 
+                     backdrop-blur-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-pointer text-left"
           onClick={() => handleKpiClick("beschikbaar")}
         >
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-1">
-              <CheckCircle className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div className="text-2xl font-semibold">{availableCount}</div>
-            <div className="text-sm text-muted-foreground">Beschikbaar</div>
-          </CardContent>
-        </Card>
+          <div className="flex items-center justify-between mb-1">
+            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <div className="text-2xl font-semibold text-green-600 dark:text-green-400">{availableCount}</div>
+          <div className="text-sm text-muted-foreground">Beschikbaar</div>
+        </button>
 
-        <Card 
-          className="border-border hover:shadow-sm transition-all cursor-pointer"
+        <button 
+          className="p-4 rounded-xl border border-white/50 dark:border-white/10 
+                     bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60 
+                     backdrop-blur-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-pointer text-left"
         >
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-1">
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div className="text-2xl font-semibold">{withActivePlacementCount}</div>
-            <div className="text-sm text-muted-foreground">Gekoppeld</div>
-          </CardContent>
-        </Card>
+          <div className="flex items-center justify-between mb-1">
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <div className="text-2xl font-semibold text-amber-600 dark:text-amber-400">{withActivePlacementCount}</div>
+          <div className="text-sm text-muted-foreground">Gekoppeld</div>
+        </button>
 
-        <Card 
-          className="border-border hover:shadow-sm transition-all cursor-pointer"
+        <button 
+          className="p-4 rounded-xl border border-white/50 dark:border-white/10 
+                     bg-gradient-to-br from-purple-50/80 to-white/60 dark:from-purple-950/30 dark:to-background/60 
+                     backdrop-blur-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-pointer text-left"
           onClick={() => handleKpiClick("nieuw")}
         >
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-1">
-              <UserPlus className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div className="text-2xl font-semibold">{newInLast7Days}</div>
-            <div className="text-sm text-muted-foreground">Nieuw (7d)</div>
-          </CardContent>
-        </Card>
+          <div className="flex items-center justify-between mb-1">
+            <UserPlus className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <div className="text-2xl font-semibold text-purple-600 dark:text-purple-400">{newInLast7Days}</div>
+          <div className="text-sm text-muted-foreground">Nieuw (7d)</div>
+        </button>
       </div>
 
       {/* Filter Bar - Inline */}

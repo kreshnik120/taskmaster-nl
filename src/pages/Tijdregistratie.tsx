@@ -346,10 +346,12 @@ const Tijdregistratie = () => {
       {/* Stats Bar - Gradient KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Vandaag */}
-        <div className="flex flex-col justify-center p-6 rounded-lg 
-                       bg-gradient-to-br from-blue-50 to-white hover:shadow-md transition-all cursor-pointer">
+        <div className="flex flex-col justify-center p-6 rounded-xl 
+                       bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 
+                       backdrop-blur-sm border border-white/50 dark:border-white/10
+                       hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-pointer">
           <p className="text-sm text-muted-foreground">Vandaag</p>
-          <p className="text-2xl font-semibold mt-2">
+          <p className="text-2xl font-semibold mt-2 text-blue-600 dark:text-blue-400">
             {formatMinutes(
               timeEntries
                 .filter(e => {
@@ -363,10 +365,12 @@ const Tijdregistratie = () => {
         </div>
 
         {/* Deze Week */}
-        <div className="flex flex-col justify-center p-6 rounded-lg 
-                       bg-gradient-to-br from-green-50 to-white hover:shadow-md transition-all cursor-pointer">
+        <div className="flex flex-col justify-center p-6 rounded-xl 
+                       bg-gradient-to-br from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60 
+                       backdrop-blur-sm border border-white/50 dark:border-white/10
+                       hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-pointer">
           <p className="text-sm text-muted-foreground">Deze Week</p>
-          <p className="text-2xl font-semibold mt-2">
+          <p className="text-2xl font-semibold mt-2 text-green-600 dark:text-green-400">
             {formatMinutes(
               timeEntries
                 .filter(e => {
@@ -382,20 +386,22 @@ const Tijdregistratie = () => {
         </div>
 
         {/* Registraties */}
-        <div className="flex flex-col justify-center p-6 rounded-lg 
-                       bg-gradient-to-br from-amber-50 to-white hover:shadow-md transition-all cursor-pointer">
+        <div className="flex flex-col justify-center p-6 rounded-xl 
+                       bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60 
+                       backdrop-blur-sm border border-white/50 dark:border-white/10
+                       hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-pointer">
           <p className="text-sm text-muted-foreground">Registraties</p>
-          <p className="text-2xl font-semibold mt-2">{timeEntries.length}</p>
+          <p className="text-2xl font-semibold mt-2 text-amber-600 dark:text-amber-400">{timeEntries.length}</p>
         </div>
 
         {/* Actieve Timer */}
-        <div className={`flex flex-col justify-center p-6 rounded-lg transition-all cursor-pointer ${
+        <div className={`flex flex-col justify-center p-6 rounded-xl backdrop-blur-sm transition-all duration-200 cursor-pointer ${
           activeTimer 
-            ? 'bg-gradient-to-br from-purple-50 to-white border-2 border-primary shadow-md' 
-            : 'bg-gradient-to-br from-purple-50 to-white hover:shadow-md'
+            ? 'bg-gradient-to-br from-purple-50/80 to-white/60 dark:from-purple-950/30 dark:to-background/60 border-2 border-primary shadow-md' 
+            : 'bg-gradient-to-br from-purple-50/80 to-white/60 dark:from-purple-950/30 dark:to-background/60 border border-white/50 dark:border-white/10 hover:shadow-md hover:scale-[1.02]'
         }`}>
           <p className="text-sm text-muted-foreground">Actieve Timer</p>
-          <p className={`text-2xl font-semibold mt-2 ${activeTimer ? 'text-primary' : ''}`}>
+          <p className={`text-2xl font-semibold mt-2 ${activeTimer ? 'text-primary' : 'text-purple-600 dark:text-purple-400'}`}>
             {activeTimer ? getRunningTime().split(' ')[0] : '0u'}
           </p>
         </div>
