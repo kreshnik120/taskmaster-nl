@@ -53,12 +53,12 @@ interface Application {
 }
 
 const PIPELINE_STAGES = [
-  { id: "nieuw", name: "Nieuw", color: "", borderColor: "border-t-2 border-t-blue-400", countColor: "text-blue-600" },
-  { id: "screening", name: "Screening", color: "", borderColor: "border-t-2 border-t-amber-400", countColor: "text-amber-600" },
-  { id: "interview", name: "Interview", color: "", borderColor: "border-t-2 border-t-sky-400", countColor: "text-sky-600" },
-  { id: "goedgekeurd", name: "Goedgekeurd", color: "", borderColor: "border-t-2 border-t-emerald-400", countColor: "text-emerald-600" },
-  { id: "geplaatst", name: "Geplaatst", color: "", borderColor: "border-t-2 border-t-green-500", countColor: "text-green-700" },
-  { id: "afgewezen", name: "Afgewezen", color: "", borderColor: "border-t-2 border-t-red-400", countColor: "text-red-600" },
+  { id: "nieuw", name: "Nieuw", color: "", borderColor: "border-t-4 border-t-recruitment-nieuw", countColor: "text-recruitment-nieuw" },
+  { id: "screening", name: "Screening", color: "", borderColor: "border-t-4 border-t-recruitment-screening", countColor: "text-recruitment-screening" },
+  { id: "interview", name: "Interview", color: "", borderColor: "border-t-4 border-t-recruitment-interview", countColor: "text-recruitment-interview" },
+  { id: "goedgekeurd", name: "Goedgekeurd", color: "", borderColor: "border-t-4 border-t-recruitment-goedgekeurd", countColor: "text-recruitment-goedgekeurd" },
+  { id: "geplaatst", name: "Geplaatst", color: "", borderColor: "border-t-4 border-t-recruitment-geplaatst", countColor: "text-recruitment-geplaatst" },
+  { id: "afgewezen", name: "Afgewezen", color: "", borderColor: "border-t-4 border-t-recruitment-afgewezen", countColor: "text-recruitment-afgewezen" },
 ];
 
 const FUNCTIE_NIVEAUS = ["VIG", "HBO-V", "Verpleegkundige MBO", "Helpende", "Begeleider", "Persoonlijk begeleider", "GGZ-agoog"];

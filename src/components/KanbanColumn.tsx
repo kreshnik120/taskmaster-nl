@@ -58,21 +58,21 @@ interface KanbanColumnProps {
 }
 
 const statusBorderColors: Record<string, string> = {
-  BACKLOG: "border-t-2 border-t-slate-400",
-  READY: "border-t-2 border-t-blue-400",
-  DOING: "border-t-2 border-t-amber-400",
-  BLOCKED: "border-t-2 border-t-red-400",
-  REVIEW: "border-t-2 border-t-purple-400",
-  DONE: "border-t-2 border-t-emerald-400",
+  BACKLOG: "border-t-4 border-t-status-backlog",
+  READY: "border-t-4 border-t-status-ready",
+  DOING: "border-t-4 border-t-status-doing",
+  BLOCKED: "border-t-4 border-t-status-blocked",
+  REVIEW: "border-t-4 border-t-status-review",
+  DONE: "border-t-4 border-t-status-done",
 };
 
 const statusCountColors: Record<string, string> = {
-  BACKLOG: "bg-slate-50 text-slate-600 dark:bg-slate-500/10 dark:text-slate-400",
-  READY: "bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400",
-  DOING: "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400",
-  BLOCKED: "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400",
-  REVIEW: "bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400",
-  DONE: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400",
+  BACKLOG: "bg-status-backlog/10 text-status-backlog",
+  READY: "bg-status-ready/10 text-status-ready",
+  DOING: "bg-status-doing/10 text-status-doing",
+  BLOCKED: "bg-status-blocked/10 text-status-blocked",
+  REVIEW: "bg-status-review/10 text-status-review",
+  DONE: "bg-status-done/10 text-status-done",
 };
 
 export function KanbanColumn({ id, title, tasks, status, onUpdateName, onTaskClick }: KanbanColumnProps) {
