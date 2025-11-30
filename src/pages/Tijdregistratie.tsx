@@ -61,6 +61,28 @@ const Tijdregistratie = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const navigate = useNavigate();
 
+  // Calculate animated metrics (BEFORE early returns)
+  const todayMinutes = timeEntries
+    .filter(e => {
+      const entryDate = new Date(e.start);
+      const today = new Date();
+      return entryDate.toDateString() === today.toDateString();
+    })
+    .reduce((sum, e) => sum + (e.duration_min || 0), 0);
+
+  const weekMinutes = timeEntries
+    .filter(e => {
+      const entryDate = new Date(e.start);
+      const today = new Date();
+      const weekStart = new Date(today);
+      weekStart.setDate(today.getDate() - today.getDay() + 1);
+      return entryDate >= weekStart;
+    })
+    .reduce((sum, e) => sum + (e.duration_min || 0), 0);
+
+  const animatedTodayMinutes = useCountUp({ end: todayMinutes, duration: 600 });
+  const animatedWeekMinutes = useCountUp({ end: weekMinutes, duration: 600 });
+  const animatedEntries = useCountUp({ end: timeEntries.length, duration: 600 });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -143,6 +165,26 @@ const Tijdregistratie = () => {
       return () => clearInterval(interval);
     }
   }, [activeTimer, activeTimers]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !activeTimer) {
+        e.preventDefault();
+        const taskSelect = document.querySelector('[role="combobox"]') as HTMLElement;
+        taskSelect?.click();
+      }
+      if (e.key === 'Escape' && activeTimer) {
+        e.preventDefault();
+        stopTimer();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTimer]);
 
   const loadTasks = async () => {
     const { data } = await supabase
@@ -334,56 +376,6 @@ const Tijdregistratie = () => {
   if (!user) {
     return null;
   }
-
-  // Calculate animated metrics
-  const todayMinutes = timeEntries
-    .filter(e => {
-      const entryDate = new Date(e.start);
-      const today = new Date();
-      return entryDate.toDateString() === today.toDateString();
-    })
-    .reduce((sum, e) => sum + (e.duration_min || 0), 0);
-
-  const weekMinutes = timeEntries
-    .filter(e => {
-      const entryDate = new Date(e.start);
-      const today = new Date();
-      const weekStart = new Date(today);
-      weekStart.setDate(today.getDate() - today.getDay() + 1);
-      return entryDate >= weekStart;
-    })
-    .reduce((sum, e) => sum + (e.duration_min || 0), 0);
-
-  const animatedTodayMinutes = useCountUp({ end: todayMinutes, duration: 600 });
-  const animatedWeekMinutes = useCountUp({ end: weekMinutes, duration: 600 });
-  const animatedEntries = useCountUp({ end: timeEntries.length, duration: 600 });
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in input/textarea
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-
-      // n = Start nieuwe timer (als er geen actief is)
-      if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !activeTimer) {
-        e.preventDefault();
-        // Focus task select
-        const taskSelect = document.querySelector('[role="combobox"]') as HTMLElement;
-        taskSelect?.click();
-      }
-
-      // Esc = Stop timer if active
-      if (e.key === 'Escape' && activeTimer) {
-        e.preventDefault();
-        stopTimer();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTimer]);
 
   return (
     <div className="space-y-6">
