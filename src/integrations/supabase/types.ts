@@ -878,6 +878,217 @@ export type Database = {
         }
         Relationships: []
       }
+      client_locations: {
+        Row: {
+          adres: string | null
+          client_org_id: string
+          contactpersoon_email: string | null
+          contactpersoon_naam: string | null
+          created_at: string
+          crediteuren_tav: string | null
+          factuur_email: string | null
+          id: string
+          is_active: boolean
+          naam: string
+          plaats: string | null
+          postcode: string | null
+          provincie: string | null
+          telefoon: string | null
+          ubl_enabled: boolean
+          updated_at: string
+        }
+        Insert: {
+          adres?: string | null
+          client_org_id: string
+          contactpersoon_email?: string | null
+          contactpersoon_naam?: string | null
+          created_at?: string
+          crediteuren_tav?: string | null
+          factuur_email?: string | null
+          id?: string
+          is_active?: boolean
+          naam: string
+          plaats?: string | null
+          postcode?: string | null
+          provincie?: string | null
+          telefoon?: string | null
+          ubl_enabled?: boolean
+          updated_at?: string
+        }
+        Update: {
+          adres?: string | null
+          client_org_id?: string
+          contactpersoon_email?: string | null
+          contactpersoon_naam?: string | null
+          created_at?: string
+          crediteuren_tav?: string | null
+          factuur_email?: string | null
+          id?: string
+          is_active?: boolean
+          naam?: string
+          plaats?: string | null
+          postcode?: string | null
+          provincie?: string | null
+          telefoon?: string | null
+          ubl_enabled?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_locations_client_org_id_fkey"
+            columns: ["client_org_id"]
+            isOneToOne: false
+            referencedRelation: "client_organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_organizations: {
+        Row: {
+          btw_nummer: string | null
+          centrale_facturatie_email: string | null
+          created_at: string
+          id: string
+          kvk_nummer: string | null
+          logo_url: string | null
+          name: string
+          notes: string | null
+          org_id: string
+          updated_at: string
+          website: string | null
+        }
+        Insert: {
+          btw_nummer?: string | null
+          centrale_facturatie_email?: string | null
+          created_at?: string
+          id?: string
+          kvk_nummer?: string | null
+          logo_url?: string | null
+          name: string
+          notes?: string | null
+          org_id: string
+          updated_at?: string
+          website?: string | null
+        }
+        Update: {
+          btw_nummer?: string | null
+          centrale_facturatie_email?: string | null
+          created_at?: string
+          id?: string
+          kvk_nummer?: string | null
+          logo_url?: string | null
+          name?: string
+          notes?: string | null
+          org_id?: string
+          updated_at?: string
+          website?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_organizations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_sublocations: {
+        Row: {
+          adres: string | null
+          capaciteit_max: number | null
+          capaciteit_min: number | null
+          created_at: string
+          doelgroep: string[] | null
+          doelgroep_omschrijving: string | null
+          factuur_via_hoofdlocatie: boolean
+          gekoppelde_bv_org_id: string | null
+          gezochte_functies: string[] | null
+          id: string
+          is_active: boolean
+          kostenplaats: string | null
+          leeftijd_tot: number | null
+          leeftijd_van: number | null
+          location_id: string
+          naam: string
+          plaats: string | null
+          postcode: string | null
+          provincie: string | null
+          publieke_opmerking: string | null
+          relatienummer: string | null
+          sector: string[] | null
+          telefoon: string | null
+          updated_at: string
+        }
+        Insert: {
+          adres?: string | null
+          capaciteit_max?: number | null
+          capaciteit_min?: number | null
+          created_at?: string
+          doelgroep?: string[] | null
+          doelgroep_omschrijving?: string | null
+          factuur_via_hoofdlocatie?: boolean
+          gekoppelde_bv_org_id?: string | null
+          gezochte_functies?: string[] | null
+          id?: string
+          is_active?: boolean
+          kostenplaats?: string | null
+          leeftijd_tot?: number | null
+          leeftijd_van?: number | null
+          location_id: string
+          naam: string
+          plaats?: string | null
+          postcode?: string | null
+          provincie?: string | null
+          publieke_opmerking?: string | null
+          relatienummer?: string | null
+          sector?: string[] | null
+          telefoon?: string | null
+          updated_at?: string
+        }
+        Update: {
+          adres?: string | null
+          capaciteit_max?: number | null
+          capaciteit_min?: number | null
+          created_at?: string
+          doelgroep?: string[] | null
+          doelgroep_omschrijving?: string | null
+          factuur_via_hoofdlocatie?: boolean
+          gekoppelde_bv_org_id?: string | null
+          gezochte_functies?: string[] | null
+          id?: string
+          is_active?: boolean
+          kostenplaats?: string | null
+          leeftijd_tot?: number | null
+          leeftijd_van?: number | null
+          location_id?: string
+          naam?: string
+          plaats?: string | null
+          postcode?: string | null
+          provincie?: string | null
+          publieke_opmerking?: string | null
+          relatienummer?: string | null
+          sector?: string[] | null
+          telefoon?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_sublocations_gekoppelde_bv_org_id_fkey"
+            columns: ["gekoppelde_bv_org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_sublocations_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "client_locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           address: string | null
@@ -1344,6 +1555,47 @@ export type Database = {
           validation_failed_count?: number | null
         }
         Relationships: []
+      }
+      hourly_rates: {
+        Row: {
+          basis_tarief: number
+          btw_percentage: number
+          created_at: string
+          id: string
+          is_active: boolean
+          kostensoort: string
+          sublocation_id: string
+          uursoort_naam: string
+        }
+        Insert: {
+          basis_tarief: number
+          btw_percentage?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          kostensoort?: string
+          sublocation_id: string
+          uursoort_naam: string
+        }
+        Update: {
+          basis_tarief?: number
+          btw_percentage?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          kostensoort?: string
+          sublocation_id?: string
+          uursoort_naam?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hourly_rates_sublocation_id_fkey"
+            columns: ["sublocation_id"]
+            isOneToOne: false
+            referencedRelation: "client_sublocations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       interview_appointments: {
         Row: {
@@ -3321,6 +3573,56 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wtt_rules: {
+        Row: {
+          created_at: string
+          dagtype: string
+          flex_tarief: number | null
+          hourly_rate_id: string
+          id: string
+          marge_bedrag: number | null
+          marge_percentage: number | null
+          tarief_klant: number | null
+          tijd_tot: string
+          tijd_van: string
+          wtt_percentage: number
+        }
+        Insert: {
+          created_at?: string
+          dagtype: string
+          flex_tarief?: number | null
+          hourly_rate_id: string
+          id?: string
+          marge_bedrag?: number | null
+          marge_percentage?: number | null
+          tarief_klant?: number | null
+          tijd_tot: string
+          tijd_van: string
+          wtt_percentage: number
+        }
+        Update: {
+          created_at?: string
+          dagtype?: string
+          flex_tarief?: number | null
+          hourly_rate_id?: string
+          id?: string
+          marge_bedrag?: number | null
+          marge_percentage?: number | null
+          tarief_klant?: number | null
+          tijd_tot?: string
+          tijd_van?: string
+          wtt_percentage?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wtt_rules_hourly_rate_id_fkey"
+            columns: ["hourly_rate_id"]
+            isOneToOne: false
+            referencedRelation: "hourly_rates"
             referencedColumns: ["id"]
           },
         ]
