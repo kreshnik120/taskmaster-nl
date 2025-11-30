@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -25,7 +27,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { cn } from "@/lib/utils";
 
 interface Task {
   id: string;
@@ -648,80 +649,41 @@ export default function Lijst() {
 
         {/* Compact Stats Bar */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <button
-            onClick={() => {
-              setFilterStatus('active');
-              setFilterPriority('all');
-            }}
-            className={`flex flex-col items-center justify-center p-4 rounded-xl border border-white/50 dark:border-white/10 
-                       bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 
-                       backdrop-blur-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 ${
-              filterStatus === 'active' ? 'ring-2 ring-primary' : ''
-            }`}
-          >
-            <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-              {tasks.filter(t => !t.completed_at && !t.accepted_by).length}
-            </span>
-            <span className="text-xs text-muted-foreground">Open</span>
-          </button>
+          <Card className="border-t-4 border-t-blue-400/60 dark:border-t-blue-500/50 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 border-blue-200 dark:border-blue-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-blue-500/10 transition-all cursor-pointer" onClick={() => { setFilterStatus('active'); setFilterPriority('all'); }}>
+            <CardContent className="p-4">
+              <div className="text-3xl font-bold text-blue-900 dark:text-blue-100">
+                {tasks.filter(t => !t.completed_at && !t.accepted_by).length}
+              </div>
+              <div className="text-xs text-blue-700 dark:text-blue-300 uppercase tracking-wide">Open</div>
+            </CardContent>
+          </Card>
           
-          <button
-            onClick={() => {
-              setFilterStatus('completed');
-              setFilterPriority('all');
-            }}
-            className={`flex flex-col items-center justify-center p-4 rounded-xl border border-white/50 dark:border-white/10 
-                       bg-gradient-to-br from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60 
-                       backdrop-blur-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 ${
-              filterStatus === 'completed' ? 'ring-2 ring-primary' : ''
-            }`}
-          >
-            <span className="text-2xl font-bold text-green-600 dark:text-green-400">
-              {tasks.filter(t => t.completed_at && new Date(t.completed_at).toDateString() === new Date().toDateString()).length}
-            </span>
-            <span className="text-xs text-muted-foreground">Vandaag</span>
-          </button>
+          <Card className="border-t-4 border-t-green-400/60 dark:border-t-green-500/50 bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/30 dark:to-green-900/20 border-green-200 dark:border-green-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-green-500/10 transition-all cursor-pointer" onClick={() => { setFilterStatus('completed'); setFilterPriority('all'); }}>
+            <CardContent className="p-4">
+              <div className="text-3xl font-bold text-green-900 dark:text-green-100">
+                {tasks.filter(t => t.completed_at && new Date(t.completed_at).toDateString() === new Date().toDateString()).length}
+              </div>
+              <div className="text-xs text-green-700 dark:text-green-300 uppercase tracking-wide">Vandaag</div>
+            </CardContent>
+          </Card>
           
-          <button
-            onClick={() => {
-              setFilterPriority('HIGH');
-              setFilterStatus('all');
-            }}
-            className={`flex flex-col items-center justify-center p-4 rounded-xl border border-white/50 dark:border-white/10 
-                       bg-gradient-to-br from-orange-50/80 to-white/60 dark:from-orange-950/30 dark:to-background/60 
-                       backdrop-blur-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 ${
-              filterPriority === 'HIGH' ? 'ring-2 ring-primary' : ''
-            }`}
-            disabled={tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length === 0}
-          >
-            <span className={`text-2xl font-bold ${
-              tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length > 0 
-                ? 'text-destructive' 
-                : 'text-orange-600 dark:text-orange-400'
-            }`}>
-              {tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length}
-            </span>
-            <span className="text-xs text-muted-foreground">High Priority</span>
-          </button>
+          <Card className={cn("border-t-4 border-t-orange-400/60 dark:border-t-orange-500/50 bg-gradient-to-br from-orange-50 to-orange-100/50 dark:from-orange-950/30 dark:to-orange-900/20 border-orange-200 dark:border-orange-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-orange-500/10 transition-all", tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length === 0 && "opacity-50 cursor-not-allowed")} onClick={() => { if (tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length > 0) { setFilterPriority('HIGH'); setFilterStatus('all'); } }}>
+            <CardContent className="p-4">
+              <div className={cn("text-3xl font-bold", tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length > 0 ? "text-red-900 dark:text-red-100" : "text-orange-900 dark:text-orange-100")}>
+                {tasks.filter(t => t.priority === 'HIGH' || t.priority === 'CRITICAL').length}
+              </div>
+              <div className="text-xs text-orange-700 dark:text-orange-300 uppercase tracking-wide">High Priority</div>
+            </CardContent>
+          </Card>
           
-          <button
-            onClick={() => {
-              if (myTasksCount > 0) {
-                setFilterStatus('all');
-                setFilterPriority('all');
-                toast.info(`${myTasksCount} taken aan jou toegewezen`);
-              }
-            }}
-            className="flex flex-col items-center justify-center p-4 rounded-xl border border-white/50 dark:border-white/10 
-                       bg-gradient-to-br from-purple-50/80 to-white/60 dark:from-purple-950/30 dark:to-background/60 
-                       backdrop-blur-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200"
-            disabled={myTasksCount === 0}
-          >
-            <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-              {myTasksCount}
-            </span>
-            <span className="text-xs text-muted-foreground">Mijn Taken</span>
-          </button>
+          <Card className={cn("border-t-4 border-t-purple-400/60 dark:border-t-purple-500/50 bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 border-purple-200 dark:border-purple-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-purple-500/10 transition-all", myTasksCount === 0 && "opacity-50 cursor-not-allowed")} onClick={() => { if (myTasksCount > 0) { setFilterStatus('all'); setFilterPriority('all'); toast.info(`${myTasksCount} taken aan jou toegewezen`); } }}>
+            <CardContent className="p-4">
+              <div className="text-3xl font-bold text-purple-900 dark:text-purple-100">
+                {myTasksCount}
+              </div>
+              <div className="text-xs text-purple-700 dark:text-purple-300 uppercase tracking-wide">Mijn Taken</div>
+            </CardContent>
+          </Card>
         </div>
       </div>
 

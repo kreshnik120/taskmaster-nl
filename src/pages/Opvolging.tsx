@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -237,6 +238,12 @@ export default function Opvolging() {
     : 0;
   const criticalCount = focusTasks.filter(t => t.scoreLabel === "CRITICAL").length;
 
+  // Animated counters
+  const animatedOverdueTasks = useCountUp({ end: overdueTasks.length, duration: 600 });
+  const animatedUpcomingTasks = useCountUp({ end: upcomingTasks.length, duration: 600 });
+  const animatedWithAction = useCountUp({ end: tasksWithNextAction.length, duration: 600 });
+  const animatedAvgScore = useCountUp({ end: avgScore, duration: 600 });
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -274,67 +281,54 @@ export default function Opvolging() {
       {/* Gradient Stats Bar - Responsive */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* Achterstallig */}
-        <button
+        <Card
           onClick={() => setActiveFilter(activeFilter === "achterstallig" ? null : "achterstallig")}
-          className={`p-4 rounded-xl border border-white/50 dark:border-white/10 transition-all duration-200 text-left 
-                      bg-gradient-to-br from-red-50/80 to-white/60 dark:from-red-950/30 dark:to-background/60 
-                      backdrop-blur-sm hover:shadow-md hover:scale-[1.02] ${
-            activeFilter === "achterstallig"
-              ? "ring-2 ring-red-500 ring-offset-2"
-              : ""
-          }`}
+          className={cn("border-t-4 border-t-red-400/60 dark:border-t-red-500/50 bg-gradient-to-br from-red-50 to-red-100/50 dark:from-red-950/30 dark:to-red-900/20 border-red-200 dark:border-red-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-red-500/10 transition-all cursor-pointer",
+            activeFilter === "achterstallig" && "ring-2 ring-red-500"
+          )}
         >
-          <div className="space-y-1">
-            <p className="text-2xl font-semibold text-red-600 dark:text-red-400">{overdueTasks.length}</p>
-            <p className="text-xs text-muted-foreground">Achterstallig</p>
-          </div>
-        </button>
+          <CardContent className="p-4">
+            <div className="text-3xl font-bold text-red-900 dark:text-red-100">{animatedOverdueTasks}</div>
+            <div className="text-xs text-red-700 dark:text-red-300 uppercase tracking-wide">Achterstallig</div>
+          </CardContent>
+        </Card>
         
         {/* Deze Week */}
-        <button
+        <Card
           onClick={() => setActiveFilter(activeFilter === "deze-week" ? null : "deze-week")}
-          className={`p-4 rounded-xl border border-white/50 dark:border-white/10 transition-all duration-200 text-left 
-                      bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60 
-                      backdrop-blur-sm hover:shadow-md hover:scale-[1.02] ${
-            activeFilter === "deze-week"
-              ? "ring-2 ring-amber-500 ring-offset-2"
-              : ""
-          }`}
+          className={cn("border-t-4 border-t-amber-400/60 dark:border-t-amber-500/50 bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20 border-amber-200 dark:border-amber-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-amber-500/10 transition-all cursor-pointer",
+            activeFilter === "deze-week" && "ring-2 ring-amber-500"
+          )}
         >
-          <div className="space-y-1">
-            <p className="text-2xl font-semibold text-amber-600 dark:text-amber-400">{upcomingTasks.length}</p>
-            <p className="text-xs text-muted-foreground">Deze Week</p>
-          </div>
-        </button>
+          <CardContent className="p-4">
+            <div className="text-3xl font-bold text-amber-900 dark:text-amber-100">{animatedUpcomingTasks}</div>
+            <div className="text-xs text-amber-700 dark:text-amber-300 uppercase tracking-wide">Deze Week</div>
+          </CardContent>
+        </Card>
         
         {/* Met Actie */}
-        <button
+        <Card
           onClick={() => setActiveFilter(activeFilter === "met-actie" ? null : "met-actie")}
-          className={`p-4 rounded-xl border border-white/50 dark:border-white/10 transition-all duration-200 text-left 
-                      bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 
-                      backdrop-blur-sm hover:shadow-md hover:scale-[1.02] ${
-            activeFilter === "met-actie"
-              ? "ring-2 ring-blue-500 ring-offset-2"
-              : ""
-          }`}
+          className={cn("border-t-4 border-t-blue-400/60 dark:border-t-blue-500/50 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 border-blue-200 dark:border-blue-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-blue-500/10 transition-all cursor-pointer",
+            activeFilter === "met-actie" && "ring-2 ring-blue-500"
+          )}
         >
-          <div className="space-y-1">
-            <p className="text-2xl font-semibold text-blue-600 dark:text-blue-400">{tasksWithNextAction.length}</p>
-            <p className="text-xs text-muted-foreground">Met Actie</p>
-          </div>
-        </button>
+          <CardContent className="p-4">
+            <div className="text-3xl font-bold text-blue-900 dark:text-blue-100">{animatedWithAction}</div>
+            <div className="text-xs text-blue-700 dark:text-blue-300 uppercase tracking-wide">Met Actie</div>
+          </CardContent>
+        </Card>
         
-        {/* AI Score */}
-        <div className="p-4 rounded-xl border border-white/50 dark:border-white/10 
-                        bg-gradient-to-br from-purple-50/80 to-white/60 dark:from-purple-950/30 dark:to-background/60 
-                        backdrop-blur-sm">
-          <div className="space-y-1">
-            <p className="text-2xl font-semibold text-purple-600 dark:text-purple-400">{avgScore}</p>
-            <p className="text-xs text-muted-foreground">Gem. AI Score</p>
-          </div>
-        </div>
+        {/* Gem. AI Score */}
+        <Card className="border-t-4 border-t-purple-400/60 dark:border-t-purple-500/50 bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 border-purple-200 dark:border-purple-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-purple-500/10 transition-all">
+          <CardContent className="p-4">
+            <div className="text-3xl font-bold text-purple-900 dark:text-purple-100">{animatedAvgScore}</div>
+            <div className="text-xs text-purple-700 dark:text-purple-300 uppercase tracking-wide">Gem. AI Score</div>
+          </CardContent>
+        </Card>
       </div>
 
+      {/* Focus Taken - Top 10 Met Filter */}
       <div className="space-y-6">
         <Card>
           <CardHeader>

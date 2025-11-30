@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -345,67 +346,62 @@ const Tijdregistratie = () => {
       </div>
 
       {/* Stats Bar - Gradient KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* Vandaag */}
-        <div className="flex flex-col justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10
-                       hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-pointer">
-          <p className="text-sm text-muted-foreground">Vandaag</p>
-          <p className="text-2xl font-semibold mt-2 text-blue-600 dark:text-blue-400">
-            {formatMinutes(
-              timeEntries
-                .filter(e => {
-                  const entryDate = new Date(e.start);
-                  const today = new Date();
-                  return entryDate.toDateString() === today.toDateString();
-                })
-                .reduce((sum, e) => sum + (e.duration_min || 0), 0)
-            )}
-          </p>
-        </div>
+        <Card className="border-t-4 border-t-blue-400/60 dark:border-t-blue-500/50 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 border-blue-200 dark:border-blue-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-blue-500/10 transition-all">
+          <CardContent className="p-4">
+            <div className="text-3xl font-bold text-blue-900 dark:text-blue-100">
+              {formatMinutes(
+                timeEntries
+                  .filter(e => {
+                    const entryDate = new Date(e.start);
+                    const today = new Date();
+                    return entryDate.toDateString() === today.toDateString();
+                  })
+                  .reduce((sum, e) => sum + (e.duration_min || 0), 0)
+              )}
+            </div>
+            <div className="text-xs text-blue-700 dark:text-blue-300 uppercase tracking-wide">Vandaag</div>
+          </CardContent>
+        </Card>
 
         {/* Deze Week */}
-        <div className="flex flex-col justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10
-                       hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-pointer">
-          <p className="text-sm text-muted-foreground">Deze Week</p>
-          <p className="text-2xl font-semibold mt-2 text-green-600 dark:text-green-400">
-            {formatMinutes(
-              timeEntries
-                .filter(e => {
-                  const entryDate = new Date(e.start);
-                  const today = new Date();
-                  const weekStart = new Date(today);
-                  weekStart.setDate(today.getDate() - today.getDay() + 1);
-                  return entryDate >= weekStart;
-                })
-                .reduce((sum, e) => sum + (e.duration_min || 0), 0)
-            )}
-          </p>
-        </div>
+        <Card className="border-t-4 border-t-green-400/60 dark:border-t-green-500/50 bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/30 dark:to-green-900/20 border-green-200 dark:border-green-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-green-500/10 transition-all">
+          <CardContent className="p-4">
+            <div className="text-3xl font-bold text-green-900 dark:text-green-100">
+              {formatMinutes(
+                timeEntries
+                  .filter(e => {
+                    const entryDate = new Date(e.start);
+                    const today = new Date();
+                    const weekStart = new Date(today);
+                    weekStart.setDate(today.getDate() - today.getDay() + 1);
+                    return entryDate >= weekStart;
+                  })
+                  .reduce((sum, e) => sum + (e.duration_min || 0), 0)
+              )}
+            </div>
+            <div className="text-xs text-green-700 dark:text-green-300 uppercase tracking-wide">Deze Week</div>
+          </CardContent>
+        </Card>
 
         {/* Registraties */}
-        <div className="flex flex-col justify-center p-6 rounded-xl 
-                       bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60 
-                       backdrop-blur-sm border border-white/50 dark:border-white/10
-                       hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-pointer">
-          <p className="text-sm text-muted-foreground">Registraties</p>
-          <p className="text-2xl font-semibold mt-2 text-amber-600 dark:text-amber-400">{timeEntries.length}</p>
-        </div>
+        <Card className="border-t-4 border-t-amber-400/60 dark:border-t-amber-500/50 bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20 border-amber-200 dark:border-amber-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-amber-500/10 transition-all">
+          <CardContent className="p-4">
+            <div className="text-3xl font-bold text-amber-900 dark:text-amber-100">{timeEntries.length}</div>
+            <div className="text-xs text-amber-700 dark:text-amber-300 uppercase tracking-wide">Registraties</div>
+          </CardContent>
+        </Card>
 
         {/* Actieve Timer */}
-        <div className={`flex flex-col justify-center p-6 rounded-xl backdrop-blur-sm transition-all duration-200 cursor-pointer ${
-          activeTimer 
-            ? 'bg-gradient-to-br from-purple-50/80 to-white/60 dark:from-purple-950/30 dark:to-background/60 border-2 border-primary shadow-md' 
-            : 'bg-gradient-to-br from-purple-50/80 to-white/60 dark:from-purple-950/30 dark:to-background/60 border border-white/50 dark:border-white/10 hover:shadow-md hover:scale-[1.02]'
-        }`}>
-          <p className="text-sm text-muted-foreground">Actieve Timer</p>
-          <p className={`text-2xl font-semibold mt-2 ${activeTimer ? 'text-primary' : 'text-purple-600 dark:text-purple-400'}`}>
-            {activeTimer ? getRunningTime().split(' ')[0] : '0u'}
-          </p>
-        </div>
+        <Card className={cn("border-t-4 border-t-purple-400/60 dark:border-t-purple-500/50 bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 border-purple-200 dark:border-purple-800 hover:scale-[1.02] hover:shadow-lg hover:shadow-purple-500/10 transition-all", activeTimer && "ring-2 ring-purple-500")}>
+          <CardContent className="p-4">
+            <div className="text-3xl font-bold text-purple-900 dark:text-purple-100">
+              {activeTimer ? getRunningTime().split(' ')[0] : '0u'}
+            </div>
+            <div className="text-xs text-purple-700 dark:text-purple-300 uppercase tracking-wide">Actieve Timer</div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Timer Card - Clean */}
