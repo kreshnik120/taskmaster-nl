@@ -1,10 +1,20 @@
-import { MapPin, ChevronDown, ChevronRight, Building, Euro, Phone, Copy, User } from "lucide-react";
+import { MapPin, ChevronDown, ChevronRight, Building, Euro, Phone, Copy, User, Navigation } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { SublocationCard } from "./SublocationCard";
 import { useToast } from "@/hooks/use-toast";
+
+// Semantic color mappings for sectors
+const SECTOR_COLORS: Record<string, string> = {
+  "VVT": "border-blue-500 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950",
+  "GGZ": "border-purple-500 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950",
+  "GHZ": "border-green-500 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950",
+  "Jeugdzorg": "border-orange-500 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950",
+  "Ziekenhuis": "border-red-500 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950",
+  "Thuiszorg": "border-teal-500 text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950",
+};
 
 interface Sublocation {
   id: string;
@@ -29,6 +39,7 @@ interface Location {
   provincie: string | null;
   telefoon: string | null;
   contactpersoon_naam: string | null;
+  adres: string | null;
   sublocations?: Sublocation[];
 }
 
@@ -82,6 +93,18 @@ export function LocationCard({
     }
   };
 
+  const handleQuickRoute = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (location.plaats || location.adres) {
+      const address = `${location.adres || ''}, ${location.plaats || ''}`.trim();
+      window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, '_blank');
+      toast({
+        title: "Route wordt geopend",
+        description: `Navigeren naar ${location.naam}`,
+      });
+    }
+  };
+
   const sublocationsCount = location.sublocations?.length || 0;
 
   // Aggregeer sector badges van sublocaties
@@ -91,8 +114,19 @@ export function LocationCard({
     )
   ).slice(0, 3);
 
-  // Totaal aantal tarieven
+  // Totaal aantal tarieven en bereik
   const totalRates = location.sublocations?.reduce((sum, sub) => sum + (sub.hourly_rates_count || 0), 0) || 0;
+  
+  // Bereken min/max tarieven
+  const allTarieven = location.sublocations?.flatMap(sub => {
+    const tarieven = [];
+    if (sub.tarieven_min) tarieven.push(sub.tarieven_min);
+    if (sub.tarieven_max) tarieven.push(sub.tarieven_max);
+    return tarieven;
+  }).filter(t => t != null) || [];
+  
+  const tariefMin = allTarieven.length > 0 ? Math.min(...allTarieven) : null;
+  const tariefMax = allTarieven.length > 0 ? Math.max(...allTarieven) : null;
 
   return (
     <div className="space-y-2">
@@ -117,15 +151,18 @@ export function LocationCard({
                     <span>{location.provincie}</span>
                   </>
                 )}
-                {location.contactpersoon_naam && (
-                  <>
-                    <span>·</span>
-                    <User className="h-3 w-3 inline" />
-                    <span className="truncate">{location.contactpersoon_naam}</span>
-                  </>
-                )}
               </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+              
+              {/* Contact persoon preview */}
+              {location.contactpersoon_naam && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+                  <User className="h-3 w-3" />
+                  <span className="truncate">{location.contactpersoon_naam}</span>
+                </div>
+              )}
+              
+              {/* Stats lijn */}
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
                 <span>
                   {sublocationsCount} {sublocationsCount === 1 ? "sublocatie" : "sublocaties"}
                 </span>
@@ -133,22 +170,32 @@ export function LocationCard({
                   <>
                     <span>·</span>
                     {allSectors.map((sector) => (
-                      <Badge key={sector} variant="outline" className="text-xs">
+                      <Badge 
+                        key={sector} 
+                        variant="outline" 
+                        className={`text-xs ${SECTOR_COLORS[sector] || ''}`}
+                      >
                         {sector}
                       </Badge>
                     ))}
                   </>
                 )}
-                {totalRates > 0 && (
-                  <>
-                    <span>·</span>
-                    <Badge className="text-xs bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20">
-                      <Euro className="h-3 w-3 mr-1" />
-                      {totalRates} {totalRates === 1 ? "tarief" : "tarieven"}
-                    </Badge>
-                  </>
-                )}
               </div>
+              
+              {/* Tarief range preview */}
+              {totalRates > 0 && (
+                <div className="flex items-center gap-2 mt-2">
+                  <Badge className="text-xs bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20">
+                    <Euro className="h-3 w-3 mr-1" />
+                    {totalRates} {totalRates === 1 ? "tarief" : "tarieven"}
+                  </Badge>
+                  {tariefMin && tariefMax && (
+                    <span className="text-xs text-muted-foreground">
+                      €{tariefMin} - €{tariefMax}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
@@ -173,6 +220,17 @@ export function LocationCard({
                   <Phone className="h-3.5 w-3.5" />
                 </Button>
               </>
+            )}
+            {(location.plaats || location.adres) && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 p-0"
+                onClick={handleQuickRoute}
+                title="Route"
+              >
+                <Navigation className="h-3.5 w-3.5" />
+              </Button>
             )}
             <button
               onClick={toggleExpanded}

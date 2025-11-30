@@ -20,6 +20,7 @@ interface Location {
   provincie: string | null;
   telefoon: string | null;
   contactpersoon_naam: string | null;
+  adres: string | null;
   sublocations?: Sublocation[];
 }
 
