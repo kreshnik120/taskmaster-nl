@@ -151,6 +151,7 @@ export default function Plaatsingen() {
           subtitle="plaatsingen"
           variant="count"
           onClick={() => setStatusFilter("all")}
+          isActive={statusFilter === "all"}
         />
         <KPICard
           icon={Activity}
@@ -158,7 +159,8 @@ export default function Plaatsingen() {
           value={stats.active}
           subtitle="koppelingen"
           variant="success"
-          onClick={() => setStatusFilter("active")}
+          onClick={() => setStatusFilter(statusFilter === "active" ? "all" : "active")}
+          isActive={statusFilter === "active"}
         />
         <KPICard
           icon={Lightbulb}
@@ -166,7 +168,8 @@ export default function Plaatsingen() {
           value={stats.suggested}
           subtitle="suggesties"
           variant="time"
-          onClick={() => setStatusFilter("suggested")}
+          onClick={() => setStatusFilter(statusFilter === "suggested" ? "all" : "suggested")}
+          isActive={statusFilter === "suggested"}
         />
         <KPICard
           icon={CheckCircle2}
@@ -174,7 +177,8 @@ export default function Plaatsingen() {
           value={stats.completed}
           subtitle="plaatsingen"
           variant="urgent"
-          onClick={() => setStatusFilter("completed")}
+          onClick={() => setStatusFilter(statusFilter === "completed" ? "all" : "completed")}
+          isActive={statusFilter === "completed"}
         />
       </div>
 

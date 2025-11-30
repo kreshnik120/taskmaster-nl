@@ -60,6 +60,7 @@ const Kanban = () => {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [lastScrolledKpi, setLastScrolledKpi] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { taskId } = useParams();
@@ -414,10 +415,13 @@ const Kanban = () => {
           title="Actieve taken" 
           value={activeTasks} 
           variant="count"
+          isActive={lastScrolledKpi === "active"}
           onClick={() => {
             const firstColumn = columns[0];
             if (firstColumn) {
               document.getElementById(`column-${firstColumn.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              setLastScrolledKpi("active");
+              setTimeout(() => setLastScrolledKpi(null), 2000);
             }
           }}
         />
@@ -426,10 +430,13 @@ const Kanban = () => {
           title="Geblokkeerd" 
           value={blockedCount} 
           variant="urgent"
+          isActive={lastScrolledKpi === "blocked"}
           onClick={() => {
             const blockedColumn = columns.find(c => c.status === 'BLOCKED');
             if (blockedColumn) {
               document.getElementById(`column-${blockedColumn.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              setLastScrolledKpi("blocked");
+              setTimeout(() => setLastScrolledKpi(null), 2000);
             }
           }}
         />
@@ -438,10 +445,13 @@ const Kanban = () => {
           title="In Review" 
           value={reviewCount} 
           variant="time"
+          isActive={lastScrolledKpi === "review"}
           onClick={() => {
             const reviewColumn = columns.find(c => c.status === 'REVIEW');
             if (reviewColumn) {
               document.getElementById(`column-${reviewColumn.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              setLastScrolledKpi("review");
+              setTimeout(() => setLastScrolledKpi(null), 2000);
             }
           }}
         />
@@ -450,10 +460,13 @@ const Kanban = () => {
           title="Vandaag afgerond" 
           value={completedToday} 
           variant="success"
+          isActive={lastScrolledKpi === "done"}
           onClick={() => {
             const doneColumn = columns.find(c => c.status === 'DONE');
             if (doneColumn) {
               document.getElementById(`column-${doneColumn.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              setLastScrolledKpi("done");
+              setTimeout(() => setLastScrolledKpi(null), 2000);
             }
           }}
         />

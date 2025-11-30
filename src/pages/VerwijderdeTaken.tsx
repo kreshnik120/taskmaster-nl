@@ -66,6 +66,7 @@ const VerwijderdeTaken = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
+  const [filterPriority, setFilterPriority] = useState<string>("all");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -171,12 +172,16 @@ const VerwijderdeTaken = () => {
           title="Totaal"
           value={tasks.length}
           variant="count"
+          onClick={() => setFilterPriority("all")}
+          isActive={filterPriority === "all"}
         />
         <KPICard
           icon={AlertTriangle}
           title="Kritiek"
           value={tasks.filter(t => t.priority === 'CRITICAL').length}
           variant="urgent"
+          onClick={() => setFilterPriority(filterPriority === "CRITICAL" ? "all" : "CRITICAL")}
+          isActive={filterPriority === "CRITICAL"}
         />
         <KPICard
           icon={Clock}
@@ -188,12 +193,15 @@ const VerwijderdeTaken = () => {
             return deletedDate >= threeDaysAgo;
           }).length}
           variant="time"
+          onClick={() => setFilterPriority(filterPriority === "RECENT" ? "all" : "RECENT")}
+          isActive={filterPriority === "RECENT"}
         />
         <KPICard
           icon={Undo2}
           title="Herstelbaar"
           value={tasks.length}
           variant="success"
+          onClick={() => toast.info("Alle taken kunnen worden hersteld")}
         />
       </div>
 
@@ -223,7 +231,17 @@ const VerwijderdeTaken = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {tasks.map((task) => (
+                    {tasks.filter(task => {
+                      if (filterPriority === "all") return true;
+                      if (filterPriority === "CRITICAL") return task.priority === "CRITICAL";
+                      if (filterPriority === "RECENT") {
+                        const deletedDate = new Date(task.deleted_at);
+                        const threeDaysAgo = new Date();
+                        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+                        return deletedDate >= threeDaysAgo;
+                      }
+                      return true;
+                    }).map((task) => (
                       <TableRow key={task.id}>
                         <TableCell className="font-medium">{task.title}</TableCell>
                         <TableCell>{task.organizations?.name || "-"}</TableCell>
