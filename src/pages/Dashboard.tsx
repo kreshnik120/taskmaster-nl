@@ -641,80 +641,76 @@ const Dashboard = () => {
     }
   };
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in input/textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // n = Nieuwe taak
+      if (e.key === 'n' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        setDialogOpen(true);
+      }
+
+      // Esc = Close dialogs
+      if (e.key === 'Escape') {
+        setDialogOpen(false);
+        setDetailModalOpen(false);
+        setDeleteDialogOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <div className="space-y-6">
-      {/* Hero Section - Apple Style with Entrance Animation */}
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="mb-8"
-      >
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h1 className="text-5xl font-bold mb-1">
-              {getGreeting()}, {user?.user_metadata?.name || 'daar'}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {format(new Date(), "EEEE d MMMM", { locale: nl })}
-            </p>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <Button 
-              onClick={() => setDialogOpen(true)}
-              size="lg"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Nieuwe taak
-            </Button>
-            {activatingFunctions ? (
-              <Button 
-                variant="outline" 
-                size="icon"
-                disabled
-                className="h-10 w-10"
-              >
-                <Clock className="h-4 w-4 animate-spin" />
-              </Button>
+      {/* Hero Section - Minimal */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">
+            {tasks.length > 0 ? (
+              <>
+                {tasks.length} actieve {tasks.length === 1 ? 'taak' : 'taken'}
+                {priorityBreakdown.critical + priorityBreakdown.high > 0 && (
+                  <span className="text-muted-foreground/80"> • {priorityBreakdown.critical + priorityBreakdown.high} prioriteit</span>
+                )}
+              </>
             ) : (
-              <Button 
-                variant="outline" 
-                size="icon"
-                onClick={activateAllFunctions}
-                title="Activeer systeem functies"
-                className="h-10 w-10"
-              >
-                <Zap className="h-4 w-4" />
-              </Button>
+              'Geen openstaande taken'
             )}
-          </div>
+          </p>
         </div>
         
-        <p className="text-sm text-muted-foreground">
-          {tasks.length > 0 ? (
-            <>
-              Je hebt <strong className="text-foreground">{tasks.length} actieve taken</strong>
-              {priorityBreakdown.critical > 0 && (
-                <span className="text-priority-critical"> • {priorityBreakdown.critical} kritiek</span>
-              )}
-              {priorityBreakdown.high > 0 && (
-                <span className="text-priority-high"> • {priorityBreakdown.high} hoog</span>
-              )}
-            </>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setDialogOpen(true)} size="default">
+            <Plus className="h-4 w-4 mr-2" />
+            Nieuwe taak
+          </Button>
+          {activatingFunctions ? (
+            <Button variant="outline" size="icon" disabled>
+              <Clock className="h-4 w-4 animate-spin" />
+            </Button>
           ) : (
-            <span>Geen openstaande taken</span>
+            <Button 
+              variant="outline" 
+              size="icon"
+              onClick={activateAllFunctions}
+              title="Activeer systeem functies"
+            >
+              <Zap className="h-4 w-4" />
+            </Button>
           )}
-        </p>
-      </motion.div>
+        </div>
+      </div>
 
       {/* Stats Bar - Gradient KPI Cards */}
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.1 }}
-        className="grid grid-cols-2 md:grid-cols-4 gap-4"
-      >
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* Open Tasks */}
         <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
                        bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60 
@@ -754,21 +750,19 @@ const Dashboard = () => {
           </span>
         </div>
 
-        {/* Priority */}
+        {/* High Priority */}
         <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
                        bg-gradient-to-br from-orange-50/80 to-white/60 dark:from-orange-950/30 dark:to-background/60 
                        backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-orange-400/60 dark:border-t-orange-500/50
                        hover:shadow-lg hover:shadow-orange-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
-          <span className={`text-3xl font-bold ${
-            priorityBreakdown.critical + priorityBreakdown.high > 0 ? 'text-destructive' : 'text-orange-600 dark:text-orange-400'
-          }`}>
+          <span className="text-3xl font-bold text-orange-600 dark:text-orange-400">
             {animatedHighPriority}
           </span>
           <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
             Prioriteit
           </span>
         </div>
-      </motion.div>
+      </div>
 
       {/* Active Process Steps Widget - Subtiel gepositioneerd */}
       <ActiveProcessWidget />

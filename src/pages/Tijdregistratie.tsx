@@ -335,6 +335,56 @@ const Tijdregistratie = () => {
     return null;
   }
 
+  // Calculate animated metrics
+  const todayMinutes = timeEntries
+    .filter(e => {
+      const entryDate = new Date(e.start);
+      const today = new Date();
+      return entryDate.toDateString() === today.toDateString();
+    })
+    .reduce((sum, e) => sum + (e.duration_min || 0), 0);
+
+  const weekMinutes = timeEntries
+    .filter(e => {
+      const entryDate = new Date(e.start);
+      const today = new Date();
+      const weekStart = new Date(today);
+      weekStart.setDate(today.getDate() - today.getDay() + 1);
+      return entryDate >= weekStart;
+    })
+    .reduce((sum, e) => sum + (e.duration_min || 0), 0);
+
+  const animatedTodayMinutes = useCountUp({ end: todayMinutes, duration: 600 });
+  const animatedWeekMinutes = useCountUp({ end: weekMinutes, duration: 600 });
+  const animatedEntries = useCountUp({ end: timeEntries.length, duration: 600 });
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in input/textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // n = Start nieuwe timer (als er geen actief is)
+      if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !activeTimer) {
+        e.preventDefault();
+        // Focus task select
+        const taskSelect = document.querySelector('[role="combobox"]') as HTMLElement;
+        taskSelect?.click();
+      }
+
+      // Esc = Stop timer if active
+      if (e.key === 'Escape' && activeTimer) {
+        e.preventDefault();
+        stopTimer();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTimer]);
+
   return (
     <div className="space-y-6">
       {/* Hero Section - Minimal */}
@@ -345,7 +395,7 @@ const Tijdregistratie = () => {
         </p>
       </div>
 
-      {/* Stats Bar - Gradient KPI Cards */}
+      {/* Stats Bar - Gradient KPI Cards with Animations */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* Vandaag */}
         <div className="group flex flex-col items-center justify-center p-6 rounded-xl 
@@ -353,15 +403,7 @@ const Tijdregistratie = () => {
                        backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-blue-400/60 dark:border-t-blue-500/50
                        hover:shadow-lg hover:shadow-blue-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
           <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-            {formatMinutes(
-              timeEntries
-                .filter(e => {
-                  const entryDate = new Date(e.start);
-                  const today = new Date();
-                  return entryDate.toDateString() === today.toDateString();
-                })
-                .reduce((sum, e) => sum + (e.duration_min || 0), 0)
-            )}
+            {formatMinutes(animatedTodayMinutes)}
           </span>
           <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Vandaag</span>
         </div>
@@ -372,17 +414,7 @@ const Tijdregistratie = () => {
                        backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-green-400/60 dark:border-t-green-500/50
                        hover:shadow-lg hover:shadow-green-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
           <span className="text-3xl font-bold text-green-600 dark:text-green-400">
-            {formatMinutes(
-              timeEntries
-                .filter(e => {
-                  const entryDate = new Date(e.start);
-                  const today = new Date();
-                  const weekStart = new Date(today);
-                  weekStart.setDate(today.getDate() - today.getDay() + 1);
-                  return entryDate >= weekStart;
-                })
-                .reduce((sum, e) => sum + (e.duration_min || 0), 0)
-            )}
+            {formatMinutes(animatedWeekMinutes)}
           </span>
           <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Deze Week</span>
         </div>
@@ -392,7 +424,7 @@ const Tijdregistratie = () => {
                        bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60 
                        backdrop-blur-sm border border-white/50 dark:border-white/10 border-t-4 border-t-amber-400/60 dark:border-t-amber-500/50
                        hover:shadow-lg hover:shadow-amber-500/10 hover:scale-[1.02] transition-all duration-200 cursor-default">
-          <span className="text-3xl font-bold text-amber-600 dark:text-amber-400">{timeEntries.length}</span>
+          <span className="text-3xl font-bold text-amber-600 dark:text-amber-400">{animatedEntries}</span>
           <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Registraties</span>
         </div>
 
