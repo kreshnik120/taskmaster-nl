@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.6.2-query-clients-name-fix";
+const SYSTEM_PROMPT_VERSION = "v2.6.3-output-limiting";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -3722,7 +3722,12 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                         case "query_clients":
                           console.log("🔍 Querying clients...", args);
                           
-                          // Build query with joins
+                          // Build count query (without LIMIT) for total
+                          let countQuery = supabaseClient
+                            .from('clients')
+                            .select('*', { count: 'exact', head: true });
+                          
+                          // Build main query with joins
                           let clientQuery = supabaseClient
                             .from('clients')
                             .select(`
@@ -3730,51 +3735,62 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                               client_org:client_organizations(id, name, kvk_nummer, btw_nummer, centrale_facturatie_email, website)
                             `);
                           
-                          // Apply filters
+                          // Apply same filters to both queries
                           if (args.filter) {
                             if (args.filter.bureau) {
-                              // Join met organizations tabel om op bureau naam te filteren
                               const bureauOrgId = args.filter.bureau === "ABCzorg" 
                                 ? "550e8400-e29b-41d4-a716-446655440000"  // ABCzorg UUID
-                                : "650e8400-e29b-41d4-a716-446655440001";  // CitoZorg UUID (FIXED)
+                                : "650e8400-e29b-41d4-a716-446655440001";  // CitoZorg UUID
                               
                               clientQuery = clientQuery.eq('org_id', bureauOrgId);
+                              countQuery = countQuery.eq('org_id', bureauOrgId);
                             }
                             
                             if (args.filter.sector) {
                               clientQuery = clientQuery.contains('sector', [args.filter.sector]);
+                              countQuery = countQuery.contains('sector', [args.filter.sector]);
                             }
                             
                             if (args.filter.regio) {
                               clientQuery = clientQuery.contains('regio', [args.filter.regio]);
+                              countQuery = countQuery.contains('regio', [args.filter.regio]);
                             }
                             
                             if (args.filter.name) {
-                              clientQuery = clientQuery.or(`name.ilike.%${args.filter.name}%,company.ilike.%${args.filter.name}%`);
+                              const nameFilter = `name.ilike.%${args.filter.name}%,company.ilike.%${args.filter.name}%`;
+                              clientQuery = clientQuery.or(nameFilter);
+                              countQuery = countQuery.or(nameFilter);
                             }
                             
                             if (args.filter.is_active !== undefined) {
                               clientQuery = clientQuery.eq('is_active', args.filter.is_active);
+                              countQuery = countQuery.eq('is_active', args.filter.is_active);
                             }
                           }
                           
+                          // Limit to top 25 to prevent context overflow
                           clientQuery = clientQuery
                             .order('name', { ascending: true })
-                            .limit(args.limit || 50);
+                            .limit(25);
                           
-                          const { data: clientsData, error: clientsQueryError } = await clientQuery;
+                          // Execute both queries
+                          const [{ data: clientsData, error: clientsQueryError }, { count: totalCount, error: countError }] = await Promise.all([
+                            clientQuery,
+                            countQuery
+                          ]);
                           
-                          if (clientsQueryError) {
-                            console.error("Clients query error:", clientsQueryError);
+                          
+                          if (clientsQueryError || countError) {
+                            console.error("Clients query error:", clientsQueryError || countError);
                             result = {
                               success: false,
-                              message: `❌ Fout bij ophalen klanten: ${clientsQueryError.message}`
+                              message: `❌ Fout bij ophalen klanten: ${(clientsQueryError || countError)?.message}`
                             };
                           } else if (!clientsData || clientsData.length === 0) {
                             result = {
                               success: true,
                               clients: [],
-                              summary: { total: 0, by_bureau: {}, by_sector: {}, by_regio: {} },
+                              summary: { total: totalCount || 0, by_bureau: {}, by_sector: {}, by_regio: {} },
                               message: `ℹ️ Geen klanten gevonden met deze filters. Probeer filters te verruimen.`
                             };
                           } else {
@@ -3825,11 +3841,19 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                               }
                             });
                             
+                            // Add "... en X meer" if there are more clients than shown
+                            const hasMore = (totalCount || 0) > clientsData.length;
+                            const moreCount = (totalCount || 0) - clientsData.length;
+                            const moreSuffix = hasMore ? `\n\n... **en ${moreCount} klanten meer**` : '';
+                            
                             const summaryParts = [
-                              `📊 **${clientsData.length} klanten gevonden**`,
+                              `📊 **${totalCount || clientsData.length} klanten totaal** (${clientsData.length} getoond)`,
                               Object.keys(byBureau).length > 0 ? `Bureau: ${Object.entries(byBureau).map(([k, v]) => `${k} (${v})`).join(', ')}` : null,
                               Object.keys(bySector).length > 0 ? `Top sectoren: ${Object.entries(bySector).slice(0, 3).map(([k, v]) => `${k} (${v})`).join(', ')}` : null
                             ].filter(Boolean).join(' | ');
+                            
+                            // Add graceful completion tip
+                            const completionTip = `\n\n💡 **Tip:** Vraag naar specifieke regio of sector voor gedetailleerde resultaten.`;
                             
                             result = {
                               success: true,
@@ -3847,12 +3871,13 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                                 is_active: c.is_active
                               })),
                               summary: {
-                                total: clientsData.length,
+                                total: totalCount || clientsData.length,
+                                shown: clientsData.length,
                                 by_bureau: byBureau,
                                 by_sector: bySector,
                                 by_regio: byRegio
                               },
-                              message: `${summaryParts}\n\n${clientList}`
+                              message: `${summaryParts}\n\n${clientList}${moreSuffix}${completionTip}`
                             };
                           }
                           break;
