@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -39,13 +38,6 @@ interface PlacementConfirmDialogProps {
   onSuccess: () => void;
 }
 
-interface HourlyRate {
-  id: string;
-  uursoort_naam: string;
-  basis_tarief: number;
-  btw_percentage: number;
-}
-
 export function PlacementConfirmDialog({
   open,
   onOpenChange,
@@ -58,24 +50,7 @@ export function PlacementConfirmDialog({
 }: PlacementConfirmDialogProps) {
   const [startDate, setStartDate] = useState<Date>(new Date());
   const [weeklyHours, setWeeklyHours] = useState<number>(32);
-  const [selectedRateId, setSelectedRateId] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Fetch hourly rates for this sublocation
-  const { data: hourlyRates } = useQuery({
-    queryKey: ["hourly-rates", sublocationId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("hourly_rates")
-        .select("*")
-        .eq("sublocation_id", sublocationId)
-        .eq("is_active", true);
-
-      if (error) throw error;
-      return data as HourlyRate[];
-    },
-    enabled: open,
-  });
 
   const handleSubmit = async () => {
     if (!startDate) {
@@ -102,7 +77,7 @@ export function PlacementConfirmDialog({
           sublocation_id: sublocationId,
           start_date: format(startDate, "yyyy-MM-dd"),
           weekly_hours: weeklyHours,
-          hourly_rate_id: selectedRateId || null,
+          hourly_rate_id: null, // Wordt later bepaald na werkvorm keuze
           status: "active",
           created_by: user.id,
         });
@@ -153,7 +128,6 @@ export function PlacementConfirmDialog({
       // Reset form
       setStartDate(new Date());
       setWeeklyHours(32);
-      setSelectedRateId("");
     } catch (error) {
       console.error("Placement error:", error);
       toast.error("Fout bij aanmaken plaatsing");
@@ -225,25 +199,9 @@ export function PlacementConfirmDialog({
             <p className="text-xs text-muted-foreground">Tussen 1 en 40 uur per week</p>
           </div>
 
-          {/* Hourly rate */}
-          {hourlyRates && hourlyRates.length > 0 && (
-            <div className="space-y-2">
-              <Label htmlFor="hourlyRate">Uurtarief (optioneel)</Label>
-              <Select value={selectedRateId} onValueChange={setSelectedRateId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecteer tarief" />
-                </SelectTrigger>
-                <SelectContent>
-                  {hourlyRates.map((rate) => (
-                    <SelectItem key={rate.id} value={rate.id}>
-                      {rate.uursoort_naam} - €{rate.basis_tarief.toFixed(2)}
-                      {rate.btw_percentage > 0 && ` (+${rate.btw_percentage}% BTW)`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          <p className="text-xs text-muted-foreground italic">
+            💡 Uurtarief wordt bepaald na vaststellen werkvorm (ZZP/Uitzendkracht/ABCito)
+          </p>
         </div>
 
         <DialogFooter>

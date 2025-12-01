@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { MapPin, Building2, Target, Users, Sparkles, Euro, Search, SlidersHorizontal } from "lucide-react";
+import { MapPin, Building2, Target, Users, Sparkles, Search, SlidersHorizontal } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { calculateSublocationMatchScore } from "@/lib/calculateSublocationMatchScore";
 import { PlacementConfirmDialog } from "@/components/organization/PlacementConfirmDialog";
@@ -35,11 +35,6 @@ interface Sublocation {
       name: string;
     };
   };
-  hourly_rates: Array<{
-    id: string;
-    uursoort_naam: string;
-    basis_tarief: number;
-  }>;
 }
 
 interface SublocationSelectorPanelProps {
@@ -79,8 +74,7 @@ export function SublocationSelectorPanel({
           location:client_locations(
             naam,
             client_org:client_organizations(name)
-          ),
-          hourly_rates(id, uursoort_naam, basis_tarief)
+          )
         `)
         .eq("is_active", true)
         .order("naam");
@@ -298,27 +292,9 @@ export function SublocationSelectorPanel({
                 </div>
               )}
 
-              {/* Hourly Rates */}
-              {sublocation.hourly_rates && sublocation.hourly_rates.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                    <Euro className="h-3 w-3" />
-                    Beschikbare tarieven:
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {sublocation.hourly_rates.slice(0, 3).map((rate) => (
-                      <Badge key={rate.id} variant="outline" className="text-xs">
-                        {rate.uursoort_naam}: €{rate.basis_tarief}
-                      </Badge>
-                    ))}
-                    {sublocation.hourly_rates.length > 3 && (
-                      <Badge variant="outline" className="text-xs">
-                        +{sublocation.hourly_rates.length - 3} meer
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              )}
+              <p className="text-xs text-muted-foreground italic mt-2">
+                💡 Tarieven worden bepaald na keuze werkvorm
+              </p>
 
               {/* Action Button */}
               <Button
