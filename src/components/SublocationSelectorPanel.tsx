@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { MapPin, Building2, Target, Users, Sparkles, Search, SlidersHorizontal } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { calculateSublocationMatchScore } from "@/lib/calculateSublocationMatchScore";
+import { calculateSublocationMatchScore, parseBeschikbaarheid } from "@/lib/calculateSublocationMatchScore";
 import { PlacementConfirmDialog } from "@/components/organization/PlacementConfirmDialog";
 
 interface Professional {
@@ -36,6 +36,8 @@ interface Sublocation {
   sector: string[] | null;
   doelgroep: string[] | null;
   gezochte_functies: string[] | null;
+  capaciteit_min: number | null;
+  capaciteit_max: number | null;
   location: {
     naam: string;
     client_org: {
@@ -78,6 +80,8 @@ export function SublocationSelectorPanel({
           sector,
           doelgroep,
           gezochte_functies,
+          capaciteit_min,
+          capaciteit_max,
           location:client_locations(
             naam,
             client_org:client_organizations(name)
@@ -100,6 +104,7 @@ export function SublocationSelectorPanel({
           regio: professionalData.regio,
           skills: professionalData.skills || [],
           beschikbaarheidsnotities: professionalData.beschikbaarheidsnotities,
+          beschikbaarheid_uren: parseBeschikbaarheid(professionalData.beschikbaarheidsnotities),
           heeft_auto: professionalData.heeft_auto,
           heeft_rijbewijs: professionalData.heeft_rijbewijs,
           eigen_vervoer: professionalData.eigen_vervoer,
@@ -113,6 +118,8 @@ export function SublocationSelectorPanel({
           sector: sublocation.sector || [],
           doelgroep: sublocation.doelgroep || [],
           plaats: sublocation.plaats,
+          capaciteit_min: sublocation.capaciteit_min,
+          capaciteit_max: sublocation.capaciteit_max,
         }
       );
 

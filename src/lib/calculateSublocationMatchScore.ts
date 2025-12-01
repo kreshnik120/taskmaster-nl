@@ -3,6 +3,7 @@ interface Professional {
   regio: string | null;
   skills?: string[] | null;
   beschikbaarheidsnotities: string | null;
+  beschikbaarheid_uren?: { min: number; max: number } | null;
   ervaring_sector?: string[] | null;
   doelgroep_ervaring?: string[] | null;
   heeft_auto?: boolean | null;
@@ -20,6 +21,8 @@ interface SublocationCriteria {
   plaats: string | null;
   provincie?: string | null;
   postcode?: string | null;
+  capaciteit_min?: number | null;
+  capaciteit_max?: number | null;
 }
 
 interface MatchScoreBreakdown {
@@ -28,6 +31,7 @@ interface MatchScoreBreakdown {
   sectorMatch: number;
   doelgroepMatch: number;
   mobiliteitMatch: number;
+  beschikbaarheidMatch: number;
   totalScore: number;
   reasoning: string[];
 }
@@ -79,6 +83,40 @@ const DOELGROEP_RELATIONS: Record<string, { related: string[]; similarity: numbe
   "Kinderen/Jeugd": { related: ["Autisme", "Jeugdzorg"], similarity: 0.6 },
   "Jeugdzorg": { related: ["Kinderen/Jeugd"], similarity: 0.7 },
 };
+
+// Parse beschikbaarheid string naar uren object
+export function parseBeschikbaarheid(beschikbaarheid: string | null): { min: number; max: number } | null {
+  if (!beschikbaarheid) return null;
+  
+  const text = beschikbaarheid.toLowerCase();
+  
+  // "32-40 uur/week" → { min: 32, max: 40 }
+  const rangeMatch = text.match(/(\d+)\s*-\s*(\d+)/);
+  if (rangeMatch) {
+    return { min: parseInt(rangeMatch[1]), max: parseInt(rangeMatch[2]) };
+  }
+  
+  // "<24 uur" → { min: 0, max: 24 }
+  const lessThanMatch = text.match(/<\s*(\d+)/);
+  if (lessThanMatch) {
+    return { min: 0, max: parseInt(lessThanMatch[1]) };
+  }
+  
+  // "24-32 uur" → { min: 24, max: 32 }
+  const simpleRangeMatch = text.match(/(\d+)\s*tot\s*(\d+)|(\d+)\s*-\s*(\d+)/);
+  if (simpleRangeMatch) {
+    const min = parseInt(simpleRangeMatch[1] || simpleRangeMatch[3]);
+    const max = parseInt(simpleRangeMatch[2] || simpleRangeMatch[4]);
+    return { min, max };
+  }
+  
+  // "Flexibel" → null (geen restrictie)
+  if (text.includes("flexibel")) {
+    return null;
+  }
+  
+  return null;
+}
 
 // Jaccard similarity calculator voor array overlap
 function calculateJaccardSimilarity(set1: string[], set2: string[]): number {
@@ -164,8 +202,9 @@ export function calculateSublocationMatchScore(
   let sectorMatch = 0;
   let doelgroepMatch = 0;
   let mobiliteitMatch = 0;
+  let beschikbaarheidMatch = 0;
 
-  // ===== 1. FUNCTIE EQUIVALENTIE MATCH (30 punten) =====
+  // ===== 1. FUNCTIE EQUIVALENTIE MATCH (25 punten) =====
   if (criteria.gezochte_functies.length > 0) {
     const profFunctie = professional.functie_niveau;
     const compatibility = FUNCTIE_COMPATIBILITY[profFunctie];
@@ -179,11 +218,11 @@ export function calculateSublocationMatchScore(
       if (hasCompatibleMatch) {
         // Exact match gets full points
         if (criteria.gezochte_functies.includes(profFunctie)) {
-          functieMatch = 30;
+          functieMatch = 25;
           reasoning.push(`✅ Functie: ${profFunctie} - Exact match`);
         } else {
-          // Compatible match gets 20 points
-          functieMatch = 20;
+          // Compatible match gets 17 points
+          functieMatch = 17;
           const compatibleFuncs = criteria.gezochte_functies.filter(f => 
             compatibility.compatible.includes(f)
           );
@@ -198,12 +237,12 @@ export function calculateSublocationMatchScore(
         (func) => func.toLowerCase() === profFunctie.toLowerCase()
       );
       if (simpleMatch) {
-        functieMatch = 30;
+        functieMatch = 25;
         reasoning.push(`✅ Functie: ${profFunctie} - Match`);
       }
     }
   } else {
-    functieMatch = 15; // Partial credit if no criteria
+    functieMatch = 8; // Lower credit if no criteria
   }
 
   // ===== 2. REGIO + MOBILITEIT MATCH (20 punten) =====
@@ -278,10 +317,10 @@ export function calculateSublocationMatchScore(
     }
   }
 
-  // ===== 4. SECTOR ERVARING MATCH (25 punten via Jaccard) =====
+  // ===== 4. SECTOR ERVARING MATCH (20 punten via Jaccard) =====
   if (criteria.sector.length > 0 && professional.ervaring_sector && professional.ervaring_sector.length > 0) {
     const similarity = calculateJaccardSimilarity(professional.ervaring_sector, criteria.sector);
-    sectorMatch = Math.round(similarity * 25);
+    sectorMatch = Math.round(similarity * 20);
     
     const overlappingSectors = professional.ervaring_sector.filter(s =>
       criteria.sector.some(cs => cs.toLowerCase() === s.toLowerCase())
@@ -293,15 +332,15 @@ export function calculateSublocationMatchScore(
       reasoning.push(`⚠️ Sector: Beperkte overlap met ${criteria.sector.join(", ")}`);
     }
   } else if (criteria.sector.length === 0) {
-    sectorMatch = 12; // Partial credit if no sector criteria
+    sectorMatch = 5; // Lower credit if no sector criteria
   } else {
     reasoning.push(`⚠️ Sector: Geen ervaring opgegeven`);
   }
 
-  // ===== 5. DOELGROEP ERVARING MATCH (15 punten via semantische matching) =====
+  // ===== 5. DOELGROEP ERVARING MATCH (10 punten via semantische matching) =====
   if (criteria.doelgroep.length > 0 && professional.doelgroep_ervaring && professional.doelgroep_ervaring.length > 0) {
     const semanticMatch = calculateSemanticDoelgroepMatch(professional.doelgroep_ervaring, criteria.doelgroep);
-    doelgroepMatch = Math.round(semanticMatch.score * 15);
+    doelgroepMatch = Math.round(semanticMatch.score * 10);
     
     if (semanticMatch.directMatches.length > 0) {
       reasoning.push(`✅ Doelgroep: ${semanticMatch.directMatches.join(", ")} (exact match, ${Math.round(semanticMatch.score * 100)}%)`);
@@ -318,14 +357,67 @@ export function calculateSublocationMatchScore(
       reasoning.push(`❌ Doelgroep: Geen ervaring met ${missing.join(", ")}`);
     }
   } else if (criteria.doelgroep.length === 0) {
-    doelgroepMatch = 7; // Partial credit if no doelgroep criteria
+    doelgroepMatch = 3; // Lower credit if no doelgroep criteria
   } else {
     reasoning.push(`⚠️ Doelgroep: Geen ervaring opgegeven - voeg doelgroep_ervaring toe voor betere match`);
   }
 
-  // ===== TOTAAL BEREKENING (max 100 punten) =====
-  // Functie: 30, Regio: 20, Mobiliteit: 15, Sector: 25, Doelgroep: 15
-  const totalScore = Math.min(100, functieMatch + regioMatch + mobiliteitMatch + sectorMatch + doelgroepMatch);
+  // ===== 6. BESCHIKBAARHEID MATCH (10 punten) =====
+  const profBeschikbaarheid = professional.beschikbaarheid_uren;
+  const locatieCapaciteit = 
+    criteria.capaciteit_min !== null && criteria.capaciteit_max !== null
+      ? { min: criteria.capaciteit_min, max: criteria.capaciteit_max }
+      : null;
+
+  if (profBeschikbaarheid && locatieCapaciteit) {
+    // Calculate overlap between availability and capacity ranges
+    const overlapMin = Math.max(profBeschikbaarheid.min, locatieCapaciteit.min);
+    const overlapMax = Math.min(profBeschikbaarheid.max, locatieCapaciteit.max);
+    
+    if (overlapMax >= overlapMin) {
+      // There is overlap
+      const overlapHours = overlapMax - overlapMin;
+      const capacityRange = locatieCapaciteit.max - locatieCapaciteit.min;
+      const overlapPercentage = capacityRange > 0 ? overlapHours / capacityRange : 1;
+      
+      if (overlapPercentage >= 0.8) {
+        beschikbaarheidMatch = 10;
+        reasoning.push(
+          `✅ Beschikbaarheid: ${profBeschikbaarheid.min}-${profBeschikbaarheid.max} uur past bij capaciteit ${locatieCapaciteit.min}-${locatieCapaciteit.max} uur (${Math.round(overlapPercentage * 100)}% overlap)`
+        );
+      } else if (overlapPercentage >= 0.4) {
+        beschikbaarheidMatch = Math.round(5 + overlapPercentage * 5);
+        reasoning.push(
+          `⚠️ Beschikbaarheid: ${profBeschikbaarheid.min}-${profBeschikbaarheid.max} uur deels passend bij capaciteit ${locatieCapaciteit.min}-${locatieCapaciteit.max} uur (${Math.round(overlapPercentage * 100)}% overlap)`
+        );
+      } else {
+        beschikbaarheidMatch = 3;
+        reasoning.push(
+          `⚠️ Beschikbaarheid: ${profBeschikbaarheid.min}-${profBeschikbaarheid.max} uur beperkt passend bij capaciteit ${locatieCapaciteit.min}-${locatieCapaciteit.max} uur`
+        );
+      }
+    } else {
+      // No overlap
+      beschikbaarheidMatch = 0;
+      reasoning.push(
+        `❌ Beschikbaarheid: ${profBeschikbaarheid.min}-${profBeschikbaarheid.max} uur past niet bij capaciteit ${locatieCapaciteit.min}-${locatieCapaciteit.max} uur (geen overlap)`
+      );
+    }
+  } else if (!profBeschikbaarheid && !locatieCapaciteit) {
+    // Both missing - neutral score
+    beschikbaarheidMatch = 5;
+  } else if (!profBeschikbaarheid) {
+    // Professional has no availability specified
+    beschikbaarheidMatch = 5;
+    reasoning.push(`⚠️ Beschikbaarheid: Geen beschikbaarheid opgegeven`);
+  } else {
+    // Location has no capacity specified
+    beschikbaarheidMatch = 5;
+  }
+
+  // ===== TOTAAL BEREKENING (exact 100 punten) =====
+  // Functie: 25, Regio: 20, Mobiliteit: 15, Sector: 20, Doelgroep: 10, Beschikbaarheid: 10
+  const totalScore = Math.min(100, functieMatch + regioMatch + mobiliteitMatch + sectorMatch + doelgroepMatch + beschikbaarheidMatch);
 
   return {
     functieMatch,
@@ -333,6 +425,7 @@ export function calculateSublocationMatchScore(
     sectorMatch,
     doelgroepMatch,
     mobiliteitMatch,
+    beschikbaarheidMatch,
     totalScore,
     reasoning,
   };
