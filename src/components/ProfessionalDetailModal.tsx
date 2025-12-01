@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { MatchingPanel } from "./MatchingPanel";
+import { SublocationSelectorPanel } from "./SublocationSelectorPanel";
 
 interface Professional {
   id: string;
@@ -729,9 +729,20 @@ export function ProfessionalDetailModal({
           </TabsContent>
 
           <TabsContent value="plaatsing" className="mt-6">
-            <MatchingPanel
+            <SublocationSelectorPanel
               professionalId={professional.id}
               professionalName={professional.full_name}
+              professionalData={{
+                id: professional.id,
+                full_name: professional.full_name,
+                functie_niveau: professional.functie_niveau,
+                werkvorm: professional.werkvorm,
+                regio: professional.regio,
+                skills: professional.skills,
+                status: professional.status,
+                beschikbaarheidsnotities: professional.beschikbaarheidsnotities,
+              }}
+              onSuccess={onSuccess}
             />
           </TabsContent>
         </Tabs>
