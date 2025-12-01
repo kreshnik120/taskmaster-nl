@@ -16,6 +16,9 @@ import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { ActiveProcessWidget } from "@/components/ActiveProcessWidget";
 import { QuickTimerButton } from "@/components/QuickTimerButton";
 import { KPICard } from "@/components/ui/kpi-card";
+import { RecruitmentKPIs } from "@/components/dashboard/RecruitmentKPIs";
+import { TodayFocusCard } from "@/components/dashboard/TodayFocusCard";
+import { QuickActionsHub } from "@/components/dashboard/QuickActionsHub";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -752,8 +755,17 @@ const Dashboard = () => {
         />
       </div>
 
+      {/* Recruitment KPI's */}
+      <RecruitmentKPIs />
+
       {/* Active Process Steps Widget - Subtiel gepositioneerd */}
       <ActiveProcessWidget />
+
+      {/* Vandaag Focus & Quick Actions */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TodayFocusCard />
+        <QuickActionsHub />
+      </div>
 
       {/* Upcoming Reminders Widget */}
       <UpcomingRemindersWidget />
