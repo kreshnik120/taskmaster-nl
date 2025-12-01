@@ -17,9 +17,16 @@ interface Professional {
   functie_niveau: string | null;
   werkvorm: string | null;
   regio: string | null;
+  woonplaats: string | null;
+  postcode: string | null;
   skills: string[] | null;
   status: string | null;
   beschikbaarheidsnotities: string | null;
+  heeft_auto: boolean | null;
+  heeft_rijbewijs: boolean | null;
+  ervaring_sector?: string[] | null;
+  doelgroep_ervaring?: string[] | null;
+  eigen_vervoer?: boolean | null;
 }
 
 interface Sublocation {
@@ -89,10 +96,17 @@ export function SublocationSelectorPanel({
     ?.map((sublocation) => {
       const matchResult = calculateSublocationMatchScore(
         {
-          functie_niveau: professionalData.functie_niveau,
+          functie_niveau: professionalData.functie_niveau || "",
           regio: professionalData.regio,
-          skills: professionalData.skills,
+          skills: professionalData.skills || [],
           beschikbaarheidsnotities: professionalData.beschikbaarheidsnotities,
+          heeft_auto: professionalData.heeft_auto,
+          heeft_rijbewijs: professionalData.heeft_rijbewijs,
+          eigen_vervoer: professionalData.eigen_vervoer,
+          woonplaats: professionalData.woonplaats,
+          postcode: professionalData.postcode,
+          ervaring_sector: professionalData.ervaring_sector,
+          doelgroep_ervaring: professionalData.doelgroep_ervaring,
         },
         {
           gezochte_functies: sublocation.gezochte_functies || [],

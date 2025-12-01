@@ -46,6 +46,8 @@ interface Professional {
   full_name: string;
   functie_niveau: string;
   regio: string | null;
+  woonplaats: string | null;
+  postcode: string | null;
   skills: string[];
   status: string;
   rating: number | null;
