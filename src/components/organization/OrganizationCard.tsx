@@ -1,4 +1,4 @@
-import { Building2, ChevronDown, ChevronRight, MapPin, Euro } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, MapPin } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
@@ -31,7 +31,6 @@ interface Sublocation {
   doelgroep: string[] | null;
   sector: string[] | null;
   gekoppelde_bv_org_id: string | null;
-  hourly_rates_count?: number;
 }
 
 interface OrganizationCardProps {
@@ -85,10 +84,6 @@ export function OrganizationCard({
     sum + (loc.sublocations?.filter(sub => getOrganizationName(sub.gekoppelde_bv_org_id) === "ABCzorg")?.length || 0), 0) || 0;
   const citozorgCount = organization.locations?.reduce((sum, loc) => 
     sum + (loc.sublocations?.filter(sub => getOrganizationName(sub.gekoppelde_bv_org_id) === "CitoZorg")?.length || 0), 0) || 0;
-
-  // Totaal aantal tarieven
-  const totalRates = organization.locations?.reduce((sum, loc) => 
-    sum + (loc.sublocations?.reduce((subSum, sub) => subSum + (sub.hourly_rates_count || 0), 0) || 0), 0) || 0;
 
   return (
     <div className="space-y-2">
@@ -146,12 +141,6 @@ export function OrganizationCard({
                     {sector}
                   </Badge>
                 ))}
-                {totalRates > 0 && (
-                  <Badge className="text-xs bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20">
-                    <Euro className="h-3 w-3 mr-1" />
-                    {totalRates} {totalRates === 1 ? "tarief" : "tarieven"}
-                  </Badge>
-                )}
               </div>
             </div>
           </div>

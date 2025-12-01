@@ -1,4 +1,4 @@
-import { MapPin, ChevronDown, ChevronRight, Building, Euro, Phone, Copy, User, Navigation } from "lucide-react";
+import { MapPin, ChevronDown, ChevronRight, Building, Phone, Copy, User, Navigation } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,9 +23,6 @@ interface Sublocation {
   doelgroep: string[] | null;
   sector: string[] | null;
   gekoppelde_bv_org_id: string | null;
-  hourly_rates_count?: number;
-  tarieven_min?: number;
-  tarieven_max?: number;
   telefoon?: string | null;
   adres?: string | null;
   capaciteit_min?: number | null;
@@ -114,19 +111,6 @@ export function LocationCard({
     )
   ).slice(0, 3);
 
-  // Totaal aantal tarieven en bereik
-  const totalRates = location.sublocations?.reduce((sum, sub) => sum + (sub.hourly_rates_count || 0), 0) || 0;
-  
-  // Bereken min/max tarieven
-  const allTarieven = location.sublocations?.flatMap(sub => {
-    const tarieven = [];
-    if (sub.tarieven_min) tarieven.push(sub.tarieven_min);
-    if (sub.tarieven_max) tarieven.push(sub.tarieven_max);
-    return tarieven;
-  }).filter(t => t != null) || [];
-  
-  const tariefMin = allTarieven.length > 0 ? Math.min(...allTarieven) : null;
-  const tariefMax = allTarieven.length > 0 ? Math.max(...allTarieven) : null;
 
   return (
     <div className="space-y-2">
@@ -181,21 +165,6 @@ export function LocationCard({
                   </>
                 )}
               </div>
-              
-              {/* Tarief range preview */}
-              {totalRates > 0 && (
-                <div className="flex items-center gap-2 mt-2">
-                  <Badge className="text-xs bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20">
-                    <Euro className="h-3 w-3 mr-1" />
-                    {totalRates} {totalRates === 1 ? "tarief" : "tarieven"}
-                  </Badge>
-                  {tariefMin && tariefMax && (
-                    <span className="text-xs text-muted-foreground">
-                      €{tariefMin} - €{tariefMax}
-                    </span>
-                  )}
-                </div>
-              )}
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">

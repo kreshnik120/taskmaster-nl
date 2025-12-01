@@ -67,9 +67,6 @@ interface Sublocation {
   sector: string[] | null;
   gezochte_functies: string[] | null;
   gekoppelde_bv_org_id: string | null;
-  hourly_rates_count?: number;
-  tarieven_min?: number;
-  tarieven_max?: number;
   publieke_opmerking: string | null;
   capaciteit_min: number | null;
   capaciteit_max: number | null;
@@ -139,8 +136,6 @@ export function OrganizationDetailModal({
   const stats = {
     totalLocations: organization?.locations?.length || 0,
     totalSublocations: organization?.locations?.reduce((sum, loc) => sum + (loc.sublocations?.length || 0), 0) || 0,
-    totalRates: organization?.locations?.reduce((sum, loc) => 
-      sum + (loc.sublocations?.reduce((subSum, sub) => subSum + (sub.hourly_rates_count || 0), 0) || 0), 0) || 0,
     activeAssignments: assignments?.filter(a => a.status === 'active')?.length || 0,
     proposedAssignments: assignments?.filter(a => a.status === 'proposed')?.length || 0,
   };
@@ -213,7 +208,7 @@ export function OrganizationDetailModal({
 
             <TabsContent value="algemeen" className="space-y-4">
               {/* Overzicht KPI's - Premium gradient style */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <Card className="border-t-4 border-t-blue-400/60 bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background hover:shadow-md transition-shadow backdrop-blur-sm">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm flex items-center gap-2">
@@ -235,18 +230,6 @@ export function OrganizationDetailModal({
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">{stats.totalSublocations}</div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-t-4 border-t-amber-400/60 bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background hover:shadow-md transition-shadow backdrop-blur-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Euro className="h-4 w-4 text-amber-600" />
-                      Tarieven
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{stats.totalRates}</div>
                   </CardContent>
                 </Card>
 
@@ -340,14 +323,7 @@ export function OrganizationDetailModal({
                 location.sublocations.map((sublocation) => (
                   <SublocationCard
                     key={sublocation.id}
-                    sublocation={{
-                      ...sublocation,
-                      hourly_rates_count: sublocation.hourly_rates_count,
-                      tarieven_min: sublocation.tarieven_min,
-                      tarieven_max: sublocation.tarieven_max,
-                      capaciteit_min: sublocation.capaciteit_min,
-                      capaciteit_max: sublocation.capaciteit_max,
-                    }}
+                    sublocation={sublocation}
                     organizationName={organization.name}
                     locationName={location.naam}
                     onSublocationClick={handleSublocationClick}
