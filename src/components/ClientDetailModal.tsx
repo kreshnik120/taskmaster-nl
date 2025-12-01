@@ -160,6 +160,22 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
   const [functies, setFuncties] = useState<string[]>(client.gezochte_functies || []);
   const [newRegio, setNewRegio] = useState("");
 
+  // Sync form state when client changes
+  React.useEffect(() => {
+    setName(client.name);
+    setCompany(client.company);
+    setEmail(client.email || "");
+    setPhone(client.phone || "");
+    setAddress(client.address || "");
+    setNotes(client.notes || "");
+    setLogoUrl(client.logo_url || "");
+    setRegios(client.regio || []);
+    setSectoren(client.sector || []);
+    setDoelgroepen(client.doelgroep || []);
+    setFuncties(client.gezochte_functies || []);
+    setIsEditing(false);
+  }, [client.id]);
+
   // Collapsible state - smart defaults
   const [contactOpen, setContactOpen] = useState(true);
 
