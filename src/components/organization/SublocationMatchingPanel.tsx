@@ -29,9 +29,15 @@ interface Professional {
   functie_niveau: string;
   werkvorm: string;
   regio: string | null;
+  woonplaats: string | null;
+  postcode: string | null;
   skills: string[];
   status: string;
   beschikbaarheidsnotities: string | null;
+  heeft_auto: boolean | null;
+  heeft_rijbewijs: boolean | null;
+  ervaring_sector?: string[] | null;
+  doelgroep_ervaring?: string[] | null;
 }
 
 interface Assignment {
@@ -108,13 +114,40 @@ export function SublocationMatchingPanel({
 
       const { data, error } = await supabase
         .from("professionals")
-        .select("*")
+        .select(`
+          *,
+          professional_applications!professional_applications_professional_id_fkey(
+            extracted_data
+          )
+        `)
         .eq("org_id", userOrg.org_id)
         .is("deleted_at", null)
         .in("status", ["actief", "beschikbaar"]);
 
       if (error) throw error;
-      return data as Professional[];
+      
+      // Enrich with extracted_data from applications
+      return (data as any[]).map((prof) => {
+        const application = prof.professional_applications?.[0];
+        const extractedData = application?.extracted_data || {};
+        
+        return {
+          id: prof.id,
+          full_name: prof.full_name,
+          functie_niveau: prof.functie_niveau,
+          werkvorm: prof.werkvorm,
+          regio: prof.regio,
+          woonplaats: prof.woonplaats,
+          postcode: prof.postcode,
+          skills: prof.skills || [],
+          status: prof.status,
+          beschikbaarheidsnotities: prof.beschikbaarheidsnotities,
+          heeft_auto: prof.heeft_auto,
+          heeft_rijbewijs: prof.heeft_rijbewijs,
+          ervaring_sector: extractedData.ervaring_sector || [],
+          doelgroep_ervaring: extractedData.doelgroep_ervaring || [],
+        } as Professional;
+      });
     },
   });
 
@@ -361,24 +394,36 @@ export function SublocationMatchingPanel({
                           </Badge>
                         </div>
 
-                        {/* Match breakdown */}
+                         {/* Match breakdown */}
                         <div className="flex flex-wrap gap-2 text-xs">
                           {prof.matchScore.functieMatch > 0 && (
                             <Badge variant="secondary" className="bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
                               <CheckCircle2 className="h-3 w-3 mr-1" />
-                              Functie: {prof.matchScore.functieMatch}%
+                              Functie: {prof.matchScore.functieMatch}
                             </Badge>
                           )}
                           {prof.matchScore.regioMatch > 0 && (
                             <Badge variant="secondary" className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300">
                               <CheckCircle2 className="h-3 w-3 mr-1" />
-                              Regio: {prof.matchScore.regioMatch}%
+                              Regio: {prof.matchScore.regioMatch}
                             </Badge>
                           )}
                           {prof.matchScore.sectorMatch > 0 && (
                             <Badge variant="secondary" className="bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300">
                               <CheckCircle2 className="h-3 w-3 mr-1" />
-                              Sector: {prof.matchScore.sectorMatch}%
+                              Sector: {prof.matchScore.sectorMatch}
+                            </Badge>
+                          )}
+                          {prof.matchScore.doelgroepMatch > 0 && (
+                            <Badge variant="secondary" className="bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Doelgroep: {prof.matchScore.doelgroepMatch}
+                            </Badge>
+                          )}
+                          {prof.matchScore.mobiliteitMatch > 0 && (
+                            <Badge variant="secondary" className="bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Mobiliteit: {prof.matchScore.mobiliteitMatch}
                             </Badge>
                           )}
                         </div>

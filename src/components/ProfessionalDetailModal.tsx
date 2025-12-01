@@ -27,6 +27,8 @@ interface Professional {
   functie_niveau: string;
   werkvorm: string | null;
   regio: string | null;
+  woonplaats: string | null;
+  postcode: string | null;
   telefoonnummer: string | null;
   email: string | null;
   heeft_auto: boolean | null;
@@ -738,9 +740,13 @@ export function ProfessionalDetailModal({
                 functie_niveau: professional.functie_niveau,
                 werkvorm: professional.werkvorm,
                 regio: professional.regio,
+                woonplaats: professional.woonplaats,
+                postcode: professional.postcode,
                 skills: professional.skills,
                 status: professional.status,
                 beschikbaarheidsnotities: professional.beschikbaarheidsnotities,
+                heeft_auto: professional.heeft_auto,
+                heeft_rijbewijs: professional.heeft_rijbewijs,
               }}
               onSuccess={onSuccess}
             />
