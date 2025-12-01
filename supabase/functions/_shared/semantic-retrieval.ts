@@ -58,7 +58,7 @@ export async function semanticKnowledgeRetrieval(
 ): Promise<SemanticMatch[]> {
   const {
     orgId,
-    threshold = 0.75,
+    threshold = 0.65, // ⬇️ LOWERED from 0.75 to 0.65 (allows more matches)
     maxResults = 20,
     roleFilter = [],
     requireVerified = false
@@ -70,8 +70,8 @@ export async function semanticKnowledgeRetrieval(
     // Generate embedding for the question
     const questionEmbedding = await generateQueryEmbedding(question);
 
-    // Use match_knowledge RPC with semantic search
-    const { data: matches, error } = await supabase.rpc('match_knowledge', {
+    // 🎯 PHASE 1: Primary semantic search with standard threshold
+    const { data: primaryMatches, error } = await supabase.rpc('match_knowledge', {
       query_embedding: questionEmbedding,
       match_threshold: threshold,
       match_count: maxResults,
@@ -85,25 +85,62 @@ export async function semanticKnowledgeRetrieval(
       return [];
     }
 
-    if (!matches || matches.length === 0) {
-      console.log('⚠️ No semantic matches found');
+    // 🎯 PHASE 2: If insufficient results, try with lower threshold (0.55)
+    let allMatches = primaryMatches || [];
+    if (allMatches.length < 5) {
+      console.log(`⚠️ Only ${allMatches.length} primary matches, trying lower threshold (0.55)...`);
+      
+      const { data: fallbackMatches } = await supabase.rpc('match_knowledge', {
+        query_embedding: questionEmbedding,
+        match_threshold: 0.55,
+        match_count: maxResults,
+        filter_org_id: orgId,
+        filter_role_tags: roleFilter.length > 0 ? roleFilter : null,
+        require_verified: false // ⬇️ More lenient for fallback
+      });
+
+      if (fallbackMatches && fallbackMatches.length > 0) {
+        // Merge and deduplicate
+        const existingIds = new Set(allMatches.map((m: any) => m.knowledge_id));
+        const newMatches = fallbackMatches.filter((m: any) => !existingIds.has(m.knowledge_id));
+        allMatches = [...allMatches, ...newMatches];
+        console.log(`✅ Added ${newMatches.length} fallback matches (total: ${allMatches.length})`);
+      }
+    }
+
+    if (!allMatches || allMatches.length === 0) {
+      console.log('⚠️ No semantic matches found (even with fallback)');
       return [];
     }
 
-    console.log(`✅ Found ${matches.length} semantic matches (avg similarity: ${
-      (matches.reduce((sum: number, m: any) => sum + m.similarity, 0) / matches.length).toFixed(3)
+    console.log(`✅ Found ${allMatches.length} semantic matches (avg similarity: ${
+      (allMatches.reduce((sum: number, m: any) => sum + m.similarity, 0) / allMatches.length).toFixed(3)
     })`);
 
-    return matches.map((m: any) => ({
-      knowledge_id: m.knowledge_id,
-      category: m.category,
-      key: m.key,
-      value: m.value,
-      confidence_score: m.confidence_score,
-      similarity: m.similarity,
-      role_tags: m.role_tags,
-      validation_status: m.validation_status
-    }));
+    // 🎯 PHASE 3: Boost scores for high-usage items (proven relevance)
+    return allMatches.map((m: any) => {
+      let boostedSimilarity = m.similarity;
+      
+      // Boost items that have been used frequently (proven relevance)
+      if (m.usage_count > 50) {
+        boostedSimilarity = Math.min(1.0, m.similarity + 0.05); // +5% boost
+      } else if (m.usage_count > 20) {
+        boostedSimilarity = Math.min(1.0, m.similarity + 0.03); // +3% boost
+      }
+      
+      return {
+        knowledge_id: m.knowledge_id,
+        category: m.category,
+        key: m.key,
+        value: m.value,
+        confidence_score: m.confidence_score,
+        similarity: boostedSimilarity,
+        original_similarity: m.similarity,
+        usage_count: m.usage_count,
+        role_tags: m.role_tags,
+        validation_status: m.validation_status
+      };
+    }).sort((a: any, b: any) => b.similarity - a.similarity); // Re-sort by boosted similarity
   } catch (error) {
     console.error('❌ Semantic retrieval failed:', error);
     return [];

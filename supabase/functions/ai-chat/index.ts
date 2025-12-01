@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.6.4-tool-response-fix";
+const SYSTEM_PROMPT_VERSION = "v2.7.0-adaptive-semantic-search";
 
 // ============================================
 // CACHE CONFIGURATION
