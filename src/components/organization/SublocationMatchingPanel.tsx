@@ -21,6 +21,7 @@ interface SublocationMatchingPanelProps {
   sector: string[];
   doelgroep: string[];
   plaats: string;
+  provincie?: string | null;
   capaciteit_min?: number | null;
   capaciteit_max?: number | null;
 }
@@ -31,13 +32,16 @@ interface Professional {
   functie_niveau: string;
   werkvorm: string;
   regio: string | null;
+  provincie?: string | null;
   woonplaats: string | null;
   postcode: string | null;
   skills: string[];
   status: string;
   beschikbaarheidsnotities: string | null;
+  beschikbaarheid_uren?: { min: number; max: number } | null;
   heeft_auto: boolean | null;
   heeft_rijbewijs: boolean | null;
+  eigen_vervoer?: boolean | null;
   ervaring_sector?: string[] | null;
   doelgroep_ervaring?: string[] | null;
 }
@@ -66,6 +70,7 @@ export function SublocationMatchingPanel({
   sector,
   doelgroep,
   plaats,
+  provincie,
   capaciteit_min,
   capaciteit_max,
 }: SublocationMatchingPanelProps) {
@@ -141,6 +146,7 @@ export function SublocationMatchingPanel({
           functie_niveau: prof.functie_niveau,
           werkvorm: prof.werkvorm,
           regio: prof.regio,
+          provincie: prof.provincie,
           woonplaats: prof.woonplaats,
           postcode: prof.postcode,
           skills: prof.skills || [],
@@ -149,6 +155,7 @@ export function SublocationMatchingPanel({
           beschikbaarheid_uren: parseBeschikbaarheid(extractedData.beschikbaarheid || prof.beschikbaarheidsnotities),
           heeft_auto: prof.heeft_auto,
           heeft_rijbewijs: prof.heeft_rijbewijs,
+          eigen_vervoer: extractedData.eigen_vervoer || false,
           ervaring_sector: extractedData.ervaring_sector || [],
           doelgroep_ervaring: extractedData.doelgroep_ervaring || [],
         } as Professional;
@@ -239,6 +246,7 @@ export function SublocationMatchingPanel({
         sector,
         doelgroep,
         plaats,
+        provincie,
         capaciteit_min,
         capaciteit_max,
       }),
