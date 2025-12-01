@@ -33,6 +33,7 @@ interface Sublocation {
   id: string;
   naam: string;
   plaats: string | null;
+  provincie: string | null;
   sector: string[] | null;
   doelgroep: string[] | null;
   gezochte_functies: string[] | null;
@@ -77,6 +78,7 @@ export function SublocationSelectorPanel({
           id,
           naam,
           plaats,
+          provincie,
           sector,
           doelgroep,
           gezochte_functies,
@@ -118,6 +120,7 @@ export function SublocationSelectorPanel({
           sector: sublocation.sector || [],
           doelgroep: sublocation.doelgroep || [],
           plaats: sublocation.plaats,
+          provincie: sublocation.provincie,
           capaciteit_min: sublocation.capaciteit_min,
           capaciteit_max: sublocation.capaciteit_max,
         }
