@@ -2597,6 +2597,7 @@ export type Database = {
           kvk_nummer: string | null
           org_id: string
           postcode: string | null
+          provincie: string | null
           rating: number | null
           regio: string | null
           skills: string[] | null
@@ -2626,6 +2627,7 @@ export type Database = {
           kvk_nummer?: string | null
           org_id: string
           postcode?: string | null
+          provincie?: string | null
           rating?: number | null
           regio?: string | null
           skills?: string[] | null
@@ -2655,6 +2657,7 @@ export type Database = {
           kvk_nummer?: string | null
           org_id?: string
           postcode?: string | null
+          provincie?: string | null
           rating?: number | null
           regio?: string | null
           skills?: string[] | null
