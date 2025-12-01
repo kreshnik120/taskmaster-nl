@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.4-recruitment-filters";
+const SYSTEM_PROMPT_VERSION = "v2.5-anti-hallucination";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -1743,6 +1743,74 @@ serve(async (req) => {
       console.log('⚠️ OPENAI_API_KEY not configured or empty message - falling back to category-based search only');
     }
     
+    // ============================================
+    // PHASE 1.4: CONFIDENCE THRESHOLD CHECK
+    // ============================================
+    // Calculate pre-generation confidence to determine if we should proceed
+    if (fullKnowledgeBase.length > 0) {
+      const avgConfidence = fullKnowledgeBase.reduce((sum: number, kb: any) => 
+        sum + (kb.confidence_score || kb.similarity || 0.5), 0
+      ) / fullKnowledgeBase.length;
+      
+      const verifiedCount = fullKnowledgeBase.filter((kb: any) => 
+        kb.validation_status === 'verified'
+      ).length;
+      const verifiedRatio = verifiedCount / fullKnowledgeBase.length;
+      
+      // Weighted confidence: 60% avg confidence + 40% verified ratio
+      const semanticConfidence = (avgConfidence * 0.6) + (verifiedRatio * 0.4);
+      
+      console.log(`🎯 Pre-generation confidence: ${(semanticConfidence * 100).toFixed(0)}% (avg: ${(avgConfidence * 100).toFixed(0)}%, verified: ${(verifiedRatio * 100).toFixed(0)}%)`);
+      
+      // CRITICAL: If confidence < 0.6, return refusal response immediately
+      if (semanticConfidence < 0.6) {
+        console.warn(`⚠️ CONFIDENCE THRESHOLD NOT MET: ${(semanticConfidence * 100).toFixed(0)}% < 60%`);
+        
+        // Identify what we DO know with high confidence
+        const highConfidenceItems = fullKnowledgeBase
+          .filter((kb: any) => (kb.confidence_score || 0) >= 0.8)
+          .slice(0, 3);
+        
+        const knownInfo = highConfidenceItems.length > 0
+          ? `\n\n✅ **Wat ik WEL met zekerheid weet:**\n${highConfidenceItems.map((kb: any) => 
+              `• ${kb.key}: ${typeof kb.value === 'string' ? kb.value : JSON.stringify(kb.value)}`
+            ).join('\n')}`
+          : '';
+        
+        const refusalMessage = `⚠️ **Onvoldoende zekerheid om te antwoorden**
+
+Ik kan deze vraag niet met voldoende betrouwbaarheid beantwoorden op basis van de beschikbare informatie in de kennisbank.
+
+📊 **Huidige confidence:** ${(semanticConfidence * 100).toFixed(0)}% (minimaal vereist: 60%)
+📚 **Beschikbare bronnen:** ${fullKnowledgeBase.length} items (waarvan ${verifiedCount} geverifieerd)${knownInfo}
+
+💡 **Om een betrouwbaar antwoord te geven heb ik nodig:**
+• Meer specifieke context (bijvoorbeeld periode, locatie, of specifieke situatie)
+• Aanvullende informatie in de kennisbank over dit onderwerp
+• Verificatie van bestaande bronnen
+
+🔍 Je kunt ook proberen:
+• De vraag anders formuleren met meer specifieke details
+• Vragen naar gerelateerde onderwerpen waar meer kennis over beschikbaar is`;
+
+        // Return refusal response immediately without AI call
+        return new Response(
+          JSON.stringify({
+            role: 'assistant',
+            content: refusalMessage,
+            confidence_refusal: true,
+            semantic_confidence: semanticConfidence
+          }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+      
+      console.log(`✅ Confidence threshold met (${(semanticConfidence * 100).toFixed(0)}% >= 60%), proceeding with AI generation`);
+    }
+    
     // PHASE 1.5: Detect knowledge conflicts before using (with SPRINT 2 deep analysis)
     await detectKnowledgeConflicts(fullKnowledgeBase, supabaseClient, userOrgId, LOVABLE_API_KEY);
     
@@ -1986,6 +2054,40 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
 
     // ⚡ NIEUWE SYSTEM PROMPT: Query tools EERST, dan ABCzorg instructies
     const systemPrompt = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🛡️ PRIORITEIT -1: ANTI-HALLUCINATIE PROTOCOL (NIET ONDERHANDELBAAR)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚫 VERBODEN - NOOIT DOEN:
+❌ GEEN informatie verzinnen die niet in kennisbank of tools staat
+❌ GEEN aannames maken over bedrijfsgegevens, tarieven, of procedures
+❌ GEEN speculatie over KvK nummers, adressen, of contactgegevens
+❌ GEEN claims maken zonder bronvermelding
+
+✅ VERPLICHT - ALTIJD DOEN:
+✅ ELKE feitelijke claim MOET een [Bron: X] citation hebben
+✅ Bij onzekerheid: "Ik weet dit niet zeker" + leg uit wat WEL bekend is
+✅ Bij ontbrekende kennis: "Deze informatie staat niet in de kennisbank"
+✅ Verwijs naar specifieke kennisbank items met hun ID wanneer relevant
+
+📋 CITATION FORMAT VOORBEELDEN:
+✅ CORRECT: "Het vakantiebeleid is 25 dagen per jaar [Bron: HR beleid]"
+✅ CORRECT: "ABCzorg KvK: 12345678 [Bron: Bedrijfsgegevens]"
+❌ FOUT: "Het vakantiebeleid is waarschijnlijk 25 dagen" (geen bron)
+❌ FOUT: "Volgens mij is het KvK nummer..." (speculatie)
+
+🎯 CONFIDENCE THRESHOLD:
+Bij ELKE antwoord:
+1. Check confidence van gebruikte bronnen
+2. Als gemiddelde confidence < 60%: 
+   → STOP en zeg: "⚠️ Ik kan dit niet met voldoende zekerheid beantwoorden op basis van beschikbare informatie. Wat ik WEL weet: [geef beperkte info]. Voor meer zekerheid heb ik aanvullende informatie nodig."
+3. Geef ALLEEN antwoord als je confidence >= 60%
+
+🔍 TRANSPARANTIE VEREISTEN:
+- Vermeld expliciet als informatie uit semantic search komt vs exact match
+- Bij conflicterende bronnen: noem BEIDE en leg uit waarom je één kiest
+- Bij oude data: vermeld de datum van laatste verificatie
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🚨 PRIORITEIT 0: DATABASE TOOLS - ALTIJD EERST CONTROLEREN
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

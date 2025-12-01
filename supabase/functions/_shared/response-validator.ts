@@ -9,10 +9,12 @@ interface ValidationResult {
   completenessScore: number;
   accuracyScore: number;
   coverageScore: number;
+  citationScore: number;
   issues: {
     missingAspects: string[];
     contradictions: string[];
     unsourcedFacts: string[];
+    invalidCitations: string[];
   };
   shouldRetry: boolean;
   improvementSuggestions: string[];
@@ -36,7 +38,8 @@ export async function validateResponse(
   const issues = {
     missingAspects: [] as string[],
     contradictions: [] as string[],
-    unsourcedFacts: [] as string[]
+    unsourcedFacts: [] as string[],
+    invalidCitations: [] as string[]
   };
 
   // 1. Completeness check: Does response address all parts of the question?
@@ -47,6 +50,12 @@ export async function validateResponse(
   
   // 3. Coverage check: Did we use relevant knowledge?
   const coverageScore = checkCoverage(question, knowledgeUsed);
+  
+  // 4. Citation check: Does response have proper source citations?
+  const citationCheck = checkCitations(response, knowledgeUsed);
+  const citationScore = citationCheck.hasCitations 
+    ? (citationCheck.validCitations / citationCheck.citationCount) 
+    : 0;
 
   // Detect specific issues
   if (completenessScore < 0.7) {
@@ -60,6 +69,14 @@ export async function validateResponse(
   if (coverageScore < 0.5) {
     issues.missingAspects.push('Insufficient knowledge base coverage for this question');
   }
+  
+  if (citationCheck.invalidCitations.length > 0) {
+    issues.invalidCitations.push(...citationCheck.invalidCitations);
+  }
+  
+  if (citationCheck.hasCitations && citationScore < 0.7) {
+    issues.unsourcedFacts.push('Some citations do not match actual knowledge sources');
+  }
 
   // Check for contradictions between sources
   const contradictions = detectContradictions(knowledgeUsed);
@@ -68,8 +85,8 @@ export async function validateResponse(
   }
 
   // Determine if validation passed
-  const overallScore = (completenessScore + accuracyScore + coverageScore) / 3;
-  const passed = overallScore >= 0.7 && issues.contradictions.length === 0;
+  const overallScore = (completenessScore + accuracyScore + coverageScore + citationScore) / 4;
+  const passed = overallScore >= 0.7 && issues.contradictions.length === 0 && issues.invalidCitations.length === 0;
 
   // Generate improvement suggestions
   const improvementSuggestions: string[] = [];
@@ -77,14 +94,20 @@ export async function validateResponse(
     improvementSuggestions.push('Expand response to cover all aspects of the question');
   }
   if (accuracyScore < 0.7) {
-    improvementSuggestions.push('Add explicit source references for key facts');
+    improvementSuggestions.push('Add explicit source references with [Bron: X] markers for key facts');
+  }
+  if (citationScore < 0.7 && citationCheck.hasCitations) {
+    improvementSuggestions.push('Ensure all citations match actual knowledge sources');
+  }
+  if (!citationCheck.hasCitations && knowledgeUsed.length > 0) {
+    improvementSuggestions.push('Add [Bron: X] citations for factual claims');
   }
   if (issues.contradictions.length > 0) {
     improvementSuggestions.push('Resolve contradictions between sources before responding');
   }
 
   const validationTime = Date.now() - startTime;
-  console.log(`✅ Validation complete in ${validationTime}ms (score: ${overallScore.toFixed(2)})`);
+  console.log(`✅ Validation complete in ${validationTime}ms (score: ${overallScore.toFixed(2)}, citations: ${citationCheck.validCitations}/${citationCheck.citationCount})`);
 
   // Log validation to database (async, non-blocking)
   logValidation(
@@ -98,6 +121,7 @@ export async function validateResponse(
       completenessScore,
       accuracyScore,
       coverageScore,
+      citationScore,
       issues,
       validationTime
     }
@@ -108,6 +132,7 @@ export async function validateResponse(
     completenessScore,
     accuracyScore,
     coverageScore,
+    citationScore,
     issues,
     shouldRetry: !passed && overallScore < 0.6,
     improvementSuggestions
@@ -248,6 +273,7 @@ async function logValidation(
     completenessScore: number;
     accuracyScore: number;
     coverageScore: number;
+    citationScore: number;
     issues: any;
     validationTime: number;
   }
@@ -264,9 +290,11 @@ async function logValidation(
         completeness_score: validation.completenessScore,
         accuracy_score: validation.accuracyScore,
         coverage_score: validation.coverageScore,
+        citation_score: validation.citationScore,
         missing_aspects: validation.issues.missingAspects,
         contradictions_found: validation.issues.contradictions,
         unsourced_facts: validation.issues.unsourcedFacts,
+        invalid_citations: validation.issues.invalidCitations,
         validation_time_ms: validation.validationTime
       });
 
@@ -276,6 +304,49 @@ async function logValidation(
   } catch (err) {
     console.error('Exception logging validation:', err);
   }
+}
+
+/**
+ * Check if response contains proper citations
+ * Format: [Bron: X] or [ID: uuid]
+ */
+function checkCitations(response: string, knowledgeUsed: any[]): {
+  hasCitations: boolean;
+  citationCount: number;
+  validCitations: number;
+  invalidCitations: string[];
+} {
+  // Extract citation markers: [Bron: X] or [ID: uuid]
+  const citationRegex = /\[(?:Bron|ID):\s*([^\]]+)\]/gi;
+  const citations = [...response.matchAll(citationRegex)];
+  
+  const validCitations: string[] = [];
+  const invalidCitations: string[] = [];
+  
+  // Validate each citation against actual knowledge used
+  for (const match of citations) {
+    const citationValue = match[1].trim();
+    
+    // Check if citation matches a knowledge ID or source
+    const isValid = knowledgeUsed.some(kb => 
+      kb.id?.includes(citationValue) || 
+      kb.source?.toLowerCase().includes(citationValue.toLowerCase()) ||
+      kb.key?.toLowerCase().includes(citationValue.toLowerCase())
+    );
+    
+    if (isValid) {
+      validCitations.push(citationValue);
+    } else {
+      invalidCitations.push(citationValue);
+    }
+  }
+  
+  return {
+    hasCitations: citations.length > 0,
+    citationCount: citations.length,
+    validCitations: validCitations.length,
+    invalidCitations
+  };
 }
 
 /**
@@ -297,7 +368,7 @@ export function addValidationContext(
   }
 
   if (issues.unsourcedFacts.length > 0) {
-    improvementContext += '- Voeg expliciete bronverwijzingen toe voor alle feiten\n';
+    improvementContext += '- Voeg expliciete bronverwijzingen toe met [Bron: X] voor alle feiten\n';
   }
 
   return originalPrompt + improvementContext;
