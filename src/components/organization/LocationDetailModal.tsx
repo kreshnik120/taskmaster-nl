@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Building, Mail, Phone, Euro } from "lucide-react";
+import { MapPin, Building, Mail, Phone } from "lucide-react";
 import { SublocationCard } from "./SublocationCard";
 
 interface Sublocation {

@@ -17,7 +17,6 @@ import {
   MapPin, 
   Globe, 
   Mail, 
-  Euro, 
   Users, 
   Briefcase,
   Calendar,
