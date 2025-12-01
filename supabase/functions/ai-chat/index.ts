@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.5-anti-hallucination";
+const SYSTEM_PROMPT_VERSION = "v2.6-query-clients";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -2253,6 +2253,45 @@ Het systeem leert automatisch van elke sollicitatie en plaatsing via system_even
 - Plaatsingen → succes factoren identificeren
 - Interview resultaten → voorspellende modellen bouwen
 
+📋 WANNEER GEBRUIK JE QUERY_CLIENTS:
+✅ "Welke klanten zijn van ABCzorg?"
+✅ "Toon alle CitoZorg klanten"
+✅ "Hoeveel klanten hebben we in Utrecht?"
+✅ "Wat zijn de contactgegevens van [Klant X]?"
+✅ "Welke organisaties zitten in de GGZ sector?"
+✅ "Toon klanten in regio Amsterdam"
+
+💡 QUERY_CLIENTS EXAMPLES:
+"Welke klanten zijn van ABCzorg?"
+→ query_clients({ 
+    filter: { bureau: "ABCzorg" },
+    include: ["organization"],
+    limit: 50
+  })
+
+"Contactgegevens van Amarant"
+→ query_clients({ 
+    filter: { name: "Amarant" },
+    include: ["contact", "address", "organization"]
+  })
+
+"Hoeveel GGZ klanten hebben we?"
+→ query_clients({ 
+    filter: { sector: "GGZ" }
+  })
+
+"Toon klanten in regio Utrecht"
+→ query_clients({ 
+    filter: { regio: "Utrecht" },
+    include: ["contact", "organization"]
+  })
+
+📊 RESPONSE FORMAT CLIENTS:
+- Tool returns: { success: true, clients: [...], summary: {...} }
+- Display: klantnaam, bureau (ABCzorg/CitoZorg), sector, regio, contactpersoon
+- Gebruik Nederlandse formatting voor adressen
+- Bij 0 resultaten: suggereer filters te verruimen
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🗑️ SYSTEEMBELEID - AUTOMATISCHE KENNISBEHEER
@@ -2853,6 +2892,57 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                 }
               },
               limit: { type: "number", default: 50 }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "query_clients",
+          description: "Doorzoek klanten/opdrachtgevers database om vragen te beantwoorden over welke klanten bij welk bureau horen (ABCzorg/CitoZorg), klantinfo, contactgegevens, regio's, etc. Gebruik dit wanneer gebruikers vragen stellen over klanten, opdrachtgevers, of organisaties waar professionals worden geplaatst.",
+          parameters: {
+            type: "object",
+            properties: {
+              filter: {
+                type: "object",
+                properties: {
+                  bureau: { 
+                    type: "string", 
+                    enum: ["ABCzorg", "CitoZorg"],
+                    description: "Filter op bemiddelingsbureau" 
+                  },
+                  sector: { 
+                    type: "string",
+                    description: "Filter op sector (bijv. 'GHZ', 'GGZ', 'VVT', 'Jeugdzorg')"
+                  },
+                  regio: { 
+                    type: "string",
+                    description: "Filter op regio/locatie (bijv. 'Utrecht', 'Nijmegen')"
+                  },
+                  name: { 
+                    type: "string",
+                    description: "Zoek op (deel van) klantnaam"
+                  },
+                  is_active: {
+                    type: "boolean",
+                    description: "Filter op actieve (true) of inactieve (false) klanten"
+                  }
+                }
+              },
+              include: {
+                type: "array",
+                description: "Welke gerelateerde data moet worden meegenomen",
+                items: { 
+                  type: "string", 
+                  enum: ["contact", "address", "organization"]
+                }
+              },
+              limit: {
+                type: "number",
+                description: "Maximum aantal resultaten",
+                default: 50
+              }
             }
           }
         }
@@ -3625,6 +3715,141 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             result = { 
                               success: true, 
                               message: `✅ ${searchData.total_found} professionals gevonden${filterInfo.length > 0 ? ` (${filterInfo.join(', ')})` : ''}:\n\n${profList}` 
+                            };
+                          }
+                          break;
+
+                        case "query_clients":
+                          console.log("🔍 Querying clients...", args);
+                          
+                          // Build query with joins
+                          let clientQuery = supabaseClient
+                            .from('clients')
+                            .select(`
+                              *,
+                              client_org:client_organizations(id, name, kvk_nummer, btw_nummer, centrale_facturatie_email, website)
+                            `);
+                          
+                          // Apply filters
+                          if (args.filter) {
+                            if (args.filter.bureau) {
+                              // Join met organizations tabel om op bureau naam te filteren
+                              const bureauOrgId = args.filter.bureau === "ABCzorg" 
+                                ? "550e8400-e29b-41d4-a716-446655440000"  // ABCzorg UUID
+                                : "550e8400-e29b-41d4-a716-446655440001";  // CitoZorg UUID
+                              
+                              clientQuery = clientQuery.eq('org_id', bureauOrgId);
+                            }
+                            
+                            if (args.filter.sector) {
+                              clientQuery = clientQuery.contains('sector', [args.filter.sector]);
+                            }
+                            
+                            if (args.filter.regio) {
+                              clientQuery = clientQuery.contains('regio', [args.filter.regio]);
+                            }
+                            
+                            if (args.filter.name) {
+                              clientQuery = clientQuery.or(`name.ilike.%${args.filter.name}%,company.ilike.%${args.filter.name}%`);
+                            }
+                            
+                            if (args.filter.is_active !== undefined) {
+                              clientQuery = clientQuery.eq('is_active', args.filter.is_active);
+                            }
+                          }
+                          
+                          clientQuery = clientQuery
+                            .order('name', { ascending: true })
+                            .limit(args.limit || 50);
+                          
+                          const { data: clientsData, error: clientsQueryError } = await clientQuery;
+                          
+                          if (clientsQueryError) {
+                            console.error("Clients query error:", clientsQueryError);
+                            result = {
+                              success: false,
+                              message: `❌ Fout bij ophalen klanten: ${clientsQueryError.message}`
+                            };
+                          } else if (!clientsData || clientsData.length === 0) {
+                            result = {
+                              success: true,
+                              clients: [],
+                              summary: { total: 0, by_bureau: {}, by_sector: {}, by_regio: {} },
+                              message: `ℹ️ Geen klanten gevonden met deze filters. Probeer filters te verruimen.`
+                            };
+                          } else {
+                            // Format client list
+                            const clientList = clientsData
+                              .map((client: any, i: number) => {
+                                const bureau = client.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : "CitoZorg";
+                                const sector = client.sector && client.sector.length > 0 ? client.sector.join(', ') : 'n/a';
+                                const regio = client.regio && client.regio.length > 0 ? client.regio.join(', ') : 'n/a';
+                                const contactInfo = args.include?.includes('contact') 
+                                  ? `\n   ├─ Contact: ${client.name} (${client.email || 'geen email'}, ${client.phone || 'geen telefoon'})`
+                                  : '';
+                                const addressInfo = args.include?.includes('address')
+                                  ? `\n   ├─ Adres: ${client.address || 'niet opgegeven'}`
+                                  : '';
+                                const orgInfo = args.include?.includes('organization') && client.client_org
+                                  ? `\n   ├─ Organisatie: ${client.client_org.name} (KvK: ${client.client_org.kvk_nummer || 'n/a'})`
+                                  : '';
+                                
+                                return `${i + 1}. **${client.company}**\n` +
+                                  `   ├─ Bureau: ${bureau}\n` +
+                                  `   ├─ Sector: ${sector}\n` +
+                                  `   ├─ Regio: ${regio}${contactInfo}${addressInfo}${orgInfo}`;
+                              })
+                              .join('\n\n');
+                            
+                            // Calculate summary stats
+                            const byBureau: any = {};
+                            const bySector: any = {};
+                            const byRegio: any = {};
+                            
+                            clientsData.forEach((client: any) => {
+                              const bureau = client.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : "CitoZorg";
+                              byBureau[bureau] = (byBureau[bureau] || 0) + 1;
+                              
+                              if (client.sector) {
+                                client.sector.forEach((s: string) => {
+                                  bySector[s] = (bySector[s] || 0) + 1;
+                                });
+                              }
+                              
+                              if (client.regio) {
+                                client.regio.forEach((r: string) => {
+                                  byRegio[r] = (byRegio[r] || 0) + 1;
+                                });
+                              }
+                            });
+                            
+                            const summaryParts = [
+                              `📊 **${clientsData.length} klanten gevonden**`,
+                              Object.keys(byBureau).length > 0 ? `Bureau: ${Object.entries(byBureau).map(([k, v]) => `${k} (${v})`).join(', ')}` : null,
+                              Object.keys(bySector).length > 0 ? `Top sectoren: ${Object.entries(bySector).slice(0, 3).map(([k, v]) => `${k} (${v})`).join(', ')}` : null
+                            ].filter(Boolean).join(' | ');
+                            
+                            result = {
+                              success: true,
+                              clients: clientsData.map((c: any) => ({
+                                id: c.id,
+                                name: c.company,
+                                bureau: c.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : "CitoZorg",
+                                sector: c.sector || [],
+                                regio: c.regio || [],
+                                contact: c.name,
+                                email: c.email,
+                                phone: c.phone,
+                                address: c.address,
+                                is_active: c.is_active
+                              })),
+                              summary: {
+                                total: clientsData.length,
+                                by_bureau: byBureau,
+                                by_sector: bySector,
+                                by_regio: byRegio
+                              },
+                              message: `${summaryParts}\n\n${clientList}`
                             };
                           }
                           break;
