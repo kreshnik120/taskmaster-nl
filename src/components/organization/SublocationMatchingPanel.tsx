@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { MapPin, Briefcase, Users, TrendingUp, CheckCircle2, Calendar, Clock, XCircle } from "lucide-react";
-import { calculateSublocationMatchScore } from "@/lib/calculateSublocationMatchScore";
+import { calculateSublocationMatchScore, parseBeschikbaarheid } from "@/lib/calculateSublocationMatchScore";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -21,6 +21,8 @@ interface SublocationMatchingPanelProps {
   sector: string[];
   doelgroep: string[];
   plaats: string;
+  capaciteit_min?: number | null;
+  capaciteit_max?: number | null;
 }
 
 interface Professional {
@@ -64,6 +66,8 @@ export function SublocationMatchingPanel({
   sector,
   doelgroep,
   plaats,
+  capaciteit_min,
+  capaciteit_max,
 }: SublocationMatchingPanelProps) {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [selectedProfessional, setSelectedProfessional] = useState<{
@@ -142,6 +146,7 @@ export function SublocationMatchingPanel({
           skills: prof.skills || [],
           status: prof.status,
           beschikbaarheidsnotities: prof.beschikbaarheidsnotities,
+          beschikbaarheid_uren: parseBeschikbaarheid(extractedData.beschikbaarheid || prof.beschikbaarheidsnotities),
           heeft_auto: prof.heeft_auto,
           heeft_rijbewijs: prof.heeft_rijbewijs,
           ervaring_sector: extractedData.ervaring_sector || [],
@@ -234,6 +239,8 @@ export function SublocationMatchingPanel({
         sector,
         doelgroep,
         plaats,
+        capaciteit_min,
+        capaciteit_max,
       }),
     }))
     .sort((a, b) => b.matchScore.totalScore - a.matchScore.totalScore);
@@ -424,6 +431,12 @@ export function SublocationMatchingPanel({
                             <Badge variant="secondary" className="bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300">
                               <CheckCircle2 className="h-3 w-3 mr-1" />
                               Mobiliteit: {prof.matchScore.mobiliteitMatch}
+                            </Badge>
+                          )}
+                          {prof.matchScore.beschikbaarheidMatch > 0 && (
+                            <Badge variant="secondary" className="bg-cyan-50 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Beschikbaarheid: {prof.matchScore.beschikbaarheidMatch}
                             </Badge>
                           )}
                         </div>
