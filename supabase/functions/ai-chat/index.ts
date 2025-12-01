@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.6.1-query-clients-fix";
+const SYSTEM_PROMPT_VERSION = "v2.6.2-query-clients-name-fix";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -3795,7 +3795,7 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                                   ? `\n   ├─ Organisatie: ${client.client_org.name} (KvK: ${client.client_org.kvk_nummer || 'n/a'})`
                                   : '';
                                 
-                                return `${i + 1}. **${client.company}**\n` +
+                                return `${i + 1}. **${client.name || client.company}**\n` +
                                   `   ├─ Bureau: ${bureau}\n` +
                                   `   ├─ Sector: ${sector}\n` +
                                   `   ├─ Regio: ${regio}${contactInfo}${addressInfo}${orgInfo}`;
@@ -3835,7 +3835,7 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                               success: true,
                               clients: clientsData.map((c: any) => ({
                                 id: c.id,
-                                name: c.company,
+                                name: c.name || c.company,
                                 bureau: c.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : 
                                         c.org_id === "650e8400-e29b-41d4-a716-446655440001" ? "CitoZorg" : "Onbekend",
                                 sector: c.sector || [],
