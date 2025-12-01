@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.6.3-output-limiting";
+const SYSTEM_PROMPT_VERSION = "v2.6.4-tool-response-fix";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -4367,18 +4367,22 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                       }
 
                       // Send tool result back to user as content
+                      const toolResultContent = `\n\n✅ ${result.message}`;
+                      fullResponse += toolResultContent; // Track tool output for empty response check
                       controller.enqueue(encoder.encode(`data: ${JSON.stringify({
                         choices: [{
-                          delta: { content: `\n\n✅ ${result.message}` },
+                          delta: { content: toolResultContent },
                           index: 0
                         }]
                       })}\n\n`));
                     } catch (toolError) {
                       console.error(`Error executing tool ${toolCall.function.name}:`, toolError);
                       const errorMessage = toolError instanceof Error ? toolError.message : String(toolError);
+                      const errorContent = `\n\n❌ Fout bij uitvoeren actie: ${errorMessage}`;
+                      fullResponse += errorContent; // Track tool errors for empty response check
                       controller.enqueue(encoder.encode(`data: ${JSON.stringify({
                         choices: [{
-                          delta: { content: `\n\n❌ Fout bij uitvoeren actie: ${errorMessage}` },
+                          delta: { content: errorContent },
                           index: 0
                         }]
                       })}\n\n`));
