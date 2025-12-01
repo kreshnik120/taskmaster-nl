@@ -101,12 +101,7 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
           client_locations (
             *,
             client_sublocations (
-              *,
-              hourly_rates (
-                id,
-                basis_tarief,
-                uursoort_naam
-              )
+              *
             )
           )
         `)
@@ -880,11 +875,8 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
                   {linkedOrg.client_locations && linkedOrg.client_locations.length > 0 ? (
                     <div className="space-y-3">
                       {linkedOrg.client_locations.map((location: any) => {
-                        // Prepare sublocations with tariff calculations
+                        // Prepare sublocations without tariff data
                         const enrichedSublocations = (location.client_sublocations || []).map((sublocation: any) => {
-                          const hourlyRates = sublocation.hourly_rates || [];
-                          const tarieven = hourlyRates.map((r: any) => r.basis_tarief).filter((t: any) => t != null);
-                          
                           return {
                             id: sublocation.id,
                             naam: sublocation.naam,
@@ -896,9 +888,6 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
                             adres: sublocation.adres,
                             capaciteit_min: sublocation.capaciteit_min,
                             capaciteit_max: sublocation.capaciteit_max,
-                            hourly_rates_count: hourlyRates.length,
-                            tarieven_min: tarieven.length > 0 ? Math.min(...tarieven) : undefined,
-                            tarieven_max: tarieven.length > 0 ? Math.max(...tarieven) : undefined,
                           };
                         });
 

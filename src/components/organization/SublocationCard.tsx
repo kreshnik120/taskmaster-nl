@@ -1,4 +1,4 @@
-import { Building, Euro, Phone, Mail, MapPin as MapPinIcon, Users, Copy } from "lucide-react";
+import { Building, Phone, Mail, MapPin as MapPinIcon, Users, Copy } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,13 +22,10 @@ interface Sublocation {
   doelgroep: string[] | null;
   sector: string[] | null;
   gekoppelde_bv_org_id: string | null;
-  hourly_rates_count?: number;
   telefoon?: string | null;
   adres?: string | null;
   capaciteit_min?: number | null;
   capaciteit_max?: number | null;
-  tarieven_min?: number;
-  tarieven_max?: number;
 }
 
 interface SublocationCardProps {
@@ -145,22 +142,6 @@ export function SublocationCard({
                     </Badge>
                   )}
                 </div>
-              )}
-              {/* Tarieven count en range - prominente styling */}
-              {sublocation.hourly_rates_count !== undefined && sublocation.hourly_rates_count > 0 ? (
-                <Badge className="text-xs bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20 font-medium">
-                  <Euro className="h-3 w-3 mr-1" />
-                  {sublocation.hourly_rates_count} {sublocation.hourly_rates_count === 1 ? "tarief" : "tarieven"}
-                  {sublocation.tarieven_min !== undefined && sublocation.tarieven_max !== undefined && (
-                    <span className="ml-1">
-                      (€{sublocation.tarieven_min}-€{sublocation.tarieven_max})
-                    </span>
-                  )}
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-xs opacity-50">
-                  Nog geen tarieven
-                </Badge>
               )}
             </div>
           </div>
