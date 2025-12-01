@@ -231,6 +231,9 @@ export function SublocationDetailModal({
               sector={sublocation.sector || []}
               doelgroep={sublocation.doelgroep || []}
               plaats={sublocation.plaats || ''}
+              provincie={sublocation.provincie}
+              capaciteit_min={sublocation.capaciteit_min}
+              capaciteit_max={sublocation.capaciteit_max}
             />
           </TabsContent>
         </Tabs>
