@@ -32,15 +32,52 @@ interface MatchScoreBreakdown {
   reasoning: string[];
 }
 
-// Functie equivalentie matrix - HBO-V kan VIG taken doen, etc.
+// Functie equivalentie matrix - Alle 17 healthcare functies met hiërarchische compatibiliteit
 const FUNCTIE_COMPATIBILITY: Record<string, { compatible: string[]; score: number }> = {
-  "HBO-V": { compatible: ["HBO-V", "VIG", "Verpleegkundige MBO"], score: 30 },
-  "VIG": { compatible: ["VIG", "Verpleegkundige MBO", "Helpende"], score: 30 },
-  "Verpleegkundige MBO": { compatible: ["Verpleegkundige MBO", "VIG", "Helpende"], score: 30 },
-  "GGZ-agoog": { compatible: ["GGZ-agoog", "Begeleider", "Persoonlijk begeleider"], score: 30 },
-  "Begeleider": { compatible: ["Begeleider", "Persoonlijk begeleider", "GGZ-agoog"], score: 30 },
-  "Persoonlijk begeleider": { compatible: ["Persoonlijk begeleider", "Begeleider"], score: 30 },
-  "Helpende": { compatible: ["Helpende", "Verzorgende"], score: 30 },
+  // Zorg hiërarchie (5 functies)
+  "HBO-V": { compatible: ["HBO-V", "Verpleegkundige MBO", "VIG", "Verzorgende IG", "Helpende"], score: 30 },
+  "Verpleegkundige MBO": { compatible: ["Verpleegkundige MBO", "VIG", "Verzorgende IG", "Helpende", "HBO-V"], score: 30 },
+  "Verpleegkundige": { compatible: ["Verpleegkundige", "HBO-V", "Verpleegkundige MBO", "VIG"], score: 30 },
+  "VIG": { compatible: ["VIG", "Verzorgende IG", "Helpende", "Verpleegkundige MBO"], score: 30 },
+  "Verzorgende IG": { compatible: ["Verzorgende IG", "Helpende", "VIG"], score: 30 },
+  "Helpende": { compatible: ["Helpende", "Verzorgende IG"], score: 30 },
+  
+  // Begeleiding hiërarchie (6 functies)
+  "GGZ-agoog": { compatible: ["GGZ-agoog", "Maatschappelijk werker", "Verslavingswerker", "Begeleider"], score: 30 },
+  "Maatschappelijk werker": { compatible: ["Maatschappelijk werker", "GGZ-agoog", "Verslavingswerker"], score: 30 },
+  "Verslavingswerker": { compatible: ["Verslavingswerker", "GGZ-agoog", "Maatschappelijk werker"], score: 30 },
+  "Begeleider": { compatible: ["Begeleider", "Persoonlijk begeleider", "Pedagogisch medewerker", "Job coach"], score: 30 },
+  "Persoonlijk begeleider": { compatible: ["Persoonlijk begeleider", "Begeleider", "Pedagogisch medewerker"], score: 30 },
+  "Pedagogisch medewerker": { compatible: ["Pedagogisch medewerker", "Begeleider", "Persoonlijk begeleider"], score: 30 },
+  "Job coach": { compatible: ["Job coach", "Begeleider"], score: 30 },
+  
+  // Therapie functies (4 functies - beperkte overlap)
+  "Kunsttherapeut": { compatible: ["Kunsttherapeut", "Muziektherapeut", "Activiteitenbegeleider"], score: 30 },
+  "Muziektherapeut": { compatible: ["Muziektherapeut", "Kunsttherapeut", "Activiteitenbegeleider"], score: 30 },
+  "Activiteitenbegeleider": { compatible: ["Activiteitenbegeleider", "Kunsttherapeut", "Muziektherapeut"], score: 30 },
+  "Gedragswetenschapper": { compatible: ["Gedragswetenschapper"], score: 30 }, // Specialist, geen overlap
+  
+  // Overige functies (3 functies - geen overlap)
+  "Sportinstructeur": { compatible: ["Sportinstructeur"], score: 30 },
+  "Agrarisch medewerker": { compatible: ["Agrarisch medewerker"], score: 30 },
+  "Hovenier": { compatible: ["Hovenier"], score: 30 },
+};
+
+// Doelgroep semantische relaties - Gerelateerde doelgroepen krijgen partiële match credit
+const DOELGROEP_RELATIONS: Record<string, { related: string[]; similarity: number }> = {
+  "LVB": { related: ["Autisme", "NAH", "EMB"], similarity: 0.7 },
+  "Autisme": { related: ["LVB", "NAH", "Kinderen/Jeugd"], similarity: 0.7 },
+  "NAH": { related: ["LVB", "Autisme", "Somatiek"], similarity: 0.6 },
+  "EMB": { related: ["LG", "LVB"], similarity: 0.5 },
+  "LG": { related: ["EMB", "LVB"], similarity: 0.5 },
+  "Psychiatrie": { related: ["Verslaving", "Dakloosheid", "GGZ"], similarity: 0.6 },
+  "Verslaving": { related: ["Psychiatrie", "Dakloosheid"], similarity: 0.6 },
+  "Dakloosheid": { related: ["Psychiatrie", "Verslaving"], similarity: 0.5 },
+  "Ouderen": { related: ["Somatiek", "Dementie"], similarity: 0.6 },
+  "Somatiek": { related: ["Ouderen", "NAH"], similarity: 0.5 },
+  "Dementie": { related: ["Ouderen", "Somatiek"], similarity: 0.7 },
+  "Kinderen/Jeugd": { related: ["Autisme", "Jeugdzorg"], similarity: 0.6 },
+  "Jeugdzorg": { related: ["Kinderen/Jeugd"], similarity: 0.7 },
 };
 
 // Jaccard similarity calculator voor array overlap
@@ -53,6 +90,49 @@ function calculateJaccardSimilarity(set1: string[], set2: string[]): number {
   const union = [...new Set([...set1, ...set2])];
   
   return intersection.length / union.length;
+}
+
+// Semantische doelgroep matching - houdt rekening met gerelateerde doelgroepen
+function calculateSemanticDoelgroepMatch(
+  profDoelgroepen: string[],
+  locatieDoelgroepen: string[]
+): { score: number; directMatches: string[]; relatedMatches: string[] } {
+  if (profDoelgroepen.length === 0 || locatieDoelgroepen.length === 0) {
+    return { score: 0, directMatches: [], relatedMatches: [] };
+  }
+
+  // Directe matches (100% credit)
+  const directMatches = profDoelgroepen.filter(profD =>
+    locatieDoelgroepen.some(locD => locD.toLowerCase() === profD.toLowerCase())
+  );
+
+  // Gerelateerde matches (60% credit via similarity score)
+  const relatedMatches: string[] = [];
+  let relatedScore = 0;
+
+  profDoelgroepen.forEach(profD => {
+    const relation = DOELGROEP_RELATIONS[profD];
+    if (relation) {
+      const relatedFound = relation.related.filter(relD =>
+        locatieDoelgroepen.some(locD => locD.toLowerCase() === relD.toLowerCase())
+      );
+      if (relatedFound.length > 0 && !directMatches.includes(profD)) {
+        relatedMatches.push(...relatedFound);
+        relatedScore += relation.similarity * relatedFound.length;
+      }
+    }
+  });
+
+  // Combined score: directe matches krijgen 1.0, gerelateerde krijgen ~0.6
+  const totalWeight = directMatches.length * 1.0 + relatedScore;
+  const maxWeight = locatieDoelgroepen.length * 1.0;
+  const score = maxWeight > 0 ? totalWeight / maxWeight : 0;
+
+  return {
+    score: Math.min(1, score),
+    directMatches: [...new Set(directMatches)],
+    relatedMatches: [...new Set(relatedMatches)],
+  };
 }
 
 // Detecteer of locatie landelijk/afgelegen is
@@ -218,24 +298,29 @@ export function calculateSublocationMatchScore(
     reasoning.push(`⚠️ Sector: Geen ervaring opgegeven`);
   }
 
-  // ===== 5. DOELGROEP ERVARING MATCH (15 punten via Jaccard) =====
+  // ===== 5. DOELGROEP ERVARING MATCH (15 punten via semantische matching) =====
   if (criteria.doelgroep.length > 0 && professional.doelgroep_ervaring && professional.doelgroep_ervaring.length > 0) {
-    const similarity = calculateJaccardSimilarity(professional.doelgroep_ervaring, criteria.doelgroep);
-    doelgroepMatch = Math.round(similarity * 15);
+    const semanticMatch = calculateSemanticDoelgroepMatch(professional.doelgroep_ervaring, criteria.doelgroep);
+    doelgroepMatch = Math.round(semanticMatch.score * 15);
     
-    const overlappingDoelgroepen = professional.doelgroep_ervaring.filter(d =>
-      criteria.doelgroep.some(cd => cd.toLowerCase() === d.toLowerCase())
-    );
+    if (semanticMatch.directMatches.length > 0) {
+      reasoning.push(`✅ Doelgroep: ${semanticMatch.directMatches.join(", ")} (exact match, ${Math.round(semanticMatch.score * 100)}%)`);
+    }
     
-    if (overlappingDoelgroepen.length > 0) {
-      reasoning.push(`✅ Doelgroep: ${overlappingDoelgroepen.join(", ")} (${Math.round(similarity * 100)}% overlap)`);
-    } else {
-      reasoning.push(`⚠️ Doelgroep: Beperkte overlap met ${criteria.doelgroep.join(", ")}`);
+    if (semanticMatch.relatedMatches.length > 0) {
+      reasoning.push(`⚠️ Doelgroep: ${semanticMatch.relatedMatches.join(", ")} (gerelateerde ervaring, +${Math.round(semanticMatch.relatedMatches.length * 0.6 / criteria.doelgroep.length * 100)}%)`);
+    }
+    
+    if (semanticMatch.directMatches.length === 0 && semanticMatch.relatedMatches.length === 0) {
+      const missing = criteria.doelgroep.filter(d => 
+        !professional.doelgroep_ervaring!.some(pd => pd.toLowerCase() === d.toLowerCase())
+      );
+      reasoning.push(`❌ Doelgroep: Geen ervaring met ${missing.join(", ")}`);
     }
   } else if (criteria.doelgroep.length === 0) {
     doelgroepMatch = 7; // Partial credit if no doelgroep criteria
   } else {
-    reasoning.push(`⚠️ Doelgroep: Geen ervaring opgegeven`);
+    reasoning.push(`⚠️ Doelgroep: Geen ervaring opgegeven - voeg doelgroep_ervaring toe voor betere match`);
   }
 
   // ===== TOTAAL BEREKENING (max 100 punten) =====
