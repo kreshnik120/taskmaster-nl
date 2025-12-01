@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.7.0-adaptive-semantic-search";
+const SYSTEM_PROMPT_VERSION = "v2.8.0-bureau-filter-tarieven";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -2950,6 +2950,56 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
       {
         type: "function",
         function: {
+          name: "query_professionals",
+          description: "Doorzoek professionals/ZZP'ers/uitzendkrachten database om vragen te beantwoorden over beschikbare professionals, hun functieniveau, werkvorm, regio, skills, etc. Gebruik dit wanneer gebruikers vragen stellen over professionals, zzp'ers, beschikbare arbeidskrachten, of wie er kan worden ingezet.",
+          parameters: {
+            type: "object",
+            properties: {
+              filter: {
+                type: "object",
+                description: "Filters voor de query",
+                properties: {
+                  functie_niveau: { 
+                    type: "string", 
+                    enum: ["VIG", "HBO-V", "Verpleegkundige MBO", "Helpende", "Begeleider", "Persoonlijk begeleider", "GGZ-agoog"],
+                    description: "Filter op functieniveau"
+                  },
+                  werkvorm: { 
+                    type: "string", 
+                    enum: ["ZZP", "Uitzendkracht", "ABCito constructie"],
+                    description: "Filter op werkvorm (ZZP, Uitzendkracht, ABCito)"
+                  },
+                  bureau: { 
+                    type: "string", 
+                    enum: ["ABCzorg", "CitoZorg"],
+                    description: "Filter op bemiddelingsbureau waar de professional bij is geregistreerd"
+                  },
+                  regio: { 
+                    type: "string",
+                    description: "Filter op regio/werkgebied (bijv. 'Utrecht', 'Nijmegen')"
+                  },
+                  status: { 
+                    type: "string",
+                    description: "Filter op status (bijv. 'beschikbaar', 'actief')"
+                  },
+                  has_auto: { 
+                    type: "boolean",
+                    description: "Filter op professionals met eigen vervoer"
+                  }
+                }
+              },
+              limit: {
+                type: "number",
+                description: "Maximum aantal resultaten",
+                default: 50
+              }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
           name: "suggest_placements",
           description: "Genereer AI-gestuurde match suggesties tussen beschikbare professionals en clients. De AI analyseert functie niveau, regio, skills, beschikbaarheid en tarief om de beste matches te vinden.",
           parameters: {
@@ -3506,6 +3556,14 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             professionalsQuery = professionalsQuery.eq('heeft_auto', args.filter.has_auto);
                           }
                           
+                          // ✨ NEW: Bureau filter (ABCzorg/CitoZorg)
+                          if (args.filter?.bureau) {
+                            const bureauOrgId = args.filter.bureau === 'ABCzorg' 
+                              ? '550e8400-e29b-41d4-a716-446655440000'
+                              : '650e8400-e29b-41d4-a716-446655440001';
+                            professionalsQuery = professionalsQuery.eq('org_id', bureauOrgId);
+                          }
+                          
                           const { data: professionals, error: professionalsError } = await professionalsQuery;
                           
                           if (professionalsError) throw professionalsError;
@@ -3525,9 +3583,10 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                               skills: p.skills,
                               rating: p.rating,
                               email: p.email,
-                              telefoonnummer: p.telefoonnummer
+                              telefoonnummer: p.telefoonnummer,
+                              org_id: p.org_id
                             })),
-                            message: `✅ ${professionals.length} professional${professionals.length !== 1 ? 's' : ''} gevonden`
+                            message: `✅ ${professionals.length} professional${professionals.length !== 1 ? 's' : ''} gevonden${args.filter?.bureau ? ` bij ${args.filter.bureau}` : ''}`
                           };
                           break;
 
