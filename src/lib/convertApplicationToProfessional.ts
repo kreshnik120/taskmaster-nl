@@ -1,6 +1,65 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+/**
+ * Auto-determine provincie based on regio
+ */
+function bepaalProvincie(regio: string | null): string | null {
+  if (!regio) return null;
+  
+  const regioLower = regio.toLowerCase();
+  
+  // Noord-Brabant
+  if (regioLower.includes('brabant') || regioLower.includes('eindhoven') || 
+      regioLower.includes('tilburg') || regioLower.includes('breda') || 
+      regioLower.includes('helmond') || regioLower.includes('oss')) {
+    return 'Noord-Brabant';
+  }
+  
+  // Limburg
+  if (regioLower.includes('limburg') || regioLower.includes('maastricht') || 
+      regioLower.includes('venlo') || regioLower.includes('sittard') || 
+      regioLower.includes('heerlen') || regioLower.includes('roermond')) {
+    return 'Limburg';
+  }
+  
+  // Gelderland
+  if (regioLower.includes('gelderland') || regioLower.includes('nijmegen') || 
+      regioLower.includes('arnhem') || regioLower.includes('apeldoorn') || 
+      regioLower.includes('ede') || regioLower.includes('doetinchem')) {
+    return 'Gelderland';
+  }
+  
+  // Utrecht
+  if (regioLower.includes('utrecht') || regioLower.includes('amersfoort') || 
+      regioLower.includes('veenendaal') || regioLower.includes('nieuwegein')) {
+    return 'Utrecht';
+  }
+  
+  // Noord-Holland
+  if (regioLower.includes('amsterdam') || regioLower.includes('haarlem') || 
+      regioLower.includes('zaanstad') || regioLower.includes('alkmaar') || 
+      regioLower.includes('noord-holland')) {
+    return 'Noord-Holland';
+  }
+  
+  // Zuid-Holland
+  if (regioLower.includes('rotterdam') || regioLower.includes('den haag') || 
+      regioLower.includes('leiden') || regioLower.includes('dordrecht') || 
+      regioLower.includes('zuid-holland')) {
+    return 'Zuid-Holland';
+  }
+  
+  // Overijssel
+  if (regioLower.includes('overijssel') || regioLower.includes('enschede') || 
+      regioLower.includes('zwolle') || regioLower.includes('almelo') || 
+      regioLower.includes('deventer') || regioLower.includes('hengelo')) {
+    return 'Overijssel';
+  }
+  
+  return null;
+}
+
 interface Application {
   id: string;
   email_from: string;
@@ -115,6 +174,7 @@ export async function convertApplicationToProfessional(
       functie_niveau: application.extracted_data.functie_niveau,
       werkvorm: mappedWerkvorm,
       regio: application.extracted_data.regio || null,
+      provincie: bepaalProvincie(application.extracted_data.regio),
       telefoonnummer: application.extracted_data.telefoon || null,
       email: application.email_from,
       heeft_auto: application.extracted_data.eigen_vervoer || false,
