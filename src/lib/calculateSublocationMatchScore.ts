@@ -39,32 +39,32 @@ interface MatchScoreBreakdown {
 // Functie equivalentie matrix - Alle 17 healthcare functies met hiërarchische compatibiliteit
 const FUNCTIE_COMPATIBILITY: Record<string, { compatible: string[]; score: number }> = {
   // Zorg hiërarchie (5 functies)
-  "HBO-V": { compatible: ["HBO-V", "Verpleegkundige MBO", "VIG", "Verzorgende IG", "Helpende"], score: 30 },
-  "Verpleegkundige MBO": { compatible: ["Verpleegkundige MBO", "VIG", "Verzorgende IG", "Helpende", "HBO-V"], score: 30 },
-  "Verpleegkundige": { compatible: ["Verpleegkundige", "HBO-V", "Verpleegkundige MBO", "VIG"], score: 30 },
-  "VIG": { compatible: ["VIG", "Verzorgende IG", "Helpende", "Verpleegkundige MBO"], score: 30 },
-  "Verzorgende IG": { compatible: ["Verzorgende IG", "Helpende", "VIG"], score: 30 },
-  "Helpende": { compatible: ["Helpende", "Verzorgende IG"], score: 30 },
+  "HBO-V": { compatible: ["HBO-V", "Verpleegkundige MBO", "VIG", "Verzorgende IG", "Helpende"], score: 25 },
+  "Verpleegkundige MBO": { compatible: ["Verpleegkundige MBO", "VIG", "Verzorgende IG", "Helpende", "HBO-V"], score: 25 },
+  "Verpleegkundige": { compatible: ["Verpleegkundige", "HBO-V", "Verpleegkundige MBO", "VIG"], score: 25 },
+  "VIG": { compatible: ["VIG", "Verzorgende IG", "Helpende", "Verpleegkundige MBO"], score: 25 },
+  "Verzorgende IG": { compatible: ["Verzorgende IG", "Helpende", "VIG"], score: 25 },
+  "Helpende": { compatible: ["Helpende", "Verzorgende IG"], score: 25 },
   
   // Begeleiding hiërarchie (6 functies)
-  "GGZ-agoog": { compatible: ["GGZ-agoog", "Maatschappelijk werker", "Verslavingswerker", "Begeleider"], score: 30 },
-  "Maatschappelijk werker": { compatible: ["Maatschappelijk werker", "GGZ-agoog", "Verslavingswerker"], score: 30 },
-  "Verslavingswerker": { compatible: ["Verslavingswerker", "GGZ-agoog", "Maatschappelijk werker"], score: 30 },
-  "Begeleider": { compatible: ["Begeleider", "Persoonlijk begeleider", "Pedagogisch medewerker", "Job coach"], score: 30 },
-  "Persoonlijk begeleider": { compatible: ["Persoonlijk begeleider", "Begeleider", "Pedagogisch medewerker"], score: 30 },
-  "Pedagogisch medewerker": { compatible: ["Pedagogisch medewerker", "Begeleider", "Persoonlijk begeleider"], score: 30 },
-  "Job coach": { compatible: ["Job coach", "Begeleider"], score: 30 },
+  "GGZ-agoog": { compatible: ["GGZ-agoog", "Maatschappelijk werker", "Verslavingswerker", "Begeleider"], score: 25 },
+  "Maatschappelijk werker": { compatible: ["Maatschappelijk werker", "GGZ-agoog", "Verslavingswerker"], score: 25 },
+  "Verslavingswerker": { compatible: ["Verslavingswerker", "GGZ-agoog", "Maatschappelijk werker"], score: 25 },
+  "Begeleider": { compatible: ["Begeleider", "Persoonlijk begeleider", "Pedagogisch medewerker", "Job coach"], score: 25 },
+  "Persoonlijk begeleider": { compatible: ["Persoonlijk begeleider", "Begeleider", "Pedagogisch medewerker"], score: 25 },
+  "Pedagogisch medewerker": { compatible: ["Pedagogisch medewerker", "Begeleider", "Persoonlijk begeleider"], score: 25 },
+  "Job coach": { compatible: ["Job coach", "Begeleider"], score: 25 },
   
   // Therapie functies (4 functies - beperkte overlap)
-  "Kunsttherapeut": { compatible: ["Kunsttherapeut", "Muziektherapeut", "Activiteitenbegeleider"], score: 30 },
-  "Muziektherapeut": { compatible: ["Muziektherapeut", "Kunsttherapeut", "Activiteitenbegeleider"], score: 30 },
-  "Activiteitenbegeleider": { compatible: ["Activiteitenbegeleider", "Kunsttherapeut", "Muziektherapeut"], score: 30 },
-  "Gedragswetenschapper": { compatible: ["Gedragswetenschapper"], score: 30 }, // Specialist, geen overlap
+  "Kunsttherapeut": { compatible: ["Kunsttherapeut", "Muziektherapeut", "Activiteitenbegeleider"], score: 25 },
+  "Muziektherapeut": { compatible: ["Muziektherapeut", "Kunsttherapeut", "Activiteitenbegeleider"], score: 25 },
+  "Activiteitenbegeleider": { compatible: ["Activiteitenbegeleider", "Kunsttherapeut", "Muziektherapeut"], score: 25 },
+  "Gedragswetenschapper": { compatible: ["Gedragswetenschapper"], score: 25 }, // Specialist, geen overlap
   
   // Overige functies (3 functies - geen overlap)
-  "Sportinstructeur": { compatible: ["Sportinstructeur"], score: 30 },
-  "Agrarisch medewerker": { compatible: ["Agrarisch medewerker"], score: 30 },
-  "Hovenier": { compatible: ["Hovenier"], score: 30 },
+  "Sportinstructeur": { compatible: ["Sportinstructeur"], score: 25 },
+  "Agrarisch medewerker": { compatible: ["Agrarisch medewerker"], score: 25 },
+  "Hovenier": { compatible: ["Hovenier"], score: 25 },
 };
 
 // Doelgroep semantische relaties - Gerelateerde doelgroepen krijgen partiële match credit
