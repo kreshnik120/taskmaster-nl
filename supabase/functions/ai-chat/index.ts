@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.6-query-clients";
+const SYSTEM_PROMPT_VERSION = "v2.6.1-query-clients-fix";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -3736,7 +3736,7 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                               // Join met organizations tabel om op bureau naam te filteren
                               const bureauOrgId = args.filter.bureau === "ABCzorg" 
                                 ? "550e8400-e29b-41d4-a716-446655440000"  // ABCzorg UUID
-                                : "550e8400-e29b-41d4-a716-446655440001";  // CitoZorg UUID
+                                : "650e8400-e29b-41d4-a716-446655440001";  // CitoZorg UUID (FIXED)
                               
                               clientQuery = clientQuery.eq('org_id', bureauOrgId);
                             }
@@ -3781,7 +3781,8 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             // Format client list
                             const clientList = clientsData
                               .map((client: any, i: number) => {
-                                const bureau = client.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : "CitoZorg";
+                                const bureau = client.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : 
+                                               client.org_id === "650e8400-e29b-41d4-a716-446655440001" ? "CitoZorg" : "Onbekend";
                                 const sector = client.sector && client.sector.length > 0 ? client.sector.join(', ') : 'n/a';
                                 const regio = client.regio && client.regio.length > 0 ? client.regio.join(', ') : 'n/a';
                                 const contactInfo = args.include?.includes('contact') 
@@ -3807,7 +3808,8 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             const byRegio: any = {};
                             
                             clientsData.forEach((client: any) => {
-                              const bureau = client.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : "CitoZorg";
+                              const bureau = client.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : 
+                                             client.org_id === "650e8400-e29b-41d4-a716-446655440001" ? "CitoZorg" : "Onbekend";
                               byBureau[bureau] = (byBureau[bureau] || 0) + 1;
                               
                               if (client.sector) {
@@ -3834,7 +3836,8 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                               clients: clientsData.map((c: any) => ({
                                 id: c.id,
                                 name: c.company,
-                                bureau: c.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : "CitoZorg",
+                                bureau: c.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : 
+                                        c.org_id === "650e8400-e29b-41d4-a716-446655440001" ? "CitoZorg" : "Onbekend",
                                 sector: c.sector || [],
                                 regio: c.regio || [],
                                 contact: c.name,
