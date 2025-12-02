@@ -124,6 +124,21 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
   const [cvExtractedData, setCvExtractedData] = useState<Record<string, any> | null>(null);
   const [cvDataOpen, setCvDataOpen] = useState(false);
 
+  // Helper to extract value from {value, confidence} or plain value (backwards compatible)
+  const getFieldValue = <T,>(field: T | { value: T; confidence: number } | null | undefined): T | null => {
+    if (field === null || field === undefined) return null;
+    if (typeof field === 'object' && field !== null && 'value' in field) {
+      return (field as { value: T; confidence: number }).value;
+    }
+    return field as T;
+  };
+
+  // Helper to get global confidence (supports both old and new format)
+  const getGlobalConfidence = (): number | null => {
+    if (!cvExtractedData) return null;
+    return cvExtractedData.global_confidence ?? cvExtractedData.confidence ?? null;
+  };
+
   const {
     register,
     handleSubmit,
@@ -179,14 +194,14 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
     if (selectedDoelgroepen.length > 0) score += basisWeights.doelgroep_ervaring;
 
     // Verrijking score (uit CV data)
-    if (cvExtractedData?.jaren_ervaring) score += verrijkingWeights.jaren_ervaring;
-    if (cvExtractedData?.opleidingen?.length > 0) score += verrijkingWeights.opleidingen;
-    if (cvExtractedData?.leidinggevende_ervaring) score += verrijkingWeights.leidinggevende_ervaring;
-    if (cvExtractedData?.postcode) score += verrijkingWeights.postcode;
-    if (cvExtractedData?.certificaten?.length > 0) score += verrijkingWeights.certificaten;
-    if (cvExtractedData?.nachtdienst_bereid !== null && cvExtractedData?.nachtdienst_bereid !== undefined) score += verrijkingWeights.nachtdienst_bereid;
-    if (cvExtractedData?.weekenddienst_bereid !== null && cvExtractedData?.weekenddienst_bereid !== undefined) score += verrijkingWeights.weekenddienst_bereid;
-    if (cvExtractedData?.talen?.length > 0) score += verrijkingWeights.talen;
+    if (getFieldValue(cvExtractedData?.jaren_ervaring)) score += verrijkingWeights.jaren_ervaring;
+    if ((getFieldValue(cvExtractedData?.opleidingen) as any[])?.length > 0) score += verrijkingWeights.opleidingen;
+    if (getFieldValue(cvExtractedData?.leidinggevende_ervaring)) score += verrijkingWeights.leidinggevende_ervaring;
+    if (getFieldValue(cvExtractedData?.postcode)) score += verrijkingWeights.postcode;
+    if ((getFieldValue(cvExtractedData?.certificaten) as any[])?.length > 0) score += verrijkingWeights.certificaten;
+    if (getFieldValue(cvExtractedData?.nachtdienst_bereid) !== null && getFieldValue(cvExtractedData?.nachtdienst_bereid) !== undefined) score += verrijkingWeights.nachtdienst_bereid;
+    if (getFieldValue(cvExtractedData?.weekenddienst_bereid) !== null && getFieldValue(cvExtractedData?.weekenddienst_bereid) !== undefined) score += verrijkingWeights.weekenddienst_bereid;
+    if ((getFieldValue(cvExtractedData?.talen) as any[])?.length > 0) score += verrijkingWeights.talen;
 
     return Math.round(score);
   };
@@ -233,26 +248,26 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
         bron: data.bron || null,
         opmerkingen: data.opmerkingen || null,
         // CV extractie velden (14+ nieuwe velden)
-        jaren_ervaring: cvExtractedData?.jaren_ervaring || null,
-        ervaring_sinds: cvExtractedData?.ervaring_sinds || null,
-        leidinggevende_ervaring: cvExtractedData?.leidinggevende_ervaring || false,
-        leidinggevende_functies: cvExtractedData?.leidinggevende_functies || [],
-        postcode: cvExtractedData?.postcode || null,
-        woonplaats: cvExtractedData?.woonplaats || null,
-        geboortedatum: cvExtractedData?.geboortedatum || null,
-        specifieke_doelgroepen: cvExtractedData?.specifieke_doelgroepen || [],
-        hoogste_opleiding: cvExtractedData?.hoogste_opleiding || null,
-        opleidingen: cvExtractedData?.opleidingen || [],
-        certificaten: cvExtractedData?.certificaten || [],
-        BIG_nummer: cvExtractedData?.BIG_nummer || null,
-        nachtdienst_bereid: cvExtractedData?.nachtdienst_bereid || null,
-        weekenddienst_bereid: cvExtractedData?.weekenddienst_bereid || null,
-        voorkeur_uren_per_week: cvExtractedData?.voorkeur_uren_per_week || null,
-        rijbewijs: cvExtractedData?.rijbewijs || null,
-        max_reisafstand_km: cvExtractedData?.max_reisafstand_km || null,
-        regio_voorkeur: cvExtractedData?.regio_voorkeur || null,
-        talen: cvExtractedData?.talen || [],
-        cv_confidence: cvExtractedData?.confidence || null,
+        jaren_ervaring: getFieldValue(cvExtractedData?.jaren_ervaring) || null,
+        ervaring_sinds: getFieldValue(cvExtractedData?.ervaring_sinds) || null,
+        leidinggevende_ervaring: getFieldValue(cvExtractedData?.leidinggevende_ervaring) || false,
+        leidinggevende_functies: getFieldValue(cvExtractedData?.leidinggevende_functies) || [],
+        postcode: getFieldValue(cvExtractedData?.postcode) || null,
+        woonplaats: getFieldValue(cvExtractedData?.woonplaats) || null,
+        geboortedatum: getFieldValue(cvExtractedData?.geboortedatum) || null,
+        specifieke_doelgroepen: getFieldValue(cvExtractedData?.specifieke_doelgroepen) || [],
+        hoogste_opleiding: getFieldValue(cvExtractedData?.hoogste_opleiding) || null,
+        opleidingen: getFieldValue(cvExtractedData?.opleidingen) || [],
+        certificaten: getFieldValue(cvExtractedData?.certificaten) || [],
+        BIG_nummer: getFieldValue(cvExtractedData?.BIG_nummer) || null,
+        nachtdienst_bereid: getFieldValue(cvExtractedData?.nachtdienst_bereid) ?? null,
+        weekenddienst_bereid: getFieldValue(cvExtractedData?.weekenddienst_bereid) ?? null,
+        voorkeur_uren_per_week: getFieldValue(cvExtractedData?.voorkeur_uren_per_week) || null,
+        rijbewijs: getFieldValue(cvExtractedData?.rijbewijs) || null,
+        max_reisafstand_km: getFieldValue(cvExtractedData?.max_reisafstand_km) || null,
+        regio_voorkeur: getFieldValue(cvExtractedData?.regio_voorkeur) || null,
+        talen: getFieldValue(cvExtractedData?.talen) || [],
+        cv_confidence: getGlobalConfidence() || null,
       };
 
       const completenessScore = calculateCompletenessScore(data);
@@ -350,49 +365,69 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
         const extracted = data.data;
         const filled: string[] = [];
 
-        // Auto-fill form fields
-        if (extracted.naam) {
-          setValue("naam", extracted.naam);
+        // Helper to extract value from new {value, confidence} format
+        const extractValue = <T,>(field: T | { value: T; confidence: number } | null | undefined): T | null => {
+          if (field === null || field === undefined) return null;
+          if (typeof field === 'object' && field !== null && 'value' in field) {
+            return (field as { value: T; confidence: number }).value;
+          }
+          return field as T;
+        };
+
+        // Auto-fill form fields (handle both old and new format)
+        const naam = extractValue(extracted.naam);
+        if (naam) {
+          setValue("naam", naam);
           filled.push("naam");
         }
-        if (extracted.email) {
-          setValue("email", extracted.email);
+        const email = extractValue(extracted.email);
+        if (email) {
+          setValue("email", email);
           filled.push("email");
         }
-        if (extracted.telefoon) {
-          setValue("telefoon", extracted.telefoon);
+        const telefoon = extractValue(extracted.telefoon);
+        if (telefoon) {
+          setValue("telefoon", telefoon);
           filled.push("telefoon");
         }
-        if (extracted.functie_niveau) {
-          setValue("functie_niveau", extracted.functie_niveau);
+        const functie_niveau = extractValue(extracted.functie_niveau);
+        if (functie_niveau) {
+          setValue("functie_niveau", functie_niveau);
           filled.push("functie_niveau");
         }
-        if (extracted.werkvorm) {
-          setValue("werkvorm", extracted.werkvorm);
+        const werkvorm = extractValue(extracted.werkvorm);
+        if (werkvorm) {
+          setValue("werkvorm", werkvorm);
           filled.push("werkvorm");
         }
-        if (extracted.regio) {
-          setValue("regio", extracted.regio);
+        const regio = extractValue(extracted.regio);
+        if (regio) {
+          setValue("regio", regio);
           filled.push("regio");
         }
-        if (extracted.beschikbaarheid) {
-          setValue("beschikbaarheid", extracted.beschikbaarheid);
+        const beschikbaarheid = extractValue(extracted.beschikbaarheid);
+        if (beschikbaarheid) {
+          setValue("beschikbaarheid", beschikbaarheid);
           filled.push("beschikbaarheid");
         }
-        if (extracted.eigen_vervoer !== null) {
-          setValue("eigen_vervoer", extracted.eigen_vervoer);
+        const eigen_vervoer = extractValue(extracted.eigen_vervoer);
+        if (eigen_vervoer !== null) {
+          setValue("eigen_vervoer", eigen_vervoer);
           filled.push("eigen_vervoer");
         }
-        if (extracted.opmerkingen) {
-          setValue("opmerkingen", extracted.opmerkingen);
+        const opmerkingen = extractValue(extracted.opmerkingen);
+        if (opmerkingen) {
+          setValue("opmerkingen", opmerkingen);
           filled.push("opmerkingen");
         }
-        if (extracted.ervaring_sector && extracted.ervaring_sector.length > 0) {
-          setSelectedSectoren(extracted.ervaring_sector);
+        const ervaring_sector = extractValue(extracted.ervaring_sector);
+        if (ervaring_sector && Array.isArray(ervaring_sector) && ervaring_sector.length > 0) {
+          setSelectedSectoren(ervaring_sector);
           filled.push("ervaring_sector");
         }
-        if (extracted.doelgroep_ervaring && extracted.doelgroep_ervaring.length > 0) {
-          setSelectedDoelgroepen(extracted.doelgroep_ervaring);
+        const doelgroep_ervaring = extractValue(extracted.doelgroep_ervaring);
+        if (doelgroep_ervaring && Array.isArray(doelgroep_ervaring) && doelgroep_ervaring.length > 0) {
+          setSelectedDoelgroepen(doelgroep_ervaring);
           filled.push("doelgroep_ervaring");
         }
 
@@ -402,8 +437,10 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
         setCvExtractedData(extracted);
 
         // Check if critical fields (naam + email) were extracted
-        const hasNaam = !!extracted.naam && extracted.naam !== "Voor- en achternaam";
-        const hasEmail = !!extracted.email;
+        const extractedNaam = extractValue(extracted.naam);
+        const extractedEmail = extractValue(extracted.email);
+        const hasNaam = !!extractedNaam && extractedNaam !== "Voor- en achternaam";
+        const hasEmail = !!extractedEmail;
 
         if (hasNaam && hasEmail) {
           // All critical fields present - jump to step 3
@@ -775,16 +812,16 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                         <FileText className="h-4 w-4 text-primary" />
                         <span className="text-sm font-medium">Bekijk geëxtraheerde CV data</span>
                         <Badge variant="secondary" className="text-xs">
-                          {Object.keys(cvExtractedData).filter(k => cvExtractedData[k] !== null && cvExtractedData[k] !== undefined && k !== 'confidence').length} velden
+                          {Object.keys(cvExtractedData).filter(k => getFieldValue(cvExtractedData[k]) !== null && k !== 'confidence' && k !== 'global_confidence').length} velden
                         </Badge>
-                        {cvExtractedData.confidence && (
+                        {getGlobalConfidence() !== null && (
                           <Badge variant="outline" className={cn(
                             "text-[10px] px-1.5",
-                            cvExtractedData.confidence >= 0.8 ? "bg-green-100 text-green-700 border-green-300" :
-                            cvExtractedData.confidence >= 0.5 ? "bg-amber-100 text-amber-700 border-amber-300" :
+                            getGlobalConfidence()! >= 0.8 ? "bg-green-100 text-green-700 border-green-300" :
+                            getGlobalConfidence()! >= 0.5 ? "bg-amber-100 text-amber-700 border-amber-300" :
                             "bg-red-100 text-red-700 border-red-300"
                           )}>
-                            {cvExtractedData.confidence >= 0.8 ? "✓" : cvExtractedData.confidence >= 0.5 ? "~" : "?"} {Math.round(cvExtractedData.confidence * 100)}%
+                            {getGlobalConfidence()! >= 0.8 ? "✓" : getGlobalConfidence()! >= 0.5 ? "~" : "?"} {Math.round(getGlobalConfidence()! * 100)}%
                           </Badge>
                         )}
                       </div>
@@ -801,24 +838,24 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Contact</p>
                         <div className="grid grid-cols-2 gap-2">
                           <div className="flex items-center gap-2">
-                            {cvExtractedData.naam ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            {getFieldValue(cvExtractedData.naam) ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
                             <span className="text-muted-foreground">Naam:</span>
-                            <span className="font-medium">{cvExtractedData.naam || "—"}</span>
+                            <span className="font-medium">{getFieldValue(cvExtractedData.naam) || "—"}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            {cvExtractedData.email ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            {getFieldValue(cvExtractedData.email) ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
                             <span className="text-muted-foreground">Email:</span>
-                            <span className="font-medium truncate">{cvExtractedData.email || "—"}</span>
+                            <span className="font-medium truncate">{getFieldValue(cvExtractedData.email) || "—"}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            {cvExtractedData.telefoon ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            {getFieldValue(cvExtractedData.telefoon) ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
                             <span className="text-muted-foreground">Telefoon:</span>
-                            <span className="font-medium">{cvExtractedData.telefoon || "—"}</span>
+                            <span className="font-medium">{getFieldValue(cvExtractedData.telefoon) || "—"}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            {cvExtractedData.woonplaats ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            {getFieldValue(cvExtractedData.woonplaats) ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
                             <span className="text-muted-foreground">Woonplaats:</span>
-                            <span className="font-medium">{cvExtractedData.woonplaats || "—"}</span>
+                            <span className="font-medium">{getFieldValue(cvExtractedData.woonplaats) || "—"}</span>
                           </div>
                         </div>
                       </div>
@@ -828,24 +865,24 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ervaring</p>
                         <div className="grid grid-cols-2 gap-2">
                           <div className="flex items-center gap-2">
-                            {cvExtractedData.functie_niveau ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            {getFieldValue(cvExtractedData.functie_niveau) ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
                             <span className="text-muted-foreground">Functie:</span>
-                            <span className="font-medium">{cvExtractedData.functie_niveau || "—"}</span>
+                            <span className="font-medium">{getFieldValue(cvExtractedData.functie_niveau) || "—"}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            {cvExtractedData.jaren_ervaring ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            {getFieldValue(cvExtractedData.jaren_ervaring) ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
                             <span className="text-muted-foreground">Jaren ervaring:</span>
-                            <span className="font-medium">{cvExtractedData.jaren_ervaring ? `${cvExtractedData.jaren_ervaring} jaar` : "—"}</span>
+                            <span className="font-medium">{getFieldValue(cvExtractedData.jaren_ervaring) ? `${getFieldValue(cvExtractedData.jaren_ervaring)} jaar` : "—"}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            {cvExtractedData.leidinggevende_ervaring ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-muted-foreground" />}
+                            {getFieldValue(cvExtractedData.leidinggevende_ervaring) ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-muted-foreground" />}
                             <span className="text-muted-foreground">Leidinggevend:</span>
-                            <span className="font-medium">{cvExtractedData.leidinggevende_ervaring ? "Ja" : "Nee"}</span>
+                            <span className="font-medium">{getFieldValue(cvExtractedData.leidinggevende_ervaring) ? "Ja" : "Nee"}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            {cvExtractedData.hoogste_opleiding ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            {getFieldValue(cvExtractedData.hoogste_opleiding) ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
                             <span className="text-muted-foreground">Opleiding:</span>
-                            <span className="font-medium truncate">{cvExtractedData.hoogste_opleiding || "—"}</span>
+                            <span className="font-medium truncate">{getFieldValue(cvExtractedData.hoogste_opleiding) || "—"}</span>
                           </div>
                         </div>
                       </div>
@@ -855,62 +892,62 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Beschikbaarheid & Mobiliteit</p>
                         <div className="grid grid-cols-2 gap-2">
                           <div className="flex items-center gap-2">
-                            {cvExtractedData.werkvorm ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            {getFieldValue(cvExtractedData.werkvorm) ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
                             <span className="text-muted-foreground">Werkvorm:</span>
-                            <span className="font-medium">{cvExtractedData.werkvorm || "—"}</span>
+                            <span className="font-medium">{getFieldValue(cvExtractedData.werkvorm) || "—"}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            {cvExtractedData.nachtdienst_bereid !== null ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            {getFieldValue(cvExtractedData.nachtdienst_bereid) !== null ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
                             <span className="text-muted-foreground">Nachtdienst:</span>
-                            <span className="font-medium">{cvExtractedData.nachtdienst_bereid === true ? "Ja" : cvExtractedData.nachtdienst_bereid === false ? "Nee" : "—"}</span>
+                            <span className="font-medium">{getFieldValue(cvExtractedData.nachtdienst_bereid) === true ? "Ja" : getFieldValue(cvExtractedData.nachtdienst_bereid) === false ? "Nee" : "—"}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            {cvExtractedData.rijbewijs ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            {getFieldValue(cvExtractedData.rijbewijs) ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
                             <span className="text-muted-foreground">Rijbewijs:</span>
-                            <span className="font-medium">{cvExtractedData.rijbewijs || "—"}</span>
+                            <span className="font-medium">{getFieldValue(cvExtractedData.rijbewijs) || "—"}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            {cvExtractedData.weekenddienst_bereid !== null ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            {getFieldValue(cvExtractedData.weekenddienst_bereid) !== null ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
                             <span className="text-muted-foreground">Weekenddienst:</span>
-                            <span className="font-medium">{cvExtractedData.weekenddienst_bereid === true ? "Ja" : cvExtractedData.weekenddienst_bereid === false ? "Nee" : "—"}</span>
+                            <span className="font-medium">{getFieldValue(cvExtractedData.weekenddienst_bereid) === true ? "Ja" : getFieldValue(cvExtractedData.weekenddienst_bereid) === false ? "Nee" : "—"}</span>
                           </div>
                         </div>
                       </div>
 
                       {/* Arrays: Opleidingen, Certificaten, Talen */}
-                      {(cvExtractedData.opleidingen?.length > 0 || cvExtractedData.certificaten?.length > 0 || cvExtractedData.talen?.length > 0) && (
+                      {(((getFieldValue(cvExtractedData.opleidingen) as any[])?.length ?? 0) > 0 || ((getFieldValue(cvExtractedData.certificaten) as any[])?.length ?? 0) > 0 || ((getFieldValue(cvExtractedData.talen) as any[])?.length ?? 0) > 0) && (
                         <div className="space-y-2 border-t pt-3">
-                          {cvExtractedData.opleidingen?.length > 0 && (
+                          {((getFieldValue(cvExtractedData.opleidingen) as any[])?.length ?? 0) > 0 && (
                             <div>
                               <span className="text-xs text-muted-foreground">Opleidingen:</span>
                               <div className="flex flex-wrap gap-1 mt-1">
-                                {cvExtractedData.opleidingen.map((opl: string, i: number) => (
+                                {(getFieldValue(cvExtractedData.opleidingen) as any[])?.map((opl: any, i: number) => (
                                   <Badge key={i} variant="outline" className="text-xs bg-blue-50 text-blue-700">
-                                    {opl}
+                                    {typeof opl === 'object' && opl?.naam ? opl.naam : String(opl)}
                                   </Badge>
                                 ))}
                               </div>
                             </div>
                           )}
-                          {cvExtractedData.certificaten?.length > 0 && (
+                          {((getFieldValue(cvExtractedData.certificaten) as any[])?.length ?? 0) > 0 && (
                             <div>
                               <span className="text-xs text-muted-foreground">Certificaten:</span>
                               <div className="flex flex-wrap gap-1 mt-1">
-                                {cvExtractedData.certificaten.map((cert: string, i: number) => (
+                                {(getFieldValue(cvExtractedData.certificaten) as any[])?.map((cert: any, i: number) => (
                                   <Badge key={i} variant="outline" className="text-xs bg-green-50 text-green-700">
-                                    {cert}
+                                    {typeof cert === 'object' && cert?.naam ? cert.naam : String(cert)}
                                   </Badge>
                                 ))}
                               </div>
                             </div>
                           )}
-                          {cvExtractedData.talen?.length > 0 && (
+                          {((getFieldValue(cvExtractedData.talen) as any[])?.length ?? 0) > 0 && (
                             <div>
                               <span className="text-xs text-muted-foreground">Talen:</span>
                               <div className="flex flex-wrap gap-1 mt-1">
-                                {cvExtractedData.talen.map((taal: string, i: number) => (
+                                {(getFieldValue(cvExtractedData.talen) as any[])?.map((taal: any, i: number) => (
                                   <Badge key={i} variant="outline" className="text-xs bg-purple-50 text-purple-700">
-                                    {taal}
+                                    {typeof taal === 'object' && taal?.naam ? taal.naam : String(taal)}
                                   </Badge>
                                 ))}
                               </div>
@@ -920,20 +957,20 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                       )}
 
                       {/* Confidence indicator */}
-                      {cvExtractedData.confidence && (
+                      {getGlobalConfidence() !== null && (
                         <div className="border-t pt-3 flex items-center gap-2">
                           <span className="text-xs text-muted-foreground">AI Confidence:</span>
                           <Badge 
                             variant="outline" 
                             className={`text-xs ${
-                              cvExtractedData.confidence >= 0.8 
+                              getGlobalConfidence()! >= 0.8 
                                 ? "bg-green-50 text-green-700 border-green-200" 
-                                : cvExtractedData.confidence >= 0.5 
+                                : getGlobalConfidence()! >= 0.5 
                                   ? "bg-amber-50 text-amber-700 border-amber-200"
                                   : "bg-red-50 text-red-700 border-red-200"
                             }`}
                           >
-                            {Math.round(cvExtractedData.confidence * 100)}%
+                            {Math.round(getGlobalConfidence()! * 100)}%
                           </Badge>
                         </div>
                       )}
