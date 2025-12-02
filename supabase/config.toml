@@ -171,3 +171,6 @@ verify_jwt = true
 
 [functions.extract-cv-data]
 verify_jwt = true
+
+[functions.backfill-cv-knowledge]
+verify_jwt = true

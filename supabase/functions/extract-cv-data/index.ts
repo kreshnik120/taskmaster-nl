@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { pdfBase64, filename } = await req.json();
+    const { pdfBase64, filename, orgId, applicationId } = await req.json();
 
     if (!pdfBase64) {
       return new Response(
@@ -384,11 +384,126 @@ Belangrijk:
     console.log("CV extraction complete with per-field confidence scores");
     console.log("Global confidence:", extractedData.global_confidence);
 
+    // 🆕 Create searchable knowledge items if orgId is provided
+    let knowledgeItemsCreated = 0;
+    if (orgId) {
+      try {
+        // Helper to extract skills from CV data
+        const extractSkillsFromCV = (data: any): string[] => {
+          const skills: string[] = [];
+          
+          // Add certificates as skills
+          const certs = getValue(data.certificaten) || [];
+          if (Array.isArray(certs)) skills.push(...certs);
+          
+          // Add sector experience as skills
+          const sectoren = getValue(data.ervaring_sector) || [];
+          if (Array.isArray(sectoren)) sectoren.forEach((s: string) => skills.push(`ervaring_${s}`));
+          
+          // Add target group experience as skills
+          const doelgroepen = getValue(data.doelgroep_ervaring) || [];
+          if (Array.isArray(doelgroepen)) doelgroepen.forEach((d: string) => skills.push(`doelgroep_${d}`));
+          
+          // Add specific target groups
+          const specifiek = getValue(data.specifieke_doelgroepen) || [];
+          if (Array.isArray(specifiek)) specifiek.forEach((s: string) => skills.push(`specialisatie_${s}`));
+          
+          return [...new Set(skills)]; // Unique skills
+        };
+
+        const kandidaatNaam = getValue(extractedData.naam) || 'Onbekend';
+        const knowledgeKey = applicationId ? `cv_${applicationId}` : `cv_${Date.now()}`;
+
+        // Skills Knowledge Item
+        const skillsKnowledge = {
+          org_id: orgId,
+          category: "candidate_skills",
+          key: `skills_${knowledgeKey}`,
+          value: {
+            application_id: applicationId || null,
+            naam: kandidaatNaam,
+            skills: extractSkillsFromCV(extractedData),
+            ervaring_sector: getValue(extractedData.ervaring_sector) || [],
+            doelgroep_ervaring: getValue(extractedData.doelgroep_ervaring) || [],
+            specifieke_doelgroepen: getValue(extractedData.specifieke_doelgroepen) || [],
+            jaren_ervaring: getValue(extractedData.jaren_ervaring),
+            certificaten: getValue(extractedData.certificaten) || [],
+            talen: getValue(extractedData.talen) || [],
+            leidinggevende_ervaring: getValue(extractedData.leidinggevende_ervaring) || false,
+            source: "cv_extraction",
+            cv_filename: filename || 'document.pdf'
+          },
+          confidence_score: extractedData.global_confidence || 0.8,
+          source_type: "cv_upload",
+          stability_score: 0.9,
+          validation_status: "verified"
+        };
+        
+        const { error: skillsError } = await supabase
+          .from('ai_knowledge_base')
+          .upsert(skillsKnowledge, { onConflict: 'org_id,category,key' });
+        
+        if (skillsError) {
+          console.error("Error creating skills knowledge:", skillsError);
+        } else {
+          knowledgeItemsCreated++;
+          console.log(`✅ Created skills knowledge for ${kandidaatNaam}`);
+        }
+
+        // Experience Knowledge Item
+        const experienceKnowledge = {
+          org_id: orgId,
+          category: "candidate_experience",
+          key: `experience_${knowledgeKey}`,
+          value: {
+            application_id: applicationId || null,
+            naam: kandidaatNaam,
+            functie_niveau: getValue(extractedData.functie_niveau),
+            werkvorm: getValue(extractedData.werkvorm),
+            hoogste_opleiding: getValue(extractedData.hoogste_opleiding),
+            opleidingen: getValue(extractedData.opleidingen) || [],
+            BIG_nummer: getValue(extractedData.BIG_nummer) ? "aanwezig" : null,
+            beschikbaarheid: getValue(extractedData.beschikbaarheid),
+            regio: getValue(extractedData.regio),
+            regio_voorkeur: getValue(extractedData.regio_voorkeur) || [],
+            eigen_vervoer: getValue(extractedData.eigen_vervoer),
+            rijbewijs: getValue(extractedData.rijbewijs),
+            max_reisafstand_km: getValue(extractedData.max_reisafstand_km),
+            nachtdienst_bereid: getValue(extractedData.nachtdienst_bereid),
+            weekenddienst_bereid: getValue(extractedData.weekenddienst_bereid),
+            voorkeur_uren_per_week: getValue(extractedData.voorkeur_uren_per_week),
+            source: "cv_extraction"
+          },
+          confidence_score: extractedData.global_confidence || 0.8,
+          source_type: "cv_upload",
+          stability_score: 0.9,
+          validation_status: "verified"
+        };
+        
+        const { error: expError } = await supabase
+          .from('ai_knowledge_base')
+          .upsert(experienceKnowledge, { onConflict: 'org_id,category,key' });
+        
+        if (expError) {
+          console.error("Error creating experience knowledge:", expError);
+        } else {
+          knowledgeItemsCreated++;
+          console.log(`✅ Created experience knowledge for ${kandidaatNaam}`);
+        }
+
+        console.log(`✅ Created ${knowledgeItemsCreated} knowledge items for CV ${filename || 'document.pdf'}`);
+      } catch (knowledgeError) {
+        console.error("Error creating knowledge items:", knowledgeError);
+        // Don't fail the whole request if knowledge creation fails
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         data: extractedData,
         cvText: `CV analyzed via AI Vision (${filename || 'document.pdf'})`,
+        knowledgeItemsCreated,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
