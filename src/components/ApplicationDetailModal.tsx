@@ -32,7 +32,7 @@ import { ApplicationActivityTimeline } from "@/components/recruitment/Applicatio
 import { EmailTemplateSuggestions } from "@/components/recruitment/EmailTemplateSuggestions";
 import { MatchScoreBreakdown } from "@/components/recruitment/MatchScoreBreakdown";
 import { ApplicationNotes } from "@/components/recruitment/ApplicationNotes";
-import { SECTOR_SIMILARITY } from "@/lib/constants/matchingConstants";
+import { SECTOR_SIMILARITY, functieMatchesAny, calculateRegioScore } from "@/lib/constants/matchingConstants";
 
 interface Application {
   id: string;
@@ -687,34 +687,41 @@ export function ApplicationDetailModal({
       }
 
       const extractedData = application.extracted_data;
-      
-      const applicantRegios = (extractedData.regio || '')
-        .toLowerCase()
-        .split(',')
-        .map((r: string) => r.trim())
-        .filter(Boolean);
 
       const scored = clients.map(client => {
         let score = 0;
         let reasons: string[] = [];
         
-        const clientRegios = (client.regio || []).map((r: string) => r.toLowerCase());
-        const regioMatch = clientRegios.some((cr: string) => 
-          applicantRegios.some((ar: string) => ar.includes(cr) || cr.includes(ar))
-        );
+        // Region matching with semantic province support
+        const clientRegios = client.regio || [];
+        const regioResult = calculateRegioScore(extractedData.regio, clientRegios);
         
+        // Fallback: check if regio appears in client name
+        const applicantRegios = (extractedData.regio || '')
+          .toLowerCase()
+          .split(',')
+          .map((r: string) => r.trim())
+          .filter(Boolean);
         const clientNameLower = (client.name || '').toLowerCase();
         const clientCompanyLower = (client.company || '').toLowerCase();
         const nameRegioMatch = applicantRegios.some((ar: string) => 
           clientNameLower.includes(ar) || clientCompanyLower.includes(ar)
         );
         
-        if (regioMatch && clientRegios.length > 0) {
-          score += 30;
-          reasons.push('Regio match');
-        } else if (nameRegioMatch) {
-          score += 20;
-          reasons.push('Regio in klantnaam');
+        // Use best regio score
+        let regioScore = regioResult.score;
+        let regioReason = regioResult.reason;
+        let regioMatchType = regioResult.matchType;
+        
+        if (regioResult.matchType === 'none' && nameRegioMatch) {
+          regioScore = 20;
+          regioReason = 'Regio gevonden in klantnaam';
+          regioMatchType = 'exact';
+        }
+        
+        score += regioScore;
+        if (regioScore > 0) {
+          reasons.push(regioReason);
         }
         
         // Use shared SECTOR_SIMILARITY from constants
@@ -769,7 +776,8 @@ export function ApplicationDetailModal({
         
         const clientFuncties = client.gezochte_functies || [];
         const applicantFunctie = extractedData.functie_niveau;
-        if (applicantFunctie && clientFuncties.includes(applicantFunctie)) {
+        const functieMatch = functieMatchesAny(applicantFunctie, clientFuncties);
+        if (functieMatch) {
           score += 15;
           reasons.push('Functieniveau match');
         }
@@ -784,13 +792,10 @@ export function ApplicationDetailModal({
         
         const breakdown = {
           regio: {
-            score: regioMatch && clientRegios.length > 0 ? 30 : nameRegioMatch ? 20 : 0,
-            match: regioMatch || nameRegioMatch,
-            reason: regioMatch && clientRegios.length > 0 
-              ? 'Exacte regio match' 
-              : nameRegioMatch 
-                ? 'Regio gevonden in klantnaam' 
-                : 'Geen regio overlap'
+            score: regioScore,
+            match: regioMatchType !== 'none',
+            reason: regioReason,
+            matchType: regioMatchType
           },
           sector: {
             score: sectorScore,
@@ -811,11 +816,11 @@ export function ApplicationDetailModal({
               : 'Geen doelgroep overlap'
           },
           functie: {
-            score: (applicantFunctie && clientFuncties.includes(applicantFunctie)) ? 15 : 0,
-            match: applicantFunctie && clientFuncties.includes(applicantFunctie),
-            reason: (applicantFunctie && clientFuncties.includes(applicantFunctie))
+            score: functieMatch ? 15 : 0,
+            match: functieMatch,
+            reason: functieMatch
               ? 'Functieniveau wordt gezocht'
-              : 'Functieniveau niet gezocht'
+              : 'Functieniveau niet gezocht (controleer variaties)'
           },
           bureau: {
             score: (applicantOrg && clientOrgName === applicantOrg) ? 10 : 0,
