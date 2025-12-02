@@ -571,6 +571,59 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_recommendation_audit: {
+        Row: {
+          action_taken_at: string | null
+          ai_confidence: number | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          match_score: number | null
+          org_id: string
+          recommendation_data: Json
+          recommendation_type: string
+          user_action: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action_taken_at?: string | null
+          ai_confidence?: number | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          match_score?: number | null
+          org_id: string
+          recommendation_data?: Json
+          recommendation_type: string
+          user_action?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action_taken_at?: string | null
+          ai_confidence?: number | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          match_score?: number | null
+          org_id?: string
+          recommendation_data?: Json
+          recommendation_type?: string
+          user_action?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_recommendation_audit_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_response_cache: {
         Row: {
           created_at: string
