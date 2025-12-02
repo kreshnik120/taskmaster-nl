@@ -272,17 +272,17 @@ export function ApplicationDetailModal({
   useEffect(() => {
     if (application && editMode) {
       setEditData({
-        telefoon: application.extracted_data?.telefoon || "",
-        regio: application.extracted_data?.regio || "",
-        functie_niveau: application.extracted_data?.functie_niveau || "",
-        werkvorm: application.extracted_data?.werkvorm || "",
-        beschikbaarheid: application.extracted_data?.beschikbaarheid || "",
-        ervaring_sector: application.extracted_data?.ervaring_sector || [],
-        doelgroep_ervaring: application.extracted_data?.doelgroep_ervaring || [],
-        eigen_vervoer: application.extracted_data?.eigen_vervoer || false,
-        bron: application.extracted_data?.bron || "",
-        opmerkingen: application.extracted_data?.opmerkingen || "",
-        assigned_organization: application.extracted_data?.assigned_organization || "",
+        telefoon: getFieldValue(application.extracted_data?.telefoon) || "",
+        regio: getFieldValue(application.extracted_data?.regio) || "",
+        functie_niveau: getFieldValue(application.extracted_data?.functie_niveau) || "",
+        werkvorm: getFieldValue(application.extracted_data?.werkvorm) || "",
+        beschikbaarheid: getFieldValue(application.extracted_data?.beschikbaarheid) || "",
+        ervaring_sector: getFieldValue(application.extracted_data?.ervaring_sector) || [],
+        doelgroep_ervaring: getFieldValue(application.extracted_data?.doelgroep_ervaring) || [],
+        eigen_vervoer: getFieldValue(application.extracted_data?.eigen_vervoer) || false,
+        bron: getFieldValue(application.extracted_data?.bron) || "",
+        opmerkingen: getFieldValue(application.extracted_data?.opmerkingen) || "",
+        assigned_organization: getFieldValue(application.extracted_data?.assigned_organization) || "",
       });
     }
   }, [application, editMode]);
@@ -1086,11 +1086,11 @@ export function ApplicationDetailModal({
           </div>
 
           {/* Organization Badge */}
-          {application.extracted_data?.assigned_organization && (
+          {getFieldValue(application.extracted_data?.assigned_organization) && (
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-950/20 border border-blue-200">
               <Building2 className="h-3.5 w-3.5 text-blue-600" />
               <span className="text-xs font-medium text-blue-700 dark:text-blue-400">
-                {application.extracted_data.assigned_organization}
+                {getFieldValue(application.extracted_data?.assigned_organization)}
               </span>
             </div>
           )}
@@ -1395,25 +1395,25 @@ export function ApplicationDetailModal({
                     {application.extracted_data && Object.keys(application.extracted_data).length > 0 && (
                       <div className="space-y-3">
                         {/* Basis gegevens */}
-                        {(getFieldValue(application.extracted_data.functie_niveau) || application.extracted_data.functie_niveau) && (
+                        {getFieldValue(application.extracted_data?.functie_niveau) && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Functieniveau:</span>
-                            <Badge variant="outline" className={getFunctieColor(getFieldValue(application.extracted_data.functie_niveau) || application.extracted_data.functie_niveau)}>
-                              {getFieldValue(application.extracted_data.functie_niveau) || application.extracted_data.functie_niveau}
+                            <Badge variant="outline" className={getFunctieColor(getFieldValue(application.extracted_data?.functie_niveau) as string)}>
+                              {getFieldValue(application.extracted_data?.functie_niveau)}
                             </Badge>
                             <ConfidenceBadge 
-                              field={application.extracted_data.functie_niveau} 
+                              field={application.extracted_data?.functie_niveau} 
                               fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
                             />
                           </div>
                         )}
                         
                         {/* NIEUW: Jaren ervaring */}
-                        {(getFieldValue(application.extracted_data.jaren_ervaring) || application.extracted_data.jaren_ervaring) && (
+                        {getFieldValue(application.extracted_data?.jaren_ervaring) && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Ervaring:</span>
                             {(() => {
-                              const jaren = getFieldValue(application.extracted_data.jaren_ervaring) || application.extracted_data.jaren_ervaring;
+                              const jaren = getFieldValue(application.extracted_data?.jaren_ervaring) as number;
                               return (
                                 <Badge variant="outline" className={
                                   jaren >= 8 
@@ -1429,28 +1429,28 @@ export function ApplicationDetailModal({
                               );
                             })()}
                             <ConfidenceBadge 
-                              field={application.extracted_data.jaren_ervaring} 
+                              field={application.extracted_data?.jaren_ervaring} 
                               fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
                             />
                           </div>
                         )}
                         
                         {/* NIEUW: Leidinggevende ervaring */}
-                        {(getFieldValue(application.extracted_data.leidinggevende_ervaring) || application.extracted_data.leidinggevende_ervaring) && (
+                        {getFieldValue(application.extracted_data?.leidinggevende_ervaring) && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Leidinggevend:</span>
                             <Badge variant="outline" className="bg-purple-100 text-purple-700 border-purple-300">
-                              ✓ {(getFieldValue(application.extracted_data.leidinggevende_functies) || application.extracted_data.leidinggevende_functies)?.join(", ") || "Ja"}
+                              ✓ {(getFieldValue(application.extracted_data?.leidinggevende_functies) as string[])?.join(", ") || "Ja"}
                             </Badge>
                             <ConfidenceBadge 
-                              field={application.extracted_data.leidinggevende_ervaring} 
+                              field={application.extracted_data?.leidinggevende_ervaring} 
                               fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
                             />
                           </div>
                         )}
                         
                         {(() => {
-                          const sectors = getFieldValue(application.extracted_data.ervaring_sector) || application.extracted_data.ervaring_sector;
+                          const sectors = getFieldValue(application.extracted_data?.ervaring_sector) as string[] | null;
                           return sectors && sectors.length > 0 && (
                             <div className="flex items-start gap-2">
                               <span className="text-xs text-muted-foreground w-32">Sectoren:</span>
@@ -1459,7 +1459,7 @@ export function ApplicationDetailModal({
                                   <Badge key={s} variant="outline" className={getSectorColor(s)}>{s}</Badge>
                                 ))}
                                 <ConfidenceBadge 
-                                  field={application.extracted_data.ervaring_sector} 
+                                  field={application.extracted_data?.ervaring_sector} 
                                   fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
                                 />
                               </div>
@@ -1468,7 +1468,7 @@ export function ApplicationDetailModal({
                         })()}
                         
                         {(() => {
-                          const doelgroepen = getFieldValue(application.extracted_data.doelgroep_ervaring) || application.extracted_data.doelgroep_ervaring;
+                          const doelgroepen = getFieldValue(application.extracted_data?.doelgroep_ervaring) as string[] | null;
                           return doelgroepen && doelgroepen.length > 0 && (
                             <div className="flex items-start gap-2">
                               <span className="text-xs text-muted-foreground w-32">Doelgroepen:</span>
@@ -1477,7 +1477,7 @@ export function ApplicationDetailModal({
                                   <Badge key={d} variant="outline" className={getDoelgroepColor(d)}>{d}</Badge>
                                 ))}
                                 <ConfidenceBadge 
-                                  field={application.extracted_data.doelgroep_ervaring} 
+                                  field={application.extracted_data?.doelgroep_ervaring} 
                                   fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
                                 />
                               </div>
@@ -1487,7 +1487,7 @@ export function ApplicationDetailModal({
                         
                         {/* NIEUW: Specifieke doelgroepen */}
                         {(() => {
-                          const specifiek = getFieldValue(application.extracted_data.specifieke_doelgroepen) || application.extracted_data.specifieke_doelgroepen;
+                          const specifiek = getFieldValue(application.extracted_data?.specifieke_doelgroepen) as string[] | null;
                           return specifiek && specifiek.length > 0 && (
                             <div className="flex items-start gap-2">
                               <span className="text-xs text-muted-foreground w-32">Specialisaties:</span>
@@ -1500,37 +1500,37 @@ export function ApplicationDetailModal({
                           );
                         })()}
                         
-                        {(getFieldValue(application.extracted_data.werkvorm) || application.extracted_data.werkvorm) && (
+                        {getFieldValue(application.extracted_data?.werkvorm) && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Werkvorm:</span>
-                            <span className="text-sm font-medium">{getFieldValue(application.extracted_data.werkvorm) || application.extracted_data.werkvorm}</span>
+                            <span className="text-sm font-medium">{getFieldValue(application.extracted_data?.werkvorm)}</span>
                             <ConfidenceBadge 
-                              field={application.extracted_data.werkvorm} 
+                              field={application.extracted_data?.werkvorm} 
                               fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
                             />
                           </div>
                         )}
                         
-                        {(getFieldValue(application.extracted_data.beschikbaarheid) || application.extracted_data.beschikbaarheid) && (
+                        {getFieldValue(application.extracted_data?.beschikbaarheid) && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Beschikbaarheid:</span>
-                            <span className="text-sm font-medium">{getFieldValue(application.extracted_data.beschikbaarheid) || application.extracted_data.beschikbaarheid}</span>
+                            <span className="text-sm font-medium">{getFieldValue(application.extracted_data?.beschikbaarheid)}</span>
                             <ConfidenceBadge 
-                              field={application.extracted_data.beschikbaarheid} 
+                              field={application.extracted_data?.beschikbaarheid} 
                               fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
                             />
                           </div>
                         )}
                         
                         {/* NIEUW: Nacht/weekend dienst */}
-                        {(getFieldValue(application.extracted_data.nachtdienst_bereid) !== null || getFieldValue(application.extracted_data.weekenddienst_bereid) !== null || application.extracted_data.nachtdienst_bereid !== null || application.extracted_data.weekenddienst_bereid !== null) && (
+                        {(getFieldValue(application.extracted_data?.nachtdienst_bereid) !== null || getFieldValue(application.extracted_data?.weekenddienst_bereid) !== null) && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Diensten:</span>
                             <div className="flex gap-2">
-                              {(getFieldValue(application.extracted_data.nachtdienst_bereid) || application.extracted_data.nachtdienst_bereid) && (
+                              {getFieldValue(application.extracted_data?.nachtdienst_bereid) && (
                                 <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-300">Nachtdienst ✓</Badge>
                               )}
-                              {(getFieldValue(application.extracted_data.weekenddienst_bereid) || application.extracted_data.weekenddienst_bereid) && (
+                              {getFieldValue(application.extracted_data?.weekenddienst_bereid) && (
                                 <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-300">Weekend ✓</Badge>
                               )}
                             </div>
@@ -1541,20 +1541,20 @@ export function ApplicationDetailModal({
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-muted-foreground w-32">Mobiliteit:</span>
                           <div className="flex gap-2">
-                            {(getFieldValue(application.extracted_data.eigen_vervoer) || application.extracted_data.eigen_vervoer) && (
+                            {getFieldValue(application.extracted_data?.eigen_vervoer) && (
                               <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">Auto ✓</Badge>
                             )}
-                            {(getFieldValue(application.extracted_data.rijbewijs) || application.extracted_data.rijbewijs) && !(getFieldValue(application.extracted_data.eigen_vervoer) || application.extracted_data.eigen_vervoer) && (
+                            {getFieldValue(application.extracted_data?.rijbewijs) && !getFieldValue(application.extracted_data?.eigen_vervoer) && (
                               <Badge variant="outline" className="bg-yellow-100 text-yellow-700 border-yellow-300">Rijbewijs ✓</Badge>
                             )}
-                            {(getFieldValue(application.extracted_data.max_reisafstand_km) || application.extracted_data.max_reisafstand_km) && (
-                              <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">Max {getFieldValue(application.extracted_data.max_reisafstand_km) || application.extracted_data.max_reisafstand_km}km</Badge>
+                            {getFieldValue(application.extracted_data?.max_reisafstand_km) && (
+                              <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">Max {getFieldValue(application.extracted_data?.max_reisafstand_km)}km</Badge>
                             )}
-                            {!(getFieldValue(application.extracted_data.eigen_vervoer) || application.extracted_data.eigen_vervoer) && !(getFieldValue(application.extracted_data.rijbewijs) || application.extracted_data.rijbewijs) && (
+                            {!getFieldValue(application.extracted_data?.eigen_vervoer) && !getFieldValue(application.extracted_data?.rijbewijs) && (
                               <span className="text-sm text-muted-foreground">Geen info</span>
                             )}
                             <ConfidenceBadge 
-                              field={application.extracted_data.eigen_vervoer} 
+                              field={application.extracted_data?.eigen_vervoer} 
                               fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
                             />
                           </div>
@@ -1562,7 +1562,7 @@ export function ApplicationDetailModal({
                         
                         {/* NIEUW: Opleidingen */}
                         {(() => {
-                          const opleidingen = getFieldValue(application.extracted_data.opleidingen) || application.extracted_data.opleidingen;
+                          const opleidingen = getFieldValue(application.extracted_data?.opleidingen) as any[] | null;
                           return opleidingen && opleidingen.length > 0 && (
                             <div className="flex items-start gap-2">
                               <span className="text-xs text-muted-foreground w-32">Opleidingen:</span>
@@ -1577,7 +1577,7 @@ export function ApplicationDetailModal({
                                 )}
                               </div>
                               <ConfidenceBadge 
-                                field={application.extracted_data.opleidingen} 
+                                field={application.extracted_data?.opleidingen} 
                                 fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
                               />
                             </div>
@@ -1586,7 +1586,7 @@ export function ApplicationDetailModal({
                         
                         {/* NIEUW: Certificaten */}
                         {(() => {
-                          const certificaten = getFieldValue(application.extracted_data.certificaten) || application.extracted_data.certificaten;
+                          const certificaten = getFieldValue(application.extracted_data?.certificaten) as string[] | null;
                           return certificaten && certificaten.length > 0 && (
                             <div className="flex items-start gap-2">
                               <span className="text-xs text-muted-foreground w-32">Certificaten:</span>
@@ -1595,7 +1595,7 @@ export function ApplicationDetailModal({
                                   <Badge key={cert} variant="outline" className="bg-teal-100 text-teal-700 border-teal-300">{cert}</Badge>
                                 ))}
                                 <ConfidenceBadge 
-                                  field={application.extracted_data.certificaten} 
+                                  field={application.extracted_data?.certificaten} 
                                   fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
                                 />
                               </div>
@@ -1604,12 +1604,12 @@ export function ApplicationDetailModal({
                         })()}
                         
                         {/* NIEUW: BIG nummer */}
-                        {(getFieldValue(application.extracted_data.BIG_nummer) || application.extracted_data.BIG_nummer) && (
+                        {getFieldValue(application.extracted_data?.BIG_nummer) && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">BIG-nummer:</span>
-                            <span className="text-sm font-mono">{getFieldValue(application.extracted_data.BIG_nummer) || application.extracted_data.BIG_nummer}</span>
+                            <span className="text-sm font-mono">{getFieldValue(application.extracted_data?.BIG_nummer)}</span>
                             <ConfidenceBadge 
-                              field={application.extracted_data.BIG_nummer} 
+                              field={application.extracted_data?.BIG_nummer} 
                               fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
                             />
                           </div>
@@ -1617,13 +1617,13 @@ export function ApplicationDetailModal({
                         
                         {/* NIEUW: Talen */}
                         {(() => {
-                          const talen = getFieldValue(application.extracted_data.talen) || application.extracted_data.talen;
+                          const talen = getFieldValue(application.extracted_data?.talen) as string[] | null;
                           return talen && talen.length > 0 && (
                             <div className="flex items-center gap-2">
                               <span className="text-xs text-muted-foreground w-32">Talen:</span>
                               <span className="text-sm">{talen.join(", ")}</span>
                               <ConfidenceBadge 
-                                field={application.extracted_data.talen} 
+                                field={application.extracted_data?.talen} 
                                 fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
                               />
                             </div>
@@ -1631,11 +1631,11 @@ export function ApplicationDetailModal({
                         })()}
                         
                         {/* NIEUW: Postcode/Woonplaats */}
-                        {((getFieldValue(application.extracted_data.postcode) || application.extracted_data.postcode) || (getFieldValue(application.extracted_data.woonplaats) || application.extracted_data.woonplaats)) && (
+                        {(getFieldValue(application.extracted_data?.postcode) || getFieldValue(application.extracted_data?.woonplaats)) && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Locatie:</span>
                             <span className="text-sm">
-                              {[application.extracted_data.postcode, application.extracted_data.woonplaats].filter(Boolean).join(", ")}
+                              {[getFieldValue(application.extracted_data?.postcode), getFieldValue(application.extracted_data?.woonplaats)].filter(Boolean).join(", ")}
                             </span>
                           </div>
                         )}
