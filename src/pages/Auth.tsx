@@ -25,34 +25,42 @@ import { Loader2, CheckCircle2, AlertCircle, Check, X } from "lucide-react";
 import { z } from "zod";
 
 /**
- * Password strength validation schema (min 8 chars + complexity)
+ * Password strength validation schema (min 12 chars + complexity + special char)
+ * Enhanced security: longer passwords with special characters required
  */
 const passwordSchema = z.string()
-  .min(8, 'Wachtwoord moet minimaal 8 tekens bevatten')
+  .min(12, 'Wachtwoord moet minimaal 12 tekens bevatten')
   .regex(/[A-Z]/, 'Minimaal 1 hoofdletter vereist')
-  .regex(/[0-9]/, 'Minimaal 1 cijfer vereist');
+  .regex(/[a-z]/, 'Minimaal 1 kleine letter vereist')
+  .regex(/[0-9]/, 'Minimaal 1 cijfer vereist')
+  .regex(/[^A-Za-z0-9]/, 'Minimaal 1 speciaal teken vereist (!@#$%^&*)');
 
 /**
  * Calculate password strength score (0-100%)
+ * Enhanced scoring for longer passwords and special characters
  */
 const calculatePasswordStrength = (pwd: string): number => {
   let strength = 0;
-  if (pwd.length >= 8) strength += 25;
-  if (pwd.length >= 12) strength += 15;
-  if (/[A-Z]/.test(pwd)) strength += 20;
-  if (/[a-z]/.test(pwd)) strength += 15;
+  if (pwd.length >= 8) strength += 15;
+  if (pwd.length >= 12) strength += 20;
+  if (pwd.length >= 16) strength += 10;
+  if (/[A-Z]/.test(pwd)) strength += 15;
+  if (/[a-z]/.test(pwd)) strength += 10;
   if (/[0-9]/.test(pwd)) strength += 15;
-  if (/[^A-Za-z0-9]/.test(pwd)) strength += 10;
+  if (/[^A-Za-z0-9]/.test(pwd)) strength += 15;
   return Math.min(strength, 100);
 };
 
 /**
  * Get password strength requirements status
+ * All 5 requirements must be met for valid password
  */
 const getPasswordRequirements = (pwd: string) => ({
-  length: pwd.length >= 8,
+  length: pwd.length >= 12,
   uppercase: /[A-Z]/.test(pwd),
+  lowercase: /[a-z]/.test(pwd),
   digit: /[0-9]/.test(pwd),
+  special: /[^A-Za-z0-9]/.test(pwd),
 });
 
 /**
