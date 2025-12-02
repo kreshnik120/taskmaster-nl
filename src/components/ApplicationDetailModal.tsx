@@ -113,29 +113,67 @@ const getFunctieColor = (functie: string) => {
   return colors[functie] || "bg-muted text-foreground";
 };
 
+// === Helper functions for per-field confidence (backwards compatible) ===
+
+// Get the value from a field (supports both old flat format and new {value, confidence} format)
+const getFieldValue = <T,>(field: T | { value: T; confidence: number } | null | undefined): T | null => {
+  if (field === null || field === undefined) return null;
+  if (typeof field === 'object' && field !== null && 'value' in field) {
+    return (field as { value: T; confidence: number }).value;
+  }
+  return field as T;
+};
+
+// Get the confidence from a field (supports both formats, with fallback to global)
+const getFieldConfidence = (field: any, fallbackGlobal?: number): number | undefined => {
+  if (field === null || field === undefined) return fallbackGlobal;
+  if (typeof field === 'object' && 'confidence' in field) {
+    return field.confidence;
+  }
+  return fallbackGlobal; // Old format: use global confidence
+};
+
+// Check if extracted_data uses new per-field confidence format
+const hasPerFieldConfidence = (extractedData: any): boolean => {
+  if (!extractedData) return false;
+  // Check if any field has the new {value, confidence} structure
+  return extractedData.naam && typeof extractedData.naam === 'object' && 'confidence' in extractedData.naam;
+};
+
 // Confidence Badge Component for AI extraction transparency
-const ConfidenceBadge = ({ confidence, fieldType = "default" }: { confidence: number; fieldType?: "critical" | "important" | "optional" | "default" }) => {
-  // Apply heuristic multiplier based on field type
-  const multiplier = fieldType === "critical" ? 1.0 : fieldType === "important" ? 0.95 : fieldType === "optional" ? 0.85 : 1.0;
-  const adjustedConfidence = confidence * multiplier;
+const ConfidenceBadge = ({ 
+  confidence, 
+  field,
+  fallbackGlobal 
+}: { 
+  confidence?: number; 
+  field?: any;
+  fallbackGlobal?: number;
+}) => {
+  // Get confidence from field if provided, otherwise use confidence prop or fallback
+  const effectiveConfidence = field !== undefined 
+    ? getFieldConfidence(field, fallbackGlobal) 
+    : (confidence ?? fallbackGlobal);
   
-  if (adjustedConfidence >= 0.8) {
+  if (effectiveConfidence === undefined || effectiveConfidence === null) return null;
+  
+  if (effectiveConfidence >= 0.8) {
     return (
       <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-green-100 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-300">
-        ✓ {Math.round(adjustedConfidence * 100)}%
+        ✓ {Math.round(effectiveConfidence * 100)}%
       </Badge>
     );
   }
-  if (adjustedConfidence >= 0.5) {
+  if (effectiveConfidence >= 0.5) {
     return (
       <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-300">
-        ~ {Math.round(adjustedConfidence * 100)}%
+        ~ {Math.round(effectiveConfidence * 100)}%
       </Badge>
     );
   }
   return (
     <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-red-100 text-red-700 border-red-300 dark:bg-red-950 dark:text-red-300">
-      ? {Math.round(adjustedConfidence * 100)}%
+      ? {Math.round(effectiveConfidence * 100)}%
     </Badge>
   );
 };
@@ -146,7 +184,8 @@ export function ApplicationDetailModal({
   onOpenChange,
   onApplicationUpdated,
 }: ApplicationDetailModalProps) {
-  const candidateName = application.extracted_data?.naam || 'Kandidaat';
+  // Support both old and new extracted_data formats for candidateName
+  const candidateName = getFieldValue(application.extracted_data?.naam) || application.extracted_data?.naam || 'Kandidaat';
   
   const [updating, setUpdating] = useState(false);
   const [linkedTasks, setLinkedTasks] = useState<LinkedTask[]>([]);
@@ -1344,8 +1383,8 @@ export function ApplicationDetailModal({
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
                       <span className="text-sm font-semibold">Geëxtraheerde gegevens</span>
-                      {application.extracted_data?.confidence && (
-                        <ConfidenceBadge confidence={application.extracted_data.confidence} />
+                      {(application.extracted_data?.global_confidence || application.extracted_data?.confidence) && (
+                        <ConfidenceBadge confidence={application.extracted_data.global_confidence || application.extracted_data.confidence} />
                       )}
                     </div>
                     {extractedOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -1356,115 +1395,142 @@ export function ApplicationDetailModal({
                     {application.extracted_data && Object.keys(application.extracted_data).length > 0 && (
                       <div className="space-y-3">
                         {/* Basis gegevens */}
-                        {application.extracted_data.functie_niveau && (
+                        {(getFieldValue(application.extracted_data.functie_niveau) || application.extracted_data.functie_niveau) && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Functieniveau:</span>
-                            <Badge variant="outline" className={getFunctieColor(application.extracted_data.functie_niveau)}>
-                              {application.extracted_data.functie_niveau}
+                            <Badge variant="outline" className={getFunctieColor(getFieldValue(application.extracted_data.functie_niveau) || application.extracted_data.functie_niveau)}>
+                              {getFieldValue(application.extracted_data.functie_niveau) || application.extracted_data.functie_niveau}
                             </Badge>
-                            {application.extracted_data?.confidence && (
-                              <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="critical" />
-                            )}
+                            <ConfidenceBadge 
+                              field={application.extracted_data.functie_niveau} 
+                              fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
+                            />
                           </div>
                         )}
                         
                         {/* NIEUW: Jaren ervaring */}
-                        {application.extracted_data.jaren_ervaring && (
+                        {(getFieldValue(application.extracted_data.jaren_ervaring) || application.extracted_data.jaren_ervaring) && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Ervaring:</span>
-                            <Badge variant="outline" className={
-                              application.extracted_data.jaren_ervaring >= 8 
-                                ? "bg-emerald-100 text-emerald-700 border-emerald-300"
-                                : application.extracted_data.jaren_ervaring >= 5
-                                  ? "bg-blue-100 text-blue-700 border-blue-300"
-                                  : "bg-gray-100 text-gray-700 border-gray-300"
-                            }>
-                              {application.extracted_data.jaren_ervaring} jaar
-                              {application.extracted_data.jaren_ervaring >= 8 && " (Expert)"}
-                              {application.extracted_data.jaren_ervaring >= 5 && application.extracted_data.jaren_ervaring < 8 && " (Ervaren)"}
-                            </Badge>
-                            {application.extracted_data?.confidence && (
-                              <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="important" />
-                            )}
+                            {(() => {
+                              const jaren = getFieldValue(application.extracted_data.jaren_ervaring) || application.extracted_data.jaren_ervaring;
+                              return (
+                                <Badge variant="outline" className={
+                                  jaren >= 8 
+                                    ? "bg-emerald-100 text-emerald-700 border-emerald-300"
+                                    : jaren >= 5
+                                      ? "bg-blue-100 text-blue-700 border-blue-300"
+                                      : "bg-gray-100 text-gray-700 border-gray-300"
+                                }>
+                                  {jaren} jaar
+                                  {jaren >= 8 && " (Expert)"}
+                                  {jaren >= 5 && jaren < 8 && " (Ervaren)"}
+                                </Badge>
+                              );
+                            })()}
+                            <ConfidenceBadge 
+                              field={application.extracted_data.jaren_ervaring} 
+                              fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
+                            />
                           </div>
                         )}
                         
                         {/* NIEUW: Leidinggevende ervaring */}
-                        {application.extracted_data.leidinggevende_ervaring && (
+                        {(getFieldValue(application.extracted_data.leidinggevende_ervaring) || application.extracted_data.leidinggevende_ervaring) && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Leidinggevend:</span>
                             <Badge variant="outline" className="bg-purple-100 text-purple-700 border-purple-300">
-                              ✓ {application.extracted_data.leidinggevende_functies?.join(", ") || "Ja"}
+                              ✓ {(getFieldValue(application.extracted_data.leidinggevende_functies) || application.extracted_data.leidinggevende_functies)?.join(", ") || "Ja"}
                             </Badge>
-                            {application.extracted_data?.confidence && (
-                              <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="optional" />
-                            )}
+                            <ConfidenceBadge 
+                              field={application.extracted_data.leidinggevende_ervaring} 
+                              fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
+                            />
                           </div>
                         )}
                         
-                        {application.extracted_data.ervaring_sector && application.extracted_data.ervaring_sector.length > 0 && (
-                          <div className="flex items-start gap-2">
-                            <span className="text-xs text-muted-foreground w-32">Sectoren:</span>
-                            <div className="flex flex-wrap gap-1">
-                              {application.extracted_data.ervaring_sector.map((s: string) => (
-                                <Badge key={s} variant="outline" className={getSectorColor(s)}>{s}</Badge>
-                              ))}
-                              {application.extracted_data?.confidence && (
-                                <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="important" />
-                              )}
+                        {(() => {
+                          const sectors = getFieldValue(application.extracted_data.ervaring_sector) || application.extracted_data.ervaring_sector;
+                          return sectors && sectors.length > 0 && (
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs text-muted-foreground w-32">Sectoren:</span>
+                              <div className="flex flex-wrap gap-1">
+                                {sectors.map((s: string) => (
+                                  <Badge key={s} variant="outline" className={getSectorColor(s)}>{s}</Badge>
+                                ))}
+                                <ConfidenceBadge 
+                                  field={application.extracted_data.ervaring_sector} 
+                                  fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
+                                />
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
                         
-                        {application.extracted_data.doelgroep_ervaring && application.extracted_data.doelgroep_ervaring.length > 0 && (
-                          <div className="flex items-start gap-2">
-                            <span className="text-xs text-muted-foreground w-32">Doelgroepen:</span>
-                            <div className="flex flex-wrap gap-1">
-                              {application.extracted_data.doelgroep_ervaring.map((d: string) => (
-                                <Badge key={d} variant="outline" className={getDoelgroepColor(d)}>{d}</Badge>
-                              ))}
-                              {application.extracted_data?.confidence && (
-                                <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="important" />
-                              )}
+                        {(() => {
+                          const doelgroepen = getFieldValue(application.extracted_data.doelgroep_ervaring) || application.extracted_data.doelgroep_ervaring;
+                          return doelgroepen && doelgroepen.length > 0 && (
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs text-muted-foreground w-32">Doelgroepen:</span>
+                              <div className="flex flex-wrap gap-1">
+                                {doelgroepen.map((d: string) => (
+                                  <Badge key={d} variant="outline" className={getDoelgroepColor(d)}>{d}</Badge>
+                                ))}
+                                <ConfidenceBadge 
+                                  field={application.extracted_data.doelgroep_ervaring} 
+                                  fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
+                                />
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
                         
                         {/* NIEUW: Specifieke doelgroepen */}
-                        {application.extracted_data.specifieke_doelgroepen && application.extracted_data.specifieke_doelgroepen.length > 0 && (
-                          <div className="flex items-start gap-2">
-                            <span className="text-xs text-muted-foreground w-32">Specialisaties:</span>
-                            <div className="flex flex-wrap gap-1">
-                              {application.extracted_data.specifieke_doelgroepen.map((d: string) => (
-                                <Badge key={d} variant="outline" className="bg-indigo-100 text-indigo-700 border-indigo-300">{d}</Badge>
-                              ))}
+                        {(() => {
+                          const specifiek = getFieldValue(application.extracted_data.specifieke_doelgroepen) || application.extracted_data.specifieke_doelgroepen;
+                          return specifiek && specifiek.length > 0 && (
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs text-muted-foreground w-32">Specialisaties:</span>
+                              <div className="flex flex-wrap gap-1">
+                                {specifiek.map((d: string) => (
+                                  <Badge key={d} variant="outline" className="bg-indigo-100 text-indigo-700 border-indigo-300">{d}</Badge>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
                         
-                        {application.extracted_data.werkvorm && (
+                        {(getFieldValue(application.extracted_data.werkvorm) || application.extracted_data.werkvorm) && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Werkvorm:</span>
-                            <span className="text-sm font-medium">{application.extracted_data.werkvorm}</span>
+                            <span className="text-sm font-medium">{getFieldValue(application.extracted_data.werkvorm) || application.extracted_data.werkvorm}</span>
+                            <ConfidenceBadge 
+                              field={application.extracted_data.werkvorm} 
+                              fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
+                            />
                           </div>
                         )}
                         
-                        {application.extracted_data.beschikbaarheid && (
+                        {(getFieldValue(application.extracted_data.beschikbaarheid) || application.extracted_data.beschikbaarheid) && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Beschikbaarheid:</span>
-                            <span className="text-sm font-medium">{application.extracted_data.beschikbaarheid}</span>
+                            <span className="text-sm font-medium">{getFieldValue(application.extracted_data.beschikbaarheid) || application.extracted_data.beschikbaarheid}</span>
+                            <ConfidenceBadge 
+                              field={application.extracted_data.beschikbaarheid} 
+                              fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
+                            />
                           </div>
                         )}
                         
                         {/* NIEUW: Nacht/weekend dienst */}
-                        {(application.extracted_data.nachtdienst_bereid !== null || application.extracted_data.weekenddienst_bereid !== null) && (
+                        {(getFieldValue(application.extracted_data.nachtdienst_bereid) !== null || getFieldValue(application.extracted_data.weekenddienst_bereid) !== null || application.extracted_data.nachtdienst_bereid !== null || application.extracted_data.weekenddienst_bereid !== null) && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Diensten:</span>
                             <div className="flex gap-2">
-                              {application.extracted_data.nachtdienst_bereid && (
+                              {(getFieldValue(application.extracted_data.nachtdienst_bereid) || application.extracted_data.nachtdienst_bereid) && (
                                 <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-300">Nachtdienst ✓</Badge>
                               )}
-                              {application.extracted_data.weekenddienst_bereid && (
+                              {(getFieldValue(application.extracted_data.weekenddienst_bereid) || application.extracted_data.weekenddienst_bereid) && (
                                 <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-300">Weekend ✓</Badge>
                               )}
                             </div>
@@ -1475,80 +1541,97 @@ export function ApplicationDetailModal({
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-muted-foreground w-32">Mobiliteit:</span>
                           <div className="flex gap-2">
-                            {application.extracted_data.eigen_vervoer && (
+                            {(getFieldValue(application.extracted_data.eigen_vervoer) || application.extracted_data.eigen_vervoer) && (
                               <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">Auto ✓</Badge>
                             )}
-                            {application.extracted_data.rijbewijs && !application.extracted_data.eigen_vervoer && (
+                            {(getFieldValue(application.extracted_data.rijbewijs) || application.extracted_data.rijbewijs) && !(getFieldValue(application.extracted_data.eigen_vervoer) || application.extracted_data.eigen_vervoer) && (
                               <Badge variant="outline" className="bg-yellow-100 text-yellow-700 border-yellow-300">Rijbewijs ✓</Badge>
                             )}
-                            {application.extracted_data.max_reisafstand_km && (
-                              <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">Max {application.extracted_data.max_reisafstand_km}km</Badge>
+                            {(getFieldValue(application.extracted_data.max_reisafstand_km) || application.extracted_data.max_reisafstand_km) && (
+                              <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">Max {getFieldValue(application.extracted_data.max_reisafstand_km) || application.extracted_data.max_reisafstand_km}km</Badge>
                             )}
-                            {!application.extracted_data.eigen_vervoer && !application.extracted_data.rijbewijs && (
+                            {!(getFieldValue(application.extracted_data.eigen_vervoer) || application.extracted_data.eigen_vervoer) && !(getFieldValue(application.extracted_data.rijbewijs) || application.extracted_data.rijbewijs) && (
                               <span className="text-sm text-muted-foreground">Geen info</span>
                             )}
+                            <ConfidenceBadge 
+                              field={application.extracted_data.eigen_vervoer} 
+                              fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
+                            />
                           </div>
                         </div>
                         
                         {/* NIEUW: Opleidingen */}
-                        {application.extracted_data.opleidingen && application.extracted_data.opleidingen.length > 0 && (
-                          <div className="flex items-start gap-2">
-                            <span className="text-xs text-muted-foreground w-32">Opleidingen:</span>
-                            <div className="flex flex-col gap-1">
-                              {application.extracted_data.opleidingen.slice(0, 3).map((opl: any, idx: number) => (
-                                <span key={idx} className="text-sm">
-                                  {opl.naam} {opl.jaar ? `(${opl.jaar})` : ""}
-                                </span>
-                              ))}
-                              {application.extracted_data.opleidingen.length > 3 && (
-                                <span className="text-xs text-muted-foreground">+{application.extracted_data.opleidingen.length - 3} meer</span>
-                              )}
+                        {(() => {
+                          const opleidingen = getFieldValue(application.extracted_data.opleidingen) || application.extracted_data.opleidingen;
+                          return opleidingen && opleidingen.length > 0 && (
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs text-muted-foreground w-32">Opleidingen:</span>
+                              <div className="flex flex-col gap-1">
+                                {opleidingen.slice(0, 3).map((opl: any, idx: number) => (
+                                  <span key={idx} className="text-sm">
+                                    {opl.naam} {opl.jaar ? `(${opl.jaar})` : ""}
+                                  </span>
+                                ))}
+                                {opleidingen.length > 3 && (
+                                  <span className="text-xs text-muted-foreground">+{opleidingen.length - 3} meer</span>
+                                )}
+                              </div>
+                              <ConfidenceBadge 
+                                field={application.extracted_data.opleidingen} 
+                                fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
+                              />
                             </div>
-                            {application.extracted_data?.confidence && (
-                              <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="optional" />
-                            )}
-                          </div>
-                        )}
+                          );
+                        })()}
                         
                         {/* NIEUW: Certificaten */}
-                        {application.extracted_data.certificaten && application.extracted_data.certificaten.length > 0 && (
-                          <div className="flex items-start gap-2">
-                            <span className="text-xs text-muted-foreground w-32">Certificaten:</span>
-                            <div className="flex flex-wrap gap-1">
-                              {application.extracted_data.certificaten.map((cert: string) => (
-                                <Badge key={cert} variant="outline" className="bg-teal-100 text-teal-700 border-teal-300">{cert}</Badge>
-                              ))}
-                              {application.extracted_data?.confidence && (
-                                <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="optional" />
-                              )}
+                        {(() => {
+                          const certificaten = getFieldValue(application.extracted_data.certificaten) || application.extracted_data.certificaten;
+                          return certificaten && certificaten.length > 0 && (
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs text-muted-foreground w-32">Certificaten:</span>
+                              <div className="flex flex-wrap gap-1">
+                                {certificaten.map((cert: string) => (
+                                  <Badge key={cert} variant="outline" className="bg-teal-100 text-teal-700 border-teal-300">{cert}</Badge>
+                                ))}
+                                <ConfidenceBadge 
+                                  field={application.extracted_data.certificaten} 
+                                  fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
+                                />
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
                         
                         {/* NIEUW: BIG nummer */}
-                        {application.extracted_data.BIG_nummer && (
+                        {(getFieldValue(application.extracted_data.BIG_nummer) || application.extracted_data.BIG_nummer) && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">BIG-nummer:</span>
-                            <span className="text-sm font-mono">{application.extracted_data.BIG_nummer}</span>
-                            {application.extracted_data?.confidence && (
-                              <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="critical" />
-                            )}
+                            <span className="text-sm font-mono">{getFieldValue(application.extracted_data.BIG_nummer) || application.extracted_data.BIG_nummer}</span>
+                            <ConfidenceBadge 
+                              field={application.extracted_data.BIG_nummer} 
+                              fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
+                            />
                           </div>
                         )}
                         
                         {/* NIEUW: Talen */}
-                        {application.extracted_data.talen && application.extracted_data.talen.length > 0 && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground w-32">Talen:</span>
-                            <span className="text-sm">{application.extracted_data.talen.join(", ")}</span>
-                            {application.extracted_data?.confidence && (
-                              <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="optional" />
-                            )}
-                          </div>
-                        )}
+                        {(() => {
+                          const talen = getFieldValue(application.extracted_data.talen) || application.extracted_data.talen;
+                          return talen && talen.length > 0 && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground w-32">Talen:</span>
+                              <span className="text-sm">{talen.join(", ")}</span>
+                              <ConfidenceBadge 
+                                field={application.extracted_data.talen} 
+                                fallbackGlobal={application.extracted_data?.global_confidence || application.extracted_data?.confidence} 
+                              />
+                            </div>
+                          );
+                        })()}
                         
                         {/* NIEUW: Postcode/Woonplaats */}
-                        {(application.extracted_data.postcode || application.extracted_data.woonplaats) && (
+                        {((getFieldValue(application.extracted_data.postcode) || application.extracted_data.postcode) || (getFieldValue(application.extracted_data.woonplaats) || application.extracted_data.woonplaats)) && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Locatie:</span>
                             <span className="text-sm">
