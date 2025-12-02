@@ -228,19 +228,22 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
     return missing;
   };
 
-  // Check of email al bestaat in professional_applications
+  // Check of email al bestaat in professional_applications (case-insensitive + whitespace handling)
   const checkDuplicateEmail = async (email: string): Promise<{ exists: boolean; applicationId?: string; naam?: string }> => {
+    const normalizedEmail = email.trim().toLowerCase();
     const { data } = await supabase
       .from("professional_applications")
-      .select("id, extracted_data")
-      .eq("email_from", email)
-      .is("deleted_at", null)
-      .limit(1);
+      .select("id, extracted_data, email_from")
+      .is("deleted_at", null);
     
-    if (data && data.length > 0) {
-      const existing = data[0];
-      const naam = (existing.extracted_data as any)?.naam || "Onbekend";
-      return { exists: true, applicationId: existing.id, naam };
+    // Case-insensitive match in JavaScript (since ilike not always reliable)
+    const match = data?.find(app => 
+      app.email_from?.trim().toLowerCase() === normalizedEmail
+    );
+    
+    if (match) {
+      const naam = (match.extracted_data as any)?.naam || "Onbekend";
+      return { exists: true, applicationId: match.id, naam };
     }
     return { exists: false };
   };
