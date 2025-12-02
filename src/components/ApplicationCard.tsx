@@ -289,7 +289,7 @@ export function ApplicationCard({ application, onClick, searchQuery = "", isSele
                         <TooltipContent side="left" className="text-xs">
                           <p>Profiel volledigheid: {completenessScore}%</p>
                           {bestMatch && bestMatch.score >= 50 && (
-                            <p className="text-muted-foreground">Match: {Math.min(100, bestMatch.score)}% ({bestMatch.client?.name || bestMatch.client?.company})</p>
+                            <p className="text-muted-foreground">Match: {bestMatch.score}% ({bestMatch.client?.name || bestMatch.client?.company})</p>
                           )}
                         </TooltipContent>
                       </Tooltip>
