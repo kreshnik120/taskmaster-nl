@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.10.1-org-filter-fix";
+const SYSTEM_PROMPT_VERSION = "v2.10.2-soft-delete-filter";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -4026,7 +4026,8 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             .select(`
                               *,
                               professional:professionals(id, full_name, functie_niveau, regio, skills, status)
-                            `);
+                            `)
+                            .is('deleted_at', null);
                           
                           // Apply filters
                           if (args.filter) {
