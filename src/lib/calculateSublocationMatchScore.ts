@@ -67,33 +67,7 @@ const FUNCTIE_COMPATIBILITY: Record<string, { compatible: string[]; score: numbe
   "Hovenier": { compatible: ["Hovenier"], score: 25 },
 };
 
-// Sector semantische relaties - Gerelateerde sectoren krijgen partiële match credit
-const SECTOR_SIMILARITY: Record<string, { related: string[]; similarity: number }> = {
-  "GGZ": { related: ["GHZ", "Verslavingszorg"], similarity: 0.6 },
-  "GHZ": { related: ["GGZ", "Jeugdzorg"], similarity: 0.6 },
-  "VVT": { related: ["Thuiszorg", "Ziekenhuis/Klinisch"], similarity: 0.7 },
-  "Thuiszorg": { related: ["VVT", "Ziekenhuis/Klinisch"], similarity: 0.7 },
-  "Jeugdzorg": { related: ["GHZ", "GGZ"], similarity: 0.5 },
-  "Ziekenhuis/Klinisch": { related: ["VVT", "Thuiszorg"], similarity: 0.6 },
-  "Verslavingszorg": { related: ["GGZ"], similarity: 0.6 },
-};
-
-// Doelgroep semantische relaties - Gerelateerde doelgroepen krijgen partiële match credit
-const DOELGROEP_RELATIONS: Record<string, { related: string[]; similarity: number }> = {
-  "LVB": { related: ["Autisme", "NAH", "EMB"], similarity: 0.7 },
-  "Autisme": { related: ["LVB", "NAH", "Kinderen/Jeugd"], similarity: 0.7 },
-  "NAH": { related: ["LVB", "Autisme", "Somatiek"], similarity: 0.6 },
-  "EMB": { related: ["LG", "LVB"], similarity: 0.5 },
-  "LG": { related: ["EMB", "LVB"], similarity: 0.5 },
-  "Psychiatrie": { related: ["Verslaving", "Dakloosheid", "GGZ"], similarity: 0.6 },
-  "Verslaving": { related: ["Psychiatrie", "Dakloosheid"], similarity: 0.6 },
-  "Dakloosheid": { related: ["Psychiatrie", "Verslaving"], similarity: 0.5 },
-  "Ouderen": { related: ["Somatiek", "Dementie"], similarity: 0.6 },
-  "Somatiek": { related: ["Ouderen", "NAH"], similarity: 0.5 },
-  "Dementie": { related: ["Ouderen", "Somatiek"], similarity: 0.7 },
-  "Kinderen/Jeugd": { related: ["Autisme", "Jeugdzorg"], similarity: 0.6 },
-  "Jeugdzorg": { related: ["Kinderen/Jeugd"], similarity: 0.7 },
-};
+import { SECTOR_SIMILARITY, DOELGROEP_RELATIONS } from './constants/matchingConstants';
 
 // Parse beschikbaarheid string naar uren object
 export function parseBeschikbaarheid(beschikbaarheid: string | null): { min: number; max: number } | null {

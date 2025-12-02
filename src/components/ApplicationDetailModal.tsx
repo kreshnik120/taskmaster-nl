@@ -32,6 +32,7 @@ import { ApplicationActivityTimeline } from "@/components/recruitment/Applicatio
 import { EmailTemplateSuggestions } from "@/components/recruitment/EmailTemplateSuggestions";
 import { MatchScoreBreakdown } from "@/components/recruitment/MatchScoreBreakdown";
 import { ApplicationNotes } from "@/components/recruitment/ApplicationNotes";
+import { SECTOR_SIMILARITY } from "@/lib/constants/matchingConstants";
 
 interface Application {
   id: string;
@@ -716,15 +717,7 @@ export function ApplicationDetailModal({
           reasons.push('Regio in klantnaam');
         }
         
-        const SECTOR_SIMILARITY: Record<string, { related: string[]; similarity: number }> = {
-          "GGZ": { related: ["GHZ", "Verslavingszorg"], similarity: 0.6 },
-          "GHZ": { related: ["GGZ", "Jeugdzorg"], similarity: 0.6 },
-          "VVT": { related: ["Thuiszorg", "Ziekenhuis/Klinisch"], similarity: 0.7 },
-          "Thuiszorg": { related: ["VVT", "Ziekenhuis/Klinisch"], similarity: 0.7 },
-          "Jeugdzorg": { related: ["GHZ", "GGZ"], similarity: 0.5 },
-          "Ziekenhuis/Klinisch": { related: ["VVT", "Thuiszorg"], similarity: 0.6 },
-          "Verslavingszorg": { related: ["GGZ"], similarity: 0.6 },
-        };
+        // Use shared SECTOR_SIMILARITY from constants
         
         const clientSectors = client.sector || [];
         const applicantSectors = extractedData.ervaring_sector || [];
