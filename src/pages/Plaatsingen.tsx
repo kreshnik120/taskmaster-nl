@@ -112,16 +112,33 @@ export default function Plaatsingen() {
     }
   };
 
-  const updateStatus = async (placementId: string, newStatus: string) => {
+  const updateStatus = async (placementId: string, newStatus: string, completedAt?: Date) => {
     try {
+      const updateData: any = { status: newStatus };
+      
+      // Add completed_at and end_date if completing
+      if (newStatus === "completed" && completedAt) {
+        updateData.completed_at = completedAt.toISOString();
+        updateData.end_date = completedAt.toISOString().split('T')[0];
+      }
+
       const { error } = await supabase
         .from("assignments")
-        .update({ status: newStatus })
+        .update(updateData)
         .eq("id", placementId);
 
       if (error) throw error;
 
-      toast.success("Status bijgewerkt");
+      // Get professional name for success message
+      const placement = placements.find(p => p.id === placementId);
+      const professionalName = placement?.professionals?.full_name || "Professional";
+
+      if (newStatus === "completed") {
+        toast.success(`Plaatsing van ${professionalName} succesvol afgerond!`);
+      } else {
+        toast.success("Status bijgewerkt");
+      }
+      
       loadPlacements();
       setDetailModalOpen(false);
     } catch (error: any) {
@@ -349,7 +366,10 @@ export default function Plaatsingen() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => updateStatus(placement.id, "completed")}
+                            onClick={() => {
+                              setSelectedPlacement(placement);
+                              setDetailModalOpen(true);
+                            }}
                           >
                             Afronden
                           </Button>

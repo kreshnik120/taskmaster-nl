@@ -681,6 +681,7 @@ export type Database = {
         Row: {
           ai_match_reasoning: Json | null
           ai_match_score: number | null
+          completed_at: string | null
           created_at: string
           created_by: string | null
           end_date: string | null
@@ -700,6 +701,7 @@ export type Database = {
         Insert: {
           ai_match_reasoning?: Json | null
           ai_match_score?: number | null
+          completed_at?: string | null
           created_at?: string
           created_by?: string | null
           end_date?: string | null
@@ -719,6 +721,7 @@ export type Database = {
         Update: {
           ai_match_reasoning?: Json | null
           ai_match_score?: number | null
+          completed_at?: string | null
           created_at?: string
           created_by?: string | null
           end_date?: string | null
