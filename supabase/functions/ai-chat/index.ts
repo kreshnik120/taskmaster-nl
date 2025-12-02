@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.8.0-bureau-filter-tarieven";
+const SYSTEM_PROMPT_VERSION = "v2.9.0-fast-path-optimization";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -1013,9 +1013,27 @@ serve(async (req) => {
     }
 
     // ============================================
-    // FASE 1: CACHE LOOKUP (SHA256 HASH)
+    // 🚀 FAST PATH DETECTION FOR SIMPLE DATA QUERIES
     // ============================================
     const lastUserMessageForCache = messages[messages.length - 1]?.content || '';
+    const lastUserMessageLower = lastUserMessageForCache.toLowerCase();
+    
+    // Detect simple data queries (database lookups)
+    const isSimpleDataQuery = /^(hoeveel|wie|welke|wanneer|aantal|lijst van|overzicht|toon|geef|laat.*zien)/i.test(lastUserMessageForCache);
+    
+    // Detect recruitment queries (professionals, clients, placements)
+    const isRecruitmentQuery = /(professional|sollicitant|klant|client|plaatsing|bureau|abczorg|citozorg)/i.test(lastUserMessageLower);
+    
+    // Fast path: simple data queries about recruitment data
+    const useFastPath = isSimpleDataQuery && isRecruitmentQuery;
+    
+    if (useFastPath) {
+      console.log('🚀 FAST PATH DETECTED: Simple recruitment data query - skipping heavy pre-processing');
+    }
+    
+    // ============================================
+    // FASE 1: CACHE LOOKUP (SHA256 HASH)
+    // ============================================
     // Include SYSTEM_PROMPT_VERSION in cache key to auto-invalidate on prompt updates
     const cacheKey = await sha256Hash(`${userOrgId}|${SYSTEM_PROMPT_VERSION}|${lastUserMessageForCache.trim()}`);
     
@@ -1023,7 +1041,8 @@ serve(async (req) => {
       org_id: userOrgId, 
       question: lastUserMessageForCache.substring(0, 50) + '...', 
       cache_key: cacheKey.substring(0, 16) + '...',
-      prompt_version: SYSTEM_PROMPT_VERSION
+      prompt_version: SYSTEM_PROMPT_VERSION,
+      fast_path: useFastPath
     });
     
     const { data: cachedResponse, error: cacheError } = await supabaseServiceClient
@@ -1332,6 +1351,7 @@ serve(async (req) => {
 
     // ============================================
     // 🏢 FASE 2.5: KVK SMART LOOKUP (COST-FREE BUSINESS DATA)
+    // ⚡ SKIP FOR FAST PATH (recruitment data queries)
     // ============================================
     let kvkEnrichedData: any[] = [];
     let kvkCostSaved = 0;
@@ -1339,7 +1359,8 @@ serve(async (req) => {
     
     const businessQuery = detectBusinessQuery(lastUserMessage);
     
-    if (businessQuery.isBusinessQuery && businessQuery.entities.length > 0) {
+    // ⚡ Fast path: skip KVK lookup voor simpele recruitment queries
+    if (!useFastPath && businessQuery.isBusinessQuery && businessQuery.entities.length > 0) {
       console.log(`🏢 Business query detected: ${businessQuery.queryType}`);
       console.log(`📋 Entities to lookup: ${businessQuery.entities.join(', ')}`);
       
@@ -1474,15 +1495,24 @@ serve(async (req) => {
     let semanticKnowledge: any[] = [];
 
     // ============================================
-    // MERGE KVK DATA MET KNOWLEDGE BASE (HOOGSTE PRIORITEIT)
+    // ⚡ FAST PATH: MINIMAL KNOWLEDGE BASE FOR DATABASE QUERIES
     // ============================================
-    if (kvkEnrichedData.length > 0) {
-      console.log('🔗 Prepending KVK enriched data to knowledge base (highest priority)...');
-      fullKnowledgeBase = [...kvkEnrichedData];
-      console.log(`✅ KVK data prepended: ${kvkEnrichedData.length} items`);
-    }
+    if (useFastPath) {
+      console.log('⚡ Fast path: using minimal knowledge base (tools-only mode)');
+      // Skip knowledge base retrieval entirely for fast path
+      // AI will rely on database tools (query_professionals, query_clients, etc.)
+      fullKnowledgeBase = [];
+    } else {
+      // ============================================
+      // MERGE KVK DATA MET KNOWLEDGE BASE (HOOGSTE PRIORITEIT)
+      // ============================================
+      if (kvkEnrichedData.length > 0) {
+        console.log('🔗 Prepending KVK enriched data to knowledge base (highest priority)...');
+        fullKnowledgeBase = [...kvkEnrichedData];
+        console.log(`✅ KVK data prepended: ${kvkEnrichedData.length} items`);
+      }
 
-    if (relevantCategories && relevantCategories.length > 0) {
+    if (!useFastPath && relevantCategories && relevantCategories.length > 0) {
       // Haal ALLE items uit relevante categorieën (geen limit!)
       const categoryNames = relevantCategories.map((c: any) => c.category_name);
       
@@ -1545,7 +1575,8 @@ serve(async (req) => {
     }
 
     // Fallback: Als geen categorieën gevonden, gebruik standaard query met verhoogd limit
-    if (fullKnowledgeBase.length === 0) {
+    // ⚡ Skip for fast path
+    if (!useFastPath && fullKnowledgeBase.length === 0) {
       console.log('⚠️ Geen categorieën gevonden, fallback naar standaard query (300 items)...');
       const { data: fallbackKnowledge } = await supabaseClient
         .from('ai_knowledge_base')
@@ -1587,9 +1618,11 @@ serve(async (req) => {
         console.log(`✅ Fallback: ${fullKnowledgeBase.length} items (${orgProfileItems.length} org-profiles)`);
       }
     }
+    } // End of !useFastPath block
     
     // 🎯 MERGE SEMANTIC + CATEGORY RESULTS
-    if (semanticKnowledge.length > 0) {
+    // ⚡ Skip for fast path
+    if (!useFastPath && semanticKnowledge.length > 0) {
       // Deduplicate: semantic results hebben voorrang
       const existingIds = new Set(fullKnowledgeBase.map((kb: any) => kb.id));
       const newSemanticItems = semanticKnowledge.filter((kb: any) => !existingIds.has(kb.id));
@@ -1603,7 +1636,8 @@ serve(async (req) => {
     }
 
     // FASE 1: Track which relationships were used (Synaptic Reinforcement)
-    if (fullKnowledgeBase.length > 0) {
+    // ⚡ Skip for fast path
+    if (!useFastPath && fullKnowledgeBase.length > 0) {
       const relevantIds = fullKnowledgeBase.map((i: any) => i.id);
       
       // Fetch relationships that involve any of our knowledge items (with current usage_count)
@@ -1642,7 +1676,8 @@ serve(async (req) => {
     const isCompanyInfoQuery = /\b(adres|gegevens|kvk|bedrijfsinformatie|contactgegevens|postcode|plaats|vestiging)\b/i.test(lastUserMessage);
     
     // Als het een bedrijfsinformatie query is, haal ALTIJD bedrijfsinformatie items op
-    if (isCompanyInfoQuery) {
+    // ⚡ Skip for fast path
+    if (!useFastPath && isCompanyInfoQuery) {
       console.log('🏢 Bedrijfsinformatie query gedetecteerd - haal specifieke items op');
       const { data: companyInfo } = await supabaseClient
         .from('ai_knowledge_base')
@@ -1664,7 +1699,8 @@ serve(async (req) => {
     }
     
     // 🧠 SEMANTIC SEARCH: Generate embedding and find relevant knowledge
-    if (OPENAI_API_KEY && lastUserMessage.length > 0) {
+    // ⚡ SKIP FOR FAST PATH (biggest performance win: ~1500ms saved)
+    if (!useFastPath && OPENAI_API_KEY && lastUserMessage.length > 0) {
       console.log('🧠 Generating embedding for semantic search...');
       
       try {
