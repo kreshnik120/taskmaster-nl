@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.11.0-candidate-skills";
+const SYSTEM_PROMPT_VERSION = "v2.11.1-cross-bureau-recruitment";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -4533,12 +4533,14 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                           }
                           
                           // Query knowledge base for candidate_skills and candidate_experience
+                          // 🔓 CROSS-BUREAU: ABCzorg en CitoZorg werken samen, personeel werkt voor beide bureaus
+                          // Verwijder org_id filter zodat ALLE kandidaten worden gevonden
                           const { data: skillsKnowledge, error: skillsQueryError } = await supabaseClient
                             .from('ai_knowledge_base')
                             .select('*')
                             .in('category', ['candidate_skills', 'candidate_experience'])
                             .is('deleted_at', null)
-                            .eq('org_id', userOrgId)
+                            // REMOVED: .eq('org_id', userOrgId) - Cross-bureau visibility required
                             .order('created_at', { ascending: false })
                             .limit(500);
                           
@@ -4577,6 +4579,13 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                           // Group by application_id to get unique candidates (application_id is in value field)
                           const candidateMap = new Map<string, any>();
                           
+                          // Helper function for bureau name
+                          const getBureauName = (orgId: string) => {
+                            if (orgId === '550e8400-e29b-41d4-a716-446655440000') return 'ABCzorg';
+                            if (orgId === '650e8400-e29b-41d4-a716-446655440001') return 'CitoZorg';
+                            return 'Onbekend';
+                          };
+                          
                           for (const kb of matchingKnowledge) {
                             const appId = kb.value?.application_id || kb.assignment_id;
                             if (!appId) continue;
@@ -4588,6 +4597,7 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                                 functie_niveau: kb.value?.functie_niveau || 'n/a',
                                 werkvorm: kb.value?.werkvorm || 'n/a',
                                 regio: kb.value?.regio || 'n/a',
+                                bureau: getBureauName(kb.org_id), // 🏢 Bureau indicator
                                 matched_skills: [],
                                 sector_ervaring: [],
                                 doelgroep_ervaring: []
@@ -4631,14 +4641,14 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             break;
                           }
                           
-                          // Format output
+                          // Format output with bureau indicator
                           const candidateList = candidates.map((c, i) => {
                             const skills = [
                               ...c.sector_ervaring.map((s: string) => `📋 ${s}`),
                               ...c.doelgroep_ervaring.map((d: string) => `👥 ${d}`)
                             ].join(', ') || 'geen skills';
                             
-                            return `${i + 1}. **${c.naam}** - ${c.functie_niveau}\n` +
+                            return `${i + 1}. **${c.naam}** [${c.bureau}] - ${c.functie_niveau}\n` +
                               `   ├─ Werkvorm: ${c.werkvorm} | Regio: ${c.regio}\n` +
                               `   └─ Ervaring: ${skills}`;
                           }).join('\n\n');
