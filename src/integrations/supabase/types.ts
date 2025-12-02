@@ -677,6 +677,51 @@ export type Database = {
           },
         ]
       }
+      assignment_evaluations: {
+        Row: {
+          assignment_id: string
+          created_at: string
+          evaluator_id: string | null
+          feedback: string | null
+          id: string
+          rating: number
+          would_rehire: boolean | null
+        }
+        Insert: {
+          assignment_id: string
+          created_at?: string
+          evaluator_id?: string | null
+          feedback?: string | null
+          id?: string
+          rating: number
+          would_rehire?: boolean | null
+        }
+        Update: {
+          assignment_id?: string
+          created_at?: string
+          evaluator_id?: string | null
+          feedback?: string | null
+          id?: string
+          rating?: number
+          would_rehire?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignment_evaluations_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: true
+            referencedRelation: "assignment_details"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignment_evaluations_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: true
+            referencedRelation: "assignments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assignments: {
         Row: {
           ai_match_reasoning: Json | null
