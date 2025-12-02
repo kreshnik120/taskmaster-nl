@@ -61,8 +61,15 @@ serve(async (req) => {
       try {
         console.log(`🔄 Processing event ${event.id} (${event.event_type})...`);
         
-        // Analyseer event met AI
-        const analysis = await analyzeEventWithAI(event, LOVABLE_API_KEY);
+        let analysis;
+        
+        // Specialized handling for evaluation events - direct knowledge creation
+        if (event.event_type === 'assignment_evaluation_created') {
+          analysis = await analyzeEvaluationEvent(event, supabase, LOVABLE_API_KEY);
+        } else {
+          // General AI analysis for other events
+          analysis = await analyzeEventWithAI(event, LOVABLE_API_KEY);
+        }
         
         // Creëer knowledge items als nodig
         if (analysis.shouldCreateKnowledge) {
@@ -117,6 +124,31 @@ serve(async (req) => {
               console.error(`❌ Failed to create knowledge for event ${event.id}:`, kbError);
               errors.push(`Event ${event.id}: ${kbError.message}`);
             }
+            
+            // For evaluation events, also create correlation knowledge
+            if (event.event_type === 'assignment_evaluation_created' && analysis.correlationKnowledge) {
+              for (const corrKnowledge of analysis.correlationKnowledge) {
+                const { error: corrError } = await supabase
+                  .from('ai_knowledge_base')
+                  .insert({
+                    org_id: orgId,
+                    user_id: event.user_id,
+                    category: corrKnowledge.category,
+                    key: corrKnowledge.key,
+                    value: corrKnowledge.value,
+                    confidence_score: corrKnowledge.confidence,
+                    source: `system_event:${event.event_type}:correlation`,
+                    source_reference: event.id,
+                    role_tags: corrKnowledge.role_tags || ['admin', 'manager'],
+                    stability_score: corrKnowledge.stability_score || 0.7
+                  });
+                
+                if (!corrError) {
+                  knowledgeCreatedCount++;
+                  console.log(`✅ Correlation knowledge created: ${corrKnowledge.key}`);
+                }
+              }
+            }
           }
         }
         
@@ -163,7 +195,202 @@ serve(async (req) => {
   }
 });
 
-// Helper: Analyze event with AI
+// Specialized analysis for evaluation events - extracts placement success patterns
+async function analyzeEvaluationEvent(event: any, supabase: any, lovableApiKey: string): Promise<any> {
+  const metadata = event.metadata || {};
+  const eventData = event.event_data || {};
+  
+  const rating = eventData.rating;
+  const wouldRehire = eventData.would_rehire;
+  const matchScore = metadata.ai_match_score;
+  const isSuccessful = metadata.is_successful_placement;
+  const isFailed = metadata.is_failed_placement;
+  const matchPredictedCorrectly = metadata.match_score_predicted_correctly;
+  
+  console.log(`📊 Analyzing evaluation: rating=${rating}, match_score=${matchScore}, success=${isSuccessful}`);
+  
+  // Build primary knowledge item about this placement
+  const primaryKnowledge = {
+    shouldCreateKnowledge: true,
+    category: 'placement_success',
+    key: `placement_evaluation_${metadata.client_name?.toLowerCase().replace(/\s+/g, '_') || 'unknown'}_${metadata.functie_niveau?.toLowerCase().replace(/\s+/g, '_') || 'unknown'}`,
+    value: {
+      rating,
+      would_rehire: wouldRehire,
+      ai_match_score: matchScore,
+      match_prediction_accurate: matchPredictedCorrectly,
+      professional_name: metadata.professional_name,
+      client_name: metadata.client_name,
+      sublocation_name: metadata.sublocation_name,
+      functie_niveau: metadata.functie_niveau,
+      werkvorm: metadata.werkvorm,
+      duration_days: metadata.assignment_duration_days,
+      success_status: isSuccessful ? 'successful' : (isFailed ? 'failed' : 'neutral'),
+      correlation_delta: metadata.rating_vs_match_correlation
+    },
+    confidence: rating >= 4 ? 0.9 : (rating <= 2 ? 0.85 : 0.75),
+    reasoning: `Plaatsing evaluatie: ${metadata.professional_name} bij ${metadata.client_name} (${rating}/5 sterren, ${wouldRehire ? 'zou opnieuw plaatsen' : 'zou niet opnieuw plaatsen'})`,
+    role_tags: ['admin', 'manager', 'recruiter'],
+    stability_score: 0.85,
+    correlationKnowledge: [] as any[]
+  };
+  
+  // Generate correlation knowledge if match_score available
+  if (matchScore !== null && matchScore !== undefined) {
+    // Correlation pattern knowledge
+    primaryKnowledge.correlationKnowledge.push({
+      category: 'matching_accuracy',
+      key: `match_score_correlation_${matchScore >= 70 ? 'high' : (matchScore >= 50 ? 'medium' : 'low')}_score`,
+      value: {
+        match_score_range: matchScore >= 70 ? '70-100' : (matchScore >= 50 ? '50-69' : '0-49'),
+        actual_rating: rating,
+        expected_rating_range: matchScore >= 70 ? '4-5' : (matchScore >= 50 ? '3-4' : '1-3'),
+        prediction_accurate: matchPredictedCorrectly,
+        correlation_delta: metadata.rating_vs_match_correlation,
+        insight: matchPredictedCorrectly 
+          ? `Match score ${matchScore}% voorspelde rating ${rating}/5 correct`
+          : `Match score ${matchScore}% voorspelde rating incorrect (werkelijk: ${rating}/5)`,
+        functie_niveau: metadata.functie_niveau,
+        werkvorm: metadata.werkvorm
+      },
+      confidence: matchPredictedCorrectly ? 0.9 : 0.7,
+      stability_score: 0.75,
+      role_tags: ['admin', 'manager']
+    });
+    
+    // Success pattern by functie_niveau
+    if (isSuccessful && metadata.functie_niveau) {
+      primaryKnowledge.correlationKnowledge.push({
+        category: 'success_patterns',
+        key: `successful_placement_pattern_${metadata.functie_niveau.toLowerCase().replace(/\s+/g, '_')}`,
+        value: {
+          functie_niveau: metadata.functie_niveau,
+          client_type: metadata.client_name,
+          werkvorm: metadata.werkvorm,
+          match_score: matchScore,
+          rating: rating,
+          duration_days: metadata.assignment_duration_days,
+          factors: [
+            matchScore >= 70 ? 'high_match_score' : null,
+            metadata.assignment_duration_days > 30 ? 'long_duration' : null,
+            wouldRehire ? 'would_rehire' : null
+          ].filter(Boolean),
+          insight: `Succesvolle plaatsing ${metadata.functie_niveau} met match score ${matchScore}% en rating ${rating}/5`
+        },
+        confidence: 0.85,
+        stability_score: 0.8,
+        role_tags: ['admin', 'manager', 'recruiter']
+      });
+    }
+    
+    // Failure pattern learning
+    if (isFailed && metadata.functie_niveau) {
+      primaryKnowledge.correlationKnowledge.push({
+        category: 'improvement_areas',
+        key: `placement_improvement_${metadata.functie_niveau.toLowerCase().replace(/\s+/g, '_')}_${metadata.client_name?.toLowerCase().replace(/\s+/g, '_') || 'unknown'}`,
+        value: {
+          functie_niveau: metadata.functie_niveau,
+          client_name: metadata.client_name,
+          werkvorm: metadata.werkvorm,
+          match_score: matchScore,
+          rating: rating,
+          would_rehire: wouldRehire,
+          potential_issues: [
+            matchScore < 50 ? 'low_initial_match_score' : null,
+            metadata.assignment_duration_days < 14 ? 'very_short_duration' : null,
+            !wouldRehire ? 'would_not_rehire' : null,
+            matchScore >= 70 && rating <= 2 ? 'match_score_overestimated' : null
+          ].filter(Boolean),
+          recommendation: matchScore >= 70 && rating <= 2 
+            ? 'Matching algoritme overschatte fit - review sector/doelgroep weging'
+            : 'Review kandidaat selectie criteria voor dit type plaatsing'
+        },
+        confidence: 0.8,
+        stability_score: 0.7,
+        role_tags: ['admin', 'manager']
+      });
+    }
+  }
+  
+  // Use AI for additional insight extraction if there's feedback
+  if (eventData.has_feedback && eventData.feedback_length > 50) {
+    try {
+      const aiInsight = await extractFeedbackInsights(event, lovableApiKey);
+      if (aiInsight) {
+        primaryKnowledge.correlationKnowledge.push(aiInsight);
+      }
+    } catch (e) {
+      console.warn('⚠️ Failed to extract AI feedback insights:', e);
+    }
+  }
+  
+  return primaryKnowledge;
+}
+
+// Extract insights from feedback text using AI
+async function extractFeedbackInsights(event: any, lovableApiKey: string): Promise<any | null> {
+  const prompt = `Analyseer deze plaatsings-evaluatie feedback en extraheer actionable insights:
+
+CONTEXT:
+- Professional: ${event.metadata?.professional_name}
+- Klant: ${event.metadata?.client_name}
+- Functie: ${event.metadata?.functie_niveau}
+- Rating: ${event.event_data?.rating}/5
+- Zou opnieuw plaatsen: ${event.event_data?.would_rehire ? 'Ja' : 'Nee'}
+- Match Score: ${event.metadata?.ai_match_score}%
+
+Return ALLEEN een JSON object:
+{
+  "key_insight": "belangrijkste conclusie in 1 zin",
+  "improvement_suggestion": "concrete verbetering voor matching",
+  "success_factor": "wat ging goed" of null,
+  "risk_factor": "wat ging minder" of null,
+  "confidence": 0.0-1.0
+}`;
+
+  try {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${lovableApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        category: 'feedback_insights',
+        key: `feedback_insight_${event.metadata?.client_name?.toLowerCase().replace(/\s+/g, '_') || 'unknown'}`,
+        value: {
+          ...parsed,
+          source_rating: event.event_data?.rating,
+          functie_niveau: event.metadata?.functie_niveau,
+          client_name: event.metadata?.client_name
+        },
+        confidence: parsed.confidence || 0.7,
+        stability_score: 0.6,
+        role_tags: ['admin', 'manager']
+      };
+    }
+  } catch (e) {
+    console.warn('⚠️ AI feedback analysis failed:', e);
+  }
+  
+  return null;
+}
+
+// General AI analysis for other event types
 async function analyzeEventWithAI(event: any, lovableApiKey: string): Promise<any> {
   const prompt = `Analyseer dit systeem event en bepaal of er kennis moet worden geleerd:
 
