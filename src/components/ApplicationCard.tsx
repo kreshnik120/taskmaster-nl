@@ -5,6 +5,7 @@ import { GripVertical, Phone, Calendar, Mail, AlertCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
@@ -268,7 +269,7 @@ export function ApplicationCard({ application, onClick, searchQuery = "", isSele
 
                 {/* Card Content - Clickable */}
                 <div className="flex-1 min-w-0 space-y-2 cursor-pointer" onClick={onClick}>
-                  {/* Header: Avatar + Name + Progress Ring + Match Badge */}
+                  {/* Header: Avatar + Name + Progress Ring */}
                   <div className="flex items-center gap-2">
                     <Avatar className="h-6 w-6 flex-shrink-0">
                       <AvatarFallback className={`text-xs font-medium ${getAvatarColor(candidateName)}`}>
@@ -278,14 +279,21 @@ export function ApplicationCard({ application, onClick, searchQuery = "", isSele
                     <p className="text-sm font-medium text-foreground truncate flex-1">
                       {highlightText(candidateName)}
                     </p>
-                    {bestMatch && bestMatch.score >= 50 && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-muted-foreground/30">
-                        {bestMatch.score}%
-                      </Badge>
-                    )}
-                    <div className="flex-shrink-0">
-                      <ProgressRing progress={completenessScore} size={28} strokeWidth={2.5} />
-                    </div>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex-shrink-0">
+                            <ProgressRing progress={completenessScore} size={28} strokeWidth={2.5} />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="text-xs">
+                          <p>Profiel volledigheid: {completenessScore}%</p>
+                          {bestMatch && bestMatch.score >= 50 && (
+                            <p className="text-muted-foreground">Match: {Math.min(100, bestMatch.score)}% ({bestMatch.client?.name || bestMatch.client?.company})</p>
+                          )}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
 
                   {/* Email */}

@@ -910,7 +910,7 @@ export function ApplicationDetailModal({
         
         return { 
           ...client, 
-          matchScore: Math.round(score), 
+          matchScore: Math.min(100, Math.round(score)), // Normalize to max 100%
           matchReasons: reasons,
           orgName: clientOrgName,
           scoreBreakdown: breakdown
