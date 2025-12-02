@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.11.1-cross-bureau-recruitment";
+const SYSTEM_PROMPT_VERSION = "v2.12.0-learning-stats-tool";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -3190,6 +3190,23 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
             }
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "query_learning_stats",
+          description: "Rapporteer de AI's eigen leervoortgang en kennisstatistieken. Gebruik dit wanneer gebruikers vragen stellen over hoeveel de AI heeft geleerd, welke patronen bekend zijn, leervoortgang, of de AI zichzelf moet beschrijven qua kennis.",
+          parameters: {
+            type: "object",
+            properties: {
+              stat_type: {
+                type: "string",
+                enum: ["overview", "patterns", "categories", "growth", "all"],
+                description: "Type statistiek: overview (samenvatting), patterns (geleerde succespatronen), categories (kennis per categorie), growth (groei over tijd)"
+              }
+            }
+          }
+        }
       }
     ];
 
@@ -4697,6 +4714,108 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                               avg_rating: parseFloat(avgRating),
                               would_rehire_percent: parseFloat(wouldRehirePercent),
                               match_accuracy: matchAccuracy !== 'n/a' ? parseFloat(matchAccuracy) : null
+                            }
+                          };
+                          break;
+
+                        case "query_learning_stats":
+                          console.log("🧠 Querying AI learning stats...", args);
+                          
+                          const statType = args.stat_type || 'overview';
+                          
+                          // Query knowledge base stats
+                          const { count: totalKnowledge } = await supabaseClient
+                            .from('ai_knowledge_base')
+                            .select('id', { count: 'exact', head: true })
+                            .is('deleted_at', null);
+                          
+                          const { data: successPatternsData, count: successPatternsCount } = await supabaseClient
+                            .from('ai_knowledge_base')
+                            .select('key, value, occurrence_count, confidence_score, created_at', { count: 'exact' })
+                            .eq('category', 'success_patterns')
+                            .is('deleted_at', null)
+                            .order('occurrence_count', { ascending: false })
+                            .limit(10);
+                          
+                          // Query category breakdown
+                          const { data: categoryData } = await supabaseClient
+                            .from('ai_knowledge_base')
+                            .select('category')
+                            .is('deleted_at', null);
+                          
+                          const categoryCounts: Record<string, number> = {};
+                          categoryData?.forEach((c: any) => {
+                            categoryCounts[c.category] = (categoryCounts[c.category] || 0) + 1;
+                          });
+                          
+                          const topCategories = Object.entries(categoryCounts)
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 8);
+                          
+                          // Query evaluation stats
+                          const { data: evalStatsData } = await supabaseClient
+                            .from('assignment_evaluations')
+                            .select('rating, would_rehire');
+                          
+                          const evalCount = evalStatsData?.length || 0;
+                          const avgEvalRating = evalCount > 0
+                            ? (evalStatsData!.reduce((s: number, e: any) => s + (e.rating || 0), 0) / evalCount).toFixed(1)
+                            : '0';
+                          const rehireRate = evalCount > 0
+                            ? ((evalStatsData!.filter((e: any) => e.would_rehire === true).length / evalCount) * 100).toFixed(0)
+                            : '0';
+                          
+                          // Calculate growth (last 7 days)
+                          const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+                          const { count: recentKnowledge } = await supabaseClient
+                            .from('ai_knowledge_base')
+                            .select('id', { count: 'exact', head: true })
+                            .is('deleted_at', null)
+                            .gte('created_at', weekAgo);
+                          
+                          // Build response based on stat_type
+                          let learningMessage = `🧠 **AI Leervoortgang Rapport**\n\n`;
+                          
+                          if (statType === 'overview' || statType === 'all') {
+                            learningMessage += `**📊 Overzicht**\n`;
+                            learningMessage += `├─ Totale kennis items: ${totalKnowledge || 0}\n`;
+                            learningMessage += `├─ Succes patronen geleerd: ${successPatternsCount || 0}\n`;
+                            learningMessage += `├─ Evaluaties verwerkt: ${evalCount}\n`;
+                            learningMessage += `├─ Gemiddelde rating: ${avgEvalRating}/5\n`;
+                            learningMessage += `└─ Herplaatsingspercentage: ${rehireRate}%\n\n`;
+                          }
+                          
+                          if (statType === 'patterns' || statType === 'all') {
+                            const patternsList = successPatternsData?.slice(0, 5)
+                              .map((p: any, i: number) => `${i + 1}. ${p.key} (${p.occurrence_count || 1}x waargenomen)`)
+                              .join('\n') || 'Nog geen patronen geleerd';
+                            learningMessage += `**🎯 Top Geleerde Patronen**:\n${patternsList}\n\n`;
+                          }
+                          
+                          if (statType === 'categories' || statType === 'all') {
+                            const categoryList = topCategories
+                              .map(([cat, count]) => `• ${cat}: ${count} items`)
+                              .join('\n') || 'Geen categorieën';
+                            learningMessage += `**📁 Kennis per Categorie**:\n${categoryList}\n\n`;
+                          }
+                          
+                          if (statType === 'growth' || statType === 'all') {
+                            learningMessage += `**📈 Groei**\n`;
+                            learningMessage += `├─ Nieuwe items deze week: ${recentKnowledge || 0}\n`;
+                            learningMessage += `└─ Leerniveau: ${(successPatternsCount || 0) < 3 ? 'Beginner' : (successPatternsCount || 0) < 10 ? 'Gevorderd' : 'Expert'}\n`;
+                          }
+                          
+                          result = {
+                            success: true,
+                            message: learningMessage,
+                            stats: {
+                              total_knowledge: totalKnowledge || 0,
+                              success_patterns: successPatternsCount || 0,
+                              evaluations_processed: evalCount,
+                              avg_rating: parseFloat(avgEvalRating),
+                              rehire_rate: parseFloat(rehireRate),
+                              recent_growth: recentKnowledge || 0,
+                              top_categories: topCategories
                             }
                           };
                           break;

@@ -14,6 +14,7 @@ import { PlacementDetailModal } from "@/components/PlacementDetailModal";
 import { motion } from "framer-motion";
 import { KPICard } from "@/components/ui/kpi-card";
 import { PlacementEvaluationKPIs } from "@/components/recruitment/PlacementEvaluationKPIs";
+import { AILearningProgressWidget } from "@/components/recruitment/AILearningProgressWidget";
 
 interface Placement {
   id: string;
@@ -230,13 +231,19 @@ export default function Plaatsingen() {
         />
       </div>
 
-      {/* Evaluation KPIs - Only show when there are completed placements */}
-      {stats.completed > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium text-muted-foreground">AI Evaluatie Inzichten</h3>
-          <PlacementEvaluationKPIs />
-        </div>
-      )}
+      {/* AI Learning & Evaluation Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* AI Learning Progress Widget */}
+        <AILearningProgressWidget />
+        
+        {/* Evaluation KPIs - Only show when there are completed placements */}
+        {stats.completed > 0 && (
+          <div className="lg:col-span-2 space-y-2">
+            <h3 className="text-sm font-medium text-muted-foreground">AI Evaluatie Inzichten</h3>
+            <PlacementEvaluationKPIs />
+          </div>
+        )}
+      </div>
 
       {/* Filters */}
       <div className="flex gap-4">
