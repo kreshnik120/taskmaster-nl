@@ -3163,6 +3163,33 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
             }
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "query_evaluation_insights",
+          description: "Haal AI-geleerde inzichten op uit plaatsingsevaluaties. Gebruik dit om vragen te beantwoorden over match nauwkeurigheid, succesfactoren, verbeterpunten, en wat de AI heeft geleerd van voltooide plaatsingen.",
+          parameters: {
+            type: "object",
+            properties: {
+              insight_type: {
+                type: "string",
+                enum: ["success_patterns", "improvement_areas", "match_accuracy", "function_performance", "all"],
+                description: "Type inzicht: success_patterns (wat werkt), improvement_areas (verbeterpunten), match_accuracy (AI voorspelling nauwkeurigheid), function_performance (prestatie per functieniveau)"
+              },
+              functie_niveau: {
+                type: "string",
+                enum: ["VIG", "HBO-V", "Verpleegkundige MBO", "Helpende", "Begeleider", "Persoonlijk begeleider", "GGZ-agoog"],
+                description: "Filter op specifiek functieniveau (optioneel)"
+              },
+              time_period: {
+                type: "string",
+                enum: ["week", "month", "quarter", "year", "all"],
+                description: "Periode voor analyse (default: all)"
+              }
+            }
+          }
+        }
       }
     ];
 
@@ -4514,6 +4541,164 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                               placements: placements
                             };
                           }
+                          break;
+
+                        case "query_evaluation_insights":
+                          console.log("🔍 Querying evaluation insights...", args);
+                          
+                          const insightType = args.insight_type || 'all';
+                          const functieFilter = args.functie_niveau;
+                          const timePeriod = args.time_period || 'all';
+                          
+                          // Calculate date filter based on time_period
+                          let dateFilter = null;
+                          const now = new Date();
+                          switch (timePeriod) {
+                            case 'week':
+                              dateFilter = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+                              break;
+                            case 'month':
+                              dateFilter = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+                              break;
+                            case 'quarter':
+                              dateFilter = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
+                              break;
+                            case 'year':
+                              dateFilter = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString();
+                              break;
+                          }
+                          
+                          // Query evaluations with assignment data
+                          let evalQuery = supabaseClient
+                            .from('assignment_evaluations')
+                            .select(`
+                              *,
+                              assignments!inner(
+                                ai_match_score,
+                                professionals(full_name, functie_niveau)
+                              )
+                            `)
+                            .order('created_at', { ascending: false });
+                          
+                          if (dateFilter) {
+                            evalQuery = evalQuery.gte('created_at', dateFilter);
+                          }
+                          
+                          const { data: evaluations, error: evalError } = await evalQuery;
+                          
+                          if (evalError) {
+                            console.error("Evaluation insights query error:", evalError);
+                            result = {
+                              success: false,
+                              message: `❌ Fout bij ophalen evaluatie inzichten: ${evalError.message}`
+                            };
+                            break;
+                          }
+                          
+                          // Filter by functie_niveau if specified
+                          let filteredEvals = evaluations || [];
+                          if (functieFilter) {
+                            filteredEvals = filteredEvals.filter((e: any) => 
+                              e.assignments?.professionals?.functie_niveau === functieFilter
+                            );
+                          }
+                          
+                          if (filteredEvals.length === 0) {
+                            result = {
+                              success: true,
+                              message: `📊 Geen evaluaties gevonden${functieFilter ? ` voor ${functieFilter}` : ''}${timePeriod !== 'all' ? ` in de afgelopen ${timePeriod}` : ''}. Zodra er meer plaatsingen worden geëvalueerd, kan AI hiervan leren.`
+                            };
+                            break;
+                          }
+                          
+                          // Calculate insights
+                          const avgRating = (filteredEvals.reduce((s: number, e: any) => s + e.rating, 0) / filteredEvals.length).toFixed(1);
+                          const wouldRehireCount = filteredEvals.filter((e: any) => e.would_rehire === true).length;
+                          const wouldRehirePercent = ((wouldRehireCount / filteredEvals.length) * 100).toFixed(0);
+                          
+                          // Calculate match accuracy (AI predictions vs outcomes)
+                          const evalsWithScore = filteredEvals.filter((e: any) => e.assignments?.ai_match_score != null);
+                          let matchAccuracy = 'n/a';
+                          if (evalsWithScore.length > 0) {
+                            const accurate = evalsWithScore.filter((e: any) => {
+                              const aiScore = e.assignments.ai_match_score;
+                              const positiveOutcome = e.rating >= 4 && e.would_rehire !== false;
+                              return (aiScore >= 70 && positiveOutcome) || (aiScore < 70 && !positiveOutcome);
+                            });
+                            matchAccuracy = ((accurate.length / evalsWithScore.length) * 100).toFixed(0);
+                          }
+                          
+                          // Query knowledge base for learned patterns
+                          const { data: patterns } = await supabaseClient
+                            .from('ai_knowledge_base')
+                            .select('key, value, occurrence_count, confidence_score')
+                            .in('category', ['recruitment', 'placement_success', 'evaluation_learning', 'match_patterns'])
+                            .is('deleted_at', null)
+                            .gte('confidence_score', 0.6)
+                            .order('occurrence_count', { ascending: false })
+                            .limit(10);
+                          
+                          // Build success patterns from knowledge
+                          const successPatterns = patterns
+                            ?.filter((p: any) => p.key?.toLowerCase().includes('success') || p.value?.type === 'success')
+                            .slice(0, 3)
+                            .map((p: any) => `• ${p.value?.insight || p.key} (${p.occurrence_count || 1}x waargenomen)`)
+                            .join('\n') || 'Nog geen patronen geleerd';
+                          
+                          // Build improvement areas from knowledge
+                          const improvementAreas = patterns
+                            ?.filter((p: any) => p.key?.toLowerCase().includes('improvement') || p.value?.type === 'improvement')
+                            .slice(0, 3)
+                            .map((p: any) => `• ${p.value?.insight || p.key}`)
+                            .join('\n') || 'Nog geen verbeterpunten geïdentificeerd';
+                          
+                          // Build result based on insight_type
+                          let insightMessage = `📊 **AI Evaluatie Inzichten**${functieFilter ? ` voor ${functieFilter}` : ''}\n`;
+                          insightMessage += `Gebaseerd op ${filteredEvals.length} evaluaties${timePeriod !== 'all' ? ` (laatste ${timePeriod})` : ''}\n\n`;
+                          
+                          if (insightType === 'all' || insightType === 'match_accuracy') {
+                            insightMessage += `**🎯 AI Match Nauwkeurigheid**: ${matchAccuracy}%\n`;
+                            insightMessage += `├─ Gemiddelde rating: ${avgRating}/5\n`;
+                            insightMessage += `└─ Herplaatsbaar: ${wouldRehirePercent}%\n\n`;
+                          }
+                          
+                          if (insightType === 'all' || insightType === 'success_patterns') {
+                            insightMessage += `**✅ Geleerde Succesfactoren**:\n${successPatterns}\n\n`;
+                          }
+                          
+                          if (insightType === 'all' || insightType === 'improvement_areas') {
+                            insightMessage += `**📈 Verbeterpunten**:\n${improvementAreas}\n\n`;
+                          }
+                          
+                          if (insightType === 'function_performance' || insightType === 'all') {
+                            // Group by functie_niveau
+                            const byFunctie = filteredEvals.reduce((acc: any, e: any) => {
+                              const fn = e.assignments?.professionals?.functie_niveau || 'Onbekend';
+                              if (!acc[fn]) acc[fn] = { count: 0, totalRating: 0, rehire: 0 };
+                              acc[fn].count++;
+                              acc[fn].totalRating += e.rating;
+                              if (e.would_rehire) acc[fn].rehire++;
+                              return acc;
+                            }, {});
+                            
+                            const functieStats = Object.entries(byFunctie)
+                              .map(([fn, stats]: [string, any]) => 
+                                `• ${fn}: ${(stats.totalRating / stats.count).toFixed(1)}/5 rating, ${((stats.rehire / stats.count) * 100).toFixed(0)}% herplaatsbaar (${stats.count} evals)`)
+                              .join('\n');
+                            
+                            insightMessage += `**👥 Prestatie per Functieniveau**:\n${functieStats || 'Geen data'}\n`;
+                          }
+                          
+                          result = {
+                            success: true,
+                            message: insightMessage,
+                            stats: {
+                              total_evaluations: filteredEvals.length,
+                              avg_rating: parseFloat(avgRating),
+                              would_rehire_percent: parseFloat(wouldRehirePercent),
+                              match_accuracy: matchAccuracy !== 'n/a' ? parseFloat(matchAccuracy) : null
+                            }
+                          };
                           break;
 
                         case "query_candidate_skills":
