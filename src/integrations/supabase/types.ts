@@ -687,12 +687,15 @@ export type Database = {
           hourly_rate_id: string | null
           id: string
           notes: string | null
+          plaatsing_type: string | null
           professional_id: string
           start_date: string
           status: string
           sublocation_id: string
           updated_at: string
+          verwachte_einddatum: string | null
           weekly_hours: number
+          werkvorm: string | null
         }
         Insert: {
           ai_match_reasoning?: Json | null
@@ -703,12 +706,15 @@ export type Database = {
           hourly_rate_id?: string | null
           id?: string
           notes?: string | null
+          plaatsing_type?: string | null
           professional_id: string
           start_date: string
           status?: string
           sublocation_id: string
           updated_at?: string
+          verwachte_einddatum?: string | null
           weekly_hours?: number
+          werkvorm?: string | null
         }
         Update: {
           ai_match_reasoning?: Json | null
@@ -719,12 +725,15 @@ export type Database = {
           hourly_rate_id?: string | null
           id?: string
           notes?: string | null
+          plaatsing_type?: string | null
           professional_id?: string
           start_date?: string
           status?: string
           sublocation_id?: string
           updated_at?: string
+          verwachte_einddatum?: string | null
           weekly_hours?: number
+          werkvorm?: string | null
         }
         Relationships: [
           {
@@ -3666,6 +3675,53 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      werkvorm_tarieven: {
+        Row: {
+          basis_tarief: number
+          btw_percentage: number | null
+          created_at: string | null
+          functie_niveau: string
+          id: string
+          is_active: boolean | null
+          sublocation_id: string
+          toeslag_percentage: number | null
+          updated_at: string | null
+          werkvorm: string
+        }
+        Insert: {
+          basis_tarief: number
+          btw_percentage?: number | null
+          created_at?: string | null
+          functie_niveau: string
+          id?: string
+          is_active?: boolean | null
+          sublocation_id: string
+          toeslag_percentage?: number | null
+          updated_at?: string | null
+          werkvorm: string
+        }
+        Update: {
+          basis_tarief?: number
+          btw_percentage?: number | null
+          created_at?: string | null
+          functie_niveau?: string
+          id?: string
+          is_active?: boolean | null
+          sublocation_id?: string
+          toeslag_percentage?: number | null
+          updated_at?: string | null
+          werkvorm?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "werkvorm_tarieven_sublocation_id_fkey"
+            columns: ["sublocation_id"]
+            isOneToOne: false
+            referencedRelation: "client_sublocations"
             referencedColumns: ["id"]
           },
         ]
