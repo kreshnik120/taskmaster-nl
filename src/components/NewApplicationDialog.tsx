@@ -648,113 +648,152 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
             </div>
           )}
 
-          {/* Step 3: Werkvorm & Details */}
+          {/* Step 3: Werkvorm & Details - Context-Aware */}
           {currentStep === 3 && (
-            <div className="space-y-4 animate-fade-in">
-              <h3 className="text-sm font-semibold text-foreground">Werkvorm & Details</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="werkvorm" className="flex items-center gap-2">
-                    Gewenste werkvorm
-                    {autoFilledFields.includes("werkvorm") && (
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <div className="space-y-6 animate-fade-in">
+              {/* Auto-fill feedback banner */}
+              {autoFilledFields.length > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-green-900">
+                        ✅ {autoFilledFields.length} velden automatisch ingevuld uit CV
+                      </p>
+                      <p className="text-xs text-green-700 mt-1">
+                        Controleer de onderstaande velden en vul ontbrekende informatie aan
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {/* Werkvorm - only show if not extracted */}
+                {!autoFilledFields.includes("werkvorm") && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Label>Gewenste werkvorm</Label>
+                      <Badge variant="outline" className="text-xs">
+                        📝 Nog invullen
+                      </Badge>
+                    </div>
+                    <Select 
+                      value={watch("werkvorm") || ""} 
+                      onValueChange={(value) => setValue("werkvorm", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecteer werkvorm" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {WERKVORMEN.map((wv) => (
+                          <SelectItem key={wv.value} value={wv.value}>
+                            {wv.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Regio - only show if not extracted */}
+                {!autoFilledFields.includes("regio") && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Label>Regio / Werkgebied</Label>
+                      <Badge variant="outline" className="text-xs">
+                        📝 Nog invullen
+                      </Badge>
+                    </div>
+                    <Input
+                      {...register("regio")}
+                      placeholder="Bijv. Utrecht, Amsterdam, etc."
+                    />
+                  </div>
+                )}
+
+                {/* Beschikbaarheid - only show if not extracted */}
+                {!autoFilledFields.includes("beschikbaarheid") && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Label>Beschikbaarheid</Label>
+                      <Badge variant="outline" className="text-xs">
+                        📝 Nog invullen
+                      </Badge>
+                    </div>
+                    <Select 
+                      value={watch("beschikbaarheid") || ""} 
+                      onValueChange={(value) => setValue("beschikbaarheid", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecteer beschikbaarheid" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BESCHIKBAARHEDEN.map((beschikbaarheid) => (
+                          <SelectItem key={beschikbaarheid} value={beschikbaarheid}>
+                            {beschikbaarheid}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Eigen vervoer - only show if not extracted OR werkvorm is ZZP */}
+                {(!autoFilledFields.includes("eigen_vervoer") || watch("werkvorm") === "ZZP") && (
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="eigen_vervoer"
+                      checked={watch("eigen_vervoer")}
+                      onCheckedChange={(checked) => setValue("eigen_vervoer", checked as boolean)}
+                    />
+                    <Label htmlFor="eigen_vervoer" className="text-sm font-normal cursor-pointer">
+                      Eigen vervoer beschikbaar (auto/rijbewijs)
+                    </Label>
+                    {!autoFilledFields.includes("eigen_vervoer") && (
+                      <Badge variant="outline" className="text-xs ml-2">
+                        📝 Nog invullen
+                      </Badge>
                     )}
-                  </Label>
-                  <Select
-                    value={watch("werkvorm")}
-                    onValueChange={(value) => setValue("werkvorm", value)}
+                  </div>
+                )}
+
+                {/* Bron - ALWAYS show (never in CV) */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label>Bron sollicitatie</Label>
+                    <Badge variant="outline" className="text-xs">
+                      📝 Verplicht
+                    </Badge>
+                  </div>
+                  <Select 
+                    value={watch("bron") || ""} 
+                    onValueChange={(value) => setValue("bron", value)}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecteer werkvorm" />
+                      <SelectValue placeholder="Waar komt sollicitatie vandaan?" />
                     </SelectTrigger>
                     <SelectContent>
-                      {WERKVORMEN.map((vorm) => (
-                        <SelectItem key={vorm.value} value={vorm.value}>
-                          {vorm.label}
+                      {BRONNEN.map((bron) => (
+                        <SelectItem key={bron} value={bron}>
+                          {bron}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="regio" className="flex items-center gap-2">
-                    Regio/Werkgebied
-                    {autoFilledFields.includes("regio") && (
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    )}
-                  </Label>
-                  <Input
-                    id="regio"
-                    placeholder="Bijv. Utrecht en omgeving"
-                    {...register("regio")}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="beschikbaarheid" className="flex items-center gap-2">
-                    Beschikbaarheid
-                    {autoFilledFields.includes("beschikbaarheid") && (
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    )}
-                  </Label>
-                  <Select
-                    value={watch("beschikbaarheid")}
-                    onValueChange={(value) => setValue("beschikbaarheid", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecteer beschikbaarheid" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {BESCHIKBAARHEDEN.map((beschikbaarheid) => (
-                        <SelectItem key={beschikbaarheid} value={beschikbaarheid}>
-                          {beschikbaarheid}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="eigen_vervoer"
-                    checked={watch("eigen_vervoer")}
-                    onCheckedChange={(checked) => setValue("eigen_vervoer", checked as boolean)}
-                  />
-                  <Label htmlFor="eigen_vervoer" className="cursor-pointer">
-                    Eigen vervoer beschikbaar
-                  </Label>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="bron">Bron sollicitatie</Label>
-                <Select
-                  value={watch("bron")}
-                  onValueChange={(value) => setValue("bron", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecteer bron" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {BRONNEN.map((bron) => (
-                      <SelectItem key={bron} value={bron}>
-                        {bron}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="opmerkingen">Opmerkingen/Motivatie</Label>
-                <Textarea
-                  id="opmerkingen"
-                  placeholder="Vrije tekst voor aanvullende opmerkingen..."
-                  rows={4}
-                  {...register("opmerkingen")}
-                />
+                {/* Opmerkingen - collapsible if already filled */}
+                {!autoFilledFields.includes("opmerkingen") && (
+                  <div className="space-y-2">
+                    <Label>Opmerkingen (optioneel)</Label>
+                    <Textarea
+                      {...register("opmerkingen")}
+                      placeholder="Extra opmerkingen..."
+                      rows={3}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}
