@@ -15,8 +15,9 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { 
   Phone, Mail, MapPin, Briefcase, Car, Calendar, User,
-  Star, Edit, Trash2, CheckCircle2, X, Link2, ChevronDown, Award
+  Star, Edit, Trash2, CheckCircle2, X, Link2, ChevronDown, Award, Clock
 } from "lucide-react";
+import { PlacementHistory } from "./PlacementHistory";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { SublocationSelectorPanel } from "./SublocationSelectorPanel";
@@ -338,7 +339,7 @@ export function ProfessionalDetailModal({
         </DialogHeader>
 
         <Tabs defaultValue="profiel" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="profiel">
               <User className="h-4 w-4 mr-2" />
               Profiel
@@ -346,6 +347,10 @@ export function ProfessionalDetailModal({
             <TabsTrigger value="ervaring">
               <Award className="h-4 w-4 mr-2" />
               Ervaring
+            </TabsTrigger>
+            <TabsTrigger value="historiek">
+              <Clock className="h-4 w-4 mr-2" />
+              Historiek
             </TabsTrigger>
             <TabsTrigger value="plaatsing">
               <Link2 className="h-4 w-4 mr-2" />
@@ -728,6 +733,10 @@ export function ProfessionalDetailModal({
                 {format(new Date(professional.updated_at), "d MMM yyyy", { locale: nl })}
               </div>
             </div>
+          </TabsContent>
+
+          <TabsContent value="historiek" className="mt-6">
+            <PlacementHistory professionalId={professional.id} />
           </TabsContent>
 
           <TabsContent value="plaatsing" className="mt-6">

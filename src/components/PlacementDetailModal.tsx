@@ -7,15 +7,20 @@ import { Separator } from "@/components/ui/separator";
 import { Card, CardContent } from "@/components/ui/card";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { 
   User, Building2, Calendar, TrendingUp, CheckCircle2, 
-  Clock, Phone, Mail, MapPin, Award, Briefcase, CalendarIcon
+  Clock, Phone, Mail, MapPin, Award, Briefcase, CalendarIcon, Star
 } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { MatchScoreBreakdown } from "./recruitment/MatchScoreBreakdown";
 import { cn } from "@/lib/utils";
 import confetti from "canvas-confetti";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface Placement {
   id: string;
@@ -106,6 +111,49 @@ const triggerMiniConfetti = () => {
   });
 };
 
+// 5-Star Rating Component
+function StarRating({ 
+  rating, 
+  onRatingChange 
+}: { 
+  rating: number; 
+  onRatingChange: (value: number) => void;
+}) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  
+  return (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          className="p-1 transition-transform hover:scale-110 focus:outline-none"
+          onMouseEnter={() => setHovered(star)}
+          onMouseLeave={() => setHovered(null)}
+          onClick={() => onRatingChange(star)}
+        >
+          <Star
+            className={cn(
+              "h-6 w-6 transition-colors",
+              (hovered !== null ? star <= hovered : star <= rating)
+                ? "fill-yellow-400 text-yellow-400"
+                : "text-muted-foreground/40"
+            )}
+          />
+        </button>
+      ))}
+      <span className="ml-2 text-sm text-muted-foreground">
+        {rating > 0 && (
+          rating === 5 ? "Uitstekend" :
+          rating === 4 ? "Goed" :
+          rating === 3 ? "Voldoende" :
+          rating === 2 ? "Matig" : "Onvoldoende"
+        )}
+      </span>
+    </div>
+  );
+}
+
 export function PlacementDetailModal({ 
   placement, 
   open, 
@@ -115,6 +163,12 @@ export function PlacementDetailModal({
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
   const [completionDate, setCompletionDate] = useState<Date>(new Date());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  
+  // Evaluation state
+  const [rating, setRating] = useState(0);
+  const [feedback, setFeedback] = useState("");
+  const [wouldRehire, setWouldRehire] = useState(true);
+  const [isSavingEvaluation, setIsSavingEvaluation] = useState(false);
 
   if (!placement) return null;
 
@@ -126,6 +180,10 @@ export function PlacementDetailModal({
 
   const handleStatusChange = (newStatus: string) => {
     if (newStatus === "completed") {
+      // Reset evaluation form
+      setRating(0);
+      setFeedback("");
+      setWouldRehire(true);
       setCompletionDate(new Date());
       setCompletionDialogOpen(true);
     } else if (onStatusChange) {
@@ -133,12 +191,52 @@ export function PlacementDetailModal({
     }
   };
 
-  const handleConfirmCompletion = () => {
-    if (onStatusChange) {
-      onStatusChange(placement.id, "completed", completionDate);
-      triggerMiniConfetti();
+  const handleConfirmCompletion = async () => {
+    // Validate rating
+    if (rating === 0) {
+      toast.error("Geef een beoordeling voordat je afrondt");
+      return;
     }
-    setCompletionDialogOpen(false);
+
+    setIsSavingEvaluation(true);
+
+    try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Save evaluation
+      const { error: evalError } = await supabase
+        .from("assignment_evaluations")
+        .insert({
+          assignment_id: placement.id,
+          rating,
+          feedback: feedback.trim() || null,
+          would_rehire: wouldRehire,
+          evaluator_id: user?.id
+        });
+
+      if (evalError) {
+        console.error("Error saving evaluation:", evalError);
+        // Continue anyway - don't block completion
+      }
+
+      // Complete the placement
+      if (onStatusChange) {
+        onStatusChange(placement.id, "completed", completionDate);
+        triggerMiniConfetti();
+        toast.success(
+          `Plaatsing afgerond${wouldRehire ? " - Professional gemarkeerd voor herplaatsing" : ""}`,
+          { description: `${rating} sterren beoordeling opgeslagen` }
+        );
+      }
+      
+      setCompletionDialogOpen(false);
+    } catch (error) {
+      console.error("Error completing placement:", error);
+      toast.error("Fout bij afronden");
+    } finally {
+      setIsSavingEvaluation(false);
+    }
   };
 
   const sublocation = placement.client_sublocations;
@@ -413,18 +511,18 @@ export function PlacementDetailModal({
         </DialogContent>
       </Dialog>
 
-      {/* Completion Confirmation Dialog */}
+      {/* Completion Confirmation Dialog with Evaluation */}
       <AlertDialog open={completionDialogOpen} onOpenChange={setCompletionDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-lg">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-green-600" />
-              Plaatsing Afronden
+              Plaatsing Afronden & Evalueren
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <p>
-                  Weet je zeker dat je de plaatsing van{" "}
+                  Rond de plaatsing van{" "}
                   <span className="font-semibold text-foreground">
                     {placement.professionals?.full_name}
                   </span>{" "}
@@ -432,13 +530,14 @@ export function PlacementDetailModal({
                   <span className="font-semibold text-foreground">
                     {sublocation?.naam}
                   </span>{" "}
-                  wilt afronden?
+                  af met een evaluatie.
                 </p>
                 
+                {/* End Date Selector */}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">
-                    Actuele einddatum
-                  </label>
+                  <Label className="text-sm font-medium text-foreground">
+                    Einddatum
+                  </Label>
                   <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
                     <PopoverTrigger asChild>
                       <Button
@@ -469,6 +568,46 @@ export function PlacementDetailModal({
                   </Popover>
                 </div>
 
+                <Separator />
+
+                {/* Rating */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-foreground flex items-center gap-2">
+                    <Star className="h-4 w-4" />
+                    Hoe beoordeel je deze plaatsing? *
+                  </Label>
+                  <StarRating rating={rating} onRatingChange={setRating} />
+                </div>
+
+                {/* Feedback */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-foreground">
+                    Hoe was de samenwerking?
+                  </Label>
+                  <Textarea
+                    value={feedback}
+                    onChange={(e) => setFeedback(e.target.value)}
+                    placeholder="Deel je ervaring over deze plaatsing..."
+                    className="min-h-[80px] resize-none"
+                  />
+                </div>
+
+                {/* Would Rehire Toggle */}
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-medium text-foreground">
+                      Zou je deze professional opnieuw plaatsen?
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Helpt bij toekomstige matches
+                    </p>
+                  </div>
+                  <Switch
+                    checked={wouldRehire}
+                    onCheckedChange={setWouldRehire}
+                  />
+                </div>
+
                 <div className="bg-muted/50 p-3 rounded-lg text-sm">
                   <p className="text-muted-foreground">
                     Na afronding wordt de professional automatisch weer beschikbaar voor nieuwe plaatsingen 
@@ -479,13 +618,23 @@ export function PlacementDetailModal({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogCancel disabled={isSavingEvaluation}>Annuleren</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmCompletion}
               className="bg-green-600 hover:bg-green-700"
+              disabled={rating === 0 || isSavingEvaluation}
             >
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-              Bevestig Afronden
+              {isSavingEvaluation ? (
+                <span className="flex items-center gap-2">
+                  <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Opslaan...
+                </span>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Bevestig Afronden
+                </>
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
