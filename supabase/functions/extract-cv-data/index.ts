@@ -100,9 +100,10 @@ Belangrijk:
                 text: "Je bent een HR assistent die CV's analyseert voor zorgverleners. Geef altijd pure JSON terug zonder markdown code blocks.\n\n" + aiPrompt
               },
               {
-                type: "image_url",
-                image_url: {
-                  url: `data:application/pdf;base64,${pdfBase64}`
+                type: "document",
+                document: {
+                  data: pdfBase64,
+                  mime_type: "application/pdf"
                 }
               }
             ]
