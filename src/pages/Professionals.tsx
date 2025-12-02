@@ -80,6 +80,7 @@ const Professionals = () => {
   const [selectedProfessionalIds, setSelectedProfessionalIds] = useState<Set<string>>(new Set());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [activeKpi, setActiveKpi] = useState<string | null>(null);
+  const [linkedProfessionalIds, setLinkedProfessionalIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const { canEdit } = useUserRole();
   const navigate = useNavigate();
@@ -94,11 +95,23 @@ const Professionals = () => {
     telefoonnummer: "",
   });
 
+  // Fetch professionals with active placements
+  const fetchLinkedProfessionals = async () => {
+    const { data } = await supabase
+      .from("assignments")
+      .select("professional_id")
+      .eq("status", "active");
+    
+    const uniqueIds = new Set(data?.map(a => a.professional_id) || []);
+    setLinkedProfessionalIds(uniqueIds);
+  };
+
   useEffect(() => {
     fetchProfessionals();
+    fetchLinkedProfessionals();
 
-    // Real-time subscription
-    const channel = supabase
+    // Real-time subscription for professionals
+    const professionalsChannel = supabase
       .channel('professionals-realtime')
       .on(
         'postgres_changes',
@@ -107,15 +120,27 @@ const Professionals = () => {
           schema: 'public',
           table: 'professionals',
         },
-        (payload) => {
-          console.log('Professional change:', payload);
-          fetchProfessionals();
-        }
+        () => fetchProfessionals()
+      )
+      .subscribe();
+
+    // Real-time subscription for assignments (to update Gekoppeld KPI)
+    const assignmentsChannel = supabase
+      .channel('assignments-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'assignments',
+        },
+        () => fetchLinkedProfessionals()
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(professionalsChannel);
+      supabase.removeChannel(assignmentsChannel);
     };
   }, []);
 
@@ -328,8 +353,8 @@ const Professionals = () => {
   // KPI metrics
   const totalCount = professionals.length;
   const activeCount = professionals.filter(p => p.status === "actief").length;
-  const withActivePlacementCount = 0; // TODO: Calculate from professional_clients
-  const availableCount = professionals.filter(p => p.status === "actief").length - withActivePlacementCount;
+  const withActivePlacementCount = linkedProfessionalIds.size;
+  const availableCount = activeCount - withActivePlacementCount;
   
   const newInLast7Days = professionals.filter(p => {
     const daysSinceCreated = Math.floor((new Date().getTime() - new Date(p.created_at).getTime()) / (1000 * 60 * 60 * 24));
