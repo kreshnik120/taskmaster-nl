@@ -33,6 +33,8 @@ serve(async (req) => {
 
     // AI Analysis with Gemini 2.5 Flash Vision (direct PDF analysis)
     console.log(`Analyzing CV with AI Vision: ${filename || 'document.pdf'}`);
+    console.log(`PDF base64 length: ${pdfBase64.length}`);
+    console.log(`PDF base64 start: ${pdfBase64.substring(0, 50)}...`);
     
     const aiPrompt = `Analyseer dit CV/PDF document en extract ALLE relevante informatie voor healthcare recruitment in JSON formaat.
 
@@ -165,10 +167,9 @@ Belangrijk:
                 text: "Je bent een HR assistent die CV's analyseert voor zorgverleners. Geef altijd pure JSON terug zonder markdown code blocks. Wees grondig en zoek naar ALLE informatie die relevant is voor matching.\n\n" + aiPrompt
               },
               {
-                type: "document",
-                document: {
-                  data: pdfBase64,
-                  mime_type: "application/pdf"
+                type: "image_url",
+                image_url: {
+                  url: `data:application/pdf;base64,${pdfBase64}`
                 }
               }
             ]
@@ -180,9 +181,13 @@ Belangrijk:
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error("AI API error:", errorText);
-      throw new Error(`AI API error: ${aiResponse.status}`);
+      console.error("AI API error status:", aiResponse.status);
+      console.error("AI API error headers:", Object.fromEntries(aiResponse.headers.entries()));
+      console.error("AI API error body:", errorText);
+      throw new Error(`AI API error: ${aiResponse.status} - ${errorText.substring(0, 200)}`);
     }
+
+    console.log("AI API response status:", aiResponse.status);
 
     const aiResult = await aiResponse.json();
     let extractedData;
