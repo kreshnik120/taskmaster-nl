@@ -708,6 +708,9 @@ export function ApplicationDetailModal({
 
       const extractedData = application.extracted_data;
 
+      // Theoretisch maximum: Regio(30) + Sector(25) + Doelgroep(20) + Functie(15) + Bureau(10) + Ervaring(5) + Leiding(3) + Postcode(5) + Nacht(3) + Weekend(3) + Cert(5) = 124
+      const MAX_POSSIBLE_SCORE = 124;
+      
       const scored = clients.map(client => {
         let score = 0;
         let reasons: string[] = [];
@@ -910,7 +913,7 @@ export function ApplicationDetailModal({
         
         return { 
           ...client, 
-          matchScore: Math.min(100, Math.round(score)), // Normalize to max 100%
+          matchScore: Math.round((score / MAX_POSSIBLE_SCORE) * 100), // True normalization
           matchReasons: reasons,
           orgName: clientOrgName,
           scoreBreakdown: breakdown
