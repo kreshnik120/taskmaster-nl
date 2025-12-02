@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export type BackendStatus = 'online' | 'offline' | 'checking';
@@ -10,9 +10,10 @@ export interface BackendHealthState {
   retryCount: number;
 }
 
-const INITIAL_RETRY_DELAY = 10000; // 10s
-const MAX_RETRY_DELAY = 120000; // 120s
-const HEALTHY_CHECK_INTERVAL = 60000; // 60s when healthy
+const INITIAL_RETRY_DELAY = 15000; // 15s (was 10s)
+const MAX_RETRY_DELAY = 180000; // 180s (was 120s)
+const HEALTHY_CHECK_INTERVAL = 90000; // 90s when healthy (was 60s)
+const HEALTH_CHECK_TIMEOUT = 8000; // 8s timeout (was 5s)
 
 export const useBackendHealth = () => {
   const [healthState, setHealthState] = useState<BackendHealthState>({
@@ -21,19 +22,22 @@ export const useBackendHealth = () => {
     errorMessage: null,
     retryCount: 0,
   });
+  
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(true);
 
-  const checkHealth = useCallback(async () => {
+  const checkHealth = useCallback(async (): Promise<boolean> => {
     const startTime = Date.now();
-    console.info('[GLOBAL_HEALTH] Check starting...', { timestamp: new Date().toISOString() });
+    
+    if (!isMountedRef.current) return false;
     
     setHealthState(prev => ({ ...prev, status: 'checking' }));
     
     try {
-      // Create AbortController for 5s timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
       
-      // Core DB reachability check with AbortSignal
+      // Simple health check - just verify we can reach DB
       const { error } = await supabase
         .from('tasks')
         .select('id')
@@ -44,12 +48,13 @@ export const useBackendHealth = () => {
       clearTimeout(timeoutId);
       const duration = Date.now() - startTime;
       
+      if (!isMountedRef.current) return false;
+      
       if (error && error.code !== 'PGRST116') {
-        // PGRST116 = table not found (but connection works)
         throw error;
       }
 
-      console.info('[GLOBAL_HEALTH] ✅ Success', { duration: `${duration}ms` });
+      console.info('[HEALTH] ✅ Online', { duration: `${duration}ms` });
       
       setHealthState({
         status: 'online',
@@ -60,37 +65,27 @@ export const useBackendHealth = () => {
       
       return true;
     } catch (error: any) {
+      if (!isMountedRef.current) return false;
+      
       const duration = Date.now() - startTime;
       
-      // Differentiate error types
       let errorMsg = 'Backend onbereikbaar';
-      let errorType = 'unknown';
       
       if (error?.name === 'AbortError') {
-        errorMsg = 'Database timeout (5s)';
-        errorType = 'timeout';
+        errorMsg = 'Database timeout';
       } else if (error?.code === '544' || error?.message?.includes('504')) {
         errorMsg = 'Database timeout (504/544)';
-        errorType = 'infra-timeout';
       } else if (error?.code === '401') {
         errorMsg = 'Authenticatie fout';
-        errorType = 'auth';
       } else if (error?.code === '403') {
         errorMsg = 'RLS policy blokkeert toegang';
-        errorType = 'rls';
       } else if (error?.code === '429') {
         errorMsg = 'Rate limit bereikt';
-        errorType = 'rate-limit';
       } else if (error?.message) {
         errorMsg = error.message;
       }
       
-      console.warn('[GLOBAL_HEALTH] ❌ Failed', {
-        duration: `${duration}ms`,
-        error: errorMsg,
-        type: errorType,
-        code: error?.code
-      });
+      console.warn('[HEALTH] ❌ Offline', { duration: `${duration}ms`, error: errorMsg });
       
       setHealthState(prev => ({
         status: 'offline',
@@ -104,41 +99,50 @@ export const useBackendHealth = () => {
   }, []);
 
   const retry = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
     checkHealth();
   }, [checkHealth]);
 
-  const getNextRetryDelay = useCallback(() => {
-    const delay = Math.min(
-      INITIAL_RETRY_DELAY * Math.pow(2, healthState.retryCount),
-      MAX_RETRY_DELAY
-    );
-    return delay;
-  }, [healthState.retryCount]);
-
-  const scheduleNextCheck = useCallback(async () => {
-    await checkHealth();
+  // Schedule next check based on current status
+  useEffect(() => {
+    if (healthState.status === 'checking') return;
     
     const delay = healthState.status === 'online' 
       ? HEALTHY_CHECK_INTERVAL 
-      : getNextRetryDelay();
+      : Math.min(INITIAL_RETRY_DELAY * Math.pow(1.5, healthState.retryCount), MAX_RETRY_DELAY);
     
-    console.info('[GLOBAL_HEALTH] Next check in', { delay: `${delay / 1000}s` });
+    console.info('[HEALTH] Next check in', { delay: `${Math.round(delay / 1000)}s` });
     
-    setTimeout(scheduleNextCheck, delay);
-  }, [checkHealth, healthState.status, getNextRetryDelay]);
+    timeoutRef.current = setTimeout(() => {
+      if (isMountedRef.current) {
+        checkHealth();
+      }
+    }, delay);
+    
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [healthState.status, healthState.retryCount, checkHealth]);
 
+  // Initial check and browser events
   useEffect(() => {
-    // Initial check and start self-scheduling loop
-    scheduleNextCheck();
+    isMountedRef.current = true;
+    
+    // Initial health check
+    checkHealth();
 
-    // Listen to browser online/offline events
     const handleOnline = () => {
-      console.info('[GLOBAL_HEALTH] Browser online event');
+      console.info('[HEALTH] Browser online event');
       checkHealth();
     };
     
     const handleOffline = () => {
-      console.info('[GLOBAL_HEALTH] Browser offline event');
+      console.info('[HEALTH] Browser offline event');
       setHealthState(prev => ({
         ...prev,
         status: 'offline',
@@ -150,10 +154,14 @@ export const useBackendHealth = () => {
     window.addEventListener('offline', handleOffline);
 
     return () => {
+      isMountedRef.current = false;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [scheduleNextCheck, checkHealth]);
+  }, [checkHealth]);
 
   return {
     ...healthState,
