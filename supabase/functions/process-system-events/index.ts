@@ -101,28 +101,64 @@ serve(async (req) => {
             
             const finalValue = redactedValue ? JSON.parse(redactedValue) : analysis.value;
             
-            // Insert knowledge
-            const { error: kbError } = await supabase
+            // Check for existing pattern to increment occurrence_count
+            const { data: existingPattern } = await supabase
               .from('ai_knowledge_base')
-              .insert({
-                org_id: orgId,
-                user_id: event.user_id,
-                category: analysis.category,
-                key: analysis.key,
-                value: finalValue,
-                confidence_score: analysis.confidence,
-                source: `system_event:${event.event_type}`,
-                source_reference: event.id,
-                role_tags: analysis.role_tags || [],
-                stability_score: analysis.stability_score || 0.8
-              });
+              .select('id, occurrence_count, confidence_score')
+              .eq('org_id', orgId)
+              .eq('category', analysis.category)
+              .eq('key', analysis.key)
+              .is('deleted_at', null)
+              .single();
             
-            if (!kbError) {
-              knowledgeCreatedCount++;
-              console.log(`✅ Knowledge created from event ${event.id}`);
+            if (existingPattern) {
+              // Increment occurrence count and boost confidence for repeated patterns
+              const newOccurrenceCount = (existingPattern.occurrence_count || 1) + 1;
+              const confidenceBoost = newOccurrenceCount > 5 ? 0.05 : (newOccurrenceCount > 3 ? 0.02 : 0);
+              const newConfidence = Math.min(1.0, (existingPattern.confidence_score || 0.7) + confidenceBoost);
+              
+              const { error: updateError } = await supabase
+                .from('ai_knowledge_base')
+                .update({
+                  occurrence_count: newOccurrenceCount,
+                  confidence_score: newConfidence,
+                  value: finalValue, // Update with latest data
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', existingPattern.id);
+              
+              if (!updateError) {
+                knowledgeCreatedCount++;
+                console.log(`🔄 Pattern updated: ${analysis.key} (occurrence #${newOccurrenceCount}, confidence: ${newConfidence})`);
+              } else {
+                console.error(`❌ Failed to update pattern for event ${event.id}:`, updateError);
+                errors.push(`Event ${event.id}: ${updateError.message}`);
+              }
             } else {
-              console.error(`❌ Failed to create knowledge for event ${event.id}:`, kbError);
-              errors.push(`Event ${event.id}: ${kbError.message}`);
+              // Insert new knowledge
+              const { error: kbError } = await supabase
+                .from('ai_knowledge_base')
+                .insert({
+                  org_id: orgId,
+                  user_id: event.user_id,
+                  category: analysis.category,
+                  key: analysis.key,
+                  value: finalValue,
+                  confidence_score: analysis.confidence,
+                  source: `system_event:${event.event_type}`,
+                  source_reference: event.id,
+                  role_tags: analysis.role_tags || [],
+                  stability_score: analysis.stability_score || 0.8,
+                  occurrence_count: 1
+                });
+              
+              if (!kbError) {
+                knowledgeCreatedCount++;
+                console.log(`✅ Knowledge created from event ${event.id}`);
+              } else {
+                console.error(`❌ Failed to create knowledge for event ${event.id}:`, kbError);
+                errors.push(`Event ${event.id}: ${kbError.message}`);
+              }
             }
             
             // For evaluation events, also create correlation knowledge

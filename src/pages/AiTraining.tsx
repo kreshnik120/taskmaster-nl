@@ -38,6 +38,7 @@ import { EmbeddingCoverageDashboard } from "@/components/AITraining/EmbeddingCov
 import { KvKCostDashboard } from "@/components/AITraining/KvKCostDashboard";
 import { CleanupDuplicateFields } from "@/components/AITraining/CleanupDuplicateFields";
 import { SystemLearningDashboard } from "@/components/AITraining/SystemLearningDashboard";
+import { EvaluationLearningWidget } from "@/components/AITraining/EvaluationLearningWidget";
 import { toast } from "sonner";
 
 const AiTraining = () => {
@@ -190,6 +191,7 @@ const AiTraining = () => {
                   <TabsContent value="dashboard" className="mt-4">
                     <div className="space-y-6">
                       <AutoResolveMonitor />
+                      <EvaluationLearningWidget />
                       <SystemLearningDashboard />
                       <AutoLearnedKnowledgeDashboard />
                       <LearningDashboard />
