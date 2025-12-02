@@ -129,8 +129,8 @@ export function calculateAILearningBoost(
     
     // Apply boost if pattern matches
     if (patternMatch) {
-      // Weight by occurrence count (more occurrences = more reliable pattern)
-      const occurrenceWeight = Math.min(1, pattern.occurrence_count / 5);
+      // Weight by occurrence count (lowered threshold from 5 to 2 for faster activation)
+      const occurrenceWeight = Math.min(1, pattern.occurrence_count / 2);
       const weightedBoost = pattern.boost_factor * occurrenceWeight;
       totalBoost += weightedBoost;
       
