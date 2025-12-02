@@ -13,6 +13,7 @@ import { nl } from "date-fns/locale";
 import { PlacementDetailModal } from "@/components/PlacementDetailModal";
 import { motion } from "framer-motion";
 import { KPICard } from "@/components/ui/kpi-card";
+import { PlacementEvaluationKPIs } from "@/components/recruitment/PlacementEvaluationKPIs";
 
 interface Placement {
   id: string;
@@ -228,6 +229,14 @@ export default function Plaatsingen() {
           isActive={statusFilter === "completed"}
         />
       </div>
+
+      {/* Evaluation KPIs - Only show when there are completed placements */}
+      {stats.completed > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium text-muted-foreground">AI Evaluatie Inzichten</h3>
+          <PlacementEvaluationKPIs />
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-4">

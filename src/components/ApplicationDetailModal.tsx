@@ -32,6 +32,7 @@ import { ApplicationActivityTimeline } from "@/components/recruitment/Applicatio
 import { EmailTemplateSuggestions } from "@/components/recruitment/EmailTemplateSuggestions";
 import { MatchScoreBreakdown } from "@/components/recruitment/MatchScoreBreakdown";
 import { ApplicationNotes } from "@/components/recruitment/ApplicationNotes";
+import { AIMatchInsights } from "@/components/recruitment/AIMatchInsights";
 import { SECTOR_SIMILARITY, functieMatchesAny, calculateRegioScore, calculateErvaringBonus, LEIDINGGEVENDE_BONUS } from "@/lib/constants/matchingConstants";
 
 interface Application {
@@ -2057,6 +2058,13 @@ export function ApplicationDetailModal({
                     <div className="text-sm text-muted-foreground">Zoeken naar passende klanten...</div>
                   ) : matchedClients.length > 0 ? (
                     <>
+                      {/* AI Match Insights */}
+                      <AIMatchInsights 
+                        functieNiveau={application.extracted_data?.functie_niveau}
+                        sector={application.extracted_data?.ervaring_sector}
+                        doelgroep={application.extracted_data?.doelgroep_ervaring}
+                      />
+                      
                       <div className="text-xs text-muted-foreground flex items-center gap-2 pb-2">
                         📍 Op basis van: {application.extracted_data?.regio || 'Regio'} • {application.extracted_data?.functie_niveau || 'Functieniveau'} • {(application.extracted_data?.ervaring_sector || []).slice(0, 2).join('/')}
                       </div>
