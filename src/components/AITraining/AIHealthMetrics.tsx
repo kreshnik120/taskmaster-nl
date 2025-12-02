@@ -253,12 +253,29 @@ export function AIHealthMetrics() {
             {overallHealth === 'healthy' ? 'Gezond' : overallHealth === 'partial' ? 'Gedeeltelijk' : 'Aandacht Nodig'}
           </Badge>
         </div>
-        <CardDescription>
+        <CardDescription className="flex items-center gap-2">
           Real-time status van het AI learning systeem
+          <Badge variant="outline" className="gap-1 text-green-600 border-green-500/50 bg-green-500/10">
+            <CheckCircle className="h-3 w-3" />
+            Test Data Filter Actief
+          </Badge>
         </CardDescription>
       </CardHeader>
       
       <CardContent className="space-y-4">
+        {/* Test Data Protection Status */}
+        <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 flex items-start gap-3">
+          <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-green-600 dark:text-green-400">
+              Test Data Filter Actief
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              AI leert alleen van productie data. Test sollicitaties, professionals en system events worden automatisch gefilterd.
+            </p>
+          </div>
+        </div>
+
         {/* Recovery Alert */}
         {hasRecoveryNeeded && (
           <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-3">
