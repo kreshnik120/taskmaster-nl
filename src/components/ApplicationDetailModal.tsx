@@ -113,6 +113,33 @@ const getFunctieColor = (functie: string) => {
   return colors[functie] || "bg-muted text-foreground";
 };
 
+// Confidence Badge Component for AI extraction transparency
+const ConfidenceBadge = ({ confidence, fieldType = "default" }: { confidence: number; fieldType?: "critical" | "important" | "optional" | "default" }) => {
+  // Apply heuristic multiplier based on field type
+  const multiplier = fieldType === "critical" ? 1.0 : fieldType === "important" ? 0.95 : fieldType === "optional" ? 0.85 : 1.0;
+  const adjustedConfidence = confidence * multiplier;
+  
+  if (adjustedConfidence >= 0.8) {
+    return (
+      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-green-100 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-300">
+        ✓ {Math.round(adjustedConfidence * 100)}%
+      </Badge>
+    );
+  }
+  if (adjustedConfidence >= 0.5) {
+    return (
+      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-300">
+        ~ {Math.round(adjustedConfidence * 100)}%
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-red-100 text-red-700 border-red-300 dark:bg-red-950 dark:text-red-300">
+      ? {Math.round(adjustedConfidence * 100)}%
+    </Badge>
+  );
+};
+
 export function ApplicationDetailModal({
   application,
   open,
@@ -1317,6 +1344,9 @@ export function ApplicationDetailModal({
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
                       <span className="text-sm font-semibold">Geëxtraheerde gegevens</span>
+                      {application.extracted_data?.confidence && (
+                        <ConfidenceBadge confidence={application.extracted_data.confidence} />
+                      )}
                     </div>
                     {extractedOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   </div>
@@ -1332,6 +1362,9 @@ export function ApplicationDetailModal({
                             <Badge variant="outline" className={getFunctieColor(application.extracted_data.functie_niveau)}>
                               {application.extracted_data.functie_niveau}
                             </Badge>
+                            {application.extracted_data?.confidence && (
+                              <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="critical" />
+                            )}
                           </div>
                         )}
                         
@@ -1350,6 +1383,9 @@ export function ApplicationDetailModal({
                               {application.extracted_data.jaren_ervaring >= 8 && " (Expert)"}
                               {application.extracted_data.jaren_ervaring >= 5 && application.extracted_data.jaren_ervaring < 8 && " (Ervaren)"}
                             </Badge>
+                            {application.extracted_data?.confidence && (
+                              <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="important" />
+                            )}
                           </div>
                         )}
                         
@@ -1360,6 +1396,9 @@ export function ApplicationDetailModal({
                             <Badge variant="outline" className="bg-purple-100 text-purple-700 border-purple-300">
                               ✓ {application.extracted_data.leidinggevende_functies?.join(", ") || "Ja"}
                             </Badge>
+                            {application.extracted_data?.confidence && (
+                              <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="optional" />
+                            )}
                           </div>
                         )}
                         
@@ -1370,6 +1409,9 @@ export function ApplicationDetailModal({
                               {application.extracted_data.ervaring_sector.map((s: string) => (
                                 <Badge key={s} variant="outline" className={getSectorColor(s)}>{s}</Badge>
                               ))}
+                              {application.extracted_data?.confidence && (
+                                <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="important" />
+                              )}
                             </div>
                           </div>
                         )}
@@ -1381,6 +1423,9 @@ export function ApplicationDetailModal({
                               {application.extracted_data.doelgroep_ervaring.map((d: string) => (
                                 <Badge key={d} variant="outline" className={getDoelgroepColor(d)}>{d}</Badge>
                               ))}
+                              {application.extracted_data?.confidence && (
+                                <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="important" />
+                              )}
                             </div>
                           </div>
                         )}
@@ -1459,6 +1504,9 @@ export function ApplicationDetailModal({
                                 <span className="text-xs text-muted-foreground">+{application.extracted_data.opleidingen.length - 3} meer</span>
                               )}
                             </div>
+                            {application.extracted_data?.confidence && (
+                              <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="optional" />
+                            )}
                           </div>
                         )}
                         
@@ -1470,6 +1518,9 @@ export function ApplicationDetailModal({
                               {application.extracted_data.certificaten.map((cert: string) => (
                                 <Badge key={cert} variant="outline" className="bg-teal-100 text-teal-700 border-teal-300">{cert}</Badge>
                               ))}
+                              {application.extracted_data?.confidence && (
+                                <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="optional" />
+                              )}
                             </div>
                           </div>
                         )}
@@ -1479,6 +1530,9 @@ export function ApplicationDetailModal({
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">BIG-nummer:</span>
                             <span className="text-sm font-mono">{application.extracted_data.BIG_nummer}</span>
+                            {application.extracted_data?.confidence && (
+                              <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="critical" />
+                            )}
                           </div>
                         )}
                         
@@ -1487,6 +1541,9 @@ export function ApplicationDetailModal({
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Talen:</span>
                             <span className="text-sm">{application.extracted_data.talen.join(", ")}</span>
+                            {application.extracted_data?.confidence && (
+                              <ConfidenceBadge confidence={application.extracted_data.confidence} fieldType="optional" />
+                            )}
                           </div>
                         )}
                         
