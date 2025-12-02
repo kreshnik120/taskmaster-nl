@@ -119,6 +119,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [cvAnalyzing, setCvAnalyzing] = useState(false);
   const [autoFilledFields, setAutoFilledFields] = useState<string[]>([]);
+  const [cvExtractedData, setCvExtractedData] = useState<Record<string, any> | null>(null);
 
   const {
     register,
@@ -182,6 +183,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
       if (!user) throw new Error("Niet ingelogd");
 
       const extractedData = {
+        // Form velden
         naam: data.naam,
         telefoon: data.telefoon || null,
         functie_niveau: data.functie_niveau || null,
@@ -193,6 +195,27 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
         eigen_vervoer: data.eigen_vervoer,
         bron: data.bron || null,
         opmerkingen: data.opmerkingen || null,
+        // CV extractie velden (14+ nieuwe velden)
+        jaren_ervaring: cvExtractedData?.jaren_ervaring || null,
+        ervaring_sinds: cvExtractedData?.ervaring_sinds || null,
+        leidinggevende_ervaring: cvExtractedData?.leidinggevende_ervaring || false,
+        leidinggevende_functies: cvExtractedData?.leidinggevende_functies || [],
+        postcode: cvExtractedData?.postcode || null,
+        woonplaats: cvExtractedData?.woonplaats || null,
+        geboortedatum: cvExtractedData?.geboortedatum || null,
+        specifieke_doelgroepen: cvExtractedData?.specifieke_doelgroepen || [],
+        hoogste_opleiding: cvExtractedData?.hoogste_opleiding || null,
+        opleidingen: cvExtractedData?.opleidingen || [],
+        certificaten: cvExtractedData?.certificaten || [],
+        BIG_nummer: cvExtractedData?.BIG_nummer || null,
+        nachtdienst_bereid: cvExtractedData?.nachtdienst_bereid || null,
+        weekenddienst_bereid: cvExtractedData?.weekenddienst_bereid || null,
+        voorkeur_uren_per_week: cvExtractedData?.voorkeur_uren_per_week || null,
+        rijbewijs: cvExtractedData?.rijbewijs || null,
+        max_reisafstand_km: cvExtractedData?.max_reisafstand_km || null,
+        regio_voorkeur: cvExtractedData?.regio_voorkeur || null,
+        talen: cvExtractedData?.talen || [],
+        cv_confidence: cvExtractedData?.confidence || null,
       };
 
       const completenessScore = calculateCompletenessScore(data);
@@ -337,6 +360,9 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
         }
 
         setAutoFilledFields(filled);
+        
+        // Sla ALLE geëxtraheerde data op voor persistentie
+        setCvExtractedData(extracted);
 
         // Check if critical fields (naam + email) were extracted
         const hasNaam = !!extracted.naam && extracted.naam !== "Voor- en achternaam";
@@ -408,6 +434,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
     setSelectedDoelgroepen([]);
     setCvFile(null);
     setAutoFilledFields([]);
+    setCvExtractedData(null);
     setCurrentStep(0);
   };
 
