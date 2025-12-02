@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { 
   User, Building2, Calendar, TrendingUp, CheckCircle2, 
-  Clock, Phone, Mail, MapPin, Award, Briefcase, CalendarIcon, Star
+  Clock, Phone, Mail, MapPin, Award, Briefcase, CalendarIcon, Star, Check
 } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -111,7 +111,10 @@ const triggerMiniConfetti = () => {
   });
 };
 
-// 5-Star Rating Component
+// Rating labels
+const RATING_LABELS = ["", "Onvoldoende", "Matig", "Voldoende", "Goed", "Uitstekend"];
+
+// 5-Star Rating Component with labels
 function StarRating({ 
   rating, 
   onRatingChange 
@@ -122,34 +125,36 @@ function StarRating({
   const [hovered, setHovered] = useState<number | null>(null);
   
   return (
-    <div className="flex items-center gap-1">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <button
-          key={star}
-          type="button"
-          className="p-1 transition-transform hover:scale-110 focus:outline-none"
-          onMouseEnter={() => setHovered(star)}
-          onMouseLeave={() => setHovered(null)}
-          onClick={() => onRatingChange(star)}
-        >
-          <Star
-            className={cn(
-              "h-6 w-6 transition-colors",
-              (hovered !== null ? star <= hovered : star <= rating)
-                ? "fill-yellow-400 text-yellow-400"
-                : "text-muted-foreground/40"
-            )}
-          />
-        </button>
-      ))}
-      <span className="ml-2 text-sm text-muted-foreground">
-        {rating > 0 && (
-          rating === 5 ? "Uitstekend" :
-          rating === 4 ? "Goed" :
-          rating === 3 ? "Voldoende" :
-          rating === 2 ? "Matig" : "Onvoldoende"
-        )}
-      </span>
+    <div className="space-y-2">
+      <div className="flex items-center gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            key={star}
+            type="button"
+            className="p-1 transition-transform hover:scale-110 focus:outline-none"
+            onMouseEnter={() => setHovered(star)}
+            onMouseLeave={() => setHovered(null)}
+            onClick={() => onRatingChange(star)}
+          >
+            <Star
+              className={cn(
+                "h-6 w-6 transition-colors",
+                (hovered !== null ? star <= hovered : star <= rating)
+                  ? "fill-yellow-400 text-yellow-400"
+                  : "text-muted-foreground/40"
+              )}
+            />
+          </button>
+        ))}
+        <span className="ml-2 text-sm font-medium text-foreground">
+          {RATING_LABELS[hovered ?? rating] || ""}
+        </span>
+      </div>
+      {/* Rating scale labels under stars */}
+      <div className="flex justify-between px-1 text-[10px] text-muted-foreground">
+        <span>Slecht</span>
+        <span>Uitstekend</span>
+      </div>
     </div>
   );
 }
@@ -169,6 +174,7 @@ export function PlacementDetailModal({
   const [feedback, setFeedback] = useState("");
   const [wouldRehire, setWouldRehire] = useState(true);
   const [isSavingEvaluation, setIsSavingEvaluation] = useState(false);
+  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
 
   if (!placement) return null;
 
@@ -220,17 +226,25 @@ export function PlacementDetailModal({
         // Continue anyway - don't block completion
       }
 
-      // Complete the placement
-      if (onStatusChange) {
-        onStatusChange(placement.id, "completed", completionDate);
-        triggerMiniConfetti();
-        toast.success(
-          `Plaatsing afgerond${wouldRehire ? " - Professional gemarkeerd voor herplaatsing" : ""}`,
-          { description: `${rating} sterren beoordeling opgeslagen` }
-        );
-      }
+      // Show success animation first
+      setShowSuccessAnimation(true);
       
-      setCompletionDialogOpen(false);
+      // Wait for animation, then complete
+      setTimeout(() => {
+        setShowSuccessAnimation(false);
+        
+        // Complete the placement
+        if (onStatusChange) {
+          onStatusChange(placement.id, "completed", completionDate);
+          triggerMiniConfetti();
+          toast.success(
+            `Plaatsing afgerond${wouldRehire ? " - Professional gemarkeerd voor herplaatsing" : ""}`,
+            { description: `${rating} sterren beoordeling opgeslagen` }
+          );
+        }
+        
+        setCompletionDialogOpen(false);
+      }, 800);
     } catch (error) {
       console.error("Error completing placement:", error);
       toast.error("Fout bij afronden");
@@ -618,13 +632,21 @@ export function PlacementDetailModal({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSavingEvaluation}>Annuleren</AlertDialogCancel>
+            <AlertDialogCancel disabled={isSavingEvaluation || showSuccessAnimation}>Annuleren</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmCompletion}
-              className="bg-green-600 hover:bg-green-700"
-              disabled={rating === 0 || isSavingEvaluation}
+              className={cn(
+                "bg-green-600 hover:bg-green-700 transition-all duration-300",
+                showSuccessAnimation && "bg-green-500 scale-105"
+              )}
+              disabled={rating === 0 || isSavingEvaluation || showSuccessAnimation}
             >
-              {isSavingEvaluation ? (
+              {showSuccessAnimation ? (
+                <span className="flex items-center gap-2">
+                  <Check className="h-5 w-5 animate-bounce" />
+                  Opgeslagen!
+                </span>
+              ) : isSavingEvaluation ? (
                 <span className="flex items-center gap-2">
                   <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   Opslaan...

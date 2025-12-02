@@ -40,15 +40,22 @@ interface PlacementWithEvaluation {
 
 interface PlacementHistoryProps {
   professionalId: string;
+  /** Only load data when this becomes true (lazy loading) */
+  isActive?: boolean;
 }
 
-export function PlacementHistory({ professionalId }: PlacementHistoryProps) {
+export function PlacementHistory({ professionalId, isActive = true }: PlacementHistoryProps) {
   const [placements, setPlacements] = useState<PlacementWithEvaluation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   useEffect(() => {
-    loadPlacements();
-  }, [professionalId]);
+    // Lazy load: only fetch when tab becomes active for the first time
+    if (isActive && !hasLoaded) {
+      loadPlacements();
+      setHasLoaded(true);
+    }
+  }, [professionalId, isActive, hasLoaded]);
 
   const loadPlacements = async () => {
     setLoading(true);
