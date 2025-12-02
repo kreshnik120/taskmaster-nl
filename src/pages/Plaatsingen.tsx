@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search, ArrowRight, Users, Activity, Lightbulb, CheckCircle2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Search, ArrowRight, Users, Activity, Lightbulb, CheckCircle2, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -16,27 +17,54 @@ import { KPICard } from "@/components/ui/kpi-card";
 interface Placement {
   id: string;
   professional_id: string;
-  client_id: string;
+  sublocation_id: string;
   status: string;
-  match_score: number | null;
-  match_reasoning: any;
+  werkvorm: string | null;
+  plaatsing_type: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  weekly_hours: number | null;
+  ai_match_score: number | null;
+  ai_match_reasoning: any;
   created_at: string;
   updated_at: string;
   professionals: {
+    id: string;
     full_name: string;
     functie_niveau: string;
     werkvorm: string | null;
     regio: string | null;
     telefoonnummer: string | null;
     email: string | null;
-  };
-  clients: {
-    name: string;
-    company: string;
-    regio: string[];
-    sector: string[];
-  };
+  } | null;
+  client_sublocations: {
+    id: string;
+    naam: string;
+    plaats: string | null;
+    doelgroep: string[] | null;
+    sector: string[] | null;
+    client_locations: {
+      id: string;
+      naam: string;
+      client_organizations: {
+        id: string;
+        name: string;
+      } | null;
+    } | null;
+  } | null;
 }
+
+const WERKVORM_LABELS: Record<string, string> = {
+  ZZP: "ZZP",
+  Uitzendkracht: "Uitzend",
+  "ABCito constructie": "ABCito"
+};
+
+const PLAATSING_TYPE_LABELS: Record<string, string> = {
+  periode_opdracht: "Periode",
+  langdurig: "Langdurig",
+  flexibel: "Flexibel"
+};
 
 export default function Plaatsingen() {
   const [placements, setPlacements] = useState<Placement[]>([]);
@@ -60,16 +88,22 @@ export default function Plaatsingen() {
       }
 
       const { data, error } = await supabase
-        .from("professional_client_matches")
+        .from("assignments")
         .select(`
           *,
-          professionals (full_name, functie_niveau, werkvorm, regio, telefoonnummer, email),
-          clients (name, company, regio, sector)
+          professionals (id, full_name, functie_niveau, werkvorm, regio, telefoonnummer, email),
+          client_sublocations (
+            id, naam, plaats, doelgroep, sector,
+            client_locations (
+              id, naam,
+              client_organizations (id, name)
+            )
+          )
         `)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setPlacements(data || []);
+      setPlacements((data as Placement[]) || []);
     } catch (error: any) {
       console.error("Error loading placements:", error);
       toast.error("Kon plaatsingen niet laden");
@@ -81,7 +115,7 @@ export default function Plaatsingen() {
   const updateStatus = async (placementId: string, newStatus: string) => {
     try {
       const { error } = await supabase
-        .from("professional_client_matches")
+        .from("assignments")
         .update({ status: newStatus })
         .eq("id", placementId);
 
@@ -97,10 +131,14 @@ export default function Plaatsingen() {
   };
 
   const filteredPlacements = placements.filter(placement => {
+    const professionalName = placement.professionals?.full_name?.toLowerCase() || "";
+    const sublocationName = placement.client_sublocations?.naam?.toLowerCase() || "";
+    const orgName = placement.client_sublocations?.client_locations?.client_organizations?.name?.toLowerCase() || "";
+    
     const matchesSearch =
-      placement.professionals?.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      placement.clients?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      placement.clients?.company.toLowerCase().includes(searchQuery.toLowerCase());
+      professionalName.includes(searchQuery.toLowerCase()) ||
+      sublocationName.includes(searchQuery.toLowerCase()) ||
+      orgName.includes(searchQuery.toLowerCase());
 
     const matchesStatus = statusFilter === "all" || placement.status === statusFilter;
 
@@ -110,24 +148,16 @@ export default function Plaatsingen() {
   const stats = {
     total: placements.length,
     active: placements.filter(p => p.status === "active").length,
-    suggested: placements.filter(p => p.status === "suggested").length,
+    draft: placements.filter(p => p.status === "draft").length,
     completed: placements.filter(p => p.status === "completed").length
-  };
-
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case "active": return "default";
-      case "suggested": return "secondary";
-      case "completed": return "outline";
-      default: return "secondary";
-    }
   };
 
   const getStatusLabel = (status: string) => {
     switch (status) {
       case "active": return "Actief";
-      case "suggested": return "Voorgesteld";
+      case "draft": return "Concept";
       case "completed": return "Afgerond";
+      case "cancelled": return "Geannuleerd";
       default: return status;
     }
   };
@@ -138,7 +168,7 @@ export default function Plaatsingen() {
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight">Plaatsingen</h1>
         <p className="text-muted-foreground">
-          {stats.active} actieve {stats.active === 1 ? 'koppeling' : 'koppelingen'}
+          {stats.active} actieve {stats.active === 1 ? 'plaatsing' : 'plaatsingen'}
         </p>
       </div>
 
@@ -157,19 +187,19 @@ export default function Plaatsingen() {
           icon={Activity}
           title="Actief"
           value={stats.active}
-          subtitle="koppelingen"
+          subtitle="lopend"
           variant="success"
           onClick={() => setStatusFilter(statusFilter === "active" ? "all" : "active")}
           isActive={statusFilter === "active"}
         />
         <KPICard
           icon={Lightbulb}
-          title="Voorgesteld"
-          value={stats.suggested}
-          subtitle="suggesties"
+          title="Concept"
+          value={stats.draft}
+          subtitle="te activeren"
           variant="time"
-          onClick={() => setStatusFilter(statusFilter === "suggested" ? "all" : "suggested")}
-          isActive={statusFilter === "suggested"}
+          onClick={() => setStatusFilter(statusFilter === "draft" ? "all" : "draft")}
+          isActive={statusFilter === "draft"}
         />
         <KPICard
           icon={CheckCircle2}
@@ -187,7 +217,7 @@ export default function Plaatsingen() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Zoek op professional of klant..."
+            placeholder="Zoek op professional of werklocatie..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -199,7 +229,7 @@ export default function Plaatsingen() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Alle statussen</SelectItem>
-            <SelectItem value="suggested">Voorgesteld</SelectItem>
+            <SelectItem value="draft">Concept</SelectItem>
             <SelectItem value="active">Actief</SelectItem>
             <SelectItem value="completed">Afgerond</SelectItem>
           </SelectContent>
@@ -220,8 +250,10 @@ export default function Plaatsingen() {
       ) : (
         <div className="space-y-3">
           {filteredPlacements.map((placement, idx) => {
-            const statusDot = placement.status === "active" ? "●" : placement.status === "suggested" ? "○" : "◌";
+            const statusDot = placement.status === "active" ? "●" : placement.status === "draft" ? "○" : "◌";
             const sinceDate = formatDistanceToNow(new Date(placement.created_at), { locale: nl, addSuffix: false });
+            const sublocation = placement.client_sublocations;
+            const organization = sublocation?.client_locations?.client_organizations;
             
             return (
               <motion.div
@@ -250,30 +282,61 @@ export default function Plaatsingen() {
                           </div>
                           <div className="text-sm text-muted-foreground">
                             {placement.professionals?.functie_niveau}
-                            {placement.professionals?.werkvorm && (
-                              <> · {placement.professionals.werkvorm}</>
-                            )}
                           </div>
                         </div>
 
-                        {/* Client Info - Minimal with Arrow */}
+                        {/* Werklocatie Info - with Arrow */}
                         <div className="flex items-center gap-2 text-sm">
                           <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span className="font-medium">{placement.clients?.name}</span>
+                          <span className="font-medium">{sublocation?.naam || "Onbekend"}</span>
+                          {organization && (
+                            <span className="text-muted-foreground text-xs">
+                              ({organization.name})
+                            </span>
+                          )}
                         </div>
 
-                        {/* Meta Info - Monochrome */}
-                        <div className="text-sm text-muted-foreground">
-                          Sinds {sinceDate}
-                          {placement.match_score && (
-                            <> · Match {(placement.match_score * 100).toFixed(0)}%</>
+                        {/* Werkvorm/Type Badges + Periode */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {placement.werkvorm && (
+                            <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-800">
+                              {WERKVORM_LABELS[placement.werkvorm] || placement.werkvorm}
+                            </Badge>
+                          )}
+                          {placement.plaatsing_type && (
+                            <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-800">
+                              {PLAATSING_TYPE_LABELS[placement.plaatsing_type] || placement.plaatsing_type}
+                            </Badge>
+                          )}
+                          {placement.weekly_hours && (
+                            <Badge variant="outline" className="text-xs">
+                              {placement.weekly_hours} uur/week
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* Meta Info - Datums */}
+                        <div className="text-sm text-muted-foreground flex items-center gap-2">
+                          <Calendar className="h-3.5 w-3.5" />
+                          {placement.start_date ? (
+                            <>
+                              {format(new Date(placement.start_date), "d MMM yyyy", { locale: nl })}
+                              {placement.end_date && (
+                                <> → {format(new Date(placement.end_date), "d MMM yyyy", { locale: nl })}</>
+                              )}
+                            </>
+                          ) : (
+                            <>Sinds {sinceDate}</>
+                          )}
+                          {placement.ai_match_score && (
+                            <> · Match {Math.round(placement.ai_match_score)}%</>
                           )}
                         </div>
                       </div>
 
                       {/* Action Buttons - Subtle */}
                       <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                        {placement.status === "suggested" && (
+                        {placement.status === "draft" && (
                           <Button
                             size="sm"
                             variant="outline"

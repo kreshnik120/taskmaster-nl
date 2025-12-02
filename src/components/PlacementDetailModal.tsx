@@ -14,26 +14,41 @@ import { MatchScoreBreakdown } from "./recruitment/MatchScoreBreakdown";
 interface Placement {
   id: string;
   professional_id: string;
-  client_id: string;
+  sublocation_id: string;
   status: string;
-  match_score: number | null;
-  match_reasoning: any;
+  werkvorm: string | null;
+  plaatsing_type: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  weekly_hours: number | null;
+  ai_match_score: number | null;
+  ai_match_reasoning: any;
   created_at: string;
   updated_at: string;
   professionals: {
+    id: string;
     full_name: string;
     functie_niveau: string;
     werkvorm: string | null;
     regio: string | null;
     telefoonnummer: string | null;
     email: string | null;
-  };
-  clients: {
-    name: string;
-    company: string;
-    regio: string[];
-    sector: string[];
-  };
+  } | null;
+  client_sublocations: {
+    id: string;
+    naam: string;
+    plaats: string | null;
+    doelgroep: string[] | null;
+    sector: string[] | null;
+    client_locations: {
+      id: string;
+      naam: string;
+      client_organizations: {
+        id: string;
+        name: string;
+      } | null;
+    } | null;
+  } | null;
 }
 
 interface PlacementDetailModalProps {
@@ -43,10 +58,22 @@ interface PlacementDetailModalProps {
   onStatusChange?: (placementId: string, newStatus: string) => void;
 }
 
+const WERKVORM_LABELS: Record<string, string> = {
+  ZZP: "ZZP",
+  Uitzendkracht: "Uitzendkracht",
+  "ABCito constructie": "ABCito constructie"
+};
+
+const PLAATSING_TYPE_LABELS: Record<string, string> = {
+  periode_opdracht: "Periode opdracht",
+  langdurig: "Langdurige plaatsing",
+  flexibel: "Flexibele inzet"
+};
+
 const getStatusVariant = (status: string) => {
   switch (status) {
     case "active": return "default";
-    case "suggested": return "secondary";
+    case "draft": return "secondary";
     case "completed": return "outline";
     default: return "secondary";
   }
@@ -55,8 +82,9 @@ const getStatusVariant = (status: string) => {
 const getStatusLabel = (status: string) => {
   switch (status) {
     case "active": return "Actief";
-    case "suggested": return "Voorgesteld";
+    case "draft": return "Concept";
     case "completed": return "Afgerond";
+    case "cancelled": return "Geannuleerd";
     default: return status;
   }
 };
@@ -70,7 +98,7 @@ export function PlacementDetailModal({
   if (!placement) return null;
 
   const statusHistory = [
-    { status: "suggested", date: placement.created_at, label: "Voorgesteld" },
+    { status: "draft", date: placement.created_at, label: "Aangemaakt" },
     { status: "active", date: placement.status === "active" || placement.status === "completed" ? placement.updated_at : null, label: "Geactiveerd" },
     { status: "completed", date: placement.status === "completed" ? placement.updated_at : null, label: "Afgerond" },
   ];
@@ -80,6 +108,10 @@ export function PlacementDetailModal({
       onStatusChange(placement.id, newStatus);
     }
   };
+
+  const sublocation = placement.client_sublocations;
+  const location = sublocation?.client_locations;
+  const organization = location?.client_organizations;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -97,7 +129,50 @@ export function PlacementDetailModal({
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Professional & Client Side-by-Side */}
+          {/* Werkvorm & Plaatsing Type Info */}
+          <div className="flex items-center gap-3 flex-wrap">
+            {placement.werkvorm && (
+              <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-800">
+                {WERKVORM_LABELS[placement.werkvorm] || placement.werkvorm}
+              </Badge>
+            )}
+            {placement.plaatsing_type && (
+              <Badge className="bg-blue-500/10 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-800">
+                {PLAATSING_TYPE_LABELS[placement.plaatsing_type] || placement.plaatsing_type}
+              </Badge>
+            )}
+            {placement.weekly_hours && (
+              <Badge variant="outline">
+                {placement.weekly_hours} uur/week
+              </Badge>
+            )}
+          </div>
+
+          {/* Periode Info */}
+          {(placement.start_date || placement.end_date) && (
+            <Card className="bg-muted/30">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 text-sm">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Periode:</span>
+                  {placement.start_date && (
+                    <span>{format(new Date(placement.start_date), "d MMMM yyyy", { locale: nl })}</span>
+                  )}
+                  {placement.end_date && (
+                    <>
+                      <span className="text-muted-foreground">→</span>
+                      <span>{format(new Date(placement.end_date), "d MMMM yyyy", { locale: nl })}</span>
+                    </>
+                  )}
+                  {!placement.end_date && placement.start_date && (
+                    <span className="text-muted-foreground">(doorlopend)</span>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Professional & Werklocatie Side-by-Side */}
           <div className="grid grid-cols-2 gap-4">
             {/* Professional Card */}
             <Card>
@@ -109,34 +184,36 @@ export function PlacementDetailModal({
                 
                 <div className="space-y-3">
                   <div>
-                    <p className="font-medium text-lg">{placement.professionals.full_name}</p>
+                    <p className="font-medium text-lg">{placement.professionals?.full_name || "Onbekend"}</p>
                     <div className="flex items-center gap-2 mt-1">
-                      <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-700 border-blue-200">
-                        {placement.professionals.functie_niveau}
-                      </Badge>
-                      {placement.professionals.werkvorm && (
-                        <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-200">
+                      {placement.professionals?.functie_niveau && (
+                        <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-800">
+                          {placement.professionals.functie_niveau}
+                        </Badge>
+                      )}
+                      {placement.professionals?.werkvorm && (
+                        <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-800">
                           {placement.professionals.werkvorm}
                         </Badge>
                       )}
                     </div>
                   </div>
 
-                  {placement.professionals.regio && (
+                  {placement.professionals?.regio && (
                     <p className="text-sm flex items-center gap-2 text-muted-foreground">
                       <MapPin className="h-4 w-4" />
                       {placement.professionals.regio}
                     </p>
                   )}
 
-                  {placement.professionals.telefoonnummer && (
+                  {placement.professionals?.telefoonnummer && (
                     <p className="text-sm flex items-center gap-2 text-muted-foreground">
                       <Phone className="h-4 w-4" />
                       {placement.professionals.telefoonnummer}
                     </p>
                   )}
 
-                  {placement.professionals.email && (
+                  {placement.professionals?.email && (
                     <p className="text-sm flex items-center gap-2 text-muted-foreground truncate">
                       <Mail className="h-4 w-4" />
                       {placement.professionals.email}
@@ -146,40 +223,55 @@ export function PlacementDetailModal({
               </CardContent>
             </Card>
 
-            {/* Client Card */}
+            {/* Werklocatie Card */}
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-center gap-2 mb-4">
                   <Building2 className="h-5 w-5 text-green-600" />
-                  <h3 className="font-semibold">Klant</h3>
+                  <h3 className="font-semibold">Werklocatie</h3>
                 </div>
                 
                 <div className="space-y-3">
                   <div>
-                    <p className="font-medium text-lg">{placement.clients.name}</p>
-                    <p className="text-sm text-muted-foreground">{placement.clients.company}</p>
+                    <p className="font-medium text-lg">{sublocation?.naam || "Onbekend"}</p>
+                    {sublocation?.plaats && (
+                      <p className="text-sm text-muted-foreground flex items-center gap-1">
+                        <MapPin className="h-3.5 w-3.5" />
+                        {sublocation.plaats}
+                      </p>
+                    )}
                   </div>
 
-                  {placement.clients.regio && placement.clients.regio.length > 0 && (
+                  {/* Locatie hiërarchie */}
+                  {(location || organization) && (
+                    <div className="text-sm text-muted-foreground">
+                      {location?.naam && <span>{location.naam}</span>}
+                      {organization?.name && (
+                        <span className="font-medium"> ({organization.name})</span>
+                      )}
+                    </div>
+                  )}
+
+                  {sublocation?.sector && sublocation.sector.length > 0 && (
                     <div>
-                      <p className="text-xs text-muted-foreground mb-1">Regio's:</p>
+                      <p className="text-xs text-muted-foreground mb-1">Sectoren:</p>
                       <div className="flex flex-wrap gap-1">
-                        {placement.clients.regio.map((r, idx) => (
-                          <Badge key={idx} variant="outline" className="text-xs">
-                            {r}
+                        {sublocation.sector.map((s, idx) => (
+                          <Badge key={idx} variant="outline" className="text-xs bg-purple-500/10 text-purple-700 border-purple-200 dark:bg-purple-500/20 dark:text-purple-400 dark:border-purple-800">
+                            {s}
                           </Badge>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {placement.clients.sector && placement.clients.sector.length > 0 && (
+                  {sublocation?.doelgroep && sublocation.doelgroep.length > 0 && (
                     <div>
-                      <p className="text-xs text-muted-foreground mb-1">Sectoren:</p>
+                      <p className="text-xs text-muted-foreground mb-1">Doelgroepen:</p>
                       <div className="flex flex-wrap gap-1">
-                        {placement.clients.sector.map((s, idx) => (
-                          <Badge key={idx} variant="outline" className="text-xs bg-purple-500/10 text-purple-700 border-purple-200">
-                            {s}
+                        {sublocation.doelgroep.map((d, idx) => (
+                          <Badge key={idx} variant="outline" className="text-xs">
+                            {d}
                           </Badge>
                         ))}
                       </div>
@@ -193,7 +285,7 @@ export function PlacementDetailModal({
           <Separator />
 
           {/* Match Score Breakdown */}
-          {placement.match_score !== null && placement.match_reasoning && (
+          {placement.ai_match_score !== null && placement.ai_match_reasoning && (
             <>
               <div>
                 <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
@@ -201,8 +293,8 @@ export function PlacementDetailModal({
                   Match Score Analyse
                 </h3>
                 <MatchScoreBreakdown
-                  breakdown={placement.match_reasoning}
-                  totalScore={Math.round(placement.match_score * 100)}
+                  breakdown={placement.ai_match_reasoning}
+                  totalScore={Math.round(placement.ai_match_score)}
                 />
               </div>
               <Separator />
@@ -254,7 +346,7 @@ export function PlacementDetailModal({
           <div>
             <h3 className="text-sm font-semibold mb-3">Acties</h3>
             <div className="flex gap-2">
-              {placement.status === "suggested" && (
+              {placement.status === "draft" && (
                 <Button onClick={() => handleStatusChange("active")}>
                   <CheckCircle2 className="h-4 w-4 mr-2" />
                   Activeer Plaatsing
