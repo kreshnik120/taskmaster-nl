@@ -11,7 +11,7 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2, Building2, UserPlus, ChevronDown, ChevronUp } from "lucide-react";
+import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2, Building2, UserPlus, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,7 +26,7 @@ import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { convertApplicationToProfessional } from "@/lib/convertApplicationToProfessional";
 import { ApplicationActivityTimeline } from "@/components/recruitment/ApplicationActivityTimeline";
 import { EmailTemplateSuggestions } from "@/components/recruitment/EmailTemplateSuggestions";
@@ -35,6 +35,7 @@ import { ApplicationNotes } from "@/components/recruitment/ApplicationNotes";
 import { AIMatchInsights } from "@/components/recruitment/AIMatchInsights";
 import { AIRecommendationBadge } from "@/components/recruitment/AIRecommendationBadge";
 import { SECTOR_SIMILARITY, functieMatchesAny, calculateRegioScore, calculateErvaringBonus, LEIDINGGEVENDE_BONUS } from "@/lib/constants/matchingConstants";
+import { loadSuccessPatterns, calculateAILearningBoost, getCachedSuccessPatterns } from "@/lib/aiLearningBoost";
 
 interface Application {
   id: string;
@@ -763,6 +764,9 @@ export function ApplicationDetailModal({
     setMatchingLoading(true);
     setShowMatches(true);
     try {
+      // Load AI success patterns for learning boost
+      const successPatterns = await loadSuccessPatterns();
+      
       const { data: clients, error } = await supabase
         .from('clients')
         .select('*')
@@ -776,8 +780,8 @@ export function ApplicationDetailModal({
 
       const extractedData = application.extracted_data;
 
-      // Theoretisch maximum: Regio(30) + Sector(25) + Doelgroep(20) + Functie(15) + Bureau(10) + Ervaring(5) + Leiding(3) + Postcode(5) + Nacht(3) + Weekend(3) + Cert(5) = 124
-      const MAX_POSSIBLE_SCORE = 124;
+      // Theoretisch maximum: Regio(30) + Sector(25) + Doelgroep(20) + Functie(15) + Bureau(10) + Ervaring(5) + Leiding(3) + Postcode(5) + Nacht(3) + Weekend(3) + Cert(5) + AI Boost(15) = 139
+      const MAX_POSSIBLE_SCORE = 139;
       
       const scored = clients.map(client => {
         let score = 0;
@@ -938,6 +942,20 @@ export function ApplicationDetailModal({
           reasons.push(`${applicantCertificaten.length} certificaat/certificaten`);
         }
         
+        // NIEUW: AI Learning Boost - past geleerde succespatronen toe
+        const aiBoost = calculateAILearningBoost(
+          extractedData.functie_niveau,
+          extractedData.ervaring_sector || [],
+          extractedData.doelgroep_ervaring || [],
+          successPatterns
+        );
+        if (aiBoost.boost > 0) {
+          // AI boost adds up to 15 points based on learned success patterns
+          const aiBoostPoints = Math.round(aiBoost.boost * 15 / 100);
+          score += aiBoostPoints;
+          reasons.push(...aiBoost.reasons.map(r => `🤖 ${r}`));
+        }
+        
         const breakdown = {
           regio: {
             score: regioScore,
@@ -976,7 +994,12 @@ export function ApplicationDetailModal({
             reason: (applicantOrg && clientOrgName === applicantOrg)
               ? 'Zelfde bemiddelingsbureau'
               : 'Ander bemiddelingsbureau'
-          }
+          },
+          aiBoost: aiBoost.boost > 0 ? {
+            score: Math.round(aiBoost.boost * 15 / 100),
+            match: true,
+            reason: `AI geleerd patroon (+${aiBoost.boost}%)`
+          } : undefined
         };
         
         return { 
@@ -984,7 +1007,8 @@ export function ApplicationDetailModal({
           matchScore: Math.round((score / MAX_POSSIBLE_SCORE) * 100), // True normalization
           matchReasons: reasons,
           orgName: clientOrgName,
-          scoreBreakdown: breakdown
+          scoreBreakdown: breakdown,
+          hasAIBoost: aiBoost.boost > 0
         };
       });
       
@@ -2073,7 +2097,7 @@ export function ApplicationDetailModal({
                         {matchedClients.map((client) => (
                           <div
                             key={client.id}
-                            className="p-4 rounded-lg border bg-card hover:bg-accent/30 transition-colors space-y-2"
+                            className={`p-4 rounded-lg border bg-card hover:bg-accent/30 transition-colors space-y-2 ${client.hasAIBoost ? 'ring-1 ring-amber-400/50' : ''}`}
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1 space-y-2">
@@ -2083,6 +2107,12 @@ export function ApplicationDetailModal({
                                   <Badge variant="default" className="text-xs">
                                     {client.matchScore}% match
                                   </Badge>
+                                  {client.hasAIBoost && (
+                                    <Badge variant="outline" className="text-xs border-amber-400 text-amber-600 gap-1">
+                                      <Sparkles className="h-3 w-3" />
+                                      AI Boost
+                                    </Badge>
+                                  )}
                                   <AIRecommendationBadge 
                                     matchScore={client.matchScore} 
                                     reasons={client.matchReasons}
