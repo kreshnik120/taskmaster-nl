@@ -1027,8 +1027,12 @@ serve(async (req) => {
     // Fast path: simple data queries about recruitment data
     const useFastPath = isSimpleDataQuery && isRecruitmentQuery;
     
+    // ⏱️ Performance logging
+    const fastPathStartTime = Date.now();
+    
     if (useFastPath) {
       console.log('🚀 FAST PATH DETECTED: Simple recruitment data query - skipping heavy pre-processing');
+      console.log(`⏱️ Fast Path initiated at ${fastPathStartTime}ms`);
     }
     
     // ============================================
@@ -3570,9 +3574,16 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                         case "query_professionals":
                           console.log("🔍 Executing database query for professionals...", args);
                           
+                          // 🔧 FIX: Check BOTH org_id sources (professionals.org_id AND professional_applications.org_id)
+                          // This ensures we find all professionals regardless of where org_id is set
+                          
+                          // Build base query with JOIN to applications for dual org_id check
                           let professionalsQuery = supabaseClient
                             .from('professionals')
-                            .select('*')
+                            .select(`
+                              *,
+                              professional_applications!inner(org_id)
+                            `)
                             .is('deleted_at', null);
                           
                           // Apply filters
@@ -3592,17 +3603,26 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             professionalsQuery = professionalsQuery.eq('heeft_auto', args.filter.has_auto);
                           }
                           
-                          // ✨ NEW: Bureau filter (ABCzorg/CitoZorg)
+                          const { data: professionalsRaw, error: professionalsError } = await professionalsQuery;
+                          
+                          if (professionalsError) throw professionalsError;
+                          
+                          // 🎯 Filter by bureau: check BOTH professionals.org_id AND professional_applications.org_id
+                          let professionals = professionalsRaw || [];
                           if (args.filter?.bureau) {
                             const bureauOrgId = args.filter.bureau === 'ABCzorg' 
                               ? '550e8400-e29b-41d4-a716-446655440000'
                               : '650e8400-e29b-41d4-a716-446655440001';
-                            professionalsQuery = professionalsQuery.eq('org_id', bureauOrgId);
+                            
+                            professionals = professionals.filter((p: any) => {
+                              // Check professionals.org_id OR any linked application's org_id
+                              const hasMatchingOrgId = p.org_id === bureauOrgId;
+                              const hasMatchingApplicationOrgId = p.professional_applications?.some((pa: any) => pa.org_id === bureauOrgId);
+                              return hasMatchingOrgId || hasMatchingApplicationOrgId;
+                            });
+                            
+                            console.log(`🔍 Filtered by bureau ${args.filter.bureau}: ${professionals.length} professionals found`);
                           }
-                          
-                          const { data: professionals, error: professionalsError } = await professionalsQuery;
-                          
-                          if (professionalsError) throw professionalsError;
                           
                           result = {
                             success: true,
@@ -5138,11 +5158,19 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
           perfTimers.total = Date.now() - perfTimers.start;
           perfTimers.aiCall = perfTimers.total - perfTimers.embedding - perfTimers.semanticSearch;
           
+          // ⚡ Fast Path performance logging
+          if (useFastPath) {
+            const fastPathDuration = Date.now() - fastPathStartTime;
+            console.log(`⚡ FAST PATH COMPLETED in ${fastPathDuration}ms (${Math.round((fastPathDuration / perfTimers.total) * 100)}% of total time)`);
+            console.log(`📊 Speed improvement: ${perfTimers.total < 1500 ? '✅ Target <1.5s achieved!' : `⚠️ ${perfTimers.total}ms (target: <1500ms)`}`);
+          }
+          
           console.log(`⏱️ Total request time: ${perfTimers.total}ms`, {
             embedding: perfTimers.embedding,
             semanticSearch: perfTimers.semanticSearch,
             aiCall: perfTimers.aiCall,
-            knowledgeItemsUsed: usedKnowledgeIds.length
+            knowledgeItemsUsed: usedKnowledgeIds.length,
+            fastPath: useFastPath
           });
           
           // Log function call for analytics
