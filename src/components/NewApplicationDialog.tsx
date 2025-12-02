@@ -228,11 +228,47 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
     return missing;
   };
 
+  // Check of email al bestaat in professional_applications
+  const checkDuplicateEmail = async (email: string): Promise<{ exists: boolean; applicationId?: string; naam?: string }> => {
+    const { data } = await supabase
+      .from("professional_applications")
+      .select("id, extracted_data")
+      .eq("email_from", email)
+      .is("deleted_at", null)
+      .limit(1);
+    
+    if (data && data.length > 0) {
+      const existing = data[0];
+      const naam = (existing.extracted_data as any)?.naam || "Onbekend";
+      return { exists: true, applicationId: existing.id, naam };
+    }
+    return { exists: false };
+  };
+
   const onSubmit = async (data: ApplicationFormData) => {
     setSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Niet ingelogd");
+
+      // Fase 3: Check duplicaat email VOOR insert
+      const duplicateCheck = await checkDuplicateEmail(data.email);
+      if (duplicateCheck.exists) {
+        toast.error("Duplicaat gevonden", {
+          description: `Er bestaat al een sollicitatie voor ${data.email} (${duplicateCheck.naam})`,
+          action: {
+            label: "Bekijk sollicitatie",
+            onClick: () => {
+              onOpenChange(false);
+              // Navigate or highlight existing application
+              window.location.href = `/sollicitaties?highlight=${duplicateCheck.applicationId}`;
+            },
+          },
+          duration: 10000,
+        });
+        setSubmitting(false);
+        return;
+      }
 
       const extractedData = {
         // Form velden
@@ -395,6 +431,24 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
         if (email) {
           setValue("email", email);
           filled.push("email");
+          
+          // Check duplicaat email direct na CV extractie
+          const duplicateCheck = await checkDuplicateEmail(email);
+          if (duplicateCheck.exists) {
+            toast.error("Duplicaat gevonden", {
+              description: `Er bestaat al een sollicitatie voor ${email} (${duplicateCheck.naam})`,
+              action: {
+                label: "Bekijk sollicitatie",
+                onClick: () => {
+                  onOpenChange(false);
+                  window.location.href = `/sollicitaties?highlight=${duplicateCheck.applicationId}`;
+                },
+              },
+              duration: 10000,
+            });
+            setCvAnalyzing(false);
+            return; // Stop verdere verwerking
+          }
         }
         const telefoon = extractValue(extracted.telefoon);
         if (telefoon) {
