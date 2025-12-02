@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ClientSelectionDialog } from "@/components/ClientSelectionDialog";
 import { KPICard } from "@/components/ui/kpi-card";
+import { useProactiveMatchNotifications } from "@/hooks/useProactiveMatchNotifications";
 
 interface Application {
   id: string;
@@ -95,6 +96,15 @@ const Sollicitaties = () => {
   }>({ open: false, application: null, previousStage: '' });
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Proactive AI match notifications - shows toast when new high-match applications arrive
+  useProactiveMatchNotifications((applicationId) => {
+    const app = applications.find(a => a.id === applicationId);
+    if (app) {
+      setSelectedApplication(app);
+      setDetailModalOpen(true);
+    }
+  });
 
   // Keyboard shortcuts
   useEffect(() => {

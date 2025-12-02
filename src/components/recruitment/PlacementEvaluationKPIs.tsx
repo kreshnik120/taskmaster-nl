@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Star, RefreshCw, Target, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { RatingTrendSparkline } from "./RatingTrendSparkline";
 
 interface EvaluationStats {
   avgRating: number;
@@ -123,7 +124,7 @@ export function PlacementEvaluationKPIs() {
   return (
     <TooltipProvider>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {/* Avg Rating */}
+        {/* Avg Rating with Sparkline */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Card className="border-border/50 bg-gradient-to-br from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60 backdrop-blur-sm cursor-help">
@@ -132,10 +133,13 @@ export function PlacementEvaluationKPIs() {
                   <span className="text-xs text-muted-foreground">Gem. Rating</span>
                   <TrendIcon trend={stats.ratingTrend} />
                 </div>
-                <div className="flex items-baseline gap-2">
-                  <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
-                  <span className="text-2xl font-semibold">{stats.avgRating.toFixed(1)}</span>
-                  <span className="text-xs text-muted-foreground">/5</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-baseline gap-2">
+                    <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
+                    <span className="text-2xl font-semibold">{stats.avgRating.toFixed(1)}</span>
+                    <span className="text-xs text-muted-foreground">/5</span>
+                  </div>
+                  <RatingTrendSparkline />
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">{getRatingLabel(stats.avgRating)}</p>
               </CardContent>
@@ -143,6 +147,7 @@ export function PlacementEvaluationKPIs() {
           </TooltipTrigger>
           <TooltipContent>
             <p>Gemiddelde rating van {stats.totalEvaluations} evaluaties</p>
+            <p className="text-xs text-muted-foreground">Sparkline toont trend laatste 30 dagen</p>
           </TooltipContent>
         </Tooltip>
 
