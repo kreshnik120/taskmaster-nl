@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState, useCallback } from "react";
 import { Loader2, X, ChevronRight, ChevronLeft, CheckCircle2, Upload, FileText, Sparkles, ChevronDown, Search, AlertCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const applicationSchema = z.object({
   naam: z.string().min(1, "Naam is verplicht"),
@@ -121,6 +122,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
   const [cvAnalyzing, setCvAnalyzing] = useState(false);
   const [autoFilledFields, setAutoFilledFields] = useState<string[]>([]);
   const [cvExtractedData, setCvExtractedData] = useState<Record<string, any> | null>(null);
+  const [cvDataOpen, setCvDataOpen] = useState(false);
 
   const {
     register,
@@ -766,17 +768,30 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
 
               {/* Collapsible CV Data Preview */}
               {cvExtractedData && (
-                <Collapsible defaultOpen={false}>
+                <Collapsible defaultOpen={false} onOpenChange={(open) => setCvDataOpen(open)}>
                   <CollapsibleTrigger asChild>
-                    <Button variant="outline" className="w-full justify-between text-left h-auto py-3 group">
+                    <Button variant="outline" className="w-full justify-between text-left h-auto py-3">
                       <div className="flex items-center gap-2">
                         <FileText className="h-4 w-4 text-primary" />
                         <span className="text-sm font-medium">Bekijk geëxtraheerde CV data</span>
                         <Badge variant="secondary" className="text-xs">
                           {Object.keys(cvExtractedData).filter(k => cvExtractedData[k] !== null && cvExtractedData[k] !== undefined && k !== 'confidence').length} velden
                         </Badge>
+                        {cvExtractedData.confidence && (
+                          <Badge variant="outline" className={cn(
+                            "text-[10px] px-1.5",
+                            cvExtractedData.confidence >= 0.8 ? "bg-green-100 text-green-700 border-green-300" :
+                            cvExtractedData.confidence >= 0.5 ? "bg-amber-100 text-amber-700 border-amber-300" :
+                            "bg-red-100 text-red-700 border-red-300"
+                          )}>
+                            {cvExtractedData.confidence >= 0.8 ? "✓" : cvExtractedData.confidence >= 0.5 ? "~" : "?"} {Math.round(cvExtractedData.confidence * 100)}%
+                          </Badge>
+                        )}
                       </div>
-                      <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                      <ChevronDown className={cn(
+                        "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                        cvDataOpen && "rotate-180"
+                      )} />
                     </Button>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="mt-3">
