@@ -7,13 +7,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Activity, 
   Brain, 
-  TrendingUp, 
   AlertTriangle, 
   CheckCircle, 
   Sparkles,
   ThumbsUp,
-  ThumbsDown,
-  Eye
+  Eye,
+  Database,
+  Recycle,
+  TrendingUp
 } from "lucide-react";
 
 interface HealthMetric {
@@ -28,12 +29,13 @@ export function AIHealthMetrics() {
   const { data: metrics, isLoading, error } = useQuery({
     queryKey: ["ai-health-metrics"],
     queryFn: async () => {
-      // Fetch all metrics in parallel
       const [
         patternsResult,
         auditResult,
         feedbackResult,
-        knowledgeResult
+        knowledgeActiveResult,
+        knowledgeDeletedResult,
+        categoryResult
       ] = await Promise.all([
         // Success patterns with usage
         supabase
@@ -55,12 +57,24 @@ export function AIHealthMetrics() {
           .in("event_type", ["ai_suggestion_accepted", "ai_suggestion_rejected", "feedback"])
           .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
         
-        // Knowledge utilization
+        // Active knowledge stats
+        supabase
+          .from("ai_knowledge_base")
+          .select("id, usage_count, source_type")
+          .is("deleted_at", null),
+        
+        // Soft-deleted knowledge with usage (recovery needed)
         supabase
           .from("ai_knowledge_base")
           .select("id, usage_count")
+          .not("deleted_at", "is", null)
+          .gt("usage_count", 0),
+        
+        // Category distribution
+        supabase
+          .from("ai_knowledge_base")
+          .select("category, usage_count")
           .is("deleted_at", null)
-          .gt("usage_count", 0)
       ]);
 
       // Calculate pattern metrics
@@ -73,32 +87,53 @@ export function AIHealthMetrics() {
         return value?.boost_factor && (value.boost_factor as number) > 0;
       }).length;
 
-      // Audit metrics
-      const auditRecords = auditResult.count || 0;
+      // Active knowledge stats
+      const activeKnowledge = knowledgeActiveResult.data || [];
+      const totalActive = activeKnowledge.length;
+      const withUsage = activeKnowledge.filter(k => (k.usage_count || 0) > 0).length;
+      const totalUsage = activeKnowledge.reduce((sum, k) => sum + (k.usage_count || 0), 0);
+      const unknownSource = activeKnowledge.filter(k => k.source_type === 'unknown').length;
+      const utilizationRate = totalActive > 0 ? Math.round((withUsage / totalActive) * 100) : 0;
 
-      // Feedback metrics
-      const feedbackEvents = feedbackResult.data || [];
-      const totalFeedback = feedbackEvents.length;
-      const positiveFeedback = feedbackEvents.filter(e => 
-        e.event_type === "ai_suggestion_accepted" || e.event_type === "feedback"
-      ).length;
+      // Soft-deleted with usage (recovery needed)
+      const deletedWithUsage = knowledgeDeletedResult.data || [];
+      const recoveryNeeded = deletedWithUsage.length;
+      const recoveryUsage = deletedWithUsage.reduce((sum, k) => sum + (k.usage_count || 0), 0);
 
-      // Knowledge utilization
-      const usedKnowledge = knowledgeResult.data?.length || 0;
+      // Category distribution
+      const categoryData = categoryResult.data || [];
+      const categoryMap = new Map<string, { count: number; usage: number }>();
+      categoryData.forEach(item => {
+        const existing = categoryMap.get(item.category) || { count: 0, usage: 0 };
+        categoryMap.set(item.category, {
+          count: existing.count + 1,
+          usage: existing.usage + (item.usage_count || 0)
+        });
+      });
+      const topCategories = Array.from(categoryMap.entries())
+        .sort((a, b) => b[1].usage - a[1].usage)
+        .slice(0, 5)
+        .map(([name, data]) => ({ name, ...data }));
 
       return {
         totalPatterns,
         patternsWithUsage,
         totalPatternUsage,
         patternsWithBoost,
-        auditRecords,
-        totalFeedback,
-        positiveFeedback,
-        usedKnowledge,
+        auditRecords: auditResult.count || 0,
+        totalFeedback: feedbackResult.data?.length || 0,
+        totalActive,
+        withUsage,
+        totalUsage,
+        unknownSource,
+        utilizationRate,
+        recoveryNeeded,
+        recoveryUsage,
+        topCategories,
         patternUsageRate: totalPatterns > 0 ? Math.round((patternsWithUsage / totalPatterns) * 100) : 0
       };
     },
-    staleTime: 60000, // 1 minute
+    staleTime: 60000,
     refetchInterval: 60000
   });
 
@@ -131,18 +166,32 @@ export function AIHealthMetrics() {
 
   const healthMetrics: HealthMetric[] = [
     {
+      label: "Knowledge Base",
+      value: `${metrics?.totalActive || 0}`,
+      status: (metrics?.totalActive || 0) > 500 ? 'success' : 'warning',
+      icon: <Database className="h-4 w-4" />
+    },
+    {
+      label: "Utilization",
+      value: `${metrics?.utilizationRate || 0}%`,
+      status: (metrics?.utilizationRate || 0) > 70 ? 'success' : (metrics?.utilizationRate || 0) > 50 ? 'warning' : 'error',
+      icon: <TrendingUp className="h-4 w-4" />
+    },
+    {
       label: "Active Patterns",
       value: `${metrics?.patternsWithBoost || 0}/${metrics?.totalPatterns || 0}`,
       status: (metrics?.patternsWithBoost || 0) > 0 ? 'success' : 'error',
       icon: <Brain className="h-4 w-4" />
     },
     {
-      label: "Pattern Usage",
-      value: metrics?.totalPatternUsage || 0,
-      target: 10,
-      status: (metrics?.totalPatternUsage || 0) > 0 ? 'success' : 'error',
+      label: "Total Usage",
+      value: metrics?.totalUsage?.toLocaleString() || 0,
+      status: (metrics?.totalUsage || 0) > 1000 ? 'success' : 'warning',
       icon: <Activity className="h-4 w-4" />
-    },
+    }
+  ];
+
+  const secondaryMetrics: HealthMetric[] = [
     {
       label: "Audit Trail (7d)",
       value: metrics?.auditRecords || 0,
@@ -154,15 +203,31 @@ export function AIHealthMetrics() {
       value: metrics?.totalFeedback || 0,
       status: (metrics?.totalFeedback || 0) > 0 ? 'success' : 'warning',
       icon: <ThumbsUp className="h-4 w-4" />
+    },
+    {
+      label: "Pattern Usage",
+      value: metrics?.totalPatternUsage || 0,
+      status: (metrics?.totalPatternUsage || 0) > 0 ? 'success' : 'error',
+      icon: <Sparkles className="h-4 w-4" />
+    },
+    {
+      label: "Items w/ Usage",
+      value: metrics?.withUsage || 0,
+      status: (metrics?.withUsage || 0) > 400 ? 'success' : 'warning',
+      icon: <CheckCircle className="h-4 w-4" />
     }
   ];
 
+  const hasRecoveryNeeded = (metrics?.recoveryNeeded || 0) > 0;
+  const hasDataQualityIssues = (metrics?.unknownSource || 0) > 0;
+  
   const overallHealth = 
+    (metrics?.utilizationRate || 0) >= 70 &&
     (metrics?.patternsWithBoost || 0) > 0 &&
-    (metrics?.auditRecords || 0) > 0 &&
-    (metrics?.totalPatternUsage || 0) > 0
+    !hasRecoveryNeeded &&
+    !hasDataQualityIssues
       ? 'healthy'
-      : (metrics?.patternsWithBoost || 0) > 0 
+      : (metrics?.utilizationRate || 0) >= 50 
         ? 'partial'
         : 'critical';
 
@@ -194,6 +259,36 @@ export function AIHealthMetrics() {
       </CardHeader>
       
       <CardContent className="space-y-4">
+        {/* Recovery Alert */}
+        {hasRecoveryNeeded && (
+          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-3">
+            <Recycle className="h-5 w-5 text-red-500 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-red-600 dark:text-red-400">
+                Data Recovery Nodig
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {metrics?.recoveryNeeded} soft-deleted items met {metrics?.recoveryUsage} totale usage wachten op herstel.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Data Quality Alert */}
+        {hasDataQualityIssues && (
+          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                Data Quality Issues
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {metrics?.unknownSource} items hebben source_type = 'unknown'
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Main Metrics Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {healthMetrics.map((metric, idx) => (
@@ -212,31 +307,64 @@ export function AIHealthMetrics() {
               <div className="text-xl font-bold">
                 {metric.value}
               </div>
-              {metric.status === 'error' && (
-                <p className="text-xs text-red-500 mt-1">⚠️ Niet actief</p>
-              )}
             </div>
           ))}
         </div>
 
-        {/* Pattern Usage Rate */}
+        {/* Secondary Metrics */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {secondaryMetrics.map((metric, idx) => (
+            <div 
+              key={idx}
+              className="p-2 rounded-lg bg-muted/50 flex items-center gap-2"
+            >
+              <div className={`p-1.5 rounded ${
+                metric.status === 'success' ? 'bg-green-500/20 text-green-600' :
+                metric.status === 'warning' ? 'bg-amber-500/20 text-amber-600' :
+                'bg-red-500/20 text-red-600'
+              }`}>
+                {metric.icon}
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{metric.label}</p>
+                <p className="text-sm font-semibold">{metric.value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Utilization Rate Progress */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Pattern Usage Rate</span>
-            <span className="font-medium">{metrics?.patternUsageRate || 0}%</span>
+            <span className="text-muted-foreground">Knowledge Utilization Rate</span>
+            <span className="font-medium">{metrics?.utilizationRate || 0}%</span>
           </div>
           <Progress 
-            value={metrics?.patternUsageRate || 0} 
+            value={metrics?.utilizationRate || 0} 
             className={`h-2 ${
-              (metrics?.patternUsageRate || 0) > 50 ? '[&>div]:bg-green-500' :
-              (metrics?.patternUsageRate || 0) > 20 ? '[&>div]:bg-amber-500' :
+              (metrics?.utilizationRate || 0) > 70 ? '[&>div]:bg-green-500' :
+              (metrics?.utilizationRate || 0) > 50 ? '[&>div]:bg-amber-500' :
               '[&>div]:bg-red-500'
             }`}
           />
         </div>
 
-        {/* Alerts */}
-        {overallHealth !== 'healthy' && (
+        {/* Top Categories */}
+        {metrics?.topCategories && metrics.topCategories.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Top Categorieën (by usage)</p>
+            <div className="flex flex-wrap gap-2">
+              {metrics.topCategories.map((cat, idx) => (
+                <Badge key={idx} variant="outline" className="text-xs">
+                  {cat.name}: {cat.count} items ({cat.usage} usage)
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Improvement Alerts */}
+        {overallHealth !== 'healthy' && !hasRecoveryNeeded && !hasDataQualityIssues && (
           <div className="p-3 rounded-lg bg-muted/50 space-y-2">
             <p className="text-sm font-medium flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-500" />
