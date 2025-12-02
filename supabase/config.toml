@@ -168,3 +168,6 @@ schedule = "0 6 * * *"  # Dagelijks om 06:00 - automatische cleanup van lage sta
 
 [functions.scan-outdated-knowledge]
 verify_jwt = true
+
+[functions.extract-cv-data]
+verify_jwt = true

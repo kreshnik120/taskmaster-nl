@@ -11,8 +11,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useState } from "react";
-import { Loader2, X, ChevronRight, ChevronLeft, CheckCircle2 } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Loader2, X, ChevronRight, ChevronLeft, CheckCircle2, Upload, FileText, Sparkles } from "lucide-react";
 
 const applicationSchema = z.object({
   naam: z.string().min(1, "Naam is verplicht"),
@@ -112,10 +112,13 @@ const getDoelgroepColor = (doelgroep: string, selected: boolean) => {
 };
 
 export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated }: NewApplicationDialogProps) {
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(0);
   const [selectedSectoren, setSelectedSectoren] = useState<string[]>([]);
   const [selectedDoelgroepen, setSelectedDoelgroepen] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [cvFile, setCvFile] = useState<File | null>(null);
+  const [cvAnalyzing, setCvAnalyzing] = useState(false);
+  const [autoFilledFields, setAutoFilledFields] = useState<string[]>([]);
 
   const {
     register,
@@ -213,10 +216,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
         description: `${data.naam} is toegevoegd aan de pipeline`,
       });
 
-      reset();
-      setSelectedSectoren([]);
-      setSelectedDoelgroepen([]);
-      setCurrentStep(1);
+      handleReset();
       onApplicationCreated();
       onOpenChange(false);
     } catch (error: any) {
@@ -241,6 +241,136 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
     );
   };
 
+  const handleCVUpload = useCallback(async (file: File) => {
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (!validTypes.includes(file.type)) {
+      toast.error("Ongeldig bestand", {
+        description: "Alleen PDF, DOC, en DOCX bestanden zijn toegestaan"
+      });
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Bestand te groot", {
+        description: "Maximale bestandsgrootte is 10MB"
+      });
+      return;
+    }
+
+    setCvFile(file);
+    setCvAnalyzing(true);
+
+    try {
+      // Convert to base64
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64 = result.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(file);
+
+      const pdfBase64 = await base64Promise;
+
+      // Call extract-cv-data edge function
+      const { data, error } = await supabase.functions.invoke('extract-cv-data', {
+        body: { pdfBase64, filename: file.name }
+      });
+
+      if (error) throw error;
+
+      if (data.success && data.data) {
+        const extracted = data.data;
+        const filled: string[] = [];
+
+        // Auto-fill form fields
+        if (extracted.naam) {
+          setValue("naam", extracted.naam);
+          filled.push("naam");
+        }
+        if (extracted.email) {
+          setValue("email", extracted.email);
+          filled.push("email");
+        }
+        if (extracted.telefoon) {
+          setValue("telefoon", extracted.telefoon);
+          filled.push("telefoon");
+        }
+        if (extracted.functie_niveau) {
+          setValue("functie_niveau", extracted.functie_niveau);
+          filled.push("functie_niveau");
+        }
+        if (extracted.werkvorm) {
+          setValue("werkvorm", extracted.werkvorm);
+          filled.push("werkvorm");
+        }
+        if (extracted.regio) {
+          setValue("regio", extracted.regio);
+          filled.push("regio");
+        }
+        if (extracted.beschikbaarheid) {
+          setValue("beschikbaarheid", extracted.beschikbaarheid);
+          filled.push("beschikbaarheid");
+        }
+        if (extracted.eigen_vervoer !== null) {
+          setValue("eigen_vervoer", extracted.eigen_vervoer);
+          filled.push("eigen_vervoer");
+        }
+        if (extracted.opmerkingen) {
+          setValue("opmerkingen", extracted.opmerkingen);
+          filled.push("opmerkingen");
+        }
+        if (extracted.ervaring_sector && extracted.ervaring_sector.length > 0) {
+          setSelectedSectoren(extracted.ervaring_sector);
+          filled.push("ervaring_sector");
+        }
+        if (extracted.doelgroep_ervaring && extracted.doelgroep_ervaring.length > 0) {
+          setSelectedDoelgroepen(extracted.doelgroep_ervaring);
+          filled.push("doelgroep_ervaring");
+        }
+
+        setAutoFilledFields(filled);
+
+        toast.success("CV geanalyseerd!", {
+          description: `✅ ${filled.length} velden automatisch ingevuld`,
+        });
+
+        // Jump to step 3 (review)
+        setCurrentStep(3);
+      } else {
+        throw new Error("CV analyse mislukt");
+      }
+
+    } catch (error: any) {
+      console.error("CV upload error:", error);
+      toast.error("CV analyse mislukt", {
+        description: "Je kunt het formulier handmatig invullen"
+      });
+      // Go to step 1 for manual entry
+      setCurrentStep(1);
+    } finally {
+      setCvAnalyzing(false);
+    }
+  }, [setValue]);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleCVUpload(file);
+    }
+  };
+
+  const skipCVUpload = () => {
+    setCurrentStep(1);
+  };
+
   const canProceedToStep2 = () => {
     return watch("naam") && watch("email");
   };
@@ -254,7 +384,16 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
   };
 
   const handleBack = () => {
-    setCurrentStep(prev => Math.max(1, prev - 1));
+    setCurrentStep(prev => Math.max(0, prev - 1));
+  };
+
+  const handleReset = () => {
+    reset();
+    setSelectedSectoren([]);
+    setSelectedDoelgroepen([]);
+    setCvFile(null);
+    setAutoFilledFields([]);
+    setCurrentStep(0);
   };
 
   return (
@@ -264,41 +403,125 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
           <DialogTitle>Nieuwe Sollicitatie</DialogTitle>
         </DialogHeader>
 
-        {/* Progress Indicator */}
-        <div className="flex items-center justify-between mb-6">
-          {[1, 2, 3].map((step) => (
-            <div key={step} className="flex items-center flex-1">
-              <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all ${
-                step < currentStep 
-                  ? "bg-primary border-primary text-primary-foreground" 
-                  : step === currentStep 
-                    ? "bg-primary border-primary text-primary-foreground"
-                    : "border-muted-foreground/30 text-muted-foreground"
-              }`}>
-                {step < currentStep ? (
-                  <CheckCircle2 className="h-5 w-5" />
-                ) : (
-                  <span className="text-sm font-semibold">{step}</span>
+        {/* Progress Indicator - only show for steps 1-3 */}
+        {currentStep > 0 && (
+          <div className="flex items-center justify-between mb-6">
+            {[1, 2, 3].map((step) => (
+              <div key={step} className="flex items-center flex-1">
+                <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all ${
+                  step < currentStep 
+                    ? "bg-primary border-primary text-primary-foreground" 
+                    : step === currentStep 
+                      ? "bg-primary border-primary text-primary-foreground"
+                      : "border-muted-foreground/30 text-muted-foreground"
+                }`}>
+                  {step < currentStep ? (
+                    <CheckCircle2 className="h-5 w-5" />
+                  ) : (
+                    <span className="text-sm font-semibold">{step}</span>
+                  )}
+                </div>
+                {step < 3 && (
+                  <div className={`flex-1 h-0.5 mx-2 transition-all ${
+                    step < currentStep ? "bg-primary" : "bg-muted-foreground/30"
+                  }`} />
                 )}
               </div>
-              {step < 3 && (
-                <div className={`flex-1 h-0.5 mx-2 transition-all ${
-                  step < currentStep ? "bg-primary" : "bg-muted-foreground/30"
-                }`} />
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          {/* Step 0: CV Upload */}
+          {currentStep === 0 && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="text-center space-y-3">
+                <Sparkles className="h-12 w-12 mx-auto text-primary" />
+                <h3 className="text-lg font-semibold text-foreground">Upload CV voor automatische extractie</h3>
+                <p className="text-sm text-muted-foreground">
+                  AI vult 80%+ van het formulier automatisch in
+                </p>
+              </div>
+
+              {cvAnalyzing ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                  <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                  <p className="text-sm font-medium">📄 CV wordt geanalyseerd...</p>
+                  <p className="text-xs text-muted-foreground">Dit duurt 3-5 seconden</p>
+                </div>
+              ) : (
+                <>
+                  <label 
+                    htmlFor="cv-upload"
+                    className="flex flex-col items-center justify-center border-2 border-dashed border-muted-foreground/30 rounded-lg p-12 cursor-pointer hover:border-primary/50 hover:bg-accent/5 transition-all"
+                  >
+                    <Upload className="h-12 w-12 text-muted-foreground mb-4" />
+                    <p className="text-sm font-medium text-foreground mb-2">
+                      Sleep PDF hier of klik om te selecteren
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      PDF, DOC, DOCX (max 10MB)
+                    </p>
+                  </label>
+                  <input
+                    id="cv-upload"
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+
+                  {cvFile && (
+                    <div className="flex items-center gap-2 p-3 bg-accent rounded-lg">
+                      <FileText className="h-5 w-5 text-primary" />
+                      <span className="text-sm font-medium flex-1">{cvFile.name}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setCvFile(null)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t border-muted-foreground/30" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">
+                        of vul handmatig in
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={skipCVUpload}
+                    >
+                      Sla CV upload over
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Step 1: Contactgegevens */}
           {currentStep === 1 && (
             <div className="space-y-4 animate-fade-in">
               <h3 className="text-sm font-semibold text-foreground">Contactgegevens</h3>
               <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="naam">
+                  <Label htmlFor="naam" className="flex items-center gap-2">
                     Naam <span className="text-destructive">*</span>
+                    {autoFilledFields.includes("naam") && (
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    )}
                   </Label>
                   <Input
                     id="naam"
@@ -311,8 +534,11 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="email">
+                  <Label htmlFor="email" className="flex items-center gap-2">
                     E-mailadres <span className="text-destructive">*</span>
+                    {autoFilledFields.includes("email") && (
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    )}
                   </Label>
                   <Input
                     id="email"
@@ -326,7 +552,12 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="telefoon">Telefoonnummer</Label>
+                  <Label htmlFor="telefoon" className="flex items-center gap-2">
+                    Telefoonnummer
+                    {autoFilledFields.includes("telefoon") && (
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    )}
+                  </Label>
                   <Input
                     id="telefoon"
                     type="tel"
@@ -344,7 +575,12 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
               <h3 className="text-sm font-semibold text-foreground">Professionele Achtergrond</h3>
               
               <div className="space-y-2">
-                <Label htmlFor="functie_niveau">Functieniveau</Label>
+                <Label htmlFor="functie_niveau" className="flex items-center gap-2">
+                  Functieniveau
+                  {autoFilledFields.includes("functie_niveau") && (
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  )}
+                </Label>
                 <Select
                   value={watch("functie_niveau")}
                   onValueChange={(value) => setValue("functie_niveau", value)}
@@ -363,7 +599,12 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
               </div>
 
               <div className="space-y-2">
-                <Label>Ervaring sector</Label>
+                <Label className="flex items-center gap-2">
+                  Ervaring sector
+                  {autoFilledFields.includes("ervaring_sector") && (
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  )}
+                </Label>
                 <div className="flex flex-wrap gap-2">
                   {SECTOREN.map((sector) => (
                     <Badge
@@ -382,7 +623,12 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
               </div>
 
               <div className="space-y-2">
-                <Label>Doelgroep ervaring</Label>
+                <Label className="flex items-center gap-2">
+                  Doelgroep ervaring
+                  {autoFilledFields.includes("doelgroep_ervaring") && (
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  )}
+                </Label>
                 <div className="flex flex-wrap gap-2">
                   {DOELGROEPEN.map((doelgroep) => (
                     <Badge
@@ -409,7 +655,12 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="werkvorm">Gewenste werkvorm</Label>
+                  <Label htmlFor="werkvorm" className="flex items-center gap-2">
+                    Gewenste werkvorm
+                    {autoFilledFields.includes("werkvorm") && (
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    )}
+                  </Label>
                   <Select
                     value={watch("werkvorm")}
                     onValueChange={(value) => setValue("werkvorm", value)}
@@ -428,7 +679,12 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="regio">Regio/Werkgebied</Label>
+                  <Label htmlFor="regio" className="flex items-center gap-2">
+                    Regio/Werkgebied
+                    {autoFilledFields.includes("regio") && (
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    )}
+                  </Label>
                   <Input
                     id="regio"
                     placeholder="Bijv. Utrecht en omgeving"
@@ -437,7 +693,12 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="beschikbaarheid">Beschikbaarheid</Label>
+                  <Label htmlFor="beschikbaarheid" className="flex items-center gap-2">
+                    Beschikbaarheid
+                    {autoFilledFields.includes("beschikbaarheid") && (
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    )}
+                  </Label>
                   <Select
                     value={watch("beschikbaarheid")}
                     onValueChange={(value) => setValue("beschikbaarheid", value)}
@@ -500,22 +761,24 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
 
           {/* Navigation Buttons */}
           <div className="flex items-center justify-between pt-4 border-t">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={currentStep === 1 ? () => onOpenChange(false) : handleBack}
-            >
-              {currentStep === 1 ? (
-                "Annuleren"
-              ) : (
-                <>
-                  <ChevronLeft className="h-4 w-4 mr-2" />
-                  Vorige
-                </>
-              )}
-            </Button>
+            {currentStep > 0 && !cvAnalyzing && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={currentStep === 1 ? () => onOpenChange(false) : handleBack}
+              >
+                {currentStep === 1 ? (
+                  "Annuleren"
+                ) : (
+                  <>
+                    <ChevronLeft className="h-4 w-4 mr-2" />
+                    Vorige
+                  </>
+                )}
+              </Button>
+            )}
 
-            {currentStep < 3 ? (
+            {currentStep === 0 ? null : currentStep < 3 ? (
               <Button
                 type="button"
                 onClick={handleNext}
