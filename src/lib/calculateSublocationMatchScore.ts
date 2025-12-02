@@ -12,6 +12,9 @@ interface Professional {
   woonplaats?: string | null;
   postcode?: string | null;
   provincie?: string | null;
+  // Nieuwe velden voor ervaring bonus
+  jaren_ervaring?: number | null;
+  leidinggevende_ervaring?: boolean | null;
 }
 
 interface SublocationCriteria {
@@ -32,6 +35,8 @@ interface MatchScoreBreakdown {
   doelgroepMatch: number;
   mobiliteitMatch: number;
   beschikbaarheidMatch: number;
+  ervaringBonus: number;
+  leidinggevendeBonus: number;
   totalScore: number;
   reasoning: string[];
 }
@@ -67,7 +72,7 @@ const FUNCTIE_COMPATIBILITY: Record<string, { compatible: string[]; score: numbe
   "Hovenier": { compatible: ["Hovenier"], score: 25 },
 };
 
-import { SECTOR_SIMILARITY, DOELGROEP_RELATIONS } from './constants/matchingConstants';
+import { SECTOR_SIMILARITY, DOELGROEP_RELATIONS, calculateErvaringBonus, LEIDINGGEVENDE_BONUS } from './constants/matchingConstants';
 
 // Parse beschikbaarheid string naar uren object
 export function parseBeschikbaarheid(beschikbaarheid: string | null): { min: number; max: number } | null {
@@ -446,9 +451,30 @@ export function calculateSublocationMatchScore(
     beschikbaarheidMatch = 5;
   }
 
-  // ===== TOTAAL BEREKENING (exact 100 punten) =====
-  // Functie: 25, Regio: 20, Mobiliteit: 15, Sector: 20, Doelgroep: 10, Beschikbaarheid: 10
-  const totalScore = Math.min(100, functieMatch + regioMatch + mobiliteitMatch + sectorMatch + doelgroepMatch + beschikbaarheidMatch);
+  // ===== 7. ERVARING BONUS (max +5 punten) =====
+  let ervaringBonus = 0;
+  if (professional.jaren_ervaring) {
+    const ervaringResult = calculateErvaringBonus(professional.jaren_ervaring);
+    ervaringBonus = ervaringResult.bonus;
+    if (ervaringBonus > 0) {
+      reasoning.push(`✅ Ervaring: ${ervaringResult.label} (+${ervaringBonus} punten)`);
+    } else if (ervaringBonus < 0) {
+      reasoning.push(`⚠️ Ervaring: ${ervaringResult.label} (${ervaringBonus} punten)`);
+    }
+  }
+
+  // ===== 8. LEIDINGGEVENDE BONUS (+3 punten) =====
+  let leidinggevendeBonus = 0;
+  if (professional.leidinggevende_ervaring) {
+    leidinggevendeBonus = LEIDINGGEVENDE_BONUS;
+    reasoning.push(`✅ Leidinggevende ervaring (+${leidinggevendeBonus} punten)`);
+  }
+
+  // ===== TOTAAL BEREKENING (basis 100 punten + bonussen) =====
+  // Functie: 25, Regio: 20, Mobiliteit: 15, Sector: 20, Doelgroep: 10, Beschikbaarheid: 10 = 100
+  // + Ervaring bonus (max +5) + Leidinggevende bonus (+3) = max 108
+  const baseScore = functieMatch + regioMatch + mobiliteitMatch + sectorMatch + doelgroepMatch + beschikbaarheidMatch;
+  const totalScore = Math.min(100, Math.max(0, baseScore + ervaringBonus + leidinggevendeBonus));
 
   return {
     functieMatch,
@@ -457,6 +483,8 @@ export function calculateSublocationMatchScore(
     doelgroepMatch,
     mobiliteitMatch,
     beschikbaarheidMatch,
+    ervaringBonus,
+    leidinggevendeBonus,
     totalScore,
     reasoning,
   };

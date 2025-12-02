@@ -32,7 +32,7 @@ import { ApplicationActivityTimeline } from "@/components/recruitment/Applicatio
 import { EmailTemplateSuggestions } from "@/components/recruitment/EmailTemplateSuggestions";
 import { MatchScoreBreakdown } from "@/components/recruitment/MatchScoreBreakdown";
 import { ApplicationNotes } from "@/components/recruitment/ApplicationNotes";
-import { SECTOR_SIMILARITY, functieMatchesAny, calculateRegioScore } from "@/lib/constants/matchingConstants";
+import { SECTOR_SIMILARITY, functieMatchesAny, calculateRegioScore, calculateErvaringBonus, LEIDINGGEVENDE_BONUS } from "@/lib/constants/matchingConstants";
 
 interface Application {
   id: string;
@@ -790,6 +790,22 @@ export function ApplicationDetailModal({
           reasons.push('Zelfde bureau');
         }
         
+        // NIEUW: Ervaring bonus
+        const jarenErvaring = extractedData.jaren_ervaring;
+        const ervaringResult = calculateErvaringBonus(jarenErvaring);
+        if (ervaringResult.bonus !== 0) {
+          score += ervaringResult.bonus;
+          if (ervaringResult.bonus > 0) {
+            reasons.push(`Ervaring bonus: ${ervaringResult.label}`);
+          }
+        }
+        
+        // NIEUW: Leidinggevende bonus
+        if (extractedData.leidinggevende_ervaring) {
+          score += LEIDINGGEVENDE_BONUS;
+          reasons.push('Leidinggevende ervaring');
+        }
+        
         const breakdown = {
           regio: {
             score: regioScore,
@@ -1245,6 +1261,7 @@ export function ApplicationDetailModal({
                   <div className="px-4 pb-4">
                     {application.extracted_data && Object.keys(application.extracted_data).length > 0 && (
                       <div className="space-y-3">
+                        {/* Basis gegevens */}
                         {application.extracted_data.functie_niveau && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Functieniveau:</span>
@@ -1253,6 +1270,35 @@ export function ApplicationDetailModal({
                             </Badge>
                           </div>
                         )}
+                        
+                        {/* NIEUW: Jaren ervaring */}
+                        {application.extracted_data.jaren_ervaring && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground w-32">Ervaring:</span>
+                            <Badge variant="outline" className={
+                              application.extracted_data.jaren_ervaring >= 8 
+                                ? "bg-emerald-100 text-emerald-700 border-emerald-300"
+                                : application.extracted_data.jaren_ervaring >= 5
+                                  ? "bg-blue-100 text-blue-700 border-blue-300"
+                                  : "bg-gray-100 text-gray-700 border-gray-300"
+                            }>
+                              {application.extracted_data.jaren_ervaring} jaar
+                              {application.extracted_data.jaren_ervaring >= 8 && " (Expert)"}
+                              {application.extracted_data.jaren_ervaring >= 5 && application.extracted_data.jaren_ervaring < 8 && " (Ervaren)"}
+                            </Badge>
+                          </div>
+                        )}
+                        
+                        {/* NIEUW: Leidinggevende ervaring */}
+                        {application.extracted_data.leidinggevende_ervaring && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground w-32">Leidinggevend:</span>
+                            <Badge variant="outline" className="bg-purple-100 text-purple-700 border-purple-300">
+                              ✓ {application.extracted_data.leidinggevende_functies?.join(", ") || "Ja"}
+                            </Badge>
+                          </div>
+                        )}
+                        
                         {application.extracted_data.ervaring_sector && application.extracted_data.ervaring_sector.length > 0 && (
                           <div className="flex items-start gap-2">
                             <span className="text-xs text-muted-foreground w-32">Sectoren:</span>
@@ -1263,6 +1309,7 @@ export function ApplicationDetailModal({
                             </div>
                           </div>
                         )}
+                        
                         {application.extracted_data.doelgroep_ervaring && application.extracted_data.doelgroep_ervaring.length > 0 && (
                           <div className="flex items-start gap-2">
                             <span className="text-xs text-muted-foreground w-32">Doelgroepen:</span>
@@ -1273,22 +1320,119 @@ export function ApplicationDetailModal({
                             </div>
                           </div>
                         )}
+                        
+                        {/* NIEUW: Specifieke doelgroepen */}
+                        {application.extracted_data.specifieke_doelgroepen && application.extracted_data.specifieke_doelgroepen.length > 0 && (
+                          <div className="flex items-start gap-2">
+                            <span className="text-xs text-muted-foreground w-32">Specialisaties:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {application.extracted_data.specifieke_doelgroepen.map((d: string) => (
+                                <Badge key={d} variant="outline" className="bg-indigo-100 text-indigo-700 border-indigo-300">{d}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
                         {application.extracted_data.werkvorm && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Werkvorm:</span>
                             <span className="text-sm font-medium">{application.extracted_data.werkvorm}</span>
                           </div>
                         )}
+                        
                         {application.extracted_data.beschikbaarheid && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-32">Beschikbaarheid:</span>
                             <span className="text-sm font-medium">{application.extracted_data.beschikbaarheid}</span>
                           </div>
                         )}
-                        {application.extracted_data.eigen_vervoer && (
+                        
+                        {/* NIEUW: Nacht/weekend dienst */}
+                        {(application.extracted_data.nachtdienst_bereid !== null || application.extracted_data.weekenddienst_bereid !== null) && (
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground w-32">Eigen vervoer:</span>
-                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            <span className="text-xs text-muted-foreground w-32">Diensten:</span>
+                            <div className="flex gap-2">
+                              {application.extracted_data.nachtdienst_bereid && (
+                                <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-300">Nachtdienst ✓</Badge>
+                              )}
+                              {application.extracted_data.weekenddienst_bereid && (
+                                <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-300">Weekend ✓</Badge>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Mobiliteit */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground w-32">Mobiliteit:</span>
+                          <div className="flex gap-2">
+                            {application.extracted_data.eigen_vervoer && (
+                              <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">Auto ✓</Badge>
+                            )}
+                            {application.extracted_data.rijbewijs && !application.extracted_data.eigen_vervoer && (
+                              <Badge variant="outline" className="bg-yellow-100 text-yellow-700 border-yellow-300">Rijbewijs ✓</Badge>
+                            )}
+                            {application.extracted_data.max_reisafstand_km && (
+                              <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">Max {application.extracted_data.max_reisafstand_km}km</Badge>
+                            )}
+                            {!application.extracted_data.eigen_vervoer && !application.extracted_data.rijbewijs && (
+                              <span className="text-sm text-muted-foreground">Geen info</span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* NIEUW: Opleidingen */}
+                        {application.extracted_data.opleidingen && application.extracted_data.opleidingen.length > 0 && (
+                          <div className="flex items-start gap-2">
+                            <span className="text-xs text-muted-foreground w-32">Opleidingen:</span>
+                            <div className="flex flex-col gap-1">
+                              {application.extracted_data.opleidingen.slice(0, 3).map((opl: any, idx: number) => (
+                                <span key={idx} className="text-sm">
+                                  {opl.naam} {opl.jaar ? `(${opl.jaar})` : ""}
+                                </span>
+                              ))}
+                              {application.extracted_data.opleidingen.length > 3 && (
+                                <span className="text-xs text-muted-foreground">+{application.extracted_data.opleidingen.length - 3} meer</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* NIEUW: Certificaten */}
+                        {application.extracted_data.certificaten && application.extracted_data.certificaten.length > 0 && (
+                          <div className="flex items-start gap-2">
+                            <span className="text-xs text-muted-foreground w-32">Certificaten:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {application.extracted_data.certificaten.map((cert: string) => (
+                                <Badge key={cert} variant="outline" className="bg-teal-100 text-teal-700 border-teal-300">{cert}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* NIEUW: BIG nummer */}
+                        {application.extracted_data.BIG_nummer && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground w-32">BIG-nummer:</span>
+                            <span className="text-sm font-mono">{application.extracted_data.BIG_nummer}</span>
+                          </div>
+                        )}
+                        
+                        {/* NIEUW: Talen */}
+                        {application.extracted_data.talen && application.extracted_data.talen.length > 0 && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground w-32">Talen:</span>
+                            <span className="text-sm">{application.extracted_data.talen.join(", ")}</span>
+                          </div>
+                        )}
+                        
+                        {/* NIEUW: Postcode/Woonplaats */}
+                        {(application.extracted_data.postcode || application.extracted_data.woonplaats) && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground w-32">Locatie:</span>
+                            <span className="text-sm">
+                              {[application.extracted_data.postcode, application.extracted_data.woonplaats].filter(Boolean).join(", ")}
+                            </span>
                           </div>
                         )}
                       </div>

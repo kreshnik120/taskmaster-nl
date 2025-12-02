@@ -5,6 +5,48 @@
  * between professionals and client requirements.
  */
 
+// ============= EXPERIENCE BONUS SYSTEM =============
+
+/**
+ * Experience Bonus Constants
+ * 
+ * Professionals with more years of experience get bonus points in matching.
+ * This rewards seasoned professionals while not penalizing newer ones too heavily.
+ */
+export const ERVARING_BONUS = {
+  EXPERT: { minJaren: 8, bonus: 5 },      // 8+ jaar = +5 punten
+  ERVAREN: { minJaren: 5, bonus: 3 },     // 5-7 jaar = +3 punten
+  JUNIOR: { minJaren: 2, bonus: 0 },      // 2-4 jaar = 0 punten
+  STARTER: { minJaren: 0, bonus: -2 },    // <2 jaar = -2 punten
+};
+
+/**
+ * Leadership bonus for coordinator/management roles
+ */
+export const LEIDINGGEVENDE_BONUS = 3;
+
+/**
+ * Calculate experience bonus based on years
+ */
+export function calculateErvaringBonus(jarenErvaring: number | null | undefined): { bonus: number; label: string } {
+  if (!jarenErvaring || jarenErvaring < 0) {
+    return { bonus: 0, label: "Onbekend" };
+  }
+  
+  if (jarenErvaring >= ERVARING_BONUS.EXPERT.minJaren) {
+    return { bonus: ERVARING_BONUS.EXPERT.bonus, label: `Expert (${jarenErvaring}+ jaar)` };
+  }
+  if (jarenErvaring >= ERVARING_BONUS.ERVAREN.minJaren) {
+    return { bonus: ERVARING_BONUS.ERVAREN.bonus, label: `Ervaren (${jarenErvaring} jaar)` };
+  }
+  if (jarenErvaring >= ERVARING_BONUS.JUNIOR.minJaren) {
+    return { bonus: ERVARING_BONUS.JUNIOR.bonus, label: `Junior (${jarenErvaring} jaar)` };
+  }
+  return { bonus: ERVARING_BONUS.STARTER.bonus, label: `Starter (<2 jaar)` };
+}
+
+// ============= SECTOR SIMILARITY =============
+
 /**
  * Sector Similarity Matrix
  * 

@@ -34,20 +34,57 @@ serve(async (req) => {
     // AI Analysis with Gemini 2.5 Flash Vision (direct PDF analysis)
     console.log(`Analyzing CV with AI Vision: ${filename || 'document.pdf'}`);
     
-    const aiPrompt = `Analyseer dit CV/PDF document en extract de volgende informatie in JSON formaat:
+    const aiPrompt = `Analyseer dit CV/PDF document en extract ALLE relevante informatie voor healthcare recruitment in JSON formaat.
 
 Geef terug in dit EXACTE JSON formaat (geen extra tekst):
 {
+  // === BASIS CONTACTGEGEVENS ===
   "naam": "Voor- en achternaam",
   "telefoon": "06-12345678 of null",
   "email": "email@example.com of null",
-  "functie_niveau": "VIG, HBO-V, Verpleegkundige (MBO), Helpende, Begeleider, Persoonlijk begeleider, of GGZ-agoog",
+  "postcode": "1234 AB of null",
+  "woonplaats": "Plaatsnaam of null",
+  "geboortedatum": "YYYY-MM-DD of null",
+  
+  // === PROFESSIONELE INFO ===
+  "functie_niveau": "VIG, HBO-V, Verpleegkundige MBO, Helpende, Begeleider, Persoonlijk begeleider, of GGZ-agoog",
   "werkvorm": "ZZP, Uitzendkracht, of ABCito constructie",
+  "jaren_ervaring": getal of null,
+  "ervaring_sinds": jaartal of null,
+  
+  // === ERVARING DETAILS ===
   "ervaring_sector": ["VVT", "GGZ", "GHZ", "Jeugdzorg", "Ziekenhuis/Klinisch", "Thuiszorg"],
-  "doelgroep_ervaring": ["Ouderen", "LVB", "Psychiatrie", "Somatiek", "Kinderen/Jeugd", "Verslaving"],
-  "regio": "Utrecht, Amsterdam, etc of null",
+  "doelgroep_ervaring": ["Ouderen", "LVB", "Psychiatrie", "Somatiek", "Kinderen/Jeugd", "Verslaving", "Dementie", "Gedragsproblemen"],
+  "specifieke_doelgroepen": ["TBS cliënten", "Justitiële kaders", "NAH", etc.],
+  
+  // === LEIDINGGEVENDE ERVARING ===
+  "leidinggevende_ervaring": true/false,
+  "leidinggevende_functies": ["Teammanager", "Coördinator", etc.],
+  
+  // === OPLEIDINGEN & CERTIFICATEN ===
+  "hoogste_opleiding": "HBO/MBO/etc.",
+  "opleidingen": [
+    { "naam": "string", "jaar": number, "instituut": "string of null" }
+  ],
+  "certificaten": ["BHV", "Voorbehouden handelingen", etc.],
+  "BIG_nummer": "string of null",
+  
+  // === BESCHIKBAARHEID ===
   "beschikbaarheid": "<24 uur/week, 24-32 uur/week, 32-40 uur/week, of Flexibel",
-  "eigen_vervoer": true/false,
+  "voorkeur_uren_per_week": { "min": number, "max": number } of null,
+  "nachtdienst_bereid": true/false/null,
+  "weekenddienst_bereid": true/false/null,
+  "voorkeur_dagen": ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"] of null,
+  
+  // === MOBILITEIT ===
+  "eigen_vervoer": true/false/null,
+  "rijbewijs": true/false/null,
+  "max_reisafstand_km": number of null,
+  "regio": "Utrecht, Amsterdam, etc of null",
+  "regio_voorkeur": ["Limburg", "Noord-Brabant", etc.] of null,
+  
+  // === OVERIG ===
+  "talen": ["Nederlands", "Engels", etc.],
   "opmerkingen": "Extra informatie of null",
   "confidence": 0.8
 }
@@ -61,29 +98,55 @@ Geef terug in dit EXACTE JSON formaat (geen extra tekst):
 - "Persoonlijk begeleider"
 - "GGZ-agoog"
 
-**BELANGRIJK:** Gebruik NOOIT haakjes in functie_niveau! "Verpleegkundige MBO" is correct, "Verpleegkundige (MBO)" is FOUT.
-
 **KRITIEK - werkvorm moet EXACT een van deze waarden zijn:**
-- "ZZP" (zoek naar: "ZZP", "zzp", "zelfstandige zonder personeel", "freelance", "eigen bedrijf")
+- "ZZP" (zoek naar: "ZZP", "zzp", "zelfstandige", "freelance", "eigen bedrijf", "zelfstandig ondernemer")
 - "Uitzendkracht" (zoek naar: "uitzendkracht", "tijdelijk contract", "via uitzendbureau", "flex")
 - "ABCito constructie" (zoek naar: "ABCito", "abcito", "payroll constructie")
 
-**EXTRA ZOEKTERMEN voor betere extractie:**
-- **werkvorm**: Let op woorden als "ZZP", "freelance", "uitzendwerk", "flex", "eigen onderneming", "payroll", "ABCito"
-- **beschikbaarheid**: Zoek naar "beschikbaar", "beschikbaarheid", "uur per week", "uren", "parttime", "fulltime", "voltijd", "24 uur", "32 uur", "40 uur", "flexibel"
-- **eigen_vervoer**: Zoek naar "rijbewijs", "auto", "eigen vervoer", "eigen auto", "mobiel", "kan reizen", "beschikt over auto"
-- **regio**: Let op woonplaats, werkgebied, voorkeur regio, beschikbaar in, werkt in
+**KRITIEK - jaren_ervaring berekening:**
+- Tel de TOTALE jaren werkervaring in de zorg
+- Zoek naar "sinds JAARTAL" en bereken jaren tot nu (2024)
+- Zoek naar datums bij werkervaring en tel de jaren op
+- Voorbeeld: "ZZP sinds 2017" = 7 jaar ervaring
+
+**KRITIEK - doelgroep_ervaring extractie:**
+Zoek ACTIEF in werkervaring tekst naar doelgroepen:
+- "dementie", "dementerende" → voeg "Dementie" toe
+- "verstandelijke beperking", "VG" → voeg "LVB" toe
+- "TBS", "justitieel", "forensisch" → voeg "Justitiële kaders" toe aan specifieke_doelgroepen
+- "NAH", "niet-aangeboren hersenletsel" → voeg "NAH" toe aan specifieke_doelgroepen
+- "gedragsproblemen", "gedragsdeskundige" → voeg "Gedragsproblemen" toe
+- "ouderen", "bejaarden", "geriatrie" → voeg "Ouderen" toe
+- "kinderen", "jeugd", "jongeren" → voeg "Kinderen/Jeugd" toe
+- "verslavingszorg", "verslaving" → voeg "Verslaving" toe
+- "somatiek", "lichamelijke" → voeg "Somatiek" toe
+- "psychiatrie", "ggz", "psychische" → voeg "Psychiatrie" toe
+
+**KRITIEK - leidinggevende_ervaring detectie:**
+Zoek naar: "manager", "teamleider", "coördinator", "leidinggevende", "afdelingshoofd", "hoofd", "senior"
+
+**KRITIEK - opleidingen extractie:**
+- Maak een array van ALLE opleidingen/diploma's
+- Extract naam, jaar van afronden, en instituut indien beschikbaar
+- Bepaal hoogste_opleiding (HBO/MBO/WO)
+
+**KRITIEK - mobiliteit extractie:**
+- "rijbewijs" → rijbewijs: true
+- "auto", "eigen vervoer", "beschikt over auto" → eigen_vervoer: true
+- "reisbereid tot X km" → max_reisafstand_km: X
+- Detecteer woonplaats en voorkeur regio's
+
+**EXTRA ZOEKTERMEN:**
+- beschikbaarheid: "uur per week", "uren", "parttime", "fulltime", "voltijd"
+- nachtdienst: "nachtdienst", "nachtzorg", "slaapdienst"
+- weekenddienst: "weekend", "zaterdag", "zondag"
+- BIG: "BIG-registratie", "BIG nummer", "geregistreerd"
 
 Belangrijk:
-- functie_niveau: gebruik EXACT een van de 7 waarden hierboven
-- werkvorm: gebruik EXACT een van de 3 waarden hierboven, zoek actief naar synoniemen
-- ervaring_sector: array met 0 of meer waarden uit de lijst
-- doelgroep_ervaring: array met 0 of meer waarden uit de lijst
-- beschikbaarheid: gebruik een van de 4 waarden, zoek actief naar uurvermelding
-- eigen_vervoer: boolean, zoek actief naar vervoer/rijbewijs vermeldingen
-- regio: zoek actief naar woonplaats/werkgebied vermeldingen
 - Als info ontbreekt, gebruik null (niet "null" als string)
-- Wees proactief: zoek actief naar synoniemen en indirecte vermeldingen`;
+- Arrays moeten leeg zijn [] als geen data, niet null
+- Wees proactief: zoek actief naar synoniemen en indirecte vermeldingen
+- Confidence: geef 0.9+ als veel data gevonden, 0.6-0.8 als beperkt`;
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -99,7 +162,7 @@ Belangrijk:
             content: [
               { 
                 type: "text", 
-                text: "Je bent een HR assistent die CV's analyseert voor zorgverleners. Geef altijd pure JSON terug zonder markdown code blocks.\n\n" + aiPrompt
+                text: "Je bent een HR assistent die CV's analyseert voor zorgverleners. Geef altijd pure JSON terug zonder markdown code blocks. Wees grondig en zoek naar ALLE informatie die relevant is voor matching.\n\n" + aiPrompt
               },
               {
                 type: "document",
@@ -139,13 +202,33 @@ Belangrijk:
         naam: null,
         telefoon: null,
         email: null,
+        postcode: null,
+        woonplaats: null,
+        geboortedatum: null,
         functie_niveau: null,
         werkvorm: null,
+        jaren_ervaring: null,
+        ervaring_sinds: null,
         ervaring_sector: [],
         doelgroep_ervaring: [],
-        regio: null,
+        specifieke_doelgroepen: [],
+        leidinggevende_ervaring: false,
+        leidinggevende_functies: [],
+        hoogste_opleiding: null,
+        opleidingen: [],
+        certificaten: [],
+        BIG_nummer: null,
         beschikbaarheid: null,
-        eigen_vervoer: false,
+        voorkeur_uren_per_week: null,
+        nachtdienst_bereid: null,
+        weekenddienst_bereid: null,
+        voorkeur_dagen: null,
+        eigen_vervoer: null,
+        rijbewijs: null,
+        max_reisafstand_km: null,
+        regio: null,
+        regio_voorkeur: null,
+        talen: [],
         opmerkingen: null,
         confidence: 0.3,
       };
@@ -205,7 +288,31 @@ Belangrijk:
       }
     }
 
-    console.log("CV extraction complete");
+    // Ensure arrays are always arrays
+    extractedData.ervaring_sector = extractedData.ervaring_sector || [];
+    extractedData.doelgroep_ervaring = extractedData.doelgroep_ervaring || [];
+    extractedData.specifieke_doelgroepen = extractedData.specifieke_doelgroepen || [];
+    extractedData.leidinggevende_functies = extractedData.leidinggevende_functies || [];
+    extractedData.opleidingen = extractedData.opleidingen || [];
+    extractedData.certificaten = extractedData.certificaten || [];
+    extractedData.talen = extractedData.talen || [];
+    extractedData.voorkeur_dagen = extractedData.voorkeur_dagen || null;
+    extractedData.regio_voorkeur = extractedData.regio_voorkeur || null;
+
+    // Calculate jaren_ervaring if not provided but ervaring_sinds is available
+    if (!extractedData.jaren_ervaring && extractedData.ervaring_sinds) {
+      const currentYear = new Date().getFullYear();
+      extractedData.jaren_ervaring = currentYear - extractedData.ervaring_sinds;
+      console.log(`Calculated jaren_ervaring: ${extractedData.jaren_ervaring} (since ${extractedData.ervaring_sinds})`);
+    }
+
+    // Copy woonplaats to regio if regio is empty
+    if (!extractedData.regio && extractedData.woonplaats) {
+      extractedData.regio = extractedData.woonplaats;
+      console.log(`Copied woonplaats to regio: ${extractedData.woonplaats}`);
+    }
+
+    console.log("CV extraction complete with extended data");
 
     return new Response(
       JSON.stringify({
