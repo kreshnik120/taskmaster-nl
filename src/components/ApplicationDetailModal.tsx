@@ -1351,21 +1351,21 @@ export function ApplicationDetailModal({
                             {application.email_from}
                           </a>
                         </div>
-                        {application.extracted_data?.telefoon && (
+                        {getFieldValue(application.extracted_data?.telefoon) && (
                           <div className="flex items-center gap-2">
                             <Phone className="h-4 w-4 text-muted-foreground" />
                             <a 
-                              href={`tel:${application.extracted_data.telefoon}`}
+                              href={`tel:${getFieldValue(application.extracted_data?.telefoon)}`}
                               className="text-sm text-primary hover:underline"
                             >
-                              {application.extracted_data.telefoon}
+                              {getFieldValue(application.extracted_data?.telefoon)}
                             </a>
                           </div>
                         )}
-                        {application.extracted_data?.regio && (
+                        {getFieldValue(application.extracted_data?.regio) && (
                           <div className="flex items-center gap-2">
                             <User className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm">Regio: {application.extracted_data.regio}</span>
+                            <span className="text-sm">Regio: {getFieldValue(application.extracted_data?.regio)}</span>
                           </div>
                         )}
                       </div>
