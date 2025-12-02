@@ -67,6 +67,17 @@ const FUNCTIE_COMPATIBILITY: Record<string, { compatible: string[]; score: numbe
   "Hovenier": { compatible: ["Hovenier"], score: 25 },
 };
 
+// Sector semantische relaties - Gerelateerde sectoren krijgen partiële match credit
+const SECTOR_SIMILARITY: Record<string, { related: string[]; similarity: number }> = {
+  "GGZ": { related: ["GHZ", "Verslavingszorg"], similarity: 0.6 },
+  "GHZ": { related: ["GGZ", "Jeugdzorg"], similarity: 0.6 },
+  "VVT": { related: ["Thuiszorg", "Ziekenhuis/Klinisch"], similarity: 0.7 },
+  "Thuiszorg": { related: ["VVT", "Ziekenhuis/Klinisch"], similarity: 0.7 },
+  "Jeugdzorg": { related: ["GHZ", "GGZ"], similarity: 0.5 },
+  "Ziekenhuis/Klinisch": { related: ["VVT", "Thuiszorg"], similarity: 0.6 },
+  "Verslavingszorg": { related: ["GGZ"], similarity: 0.6 },
+};
+
 // Doelgroep semantische relaties - Gerelateerde doelgroepen krijgen partiële match credit
 const DOELGROEP_RELATIONS: Record<string, { related: string[]; similarity: number }> = {
   "LVB": { related: ["Autisme", "NAH", "EMB"], similarity: 0.7 },
@@ -128,6 +139,49 @@ function calculateJaccardSimilarity(set1: string[], set2: string[]): number {
   const union = [...new Set([...set1, ...set2])];
   
   return intersection.length / union.length;
+}
+
+// Semantische sector matching - houdt rekening met gerelateerde sectoren
+function calculateSemanticSectorMatch(
+  profSectoren: string[],
+  locatieSectoren: string[]
+): { score: number; directMatches: string[]; relatedMatches: string[] } {
+  if (profSectoren.length === 0 || locatieSectoren.length === 0) {
+    return { score: 0, directMatches: [], relatedMatches: [] };
+  }
+
+  // Directe matches (100% credit)
+  const directMatches = profSectoren.filter(profS =>
+    locatieSectoren.some(locS => locS.toLowerCase() === profS.toLowerCase())
+  );
+
+  // Gerelateerde matches (60-70% credit via similarity score)
+  const relatedMatches: string[] = [];
+  let relatedScore = 0;
+
+  profSectoren.forEach(profS => {
+    const relation = SECTOR_SIMILARITY[profS];
+    if (relation) {
+      const relatedFound = relation.related.filter(relS =>
+        locatieSectoren.some(locS => locS.toLowerCase() === relS.toLowerCase())
+      );
+      if (relatedFound.length > 0 && !directMatches.includes(profS)) {
+        relatedMatches.push(...relatedFound);
+        relatedScore += relation.similarity * relatedFound.length;
+      }
+    }
+  });
+
+  // Combined score: directe matches krijgen 1.0, gerelateerde krijgen ~0.6-0.7
+  const totalWeight = directMatches.length * 1.0 + relatedScore;
+  const maxWeight = locatieSectoren.length * 1.0;
+  const score = maxWeight > 0 ? totalWeight / maxWeight : 0;
+
+  return {
+    score: Math.min(1, score),
+    directMatches: [...new Set(directMatches)],
+    relatedMatches: [...new Set(relatedMatches)],
+  };
 }
 
 // Semantische doelgroep matching - houdt rekening met gerelateerde doelgroepen
@@ -317,19 +371,22 @@ export function calculateSublocationMatchScore(
     }
   }
 
-  // ===== 4. SECTOR ERVARING MATCH (20 punten via Jaccard) =====
+  // ===== 4. SECTOR ERVARING MATCH (20 punten via semantische matching) =====
   if (criteria.sector.length > 0 && professional.ervaring_sector && professional.ervaring_sector.length > 0) {
-    const similarity = calculateJaccardSimilarity(professional.ervaring_sector, criteria.sector);
-    sectorMatch = Math.round(similarity * 20);
+    const semanticMatch = calculateSemanticSectorMatch(professional.ervaring_sector, criteria.sector);
+    sectorMatch = Math.round(semanticMatch.score * 20);
     
-    const overlappingSectors = professional.ervaring_sector.filter(s =>
-      criteria.sector.some(cs => cs.toLowerCase() === s.toLowerCase())
-    );
+    if (semanticMatch.directMatches.length > 0) {
+      reasoning.push(`✅ Sector: ${semanticMatch.directMatches.join(", ")} (exact match, ${Math.round(semanticMatch.score * 100)}%)`);
+    }
     
-    if (overlappingSectors.length > 0) {
-      reasoning.push(`✅ Sector: ${overlappingSectors.join(", ")} (${Math.round(similarity * 100)}% overlap)`);
-    } else {
-      reasoning.push(`⚠️ Sector: Beperkte overlap met ${criteria.sector.join(", ")}`);
+    if (semanticMatch.relatedMatches.length > 0) {
+      const relatedSectors = [...new Set(semanticMatch.relatedMatches)];
+      reasoning.push(`⚠️ Sector: ${relatedSectors.join(", ")} (gerelateerde ervaring, +${Math.round(relatedSectors.length * 0.6 / criteria.sector.length * 100)}%)`);
+    }
+    
+    if (semanticMatch.directMatches.length === 0 && semanticMatch.relatedMatches.length === 0) {
+      reasoning.push(`❌ Sector: Geen ervaring met ${criteria.sector.join(", ")}`);
     }
   } else if (criteria.sector.length === 0) {
     sectorMatch = 5; // Lower credit if no sector criteria

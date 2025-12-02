@@ -716,15 +716,51 @@ export function ApplicationDetailModal({
           reasons.push('Regio in klantnaam');
         }
         
+        const SECTOR_SIMILARITY: Record<string, { related: string[]; similarity: number }> = {
+          "GGZ": { related: ["GHZ", "Verslavingszorg"], similarity: 0.6 },
+          "GHZ": { related: ["GGZ", "Jeugdzorg"], similarity: 0.6 },
+          "VVT": { related: ["Thuiszorg", "Ziekenhuis/Klinisch"], similarity: 0.7 },
+          "Thuiszorg": { related: ["VVT", "Ziekenhuis/Klinisch"], similarity: 0.7 },
+          "Jeugdzorg": { related: ["GHZ", "GGZ"], similarity: 0.5 },
+          "Ziekenhuis/Klinisch": { related: ["VVT", "Thuiszorg"], similarity: 0.6 },
+          "Verslavingszorg": { related: ["GGZ"], similarity: 0.6 },
+        };
+        
         const clientSectors = client.sector || [];
         const applicantSectors = extractedData.ervaring_sector || [];
-        const sectorOverlap = clientSectors.filter((s: string) => 
+        
+        const directSectorMatches = clientSectors.filter((s: string) => 
           applicantSectors.includes(s)
-        ).length;
-        if (sectorOverlap > 0) {
-          const sectorScore = Math.min(25, sectorOverlap * 10);
+        );
+        
+        const relatedSectorMatches: string[] = [];
+        let relatedSectorScore = 0;
+        applicantSectors.forEach((appS: string) => {
+          const relation = SECTOR_SIMILARITY[appS];
+          if (relation) {
+            const relatedFound = relation.related.filter((relS: string) =>
+              clientSectors.includes(relS)
+            );
+            if (relatedFound.length > 0 && !directSectorMatches.includes(appS)) {
+              relatedSectorMatches.push(...relatedFound);
+              relatedSectorScore += relation.similarity * relatedFound.length;
+            }
+          }
+        });
+        
+        const totalSectorWeight = directSectorMatches.length * 1.0 + relatedSectorScore;
+        const maxSectorWeight = clientSectors.length * 1.0;
+        const sectorMatchPercentage = maxSectorWeight > 0 ? totalSectorWeight / maxSectorWeight : 0;
+        const sectorScore = Math.round(sectorMatchPercentage * 25);
+        
+        if (directSectorMatches.length > 0 || relatedSectorMatches.length > 0) {
           score += sectorScore;
-          reasons.push(`${sectorOverlap} sector(en) match`);
+          if (directSectorMatches.length > 0) {
+            reasons.push(`${directSectorMatches.length} sector(en) exact match`);
+          }
+          if (relatedSectorMatches.length > 0) {
+            reasons.push(`${[...new Set(relatedSectorMatches)].length} gerelateerde sector(en)`);
+          }
         }
         
         const clientDoelgroepen = client.doelgroep || [];
@@ -764,11 +800,15 @@ export function ApplicationDetailModal({
                 : 'Geen regio overlap'
           },
           sector: {
-            score: sectorOverlap > 0 ? Math.min(25, sectorOverlap * 10) : 0,
-            match: sectorOverlap > 0,
-            reason: sectorOverlap > 0 
-              ? `${sectorOverlap} sector(en) komen overeen` 
-              : 'Geen sector overlap'
+            score: sectorScore,
+            match: directSectorMatches.length > 0 || relatedSectorMatches.length > 0,
+            reason: directSectorMatches.length > 0 
+              ? `${directSectorMatches.length} sector(en) exact match` 
+              : relatedSectorMatches.length > 0
+                ? `${[...new Set(relatedSectorMatches)].length} gerelateerde sector(en) (${Math.round(sectorMatchPercentage * 100)}%)`
+                : 'Geen sector overlap',
+            directMatches: directSectorMatches,
+            relatedMatches: [...new Set(relatedSectorMatches)]
           },
           doelgroep: {
             score: doelgroepOverlap > 0 ? Math.min(20, doelgroepOverlap * 8) : 0,
