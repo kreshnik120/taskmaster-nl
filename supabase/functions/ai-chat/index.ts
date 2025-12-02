@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.10.0-tool-deduplication";
+const SYSTEM_PROMPT_VERSION = "v2.10.1-org-filter-fix";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -4054,7 +4054,16 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                               appQuery = appQuery.eq('extracted_data->>werkvorm', args.filter.werkvorm);
                             }
                             if (args.filter.assigned_organization) {
-                              appQuery = appQuery.eq('extracted_data->>assigned_organization', args.filter.assigned_organization);
+                              // ✅ FIX: Lookup org_id via organizations table instead of JSONB field
+                              const { data: orgData } = await supabaseClient
+                                .from('organizations')
+                                .select('id')
+                                .eq('name', args.filter.assigned_organization)
+                                .single();
+                              
+                              if (orgData) {
+                                appQuery = appQuery.eq('org_id', orgData.id);
+                              }
                             }
                             if (args.filter.regio) {
                               appQuery = appQuery.ilike('extracted_data->>regio', `%${args.filter.regio}%`);
