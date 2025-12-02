@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -28,7 +28,8 @@ import {
   User,
   FileText,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Pencil
 } from "lucide-react";
 import { format, addMonths } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -131,15 +132,33 @@ export function PlacementConfirmDialog({
     btw_percentage: number;
   } | null>(null);
 
-  // Set default werkvorm from professional profile
+  // Check if werkvorm step can be skipped
+  const shouldSkipWerkvormStep = useMemo(() => {
+    return professionalWerkvorm && 
+      professionalWerkvorm !== "Beide" &&
+      WERKVORM_INFO[professionalWerkvorm as WerkvormType];
+  }, [professionalWerkvorm]);
+
+  // Determine total steps and step mapping
+  const totalSteps = shouldSkipWerkvormStep ? 3 : 4;
+  const getDisplayStep = (internalStep: number) => {
+    if (shouldSkipWerkvormStep && internalStep > 1) {
+      return internalStep - 1;
+    }
+    return internalStep;
+  };
+
+  // Set default werkvorm and skip step 1 if possible
   useEffect(() => {
-    if (open && professionalWerkvorm) {
-      const mappedWerkvorm = professionalWerkvorm as WerkvormType;
-      if (WERKVORM_INFO[mappedWerkvorm]) {
-        setWerkvorm(mappedWerkvorm);
+    if (open) {
+      if (shouldSkipWerkvormStep && professionalWerkvorm) {
+        setWerkvorm(professionalWerkvorm as WerkvormType);
+        setStep(2); // Skip to step 2
+      } else {
+        setStep(1);
       }
     }
-  }, [open, professionalWerkvorm]);
+  }, [open, shouldSkipWerkvormStep, professionalWerkvorm]);
 
   // Auto-set plaatsing type based on werkvorm
   useEffect(() => {
@@ -221,7 +240,7 @@ export function PlacementConfirmDialog({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Create assignment with werkvorm and plaatsing_type
+      // Create assignment - trigger handles event logging automatically
       const { error } = await supabase
         .from("assignments")
         .insert({
@@ -240,37 +259,6 @@ export function PlacementConfirmDialog({
         });
 
       if (error) throw error;
-
-      // Log event for AI learning
-      const { data: userOrgData } = await supabase
-        .from("user_organizations")
-        .select("org_id")
-        .eq("user_id", user.id)
-        .single();
-
-      if (userOrgData?.org_id) {
-        await supabase.from("system_events").insert({
-          entity_type: "assignment",
-          entity_id: professionalId,
-          event_type: "placement_created",
-          event_data: {
-            professional_id: professionalId,
-            professional_name: professionalName,
-            sublocation_id: sublocationId,
-            sublocation_name: sublocationName,
-            start_date: format(startDate, "yyyy-MM-dd"),
-            end_date: endDate ? format(endDate, "yyyy-MM-dd") : null,
-            weekly_hours: weeklyHours,
-            werkvorm: werkvorm,
-            plaatsing_type: plaatsingType,
-            match_score: matchScore,
-            tarief: tariefPreview,
-          },
-          metadata: {},
-          org_id: userOrgData.org_id,
-          user_id: user.id,
-        });
-      }
 
       // Success feedback
       confetti({
@@ -323,6 +311,22 @@ export function PlacementConfirmDialog({
 
   const revenue = calculateEstimatedRevenue();
 
+  // Handle going back - need to handle skipped step
+  const handleBack = () => {
+    if (shouldSkipWerkvormStep && step === 2) {
+      // Can't go back further if we skipped step 1
+      return;
+    }
+    setStep(step - 1);
+  };
+
+  const canGoBack = () => {
+    if (shouldSkipWerkvormStep) {
+      return step > 2;
+    }
+    return step > 1;
+  };
+
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
       <DialogContent className="sm:max-w-[600px]">
@@ -336,23 +340,26 @@ export function PlacementConfirmDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Progress indicator */}
+        {/* Progress indicator - dynamic based on steps */}
         <div className="flex items-center justify-center gap-2 py-2">
-          {[1, 2, 3, 4].map((s) => (
-            <div key={s} className="flex items-center">
-              <div className={cn(
-                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors",
-                step === s ? "bg-primary text-primary-foreground" :
-                step > s ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
-              )}>
-                {step > s ? <CheckCircle2 className="h-4 w-4" /> : s}
+          {Array.from({ length: totalSteps }, (_, i) => i + 1).map((s) => {
+            const displayStep = getDisplayStep(step);
+            return (
+              <div key={s} className="flex items-center">
+                <div className={cn(
+                  "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors",
+                  displayStep === s ? "bg-primary text-primary-foreground" :
+                  displayStep > s ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+                )}>
+                  {displayStep > s ? <CheckCircle2 className="h-4 w-4" /> : s}
+                </div>
+                {s < totalSteps && <ChevronRight className="h-4 w-4 text-muted-foreground mx-1" />}
               </div>
-              {s < 4 && <ChevronRight className="h-4 w-4 text-muted-foreground mx-1" />}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* Match score banner */}
+        {/* Match score banner with werkvorm badge when skipped */}
         <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
           <div className="flex items-center gap-2">
             <User className="h-4 w-4 text-muted-foreground" />
@@ -361,10 +368,26 @@ export function PlacementConfirmDialog({
               <Badge variant="secondary" className="text-xs">{professionalFunctieNiveau}</Badge>
             )}
           </div>
-          <Badge variant="default" className="flex items-center gap-1">
-            <TrendingUp className="h-3 w-3" />
-            {matchScore}% match
-          </Badge>
+          <div className="flex items-center gap-2">
+            {/* Show werkvorm badge with edit option when step was skipped */}
+            {shouldSkipWerkvormStep && werkvorm && step > 1 && (
+              <Badge 
+                variant="outline" 
+                className={cn(
+                  "cursor-pointer hover:bg-muted flex items-center gap-1",
+                  WERKVORM_INFO[werkvorm].color
+                )}
+                onClick={() => setStep(1)}
+              >
+                {werkvorm}
+                <Pencil className="h-3 w-3 ml-1" />
+              </Badge>
+            )}
+            <Badge variant="default" className="flex items-center gap-1">
+              <TrendingUp className="h-3 w-3" />
+              {matchScore}% match
+            </Badge>
+          </div>
         </div>
 
         <div className="py-4 min-h-[280px]">
@@ -603,8 +626,8 @@ export function PlacementConfirmDialog({
 
         <DialogFooter className="flex justify-between">
           <div>
-            {step > 1 && (
-              <Button variant="ghost" onClick={() => setStep(step - 1)} disabled={isSubmitting}>
+            {canGoBack() && (
+              <Button variant="ghost" onClick={handleBack} disabled={isSubmitting}>
                 <ChevronLeft className="h-4 w-4 mr-1" />
                 Vorige
               </Button>
