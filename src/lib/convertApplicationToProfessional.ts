@@ -135,22 +135,25 @@ export async function convertApplicationToProfessional(
       return { success: false, error: "No organization found" };
     }
 
-    // Check for duplicate professional by email
-    const { data: existingProfessional } = await supabase
-      .from('professionals')
-      .select('id, full_name')
-      .eq('email', application.email_from)
-      .maybeSingle();
+    // Check for duplicate professional by email (case-insensitive)
+    const normalizedEmail = application.email_from.trim().toLowerCase();
+    const { data: duplicateCheck } = await supabase
+      .rpc('check_duplicate_email', { 
+        p_email: normalizedEmail, 
+        p_table: 'professionals' 
+      });
+    
+    const existingProfessional = duplicateCheck?.[0] || null;
 
     if (existingProfessional) {
       if (showToast) {
-        toast.error(`Professional bestaat al: ${existingProfessional.full_name}`);
+        toast.error(`Professional bestaat al: ${existingProfessional.naam}`);
       }
       return { 
         success: false, 
         error: "Duplicate professional",
         professionalId: existingProfessional.id,
-        professionalName: existingProfessional.full_name
+        professionalName: existingProfessional.naam
       };
     }
 
