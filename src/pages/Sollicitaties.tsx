@@ -660,6 +660,16 @@ const Sollicitaties = () => {
     loadApplications();
   };
 
+  // Synchronize selectedApplication with fresh data after applications reload
+  useEffect(() => {
+    if (selectedApplication && applications.length > 0) {
+      const freshApp = applications.find(a => a.id === selectedApplication.id);
+      if (freshApp && JSON.stringify(freshApp) !== JSON.stringify(selectedApplication)) {
+        setSelectedApplication(freshApp);
+      }
+    }
+  }, [applications, selectedApplication]);
+
   // Bulk actions handlers
   const handleSelectApplication = (id: string, selected: boolean) => {
     setSelectedApplicationIds(prev => {
