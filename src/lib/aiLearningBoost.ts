@@ -4,6 +4,8 @@ interface SuccessPattern {
   functie_niveau?: string;
   sector?: string;
   doelgroep?: string;
+  rating?: number;
+  match_score?: number;
   boost_factor: number;
   occurrence_count: number;
 }
@@ -44,16 +46,23 @@ export async function loadSuccessPatterns(): Promise<SuccessPattern[]> {
     const patterns: SuccessPattern[] = [];
     
     for (const item of knowledgeItems || []) {
-      const value = item.value as any;
+      const value = item.value as Record<string, unknown>;
       
       // Extract pattern data from various knowledge formats
       if (value?.pattern_type === 'sector_function_success' || 
           value?.sector || value?.functie || value?.functie_niveau) {
+        
+        // Calculate boost factor based on rating and occurrence
+        const rating = (value.rating as number) || 4;
+        const baseBoost = rating >= 4.5 ? 0.12 : rating >= 4 ? 0.08 : 0.05;
+        
         patterns.push({
-          functie_niveau: value.functie_niveau || value.functie,
-          sector: value.sector,
-          doelgroep: value.doelgroep,
-          boost_factor: Math.min(0.15, (value.success_rate || 0.7) * 0.2),
+          functie_niveau: (value.functie_niveau as string) || (value.functie as string),
+          sector: value.sector as string,
+          doelgroep: value.doelgroep as string,
+          rating: value.rating as number,
+          match_score: value.match_score as number,
+          boost_factor: Math.min(0.15, baseBoost),
           occurrence_count: item.occurrence_count || 1
         });
       }
