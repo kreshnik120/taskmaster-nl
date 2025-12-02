@@ -119,7 +119,7 @@ serve(async (req) => {
 
       const { error: skillsError } = await supabase
         .from('ai_knowledge_base')
-        .upsert(skillsKnowledge, { onConflict: 'org_id,category,key' });
+        .insert(skillsKnowledge);
 
       if (skillsError) {
         errors.push(`Skills error for ${app.id}: ${skillsError.message}`);
@@ -158,7 +158,7 @@ serve(async (req) => {
 
       const { error: expError } = await supabase
         .from('ai_knowledge_base')
-        .upsert(experienceKnowledge, { onConflict: 'org_id,category,key' });
+        .insert(experienceKnowledge);
 
       if (expError) {
         errors.push(`Experience error for ${app.id}: ${expError.message}`);
