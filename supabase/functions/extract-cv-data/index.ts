@@ -52,14 +52,16 @@ Geef terug in dit EXACTE JSON formaat (geen extra tekst):
   "confidence": 0.8
 }
 
-**KRITIEK - functie_niveau moet EXACT een van deze waarden zijn:**
+**KRITIEK - functie_niveau moet EXACT een van deze waarden zijn (ZONDER haakjes!):**
 - "VIG" (voor Verzorgende IG)
 - "HBO-V" (voor HBO Verpleegkundige)
-- "Verpleegkundige (MBO)"
+- "Verpleegkundige MBO" (NIET "Verpleegkundige (MBO)" - GEEN haakjes!)
 - "Helpende"
 - "Begeleider"
 - "Persoonlijk begeleider"
 - "GGZ-agoog"
+
+**BELANGRIJK:** Gebruik NOOIT haakjes in functie_niveau! "Verpleegkundige MBO" is correct, "Verpleegkundige (MBO)" is FOUT.
 
 **KRITIEK - werkvorm moet EXACT een van deze waarden zijn:**
 - "ZZP" (zoek naar: "ZZP", "zzp", "zelfstandige zonder personeel", "freelance", "eigen bedrijf")
@@ -149,23 +151,34 @@ Belangrijk:
       };
     }
 
-    // Normalize functie_niveau variations
+    // Normalize functie_niveau variations - CRITICAL: Map to exact DB values without parentheses
     if (extractedData.functie_niveau) {
       const functieNiveauMapping: Record<string, string> = {
         "verzorgende ig": "VIG",
         "verzorgende IG": "VIG",
+        "verzorgende-ig": "VIG",
         "vig": "VIG",
         "hbo verpleegkundige": "HBO-V",
         "hbo-v": "HBO-V",
+        "hbo v": "HBO-V",
         "hbov": "HBO-V",
-        "verpleegkundige mbo": "Verpleegkundige (MBO)",
-        "verpleegkundige": "Verpleegkundige (MBO)",
+        // CRITICAL FIX: All variations map to "Verpleegkundige MBO" WITHOUT parentheses
+        "verpleegkundige mbo": "Verpleegkundige MBO",
+        "verpleegkundige (mbo)": "Verpleegkundige MBO",
+        "mbo verpleegkundige": "Verpleegkundige MBO",
+        "verpleegkundige": "Verpleegkundige MBO",
+        "vp mbo": "Verpleegkundige MBO",
         "helpende": "Helpende",
         "helpende 2": "Helpende",
+        "helpende niveau 2": "Helpende",
         "begeleider": "Begeleider",
+        "agogisch medewerker": "Begeleider",
         "persoonlijk begeleider": "Persoonlijk begeleider",
+        "pb": "Persoonlijk begeleider",
+        "pb-er": "Persoonlijk begeleider",
         "ggz-agoog": "GGZ-agoog",
         "ggz agoog": "GGZ-agoog",
+        "ggz medewerker": "GGZ-agoog",
       };
 
       const normalized = extractedData.functie_niveau.toLowerCase().trim();
