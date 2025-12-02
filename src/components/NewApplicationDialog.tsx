@@ -354,9 +354,16 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
 
       const pdfBase64 = await base64Promise;
 
-      // Call extract-cv-data edge function
+      // Use default ABCzorg org_id for knowledge base creation
+      const userOrgId = '550e8400-e29b-41d4-a716-446655440000';
+
+      // Call extract-cv-data edge function with orgId for knowledge creation
       const { data, error } = await supabase.functions.invoke('extract-cv-data', {
-        body: { pdfBase64, filename: file.name }
+        body: { 
+          pdfBase64, 
+          filename: file.name,
+          orgId: userOrgId // Pass org_id for knowledge base items
+        }
       });
 
       if (error) throw error;
