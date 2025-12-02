@@ -6,13 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState, useCallback } from "react";
-import { Loader2, X, ChevronRight, ChevronLeft, CheckCircle2, Upload, FileText, Sparkles } from "lucide-react";
+import { Loader2, X, ChevronRight, ChevronLeft, CheckCircle2, Upload, FileText, Sparkles, ChevronDown, Search, AlertCircle } from "lucide-react";
 
 const applicationSchema = z.object({
   naam: z.string().min(1, "Naam is verplicht"),
@@ -135,31 +136,65 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
     },
   });
 
+  // Completeness Score v2: Inclusief CV extractie velden
   const calculateCompletenessScore = (data: ApplicationFormData): number => {
     let score = 0;
-    const weights = {
-      naam: 15,
-      email: 15,
-      telefoon: 10,
-      functie_niveau: 20,
-      werkvorm: 15,
-      regio: 10,
-      beschikbaarheid: 5,
+    
+    // Basis velden (75% totaal)
+    const basisWeights = {
+      naam: 10,
+      email: 10,
+      telefoon: 8,
+      functie_niveau: 15,
+      werkvorm: 10,
+      regio: 8,
+      beschikbaarheid: 4,
       ervaring_sector: 5,
       doelgroep_ervaring: 5,
     };
 
-    if (data.naam) score += weights.naam;
-    if (data.email) score += weights.email;
-    if (data.telefoon) score += weights.telefoon;
-    if (data.functie_niveau) score += weights.functie_niveau;
-    if (data.werkvorm) score += weights.werkvorm;
-    if (data.regio) score += weights.regio;
-    if (data.beschikbaarheid) score += weights.beschikbaarheid;
-    if (selectedSectoren.length > 0) score += weights.ervaring_sector;
-    if (selectedDoelgroepen.length > 0) score += weights.doelgroep_ervaring;
+    // Verrijking velden van CV (25% totaal)
+    const verrijkingWeights = {
+      jaren_ervaring: 5,
+      opleidingen: 5,
+      leidinggevende_ervaring: 3,
+      postcode: 3,
+      certificaten: 3,
+      nachtdienst_bereid: 2,
+      weekenddienst_bereid: 2,
+      talen: 2,
+    };
+
+    // Basis score berekening
+    if (data.naam) score += basisWeights.naam;
+    if (data.email) score += basisWeights.email;
+    if (data.telefoon) score += basisWeights.telefoon;
+    if (data.functie_niveau) score += basisWeights.functie_niveau;
+    if (data.werkvorm) score += basisWeights.werkvorm;
+    if (data.regio) score += basisWeights.regio;
+    if (data.beschikbaarheid) score += basisWeights.beschikbaarheid;
+    if (selectedSectoren.length > 0) score += basisWeights.ervaring_sector;
+    if (selectedDoelgroepen.length > 0) score += basisWeights.doelgroep_ervaring;
+
+    // Verrijking score (uit CV data)
+    if (cvExtractedData?.jaren_ervaring) score += verrijkingWeights.jaren_ervaring;
+    if (cvExtractedData?.opleidingen?.length > 0) score += verrijkingWeights.opleidingen;
+    if (cvExtractedData?.leidinggevende_ervaring) score += verrijkingWeights.leidinggevende_ervaring;
+    if (cvExtractedData?.postcode) score += verrijkingWeights.postcode;
+    if (cvExtractedData?.certificaten?.length > 0) score += verrijkingWeights.certificaten;
+    if (cvExtractedData?.nachtdienst_bereid !== null && cvExtractedData?.nachtdienst_bereid !== undefined) score += verrijkingWeights.nachtdienst_bereid;
+    if (cvExtractedData?.weekenddienst_bereid !== null && cvExtractedData?.weekenddienst_bereid !== undefined) score += verrijkingWeights.weekenddienst_bereid;
+    if (cvExtractedData?.talen?.length > 0) score += verrijkingWeights.talen;
 
     return Math.round(score);
+  };
+
+  // Bereken profiel kwaliteit label
+  const getProfileQualityLabel = (): { label: string; color: string } => {
+    const score = calculateCompletenessScore(watch());
+    if (score >= 90) return { label: "Premium", color: "bg-purple-100 text-purple-700 border-purple-300" };
+    if (score >= 75) return { label: "Rijk", color: "bg-green-100 text-green-700 border-green-300" };
+    return { label: "Basis", color: "bg-amber-100 text-amber-700 border-amber-300" };
   };
 
   const detectMissingInfo = (data: ApplicationFormData): string[] => {
@@ -704,21 +739,192 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
           {/* Step 3: Werkvorm & Details - Context-Aware */}
           {currentStep === 3 && (
             <div className="space-y-6 animate-fade-in">
-              {/* Auto-fill feedback banner */}
+              {/* Auto-fill feedback banner with profile quality */}
               {autoFilledFields.length > 0 && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4 dark:bg-green-950 dark:border-green-800">
                   <div className="flex items-start gap-3">
                     <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-green-900 dark:text-green-100">
-                        ✅ {autoFilledFields.length} velden automatisch ingevuld uit CV
-                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                          ✅ {autoFilledFields.length} velden automatisch ingevuld
+                        </p>
+                        <Badge variant="outline" className={`text-xs ${getProfileQualityLabel().color}`}>
+                          {getProfileQualityLabel().label} profiel
+                        </Badge>
+                        <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                          {calculateCompletenessScore(watch())}% compleet
+                        </Badge>
+                      </div>
                       <p className="text-xs text-green-700 dark:text-green-300 mt-1">
                         Controleer de onderstaande velden en vul ontbrekende informatie aan
                       </p>
                     </div>
                   </div>
                 </div>
+              )}
+
+              {/* Collapsible CV Data Preview */}
+              {cvExtractedData && (
+                <Collapsible defaultOpen={false}>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between text-left h-auto py-3">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-medium">Bekijk geëxtraheerde CV data</span>
+                        <Badge variant="secondary" className="text-xs">
+                          {Object.keys(cvExtractedData).filter(k => cvExtractedData[k] !== null && cvExtractedData[k] !== undefined && k !== 'confidence').length} velden
+                        </Badge>
+                      </div>
+                      <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-3">
+                    <div className="bg-muted/50 rounded-lg p-4 space-y-3 text-sm">
+                      {/* Contact Info */}
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Contact</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex items-center gap-2">
+                            {cvExtractedData.naam ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            <span className="text-muted-foreground">Naam:</span>
+                            <span className="font-medium">{cvExtractedData.naam || "—"}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {cvExtractedData.email ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            <span className="text-muted-foreground">Email:</span>
+                            <span className="font-medium truncate">{cvExtractedData.email || "—"}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {cvExtractedData.telefoon ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            <span className="text-muted-foreground">Telefoon:</span>
+                            <span className="font-medium">{cvExtractedData.telefoon || "—"}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {cvExtractedData.woonplaats ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            <span className="text-muted-foreground">Woonplaats:</span>
+                            <span className="font-medium">{cvExtractedData.woonplaats || "—"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Ervaring */}
+                      <div className="space-y-1 border-t pt-3">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ervaring</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex items-center gap-2">
+                            {cvExtractedData.functie_niveau ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            <span className="text-muted-foreground">Functie:</span>
+                            <span className="font-medium">{cvExtractedData.functie_niveau || "—"}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {cvExtractedData.jaren_ervaring ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            <span className="text-muted-foreground">Jaren ervaring:</span>
+                            <span className="font-medium">{cvExtractedData.jaren_ervaring ? `${cvExtractedData.jaren_ervaring} jaar` : "—"}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {cvExtractedData.leidinggevende_ervaring ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-muted-foreground" />}
+                            <span className="text-muted-foreground">Leidinggevend:</span>
+                            <span className="font-medium">{cvExtractedData.leidinggevende_ervaring ? "Ja" : "Nee"}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {cvExtractedData.hoogste_opleiding ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            <span className="text-muted-foreground">Opleiding:</span>
+                            <span className="font-medium truncate">{cvExtractedData.hoogste_opleiding || "—"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Beschikbaarheid & Mobiliteit */}
+                      <div className="space-y-1 border-t pt-3">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Beschikbaarheid & Mobiliteit</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex items-center gap-2">
+                            {cvExtractedData.werkvorm ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            <span className="text-muted-foreground">Werkvorm:</span>
+                            <span className="font-medium">{cvExtractedData.werkvorm || "—"}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {cvExtractedData.nachtdienst_bereid !== null ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            <span className="text-muted-foreground">Nachtdienst:</span>
+                            <span className="font-medium">{cvExtractedData.nachtdienst_bereid === true ? "Ja" : cvExtractedData.nachtdienst_bereid === false ? "Nee" : "—"}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {cvExtractedData.rijbewijs ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            <span className="text-muted-foreground">Rijbewijs:</span>
+                            <span className="font-medium">{cvExtractedData.rijbewijs || "—"}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {cvExtractedData.weekenddienst_bereid !== null ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <AlertCircle className="h-3 w-3 text-amber-500" />}
+                            <span className="text-muted-foreground">Weekenddienst:</span>
+                            <span className="font-medium">{cvExtractedData.weekenddienst_bereid === true ? "Ja" : cvExtractedData.weekenddienst_bereid === false ? "Nee" : "—"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Arrays: Opleidingen, Certificaten, Talen */}
+                      {(cvExtractedData.opleidingen?.length > 0 || cvExtractedData.certificaten?.length > 0 || cvExtractedData.talen?.length > 0) && (
+                        <div className="space-y-2 border-t pt-3">
+                          {cvExtractedData.opleidingen?.length > 0 && (
+                            <div>
+                              <span className="text-xs text-muted-foreground">Opleidingen:</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {cvExtractedData.opleidingen.map((opl: string, i: number) => (
+                                  <Badge key={i} variant="outline" className="text-xs bg-blue-50 text-blue-700">
+                                    {opl}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {cvExtractedData.certificaten?.length > 0 && (
+                            <div>
+                              <span className="text-xs text-muted-foreground">Certificaten:</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {cvExtractedData.certificaten.map((cert: string, i: number) => (
+                                  <Badge key={i} variant="outline" className="text-xs bg-green-50 text-green-700">
+                                    {cert}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {cvExtractedData.talen?.length > 0 && (
+                            <div>
+                              <span className="text-xs text-muted-foreground">Talen:</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {cvExtractedData.talen.map((taal: string, i: number) => (
+                                  <Badge key={i} variant="outline" className="text-xs bg-purple-50 text-purple-700">
+                                    {taal}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Confidence indicator */}
+                      {cvExtractedData.confidence && (
+                        <div className="border-t pt-3 flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">AI Confidence:</span>
+                          <Badge 
+                            variant="outline" 
+                            className={`text-xs ${
+                              cvExtractedData.confidence >= 0.8 
+                                ? "bg-green-50 text-green-700 border-green-200" 
+                                : cvExtractedData.confidence >= 0.5 
+                                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                                  : "bg-red-50 text-red-700 border-red-200"
+                            }`}
+                          >
+                            {Math.round(cvExtractedData.confidence * 100)}%
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
               )}
 
               {/* Critical fields if missing - show at top of Step 3 */}
@@ -782,8 +988,9 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Label>Gewenste werkvorm</Label>
-                      <Badge variant="outline" className="text-xs">
-                        📝 Nog invullen
+                      <Badge variant="outline" className="text-xs text-amber-600 border-amber-300 bg-amber-50">
+                        <Search className="h-3 w-3 mr-1" />
+                        Niet gevonden in CV
                       </Badge>
                     </div>
                     <Select 
@@ -809,8 +1016,9 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Label>Regio / Werkgebied</Label>
-                      <Badge variant="outline" className="text-xs">
-                        📝 Nog invullen
+                      <Badge variant="outline" className="text-xs text-amber-600 border-amber-300 bg-amber-50">
+                        <Search className="h-3 w-3 mr-1" />
+                        Niet gevonden in CV
                       </Badge>
                     </div>
                     <Input
@@ -825,8 +1033,9 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Label>Beschikbaarheid</Label>
-                      <Badge variant="outline" className="text-xs">
-                        📝 Nog invullen
+                      <Badge variant="outline" className="text-xs text-amber-600 border-amber-300 bg-amber-50">
+                        <Search className="h-3 w-3 mr-1" />
+                        Niet gevonden in CV
                       </Badge>
                     </div>
                     <Select 
@@ -859,8 +1068,9 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                       Eigen vervoer beschikbaar (auto/rijbewijs)
                     </Label>
                     {!autoFilledFields.includes("eigen_vervoer") && (
-                      <Badge variant="outline" className="text-xs ml-2">
-                        📝 Nog invullen
+                      <Badge variant="outline" className="text-xs ml-2 text-amber-600 border-amber-300 bg-amber-50">
+                        <Search className="h-3 w-3 mr-1" />
+                        Niet gevonden
                       </Badge>
                     )}
                   </div>
