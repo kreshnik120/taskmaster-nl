@@ -26,12 +26,16 @@ serve(async (req) => {
     console.log('🔍 Fetching unprocessed system events...');
     
     // Haal onverwerkte events op (max 50 per run)
+    // IMPORTANT: Filter out test data to prevent AI learning from test entities
     const { data: events, error: eventsError } = await supabase
       .from('system_events')
       .select('*')
       .is('processed_at', null)
+      .eq('is_test_data', false) // Filter out test data
       .order('created_at', { ascending: true })
       .limit(50);
+    
+    console.log('🛡️ Test data filter active - only learning from production data');
     
     if (eventsError) {
       console.error('❌ Error fetching events:', eventsError);

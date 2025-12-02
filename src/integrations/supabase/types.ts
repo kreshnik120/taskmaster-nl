@@ -788,6 +788,7 @@ export type Database = {
           end_date: string | null
           hourly_rate_id: string | null
           id: string
+          is_test_data: boolean | null
           notes: string | null
           plaatsing_type: string | null
           professional_id: string
@@ -808,6 +809,7 @@ export type Database = {
           end_date?: string | null
           hourly_rate_id?: string | null
           id?: string
+          is_test_data?: boolean | null
           notes?: string | null
           plaatsing_type?: string | null
           professional_id: string
@@ -828,6 +830,7 @@ export type Database = {
           end_date?: string | null
           hourly_rate_id?: string | null
           id?: string
+          is_test_data?: boolean | null
           notes?: string | null
           plaatsing_type?: string | null
           professional_id?: string
@@ -2384,6 +2387,7 @@ export type Database = {
           email_subject: string | null
           extracted_data: Json | null
           id: string
+          is_test_data: boolean | null
           missing_info: Json | null
           org_id: string | null
           pipeline_stage: string | null
@@ -2405,6 +2409,7 @@ export type Database = {
           email_subject?: string | null
           extracted_data?: Json | null
           id?: string
+          is_test_data?: boolean | null
           missing_info?: Json | null
           org_id?: string | null
           pipeline_stage?: string | null
@@ -2426,6 +2431,7 @@ export type Database = {
           email_subject?: string | null
           extracted_data?: Json | null
           id?: string
+          is_test_data?: boolean | null
           missing_info?: Json | null
           org_id?: string | null
           pipeline_stage?: string | null
@@ -2707,6 +2713,7 @@ export type Database = {
           heeft_auto: boolean | null
           heeft_rijbewijs: boolean | null
           id: string
+          is_test_data: boolean | null
           kvk_nummer: string | null
           org_id: string
           postcode: string | null
@@ -2737,6 +2744,7 @@ export type Database = {
           heeft_auto?: boolean | null
           heeft_rijbewijs?: boolean | null
           id?: string
+          is_test_data?: boolean | null
           kvk_nummer?: string | null
           org_id: string
           postcode?: string | null
@@ -2767,6 +2775,7 @@ export type Database = {
           heeft_auto?: boolean | null
           heeft_rijbewijs?: boolean | null
           id?: string
+          is_test_data?: boolean | null
           kvk_nummer?: string | null
           org_id?: string
           postcode?: string | null
@@ -3203,6 +3212,7 @@ export type Database = {
           event_data: Json
           event_type: string
           id: string
+          is_test_data: boolean | null
           learning_outcome: Json | null
           metadata: Json | null
           org_id: string | null
@@ -3216,6 +3226,7 @@ export type Database = {
           event_data: Json
           event_type: string
           id?: string
+          is_test_data?: boolean | null
           learning_outcome?: Json | null
           metadata?: Json | null
           org_id?: string | null
@@ -3229,6 +3240,7 @@ export type Database = {
           event_data?: Json
           event_type?: string
           id?: string
+          is_test_data?: boolean | null
           learning_outcome?: Json | null
           metadata?: Json | null
           org_id?: string | null

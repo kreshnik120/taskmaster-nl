@@ -27,16 +27,19 @@ serve(async (req) => {
 
   try {
     console.log("[learn-from-pipeline] Starting pipeline learning analysis...");
+    console.log("[learn-from-pipeline] 🛡️ Test data filter active - only learning from production data");
 
     // Get recent stage transitions from system_events (last 7 days)
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     
     // Check for both event types: application_stage_changed and pipeline_stage_changed
+    // IMPORTANT: Filter out test data to prevent AI learning from test entities
     const { data: events, error: eventsError } = await supabase
       .from("system_events")
       .select("*")
       .in("event_type", ["pipeline_stage_changed", "application_stage_changed"])
-      .is("processed_at", null) // Use processed_at instead of applied_to_knowledge_base
+      .is("processed_at", null)
+      .eq("is_test_data", false) // Filter out test data
       .gte("created_at", sevenDaysAgo)
       .order("created_at", { ascending: false })
       .limit(100);
