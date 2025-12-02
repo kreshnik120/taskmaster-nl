@@ -34,6 +34,7 @@ import { MatchScoreBreakdown } from "@/components/recruitment/MatchScoreBreakdow
 import { ApplicationNotes } from "@/components/recruitment/ApplicationNotes";
 import { AIMatchInsights } from "@/components/recruitment/AIMatchInsights";
 import { AIRecommendationBadge } from "@/components/recruitment/AIRecommendationBadge";
+import { AIFeedbackButtons } from "@/components/recruitment/AIFeedbackButtons";
 import { SECTOR_SIMILARITY, functieMatchesAny, calculateRegioScore, calculateErvaringBonus, LEIDINGGEVENDE_BONUS } from "@/lib/constants/matchingConstants";
 import { loadSuccessPatterns, calculateAILearningBoost, getCachedSuccessPatterns } from "@/lib/aiLearningBoost";
 
@@ -2116,6 +2117,9 @@ export function ApplicationDetailModal({
                                   <AIRecommendationBadge 
                                     matchScore={client.matchScore} 
                                     reasons={client.matchReasons}
+                                    entityType="client_match"
+                                    entityId={client.id}
+                                    recommendationType="client_matching"
                                   />
                                 </div>
                                 
@@ -2158,25 +2162,33 @@ export function ApplicationDetailModal({
                               </div>
                             </div>
                             
-                            <div className="flex gap-2 pt-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  window.location.href = `/klanten`;
-                                }}
-                              >
-                                Bekijk Klant
-                              </Button>
-                              <Button
-                                variant="default"
-                                size="sm"
-                                onClick={() => {
-                                  toast.info("Direct koppelen functionaliteit komt binnenkort");
-                                }}
-                              >
-                                Direct Koppelen
-                              </Button>
+                            <div className="flex items-center justify-between gap-2 pt-2">
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    window.location.href = `/klanten`;
+                                  }}
+                                >
+                                  Bekijk Klant
+                                </Button>
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() => {
+                                    toast.info("Direct koppelen functionaliteit komt binnenkort");
+                                  }}
+                                >
+                                  Direct Koppelen
+                                </Button>
+                              </div>
+                              <AIFeedbackButtons
+                                suggestionId={`match-${application.id}-${client.id}`}
+                                entityType="client_match"
+                                entityId={client.id}
+                                matchScore={client.matchScore}
+                              />
                             </div>
                           </div>
                         ))}
