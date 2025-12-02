@@ -129,6 +129,7 @@ export function ProfessionalDetailModal({
   const [basicsOpen, setBasicsOpen] = useState(true);
   const [contactOpen, setContactOpen] = useState(true);
   const [financialOpen, setFinancialOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("profiel");
   
   const [editData, setEditData] = useState({
     full_name: "",
@@ -338,7 +339,7 @@ export function ProfessionalDetailModal({
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="profiel" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="profiel">
               <User className="h-4 w-4 mr-2" />
@@ -736,7 +737,7 @@ export function ProfessionalDetailModal({
           </TabsContent>
 
           <TabsContent value="historiek" className="mt-6">
-            <PlacementHistory professionalId={professional.id} />
+            <PlacementHistory professionalId={professional.id} isActive={activeTab === "historiek"} />
           </TabsContent>
 
           <TabsContent value="plaatsing" className="mt-6">

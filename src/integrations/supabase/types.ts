@@ -179,6 +179,7 @@ export type Database = {
           last_verified: string | null
           needs_review: boolean | null
           observation_count: number | null
+          occurrence_count: number | null
           org_id: string
           original_text: string | null
           redacted_text: string | null
@@ -237,6 +238,7 @@ export type Database = {
           last_verified?: string | null
           needs_review?: boolean | null
           observation_count?: number | null
+          occurrence_count?: number | null
           org_id: string
           original_text?: string | null
           redacted_text?: string | null
@@ -295,6 +297,7 @@ export type Database = {
           last_verified?: string | null
           needs_review?: boolean | null
           observation_count?: number | null
+          occurrence_count?: number | null
           org_id?: string
           original_text?: string | null
           redacted_text?: string | null
