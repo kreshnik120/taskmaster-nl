@@ -174,3 +174,7 @@ verify_jwt = true
 
 [functions.backfill-cv-knowledge]
 verify_jwt = false
+
+[functions.learn-from-pipeline]
+verify_jwt = false
+schedule = "0 */3 * * *"  # Elke 3 uur - learn from pipeline transitions
