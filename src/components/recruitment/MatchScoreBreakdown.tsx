@@ -1,11 +1,18 @@
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { AlertCircle, CheckCircle2, AlertTriangle } from "lucide-react";
 
 interface ScoreBreakdown {
   regio: { score: number; match: boolean; reason: string };
-  sector: { score: number; match: boolean; reason: string };
+  sector: { 
+    score: number; 
+    match: boolean; 
+    reason: string; 
+    directMatches?: string[];
+    relatedMatches?: string[];
+  };
   doelgroep: { score: number; match: boolean; reason: string };
   functie: { score: number; match: boolean; reason: string };
   bureau: { score: number; match: boolean; reason: string };
@@ -59,11 +66,42 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
               <div key={criterion.key} className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
-                    {criterion.match ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4 text-muted-foreground" />
-                    )}
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          {criterion.key === 'sector' && breakdown.sector.relatedMatches && breakdown.sector.relatedMatches.length > 0 ? (
+                            <AlertTriangle className="h-4 w-4 text-amber-500" />
+                          ) : criterion.match ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </TooltipTrigger>
+                        {criterion.key === 'sector' && breakdown.sector.relatedMatches && breakdown.sector.relatedMatches.length > 0 && (
+                          <TooltipContent>
+                            <p className="text-xs">
+                              <span className="font-medium">Gerelateerde sectoren:</span><br />
+                              {breakdown.sector.relatedMatches.map((rel, idx) => {
+                                const SECTOR_REL_MAP: Record<string, string> = {
+                                  "GHZ": "60% gerelateerd aan GGZ/Jeugdzorg",
+                                  "GGZ": "60% gerelateerd aan GHZ/Verslavingszorg",
+                                  "VVT": "70% gerelateerd aan Thuiszorg/Ziekenhuis",
+                                  "Thuiszorg": "70% gerelateerd aan VVT/Ziekenhuis",
+                                  "Jeugdzorg": "50% gerelateerd aan GHZ/GGZ",
+                                  "Ziekenhuis/Klinisch": "60% gerelateerd aan VVT/Thuiszorg",
+                                  "Verslavingszorg": "60% gerelateerd aan GGZ"
+                                };
+                                return (
+                                  <span key={idx}>
+                                    {rel} ({SECTOR_REL_MAP[rel] || "gerelateerd"}){idx < breakdown.sector.relatedMatches!.length - 1 ? ', ' : ''}
+                                  </span>
+                                );
+                              })}
+                            </p>
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    </TooltipProvider>
                     <span className="font-medium">{criterion.label}</span>
                     <Badge variant="outline" className="text-xs">
                       {criterion.weight}
@@ -80,7 +118,11 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                     className="h-2"
                   />
                   <div 
-                    className={`absolute top-0 left-0 h-2 rounded-full transition-all ${getProgressColor(criterion.score, maxScore)}`}
+                    className={`absolute top-0 left-0 h-2 rounded-full transition-all ${
+                      criterion.key === 'sector' && breakdown.sector.relatedMatches && breakdown.sector.relatedMatches.length > 0
+                        ? 'bg-amber-500'
+                        : getProgressColor(criterion.score, maxScore)
+                    }`}
                     style={{ width: `${percentage}%` }}
                   />
                 </div>
