@@ -273,9 +273,13 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
       const completenessScore = calculateCompletenessScore(data);
       const missingInfo = detectMissingInfo(data);
 
+      // Default org_id voor ABCzorg - wordt later door team gewijzigd indien nodig
+      const defaultOrgId = "550e8400-e29b-41d4-a716-446655440000";
+
       const { error: insertError } = await supabase
         .from("professional_applications")
         .insert({
+          org_id: defaultOrgId,
           email_from: data.email,
           email_subject: `Nieuwe sollicitatie: ${data.naam}`,
           extracted_data: extractedData,
