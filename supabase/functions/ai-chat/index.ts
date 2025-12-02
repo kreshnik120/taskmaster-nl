@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.10.2-soft-delete-filter";
+const SYSTEM_PROMPT_VERSION = "v2.10.3-org-mapping-fix";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -4092,7 +4092,9 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                                 const naam = data.naam || app.email_from || 'Onbekend';
                                 const functie = data.functie_niveau || 'n/a';
                                 const werkvorm = data.werkvorm || 'n/a';
-                                const organisatie = data.assigned_organization || 'Niet toegewezen';
+                                const organisatie = app.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" :
+                                                    app.org_id === "650e8400-e29b-41d4-a716-446655440001" ? "CitoZorg" : 
+                                                    "Niet toegewezen";
                                 const regio = data.regio || 'n/a';
                                 
                                 return `${i + 1}. **${naam}** (${functie})
