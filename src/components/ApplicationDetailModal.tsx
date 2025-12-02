@@ -36,7 +36,7 @@ import { AIMatchInsights } from "@/components/recruitment/AIMatchInsights";
 import { AIRecommendationBadge } from "@/components/recruitment/AIRecommendationBadge";
 import { AIFeedbackButtons } from "@/components/recruitment/AIFeedbackButtons";
 import { SECTOR_SIMILARITY, functieMatchesAny, calculateRegioScore, calculateErvaringBonus, LEIDINGGEVENDE_BONUS } from "@/lib/constants/matchingConstants";
-import { loadSuccessPatterns, calculateAILearningBoost, getCachedSuccessPatterns } from "@/lib/aiLearningBoost";
+import { loadSuccessPatterns, calculateAILearningBoost, getCachedSuccessPatterns, trackPatternUsage } from "@/lib/aiLearningBoost";
 
 interface Application {
   id: string;
@@ -955,6 +955,11 @@ export function ApplicationDetailModal({
           const aiBoostPoints = Math.round(aiBoost.boost * 15 / 100);
           score += aiBoostPoints;
           reasons.push(...aiBoost.reasons.map(r => `🤖 ${r}`));
+          
+          // Track pattern usage (fire-and-forget)
+          if (aiBoost.usedPatternIds.length > 0) {
+            trackPatternUsage(aiBoost.usedPatternIds);
+          }
         }
         
         const breakdown = {

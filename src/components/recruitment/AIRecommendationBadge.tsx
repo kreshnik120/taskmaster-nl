@@ -22,19 +22,42 @@ async function logRecommendationAudit(
   aiConfidence: number,
   recommendationData: Json
 ) {
+  console.log(`[AIRecommendationBadge] Attempting audit log: type=${recommendationType}, entity=${entityType}, id=${entityId}, score=${matchScore}`);
+  
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user?.id) return;
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
     
-    const { data: userOrg } = await supabase
+    if (authError) {
+      console.warn('[AIRecommendationBadge] Auth error:', authError.message);
+      return;
+    }
+    
+    if (!user?.id) {
+      console.warn('[AIRecommendationBadge] No user logged in - skipping audit');
+      return;
+    }
+    
+    console.log(`[AIRecommendationBadge] User authenticated: ${user.id}`);
+    
+    const { data: userOrg, error: orgError } = await supabase
       .from("user_organizations")
       .select("org_id")
       .eq("user_id", user.id)
       .single();
     
-    if (!userOrg?.org_id) return;
+    if (orgError) {
+      console.warn('[AIRecommendationBadge] Org lookup error:', orgError.message);
+      return;
+    }
     
-    await supabase.from("ai_recommendation_audit").insert([{
+    if (!userOrg?.org_id) {
+      console.warn('[AIRecommendationBadge] No org_id found for user');
+      return;
+    }
+    
+    console.log(`[AIRecommendationBadge] Org found: ${userOrg.org_id}`);
+    
+    const { error: insertError } = await supabase.from("ai_recommendation_audit").insert([{
       org_id: userOrg.org_id,
       user_id: user.id,
       recommendation_type: recommendationType,
@@ -44,9 +67,15 @@ async function logRecommendationAudit(
       ai_confidence: aiConfidence,
       recommendation_data: recommendationData
     }]);
+    
+    if (insertError) {
+      console.error('[AIRecommendationBadge] Insert error:', insertError.message);
+      return;
+    }
+    
+    console.log(`[AIRecommendationBadge] ✅ Audit record created successfully`);
   } catch (err) {
-    // Silent fail - audit logging should not break UI
-    console.debug("Audit log failed:", err);
+    console.error("[AIRecommendationBadge] Unexpected error:", err);
   }
 }
 

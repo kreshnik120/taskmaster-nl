@@ -5,7 +5,8 @@ import {
   getDoelgroepCompatibility 
 } from "@/lib/constants/aiDomainKnowledge";
 
-interface SuccessPattern {
+export interface SuccessPattern {
+  id: string; // Knowledge base ID for usage tracking
   functie_niveau?: string;
   sector?: string;
   doelgroep?: string;
@@ -20,6 +21,9 @@ let successPatternsCache: SuccessPattern[] = [];
 let lastCacheUpdate = 0;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// Track which patterns were used in the last matching operation
+let lastUsedPatternIds: string[] = [];
+
 /**
  * Load success patterns from AI knowledge base
  * These are patterns the AI has learned correlate with successful placements
@@ -29,22 +33,23 @@ export async function loadSuccessPatterns(): Promise<SuccessPattern[]> {
   
   // Return cached data if still valid
   if (successPatternsCache.length > 0 && now - lastCacheUpdate < CACHE_TTL) {
+    console.log(`[AI Patterns] Using cached patterns: ${successPatternsCache.length} patterns`);
     return successPatternsCache;
   }
   
   try {
     const { data: knowledgeItems, error } = await supabase
       .from("ai_knowledge_base")
-      .select("key, value, occurrence_count, confidence_score")
+      .select("id, key, value, occurrence_count, confidence_score, usage_count")
       .eq("category", "success_patterns")
       .is("deleted_at", null)
-      .gte("confidence_score", 0.4) // Lowered from 0.6 to include more learned patterns
+      .gte("confidence_score", 0.4)
       .order("occurrence_count", { ascending: false })
-      .limit(100); // Increased from 50
+      .limit(100);
     
     if (error) {
-      console.error("Error loading success patterns:", error);
-      return successPatternsCache; // Return stale cache on error
+      console.error("[AI Patterns] Error loading:", error);
+      return successPatternsCache;
     }
     
     // Parse knowledge items into success patterns
@@ -64,12 +69,13 @@ export async function loadSuccessPatterns(): Promise<SuccessPattern[]> {
         const baseBoost = storedBoost || (rating >= 4.5 ? 0.12 : rating >= 4 ? 0.08 : 0.05);
         
         patterns.push({
+          id: item.id,
           functie_niveau: (value.functie_niveau as string) || (value.functie as string),
           sector: value.sector as string,
           doelgroep: value.doelgroep as string,
           rating: value.rating as number,
           match_score: value.match_score as number,
-          boost_factor: Math.min(0.20, baseBoost), // Allow up to 20% boost
+          boost_factor: Math.min(0.20, baseBoost),
           occurrence_count: item.occurrence_count || 1
         });
       }
@@ -78,10 +84,10 @@ export async function loadSuccessPatterns(): Promise<SuccessPattern[]> {
     successPatternsCache = patterns;
     lastCacheUpdate = now;
     
-    console.log(`Loaded ${patterns.length} AI success patterns for matching boost`);
+    console.log(`[AI Patterns] Loaded ${patterns.length} patterns from database`);
     return patterns;
   } catch (err) {
-    console.error("Failed to load success patterns:", err);
+    console.error("[AI Patterns] Failed to load:", err);
     return successPatternsCache;
   }
 }
@@ -89,6 +95,7 @@ export async function loadSuccessPatterns(): Promise<SuccessPattern[]> {
 /**
  * Calculate AI learning boost for a match based on success patterns AND domain knowledge
  * Returns a percentage boost (0-20%) to add to the match score
+ * Also tracks which patterns were used for usage_count updates
  */
 export function calculateAILearningBoost(
   applicantFunctie: string | null,
@@ -99,10 +106,11 @@ export function calculateAILearningBoost(
   targetFunctie?: string | null,
   targetSectoren?: string[],
   targetDoelgroepen?: string[]
-): { boost: number; reasons: string[]; domainBoost: number; patternBoost: number } {
+): { boost: number; reasons: string[]; domainBoost: number; patternBoost: number; usedPatternIds: string[] } {
   let patternBoost = 0;
   let domainBoost = 0;
   const reasons: string[] = [];
+  const usedPatternIds: string[] = [];
   
   // === PART 1: Pattern-based boost from learned success patterns ===
   if (patterns.length > 0) {
@@ -163,6 +171,11 @@ export function calculateAILearningBoost(
       
       // Apply boost if pattern matches
       if (patternMatch && matchStrength > 0) {
+        // Track this pattern as used
+        if (pattern.id) {
+          usedPatternIds.push(pattern.id);
+        }
+        
         // Weight by occurrence count (threshold of 1 - even single occurrence counts)
         const occurrenceWeight = Math.min(1, pattern.occurrence_count / 1);
         // Weight by match strength (how well the applicant matches the pattern)
@@ -181,6 +194,9 @@ export function calculateAILearningBoost(
       }
     }
   }
+  
+  // Store used pattern IDs for later update
+  lastUsedPatternIds = usedPatternIds;
   
   // === PART 2: Domain knowledge boost for target matching ===
   if (targetFunctie || targetSectoren?.length || targetDoelgroepen?.length) {
@@ -217,11 +233,17 @@ export function calculateAILearningBoost(
   const cappedDomainBoost = Math.min(7, Math.round(domainBoost * 100));
   const totalBoost = Math.min(20, cappedPatternBoost + cappedDomainBoost);
   
+  // Log usage for debugging
+  if (usedPatternIds.length > 0) {
+    console.log(`[AI Boost] Applied ${usedPatternIds.length} patterns, total boost: ${totalBoost}%`);
+  }
+  
   return {
     boost: totalBoost,
     patternBoost: cappedPatternBoost,
     domainBoost: cappedDomainBoost,
-    reasons: reasons.slice(0, 3) // Max 3 reasons
+    reasons: reasons.slice(0, 3),
+    usedPatternIds
   };
 }
 
@@ -230,4 +252,77 @@ export function calculateAILearningBoost(
  */
 export function getCachedSuccessPatterns(): SuccessPattern[] {
   return successPatternsCache;
+}
+
+/**
+ * Update usage_count for patterns that were used in matching
+ * Call this after displaying match results to the user
+ */
+export async function updatePatternUsage(patternIds?: string[]): Promise<void> {
+  const idsToUpdate = patternIds || lastUsedPatternIds;
+  
+  if (idsToUpdate.length === 0) {
+    return;
+  }
+  
+  try {
+    // Update patterns individually (no RPC needed)
+    for (const id of idsToUpdate) {
+      const { data } = await supabase
+        .from('ai_knowledge_base')
+        .select('usage_count')
+        .eq('id', id)
+        .single();
+      
+      const currentCount = (data?.usage_count as number) || 0;
+      
+      await supabase
+        .from('ai_knowledge_base')
+        .update({ 
+          usage_count: currentCount + 1,
+          last_used_at: new Date().toISOString()
+        })
+        .eq('id', id);
+    }
+    
+    console.log(`[AI Patterns] ✅ Updated usage_count for ${idsToUpdate.length} patterns`);
+    
+    // Clear tracked IDs after update
+    lastUsedPatternIds = [];
+  } catch (err) {
+    console.error('[AI Patterns] Failed to update usage:', err);
+  }
+}
+
+/**
+ * Simple usage update without RPC - increment usage_count directly
+ */
+export async function trackPatternUsage(patternIds: string[]): Promise<void> {
+  if (patternIds.length === 0) return;
+  
+  try {
+    for (const id of patternIds) {
+      // Get current usage_count
+      const { data } = await supabase
+        .from('ai_knowledge_base')
+        .select('usage_count')
+        .eq('id', id)
+        .single();
+      
+      const currentCount = data?.usage_count || 0;
+      
+      // Increment
+      await supabase
+        .from('ai_knowledge_base')
+        .update({ 
+          usage_count: currentCount + 1,
+          last_used_at: new Date().toISOString()
+        })
+        .eq('id', id);
+    }
+    
+    console.log(`[AI Patterns] ✅ Tracked usage for ${patternIds.length} patterns`);
+  } catch (err) {
+    console.error('[AI Patterns] Usage tracking failed:', err);
+  }
 }
