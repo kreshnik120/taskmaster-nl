@@ -768,7 +768,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
               {cvExtractedData && (
                 <Collapsible defaultOpen={false}>
                   <CollapsibleTrigger asChild>
-                    <Button variant="outline" className="w-full justify-between text-left h-auto py-3">
+                    <Button variant="outline" className="w-full justify-between text-left h-auto py-3 group">
                       <div className="flex items-center gap-2">
                         <FileText className="h-4 w-4 text-primary" />
                         <span className="text-sm font-medium">Bekijk geëxtraheerde CV data</span>

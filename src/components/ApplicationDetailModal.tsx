@@ -403,7 +403,8 @@ export function ApplicationDetailModal({
         assigned_organization: editData.assigned_organization || null,
       };
 
-      const fields = {
+      // Basis velden (75%)
+      const basisFields = {
         naam: updatedExtractedData.naam,
         email: application.email_from,
         functie_niveau: updatedExtractedData.functie_niveau,
@@ -415,26 +416,45 @@ export function ApplicationDetailModal({
         doelgroep_ervaring: updatedExtractedData.doelgroep_ervaring,
       };
 
-      const weights = {
-        naam: 15,
-        email: 15,
-        functie_niveau: 20,
-        werkvorm: 15,
-        regio: 10,
-        telefoon: 10,
-        ervaring_sector: 5,
-        beschikbaarheid: 5,
-        doelgroep_ervaring: 5,
+      const basisWeights = {
+        naam: 10, email: 10, telefoon: 8, functie_niveau: 15,
+        werkvorm: 10, regio: 8, beschikbaarheid: 4,
+        ervaring_sector: 5, doelgroep_ervaring: 5,
+      };
+
+      // Verrijking velden (25%)
+      const verrijkingFields = {
+        jaren_ervaring: updatedExtractedData.jaren_ervaring,
+        opleidingen: updatedExtractedData.opleidingen,
+        leidinggevende_ervaring: updatedExtractedData.leidinggevende_ervaring,
+        postcode: updatedExtractedData.postcode,
+        certificaten: updatedExtractedData.certificaten,
+        nachtdienst_bereid: updatedExtractedData.nachtdienst_bereid,
+        weekenddienst_bereid: updatedExtractedData.weekenddienst_bereid,
+        talen: updatedExtractedData.talen,
+      };
+
+      const verrijkingWeights = {
+        jaren_ervaring: 5, opleidingen: 5, leidinggevende_ervaring: 3,
+        postcode: 3, certificaten: 3, nachtdienst_bereid: 2,
+        weekenddienst_bereid: 2, talen: 2,
       };
 
       let score = 0;
-      Object.entries(fields).forEach(([key, value]) => {
+      Object.entries(basisFields).forEach(([key, value]) => {
         if (value && (Array.isArray(value) ? value.length > 0 : true)) {
-          score += weights[key as keyof typeof weights] || 0;
+          score += basisWeights[key as keyof typeof basisWeights] || 0;
+        }
+      });
+      Object.entries(verrijkingFields).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== '') {
+          if (Array.isArray(value) ? value.length > 0 : true) {
+            score += verrijkingWeights[key as keyof typeof verrijkingWeights] || 0;
+          }
         }
       });
 
-      const completeness_score = Math.round(score);
+      const completeness_score = Math.min(100, Math.round(score));
 
       const { error } = await supabase
         .from("professional_applications")
@@ -804,6 +824,47 @@ export function ApplicationDetailModal({
         if (extractedData.leidinggevende_ervaring) {
           score += LEIDINGGEVENDE_BONUS;
           reasons.push('Leidinggevende ervaring');
+        }
+        
+        // NIEUW: Postcode afstand matching
+        const applicantPostcode = extractedData.postcode;
+        const clientRegio = client.regio?.[0] || '';
+        if (applicantPostcode && clientRegio) {
+          const postcodePrefix = applicantPostcode.substring(0, 2);
+          const postcodeRegioMap: Record<string, string[]> = {
+            '10': ['Noord-Holland'], '11': ['Noord-Holland'], '12': ['Noord-Holland'], '13': ['Noord-Holland'], '14': ['Noord-Holland'], '15': ['Noord-Holland'], '16': ['Noord-Holland'], '17': ['Noord-Holland'], '18': ['Noord-Holland'], '19': ['Noord-Holland'], '20': ['Noord-Holland'],
+            '21': ['Zuid-Holland'], '22': ['Zuid-Holland'], '23': ['Zuid-Holland'], '24': ['Zuid-Holland'], '25': ['Zuid-Holland'], '26': ['Zuid-Holland'], '27': ['Zuid-Holland'], '28': ['Zuid-Holland'], '29': ['Zuid-Holland'],
+            '30': ['Utrecht'], '31': ['Utrecht'], '32': ['Utrecht'], '33': ['Utrecht'], '34': ['Utrecht'], '35': ['Gelderland'], '36': ['Gelderland'], '37': ['Overijssel'],
+            '40': ['Gelderland'], '41': ['Gelderland'], '42': ['Gelderland'], '43': ['Gelderland'],
+            '50': ['Noord-Brabant'], '51': ['Noord-Brabant'], '52': ['Noord-Brabant'], '53': ['Noord-Brabant'], '54': ['Noord-Brabant'], '55': ['Noord-Brabant'], '56': ['Noord-Brabant'], '57': ['Noord-Brabant'], '58': ['Noord-Brabant'], '59': ['Limburg'],
+            '60': ['Limburg'], '61': ['Limburg'], '62': ['Limburg'], '63': ['Limburg'], '64': ['Limburg'],
+            '70': ['Overijssel'], '71': ['Overijssel'], '72': ['Overijssel'], '73': ['Overijssel'], '74': ['Overijssel'], '75': ['Overijssel'], '76': ['Drenthe'], '77': ['Drenthe'], '78': ['Drenthe'], '79': ['Drenthe'],
+            '80': ['Friesland'], '81': ['Friesland'], '82': ['Friesland'], '83': ['Friesland'], '84': ['Friesland'], '85': ['Friesland'], '86': ['Friesland'], '87': ['Friesland'], '88': ['Friesland'], '89': ['Groningen'],
+            '90': ['Groningen'], '91': ['Groningen'], '92': ['Groningen'], '93': ['Groningen'], '94': ['Groningen'], '95': ['Groningen'], '96': ['Groningen'], '97': ['Groningen'], '98': ['Groningen'], '99': ['Groningen'],
+          };
+          const postcodeProvincie = postcodeRegioMap[postcodePrefix]?.[0];
+          if (postcodeProvincie && clientRegio.toLowerCase().includes(postcodeProvincie.toLowerCase())) {
+            score += 5;
+            reasons.push(`Postcode match (${postcodeProvincie})`);
+          }
+        }
+        
+        // NIEUW: Dienstvorm matching (nacht/weekend)
+        if (extractedData.nachtdienst_bereid === true) {
+          score += 3;
+          reasons.push('Beschikbaar voor nachtdienst');
+        }
+        if (extractedData.weekenddienst_bereid === true) {
+          score += 3;
+          reasons.push('Beschikbaar voor weekenddienst');
+        }
+        
+        // NIEUW: Certificaten bonus
+        const applicantCertificaten = extractedData.certificaten || [];
+        if (Array.isArray(applicantCertificaten) && applicantCertificaten.length > 0) {
+          const certBonus = Math.min(5, applicantCertificaten.length * 2);
+          score += certBonus;
+          reasons.push(`${applicantCertificaten.length} certificaat/certificaten`);
         }
         
         const breakdown = {
