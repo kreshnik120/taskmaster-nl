@@ -24,12 +24,23 @@ interface MatchScoreBreakdownProps {
 }
 
 export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdownProps) {
+  // Default values for missing breakdown properties
+  const defaultCriterion = { score: 0, match: false, reason: 'Geen data beschikbaar' };
+  
+  const safeBreakdown = {
+    regio: breakdown?.regio || defaultCriterion,
+    sector: breakdown?.sector || { ...defaultCriterion, directMatches: [], relatedMatches: [] },
+    doelgroep: breakdown?.doelgroep || defaultCriterion,
+    functie: breakdown?.functie || defaultCriterion,
+    bureau: breakdown?.bureau || defaultCriterion,
+  };
+
   const criteria = [
-    { key: 'regio', label: 'Regio', weight: '30%', ...breakdown.regio },
-    { key: 'sector', label: 'Sector', weight: '25%', ...breakdown.sector },
-    { key: 'doelgroep', label: 'Doelgroep', weight: '20%', ...breakdown.doelgroep },
-    { key: 'functie', label: 'Functieniveau', weight: '15%', ...breakdown.functie },
-    { key: 'bureau', label: 'Bureau', weight: '10%', ...breakdown.bureau },
+    { key: 'regio', label: 'Regio', weight: '30%', ...safeBreakdown.regio },
+    { key: 'sector', label: 'Sector', weight: '25%', ...safeBreakdown.sector },
+    { key: 'doelgroep', label: 'Doelgroep', weight: '20%', ...safeBreakdown.doelgroep },
+    { key: 'functie', label: 'Functieniveau', weight: '15%', ...safeBreakdown.functie },
+    { key: 'bureau', label: 'Bureau', weight: '10%', ...safeBreakdown.bureau },
   ];
 
   const getScoreColor = (score: number) => {
@@ -69,7 +80,7 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger>
-                          {criterion.key === 'sector' && breakdown.sector.relatedMatches && breakdown.sector.relatedMatches.length > 0 ? (
+                      {criterion.key === 'sector' && safeBreakdown.sector.relatedMatches && safeBreakdown.sector.relatedMatches.length > 0 ? (
                             <AlertTriangle className="h-4 w-4 text-amber-500" />
                           ) : criterion.match ? (
                             <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -77,11 +88,11 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                             <AlertCircle className="h-4 w-4 text-muted-foreground" />
                           )}
                         </TooltipTrigger>
-                        {criterion.key === 'sector' && breakdown.sector.relatedMatches && breakdown.sector.relatedMatches.length > 0 && (
+                        {criterion.key === 'sector' && safeBreakdown.sector.relatedMatches && safeBreakdown.sector.relatedMatches.length > 0 && (
                           <TooltipContent>
                             <p className="text-xs">
                               <span className="font-medium">Gerelateerde sectoren:</span><br />
-                              {breakdown.sector.relatedMatches.map((rel, idx) => {
+                              {safeBreakdown.sector.relatedMatches.map((rel, idx) => {
                                 const SECTOR_REL_MAP: Record<string, string> = {
                                   "GHZ": "60% gerelateerd aan GGZ/Jeugdzorg",
                                   "GGZ": "60% gerelateerd aan GHZ/Verslavingszorg",
@@ -93,7 +104,7 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                                 };
                                 return (
                                   <span key={idx}>
-                                    {rel} ({SECTOR_REL_MAP[rel] || "gerelateerd"}){idx < breakdown.sector.relatedMatches!.length - 1 ? ', ' : ''}
+                                    {rel} ({SECTOR_REL_MAP[rel] || "gerelateerd"}){idx < safeBreakdown.sector.relatedMatches!.length - 1 ? ', ' : ''}
                                   </span>
                                 );
                               })}
@@ -119,7 +130,7 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                   />
                   <div 
                     className={`absolute top-0 left-0 h-2 rounded-full transition-all ${
-                      criterion.key === 'sector' && breakdown.sector.relatedMatches && breakdown.sector.relatedMatches.length > 0
+                      criterion.key === 'sector' && safeBreakdown.sector.relatedMatches && safeBreakdown.sector.relatedMatches.length > 0
                         ? 'bg-amber-500'
                         : getProgressColor(criterion.score, maxScore)
                     }`}
