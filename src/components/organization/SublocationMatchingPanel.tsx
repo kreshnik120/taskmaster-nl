@@ -79,6 +79,8 @@ export function SublocationMatchingPanel({
     id: string;
     name: string;
     matchScore: number;
+    werkvorm?: string;
+    functieNiveau?: string;
   } | null>(null);
 
   // Fetch active assignments
@@ -213,8 +215,14 @@ export function SublocationMatchingPanel({
     }
   };
 
-  const openConfirmDialog = (professionalId: string, professionalName: string, matchScore: number) => {
-    setSelectedProfessional({ id: professionalId, name: professionalName, matchScore });
+  const openConfirmDialog = (professional: Professional, matchScore: number) => {
+    setSelectedProfessional({ 
+      id: professional.id, 
+      name: professional.full_name, 
+      matchScore,
+      werkvorm: professional.werkvorm,
+      functieNiveau: professional.functie_niveau
+    });
     setConfirmDialogOpen(true);
   };
 
@@ -452,7 +460,7 @@ export function SublocationMatchingPanel({
                     </div>
 
                     <Button
-                      onClick={() => openConfirmDialog(prof.id, prof.full_name, prof.matchScore.totalScore)}
+                      onClick={() => openConfirmDialog(prof, prof.matchScore.totalScore)}
                       className="shrink-0"
                     >
                       Plaats hier
@@ -472,6 +480,8 @@ export function SublocationMatchingPanel({
           onOpenChange={setConfirmDialogOpen}
           professionalId={selectedProfessional.id}
           professionalName={selectedProfessional.name}
+          professionalWerkvorm={selectedProfessional.werkvorm}
+          professionalFunctieNiveau={selectedProfessional.functieNiveau}
           sublocationId={sublocationId}
           sublocationName={sublocationName}
           matchScore={selectedProfessional.matchScore}
