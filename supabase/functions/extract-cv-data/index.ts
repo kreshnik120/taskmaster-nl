@@ -78,18 +78,26 @@ Geef terug in dit EXACTE JSON formaat (geen extra tekst):
 - "GGZ-agoog"
 
 **KRITIEK - werkvorm moet EXACT een van deze waarden zijn:**
-- "ZZP"
-- "Uitzendkracht"
-- "ABCito constructie"
+- "ZZP" (zoek naar: "ZZP", "zzp", "zelfstandige zonder personeel", "freelance", "eigen bedrijf")
+- "Uitzendkracht" (zoek naar: "uitzendkracht", "tijdelijk contract", "via uitzendbureau", "flex")
+- "ABCito constructie" (zoek naar: "ABCito", "abcito", "payroll constructie")
+
+**EXTRA ZOEKTERMEN voor betere extractie:**
+- **werkvorm**: Let op woorden als "ZZP", "freelance", "uitzendwerk", "flex", "eigen onderneming", "payroll", "ABCito"
+- **beschikbaarheid**: Zoek naar "beschikbaar", "beschikbaarheid", "uur per week", "uren", "parttime", "fulltime", "voltijd", "24 uur", "32 uur", "40 uur", "flexibel"
+- **eigen_vervoer**: Zoek naar "rijbewijs", "auto", "eigen vervoer", "eigen auto", "mobiel", "kan reizen", "beschikt over auto"
+- **regio**: Let op woonplaats, werkgebied, voorkeur regio, beschikbaar in, werkt in
 
 Belangrijk:
 - functie_niveau: gebruik EXACT een van de 7 waarden hierboven
-- werkvorm: gebruik EXACT een van de 3 waarden hierboven
+- werkvorm: gebruik EXACT een van de 3 waarden hierboven, zoek actief naar synoniemen
 - ervaring_sector: array met 0 of meer waarden uit de lijst
 - doelgroep_ervaring: array met 0 of meer waarden uit de lijst
-- beschikbaarheid: gebruik een van de 4 waarden
+- beschikbaarheid: gebruik een van de 4 waarden, zoek actief naar uurvermelding
+- eigen_vervoer: boolean, zoek actief naar vervoer/rijbewijs vermeldingen
+- regio: zoek actief naar woonplaats/werkgebied vermeldingen
 - Als info ontbreekt, gebruik null (niet "null" als string)
-- eigen_vervoer: boolean true/false`;
+- Wees proactief: zoek actief naar synoniemen en indirecte vermeldingen`;
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
