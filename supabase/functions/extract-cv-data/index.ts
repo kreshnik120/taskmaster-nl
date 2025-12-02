@@ -31,26 +31,10 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    console.log("Parsing PDF...");
+    // AI Analysis with Gemini 2.5 Flash Vision (direct PDF analysis)
+    console.log(`Analyzing CV with AI Vision: ${filename || 'document.pdf'}`);
     
-    // Call parse-pdf-cv function
-    const { data: parseData, error: parseError } = await supabase.functions.invoke('parse-pdf-cv', {
-      body: { pdfBase64, filename }
-    });
-
-    if (parseError) {
-      console.error("PDF parse error:", parseError);
-      throw parseError;
-    }
-
-    const cvContent = parseData.text || "";
-    console.log(`PDF parsed: ${cvContent.length} characters extracted`);
-
-    // AI Analysis with Lovable AI (Gemini 2.5 Flash)
-    console.log("Starting AI analysis...");
-    const aiPrompt = `Analyseer dit CV en extract de volgende informatie in JSON formaat:
-
-CV inhoud: ${cvContent.substring(0, 3000)}
+    const aiPrompt = `Analyseer dit CV/PDF document en extract de volgende informatie in JSON formaat:
 
 Geef terug in dit EXACTE JSON formaat (geen extra tekst):
 {
@@ -108,8 +92,21 @@ Belangrijk:
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: "Je bent een HR assistent die CV's analyseert voor zorgverleners. Geef altijd pure JSON terug zonder markdown code blocks." },
-          { role: "user", content: aiPrompt }
+          {
+            role: "user",
+            content: [
+              { 
+                type: "text", 
+                text: "Je bent een HR assistent die CV's analyseert voor zorgverleners. Geef altijd pure JSON terug zonder markdown code blocks.\n\n" + aiPrompt
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:application/pdf;base64,${pdfBase64}`
+                }
+              }
+            ]
+          }
         ],
         temperature: 0.3,
       }),
@@ -200,7 +197,7 @@ Belangrijk:
       JSON.stringify({
         success: true,
         data: extractedData,
-        cvText: cvContent.substring(0, 500), // First 500 chars for preview
+        cvText: `CV analyzed via AI Vision (${filename || 'document.pdf'})`, // Vision analysis confirmation
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

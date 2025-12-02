@@ -338,12 +338,27 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
 
         setAutoFilledFields(filled);
 
-        toast.success("CV geanalyseerd!", {
-          description: `✅ ${filled.length} velden automatisch ingevuld`,
-        });
+        // Check if critical fields (naam + email) were extracted
+        const hasNaam = !!extracted.naam && extracted.naam !== "Voor- en achternaam";
+        const hasEmail = !!extracted.email;
 
-        // Jump to step 3 (review)
-        setCurrentStep(3);
+        if (hasNaam && hasEmail) {
+          // All critical fields present - jump to step 3
+          toast.success("CV geanalyseerd!", {
+            description: `✅ ${filled.length} velden automatisch ingevuld`,
+          });
+          setCurrentStep(3);
+        } else {
+          // Missing critical fields - go to step 1 to fill them
+          const missingFields = [];
+          if (!hasNaam) missingFields.push("Naam");
+          if (!hasEmail) missingFields.push("E-mail");
+          
+          toast.warning("CV gedeeltelijk geanalyseerd", {
+            description: `${filled.length} velden ingevuld. Vul aan: ${missingFields.join(", ")}`,
+          });
+          setCurrentStep(1);
+        }
       } else {
         throw new Error("CV analyse mislukt");
       }
@@ -431,7 +446,18 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
           </div>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={handleSubmit(onSubmit, (errors) => {
+          // Error callback - toon toast bij validatie failures
+          const errorMessages = Object.entries(errors)
+            .map(([field, error]) => `${field}: ${error?.message}`)
+            .filter(Boolean);
+          
+          if (errorMessages.length > 0) {
+            toast.error("Ontbrekende verplichte velden", {
+              description: errorMessages.join(" • "),
+            });
+          }
+        })} className="space-y-6">
           {/* Step 0: CV Upload */}
           {currentStep === 0 && (
             <div className="space-y-6 animate-fade-in">
@@ -653,18 +679,73 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
             <div className="space-y-6 animate-fade-in">
               {/* Auto-fill feedback banner */}
               {autoFilledFields.length > 0 && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 dark:bg-green-950 dark:border-green-800">
                   <div className="flex items-start gap-3">
-                    <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-green-900">
+                      <p className="text-sm font-medium text-green-900 dark:text-green-100">
                         ✅ {autoFilledFields.length} velden automatisch ingevuld uit CV
                       </p>
-                      <p className="text-xs text-green-700 mt-1">
+                      <p className="text-xs text-green-700 dark:text-green-300 mt-1">
                         Controleer de onderstaande velden en vul ontbrekende informatie aan
                       </p>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Critical fields if missing - show at top of Step 3 */}
+              {!watch("naam") && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label>Naam <span className="text-destructive">*</span></Label>
+                    <Badge variant="destructive" className="text-xs">
+                      🔴 Verplicht
+                    </Badge>
+                  </div>
+                  <Input 
+                    {...register("naam")} 
+                    placeholder="Voor- en achternaam" 
+                    className="border-destructive focus-visible:ring-destructive"
+                  />
+                  {errors.naam && (
+                    <p className="text-sm text-destructive">{errors.naam.message}</p>
+                  )}
+                </div>
+              )}
+
+              {!watch("email") && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label>E-mailadres <span className="text-destructive">*</span></Label>
+                    <Badge variant="destructive" className="text-xs">
+                      🔴 Verplicht
+                    </Badge>
+                  </div>
+                  <Input 
+                    {...register("email")} 
+                    type="email"
+                    placeholder="naam@voorbeeld.nl" 
+                    className="border-destructive focus-visible:ring-destructive"
+                  />
+                  {errors.email && (
+                    <p className="text-sm text-destructive">{errors.email.message}</p>
+                  )}
+                </div>
+              )}
+
+              {!watch("telefoon") && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label>Telefoonnummer</Label>
+                    <Badge variant="outline" className="text-xs">
+                      📝 Aanbevolen
+                    </Badge>
+                  </div>
+                  <Input 
+                    {...register("telefoon")} 
+                    placeholder="06-12345678" 
+                  />
                 </div>
               )}
 
