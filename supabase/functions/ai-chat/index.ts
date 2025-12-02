@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.9.0-fast-path-optimization";
+const SYSTEM_PROMPT_VERSION = "v2.10.0-tool-deduplication";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -3235,10 +3235,31 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                     newKnowledgeMessage = "\n\n🔄 Ik probeer het opnieuw met een volledig antwoord...\n";
                   }
                   
+                  // 🔒 TOOL CALL DEDUPLICATION: Track executed tools to prevent duplicates
+                  const executedToolCalls = new Set<string>();
+                  
+                  const createToolCallKey = (functionName: string, args: any): string => {
+                    // Create unique key from function name + normalized args
+                    const normalizedArgs = JSON.stringify(args, Object.keys(args).sort());
+                    return `${functionName}::${normalizedArgs}`;
+                  };
+                  
                   // Execute all tool calls
                   for (const toolCall of toolCalls) {
                     try {
                       const args = JSON.parse(toolCall.function.arguments);
+                      
+                      // 🚫 DEDUPLICATION CHECK: Skip if already executed
+                      const toolCallKey = createToolCallKey(toolCall.function.name, args);
+                      if (executedToolCalls.has(toolCallKey)) {
+                        console.log(`⏭️ SKIPPED DUPLICATE: ${toolCall.function.name} with same args already executed`);
+                        continue; // Skip this duplicate call
+                      }
+                      
+                      // Mark as executed
+                      executedToolCalls.add(toolCallKey);
+                      console.log(`✅ EXECUTING: ${toolCall.function.name} (unique call #${executedToolCalls.size})`);
+                      
                       let result;
 
                       switch (toolCall.function.name) {
