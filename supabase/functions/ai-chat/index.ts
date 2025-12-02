@@ -16,7 +16,7 @@ const corsHeaders = {
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.10.3-org-mapping-fix";
+const SYSTEM_PROMPT_VERSION = "v2.11.0-candidate-skills";
 
 // ============================================
 // CACHE CONFIGURATION
@@ -2286,12 +2286,61 @@ Het systeem leert automatisch van elke sollicitatie en plaatsing via system_even
 - **pipeline_metrics**: Doorlooptijden en conversies per stage
 - **interview_outcomes**: Patronen in interview resultaten
 - **client_preferences**: Wat klanten zoeken in professionals
+- **candidate_skills**: Vaardigheden en competenties per kandidaat (CV data)
+- **candidate_experience**: Werkervaring per kandidaat (CV data)
 
 💡 DE AI LEERT AUTOMATISCH VAN RECRUITMENT EVENTS:
 - Elke nieuwe sollicitatie → event logging
 - Status changes → patronen herkennen
 - Plaatsingen → succes factoren identificeren
 - Interview resultaten → voorspellende modellen bouwen
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 CANDIDATE SKILLS & EXPERIENCE ZOEKEN (NIEUW!)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 WANNEER GEBRUIK JE QUERY_CANDIDATE_SKILLS:
+✅ "Welke kandidaten hebben ervaring met GHZ?"
+✅ "Wie heeft LVB doelgroep ervaring?"
+✅ "Zoek kandidaten met GGZ ervaring"
+✅ "Welke professionals hebben ervaring met ouderenzorg?"
+✅ "Wie heeft Jeugdzorg ervaring?"
+✅ "Toon kandidaten met VVT sector ervaring"
+✅ "Welke kandidaten kennen doelgroep Psychiatrie?"
+
+💡 SKILL FORMAT IN KNOWLEDGE BASE:
+Skills worden opgeslagen als:
+- **Sector ervaring**: ervaring_GHZ, ervaring_GGZ, ervaring_VVT, ervaring_Jeugdzorg, ervaring_Thuiszorg, ervaring_Ziekenhuis
+- **Doelgroep ervaring**: doelgroep_LVB, doelgroep_Ouderen, doelgroep_Psychiatrie, doelgroep_Somatiek, doelgroep_Verslaving, doelgroep_Kinderen/Jeugd
+
+💡 QUERY_CANDIDATE_SKILLS EXAMPLES:
+"Welke kandidaten hebben ervaring met GHZ en doelgroep LVB?"
+→ query_candidate_skills({ 
+    sector: ["GHZ"],
+    doelgroep: ["LVB"]
+  })
+
+"Wie heeft GGZ ervaring?"
+→ query_candidate_skills({ 
+    sector: ["GGZ"]
+  })
+
+"Zoek kandidaten met ouderenzorg ervaring"
+→ query_candidate_skills({ 
+    doelgroep: ["Ouderen"]
+  })
+
+"Kandidaten met VVT of Thuiszorg ervaring"
+→ query_candidate_skills({ 
+    sector: ["VVT", "Thuiszorg"]
+  })
+
+📊 RESPONSE FORMAT CANDIDATE SKILLS:
+- Tool returns: { success: true, candidates: [...], summary: {...} }
+- Elke kandidaat bevat: naam, functie_niveau, werkvorm, regio, matched_skills[]
+- Display: "Kandidaat [naam] - [functie] - Ervaring: [skills]"
+- Bij 0 resultaten: probeer met ruimere sector/doelgroep filters
 
 📋 WANNEER GEBRUIK JE QUERY_CLIENTS:
 ✅ "Welke klanten zijn van ABCzorg?"
@@ -3072,6 +3121,44 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                 type: "boolean", 
                 default: true,
                 description: "Sla suggesties op in professional_client_matches tabel"
+              }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "query_candidate_skills",
+          description: "Doorzoek kandidaat skills en ervaring uit CV data. Gebruik dit wanneer gebruikers vragen stellen over kandidaten met specifieke sector ervaring (GHZ, GGZ, VVT, etc.) of doelgroep ervaring (LVB, Ouderen, Psychiatrie, etc.).",
+          parameters: {
+            type: "object",
+            properties: {
+              sector: {
+                type: "array",
+                items: { 
+                  type: "string",
+                  enum: ["GHZ", "GGZ", "VVT", "Jeugdzorg", "Thuiszorg", "Ziekenhuis"]
+                },
+                description: "Filter op sector ervaring (bijv. ['GHZ', 'GGZ'])"
+              },
+              doelgroep: {
+                type: "array",
+                items: { 
+                  type: "string",
+                  enum: ["LVB", "Ouderen", "Psychiatrie", "Somatiek", "Verslaving", "Kinderen/Jeugd"]
+                },
+                description: "Filter op doelgroep ervaring (bijv. ['LVB', 'Ouderen'])"
+              },
+              functie_niveau: {
+                type: "string",
+                enum: ["VIG", "HBO-V", "Verpleegkundige MBO", "Helpende", "Begeleider", "Persoonlijk begeleider", "GGZ-agoog"],
+                description: "Filter op functieniveau (optioneel)"
+              },
+              limit: {
+                type: "number",
+                description: "Maximum aantal resultaten",
+                default: 20
               }
             }
           }
@@ -4421,12 +4508,151 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                               `├─ Gem. match score: ${avgMatchScore}%\n` +
                               `└─ Per status: ${Object.entries(byStatus || {}).map(([status, count]) => `${status}: ${count}`).join(', ')}`;
                             
-                            result = {
+                          result = {
                               success: true,
                               message: `${summary}\n\n${placementList}`,
                               placements: placements
                             };
                           }
+                          break;
+
+                        case "query_candidate_skills":
+                          console.log("🔍 Querying candidate skills...", args);
+                          
+                          // Build search patterns for sectors and doelgroepen
+                          const sectorPatterns = (args.sector || []).map((s: string) => `ervaring_${s}`);
+                          const doelgroepPatterns = (args.doelgroep || []).map((d: string) => `doelgroep_${d}`);
+                          const allPatterns = [...sectorPatterns, ...doelgroepPatterns];
+                          
+                          if (allPatterns.length === 0) {
+                            result = {
+                              success: false,
+                              message: `❌ Geef minimaal 1 sector of doelgroep filter op (bijv. sector: ["GHZ"] of doelgroep: ["LVB"])`
+                            };
+                            break;
+                          }
+                          
+                          // Query knowledge base for candidate_skills and candidate_experience
+                          const { data: skillsKnowledge, error: skillsQueryError } = await supabaseClient
+                            .from('ai_knowledge_base')
+                            .select('*')
+                            .in('category', ['candidate_skills', 'candidate_experience'])
+                            .is('deleted_at', null)
+                            .eq('org_id', userOrgId)
+                            .order('created_at', { ascending: false })
+                            .limit(500);
+                          
+                          if (skillsQueryError) {
+                            console.error("Skills query error:", skillsQueryError);
+                            result = {
+                              success: false,
+                              message: `❌ Fout bij ophalen kandidaat skills: ${skillsQueryError.message}`
+                            };
+                            break;
+                          }
+                          
+                          // Filter knowledge items that match requested patterns
+                          const matchingKnowledge = skillsKnowledge?.filter((kb: any) => {
+                            const skills = kb.value?.skills || [];
+                            const sectorExp = kb.value?.ervaring_sector || kb.value?.sector_ervaring || [];
+                            const doelgroepExp = kb.value?.doelgroep_ervaring || [];
+                            
+                            // Check if any requested sector matches
+                            const hasMatchingSector = sectorPatterns.length === 0 || 
+                              sectorPatterns.some((pattern: string) => 
+                                skills.includes(pattern) || 
+                                sectorExp.some((s: string) => `ervaring_${s}` === pattern || pattern.toLowerCase().includes(s.toLowerCase()))
+                              );
+                            
+                            // Check if any requested doelgroep matches
+                            const hasMatchingDoelgroep = doelgroepPatterns.length === 0 ||
+                              doelgroepPatterns.some((pattern: string) => 
+                                skills.includes(pattern) ||
+                                doelgroepExp.some((d: string) => `doelgroep_${d}` === pattern || pattern.toLowerCase().includes(d.toLowerCase()))
+                              );
+                            
+                            return hasMatchingSector && hasMatchingDoelgroep;
+                          }) || [];
+                          
+                          // Group by application_id to get unique candidates (application_id is in value field)
+                          const candidateMap = new Map<string, any>();
+                          
+                          for (const kb of matchingKnowledge) {
+                            const appId = kb.value?.application_id || kb.assignment_id;
+                            if (!appId) continue;
+                            
+                            if (!candidateMap.has(appId)) {
+                              candidateMap.set(appId, {
+                                application_id: appId,
+                                naam: kb.value?.naam || 'Onbekend',
+                                functie_niveau: kb.value?.functie_niveau || 'n/a',
+                                werkvorm: kb.value?.werkvorm || 'n/a',
+                                regio: kb.value?.regio || 'n/a',
+                                matched_skills: [],
+                                sector_ervaring: [],
+                                doelgroep_ervaring: []
+                              });
+                            }
+                            
+                            const candidate = candidateMap.get(appId)!;
+                            
+                            // Merge skills (handle both field names)
+                            if (kb.value?.skills) {
+                              candidate.matched_skills = [...new Set([...candidate.matched_skills, ...kb.value.skills])];
+                            }
+                            const sectorData = kb.value?.ervaring_sector || kb.value?.sector_ervaring || [];
+                            if (sectorData.length > 0) {
+                              candidate.sector_ervaring = [...new Set([...candidate.sector_ervaring, ...sectorData])];
+                            }
+                            if (kb.value?.doelgroep_ervaring) {
+                              candidate.doelgroep_ervaring = [...new Set([...candidate.doelgroep_ervaring, ...kb.value.doelgroep_ervaring])];
+                            }
+                          }
+                          
+                          // Filter by functie_niveau if specified
+                          let candidates = Array.from(candidateMap.values());
+                          if (args.functie_niveau) {
+                            candidates = candidates.filter(c => c.functie_niveau === args.functie_niveau);
+                          }
+                          
+                          // Limit results
+                          candidates = candidates.slice(0, args.limit || 20);
+                          
+                          if (candidates.length === 0) {
+                            result = {
+                              success: true,
+                              message: `🔍 **0 kandidaten gevonden** met criteria:\n` +
+                                `├─ Sector: ${args.sector?.join(', ') || 'alle'}\n` +
+                                `├─ Doelgroep: ${args.doelgroep?.join(', ') || 'alle'}\n` +
+                                `└─ Functieniveau: ${args.functie_niveau || 'alle'}\n\n` +
+                                `💡 Tip: Probeer met ruimere filters of andere sector/doelgroep combinaties.`,
+                              candidates: []
+                            };
+                            break;
+                          }
+                          
+                          // Format output
+                          const candidateList = candidates.map((c, i) => {
+                            const skills = [
+                              ...c.sector_ervaring.map((s: string) => `📋 ${s}`),
+                              ...c.doelgroep_ervaring.map((d: string) => `👥 ${d}`)
+                            ].join(', ') || 'geen skills';
+                            
+                            return `${i + 1}. **${c.naam}** - ${c.functie_niveau}\n` +
+                              `   ├─ Werkvorm: ${c.werkvorm} | Regio: ${c.regio}\n` +
+                              `   └─ Ervaring: ${skills}`;
+                          }).join('\n\n');
+                          
+                          const skillsSummary = `🎯 **${candidates.length} kandidaten gevonden** met criteria:\n` +
+                            `├─ Sector: ${args.sector?.join(', ') || 'alle'}\n` +
+                            `├─ Doelgroep: ${args.doelgroep?.join(', ') || 'alle'}\n` +
+                            `└─ Functieniveau: ${args.functie_niveau || 'alle'}`;
+                          
+                          result = {
+                            success: true,
+                            message: `${skillsSummary}\n\n${candidateList}`,
+                            candidates: candidates
+                          };
                           break;
 
                         case "create_multiple_tasks":
