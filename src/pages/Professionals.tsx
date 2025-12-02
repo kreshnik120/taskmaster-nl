@@ -124,19 +124,11 @@ const Professionals = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: userOrg } = await supabase
-        .from("user_organizations")
-        .select("org_id")
-        .eq("user_id", user.id)
-        .single();
-
-      if (!userOrg) return;
-
-      // Fetch from main professionals table instead of view to get all fields
+      // Cross-bureau: ABCzorg en CitoZorg werken samen
+      // Haal alle professionals op voor beide bureaus
       const { data, error } = await supabase
         .from("professionals")
         .select("*")
-        .eq("org_id", userOrg.org_id)
         .is("deleted_at", null)
         .order("full_name");
 

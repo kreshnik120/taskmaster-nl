@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Phone, Mail, MapPin } from "lucide-react";
+import { getOrganizationName } from "@/lib/organizationMapping";
 
 interface Professional {
   id: string;
@@ -20,6 +21,7 @@ interface Professional {
   telefoonnummer?: string | null;
   email?: string | null;
   skills?: string[];
+  org_id?: string | null;
 }
 
 interface ProfessionalCardProps {
@@ -130,11 +132,23 @@ export function ProfessionalCard({
 
               {/* Content */}
               <div className="flex-1 min-w-0">
-                {/* Header: Name + Status Dot */}
+                {/* Header: Name + Bureau + Status Dot */}
                 <div className="flex items-center gap-2 mb-1">
                   <h3 className="font-medium text-foreground truncate">
                     {professional.full_name}
                   </h3>
+                  {professional.org_id && (
+                    <Badge 
+                      variant="outline" 
+                      className={`text-[10px] px-1.5 py-0 h-4 flex-shrink-0 ${
+                        getOrganizationName(professional.org_id) === "ABCzorg" 
+                          ? "border-blue-300 text-blue-600 bg-blue-50/50" 
+                          : "border-green-300 text-green-600 bg-green-50/50"
+                      }`}
+                    >
+                      {getOrganizationName(professional.org_id)}
+                    </Badge>
+                  )}
                   <div className={`w-2 h-2 rounded-full ${getStatusColor(professional.status)} flex-shrink-0`} />
                 </div>
 
@@ -248,7 +262,21 @@ export function ProfessionalCard({
       <HoverCardContent className="w-80">
         <div className="space-y-3">
           <div>
-            <h4 className="font-semibold text-foreground mb-1">{professional.full_name}</h4>
+            <div className="flex items-center gap-2 mb-1">
+              <h4 className="font-semibold text-foreground">{professional.full_name}</h4>
+              {professional.org_id && (
+                <Badge 
+                  variant="outline" 
+                  className={`text-[10px] px-1.5 py-0 h-4 ${
+                    getOrganizationName(professional.org_id) === "ABCzorg" 
+                      ? "border-blue-300 text-blue-600 bg-blue-50/50" 
+                      : "border-green-300 text-green-600 bg-green-50/50"
+                  }`}
+                >
+                  {getOrganizationName(professional.org_id)}
+                </Badge>
+              )}
+            </div>
             <div className="flex gap-2 flex-wrap">
               <Badge variant="outline" className="text-xs">
                 {professional.functie_niveau}
