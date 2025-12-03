@@ -881,13 +881,19 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
                             id: sublocation.id,
                             naam: sublocation.naam,
                             plaats: sublocation.plaats,
+                            provincie: sublocation.provincie,
                             doelgroep: sublocation.doelgroep,
+                            doelgroep_omschrijving: sublocation.doelgroep_omschrijving,
                             sector: sublocation.sector,
+                            gezochte_functies: sublocation.gezochte_functies,
                             gekoppelde_bv_org_id: sublocation.gekoppelde_bv_org_id,
                             telefoon: sublocation.telefoon,
                             adres: sublocation.adres,
                             capaciteit_min: sublocation.capaciteit_min,
                             capaciteit_max: sublocation.capaciteit_max,
+                            leeftijd_van: sublocation.leeftijd_van,
+                            leeftijd_tot: sublocation.leeftijd_tot,
+                            publieke_opmerking: sublocation.publieke_opmerking,
                           };
                         });
 

@@ -10,13 +10,19 @@ interface Sublocation {
   id: string;
   naam: string;
   plaats: string | null;
+  provincie?: string | null;
   doelgroep: string[] | null;
+  doelgroep_omschrijving?: string | null;
   sector: string[] | null;
+  gezochte_functies?: string[] | null;
   gekoppelde_bv_org_id: string | null;
   telefoon?: string | null;
   adres?: string | null;
   capaciteit_min?: number | null;
   capaciteit_max?: number | null;
+  leeftijd_van?: number | null;
+  leeftijd_tot?: number | null;
+  publieke_opmerking?: string | null;
 }
 
 interface Location {
