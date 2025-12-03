@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Calendar, CheckCircle2, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, ListTodo, User, Zap, Sparkles, CheckSquare } from "lucide-react";
+import { Plus, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, Zap, CheckSquare, CheckCircle2, ListTodo, User } from "lucide-react";
 import { TaskItem } from "@/components/TaskItem";
 import { UpcomingRemindersWidget } from "@/components/UpcomingRemindersWidget";
 import { motion } from "framer-motion";
@@ -13,12 +13,9 @@ import confetti from "canvas-confetti";
 import { Badge } from "@/components/ui/badge";
 import { TaskDialog } from "@/components/TaskDialog";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
-import { ActiveProcessWidget } from "@/components/ActiveProcessWidget";
 import { QuickTimerButton } from "@/components/QuickTimerButton";
-import { KPICard } from "@/components/ui/kpi-card";
 import { RecruitmentKPIs } from "@/components/dashboard/RecruitmentKPIs";
 import { TodayFocusCard } from "@/components/dashboard/TodayFocusCard";
-import { QuickActionsHub } from "@/components/dashboard/QuickActionsHub";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,7 +35,6 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
-import { useCountUp } from "@/hooks/useCountUp";
 
 // Deployment trigger - 2025-10-03 23:21
 
@@ -92,7 +88,6 @@ const Dashboard = () => {
   const lastUserActionRef = useRef<number>(0);
   const [activatingFunctions, setActivatingFunctions] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const [activeKpi, setActiveKpi] = useState<string | null>(null);
 
   useEffect(() => {
     const getUser = async () => {
@@ -599,12 +594,6 @@ const Dashboard = () => {
     low: tasks.filter(t => t.priority === 'LOW').length,
   };
 
-  // Animated counters for KPIs
-  const animatedOpenTasks = useCountUp({ end: tasks.length, duration: 600 });
-  const animatedCompletedTasks = useCountUp({ end: completedThisWeek, duration: 600 });
-  const animatedHoursWorked = useCountUp({ end: Math.round(parseFloat(todayHours.split(' ')[0]) * 10) / 10, duration: 600 });
-  const animatedHighPriority = useCountUp({ end: priorityBreakdown.critical + priorityBreakdown.high, duration: 600 });
-
   const activateAllFunctions = async () => {
     setActivatingFunctions(true);
     
@@ -716,56 +705,11 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* KPI Cards met Icons */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KPICard
-          icon={ListTodo}
-          title="Open"
-          value={animatedOpenTasks}
-          variant="count"
-          isActive={activeKpi === "open"}
-          onClick={() => setActiveKpi(activeKpi === "open" ? null : "open")}
-        />
-        <KPICard
-          icon={CheckCircle2}
-          title="Afgerond"
-          value={animatedCompletedTasks}
-          variant="success"
-          onClick={() => navigate("/afgerond")}
-        />
-        <KPICard
-          icon={Clock}
-          title="Gewerkt"
-          value={animatedHoursWorked}
-          subtitle={`${animatedHoursWorked.toFixed(1)} uur`}
-          variant="time"
-          onClick={() => navigate("/tijdregistratie")}
-        />
-        <KPICard
-          icon={Zap}
-          title="Prioriteit"
-          value={animatedHighPriority}
-          variant="urgent"
-          isActive={activeKpi === "prioriteit"}
-          onClick={() => {
-            setActiveKpi(activeKpi === "prioriteit" ? null : "prioriteit");
-            const prioritySection = document.querySelector('.space-y-3');
-            prioritySection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }}
-        />
-      </div>
-
-      {/* Recruitment KPI's */}
+      {/* Recruitment KPI's - Core Dashboard Metrics */}
       <RecruitmentKPIs />
 
-      {/* Active Process Steps Widget - Subtiel gepositioneerd */}
-      <ActiveProcessWidget />
-
-      {/* Vandaag Focus & Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <TodayFocusCard />
-        <QuickActionsHub />
-      </div>
+      {/* Vandaag Focus - Full Width */}
+      <TodayFocusCard />
 
       {/* Upcoming Reminders Widget */}
       <UpcomingRemindersWidget />
