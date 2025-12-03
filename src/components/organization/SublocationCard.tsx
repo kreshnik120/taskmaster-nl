@@ -1,4 +1,4 @@
-import { Building, Phone, Mail, MapPin as MapPinIcon, Users, Copy } from "lucide-react";
+import { Building, Phone, MapPin as MapPinIcon, Users, Copy, FileText } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -120,6 +120,16 @@ export function SublocationCard({
               )}
             </div>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
+              {/* Werkbeschrijving indicator */}
+              {sublocation.publieke_opmerking && (
+                <Badge 
+                  variant="outline" 
+                  className="text-xs bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20"
+                >
+                  <FileText className="h-3 w-3 mr-1" />
+                  Werkbeschrijving
+                </Badge>
+              )}
               {/* Sector badges */}
               {sublocation.sector && sublocation.sector.length > 0 && (
                 <div className="flex items-center gap-1">
