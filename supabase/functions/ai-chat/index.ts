@@ -2694,33 +2694,7 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
           }
         }
       },
-      {
-        type: "function",
-        function: {
-          name: "auto_harvest_knowledge",
-          description: "Trigger de Auto-Knowledge-Harvester om online informatie te verzamelen. Gebruik dit DIRECT na het detecteren van een knowledge gap.",
-          parameters: {
-            type: "object",
-            properties: {
-              search_topics: {
-                type: "array",
-                items: { type: "string" },
-                description: "Specifieke zoektermen (bijv. 'Kwintes CAO GGZ salarisschalen 2025')"
-              },
-              reason: {
-                type: "string",
-                description: "Waarom wordt harvester getriggerd?"
-              },
-              wait_for_results: {
-                type: "boolean",
-                description: "Wacht op harvester resultaten? (max 20 sec)",
-                default: true
-              }
-            },
-            required: ["search_topics", "reason"]
-          }
-        }
-      },
+      // NOTE: auto_harvest_knowledge tool verwijderd in Fase 16 - edge function bestaat niet
         {
           type: "function",
           function: {
@@ -3621,107 +3595,7 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                           };
                           break;
 
-                        case "auto_harvest_knowledge":
-                          console.log("🤖 Triggering Auto-Knowledge-Harvester:", args);
-                          
-                          try {
-                            const harvesterResponse = await fetch(
-                              `${Deno.env.get("SUPABASE_URL")}/functions/v1/auto-knowledge-harvester`,
-                              {
-                                method: "POST",
-                                headers: {
-                                  "Content-Type": "application/json",
-                                  "Authorization": req.headers.get("Authorization") || ""
-                                },
-                                body: JSON.stringify({
-                                  search_topics: args.search_topics,
-                                  autonomous: true,
-                                  triggered_by: "ai_chat_knowledge_gap",
-                                  reason: args.reason
-                                })
-                              }
-                            );
-
-                            const harvesterResult = await harvesterResponse.json();
-                            
-                            // FASE 3: Polling mechanisme voor harvester results
-                            let newKnowledge: any[] = [];
-                            if (args.wait_for_results !== false) {
-                              console.log("⏳ Waiting for harvester results (max 20s)...");
-                              
-                              for (let i = 0; i < 10; i++) {
-                                await new Promise(resolve => setTimeout(resolve, 2000));
-                                
-                                // Check for new knowledge items
-                                const { data: recentKnowledge } = await supabaseClient
-                                  .from('ai_knowledge_base')
-                                  .select('*')
-                                  .or(`user_id.eq.${user.id},org_id.eq.${userOrgId}`)
-                                  .is('deleted_at', null)
-                                  .gte('created_at', new Date(Date.now() - 25000).toISOString())
-                                  .order('created_at', { ascending: false });
-                                
-                                if (recentKnowledge && recentKnowledge.length > 0) {
-                                  newKnowledge = recentKnowledge;
-                                  console.log(`✅ Found ${newKnowledge.length} new knowledge items`);
-                                  
-                                  // Refresh fullKnowledgeBase with new items
-                                  fullKnowledgeBase.push(...newKnowledge);
-                                  
-                                  // Re-organize by category
-                                  newKnowledge.forEach((kb: any) => {
-                                    if (!knowledgeByCategory[kb.category]) {
-                                      knowledgeByCategory[kb.category] = [];
-                                    }
-                                    knowledgeByCategory[kb.category].push(kb);
-                                  });
-                                  
-                                  break;
-                                }
-                              }
-                            }
-                            
-                            // Bepaal message op basis van wait_for_results en resultaten
-                            let harvesterMessage: string;
-                            if (args.wait_for_results !== false && newKnowledge.length === 0) {
-                              // Wachttijd afgelopen, geen resultaten
-                              harvesterMessage = `⏳ Geen betrouwbare openbare bronnen gevonden binnen 15s. Ik blijf monitoren en kom erop terug zodra er verifieerbare data is.`;
-                              console.log(`⚠️ Harvester: Geen nieuwe kennis gevonden binnen wachttijd`);
-                              noResultsAfterHarvest = true; // Set flag for closing message
-                            } else if (newKnowledge.length > 0) {
-                              harvesterMessage = `✅ Harvester verzamelde ${newKnowledge.length} nieuwe kennisitems! Je kennisbank is geüpdatet.`;
-                            } else {
-                              harvesterMessage = `🤖 Auto-Knowledge-Harvester gestart voor ${args.search_topics.length} onderwerpen`;
-                            }
-                            
-                            result = {
-                              success: true,
-                              message: harvesterMessage,
-                              topics: args.search_topics,
-                              harvester_status: harvesterResult,
-                              new_knowledge_count: newKnowledge.length,
-                              should_retry_answer: newKnowledge.length > 0,
-                              waited_for_results: args.wait_for_results !== false
-                            };
-                            
-                            // 🔄 RETRY DETECTION: Check if harvester found new knowledge
-                            if (result.should_retry_answer && result.new_knowledge_count > 0) {
-                              console.log(`🔄 RETRY TRIGGERED: Harvester found ${result.new_knowledge_count} new items`);
-                              console.log(`📊 Retry count: ${retryCount}, New knowledge count: ${result.new_knowledge_count}`);
-                              needsRetryWithNewKnowledge = true;
-                              newKnowledgeMessage = `\n\n✅ Nieuwe data verzameld! ${result.new_knowledge_count} kennisitems toegevoegd. Ik herbereken nu mijn antwoord...\n\n`;
-                              console.log(`✅ Retry flag set: ${needsRetryWithNewKnowledge}`);
-                            } else if (result.waited_for_results && result.new_knowledge_count === 0) {
-                              console.log(`⚠️ Retry niet gestart: Geen nieuwe kennis gevonden na wachttijd`);
-                            }
-                          } catch (harvesterError) {
-                            console.error("❌ Harvester trigger failed:", harvesterError);
-                            result = {
-                              success: false,
-                              message: "⚠️ Harvester kon niet worden gestart, maar knowledge gap is wel gelogd"
-                            };
-                          }
-                          break;
+                        // NOTE: auto_harvest_knowledge case verwijderd in Fase 16 - edge function auto-knowledge-harvester bestaat niet
 
                         case "query_professionals":
                           console.log("🔍 Executing database query for professionals...", args);
