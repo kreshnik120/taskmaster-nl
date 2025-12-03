@@ -861,6 +861,13 @@ export type Database = {
             foreignKeyName: "assignments_professional_id_fkey"
             columns: ["professional_id"]
             isOneToOne: false
+            referencedRelation: "professionals_admin_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
             referencedRelation: "professionals_public"
             referencedColumns: ["id"]
           },
@@ -1874,6 +1881,13 @@ export type Database = {
             foreignKeyName: "interview_appointments_professional_id_fkey"
             columns: ["professional_id"]
             isOneToOne: false
+            referencedRelation: "professionals_admin_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interview_appointments_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
             referencedRelation: "professionals_public"
             referencedColumns: ["id"]
           },
@@ -2453,6 +2467,13 @@ export type Database = {
             foreignKeyName: "professional_applications_professional_id_fkey"
             columns: ["professional_id"]
             isOneToOne: false
+            referencedRelation: "professionals_admin_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_applications_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
             referencedRelation: "professionals_public"
             referencedColumns: ["id"]
           },
@@ -2489,6 +2510,13 @@ export type Database = {
             columns: ["professional_id"]
             isOneToOne: false
             referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_availability_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_admin_view"
             referencedColumns: ["id"]
           },
           {
@@ -2563,6 +2591,13 @@ export type Database = {
             foreignKeyName: "professional_client_matches_professional_id_fkey"
             columns: ["professional_id"]
             isOneToOne: false
+            referencedRelation: "professionals_admin_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_client_matches_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
             referencedRelation: "professionals_public"
             referencedColumns: ["id"]
           },
@@ -2615,6 +2650,13 @@ export type Database = {
             columns: ["professional_id"]
             isOneToOne: false
             referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_clients_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_admin_view"
             referencedColumns: ["id"]
           },
           {
@@ -2686,6 +2728,13 @@ export type Database = {
             columns: ["professional_id"]
             isOneToOne: false
             referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_interviews_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_admin_view"
             referencedColumns: ["id"]
           },
           {
@@ -3907,7 +3956,6 @@ export type Database = {
           functie_niveau: string | null
           hourly_rate_id: string | null
           id: string | null
-          kvk_nummer: string | null
           location_name: string | null
           location_plaats: string | null
           notes: string | null
@@ -3938,6 +3986,13 @@ export type Database = {
             columns: ["professional_id"]
             isOneToOne: false
             referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_admin_view"
             referencedColumns: ["id"]
           },
           {
@@ -4048,20 +4103,126 @@ export type Database = {
         }
         Relationships: []
       }
+      professionals_admin_view: {
+        Row: {
+          adres: string | null
+          beschikbaarheidsnotities: string | null
+          big_nummer: string | null
+          btw_nummer: string | null
+          cao_akkoord: boolean | null
+          created_at: string | null
+          deleted_at: string | null
+          email: string | null
+          full_name: string | null
+          functie_niveau: string | null
+          gewenst_uurloon: number | null
+          heeft_auto: boolean | null
+          heeft_rijbewijs: boolean | null
+          id: string | null
+          is_test_data: boolean | null
+          kvk_nummer: string | null
+          org_id: string | null
+          postcode: string | null
+          provincie: string | null
+          rating: number | null
+          regio: string | null
+          skills: string[] | null
+          status: string | null
+          tags: string[] | null
+          telefoonnummer: string | null
+          updated_at: string | null
+          vog_date: string | null
+          werkvorm: string | null
+          woonplaats: string | null
+        }
+        Insert: {
+          adres?: string | null
+          beschikbaarheidsnotities?: string | null
+          big_nummer?: string | null
+          btw_nummer?: string | null
+          cao_akkoord?: boolean | null
+          created_at?: string | null
+          deleted_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          functie_niveau?: string | null
+          gewenst_uurloon?: number | null
+          heeft_auto?: boolean | null
+          heeft_rijbewijs?: boolean | null
+          id?: string | null
+          is_test_data?: boolean | null
+          kvk_nummer?: string | null
+          org_id?: string | null
+          postcode?: string | null
+          provincie?: string | null
+          rating?: number | null
+          regio?: string | null
+          skills?: string[] | null
+          status?: string | null
+          tags?: string[] | null
+          telefoonnummer?: string | null
+          updated_at?: string | null
+          vog_date?: string | null
+          werkvorm?: string | null
+          woonplaats?: string | null
+        }
+        Update: {
+          adres?: string | null
+          beschikbaarheidsnotities?: string | null
+          big_nummer?: string | null
+          btw_nummer?: string | null
+          cao_akkoord?: boolean | null
+          created_at?: string | null
+          deleted_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          functie_niveau?: string | null
+          gewenst_uurloon?: number | null
+          heeft_auto?: boolean | null
+          heeft_rijbewijs?: boolean | null
+          id?: string | null
+          is_test_data?: boolean | null
+          kvk_nummer?: string | null
+          org_id?: string | null
+          postcode?: string | null
+          provincie?: string | null
+          rating?: number | null
+          regio?: string | null
+          skills?: string[] | null
+          status?: string | null
+          tags?: string[] | null
+          telefoonnummer?: string | null
+          updated_at?: string | null
+          vog_date?: string | null
+          werkvorm?: string | null
+          woonplaats?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professionals_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       professionals_public: {
         Row: {
           beschikbaarheidsnotities: string | null
           created_at: string | null
           full_name: string | null
           functie_niveau: string | null
+          heeft_auto: boolean | null
+          heeft_rijbewijs: boolean | null
           id: string | null
           org_id: string | null
+          provincie: string | null
           rating: number | null
           regio: string | null
           skills: string[] | null
           status: string | null
           tags: string[] | null
-          updated_at: string | null
           werkvorm: string | null
         }
         Insert: {
@@ -4069,14 +4230,16 @@ export type Database = {
           created_at?: string | null
           full_name?: string | null
           functie_niveau?: string | null
+          heeft_auto?: boolean | null
+          heeft_rijbewijs?: boolean | null
           id?: string | null
           org_id?: string | null
+          provincie?: string | null
           rating?: number | null
           regio?: string | null
           skills?: string[] | null
           status?: string | null
           tags?: string[] | null
-          updated_at?: string | null
           werkvorm?: string | null
         }
         Update: {
@@ -4084,14 +4247,16 @@ export type Database = {
           created_at?: string | null
           full_name?: string | null
           functie_niveau?: string | null
+          heeft_auto?: boolean | null
+          heeft_rijbewijs?: boolean | null
           id?: string | null
           org_id?: string | null
+          provincie?: string | null
           rating?: number | null
           regio?: string | null
           skills?: string[] | null
           status?: string | null
           tags?: string[] | null
-          updated_at?: string | null
           werkvorm?: string | null
         }
         Relationships: [
