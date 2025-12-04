@@ -726,19 +726,19 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                 </div>
               ) : extractedPhotoBase64 ? (
                 // Photo extracted - show success preview
-                <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                <div className="flex flex-col items-center justify-center py-8 space-y-6">
                   <div className="relative">
-                    <Avatar className="h-24 w-24 border-4 border-green-500 shadow-lg">
-                      <AvatarImage src={extractedPhotoBase64} alt="Geëxtraheerde foto" />
-                      <AvatarFallback><Camera className="h-8 w-8" /></AvatarFallback>
+                    <Avatar className="h-40 w-40 border-4 border-green-500 shadow-xl ring-4 ring-green-100">
+                      <AvatarImage src={extractedPhotoBase64} alt="Geëxtraheerde foto" className="object-cover" />
+                      <AvatarFallback><Camera className="h-12 w-12" /></AvatarFallback>
                     </Avatar>
-                    <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-1">
-                      <CheckCircle2 className="h-5 w-5 text-white" />
+                    <div className="absolute -bottom-2 -right-2 bg-green-500 rounded-full p-1.5 shadow-lg">
+                      <CheckCircle2 className="h-6 w-6 text-white" />
                     </div>
                   </div>
-                  <div className="text-center space-y-1">
-                    <p className="text-sm font-medium text-green-600">✅ Profielfoto automatisch geëxtraheerd!</p>
-                    <p className="text-xs text-muted-foreground">Foto wordt opgeslagen bij aanmaken sollicitatie</p>
+                  <div className="text-center space-y-2">
+                    <p className="text-base font-semibold text-green-600">✅ Profielfoto automatisch geëxtraheerd!</p>
+                    <p className="text-sm text-muted-foreground">Foto wordt opgeslagen bij aanmaken sollicitatie</p>
                   </div>
                 </div>
               ) : (
