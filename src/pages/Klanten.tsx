@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Plus, Search, X, Users, Building2, Target, LayoutGrid, Network, FileSpreadsheet } from "lucide-react";
+import { Plus, Search, X, Users, Building2, Target, LayoutGrid, Network, FileSpreadsheet, Image, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import NewClientDialog from "@/components/NewClientDialog";
 import { KPICard } from "@/components/ui/kpi-card";
@@ -72,6 +72,7 @@ export default function Klanten() {
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [selectedSublocation, setSelectedSublocation] = useState<Sublocation | null>(null);
   const [isSublocationModalOpen, setIsSublocationModalOpen] = useState(false);
+  const [isFetchingLogos, setIsFetchingLogos] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "hierarchy">(() => {
     const saved = localStorage.getItem("klanten-view-mode");
     return (saved as any) || "cards";
@@ -88,6 +89,31 @@ export default function Klanten() {
     return (saved as any) || "compact";
   });
   const [allExpanded, setAllExpanded] = useState(true);
+  
+  // Logo fetch handler
+  const handleFetchLogos = async () => {
+    setIsFetchingLogos(true);
+    try {
+      toast.info("Logo's ophalen gestart - dit kan enkele minuten duren...");
+      
+      const { data, error } = await supabase.functions.invoke("fetch-organization-logos", {
+        body: { fetchAll: false } // Only fetch for orgs without logos
+      });
+      
+      if (error) throw error;
+      
+      if (data) {
+        toast.success(`Logo's opgehaald: ${data.success} geslaagd, ${data.failed} mislukt, ${data.skipped} overgeslagen`);
+        // Reload organizations to show new logos
+        loadOrganizations();
+      }
+    } catch (error: any) {
+      console.error("Error fetching logos:", error);
+      toast.error(`Fout bij ophalen logo's: ${error.message}`);
+    } finally {
+      setIsFetchingLogos(false);
+    }
+  };
   
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -519,6 +545,19 @@ export default function Klanten() {
         </Button>
 
         <AdminOnly>
+          <Button 
+            variant="outline" 
+            className="shrink-0"
+            onClick={handleFetchLogos}
+            disabled={isFetchingLogos}
+          >
+            {isFetchingLogos ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Image className="h-4 w-4 mr-2" />
+            )}
+            {isFetchingLogos ? "Ophalen..." : "Logo's ophalen"}
+          </Button>
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="outline" className="shrink-0">

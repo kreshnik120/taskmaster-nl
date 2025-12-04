@@ -184,3 +184,6 @@ verify_jwt = false
 
 [functions.import-abczorg-sublocations]
 verify_jwt = false
+
+[functions.fetch-organization-logos]
+verify_jwt = false
