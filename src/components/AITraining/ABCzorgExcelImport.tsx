@@ -132,6 +132,31 @@ const isRealOrganization = (record: ExcelRecord): boolean => {
   return false;
 };
 
+// Check if record has a known parent organization via Fact. bedrijfsnaam
+const hasKnownParentOrganization = (record: ExcelRecord): boolean => {
+  const factBedrijfsnaam = (record["Fact. bedrijfsnaam"] || "").trim();
+  if (!factBedrijfsnaam) return false;
+  
+  // Pattern match for known organization names
+  const knownPatterns = [
+    /rosales/i, /heeren\s*loo/i, /leger\s*des\s*heils/i,
+    /amarant/i, /pluryn/i, /kentalis/i, /dimence/i,
+    /siza/i, /oro\b/i, /driestroom/i, /sherpa/i,
+    /cello/i, /tactus/i, /iriszorg/i, /reinier\s*van\s*arkel/i,
+    /mare\s*zorg/i, /kwintes/i, /atlant/i, /tussenvoorziening/i,
+    /pro\s*persona/i, /mutsaers/i, /lister/i, /dichterbij/i,
+    /ribw/i, /eleos/i, /ggnet/i, /triade/i, /vitree/i,
+    /emergis/i, /opella/i, /vincent\s*van\s*gogh/i, /aveleijn/i,
+    /jp\s*van\s*den\s*bent/i, /zozijn/i, /philadelphia/i,
+    /zinzia/i, /careander/i, /careaz/i, /icare/i,
+    /waalboog/i, /asvz/i, /sdw/i, /koraal/i,
+    /mesazorg/i, /multiflexx/i, /zorgspectrum/i,
+    /herenhuis/i, /gezusters/i, /hoeve/i, /rooyse\s*wissel/i,
+  ];
+  
+  return knownPatterns.some(p => p.test(factBedrijfsnaam));
+};
+
 const shouldSkipRecord = (record: ExcelRecord): { skip: boolean; reason?: string } => {
   const bedrijfsnaam = record.Bedrijfsnaam || "";
   const locatie = record.Locatie || "";
@@ -158,9 +183,18 @@ const shouldSkipRecord = (record: ExcelRecord): { skip: boolean; reason?: string
     return { skip: true, reason: "Hoofdkantoor (geen werklocatie)" };
   }
   
+  // Check case-specific records with parent organization awareness
   const caseCheck = isCaseSpecificRecord(record);
-  if (caseCheck.isCaseSpecific && !isRealOrganization(record)) {
-    return { skip: true, reason: caseCheck.reason || "Case-specifieke opdracht" };
+  if (caseCheck.isCaseSpecific) {
+    // If record has known parent organization, DON'T skip - import as sublocation
+    if (hasKnownParentOrganization(record)) {
+      return { skip: false };
+    }
+    
+    // No known parent AND not a real org itself → skip
+    if (!isRealOrganization(record)) {
+      return { skip: true, reason: caseCheck.reason + " (geen bekende organisatie)" };
+    }
   }
   
   return { skip: false };

@@ -398,6 +398,40 @@ function isRealOrganization(record: Record<string, string>): boolean {
   return false;
 }
 
+// Check if record has a known parent organization via Fact. bedrijfsnaam
+function hasKnownParentOrganization(record: Record<string, string>): boolean {
+  const factBedrijfsnaam = (record["Fact. bedrijfsnaam"] || "").trim();
+  if (!factBedrijfsnaam) return false;
+  
+  // Direct match in ORG_MAPPING
+  if (ORG_MAPPING[factBedrijfsnaam]) return true;
+  
+  // Case-insensitive lookup in ORG_MAPPING
+  const lowerFact = factBedrijfsnaam.toLowerCase();
+  for (const key of Object.keys(ORG_MAPPING)) {
+    if (key.toLowerCase() === lowerFact) return true;
+  }
+  
+  // Pattern match for known organization names
+  const knownPatterns = [
+    /rosales/i, /heeren\s*loo/i, /leger\s*des\s*heils/i,
+    /amarant/i, /pluryn/i, /kentalis/i, /dimence/i,
+    /siza/i, /oro\b/i, /driestroom/i, /sherpa/i,
+    /cello/i, /tactus/i, /iriszorg/i, /reinier\s*van\s*arkel/i,
+    /mare\s*zorg/i, /kwintes/i, /atlant/i, /tussenvoorziening/i,
+    /pro\s*persona/i, /mutsaers/i, /lister/i, /dichterbij/i,
+    /ribw/i, /eleos/i, /ggnet/i, /triade/i, /vitree/i,
+    /emergis/i, /opella/i, /vincent\s*van\s*gogh/i, /aveleijn/i,
+    /jp\s*van\s*den\s*bent/i, /zozijn/i, /philadelphia/i,
+    /zinzia/i, /careander/i, /careaz/i, /icare/i,
+    /waalboog/i, /asvz/i, /sdw/i, /koraal/i,
+    /mesazorg/i, /multiflexx/i, /zorgspectrum/i,
+    /herenhuis/i, /gezusters/i, /hoeve/i, /rooyse\s*wissel/i,
+  ];
+  
+  return knownPatterns.some(p => p.test(factBedrijfsnaam));
+}
+
 // Check if record should be skipped - returns object with reason
 function shouldSkip(record: Record<string, string>): { skip: boolean; reason?: string } {
   const bedrijfsnaam = record["Bedrijfsnaam"] || "";
@@ -432,10 +466,19 @@ function shouldSkip(record: Record<string, string>): { skip: boolean; reason?: s
     return { skip: true, reason: "Hoofdkantoor (geen werklocatie)" };
   }
   
-  // NEW: Skip case-specific records that are NOT real organizations
+  // Check case-specific records with parent organization awareness
   const caseCheck = isCaseSpecificRecord(record);
-  if (caseCheck.isCaseSpecific && !isRealOrganization(record)) {
-    return { skip: true, reason: caseCheck.reason || "Case-specifieke opdracht" };
+  if (caseCheck.isCaseSpecific) {
+    // If record has known parent organization, DON'T skip - import as sublocation
+    if (hasKnownParentOrganization(record)) {
+      console.log(`✓ Case-specific "${bedrijfsnaam.substring(0, 50)}" will be imported under "${record["Fact. bedrijfsnaam"]}"`);
+      return { skip: false };
+    }
+    
+    // No known parent AND not a real org itself → skip
+    if (!isRealOrganization(record)) {
+      return { skip: true, reason: caseCheck.reason + " (geen bekende organisatie)" };
+    }
   }
   
   return { skip: false };
