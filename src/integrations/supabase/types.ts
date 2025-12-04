@@ -196,6 +196,7 @@ export type Database = {
           source_url: string | null
           stability_score: number | null
           temporal_context: Json | null
+          training_document_id: string | null
           updated_at: string | null
           usage_count: number | null
           user_id: string | null
@@ -255,6 +256,7 @@ export type Database = {
           source_url?: string | null
           stability_score?: number | null
           temporal_context?: Json | null
+          training_document_id?: string | null
           updated_at?: string | null
           usage_count?: number | null
           user_id?: string | null
@@ -314,6 +316,7 @@ export type Database = {
           source_url?: string | null
           stability_score?: number | null
           temporal_context?: Json | null
+          training_document_id?: string | null
           updated_at?: string | null
           usage_count?: number | null
           user_id?: string | null
@@ -336,6 +339,13 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_knowledge_base_training_document_id_fkey"
+            columns: ["training_document_id"]
+            isOneToOne: false
+            referencedRelation: "training_documents"
             referencedColumns: ["id"]
           },
         ]
