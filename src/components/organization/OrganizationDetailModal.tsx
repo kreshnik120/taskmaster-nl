@@ -142,8 +142,10 @@ export function OrganizationDetailModal({
     proposedAssignments: assignments?.filter(a => a.status === 'proposed')?.length || 0,
   };
 
-  // Verzamel contactpersonen uit locaties
-  const contacts = organization?.locations?.filter(loc => loc.contactpersoon_naam || loc.contactpersoon_email).map(loc => ({
+  // Verzamel contactpersonen uit locaties (inclusief factuur_email en crediteuren_tav)
+  const contacts = organization?.locations?.filter(loc => 
+    loc.contactpersoon_naam || loc.contactpersoon_email || loc.factuur_email || loc.crediteuren_tav
+  ).map(loc => ({
     naam: loc.contactpersoon_naam,
     email: loc.contactpersoon_email,
     telefoon: loc.telefoon,

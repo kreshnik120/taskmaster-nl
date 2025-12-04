@@ -2,7 +2,6 @@ import { Building, Phone, MapPin as MapPinIcon, Users, Copy, FileText } from "lu
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getOrganizationName, getOrganizationBadgeColor } from "@/lib/organizationMapping";
 import { useToast } from "@/hooks/use-toast";
 
 // Sector color mappings (consistent with ClientDetailModal)
@@ -81,8 +80,7 @@ export function SublocationCard({
     }
   };
 
-  const bemiddelaar = getOrganizationName(sublocation.gekoppelde_bv_org_id);
-  const bemiddelaarColor = getOrganizationBadgeColor(bemiddelaar);
+  // Bureau badge verwijderd - is al zichtbaar op organisatie niveau
 
   return (
     <Card
@@ -99,14 +97,6 @@ export function SublocationCard({
             <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1 flex-wrap">
               {sublocation.plaats && (
                 <span className="truncate">{sublocation.plaats}</span>
-              )}
-              {bemiddelaar && (
-                <>
-                  <span>·</span>
-                  <Badge variant="outline" className={`text-xs ${bemiddelaarColor}`}>
-                    {bemiddelaar}
-                  </Badge>
-                </>
               )}
               {/* Capaciteit indicator */}
               {sublocation.capaciteit_min != null && sublocation.capaciteit_max != null && (
