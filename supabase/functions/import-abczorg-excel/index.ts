@@ -373,29 +373,150 @@ function isCaseSpecificRecord(record: Record<string, string>): { isCaseSpecific:
   return { isCaseSpecific: false };
 }
 
-// Detect real organizations (should be imported)
+// Detect real organizations (should be imported) - STRICTER: KVK alone is NOT enough
 function isRealOrganization(record: Record<string, string>): boolean {
   const bedrijfsnaam = (record["Bedrijfsnaam"] || "");
   const factBedrijfsnaam = (record["Fact. bedrijfsnaam"] || "");
-  const kvk = record["KVK nummer"];
   
-  // Has valid KVK number = real organization
-  if (kvk && kvk.replace(/\D/g, "").length >= 8) return true;
+  // NOTE: KVK alone is NOT enough - almost all records have KVK, but they're not all "real orgs"
+  // A "real org" is a parent organization, not a sublocation
   
-  // Contains "Stichting" = real organization
-  if (/stichting/i.test(bedrijfsnaam) || /stichting/i.test(factBedrijfsnaam)) return true;
+  // Contains "Stichting" at start = real organization
+  if (/^stichting\s/i.test(bedrijfsnaam) || /^stichting\s/i.test(factBedrijfsnaam)) return true;
   
-  // Match with known organizations in ORG_MAPPING
+  // Exact match with known organizations in ORG_MAPPING = real organization
   if (ORG_MAPPING[bedrijfsnaam] || ORG_MAPPING[factBedrijfsnaam]) return true;
   if (ORG_MAPPING[bedrijfsnaam.trim()] || ORG_MAPPING[factBedrijfsnaam.trim()]) return true;
   
-  // Ends with legal form
-  if (/\s+(b\.?v\.?|groep|zorg|zorggroep)$/i.test(bedrijfsnaam)) return true;
-  
-  // Contains "Hoofdkantoor" = organizational record
-  if (/hoofdkantoor/i.test(bedrijfsnaam)) return true;
+  // Ends with legal form AND substantial name (>15 chars) = likely real org
+  if (/\s+(b\.?v\.?|groep|zorggroep)$/i.test(bedrijfsnaam) && bedrijfsnaam.length > 15) return true;
   
   return false;
+}
+
+// Detect if record is a "Hoofdlocatie" (main location for an organization)
+function isHoofdlocatie(record: Record<string, string>): { isHoofd: boolean; parentOrgName?: string } {
+  const bedrijfsnaam = (record["Bedrijfsnaam"] || "");
+  
+  // Check if name contains "Hoofdkantoor"
+  if (!/hoofdkantoor/i.test(bedrijfsnaam)) {
+    return { isHoofd: false };
+  }
+  
+  // Extract parent organization name
+  // "'s Heerenloo, Stichting - Hoofdkantoor" → "'s Heerenloo, Stichting"
+  // "Bloezem GGZ BV-Hoofdkantoor" → "Bloezem GGZ BV"
+  // "De Driestroom Hoofdkantoor" → "De Driestroom"
+  let parentName = bedrijfsnaam
+    .replace(/\s*-?\s*hoofdkantoor$/i, "")
+    .replace(/,\s*$/, "")
+    .trim();
+  
+  return { 
+    isHoofd: true, 
+    parentOrgName: parentName 
+  };
+}
+
+// KVK-based record classification for intelligent hierarchy
+type RecordClassification = {
+  type: 'HOOFDLOCATIE' | 'SUBLOCATIE' | 'NIEUWE_ORG' | 'SKIP';
+  parentOrgId?: string;
+  parentOrgName?: string;
+  reason?: string;
+};
+
+function classifyRecordByKvk(
+  record: Record<string, string>,
+  orgByKvk: Map<string, { id: string; name: string }>,
+  orgByName: Map<string, string>
+): RecordClassification {
+  const recordKvk = extractKvk(record["KVK nummer"]);
+  const bedrijfsnaam = (record["Bedrijfsnaam"] || "").trim();
+  const factBedrijfsnaam = (record["Fact. bedrijfsnaam"] || "").trim();
+  
+  // Check if this is a hoofdlocatie
+  const hoofdCheck = isHoofdlocatie(record);
+  
+  // STEP 1: KVK matching - most reliable
+  if (recordKvk) {
+    const parentOrg = orgByKvk.get(recordKvk);
+    
+    if (parentOrg) {
+      // KVK matched with existing organization
+      if (hoofdCheck.isHoofd) {
+        return {
+          type: 'HOOFDLOCATIE',
+          parentOrgId: parentOrg.id,
+          parentOrgName: parentOrg.name,
+          reason: `KVK ${recordKvk} matched → Hoofdlocatie`
+        };
+      }
+      
+      return {
+        type: 'SUBLOCATIE',
+        parentOrgId: parentOrg.id,
+        parentOrgName: parentOrg.name,
+        reason: `KVK ${recordKvk} matched → Sublocatie`
+      };
+    }
+  }
+  
+  // STEP 2: Name-based matching via ORG_MAPPING or existing orgs
+  const mappedOrgName = ORG_MAPPING[factBedrijfsnaam] || ORG_MAPPING[factBedrijfsnaam.trim()];
+  if (mappedOrgName) {
+    const existingOrgId = orgByName.get(mappedOrgName.toLowerCase());
+    if (existingOrgId) {
+      if (hoofdCheck.isHoofd) {
+        return {
+          type: 'HOOFDLOCATIE',
+          parentOrgId: existingOrgId,
+          parentOrgName: mappedOrgName,
+          reason: `Naam mapping matched → Hoofdlocatie`
+        };
+      }
+      
+      return {
+        type: 'SUBLOCATIE',
+        parentOrgId: existingOrgId,
+        parentOrgName: mappedOrgName,
+        reason: `Naam mapping matched → Sublocatie`
+      };
+    }
+  }
+  
+  // STEP 3: Check if this is a new real organization (should be created)
+  if (isRealOrganization(record)) {
+    return {
+      type: 'NIEUWE_ORG',
+      parentOrgName: mappedOrgName || factBedrijfsnaam || bedrijfsnaam,
+      reason: `Nieuwe organisatie met ${recordKvk ? 'KVK ' + recordKvk : 'naam match'}`
+    };
+  }
+  
+  // STEP 4: If it's a hoofdlocatie but no match, create new org
+  if (hoofdCheck.isHoofd && hoofdCheck.parentOrgName) {
+    return {
+      type: 'NIEUWE_ORG',
+      parentOrgName: hoofdCheck.parentOrgName,
+      reason: `Hoofdkantoor zonder bestaande org → Nieuwe org`
+    };
+  }
+  
+  // STEP 5: Check for known parent via hasKnownParentOrganization
+  if (hasKnownParentOrganization(record)) {
+    return {
+      type: 'SUBLOCATIE',
+      parentOrgName: factBedrijfsnaam,
+      reason: `Bekende parent org via patroon match`
+    };
+  }
+  
+  // STEP 6: No match found - should be skipped
+  return {
+    type: 'SKIP',
+    reason: `Geen KVK/naam match gevonden`
+  };
 }
 
 // Check if record has a known parent organization via Fact. bedrijfsnaam
@@ -461,10 +582,9 @@ function shouldSkip(record: Record<string, string>): { skip: boolean; reason?: s
     }
   }
   
-  // Skip "Hoofdkantoor" entries (these are organizational, not sublocations)
-  if (/\s*-\s*hoofdkantoor$/i.test(bedrijfsnaam) || bedrijfsnaam.toLowerCase().endsWith("hoofdkantoor")) {
-    return { skip: true, reason: "Hoofdkantoor (geen werklocatie)" };
-  }
+  // NOTE: Hoofdkantoren worden NIET meer geskipt - ze worden als hoofdlocaties geïmporteerd!
+  // Dit was de oude logica die fout was:
+  // if (/\s*-\s*hoofdkantoor$/i.test(bedrijfsnaam) ...) return { skip: true, ... }
   
   // Check case-specific records with parent organization awareness
   const caseCheck = isCaseSpecificRecord(record);
