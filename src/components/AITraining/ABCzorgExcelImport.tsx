@@ -39,6 +39,12 @@ interface ExcelRecord {
   [key: string]: string | undefined;
 }
 
+interface ProblematicRecord {
+  bedrijfsnaam: string;
+  reason: string;
+  willBeSkipped: boolean;
+}
+
 interface PreviewStats {
   totalRecords: number;
   uniqueOrganizations: string[];
@@ -52,6 +58,11 @@ interface PreviewStats {
   sampleRecords: ExcelRecord[];
   detectedSectors: { sector: string; count: number }[];
   detectedDoelgroepen: { doelgroep: string; count: number }[];
+  // NEW: Intelligent data cleaning stats
+  realOrganizations: number;
+  caseSpecificRecords: number;
+  problematicRecords: ProblematicRecord[];
+  recordsToImport: number;
 }
 
 // AI-enrichment detection functions (matching edge function logic)
@@ -80,6 +91,81 @@ const detectDoelgroepFromDescription = (desc: string): string[] => {
   return doelgroepen;
 };
 
+// Intelligent data cleaning detection (matching edge function logic)
+const isCaseSpecificRecord = (record: ExcelRecord): { isCaseSpecific: boolean; reason?: string } => {
+  const bedrijfsnaam = (record.Bedrijfsnaam || "").toLowerCase();
+  const locatie = (record.Locatie || "").toLowerCase();
+  const combined = `${bedrijfsnaam} ${locatie}`;
+  
+  const casePatterns: { pattern: RegExp; reason: string }[] = [
+    { pattern: /1\s*op\s*1\s*begelei/i, reason: "1-op-1 begeleiding (individuele casus)" },
+    { pattern: /casus\s+[a-z]\.?\s*(in|te)?/i, reason: "Casus-specifieke opdracht" },
+    { pattern: /^client\s+[a-z]/i, reason: "Client-specifieke locatie" },
+    { pattern: /begeleidersprofiel\s+(voor|van)/i, reason: "Begeleidersprofiel (geen locatie)" },
+    { pattern: /begeleiding\s+in\s+\w+,?\s*(client|casus)/i, reason: "Begeleiding voor specifieke client" },
+    { pattern: /center\s*park/i, reason: "Tijdelijke locatie (vakantiepark)" },
+    { pattern: /^cp\s+de\s+/i, reason: "Tijdelijke Center Parcs locatie" },
+    { pattern: /tijdelijke?\s+(opdracht|locatie|inzet)/i, reason: "Tijdelijke opdracht" },
+    { pattern: /\(\s*tijden\s+casus/i, reason: "Casus met tijden (geen vaste locatie)" },
+    { pattern: /kennis\s+(lvb|odd|adhd).*kenni/i, reason: "Profielbeschrijving (geen locatie)" },
+  ];
+  
+  for (const { pattern, reason } of casePatterns) {
+    if (pattern.test(bedrijfsnaam) || pattern.test(combined)) {
+      return { isCaseSpecific: true, reason };
+    }
+  }
+  
+  return { isCaseSpecific: false };
+};
+
+const isRealOrganization = (record: ExcelRecord): boolean => {
+  const bedrijfsnaam = record.Bedrijfsnaam || "";
+  const factBedrijfsnaam = record["Fact. bedrijfsnaam"] || "";
+  const kvk = record["KVK nummer"] || "";
+  
+  if (kvk && kvk.replace(/\D/g, "").length >= 8) return true;
+  if (/stichting/i.test(bedrijfsnaam) || /stichting/i.test(factBedrijfsnaam)) return true;
+  if (/\s+(b\.?v\.?|groep|zorg|zorggroep)$/i.test(bedrijfsnaam)) return true;
+  if (/hoofdkantoor/i.test(bedrijfsnaam)) return true;
+  
+  return false;
+};
+
+const shouldSkipRecord = (record: ExcelRecord): { skip: boolean; reason?: string } => {
+  const bedrijfsnaam = record.Bedrijfsnaam || "";
+  const locatie = record.Locatie || "";
+  const status = record.Status || "";
+  
+  if (status.toLowerCase().includes("inactief") || status.toLowerCase().includes("niet actief")) {
+    return { skip: true, reason: "Inactief record" };
+  }
+  
+  const skipPatterns = [
+    { pattern: "NIET GEBRUIKEN", reason: "Gemarkeerd als niet gebruiken" },
+    { pattern: "TEST", reason: "Test record" },
+    { pattern: "DUMMY", reason: "Dummy record" },
+    { pattern: "VERVALLEN", reason: "Vervallen record" },
+  ];
+  
+  for (const { pattern, reason } of skipPatterns) {
+    if (bedrijfsnaam.toUpperCase().includes(pattern) || locatie.toUpperCase().includes(pattern)) {
+      return { skip: true, reason };
+    }
+  }
+  
+  if (/\s*-\s*hoofdkantoor$/i.test(bedrijfsnaam) || bedrijfsnaam.toLowerCase().endsWith("hoofdkantoor")) {
+    return { skip: true, reason: "Hoofdkantoor (geen werklocatie)" };
+  }
+  
+  const caseCheck = isCaseSpecificRecord(record);
+  if (caseCheck.isCaseSpecific && !isRealOrganization(record)) {
+    return { skip: true, reason: caseCheck.reason || "Case-specifieke opdracht" };
+  }
+  
+  return { skip: false };
+};
+
 export function ABCzorgExcelImport() {
   const [isImporting, setIsImporting] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -101,8 +187,12 @@ export function ABCzorgExcelImport() {
     let withAddress = 0;
     let withKostenplaats = 0;
     let totalDescLength = 0;
+    let realOrganizations = 0;
+    let caseSpecificRecords = 0;
+    let recordsToImport = 0;
     const sectorCounts = new Map<string, number>();
     const doelgroepCounts = new Map<string, number>();
+    const problematicRecords: ProblematicRecord[] = [];
 
     records.forEach(r => {
       if (r.Bedrijfsnaam) uniqueOrgs.add(r.Bedrijfsnaam.trim());
@@ -111,6 +201,30 @@ export function ABCzorgExcelImport() {
       if (r.Telefoon?.trim() || r.Mobiel?.trim()) withPhone++;
       if (r.Adres?.trim() || r.Postcode?.trim()) withAddress++;
       if (r.Kostenplaats?.trim()) withKostenplaats++;
+      
+      // Check if record is real organization or case-specific
+      if (isRealOrganization(r)) {
+        realOrganizations++;
+      }
+      
+      const caseCheck = isCaseSpecificRecord(r);
+      if (caseCheck.isCaseSpecific) {
+        caseSpecificRecords++;
+      }
+      
+      // Check if will be skipped
+      const skipCheck = shouldSkipRecord(r);
+      if (skipCheck.skip) {
+        if (problematicRecords.length < 15) {
+          problematicRecords.push({
+            bedrijfsnaam: (r.Bedrijfsnaam || "").substring(0, 60),
+            reason: skipCheck.reason || "Onbekend",
+            willBeSkipped: true,
+          });
+        }
+      } else {
+        recordsToImport++;
+      }
       
       const desc = r["Publieke opmerking"]?.trim() || "";
       if (desc) {
@@ -149,6 +263,10 @@ export function ABCzorgExcelImport() {
       sampleRecords: records.slice(0, 5),
       detectedSectors,
       detectedDoelgroepen,
+      realOrganizations,
+      caseSpecificRecords,
+      problematicRecords,
+      recordsToImport,
     };
   };
 
@@ -328,20 +446,53 @@ export function ABCzorgExcelImport() {
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-3 space-y-4">
               {/* Statistics Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="bg-muted/50 rounded-lg p-3 text-center">
                   <div className="text-2xl font-bold text-primary">{previewStats.totalRecords}</div>
                   <div className="text-xs text-muted-foreground">Totaal records</div>
                 </div>
+                <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-3 text-center border border-green-200 dark:border-green-800">
+                  <div className="text-2xl font-bold text-green-600">{previewStats.recordsToImport}</div>
+                  <div className="text-xs text-green-600/80">Te importeren</div>
+                </div>
                 <div className="bg-muted/50 rounded-lg p-3 text-center">
                   <div className="text-2xl font-bold text-blue-600">{previewStats.uniqueOrganizations.length}</div>
-                  <div className="text-xs text-muted-foreground">Unieke organisaties</div>
+                  <div className="text-xs text-muted-foreground">Unieke bedrijfsnamen</div>
                 </div>
-                <div className="bg-muted/50 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-bold text-green-600">{previewStats.uniqueLocations.length}</div>
-                  <div className="text-xs text-muted-foreground">Unieke locaties</div>
+                <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3 text-center border border-amber-200 dark:border-amber-800">
+                  <div className="text-2xl font-bold text-amber-600">{previewStats.totalRecords - previewStats.recordsToImport}</div>
+                  <div className="text-xs text-amber-600/80">Worden overgeslagen</div>
                 </div>
               </div>
+
+              {/* Data Cleaning Warning */}
+              {previewStats.problematicRecords.length > 0 && (
+                <div className="space-y-3 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <h4 className="text-sm font-medium flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                    <AlertCircle className="h-4 w-4" />
+                    Intelligente Data Cleaning - {previewStats.problematicRecords.length} records worden overgeslagen
+                  </h4>
+                  <p className="text-xs text-amber-600 dark:text-amber-500">
+                    De volgende records zijn gedetecteerd als case-specifieke opdrachten of ongeldige data en worden NIET geïmporteerd als organisaties:
+                  </p>
+                  <div className="max-h-[150px] overflow-y-auto space-y-1">
+                    {previewStats.problematicRecords.map((record, i) => (
+                      <div key={i} className="flex items-start gap-2 text-xs p-1.5 bg-white dark:bg-background/50 rounded border">
+                        <span className="text-amber-500 mt-0.5">⚠️</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium truncate block">{record.bedrijfsnaam}</span>
+                          <span className="text-muted-foreground">{record.reason}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {(previewStats.totalRecords - previewStats.recordsToImport) > 15 && (
+                      <p className="text-xs text-amber-600 italic">
+                        ...en {(previewStats.totalRecords - previewStats.recordsToImport) - 15} meer
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Data Quality Indicators */}
               <div className="space-y-2">
@@ -479,7 +630,12 @@ export function ABCzorgExcelImport() {
           disabled={isImporting || parsedData.length === 0}
           className="w-full"
         >
-          {isImporting ? "Importeren..." : `Start Import (${parsedData.length} records)`}
+          {isImporting 
+            ? "Importeren..." 
+            : previewStats 
+              ? `Start Import (${previewStats.recordsToImport} van ${parsedData.length} records)`
+              : `Start Import (${parsedData.length} records)`
+          }
         </Button>
 
         {isImporting && (
