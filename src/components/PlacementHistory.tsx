@@ -45,7 +45,8 @@ interface PlacementHistoryProps {
 }
 
 export function PlacementHistory({ professionalId, isActive = true }: PlacementHistoryProps) {
-  const [placements, setPlacements] = useState<PlacementWithEvaluation[]>([]);
+  const [activePlacements, setActivePlacements] = useState<PlacementWithEvaluation[]>([]);
+  const [completedPlacements, setCompletedPlacements] = useState<PlacementWithEvaluation[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
 
@@ -60,7 +61,42 @@ export function PlacementHistory({ professionalId, isActive = true }: PlacementH
   const loadPlacements = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Load active placements
+      const { data: activeData, error: activeError } = await supabase
+        .from("assignments")
+        .select(`
+          id,
+          status,
+          start_date,
+          end_date,
+          completed_at,
+          weekly_hours,
+          ai_match_score,
+          client_sublocations (
+            naam,
+            plaats,
+            client_locations (
+              naam,
+              client_organizations (
+                name
+              )
+            )
+          ),
+          assignment_evaluations (
+            rating,
+            feedback,
+            would_rehire,
+            created_at
+          )
+        `)
+        .eq("professional_id", professionalId)
+        .eq("status", "active")
+        .order("start_date", { ascending: false });
+
+      if (activeError) throw activeError;
+
+      // Load completed placements
+      const { data: completedData, error: completedError } = await supabase
         .from("assignments")
         .select(`
           id,
@@ -91,15 +127,18 @@ export function PlacementHistory({ professionalId, isActive = true }: PlacementH
         .eq("status", "completed")
         .order("completed_at", { ascending: false });
 
-      if (error) throw error;
-      // Normalize the data - assignment_evaluations can be object or array
-      const normalizedData = (data || []).map((p: any) => ({
+      if (completedError) throw completedError;
+
+      // Normalize the data
+      const normalizeData = (data: any[]) => (data || []).map((p: any) => ({
         ...p,
         assignment_evaluations: Array.isArray(p.assignment_evaluations) 
           ? p.assignment_evaluations 
           : p.assignment_evaluations ? [p.assignment_evaluations] : []
       }));
-      setPlacements(normalizedData as PlacementWithEvaluation[]);
+
+      setActivePlacements(normalizeData(activeData) as PlacementWithEvaluation[]);
+      setCompletedPlacements(normalizeData(completedData) as PlacementWithEvaluation[]);
     } catch (error) {
       console.error("Error loading placements:", error);
     } finally {
@@ -107,23 +146,23 @@ export function PlacementHistory({ professionalId, isActive = true }: PlacementH
     }
   };
 
-  // Calculate stats
-  const totalPlacements = placements.length;
-  const ratingsWithValues = placements
+  // Calculate stats from completed placements
+  const totalPlacements = completedPlacements.length;
+  const ratingsWithValues = completedPlacements
     .filter(p => p.assignment_evaluations && p.assignment_evaluations.length > 0)
     .map(p => p.assignment_evaluations![0].rating);
   const avgRating = ratingsWithValues.length > 0 
     ? ratingsWithValues.reduce((a, b) => a + b, 0) / ratingsWithValues.length 
     : 0;
-  const wouldRehireCount = placements.filter(
+  const wouldRehireCount = completedPlacements.filter(
     p => p.assignment_evaluations && p.assignment_evaluations.length > 0 && p.assignment_evaluations[0].would_rehire
   ).length;
-  const avgDurationWeeks = placements
+  const avgDurationWeeks = completedPlacements
     .filter(p => p.start_date && p.end_date)
     .reduce((acc, p) => {
       const weeks = differenceInWeeks(new Date(p.end_date!), new Date(p.start_date!));
       return acc + weeks;
-    }, 0) / (placements.filter(p => p.start_date && p.end_date).length || 1);
+    }, 0) / (completedPlacements.filter(p => p.start_date && p.end_date).length || 1);
 
   const formatDuration = (startDate: string | null, endDate: string | null) => {
     if (!startDate || !endDate) return "-";
@@ -145,12 +184,80 @@ export function PlacementHistory({ professionalId, isActive = true }: PlacementH
 
   return (
     <div className="space-y-6">
+      {/* Active Placements Section */}
+      {activePlacements.length > 0 && (
+        <>
+          <div>
+            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              Actieve Plaatsing ({activePlacements.length})
+            </h3>
+            
+            <div className="space-y-3">
+              {activePlacements.map((placement) => {
+                const sublocation = placement.client_sublocations;
+                const location = sublocation?.client_locations;
+                const organization = location?.client_organizations;
+                
+                return (
+                  <Card key={placement.id} className="border-green-200 dark:border-green-900/50 bg-gradient-to-br from-green-50/50 to-white dark:from-green-950/20 dark:to-background">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                            <span className="font-medium truncate">
+                              {sublocation?.naam || "Onbekend"}
+                            </span>
+                            <Badge className="bg-green-500/20 text-green-700 border-green-300 text-xs">
+                              Actief
+                            </Badge>
+                          </div>
+                          
+                          <div className="text-sm text-muted-foreground mt-1">
+                            {sublocation?.plaats && <span>{sublocation.plaats}</span>}
+                            {organization?.name && (
+                              <span className="ml-1">• {organization.name}</span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                            <Calendar className="h-3.5 w-3.5" />
+                            {placement.start_date && (
+                              <span>
+                                Sinds {format(new Date(placement.start_date), "d MMM yyyy", { locale: nl })}
+                              </span>
+                            )}
+                            {placement.weekly_hours && (
+                              <span className="ml-2">• {placement.weekly_hours} uur/week</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {placement.ai_match_score && (
+                          <div className="flex items-center gap-1 text-sm text-green-600">
+                            <Award className="h-4 w-4" />
+                            <span className="font-medium">{Math.round(placement.ai_match_score)}%</span>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+          
+          <Separator />
+        </>
+      )}
+
       {/* Stats Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="bg-gradient-to-br from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background border-blue-100 dark:border-blue-900/50">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-blue-600">{totalPlacements}</div>
-            <div className="text-xs text-muted-foreground">Totaal plaatsingen</div>
+            <div className="text-xs text-muted-foreground">Voltooide plaatsingen</div>
           </CardContent>
         </Card>
         
@@ -189,21 +296,21 @@ export function PlacementHistory({ professionalId, isActive = true }: PlacementH
 
       <Separator />
 
-      {/* Placements List */}
+      {/* Completed Placements List */}
       <div>
         <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
           <Clock className="h-4 w-4" />
           Voltooide Plaatsingen ({totalPlacements})
         </h3>
         
-        {placements.length === 0 ? (
+        {completedPlacements.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <TrendingUp className="h-10 w-10 mx-auto mb-2 opacity-30" />
             <p>Nog geen voltooide plaatsingen</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {placements.map((placement) => {
+            {completedPlacements.map((placement) => {
               const evaluation = placement.assignment_evaluations?.[0];
               const sublocation = placement.client_sublocations;
               const location = sublocation?.client_locations;
