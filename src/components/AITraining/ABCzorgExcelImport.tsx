@@ -269,10 +269,36 @@ export function ABCzorgExcelImport() {
   const [previewStats, setPreviewStats] = useState<PreviewStats | null>(null);
   const [showPreview, setShowPreview] = useState(true);
 
+  // NEW: Classification function based on Fact. bedrijfsnaam instead of KVK
+  type RecordClassification = 'SKIP' | 'HOOFDLOCATIE' | 'SUBLOCATIE' | 'NIEUWE_ORG' | 'STANDALONE';
+  
+  const classifyRecord = (record: ExcelRecord): RecordClassification => {
+    // Skip check first
+    if (shouldSkipRecord(record).skip) return 'SKIP';
+    
+    // Hoofdlocatie check (naam bevat "Hoofdkantoor")
+    if (isHoofdlocatie(record).isHoofd) return 'HOOFDLOCATIE';
+    
+    const bedrijfsnaam = (record.Bedrijfsnaam || "").trim();
+    const factBedrijfsnaam = (record["Fact. bedrijfsnaam"] || "").trim();
+    
+    // KEY INSIGHT: If Fact. bedrijfsnaam exists AND differs from Bedrijfsnaam → it's a sublocation
+    if (factBedrijfsnaam && factBedrijfsnaam !== bedrijfsnaam) {
+      return 'SUBLOCATIE';
+    }
+    
+    // If it's a real organization (Stichting, B.V.) → new org
+    if (isRealOrganization(record)) return 'NIEUWE_ORG';
+    
+    // Fallback: standalone werklocatie
+    return 'STANDALONE';
+  };
+
   const calculatePreviewStats = (records: ExcelRecord[]): PreviewStats => {
     const uniqueOrgs = new Set<string>();
     const uniqueLocs = new Set<string>();
     const uniqueKvks = new Set<string>();
+    const uniqueFactBedrijfsnamen = new Set<string>();
     let withKvk = 0;
     let withPhone = 0;
     let withDesc = 0;
@@ -283,22 +309,17 @@ export function ABCzorgExcelImport() {
     const sectorCounts = new Map<string, number>();
     const doelgroepCounts = new Map<string, number>();
     
-    // KVK-driven categorization
+    // Categorization arrays (for preview display, capped at 15)
     const hoofdlocaties: HoofdlocatieRecord[] = [];
-    const sublocatiesViaKvk: KvkMatchedRecord[] = [];
+    const sublocatiesViaKvk: KvkMatchedRecord[] = []; // Renamed but still used for UI
     const nieuweOrganisaties: RealOrganizationRecord[] = [];
     const werklocatiesViaNaam: CaseSpecificWithParent[] = [];
     const problematicRecords: ProblematicRecord[] = [];
     
-    // Build KVK lookup from unique organizations in the data
-    const kvkToFirstOrg = new Map<string, string>();
+    // First pass: collect all unique Fact. bedrijfsnaam values (parent organizations)
     records.forEach(r => {
-      const kvk = extractKvk(r["KVK nummer"]);
-      if (kvk && !kvkToFirstOrg.has(kvk)) {
-        // First occurrence with this KVK = likely the parent org
-        const orgName = r["Fact. bedrijfsnaam"] || r.Bedrijfsnaam || "";
-        if (orgName) kvkToFirstOrg.set(kvk, orgName);
-      }
+      const factName = (r["Fact. bedrijfsnaam"] || "").trim();
+      if (factName) uniqueFactBedrijfsnamen.add(factName);
     });
 
     records.forEach(r => {
@@ -314,12 +335,14 @@ export function ABCzorgExcelImport() {
       if (r.Adres?.trim() || r.Postcode?.trim()) withAddress++;
       if (r.Kostenplaats?.trim()) withKostenplaats++;
       
-      const skipCheck = shouldSkipRecord(r);
-      if (skipCheck.skip) {
+      const classification = classifyRecord(r);
+      
+      if (classification === 'SKIP') {
+        const skipReason = shouldSkipRecord(r).reason || "Onbekend";
         if (problematicRecords.length < 15) {
           problematicRecords.push({
             bedrijfsnaam: (r.Bedrijfsnaam || "").substring(0, 60),
-            reason: skipCheck.reason || "Onbekend",
+            reason: skipReason,
             willBeSkipped: true,
           });
         }
@@ -328,43 +351,45 @@ export function ABCzorgExcelImport() {
       
       recordsToImport++;
       
-      // KVK-driven classification
+      // Categorize for preview display (capped at 15 each)
       const hoofdCheck = isHoofdlocatie(r);
+      const factBedrijfsnaam = (r["Fact. bedrijfsnaam"] || "").trim();
       
-      if (hoofdCheck.isHoofd) {
-        // It's a hoofdlocatie
-        if (hoofdlocaties.length < 15) {
-          hoofdlocaties.push({
-            bedrijfsnaam: (r.Bedrijfsnaam || "").substring(0, 50),
-            parentOrg: hoofdCheck.parentOrgName || "Onbekend",
-            kvk: kvk || undefined,
-          });
-        }
-      } else if (kvk && kvkToFirstOrg.has(kvk)) {
-        // KVK matched - it's a sublocation under existing org
-        if (sublocatiesViaKvk.length < 15) {
-          sublocatiesViaKvk.push({
-            bedrijfsnaam: (r.Bedrijfsnaam || "").substring(0, 50),
-            kvk: kvk,
-            matchedOrg: kvkToFirstOrg.get(kvk) || "Onbekend",
-          });
-        }
-      } else if (isRealOrganization(r)) {
-        // New organization (with Stichting or B.V.)
-        if (nieuweOrganisaties.length < 15) {
-          nieuweOrganisaties.push({
-            bedrijfsnaam: (r.Bedrijfsnaam || "").substring(0, 50),
-            kvk: kvk || undefined,
-          });
-        }
-      } else if (hasKnownParentOrganization(r)) {
-        // Sublocation via name matching
-        if (werklocatiesViaNaam.length < 15) {
-          werklocatiesViaNaam.push({
-            bedrijfsnaam: (r.Bedrijfsnaam || "").substring(0, 50),
-            parentOrg: (r["Fact. bedrijfsnaam"] || "").substring(0, 40),
-          });
-        }
+      switch (classification) {
+        case 'HOOFDLOCATIE':
+          if (hoofdlocaties.length < 15) {
+            hoofdlocaties.push({
+              bedrijfsnaam: (r.Bedrijfsnaam || "").substring(0, 50),
+              parentOrg: hoofdCheck.parentOrgName || "Onbekend",
+              kvk: kvk || undefined,
+            });
+          }
+          break;
+        case 'SUBLOCATIE':
+          if (sublocatiesViaKvk.length < 15) {
+            sublocatiesViaKvk.push({
+              bedrijfsnaam: (r.Bedrijfsnaam || "").substring(0, 50),
+              kvk: kvk || "",
+              matchedOrg: factBedrijfsnaam || "Onbekend",
+            });
+          }
+          break;
+        case 'NIEUWE_ORG':
+          if (nieuweOrganisaties.length < 15) {
+            nieuweOrganisaties.push({
+              bedrijfsnaam: (r.Bedrijfsnaam || "").substring(0, 50),
+              kvk: kvk || undefined,
+            });
+          }
+          break;
+        case 'STANDALONE':
+          if (werklocatiesViaNaam.length < 15) {
+            werklocatiesViaNaam.push({
+              bedrijfsnaam: (r.Bedrijfsnaam || "").substring(0, 50),
+              parentOrg: factBedrijfsnaam || "(geen parent)",
+            });
+          }
+          break;
       }
       
       const desc = r["Publieke opmerking"]?.trim() || "";
@@ -389,6 +414,9 @@ export function ABCzorgExcelImport() {
       .map(([doelgroep, count]) => ({ doelgroep, count }))
       .sort((a, b) => b.count - a.count);
 
+    // Calculate ACCURATE counts using classifyRecord over ALL records
+    const allClassifications = records.map(r => classifyRecord(r));
+
     return {
       totalRecords: records.length,
       uniqueOrganizations: Array.from(uniqueOrgs),
@@ -402,39 +430,19 @@ export function ABCzorgExcelImport() {
       sampleRecords: records.slice(0, 5),
       detectedSectors,
       detectedDoelgroepen,
-      // KVK-driven stats
+      // Preview arrays (capped at 15)
       hoofdlocaties,
       sublocatiesViaKvk,
       nieuweOrganisaties,
       werklocatiesViaNaam,
       problematicRecords,
-      // Counts - calculate over ALL records, not capped arrays
-      hoofdlocatieCount: records.filter(r => 
-        !shouldSkipRecord(r).skip && isHoofdlocatie(r).isHoofd
-      ).length,
-      sublocatieViaKvkCount: records.filter(r => {
-        if (shouldSkipRecord(r).skip) return false;
-        if (isHoofdlocatie(r).isHoofd) return false;
-        const kvk = extractKvk(r["KVK nummer"]);
-        return kvk && kvkToFirstOrg.has(kvk);
-      }).length,
-      nieuweOrgCount: records.filter(r => {
-        if (shouldSkipRecord(r).skip) return false;
-        if (isHoofdlocatie(r).isHoofd) return false;
-        const kvk = extractKvk(r["KVK nummer"]);
-        if (kvk && kvkToFirstOrg.has(kvk)) return false; // Already matched via KVK
-        return isRealOrganization(r);
-      }).length,
-      werklocatieViaNaamCount: records.filter(r => {
-        if (shouldSkipRecord(r).skip) return false;
-        if (isHoofdlocatie(r).isHoofd) return false;
-        const kvk = extractKvk(r["KVK nummer"]);
-        if (kvk && kvkToFirstOrg.has(kvk)) return false; // Already matched via KVK
-        if (isRealOrganization(r)) return false; // New org, not sublocation
-        return hasKnownParentOrganization(r);
-      }).length,
+      // ACCURATE counts over ALL records
+      hoofdlocatieCount: allClassifications.filter(c => c === 'HOOFDLOCATIE').length,
+      sublocatieViaKvkCount: allClassifications.filter(c => c === 'SUBLOCATIE').length,
+      nieuweOrgCount: allClassifications.filter(c => c === 'NIEUWE_ORG').length,
+      werklocatieViaNaamCount: allClassifications.filter(c => c === 'STANDALONE').length,
       recordsToImport,
-      uniqueKvkNumbers: uniqueKvks.size,
+      uniqueKvkNumbers: uniqueFactBedrijfsnamen.size, // Now counts unique parent orgs
     };
   };
 
@@ -633,28 +641,28 @@ export function ABCzorgExcelImport() {
                 </div>
               </div>
 
-              {/* KVK-Driven Summary Banner */}
+              {/* Classification Summary Banner */}
               <div className="p-3 bg-muted/50 rounded-lg border">
                 <div className="flex flex-wrap items-center gap-4 text-sm">
                   <span className="flex items-center gap-1">
-                    <span className="text-purple-600">🔑</span>
-                    <span className="font-medium">{previewStats.uniqueKvkNumbers}</span>
-                    <span className="text-muted-foreground">unieke KVK's</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="text-blue-600">🏢</span>
-                    <span className="font-medium">{previewStats.hoofdlocaties.length}</span>
+                    <span className="text-purple-600">🏛️</span>
+                    <span className="font-medium">{previewStats.hoofdlocatieCount}</span>
                     <span className="text-muted-foreground">hoofdlocaties</span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="text-green-600">✅</span>
-                    <span className="font-medium">{previewStats.sublocatiesViaKvk.length + previewStats.werklocatiesViaNaam.length}</span>
+                    <span className="text-blue-600">📍</span>
+                    <span className="font-medium">{previewStats.sublocatieViaKvkCount}</span>
                     <span className="text-muted-foreground">sublocaties</span>
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="text-cyan-600">🆕</span>
-                    <span className="font-medium">{previewStats.nieuweOrganisaties.length}</span>
+                    <span className="font-medium">{previewStats.nieuweOrgCount}</span>
                     <span className="text-muted-foreground">nieuwe orgs</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="text-green-600">🏠</span>
+                    <span className="font-medium">{previewStats.werklocatieViaNaamCount}</span>
+                    <span className="text-muted-foreground">standalone</span>
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="text-amber-600">⚠️</span>
@@ -662,6 +670,9 @@ export function ABCzorgExcelImport() {
                     <span className="text-muted-foreground">overgeslagen</span>
                   </span>
                 </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  📊 {previewStats.uniqueKvkNumbers} unieke parent organisaties gedetecteerd via Fact. bedrijfsnaam
+                </p>
               </div>
 
               {/* Data Quality Indicators */}
@@ -732,17 +743,17 @@ export function ABCzorgExcelImport() {
               {/* KVK-Driven Category Preview */}
               <div className="space-y-3">
                 {/* Category 1: Hoofdlocaties */}
-                {previewStats.hoofdlocaties.length > 0 && (
+                {previewStats.hoofdlocatieCount > 0 && (
                   <div className="p-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800">
                     <h4 className="text-sm font-medium flex items-center gap-2 text-purple-700 dark:text-purple-400 mb-2">
                       <Building2 className="h-4 w-4" />
-                      🏛️ Hoofdlocaties ({previewStats.hoofdlocaties.length})
+                      🏛️ Hoofdlocaties ({previewStats.hoofdlocatieCount})
                     </h4>
                     <p className="text-xs text-purple-600 dark:text-purple-500 mb-2">
                       Records met "Hoofdkantoor" - worden als hoofdlocaties voor organisaties geïmporteerd:
                     </p>
                     <div className="space-y-1 max-h-[120px] overflow-y-auto">
-                      {previewStats.hoofdlocaties.map((record, i) => (
+                      {previewStats.hoofdlocaties.slice(0, 10).map((record, i) => (
                         <div key={i} className="flex items-center gap-2 text-xs p-1.5 bg-white dark:bg-background/50 rounded border border-purple-200 dark:border-purple-700">
                           <span className="text-purple-500">🏛️</span>
                           <span className="font-medium truncate flex-1">{record.bedrijfsnaam}</span>
@@ -750,37 +761,41 @@ export function ABCzorgExcelImport() {
                           <Badge variant="outline" className="text-xs bg-purple-100 dark:bg-purple-900/50">
                             {record.parentOrg}
                           </Badge>
-                          {record.kvk && <span className="text-purple-400 text-[10px]">KVK:{record.kvk}</span>}
                         </div>
                       ))}
+                      {previewStats.hoofdlocatieCount > 10 && (
+                        <div className="text-xs text-purple-500 pl-6">
+                          +{previewStats.hoofdlocatieCount - 10} meer hoofdlocaties...
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
 
-                {/* Category 2: Sublocaties via KVK matching */}
-                {previewStats.sublocatiesViaKvk.length > 0 && (
+                {/* Category 2: Sublocaties via Fact. bedrijfsnaam matching */}
+                {previewStats.sublocatieViaKvkCount > 0 && (
                   <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
                     <h4 className="text-sm font-medium flex items-center gap-2 text-blue-700 dark:text-blue-400 mb-2">
                       <Building2 className="h-4 w-4" />
-                      🔑 Sublocaties via KVK ({previewStats.sublocatiesViaKvk.length})
+                      📍 Sublocaties ({previewStats.sublocatieViaKvkCount})
                     </h4>
                     <p className="text-xs text-blue-600 dark:text-blue-500 mb-2">
-                      Records gekoppeld aan organisaties via KVK nummer matching:
+                      Werklocaties gekoppeld aan organisaties via Fact. bedrijfsnaam:
                     </p>
                     <div className="space-y-1 max-h-[120px] overflow-y-auto">
                       {previewStats.sublocatiesViaKvk.slice(0, 10).map((record, i) => (
                         <div key={i} className="flex items-center gap-2 text-xs p-1.5 bg-white dark:bg-background/50 rounded border border-blue-200 dark:border-blue-700">
-                          <span className="text-blue-500">🔑</span>
+                          <span className="text-blue-500">📍</span>
                           <span className="font-medium truncate flex-1">{record.bedrijfsnaam}</span>
-                          <span className="text-muted-foreground">KVK:{record.kvk} →</span>
+                          <span className="text-muted-foreground">→</span>
                           <Badge variant="outline" className="text-xs bg-blue-100 dark:bg-blue-900/50">
                             {record.matchedOrg}
                           </Badge>
                         </div>
                       ))}
-                      {previewStats.sublocatiesViaKvk.length > 10 && (
+                      {previewStats.sublocatieViaKvkCount > 10 && (
                         <div className="text-xs text-blue-500 pl-6">
-                          +{previewStats.sublocatiesViaKvk.length - 10} meer via KVK matching...
+                          +{previewStats.sublocatieViaKvkCount - 10} meer sublocaties...
                         </div>
                       )}
                     </div>
@@ -788,47 +803,60 @@ export function ABCzorgExcelImport() {
                 )}
 
                 {/* Category 3: Nieuwe Organisaties */}
-                {previewStats.nieuweOrganisaties.length > 0 && (
+                {previewStats.nieuweOrgCount > 0 && (
                   <div className="p-3 bg-cyan-50 dark:bg-cyan-950/30 rounded-lg border border-cyan-200 dark:border-cyan-800">
                     <h4 className="text-sm font-medium flex items-center gap-2 text-cyan-700 dark:text-cyan-400 mb-2">
                       <Building2 className="h-4 w-4" />
-                      🆕 Nieuwe Organisaties ({previewStats.nieuweOrganisaties.length})
+                      🆕 Nieuwe Organisaties ({previewStats.nieuweOrgCount})
                     </h4>
                     <p className="text-xs text-cyan-600 dark:text-cyan-500 mb-2">
                       Nieuwe organisaties met "Stichting" of "B.V." die worden aangemaakt:
                     </p>
                     <div className="flex flex-wrap gap-1">
-                      {previewStats.nieuweOrganisaties.map((org, i) => (
+                      {previewStats.nieuweOrganisaties.slice(0, 15).map((org, i) => (
                         <Badge key={i} variant="outline" className="text-xs bg-cyan-100 dark:bg-cyan-900/50 border-cyan-300">
                           {org.bedrijfsnaam}
-                          {org.kvk && <span className="ml-1 text-cyan-500">({org.kvk})</span>}
                         </Badge>
                       ))}
+                      {previewStats.nieuweOrgCount > 15 && (
+                        <Badge variant="outline" className="text-xs bg-cyan-200 dark:bg-cyan-800">
+                          +{previewStats.nieuweOrgCount - 15} meer
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 )}
 
-                {/* Category 4: Werklocaties via Naam Matching */}
-                {previewStats.werklocatiesViaNaam.length > 0 && (
+                {/* Category 4: Standalone Werklocaties */}
+                {previewStats.werklocatieViaNaamCount > 0 && (
                   <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
                     <h4 className="text-sm font-medium flex items-center gap-2 text-green-700 dark:text-green-400 mb-2">
                       <MapPin className="h-4 w-4" />
-                      ✅ Werklocaties via Naam ({previewStats.werklocatiesViaNaam.length})
+                      🏠 Standalone Werklocaties ({previewStats.werklocatieViaNaamCount})
                     </h4>
                     <p className="text-xs text-green-600 dark:text-green-500 mb-2">
-                      Sublocaties gekoppeld via bekende organisatienamen (fallback wanneer geen KVK match):
+                      Records zonder parent organisatie (Bedrijfsnaam = Fact. bedrijfsnaam):
                     </p>
                     <div className="space-y-1 max-h-[120px] overflow-y-auto">
-                      {previewStats.werklocatiesViaNaam.map((record, i) => (
+                      {previewStats.werklocatiesViaNaam.slice(0, 10).map((record, i) => (
                         <div key={i} className="flex items-center gap-2 text-xs p-1.5 bg-white dark:bg-background/50 rounded border border-green-200 dark:border-green-700">
-                          <span className="text-green-500">→</span>
+                          <span className="text-green-500">🏠</span>
                           <span className="font-medium truncate flex-1">{record.bedrijfsnaam}</span>
-                          <span className="text-muted-foreground">onder</span>
-                          <Badge variant="outline" className="text-xs bg-green-100 dark:bg-green-900/50">
-                            {record.parentOrg}
-                          </Badge>
+                          {record.parentOrg && record.parentOrg !== "(geen parent)" && (
+                            <>
+                              <span className="text-muted-foreground">Fact:</span>
+                              <Badge variant="outline" className="text-xs bg-green-100 dark:bg-green-900/50">
+                                {record.parentOrg}
+                              </Badge>
+                            </>
+                          )}
                         </div>
                       ))}
+                      {previewStats.werklocatieViaNaamCount > 10 && (
+                        <div className="text-xs text-green-500 pl-6">
+                          +{previewStats.werklocatieViaNaamCount - 10} meer standalone...
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
