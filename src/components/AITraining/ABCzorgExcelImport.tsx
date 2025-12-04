@@ -45,6 +45,16 @@ interface ProblematicRecord {
   willBeSkipped: boolean;
 }
 
+interface CaseSpecificWithParent {
+  bedrijfsnaam: string;
+  parentOrg: string;
+}
+
+interface RealOrganizationRecord {
+  bedrijfsnaam: string;
+  kvk?: string;
+}
+
 interface PreviewStats {
   totalRecords: number;
   uniqueOrganizations: string[];
@@ -58,9 +68,11 @@ interface PreviewStats {
   sampleRecords: ExcelRecord[];
   detectedSectors: { sector: string; count: number }[];
   detectedDoelgroepen: { doelgroep: string; count: number }[];
-  // NEW: Intelligent data cleaning stats
+  // Intelligent data cleaning stats - categorized
   realOrganizations: number;
+  realOrganizationRecords: RealOrganizationRecord[];
   caseSpecificRecords: number;
+  caseSpecificWithParent: CaseSpecificWithParent[];
   problematicRecords: ProblematicRecord[];
   recordsToImport: number;
 }
@@ -227,6 +239,8 @@ export function ABCzorgExcelImport() {
     const sectorCounts = new Map<string, number>();
     const doelgroepCounts = new Map<string, number>();
     const problematicRecords: ProblematicRecord[] = [];
+    const realOrganizationRecords: RealOrganizationRecord[] = [];
+    const caseSpecificWithParent: CaseSpecificWithParent[] = [];
 
     records.forEach(r => {
       if (r.Bedrijfsnaam) uniqueOrgs.add(r.Bedrijfsnaam.trim());
@@ -236,18 +250,33 @@ export function ABCzorgExcelImport() {
       if (r.Adres?.trim() || r.Postcode?.trim()) withAddress++;
       if (r.Kostenplaats?.trim()) withKostenplaats++;
       
-      // Check if record is real organization or case-specific
-      if (isRealOrganization(r)) {
+      // Categorize record type
+      const isReal = isRealOrganization(r);
+      const caseCheck = isCaseSpecificRecord(r);
+      const hasKnownParent = hasKnownParentOrganization(r);
+      const skipCheck = shouldSkipRecord(r);
+      
+      if (isReal) {
         realOrganizations++;
+        if (realOrganizationRecords.length < 10) {
+          realOrganizationRecords.push({
+            bedrijfsnaam: (r.Bedrijfsnaam || "").substring(0, 50),
+            kvk: r["KVK nummer"]?.trim() || undefined,
+          });
+        }
       }
       
-      const caseCheck = isCaseSpecificRecord(r);
       if (caseCheck.isCaseSpecific) {
         caseSpecificRecords++;
+        if (hasKnownParent && caseSpecificWithParent.length < 10) {
+          caseSpecificWithParent.push({
+            bedrijfsnaam: (r.Bedrijfsnaam || "").substring(0, 50),
+            parentOrg: (r["Fact. bedrijfsnaam"] || "").substring(0, 40),
+          });
+        }
       }
       
       // Check if will be skipped
-      const skipCheck = shouldSkipRecord(r);
       if (skipCheck.skip) {
         if (problematicRecords.length < 15) {
           problematicRecords.push({
@@ -298,7 +327,9 @@ export function ABCzorgExcelImport() {
       detectedSectors,
       detectedDoelgroepen,
       realOrganizations,
+      realOrganizationRecords,
       caseSpecificRecords,
+      caseSpecificWithParent,
       problematicRecords,
       recordsToImport,
     };
@@ -499,34 +530,26 @@ export function ABCzorgExcelImport() {
                 </div>
               </div>
 
-              {/* Data Cleaning Warning */}
-              {previewStats.problematicRecords.length > 0 && (
-                <div className="space-y-3 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <h4 className="text-sm font-medium flex items-center gap-2 text-amber-700 dark:text-amber-400">
-                    <AlertCircle className="h-4 w-4" />
-                    Intelligente Data Cleaning - {previewStats.problematicRecords.length} records worden overgeslagen
-                  </h4>
-                  <p className="text-xs text-amber-600 dark:text-amber-500">
-                    De volgende records zijn gedetecteerd als case-specifieke opdrachten of ongeldige data en worden NIET geïmporteerd als organisaties:
-                  </p>
-                  <div className="max-h-[150px] overflow-y-auto space-y-1">
-                    {previewStats.problematicRecords.map((record, i) => (
-                      <div key={i} className="flex items-start gap-2 text-xs p-1.5 bg-white dark:bg-background/50 rounded border">
-                        <span className="text-amber-500 mt-0.5">⚠️</span>
-                        <div className="flex-1 min-w-0">
-                          <span className="font-medium truncate block">{record.bedrijfsnaam}</span>
-                          <span className="text-muted-foreground">{record.reason}</span>
-                        </div>
-                      </div>
-                    ))}
-                    {(previewStats.totalRecords - previewStats.recordsToImport) > 15 && (
-                      <p className="text-xs text-amber-600 italic">
-                        ...en {(previewStats.totalRecords - previewStats.recordsToImport) - 15} meer
-                      </p>
-                    )}
-                  </div>
+              {/* Summary Banner */}
+              <div className="p-3 bg-muted/50 rounded-lg border">
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="flex items-center gap-1">
+                    <span className="text-blue-600">🏢</span>
+                    <span className="font-medium">{previewStats.realOrganizations}</span>
+                    <span className="text-muted-foreground">organisaties</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="text-green-600">✅</span>
+                    <span className="font-medium">{previewStats.caseSpecificWithParent.length}</span>
+                    <span className="text-muted-foreground">sublocaties (met parent)</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="text-amber-600">⚠️</span>
+                    <span className="font-medium">{previewStats.totalRecords - previewStats.recordsToImport}</span>
+                    <span className="text-muted-foreground">overgeslagen</span>
+                  </span>
                 </div>
-              )}
+              </div>
 
               {/* Data Quality Indicators */}
               <div className="space-y-2">
@@ -593,24 +616,87 @@ export function ABCzorgExcelImport() {
                 </div>
               )}
 
-              {/* Sample Organizations */}
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium flex items-center gap-2">
-                  <Building2 className="h-4 w-4" />
-                  Eerste 5 organisaties
-                </h4>
-                <div className="flex flex-wrap gap-1">
-                  {previewStats.uniqueOrganizations.slice(0, 5).map((org, i) => (
-                    <Badge key={i} variant="outline" className="text-xs">
-                      {org}
-                    </Badge>
-                  ))}
-                  {previewStats.uniqueOrganizations.length > 5 && (
-                    <Badge variant="secondary" className="text-xs">
-                      +{previewStats.uniqueOrganizations.length - 5} meer
-                    </Badge>
-                  )}
-                </div>
+              {/* Three Category Preview - Clear Classification */}
+              <div className="space-y-3">
+                {/* Category 1: Real Organizations */}
+                {previewStats.realOrganizationRecords.length > 0 && (
+                  <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <h4 className="text-sm font-medium flex items-center gap-2 text-blue-700 dark:text-blue-400 mb-2">
+                      <Building2 className="h-4 w-4" />
+                      🏢 Echte Organisaties ({previewStats.realOrganizations})
+                    </h4>
+                    <p className="text-xs text-blue-600 dark:text-blue-500 mb-2">
+                      Records met KVK nummer of "Stichting/B.V." - worden geïmporteerd als organisaties:
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {previewStats.realOrganizationRecords.map((org, i) => (
+                        <Badge key={i} variant="outline" className="text-xs bg-blue-100 dark:bg-blue-900/50 border-blue-300">
+                          {org.bedrijfsnaam}
+                          {org.kvk && <span className="ml-1 text-blue-500">({org.kvk})</span>}
+                        </Badge>
+                      ))}
+                      {previewStats.realOrganizations > 10 && (
+                        <Badge variant="secondary" className="text-xs">
+                          +{previewStats.realOrganizations - 10} meer
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Category 2: Case-Specific with Known Parent */}
+                {previewStats.caseSpecificWithParent.length > 0 && (
+                  <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
+                    <h4 className="text-sm font-medium flex items-center gap-2 text-green-700 dark:text-green-400 mb-2">
+                      <MapPin className="h-4 w-4" />
+                      ✅ Case-Specifieke Sublocaties met Bekende Parent ({previewStats.caseSpecificWithParent.length})
+                    </h4>
+                    <p className="text-xs text-green-600 dark:text-green-500 mb-2">
+                      Case-specifieke opdrachten die WEL worden geïmporteerd als sublocaties onder bekende organisaties:
+                    </p>
+                    <div className="space-y-1 max-h-[120px] overflow-y-auto">
+                      {previewStats.caseSpecificWithParent.map((record, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs p-1.5 bg-white dark:bg-background/50 rounded border border-green-200 dark:border-green-700">
+                          <span className="text-green-500">→</span>
+                          <span className="font-medium truncate flex-1">{record.bedrijfsnaam}</span>
+                          <span className="text-muted-foreground">onder</span>
+                          <Badge variant="outline" className="text-xs bg-green-100 dark:bg-green-900/50">
+                            {record.parentOrg}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Category 3: Skipped Records (moved from above, now in context) */}
+                {previewStats.problematicRecords.length > 0 && (
+                  <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                    <h4 className="text-sm font-medium flex items-center gap-2 text-amber-700 dark:text-amber-400 mb-2">
+                      <AlertCircle className="h-4 w-4" />
+                      ⚠️ Overgeslagen Records ({previewStats.totalRecords - previewStats.recordsToImport})
+                    </h4>
+                    <p className="text-xs text-amber-600 dark:text-amber-500 mb-2">
+                      Records die worden overgeslagen (inactief, test, case-specifiek zonder bekende parent):
+                    </p>
+                    <div className="max-h-[120px] overflow-y-auto space-y-1">
+                      {previewStats.problematicRecords.map((record, i) => (
+                        <div key={i} className="flex items-start gap-2 text-xs p-1.5 bg-white dark:bg-background/50 rounded border border-amber-200 dark:border-amber-700">
+                          <span className="text-amber-500 mt-0.5">✗</span>
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium truncate block">{record.bedrijfsnaam}</span>
+                            <span className="text-muted-foreground">{record.reason}</span>
+                          </div>
+                        </div>
+                      ))}
+                      {(previewStats.totalRecords - previewStats.recordsToImport) > 15 && (
+                        <p className="text-xs text-amber-600 italic">
+                          ...en {(previewStats.totalRecords - previewStats.recordsToImport) - 15} meer
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Sample Records Table - EXPANDED */}
