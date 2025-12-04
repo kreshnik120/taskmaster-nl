@@ -5,7 +5,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Phone, Mail, MapPin, Building2, Users } from "lucide-react";
+import { Phone, Mail, Globe, Building2, Users } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface Location {
@@ -280,7 +280,7 @@ export function OrganizationCardSimple({
                       disabled={!organization.website}
                       className="h-7 px-2 disabled:opacity-40 hover:scale-105 hover:bg-primary/10 transition-all duration-200"
                     >
-                      <MapPin className="h-3.5 w-3.5" />
+                      <Globe className="h-3.5 w-3.5" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
