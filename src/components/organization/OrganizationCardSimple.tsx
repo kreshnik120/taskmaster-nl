@@ -183,9 +183,11 @@ export function OrganizationCardSimple({
               <div className="flex items-start gap-3">
                 {/* Avatar */}
                 <Avatar className="h-10 w-10 flex-shrink-0">
-                  {organization.logo_url && (
-                    <img src={organization.logo_url} alt={organization.name} className="object-contain" />
-                  )}
+                  <AvatarImage 
+                    src={organization.logo_url || undefined} 
+                    alt={organization.name} 
+                    className="object-contain"
+                  />
                   <AvatarFallback className={getSectorAvatarColor()}>
                     {getInitials(organization.name)}
                   </AvatarFallback>
