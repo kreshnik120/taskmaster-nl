@@ -178,3 +178,9 @@ verify_jwt = false
 [functions.learn-from-pipeline]
 verify_jwt = false
 schedule = "0 */3 * * *"  # Elke 3 uur - learn from pipeline transitions
+
+[functions.import-abczorg-excel]
+verify_jwt = false
+
+[functions.import-abczorg-sublocations]
+verify_jwt = false

@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, X, Users, Building2, Target, LayoutGrid, Network } from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Plus, Search, X, Users, Building2, Target, LayoutGrid, Network, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import NewClientDialog from "@/components/NewClientDialog";
 import { KPICard } from "@/components/ui/kpi-card";
@@ -17,6 +18,8 @@ import { OrganizationCard } from "@/components/organization/OrganizationCard";
 import { OrganizationDetailModal } from "@/components/organization/OrganizationDetailModal";
 import { LocationDetailModal } from "@/components/organization/LocationDetailModal";
 import { SublocationDetailModal } from "@/components/organization/SublocationDetailModal";
+import { ABCzorgExcelImport } from "@/components/AITraining/ABCzorgExcelImport";
+import { AdminOnly } from "@/components/auth/AdminOnly";
 
 // Unified Organization type used in both views
 interface Sublocation {
@@ -514,6 +517,20 @@ export default function Klanten() {
             N
           </kbd>
         </Button>
+
+        <AdminOnly>
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" className="shrink-0">
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Excel Import
+              </Button>
+            </SheetTrigger>
+            <SheetContent className="w-[400px] sm:w-[540px]">
+              <ABCzorgExcelImport />
+            </SheetContent>
+          </Sheet>
+        </AdminOnly>
       </div>
 
       {/* Active Filter Chips */}
