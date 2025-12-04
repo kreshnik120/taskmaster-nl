@@ -7,13 +7,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState, useCallback } from "react";
-import { Loader2, X, ChevronRight, ChevronLeft, CheckCircle2, Upload, FileText, Sparkles, ChevronDown, Search, AlertCircle } from "lucide-react";
+import { Loader2, X, ChevronRight, ChevronLeft, CheckCircle2, Upload, FileText, Sparkles, ChevronDown, Search, AlertCircle, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const applicationSchema = z.object({
@@ -123,6 +124,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
   const [autoFilledFields, setAutoFilledFields] = useState<string[]>([]);
   const [cvExtractedData, setCvExtractedData] = useState<Record<string, any> | null>(null);
   const [cvDataOpen, setCvDataOpen] = useState(false);
+  const [extractedPhotoBase64, setExtractedPhotoBase64] = useState<string | null>(null);
 
   // Helper to extract value from {value, confidence} or plain value (backwards compatible)
   const getFieldValue = <T,>(field: T | { value: T; confidence: number } | null | undefined): T | null => {
@@ -323,7 +325,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
       // Default org_id voor ABCzorg - wordt later door team gewijzigd indien nodig
       const defaultOrgId = "550e8400-e29b-41d4-a716-446655440000";
 
-      const { error: insertError } = await supabase
+      const { data: insertData, error: insertError } = await supabase
         .from("professional_applications")
         .insert({
           org_id: defaultOrgId,
@@ -334,9 +336,70 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
           missing_info: missingInfo,
           pipeline_stage: "nieuw",
           status: "nieuw",
-        });
+        })
+        .select('id')
+        .single();
 
       if (insertError) throw insertError;
+
+      const newApplicationId = insertData?.id;
+
+      // 🆕 Upload geëxtraheerde foto naar Storage na applicatie creatie
+      if (extractedPhotoBase64 && newApplicationId) {
+        try {
+          console.log("📤 Uploading extracted photo to Storage...");
+          
+          // Parse base64 from data URL
+          const base64Match = extractedPhotoBase64.match(/^data:image\/(\w+);base64,(.+)$/);
+          if (base64Match) {
+            const imageFormat = base64Match[1];
+            const base64Data = base64Match[2];
+            
+            // Convert base64 to Uint8Array
+            const binaryString = atob(base64Data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            
+            // Upload to Storage
+            const photoFileName = `${newApplicationId}_extracted.${imageFormat === 'jpeg' ? 'jpg' : imageFormat}`;
+            const { error: uploadError } = await supabase.storage
+              .from('profile-photos')
+              .upload(photoFileName, bytes, {
+                contentType: `image/${imageFormat}`,
+                upsert: true
+              });
+            
+            if (!uploadError) {
+              // Get public URL
+              const { data: urlData } = supabase.storage
+                .from('profile-photos')
+                .getPublicUrl(photoFileName);
+              
+              if (urlData?.publicUrl) {
+                // Update application with photo URL
+                await supabase
+                  .from('professional_applications')
+                  .update({
+                    extracted_data: {
+                      ...extractedData,
+                      profile_photo_url: urlData.publicUrl
+                    }
+                  })
+                  .eq('id', newApplicationId);
+                
+                console.log("✅ Photo uploaded and linked:", urlData.publicUrl);
+              }
+            } else {
+              console.error("❌ Photo upload error:", uploadError);
+            }
+          }
+        } catch (photoError) {
+          console.error("❌ Photo upload failed:", photoError);
+          // Don't fail the whole submission for photo upload error
+        }
+      }
 
       toast.success("Sollicitatie aangemaakt", {
         description: `${data.naam} is toegevoegd aan de pipeline`,
@@ -511,6 +574,14 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
         
         // Sla ALLE geëxtraheerde data op voor persistentie
         setCvExtractedData(extracted);
+        
+        // 🆕 Sla geëxtraheerde foto base64 op voor upload na applicatie creatie
+        const photoBase64 = extractValue(extracted.extracted_photo_base64);
+        if (photoBase64) {
+          setExtractedPhotoBase64(photoBase64);
+          filled.push("profile_photo");
+          console.log("✅ Extracted photo base64 stored for upload");
+        }
 
         // Check if critical fields (naam + email) were extracted
         const extractedNaam = extractValue(extracted.naam);
@@ -585,6 +656,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
     setCvFile(null);
     setAutoFilledFields([]);
     setCvExtractedData(null);
+    setExtractedPhotoBase64(null);
     setCurrentStep(0);
   };
 
@@ -650,7 +722,24 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                 <div className="flex flex-col items-center justify-center py-12 space-y-4">
                   <Loader2 className="h-12 w-12 animate-spin text-primary" />
                   <p className="text-sm font-medium">📄 CV wordt geanalyseerd...</p>
-                  <p className="text-xs text-muted-foreground">Dit duurt 3-5 seconden</p>
+                  <p className="text-xs text-muted-foreground">Incl. foto extractie - dit duurt 5-10 seconden</p>
+                </div>
+              ) : extractedPhotoBase64 ? (
+                // Photo extracted - show success preview
+                <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                  <div className="relative">
+                    <Avatar className="h-24 w-24 border-4 border-green-500 shadow-lg">
+                      <AvatarImage src={extractedPhotoBase64} alt="Geëxtraheerde foto" />
+                      <AvatarFallback><Camera className="h-8 w-8" /></AvatarFallback>
+                    </Avatar>
+                    <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-1">
+                      <CheckCircle2 className="h-5 w-5 text-white" />
+                    </div>
+                  </div>
+                  <div className="text-center space-y-1">
+                    <p className="text-sm font-medium text-green-600">✅ Profielfoto automatisch geëxtraheerd!</p>
+                    <p className="text-xs text-muted-foreground">Foto wordt opgeslagen bij aanmaken sollicitatie</p>
+                  </div>
                 </div>
               ) : (
                 <>

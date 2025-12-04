@@ -401,8 +401,8 @@ console.log("CV extraction complete with per-field confidence scores");
     const photoDesc = getValue(extractedData.photo_description);
     console.log(`📷 Photo detected: ${hasPhoto ? 'YES' : 'NO'}${photoDesc ? ` (${photoDesc})` : ''}`);
     
-    // 🆕 AUTOMATIC PHOTO EXTRACTION using Gemini Image model
-    if (hasPhoto && applicationId) {
+    // 🆕 AUTOMATIC PHOTO EXTRACTION using Gemini Image model - ALTIJD uitvoeren als foto gedetecteerd
+    if (hasPhoto) {
       console.log("🔄 Attempting automatic photo extraction with Gemini Image model...");
       
       try {
@@ -452,46 +452,56 @@ Do NOT include any text, logos, or other elements - just the person's face.`
           if (extractedImageData && extractedImageData.startsWith('data:image')) {
             console.log("✅ Profile photo extracted successfully!");
             
-            // Parse base64 from data URL
-            const base64Match = extractedImageData.match(/^data:image\/(\w+);base64,(.+)$/);
-            if (base64Match) {
-              const imageFormat = base64Match[1]; // png, jpeg, etc.
-              const base64Data = base64Match[2];
-              
-              // Convert base64 to Uint8Array for upload
-              const binaryString = atob(base64Data);
-              const bytes = new Uint8Array(binaryString.length);
-              for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-              }
-              
-              // Upload to Supabase Storage
-              const photoFileName = `${applicationId}_extracted.${imageFormat === 'jpeg' ? 'jpg' : imageFormat}`;
-              console.log(`📤 Uploading photo to profile-photos/${photoFileName}`);
-              
-              const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('profile-photos')
-                .upload(photoFileName, bytes, { 
-                  contentType: `image/${imageFormat}`,
-                  upsert: true 
-                });
-              
-              if (uploadError) {
-                console.error("❌ Photo upload error:", uploadError);
-              } else {
-                // Get public URL
-                const { data: urlData } = supabase.storage
-                  .from('profile-photos')
-                  .getPublicUrl(photoFileName);
+            // Als applicationId aanwezig is, upload naar Storage
+            if (applicationId) {
+              // Parse base64 from data URL
+              const base64Match = extractedImageData.match(/^data:image\/(\w+);base64,(.+)$/);
+              if (base64Match) {
+                const imageFormat = base64Match[1]; // png, jpeg, etc.
+                const base64Data = base64Match[2];
                 
-                if (urlData?.publicUrl) {
-                  extractedData.profile_photo_url = { 
-                    value: urlData.publicUrl, 
-                    confidence: 0.9 
-                  };
-                  console.log(`✅ Photo uploaded successfully: ${urlData.publicUrl}`);
+                // Convert base64 to Uint8Array for upload
+                const binaryString = atob(base64Data);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
+                }
+                
+                // Upload to Supabase Storage
+                const photoFileName = `${applicationId}_extracted.${imageFormat === 'jpeg' ? 'jpg' : imageFormat}`;
+                console.log(`📤 Uploading photo to profile-photos/${photoFileName}`);
+                
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                  .from('profile-photos')
+                  .upload(photoFileName, bytes, { 
+                    contentType: `image/${imageFormat}`,
+                    upsert: true 
+                  });
+                
+                if (uploadError) {
+                  console.error("❌ Photo upload error:", uploadError);
+                } else {
+                  // Get public URL
+                  const { data: urlData } = supabase.storage
+                    .from('profile-photos')
+                    .getPublicUrl(photoFileName);
+                  
+                  if (urlData?.publicUrl) {
+                    extractedData.profile_photo_url = { 
+                      value: urlData.publicUrl, 
+                      confidence: 0.9 
+                    };
+                    console.log(`✅ Photo uploaded successfully: ${urlData.publicUrl}`);
+                  }
                 }
               }
+            } else {
+              // Geen applicationId - retourneer base64 voor frontend upload
+              extractedData.extracted_photo_base64 = { 
+                value: extractedImageData, 
+                confidence: 0.9 
+              };
+              console.log("✅ Photo extracted as base64 - will be uploaded by frontend after application creation");
             }
           } else {
             console.log("⚠️ No image returned from photo extraction API - photo may be too small or unclear");
@@ -508,10 +518,6 @@ Do NOT include any text, logos, or other elements - just the person's face.`
         // Still flag that photo was detected for manual upload
         extractedData.photo_detected = { value: true, confidence: 0.7 };
       }
-    } else if (hasPhoto) {
-      // Photo detected but no applicationId - flag for manual upload
-      extractedData.photo_detected = { value: true, confidence: 0.9 };
-      console.log("✅ Profile photo detected in CV - no applicationId, user can upload manually");
     }
 
     // 🆕 Create searchable knowledge items if orgId is provided
