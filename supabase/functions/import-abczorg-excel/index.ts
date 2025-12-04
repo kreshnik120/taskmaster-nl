@@ -795,11 +795,50 @@ serve(async (req) => {
         const kvkNummer = extractKvk(record["KVK nummer"]);
         const plaats = record["Plaats"] || "";
         
-        // Determine organization name using mapping
-        let orgName = ORG_MAPPING[factBedrijfsnaam] || ORG_MAPPING[factBedrijfsnaam.trim()] || factBedrijfsnaam;
-        if (!orgName || orgName.trim() === "") {
-          orgName = bedrijfsnaam.split(" - ")[0].split(",")[0].trim();
+        // STEP 1: Check if factBedrijfsnaam is in ORG_MAPPING (known parent)
+        let orgName = ORG_MAPPING[factBedrijfsnaam] || ORG_MAPPING[factBedrijfsnaam.trim()];
+        
+        // STEP 2: If no mapping found, check if this IS a real organization itself
+        const isRealOrg = isRealOrganization(record);
+        
+        if (!orgName) {
+          // factBedrijfsnaam not in ORG_MAPPING
+          
+          // Check if factBedrijfsnaam == bedrijfsnaam (no parent indicator in Excel)
+          const noParentIndicator = factBedrijfsnaam.toLowerCase().trim() === bedrijfsnaam.toLowerCase().trim() ||
+                                    !factBedrijfsnaam || factBedrijfsnaam.trim() === "";
+          
+          if (noParentIndicator && !isRealOrg) {
+            // No parent org indicated AND not a real org itself → SKIP
+            results.skipped++;
+            if (results.skippedRecords.length < 30) {
+              results.skippedRecords.push({
+                name: bedrijfsnaam.substring(0, 50),
+                reason: "Geen bekende parent organisatie (Fact. bedrijfsnaam = Bedrijfsnaam)"
+              });
+            }
+            continue;
+          }
+          
+          if (isRealOrg) {
+            // This IS a real organization (Stichting/BV) → use its name
+            orgName = factBedrijfsnaam || bedrijfsnaam;
+          } else if (hasKnownParentOrganization(record)) {
+            // Pattern-matched to known org
+            orgName = factBedrijfsnaam;
+          } else {
+            // Fallback: try to extract org name, but be strict
+            results.skipped++;
+            if (results.skippedRecords.length < 30) {
+              results.skippedRecords.push({
+                name: bedrijfsnaam.substring(0, 50),
+                reason: "Geen match met bekende organisaties"
+              });
+            }
+            continue;
+          }
         }
+        
         if (!orgName || orgName.trim() === "") {
           results.skipped++;
           continue;
@@ -811,8 +850,21 @@ serve(async (req) => {
           orgId = fuzzyMatchOrg(orgName, orgByName);
         }
 
-        // Create organization if not found
+        // STEP 3: Create organization ONLY if it's a real organization (Stichting/BV)
         if (!orgId) {
+          if (!isRealOrg) {
+            // Not a real org and no match found → SKIP instead of creating
+            results.skipped++;
+            if (results.skippedRecords.length < 30) {
+              results.skippedRecords.push({
+                name: bedrijfsnaam.substring(0, 50),
+                reason: `Geen bestaande org gevonden voor "${orgName.substring(0, 30)}"`
+              });
+            }
+            continue;
+          }
+          
+          // IS a real org → create it
           const { data: newOrg, error: orgError } = await supabase
             .from("client_organizations")
             .insert({
@@ -831,8 +883,9 @@ serve(async (req) => {
 
           orgId = newOrg.id;
           results.orgsCreated.push(orgName);
+          console.log(`✓ Created new organization: ${orgName} (KVK: ${kvkNummer || 'geen'})`);
           
-          // Cache the new org immediately (newOrg.id is guaranteed to be string here)
+          // Cache the new org immediately
           orgByName.set(orgName.toLowerCase(), newOrg.id);
         }
 
