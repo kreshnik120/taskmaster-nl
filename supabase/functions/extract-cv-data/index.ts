@@ -36,7 +36,7 @@ serve(async (req) => {
     console.log(`PDF base64 length: ${pdfBase64.length}`);
     console.log(`PDF base64 start: ${pdfBase64.substring(0, 50)}...`);
     
-    const aiPrompt = `Analyseer dit CV/PDF document en extract ALLE relevante informatie voor healthcare recruitment.
+const aiPrompt = `Analyseer dit CV/PDF document en extract ALLE relevante informatie voor healthcare recruitment.
 
 **NIEUW FORMAT - Per-veld confidence scores**
 Elk veld heeft nu een "value" en "confidence" property. Geef terug in dit EXACTE JSON formaat:
@@ -49,6 +49,10 @@ Elk veld heeft nu een "value" en "confidence" property. Geef terug in dit EXACTE
   "postcode": { "value": "1234 AB", "confidence": 0.8 },
   "woonplaats": { "value": "Plaatsnaam", "confidence": 0.85 },
   "geboortedatum": { "value": "YYYY-MM-DD", "confidence": 0.7 },
+  
+  // === PROFIELFOTO DETECTIE ===
+  "has_profile_photo": { "value": true, "confidence": 0.95 },
+  "photo_description": { "value": "Pasfoto in header rechtsboven", "confidence": 0.9 },
   
   // === PROFESSIONELE INFO ===
   "functie_niveau": { "value": "VIG", "confidence": 0.85 },
@@ -92,6 +96,12 @@ Elk veld heeft nu een "value" en "confidence" property. Geef terug in dit EXACTE
   // === GLOBAL (backwards compatibility) ===
   "global_confidence": 0.82
 }
+
+**PROFIELFOTO DETECTIE:**
+- Zoek naar een pasfoto/profielfoto in het CV (vaak rechtsboven of linksboven in header)
+- has_profile_photo.value: true als foto gedetecteerd, false als geen foto
+- photo_description.value: beschrijf locatie ("header rechtsboven", "sidebar links", etc.)
+- Confidence 0.95 als duidelijke pasfoto, 0.7 als onduidelijk/klein
 
 **CONFIDENCE SCORING GUIDELINES:**
 - 0.95-1.0: Exact gevonden (letterlijk in CV, bijv. naam bovenaan, email met @)
@@ -195,7 +205,7 @@ Belangrijk:
       console.log("Extracted data:", extractedData);
     } catch (parseError) {
       console.error("Failed to parse AI response:", parseError);
-      // Fallback with minimal data - NEW FORMAT
+// Fallback with minimal data - NEW FORMAT
       extractedData = {
         naam: { value: null, confidence: 0 },
         telefoon: { value: null, confidence: 0 },
@@ -203,6 +213,8 @@ Belangrijk:
         postcode: { value: null, confidence: 0 },
         woonplaats: { value: null, confidence: 0 },
         geboortedatum: { value: null, confidence: 0 },
+        has_profile_photo: { value: false, confidence: 0 },
+        photo_description: { value: null, confidence: 0 },
         functie_niveau: { value: null, confidence: 0 },
         werkvorm: { value: null, confidence: 0 },
         jaren_ervaring: { value: null, confidence: 0 },
@@ -381,8 +393,21 @@ Belangrijk:
         : 0.5;
     }
 
-    console.log("CV extraction complete with per-field confidence scores");
+console.log("CV extraction complete with per-field confidence scores");
     console.log("Global confidence:", extractedData.global_confidence);
+    
+    // Log photo detection status
+    const hasPhoto = getValue(extractedData.has_profile_photo);
+    const photoDesc = getValue(extractedData.photo_description);
+    console.log(`📷 Photo detected: ${hasPhoto ? 'YES' : 'NO'}${photoDesc ? ` (${photoDesc})` : ''}`);
+    
+    // Note: Profile photos detected but not yet extracted as base64
+    // The AI can detect presence but extracting the actual image requires separate processing
+    // For now, we flag the detection for future manual/automated photo upload
+    if (hasPhoto) {
+      extractedData.photo_detected = { value: true, confidence: getValue(extractedData.has_profile_photo) ? 0.9 : 0.5 };
+      console.log("✅ Profile photo detected in CV - user can upload photo manually");
+    }
 
     // 🆕 Create searchable knowledge items if orgId is provided
     let knowledgeItemsCreated = 0;

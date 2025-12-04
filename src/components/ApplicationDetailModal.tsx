@@ -1149,26 +1149,88 @@ export function ApplicationDetailModal({
 
         {/* Hero Header Section */}
         <div className="flex items-start gap-4 pb-4">
-          {/* Avatar */}
-          <Avatar className="h-16 w-16 border-2 border-border">
-            {application.extracted_data?.profile_photo_url ? (
-              <AvatarImage 
-                src={application.extracted_data.profile_photo_url} 
-                alt={candidateName} 
-              />
-            ) : null}
-            <AvatarFallback className={`text-lg font-semibold ${
-              getFieldValue(application.extracted_data?.functie_niveau) === 'HBO-V' 
-                ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300'
-                : getFieldValue(application.extracted_data?.functie_niveau) === 'VIG'
-                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
-                  : getFieldValue(application.extracted_data?.functie_niveau) === 'Begeleider'
-                    ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300'
-                    : 'bg-muted text-muted-foreground'
-            }`}>
-              {candidateName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-            </AvatarFallback>
-          </Avatar>
+          {/* Avatar with Photo Upload */}
+          <div className="relative group">
+            <Avatar className="h-16 w-16 border-2 border-border">
+              {getFieldValue(application.extracted_data?.profile_photo_url) ? (
+                <AvatarImage 
+                  src={getFieldValue(application.extracted_data?.profile_photo_url) as string} 
+                  alt={candidateName} 
+                />
+              ) : null}
+              <AvatarFallback className={`text-lg font-semibold ${
+                getFieldValue(application.extracted_data?.functie_niveau) === 'HBO-V' 
+                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300'
+                  : getFieldValue(application.extracted_data?.functie_niveau) === 'VIG'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                    : getFieldValue(application.extracted_data?.functie_niveau) === 'Begeleider'
+                      ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300'
+                      : 'bg-muted text-muted-foreground'
+              }`}>
+                {candidateName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+              </AvatarFallback>
+            </Avatar>
+            
+            {/* Photo upload overlay */}
+            {!getFieldValue(application.extracted_data?.profile_photo_url) && (
+              <label 
+                className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                title="Upload foto"
+              >
+                <Upload className="h-5 w-5 text-white" />
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    
+                    try {
+                      const fileExt = file.name.split('.').pop();
+                      const fileName = `${application.id}.${fileExt}`;
+                      
+                      const { data: uploadData, error: uploadError } = await supabase.storage
+                        .from('profile-photos')
+                        .upload(fileName, file, { upsert: true });
+                      
+                      if (uploadError) throw uploadError;
+                      
+                      const { data: { publicUrl } } = supabase.storage
+                        .from('profile-photos')
+                        .getPublicUrl(fileName);
+                      
+                      // Update extracted_data with photo URL
+                      const updatedData = {
+                        ...application.extracted_data,
+                        profile_photo_url: publicUrl,
+                      };
+                      
+                      const { error: updateError } = await supabase
+                        .from('professional_applications')
+                        .update({ extracted_data: updatedData })
+                        .eq('id', application.id);
+                      
+                      if (updateError) throw updateError;
+                      
+                      toast.success('Foto geüpload');
+                      onApplicationUpdated();
+                    } catch (error: any) {
+                      console.error('Photo upload error:', error);
+                      toast.error('Fout bij uploaden foto');
+                    }
+                  }}
+                />
+              </label>
+            )}
+            
+            {/* Photo detected badge */}
+            {getFieldValue(application.extracted_data?.has_profile_photo) && !getFieldValue(application.extracted_data?.profile_photo_url) && (
+              <div className="absolute -bottom-1 -right-1 bg-amber-500 text-white text-[10px] rounded-full px-1.5 py-0.5 font-medium">
+                📷
+              </div>
+            )}
+          </div>
 
           {/* Name & Metadata */}
           <div className="flex-1 min-w-0">
