@@ -344,27 +344,101 @@ function detectFuncties(beschrijving: string | null): string[] {
   return functies.length > 0 ? [...new Set(functies)] : ["Begeleider"];
 }
 
-// Check if record should be skipped
-function shouldSkip(record: Record<string, string>): boolean {
+// Detect case-specific assignments (NOT real organizations)
+function isCaseSpecificRecord(record: Record<string, string>): { isCaseSpecific: boolean; reason?: string } {
+  const bedrijfsnaam = (record["Bedrijfsnaam"] || "").toLowerCase();
+  const locatie = (record["Locatie"] || "").toLowerCase();
+  const combined = `${bedrijfsnaam} ${locatie}`;
+  
+  // Patterns indicating case-specific / individual client assignments
+  const casePatterns: { pattern: RegExp; reason: string }[] = [
+    { pattern: /1\s*op\s*1\s*begelei/i, reason: "1-op-1 begeleiding (individuele casus)" },
+    { pattern: /casus\s+[a-z]\.?\s*(in|te)?/i, reason: "Casus-specifieke opdracht" },
+    { pattern: /^client\s+[a-z]/i, reason: "Client-specifieke locatie" },
+    { pattern: /begeleidersprofiel\s+(voor|van)/i, reason: "Begeleidersprofiel (geen locatie)" },
+    { pattern: /begeleiding\s+in\s+\w+,?\s*(client|casus)/i, reason: "Begeleiding voor specifieke client" },
+    { pattern: /center\s*park/i, reason: "Tijdelijke locatie (vakantiepark)" },
+    { pattern: /^cp\s+de\s+/i, reason: "Tijdelijke Center Parcs locatie" },
+    { pattern: /tijdelijke?\s+(opdracht|locatie|inzet)/i, reason: "Tijdelijke opdracht" },
+    { pattern: /\(\s*tijden\s+casus/i, reason: "Casus met tijden (geen vaste locatie)" },
+    { pattern: /kennis\s+(lvb|odd|adhd).*kenni/i, reason: "Profielbeschrijving (geen locatie)" },
+  ];
+  
+  for (const { pattern, reason } of casePatterns) {
+    if (pattern.test(bedrijfsnaam) || pattern.test(combined)) {
+      return { isCaseSpecific: true, reason };
+    }
+  }
+  
+  return { isCaseSpecific: false };
+}
+
+// Detect real organizations (should be imported)
+function isRealOrganization(record: Record<string, string>): boolean {
+  const bedrijfsnaam = (record["Bedrijfsnaam"] || "");
+  const factBedrijfsnaam = (record["Fact. bedrijfsnaam"] || "");
+  const kvk = record["KVK nummer"];
+  
+  // Has valid KVK number = real organization
+  if (kvk && kvk.replace(/\D/g, "").length >= 8) return true;
+  
+  // Contains "Stichting" = real organization
+  if (/stichting/i.test(bedrijfsnaam) || /stichting/i.test(factBedrijfsnaam)) return true;
+  
+  // Match with known organizations in ORG_MAPPING
+  if (ORG_MAPPING[bedrijfsnaam] || ORG_MAPPING[factBedrijfsnaam]) return true;
+  if (ORG_MAPPING[bedrijfsnaam.trim()] || ORG_MAPPING[factBedrijfsnaam.trim()]) return true;
+  
+  // Ends with legal form
+  if (/\s+(b\.?v\.?|groep|zorg|zorggroep)$/i.test(bedrijfsnaam)) return true;
+  
+  // Contains "Hoofdkantoor" = organizational record
+  if (/hoofdkantoor/i.test(bedrijfsnaam)) return true;
+  
+  return false;
+}
+
+// Check if record should be skipped - returns object with reason
+function shouldSkip(record: Record<string, string>): { skip: boolean; reason?: string } {
   const bedrijfsnaam = record["Bedrijfsnaam"] || "";
   const locatie = record["Locatie"] || "";
   const status = record["Status"] || "";
   
   // Skip inactive records
   if (status.toLowerCase().includes("inactief") || status.toLowerCase().includes("niet actief")) {
-    return true;
+    return { skip: true, reason: "Inactief record" };
   }
   
   // Skip records marked as not to use
-  const skipPatterns = ["NIET GEBRUIKEN", "VERKEERDE", "TEST", "DUMMY", "Hoofdkantoor", "VERVALLEN", "OUD - ", "NIET MEER"];
-  for (const pattern of skipPatterns) {
+  const skipPatterns = [
+    { pattern: "NIET GEBRUIKEN", reason: "Gemarkeerd als niet gebruiken" },
+    { pattern: "VERKEERDE", reason: "Verkeerde data" },
+    { pattern: "TEST", reason: "Test record" },
+    { pattern: "DUMMY", reason: "Dummy record" },
+    { pattern: "VERVALLEN", reason: "Vervallen record" },
+    { pattern: "OUD - ", reason: "Oud record" },
+    { pattern: "NIET MEER", reason: "Niet meer actief" },
+  ];
+  
+  for (const { pattern, reason } of skipPatterns) {
     if (bedrijfsnaam.toUpperCase().includes(pattern.toUpperCase()) || 
         locatie.toUpperCase().includes(pattern.toUpperCase())) {
-      return true;
+      return { skip: true, reason };
     }
   }
   
-  return false;
+  // Skip "Hoofdkantoor" entries (these are organizational, not sublocations)
+  if (/\s*-\s*hoofdkantoor$/i.test(bedrijfsnaam) || bedrijfsnaam.toLowerCase().endsWith("hoofdkantoor")) {
+    return { skip: true, reason: "Hoofdkantoor (geen werklocatie)" };
+  }
+  
+  // NEW: Skip case-specific records that are NOT real organizations
+  const caseCheck = isCaseSpecificRecord(record);
+  if (caseCheck.isCaseSpecific && !isRealOrganization(record)) {
+    return { skip: true, reason: caseCheck.reason || "Case-specifieke opdracht" };
+  }
+  
+  return { skip: false };
 }
 
 // Normalize organization name for consistent matching
@@ -534,13 +608,22 @@ serve(async (req) => {
       errors: [] as string[],
       orgsCreated: [] as string[],
       locationsCreated: [] as string[],
+      skippedRecords: [] as { name: string; reason: string }[],
     };
 
     for (const record of records) {
       try {
         // Skip records that should not be imported
-        if (shouldSkip(record)) {
+        const skipResult = shouldSkip(record);
+        if (skipResult.skip) {
           results.skipped++;
+          // Track first 20 skipped records with reasons for transparency
+          if (results.skippedRecords.length < 20) {
+            results.skippedRecords.push({
+              name: (record["Bedrijfsnaam"] || "").substring(0, 50),
+              reason: skipResult.reason || "Onbekende reden",
+            });
+          }
           continue;
         }
 
