@@ -2761,6 +2761,7 @@ export type Database = {
           email: string | null
           full_name: string
           functie_niveau: string
+          geboortedatum: string | null
           gewenst_uurloon: number | null
           heeft_auto: boolean | null
           heeft_rijbewijs: boolean | null
@@ -2793,6 +2794,7 @@ export type Database = {
           email?: string | null
           full_name: string
           functie_niveau: string
+          geboortedatum?: string | null
           gewenst_uurloon?: number | null
           heeft_auto?: boolean | null
           heeft_rijbewijs?: boolean | null
@@ -2825,6 +2827,7 @@ export type Database = {
           email?: string | null
           full_name?: string
           functie_niveau?: string
+          geboortedatum?: string | null
           gewenst_uurloon?: number | null
           heeft_auto?: boolean | null
           heeft_rijbewijs?: boolean | null

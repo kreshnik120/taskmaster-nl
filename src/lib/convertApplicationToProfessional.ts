@@ -170,7 +170,7 @@ export async function convertApplicationToProfessional(
       ? (werkvormMapping[application.extracted_data.werkvorm.toLowerCase()] || application.extracted_data.werkvorm)
       : null;
 
-    // Map application data to professional
+    // Map application data to professional including NAW fields
     const professionalData = {
       org_id: orgId,
       full_name: application.extracted_data.naam,
@@ -183,7 +183,13 @@ export async function convertApplicationToProfessional(
       heeft_auto: application.extracted_data.eigen_vervoer || false,
       skills: application.extracted_data.ervaring_sector || [],
       status: 'actief',
-      tags: application.extracted_data.doelgroep_ervaring || []
+      tags: application.extracted_data.doelgroep_ervaring || [],
+      // NAW fields from CV extraction
+      woonplaats: application.extracted_data.woonplaats || null,
+      postcode: application.extracted_data.postcode || null,
+      adres: application.extracted_data.adres || null,
+      geboortedatum: application.extracted_data.geboortedatum || null,
+      profile_photo_url: application.extracted_data.profile_photo_url || null
     };
 
     // Create professional
