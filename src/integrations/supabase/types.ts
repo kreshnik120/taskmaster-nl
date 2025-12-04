@@ -2762,13 +2762,17 @@ export type Database = {
       professionals: {
         Row: {
           adres: string | null
+          beschikbaarheid_uren: Json | null
           beschikbaarheidsnotities: string | null
           big_nummer: string | null
           btw_nummer: string | null
           cao_akkoord: boolean | null
+          certificaten: string[] | null
           created_at: string
           deleted_at: string | null
+          doelgroep_ervaring: string[] | null
           email: string | null
+          ervaring_sector: string[] | null
           full_name: string
           functie_niveau: string
           geboortedatum: string | null
@@ -2777,7 +2781,10 @@ export type Database = {
           heeft_rijbewijs: boolean | null
           id: string
           is_test_data: boolean | null
+          jaren_ervaring: number | null
           kvk_nummer: string | null
+          leidinggevende_ervaring: boolean | null
+          nachtdienst_bereid: boolean | null
           org_id: string
           postcode: string | null
           profile_photo_url: string | null
@@ -2790,18 +2797,23 @@ export type Database = {
           telefoonnummer: string | null
           updated_at: string
           vog_date: string | null
+          weekenddienst_bereid: boolean | null
           werkvorm: string | null
           woonplaats: string | null
         }
         Insert: {
           adres?: string | null
+          beschikbaarheid_uren?: Json | null
           beschikbaarheidsnotities?: string | null
           big_nummer?: string | null
           btw_nummer?: string | null
           cao_akkoord?: boolean | null
+          certificaten?: string[] | null
           created_at?: string
           deleted_at?: string | null
+          doelgroep_ervaring?: string[] | null
           email?: string | null
+          ervaring_sector?: string[] | null
           full_name: string
           functie_niveau: string
           geboortedatum?: string | null
@@ -2810,7 +2822,10 @@ export type Database = {
           heeft_rijbewijs?: boolean | null
           id?: string
           is_test_data?: boolean | null
+          jaren_ervaring?: number | null
           kvk_nummer?: string | null
+          leidinggevende_ervaring?: boolean | null
+          nachtdienst_bereid?: boolean | null
           org_id: string
           postcode?: string | null
           profile_photo_url?: string | null
@@ -2823,18 +2838,23 @@ export type Database = {
           telefoonnummer?: string | null
           updated_at?: string
           vog_date?: string | null
+          weekenddienst_bereid?: boolean | null
           werkvorm?: string | null
           woonplaats?: string | null
         }
         Update: {
           adres?: string | null
+          beschikbaarheid_uren?: Json | null
           beschikbaarheidsnotities?: string | null
           big_nummer?: string | null
           btw_nummer?: string | null
           cao_akkoord?: boolean | null
+          certificaten?: string[] | null
           created_at?: string
           deleted_at?: string | null
+          doelgroep_ervaring?: string[] | null
           email?: string | null
+          ervaring_sector?: string[] | null
           full_name?: string
           functie_niveau?: string
           geboortedatum?: string | null
@@ -2843,7 +2863,10 @@ export type Database = {
           heeft_rijbewijs?: boolean | null
           id?: string
           is_test_data?: boolean | null
+          jaren_ervaring?: number | null
           kvk_nummer?: string | null
+          leidinggevende_ervaring?: boolean | null
+          nachtdienst_bereid?: boolean | null
           org_id?: string
           postcode?: string | null
           profile_photo_url?: string | null
@@ -2856,6 +2879,7 @@ export type Database = {
           telefoonnummer?: string | null
           updated_at?: string
           vog_date?: string | null
+          weekenddienst_bereid?: boolean | null
           werkvorm?: string | null
           woonplaats?: string | null
         }
