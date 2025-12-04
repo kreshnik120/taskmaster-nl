@@ -20,6 +20,7 @@ import { OrganizationCard } from "@/components/organization/OrganizationCard";
 import { OrganizationDetailModal } from "@/components/organization/OrganizationDetailModal";
 import { LocationDetailModal } from "@/components/organization/LocationDetailModal";
 import { SublocationDetailModal } from "@/components/organization/SublocationDetailModal";
+import { DataLinkingIndicator } from "@/components/recruitment/DataLinkingIndicator";
 
 interface Client {
   id: string;
@@ -435,6 +436,9 @@ export default function Klanten() {
                 {clients.length} klanten in je portfolio
               </p>
             </div>
+
+            {/* Data Linking Indicator */}
+            <DataLinkingIndicator onRefresh={loadClients} />
 
             {/* View Toggle */}
             <div className="flex items-center gap-2 mb-6">
