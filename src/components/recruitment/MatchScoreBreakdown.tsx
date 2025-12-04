@@ -2,7 +2,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertCircle, CheckCircle2, AlertTriangle } from "lucide-react";
+import { AlertCircle, CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
 
 interface ScoreBreakdown {
   regio: { score: number; match: boolean; reason: string };
@@ -16,6 +16,7 @@ interface ScoreBreakdown {
   doelgroep: { score: number; match: boolean; reason: string };
   functie: { score: number; match: boolean; reason: string };
   bureau: { score: number; match: boolean; reason: string };
+  aiBoost?: { score: number; match: boolean; reason: string };
 }
 
 interface MatchScoreBreakdownProps {
@@ -33,19 +34,22 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
     doelgroep: breakdown?.doelgroep || defaultCriterion,
     functie: breakdown?.functie || defaultCriterion,
     bureau: breakdown?.bureau || defaultCriterion,
+    aiBoost: breakdown?.aiBoost,
   };
 
+  // Updated weights to match unified service (100 point scale)
   const criteria = [
-    { key: 'regio', label: 'Regio', weight: '30%', ...safeBreakdown.regio },
-    { key: 'sector', label: 'Sector', weight: '25%', ...safeBreakdown.sector },
-    { key: 'doelgroep', label: 'Doelgroep', weight: '20%', ...safeBreakdown.doelgroep },
-    { key: 'functie', label: 'Functieniveau', weight: '15%', ...safeBreakdown.functie },
-    { key: 'bureau', label: 'Bureau', weight: '10%', ...safeBreakdown.bureau },
+    { key: 'functie', label: 'Functieniveau', weight: 25, maxScore: 25, ...safeBreakdown.functie },
+    { key: 'regio', label: 'Regio', weight: 20, maxScore: 20, ...safeBreakdown.regio },
+    { key: 'sector', label: 'Sector', weight: 20, maxScore: 20, ...safeBreakdown.sector },
+    { key: 'doelgroep', label: 'Doelgroep', weight: 10, maxScore: 10, ...safeBreakdown.doelgroep },
+    { key: 'bureau', label: 'Bureau', weight: 5, maxScore: 5, ...safeBreakdown.bureau },
   ];
 
-  const getScoreColor = (score: number) => {
-    if (score >= 25) return 'text-green-600';
-    if (score >= 15) return 'text-yellow-600';
+  const getScoreColor = (score: number, maxScore: number) => {
+    const percentage = (score / maxScore) * 100;
+    if (percentage >= 80) return 'text-green-600';
+    if (percentage >= 50) return 'text-yellow-600';
     return 'text-red-600';
   };
 
@@ -67,11 +71,20 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
           </Badge>
         </div>
 
+        {/* AI Boost indicator */}
+        {safeBreakdown.aiBoost && safeBreakdown.aiBoost.match && (
+          <div className="flex items-center gap-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+            <Sparkles className="h-4 w-4 text-purple-600" />
+            <span className="text-xs text-purple-700 dark:text-purple-300 font-medium">
+              AI Learning Boost: +{safeBreakdown.aiBoost.score} punten
+            </span>
+          </div>
+        )}
+
         {/* Criteria Breakdown */}
         <div className="space-y-3">
           {criteria.map((criterion) => {
-            const maxScore = parseInt(criterion.weight);
-            const percentage = (criterion.score / maxScore) * 100;
+            const percentage = (criterion.score / criterion.maxScore) * 100;
             
             return (
               <div key={criterion.key} className="space-y-2">
@@ -115,11 +128,11 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                     </TooltipProvider>
                     <span className="font-medium">{criterion.label}</span>
                     <Badge variant="outline" className="text-xs">
-                      {criterion.weight}
+                      max {criterion.maxScore}
                     </Badge>
                   </div>
-                  <span className={`font-semibold ${getScoreColor(criterion.score)}`}>
-                    {criterion.score}/{maxScore}
+                  <span className={`font-semibold ${getScoreColor(criterion.score, criterion.maxScore)}`}>
+                    {criterion.score}/{criterion.maxScore}
                   </span>
                 </div>
                 
@@ -132,7 +145,7 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                     className={`absolute top-0 left-0 h-2 rounded-full transition-all ${
                       criterion.key === 'sector' && safeBreakdown.sector.relatedMatches && safeBreakdown.sector.relatedMatches.length > 0
                         ? 'bg-amber-500'
-                        : getProgressColor(criterion.score, maxScore)
+                        : getProgressColor(criterion.score, criterion.maxScore)
                     }`}
                     style={{ width: `${percentage}%` }}
                   />

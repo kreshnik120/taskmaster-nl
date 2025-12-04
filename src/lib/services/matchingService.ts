@@ -13,6 +13,7 @@
  * - Beschikbaarheid: 5 punten
  * - Bureau: 5 punten
  * - Bonus: Ervaring (+5), Leidinggevende (+3), Certificaten (+3), Nacht/Weekend (+2)
+ * - AI Boost: up to +15 punten (from learned success patterns)
  */
 
 import { 
@@ -24,6 +25,13 @@ import {
   BUUR_PROVINCIES,
   functieMatchesAny
 } from '../constants/matchingConstants';
+
+import {
+  loadSuccessPatterns,
+  calculateAILearningBoost,
+  trackPatternUsage,
+  type SuccessPattern
+} from '../aiLearningBoost';
 
 // ============= INTERFACES =============
 
@@ -73,9 +81,13 @@ export interface MatchScoreBreakdown {
   leidinggevendeBonus: number;
   certificatenBonus: number;
   dienstBonus: number;
+  aiBoost: number;
   totalScore: number;
   normalizedScore: number;
   reasoning: string[];
+  hasAIBoost: boolean;
+  aiBoostReasons: string[];
+  usedPatternIds: string[];
   details: {
     functie?: { match: boolean; reason: string };
     regio?: { match: boolean; reason: string; matchType: 'exact' | 'province' | 'neighbor' | 'none' };
@@ -85,6 +97,7 @@ export interface MatchScoreBreakdown {
     beschikbaarheid?: { match: boolean; reason: string };
     bureau?: { match: boolean; reason: string };
     ervaring?: { bonus: number; label: string };
+    aiBoost?: { score: number; match: boolean; reason: string };
   };
 }
 
@@ -228,7 +241,8 @@ function calculateSemanticDoelgroepMatch(
 
 export function calculateUnifiedMatchScore(
   candidate: MatchCandidate,
-  target: MatchTarget
+  target: MatchTarget,
+  aiBoostData?: { boost: number; reasons: string[]; usedPatternIds: string[] }
 ): MatchScoreBreakdown {
   const reasoning: string[] = [];
   let functieMatch = 0;
@@ -242,6 +256,7 @@ export function calculateUnifiedMatchScore(
   let leidinggevendeBonus = 0;
   let certificatenBonus = 0;
   let dienstBonus = 0;
+  let aiBoost = 0;
 
   const details: MatchScoreBreakdown['details'] = {};
 
@@ -513,6 +528,25 @@ export function calculateUnifiedMatchScore(
     reasoning.push(`✅ Beschikbaar voor weekenddienst (+1)`);
   }
 
+  // ===== AI LEARNING BOOST (up to +15 points) =====
+  let hasAIBoost = false;
+  let aiBoostReasons: string[] = [];
+  let usedPatternIds: string[] = [];
+
+  if (aiBoostData && aiBoostData.boost > 0) {
+    // AI boost is already in percentage, convert to points (max 15)
+    aiBoost = Math.min(15, Math.round(aiBoostData.boost * 15 / 100));
+    hasAIBoost = true;
+    aiBoostReasons = aiBoostData.reasons;
+    usedPatternIds = aiBoostData.usedPatternIds;
+    reasoning.push(...aiBoostData.reasons.map(r => `🤖 ${r}`));
+    details.aiBoost = { 
+      score: aiBoost, 
+      match: true, 
+      reason: `AI geleerd patroon (+${aiBoostData.boost}%)` 
+    };
+  }
+
   // ===== TOTAL SCORE =====
   const totalScore = 
     functieMatch + 
@@ -525,9 +559,10 @@ export function calculateUnifiedMatchScore(
     ervaringBonus + 
     leidinggevendeBonus + 
     certificatenBonus + 
-    dienstBonus;
+    dienstBonus +
+    aiBoost;
 
-  // Normalize to 0-100 scale
+  // Normalize to 0-100 scale (max base is 100, but with AI boost can go slightly higher)
   const normalizedScore = Math.round(Math.min(100, Math.max(0, totalScore)));
 
   return {
@@ -542,9 +577,13 @@ export function calculateUnifiedMatchScore(
     leidinggevendeBonus,
     certificatenBonus,
     dienstBonus,
+    aiBoost,
     totalScore,
     normalizedScore,
     reasoning,
+    hasAIBoost,
+    aiBoostReasons,
+    usedPatternIds,
     details
   };
 }
@@ -610,7 +649,8 @@ export function calculateApplicationToClientMatch(
     doelgroep?: string[] | null;
     regio?: string[] | null;
     org_id?: string | null;
-  }
+  },
+  aiBoostData?: { boost: number; reasons: string[]; usedPatternIds: string[] }
 ): MatchScoreBreakdown {
   return calculateUnifiedMatchScore(
     {
@@ -634,6 +674,61 @@ export function calculateApplicationToClientMatch(
       doelgroep: client.doelgroep,
       regio: client.regio,
       org_id: client.org_id,
+    },
+    aiBoostData
+  );
+}
+
+/**
+ * Async version that loads AI patterns and calculates boost automatically
+ */
+export async function calculateApplicationToClientMatchWithAI(
+  extractedData: {
+    functie_niveau?: string | null;
+    regio?: string | null;
+    woonplaats?: string | null;
+    postcode?: string | null;
+    ervaring_sector?: string[] | null;
+    doelgroep_ervaring?: string[] | null;
+    jaren_ervaring?: number | null;
+    leidinggevende_ervaring?: boolean | null;
+    eigen_vervoer?: boolean | null;
+    nachtdienst_bereid?: boolean | null;
+    weekenddienst_bereid?: boolean | null;
+    certificaten?: string[] | null;
+    assigned_organization?: string | null;
+  },
+  client: {
+    gezochte_functies?: string[] | null;
+    sector?: string[] | null;
+    doelgroep?: string[] | null;
+    regio?: string[] | null;
+    org_id?: string | null;
+  }
+): Promise<MatchScoreBreakdown> {
+  // Load AI success patterns
+  const patterns = await loadSuccessPatterns();
+  
+  // Calculate AI boost
+  const aiBoostResult = calculateAILearningBoost(
+    extractedData.functie_niveau || null,
+    extractedData.ervaring_sector || [],
+    extractedData.doelgroep_ervaring || [],
+    patterns
+  );
+  
+  // Track pattern usage (fire-and-forget)
+  if (aiBoostResult.usedPatternIds.length > 0) {
+    trackPatternUsage(aiBoostResult.usedPatternIds);
+  }
+  
+  return calculateApplicationToClientMatch(
+    extractedData,
+    client,
+    {
+      boost: aiBoostResult.boost,
+      reasons: aiBoostResult.reasons,
+      usedPatternIds: aiBoostResult.usedPatternIds
     }
   );
 }

@@ -38,9 +38,7 @@ import { AIMatchInsights } from "@/components/recruitment/AIMatchInsights";
 import { AIRecommendationBadge } from "@/components/recruitment/AIRecommendationBadge";
 import { AIFeedbackButtons } from "@/components/recruitment/AIFeedbackButtons";
 import { InterviewSchedulingModal } from "@/components/recruitment/InterviewSchedulingModal";
-import { calculateApplicationToClientMatch } from "@/lib/services/matchingService";
-import { SECTOR_SIMILARITY, functieMatchesAny, calculateRegioScore, calculateErvaringBonus, LEIDINGGEVENDE_BONUS } from "@/lib/constants/matchingConstants";
-import { loadSuccessPatterns, calculateAILearningBoost, getCachedSuccessPatterns, trackPatternUsage } from "@/lib/aiLearningBoost";
+import { calculateApplicationToClientMatchWithAI, type MatchScoreBreakdown as MatchScoreBreakdownType } from "@/lib/services/matchingService";
 
 interface Application {
   id: string;
@@ -829,9 +827,6 @@ export function ApplicationDetailModal({
     setMatchingLoading(true);
     setShowMatches(true);
     try {
-      // Load AI success patterns for learning boost
-      const successPatterns = await loadSuccessPatterns();
-      
       const { data: clients, error } = await supabase
         .from('clients')
         .select('*')
@@ -845,242 +840,69 @@ export function ApplicationDetailModal({
 
       const extractedData = application.extracted_data;
 
-      // Theoretisch maximum: Regio(30) + Sector(25) + Doelgroep(20) + Functie(15) + Bureau(10) + Ervaring(5) + Leiding(3) + Postcode(5) + Nacht(3) + Weekend(3) + Cert(5) + AI Boost(15) = 139
-      const MAX_POSSIBLE_SCORE = 139;
-      
-      const scored = clients.map(client => {
-        let score = 0;
-        let reasons: string[] = [];
-        
-        // Region matching with semantic province support
-        const clientRegios = client.regio || [];
-        const regioResult = calculateRegioScore(extractedData.regio, clientRegios);
-        
-        // Fallback: check if regio appears in client name
-        const applicantRegios = (extractedData.regio || '')
-          .toLowerCase()
-          .split(',')
-          .map((r: string) => r.trim())
-          .filter(Boolean);
-        const clientNameLower = (client.name || '').toLowerCase();
-        const clientCompanyLower = (client.company || '').toLowerCase();
-        const nameRegioMatch = applicantRegios.some((ar: string) => 
-          clientNameLower.includes(ar) || clientCompanyLower.includes(ar)
+      // Use unified matching service with AI boost
+      const scoredPromises = clients.map(async (client) => {
+        const result = await calculateApplicationToClientMatchWithAI(
+          extractedData,
+          {
+            gezochte_functies: client.gezochte_functies,
+            sector: client.sector,
+            doelgroep: client.doelgroep,
+            regio: client.regio,
+            org_id: client.org_id,
+          }
         );
-        
-        // Use best regio score
-        let regioScore = regioResult.score;
-        let regioReason = regioResult.reason;
-        let regioMatchType = regioResult.matchType;
-        
-        if (regioResult.matchType === 'none' && nameRegioMatch) {
-          regioScore = 20;
-          regioReason = 'Regio gevonden in klantnaam';
-          regioMatchType = 'exact';
-        }
-        
-        score += regioScore;
-        if (regioScore > 0) {
-          reasons.push(regioReason);
-        }
-        
-        // Use shared SECTOR_SIMILARITY from constants
-        
-        const clientSectors = client.sector || [];
-        const applicantSectors = extractedData.ervaring_sector || [];
-        
-        const directSectorMatches = clientSectors.filter((s: string) => 
-          applicantSectors.includes(s)
-        );
-        
-        const relatedSectorMatches: string[] = [];
-        let relatedSectorScore = 0;
-        applicantSectors.forEach((appS: string) => {
-          const relation = SECTOR_SIMILARITY[appS];
-          if (relation) {
-            const relatedFound = relation.related.filter((relS: string) =>
-              clientSectors.includes(relS)
-            );
-            if (relatedFound.length > 0 && !directSectorMatches.includes(appS)) {
-              relatedSectorMatches.push(...relatedFound);
-              relatedSectorScore += relation.similarity * relatedFound.length;
-            }
-          }
-        });
-        
-        const totalSectorWeight = directSectorMatches.length * 1.0 + relatedSectorScore;
-        const maxSectorWeight = clientSectors.length * 1.0;
-        const sectorMatchPercentage = maxSectorWeight > 0 ? totalSectorWeight / maxSectorWeight : 0;
-        const sectorScore = Math.round(sectorMatchPercentage * 25);
-        
-        if (directSectorMatches.length > 0 || relatedSectorMatches.length > 0) {
-          score += sectorScore;
-          if (directSectorMatches.length > 0) {
-            reasons.push(`${directSectorMatches.length} sector(en) exact match`);
-          }
-          if (relatedSectorMatches.length > 0) {
-            reasons.push(`${[...new Set(relatedSectorMatches)].length} gerelateerde sector(en)`);
-          }
-        }
-        
-        const clientDoelgroepen = client.doelgroep || [];
-        const applicantDoelgroepen = extractedData.doelgroep_ervaring || [];
-        const doelgroepOverlap = clientDoelgroepen.filter((d: string) => 
-          applicantDoelgroepen.includes(d)
-        ).length;
-        if (doelgroepOverlap > 0) {
-          const doelgroepScore = Math.min(20, doelgroepOverlap * 8);
-          score += doelgroepScore;
-          reasons.push(`${doelgroepOverlap} doelgroep(en) match`);
-        }
-        
-        const clientFuncties = client.gezochte_functies || [];
-        const applicantFunctie = extractedData.functie_niveau;
-        const functieMatch = functieMatchesAny(applicantFunctie, clientFuncties);
-        if (functieMatch) {
-          score += 15;
-          reasons.push('Functieniveau match');
-        }
-        
-        const clientOrgId = client.org_id;
-        const clientOrgName = clientOrgId === '550e8400-e29b-41d4-a716-446655440000' ? 'ABCzorg' : 'CitoZorg';
-        const applicantOrg = extractedData.assigned_organization;
-        if (applicantOrg && clientOrgName === applicantOrg) {
-          score += 10;
-          reasons.push('Zelfde bureau');
-        }
-        
-        // NIEUW: Ervaring bonus
-        const jarenErvaring = extractedData.jaren_ervaring;
-        const ervaringResult = calculateErvaringBonus(jarenErvaring);
-        if (ervaringResult.bonus !== 0) {
-          score += ervaringResult.bonus;
-          if (ervaringResult.bonus > 0) {
-            reasons.push(`Ervaring bonus: ${ervaringResult.label}`);
-          }
-        }
-        
-        // NIEUW: Leidinggevende bonus
-        if (extractedData.leidinggevende_ervaring) {
-          score += LEIDINGGEVENDE_BONUS;
-          reasons.push('Leidinggevende ervaring');
-        }
-        
-        // NIEUW: Postcode afstand matching
-        const applicantPostcode = extractedData.postcode;
-        const clientRegio = client.regio?.[0] || '';
-        if (applicantPostcode && clientRegio) {
-          const postcodePrefix = applicantPostcode.substring(0, 2);
-          const postcodeRegioMap: Record<string, string[]> = {
-            '10': ['Noord-Holland'], '11': ['Noord-Holland'], '12': ['Noord-Holland'], '13': ['Noord-Holland'], '14': ['Noord-Holland'], '15': ['Noord-Holland'], '16': ['Noord-Holland'], '17': ['Noord-Holland'], '18': ['Noord-Holland'], '19': ['Noord-Holland'], '20': ['Noord-Holland'],
-            '21': ['Zuid-Holland'], '22': ['Zuid-Holland'], '23': ['Zuid-Holland'], '24': ['Zuid-Holland'], '25': ['Zuid-Holland'], '26': ['Zuid-Holland'], '27': ['Zuid-Holland'], '28': ['Zuid-Holland'], '29': ['Zuid-Holland'],
-            '30': ['Utrecht'], '31': ['Utrecht'], '32': ['Utrecht'], '33': ['Utrecht'], '34': ['Utrecht'], '35': ['Gelderland'], '36': ['Gelderland'], '37': ['Overijssel'],
-            '40': ['Gelderland'], '41': ['Gelderland'], '42': ['Gelderland'], '43': ['Gelderland'],
-            '50': ['Noord-Brabant'], '51': ['Noord-Brabant'], '52': ['Noord-Brabant'], '53': ['Noord-Brabant'], '54': ['Noord-Brabant'], '55': ['Noord-Brabant'], '56': ['Noord-Brabant'], '57': ['Noord-Brabant'], '58': ['Noord-Brabant'], '59': ['Limburg'],
-            '60': ['Limburg'], '61': ['Limburg'], '62': ['Limburg'], '63': ['Limburg'], '64': ['Limburg'],
-            '70': ['Overijssel'], '71': ['Overijssel'], '72': ['Overijssel'], '73': ['Overijssel'], '74': ['Overijssel'], '75': ['Overijssel'], '76': ['Drenthe'], '77': ['Drenthe'], '78': ['Drenthe'], '79': ['Drenthe'],
-            '80': ['Friesland'], '81': ['Friesland'], '82': ['Friesland'], '83': ['Friesland'], '84': ['Friesland'], '85': ['Friesland'], '86': ['Friesland'], '87': ['Friesland'], '88': ['Friesland'], '89': ['Groningen'],
-            '90': ['Groningen'], '91': ['Groningen'], '92': ['Groningen'], '93': ['Groningen'], '94': ['Groningen'], '95': ['Groningen'], '96': ['Groningen'], '97': ['Groningen'], '98': ['Groningen'], '99': ['Groningen'],
-          };
-          const postcodeProvincie = postcodeRegioMap[postcodePrefix]?.[0];
-          if (postcodeProvincie && clientRegio.toLowerCase().includes(postcodeProvincie.toLowerCase())) {
-            score += 5;
-            reasons.push(`Postcode match (${postcodeProvincie})`);
-          }
-        }
-        
-        // NIEUW: Dienstvorm matching (nacht/weekend)
-        if (extractedData.nachtdienst_bereid === true) {
-          score += 3;
-          reasons.push('Beschikbaar voor nachtdienst');
-        }
-        if (extractedData.weekenddienst_bereid === true) {
-          score += 3;
-          reasons.push('Beschikbaar voor weekenddienst');
-        }
-        
-        // NIEUW: Certificaten bonus
-        const applicantCertificaten = extractedData.certificaten || [];
-        if (Array.isArray(applicantCertificaten) && applicantCertificaten.length > 0) {
-          const certBonus = Math.min(5, applicantCertificaten.length * 2);
-          score += certBonus;
-          reasons.push(`${applicantCertificaten.length} certificaat/certificaten`);
-        }
-        
-        // NIEUW: AI Learning Boost - past geleerde succespatronen toe
-        const aiBoost = calculateAILearningBoost(
-          extractedData.functie_niveau,
-          extractedData.ervaring_sector || [],
-          extractedData.doelgroep_ervaring || [],
-          successPatterns
-        );
-        if (aiBoost.boost > 0) {
-          // AI boost adds up to 15 points based on learned success patterns
-          const aiBoostPoints = Math.round(aiBoost.boost * 15 / 100);
-          score += aiBoostPoints;
-          reasons.push(...aiBoost.reasons.map(r => `🤖 ${r}`));
-          
-          // Track pattern usage (fire-and-forget)
-          if (aiBoost.usedPatternIds.length > 0) {
-            trackPatternUsage(aiBoost.usedPatternIds);
-          }
-        }
-        
+
+        const clientOrgName = client.org_id === '550e8400-e29b-41d4-a716-446655440000' ? 'ABCzorg' : 'CitoZorg';
+
+        // Transform to expected format for UI
         const breakdown = {
           regio: {
-            score: regioScore,
-            match: regioMatchType !== 'none',
-            reason: regioReason,
-            matchType: regioMatchType
+            score: result.regioMatch,
+            match: result.details.regio?.match || false,
+            reason: result.details.regio?.reason || 'Geen data',
+            matchType: result.details.regio?.matchType || 'none'
           },
           sector: {
-            score: sectorScore,
-            match: directSectorMatches.length > 0 || relatedSectorMatches.length > 0,
-            reason: directSectorMatches.length > 0 
-              ? `${directSectorMatches.length} sector(en) exact match` 
-              : relatedSectorMatches.length > 0
-                ? `${[...new Set(relatedSectorMatches)].length} gerelateerde sector(en) (${Math.round(sectorMatchPercentage * 100)}%)`
-                : 'Geen sector overlap',
-            directMatches: directSectorMatches,
-            relatedMatches: [...new Set(relatedSectorMatches)]
+            score: result.sectorMatch,
+            match: result.details.sector?.match || false,
+            reason: result.details.sector?.reason || 'Geen data',
+            directMatches: result.details.sector?.directMatches || [],
+            relatedMatches: result.details.sector?.relatedMatches || []
           },
           doelgroep: {
-            score: doelgroepOverlap > 0 ? Math.min(20, doelgroepOverlap * 8) : 0,
-            match: doelgroepOverlap > 0,
-            reason: doelgroepOverlap > 0 
-              ? `${doelgroepOverlap} doelgroep(en) komen overeen` 
-              : 'Geen doelgroep overlap'
+            score: result.doelgroepMatch,
+            match: result.details.doelgroep?.match || false,
+            reason: result.details.doelgroep?.reason || 'Geen data'
           },
           functie: {
-            score: functieMatch ? 15 : 0,
-            match: functieMatch,
-            reason: functieMatch
-              ? 'Functieniveau wordt gezocht'
-              : 'Functieniveau niet gezocht (controleer variaties)'
+            score: result.functieMatch,
+            match: result.details.functie?.match || false,
+            reason: result.details.functie?.reason || 'Geen data'
           },
           bureau: {
-            score: (applicantOrg && clientOrgName === applicantOrg) ? 10 : 0,
-            match: applicantOrg && clientOrgName === applicantOrg,
-            reason: (applicantOrg && clientOrgName === applicantOrg)
-              ? 'Zelfde bemiddelingsbureau'
-              : 'Ander bemiddelingsbureau'
+            score: result.bureauMatch,
+            match: result.details.bureau?.match || false,
+            reason: result.details.bureau?.reason || 'Geen data'
           },
-          aiBoost: aiBoost.boost > 0 ? {
-            score: Math.round(aiBoost.boost * 15 / 100),
+          aiBoost: result.hasAIBoost ? {
+            score: result.aiBoost,
             match: true,
-            reason: `AI geleerd patroon (+${aiBoost.boost}%)`
+            reason: `AI geleerd patroon (+${result.aiBoost})`
           } : undefined
         };
-        
-        return { 
-          ...client, 
-          matchScore: Math.round((score / MAX_POSSIBLE_SCORE) * 100), // True normalization
-          matchReasons: reasons,
+
+        return {
+          ...client,
+          matchScore: result.normalizedScore,
+          matchReasons: result.reasoning,
           orgName: clientOrgName,
           scoreBreakdown: breakdown,
-          hasAIBoost: aiBoost.boost > 0
+          hasAIBoost: result.hasAIBoost
         };
       });
+
+      const scored = await Promise.all(scoredPromises);
       
       const topMatches = scored
         .filter(c => c.matchScore >= 10)
