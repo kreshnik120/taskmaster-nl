@@ -703,16 +703,44 @@ export function ApplicationDetailModal({
 
     setCreatingAction(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      console.log('[handleCreateAction] Starting action creation...', {
+        applicationId: application.id,
+        actionType,
+        title,
+        actionPriority,
+        actionDueDate,
+        actionDueTime
+      });
+
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      console.log('[handleCreateAction] Auth result:', {
+        userId: user?.id,
+        userEmail: user?.email,
+        authError: authError ? { message: authError.message, status: authError.status } : null
+      });
+
       if (!user) throw new Error("Not authenticated");
 
-      const { data: orgData } = await supabase
+      const { data: orgData, error: orgError } = await supabase
         .from('user_organizations')
-        .select('org_id')
-        .eq('user_id', user.id)
-        .single();
+        .select('org_id, role')
+        .eq('user_id', user.id);
 
-      if (!orgData) throw new Error("Je bent niet gekoppeld aan een organisatie. Neem contact op met je beheerder.");
+      console.log('[handleCreateAction] Organization lookup result:', {
+        userId: user.id,
+        orgData,
+        orgError: orgError ? { message: orgError.message, code: orgError.code, details: orgError.details } : null
+      });
+
+      if (!orgData || orgData.length === 0) {
+        console.error('[handleCreateAction] No organization found for user:', user.id);
+        throw new Error("Je bent niet gekoppeld aan een organisatie. Neem contact op met je beheerder.");
+      }
+
+      // Use first organization if multiple
+      const selectedOrg = orgData[0];
+      console.log('[handleCreateAction] Using organization:', selectedOrg);
 
       let dueAt = null;
       if (actionDueDate) {
@@ -722,8 +750,8 @@ export function ApplicationDetailModal({
         dueAt = combined.toISOString();
       }
 
-      const { error } = await supabase.from('tasks').insert([{
-        org_id: orgData.org_id,
+      const taskPayload = {
+        org_id: selectedOrg.org_id,
         application_id: application.id,
         recruitment_action_type: actionType,
         title,
@@ -733,10 +761,28 @@ export function ApplicationDetailModal({
         status: 'todo',
         reporter_id: user.id,
         due_at: dueAt,
-      }]);
+      };
 
-      if (error) throw error;
+      console.log('[handleCreateAction] Inserting task with payload:', taskPayload);
 
+      const { data: insertData, error: insertError } = await supabase
+        .from('tasks')
+        .insert([taskPayload])
+        .select();
+
+      console.log('[handleCreateAction] Insert result:', {
+        data: insertData,
+        error: insertError ? { 
+          message: insertError.message, 
+          code: insertError.code, 
+          details: insertError.details,
+          hint: insertError.hint 
+        } : null
+      });
+
+      if (insertError) throw insertError;
+
+      console.log('[handleCreateAction] Task created successfully:', insertData);
       toast.success("Actie aangemaakt");
       
       setShowActionForm(false);
@@ -748,9 +794,16 @@ export function ApplicationDetailModal({
       setActionDueTime("09:00");
       
       loadLinkedTasks();
-    } catch (error) {
-      console.error('Error creating action:', error);
-      toast.error("Fout bij aanmaken actie");
+    } catch (error: any) {
+      console.error('[handleCreateAction] FULL ERROR:', {
+        error,
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint,
+        stack: error?.stack
+      });
+      toast.error(error?.message || "Fout bij aanmaken actie");
     } finally {
       setCreatingAction(false);
     }
