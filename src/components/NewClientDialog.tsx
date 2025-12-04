@@ -24,20 +24,36 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, X, ChevronRight, ChevronLeft } from "lucide-react";
+import { Loader2, X, ChevronRight, ChevronLeft, Building2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  BUREAU_IDS,
+  SECTOREN,
+  DOELGROEPEN,
+  FUNCTIES,
+  SECTOR_COLORS,
+  DOELGROEP_COLORS,
+  FUNCTIE_COLORS,
+} from "@/types/organization";
 
-const clientSchema = z.object({
-  company: z.string().min(1, "Bedrijfsnaam is verplicht"),
-  name: z.string().min(1, "Contactpersoon is verplicht"),
-  org_id: z.string().min(1, "Organisatie is verplicht"),
-  email: z.string().email("Ongeldig e-mailadres").optional().or(z.literal("")),
-  phone: z.string().optional(),
-  address: z.string().optional(),
+// Schema for creating a new client organization
+const organizationSchema = z.object({
+  name: z.string().min(1, "Organisatienaam is verplicht"),
+  org_id: z.string().min(1, "Bemiddelingsbureau is verplicht"),
+  kvk_nummer: z.string().optional(),
+  website: z.string().optional(),
   notes: z.string().optional(),
+  // Hoofdlocatie fields
+  location_naam: z.string().optional(),
+  contactpersoon_naam: z.string().optional(),
+  contactpersoon_email: z.string().email("Ongeldig e-mailadres").optional().or(z.literal("")),
+  telefoon: z.string().optional(),
+  adres: z.string().optional(),
+  postcode: z.string().optional(),
+  plaats: z.string().optional(),
 });
 
-type ClientFormData = z.infer<typeof clientSchema>;
+type OrganizationFormData = z.infer<typeof organizationSchema>;
 
 interface NewClientDialogProps {
   open: boolean;
@@ -45,44 +61,10 @@ interface NewClientDialogProps {
   onClientCreated: () => void;
 }
 
-// Hardcoded org IDs matching the database
 const ORGANIZATIONS = [
-  { id: "650e8400-e29b-41d4-a716-446655440000", name: "ABCzorg" },
-  { id: "650e8400-e29b-41d4-a716-446655440001", name: "CitoZorg" },
+  { id: BUREAU_IDS.ABCzorg, name: "ABCzorg" },
+  { id: BUREAU_IDS.CitoZorg, name: "CitoZorg" },
 ];
-
-const SECTOREN = ["VVT", "GGZ", "GHZ", "Jeugdzorg", "Ziekenhuis/Klinisch", "Thuiszorg"];
-const DOELGROEPEN = ["Ouderen", "LVB", "Psychiatrie", "Somatiek", "Kinderen/Jeugd", "Verslaving"];
-const FUNCTIES = ["VIG", "HBO-V", "Verpleegkundige MBO", "Helpende", "Begeleider", "Persoonlijk begeleider", "GGZ-agoog"];
-
-// Semantic color mappings
-const SECTOR_COLORS: Record<string, { selected: string; outline: string }> = {
-  "VVT": { selected: "bg-blue-500 text-white border-blue-500 hover:bg-blue-600", outline: "border-blue-500 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950" },
-  "GGZ": { selected: "bg-purple-500 text-white border-purple-500 hover:bg-purple-600", outline: "border-purple-500 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950" },
-  "GHZ": { selected: "bg-green-500 text-white border-green-500 hover:bg-green-600", outline: "border-green-500 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950" },
-  "Jeugdzorg": { selected: "bg-orange-500 text-white border-orange-500 hover:bg-orange-600", outline: "border-orange-500 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950" },
-  "Ziekenhuis/Klinisch": { selected: "bg-red-500 text-white border-red-500 hover:bg-red-600", outline: "border-red-500 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950" },
-  "Thuiszorg": { selected: "bg-teal-500 text-white border-teal-500 hover:bg-teal-600", outline: "border-teal-500 text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950" },
-};
-
-const DOELGROEP_COLORS: Record<string, { selected: string; outline: string }> = {
-  "Ouderen": { selected: "bg-amber-500 text-white border-amber-500 hover:bg-amber-600", outline: "border-amber-500 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950" },
-  "LVB": { selected: "bg-emerald-500 text-white border-emerald-500 hover:bg-emerald-600", outline: "border-emerald-500 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950" },
-  "Psychiatrie": { selected: "bg-indigo-500 text-white border-indigo-500 hover:bg-indigo-600", outline: "border-indigo-500 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950" },
-  "Somatiek": { selected: "bg-rose-500 text-white border-rose-500 hover:bg-rose-600", outline: "border-rose-500 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950" },
-  "Kinderen/Jeugd": { selected: "bg-cyan-500 text-white border-cyan-500 hover:bg-cyan-600", outline: "border-cyan-500 text-cyan-700 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-950" },
-  "Verslaving": { selected: "bg-slate-500 text-white border-slate-500 hover:bg-slate-600", outline: "border-slate-500 text-slate-700 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-950" },
-};
-
-const FUNCTIE_COLORS: Record<string, { selected: string; outline: string }> = {
-  "VIG": { selected: "bg-blue-600 text-white border-blue-600 hover:bg-blue-700", outline: "border-blue-600 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950" },
-  "HBO-V": { selected: "bg-purple-600 text-white border-purple-600 hover:bg-purple-700", outline: "border-purple-600 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950" },
-  "Verpleegkundige MBO": { selected: "bg-green-600 text-white border-green-600 hover:bg-green-700", outline: "border-green-600 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950" },
-  "Helpende": { selected: "bg-orange-600 text-white border-orange-600 hover:bg-orange-700", outline: "border-orange-600 text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950" },
-  "Begeleider": { selected: "bg-teal-600 text-white border-teal-600 hover:bg-teal-700", outline: "border-teal-600 text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950" },
-  "Persoonlijk begeleider": { selected: "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700", outline: "border-indigo-600 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950" },
-  "GGZ-agoog": { selected: "bg-pink-600 text-white border-pink-600 hover:bg-pink-700", outline: "border-pink-600 text-pink-700 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-950" },
-};
 
 export default function NewClientDialog({
   open,
@@ -91,8 +73,6 @@ export default function NewClientDialog({
 }: NewClientDialogProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
-  const [regios, setRegios] = useState<string[]>([]);
-  const [newRegio, setNewRegio] = useState("");
   const [sectors, setSectors] = useState<string[]>([]);
   const [doelgroepen, setDoelgroepen] = useState<string[]>([]);
   const [functies, setFuncties] = useState<string[]>([]);
@@ -105,53 +85,48 @@ export default function NewClientDialog({
     setValue,
     watch,
     trigger,
-  } = useForm<ClientFormData>({
-    resolver: zodResolver(clientSchema),
+  } = useForm<OrganizationFormData>({
+    resolver: zodResolver(organizationSchema),
     defaultValues: {
-      company: "",
       name: "",
       org_id: "",
-      email: "",
-      phone: "",
-      address: "",
+      kvk_nummer: "",
+      website: "",
       notes: "",
+      location_naam: "",
+      contactpersoon_naam: "",
+      contactpersoon_email: "",
+      telefoon: "",
+      adres: "",
+      postcode: "",
+      plaats: "",
     },
   });
 
   const selectedOrgId = watch("org_id");
-  
-  const handleAddRegio = () => {
-    if (newRegio.trim() && !regios.includes(newRegio.trim())) {
-      setRegios([...regios, newRegio.trim()]);
-      setNewRegio("");
-    }
-  };
-  
-  const handleRemoveRegio = (regio: string) => {
-    setRegios(regios.filter(r => r !== regio));
-  };
-  
+  const organizationName = watch("name");
+
   const toggleSector = (sector: string) => {
-    setSectors(prev => 
+    setSectors(prev =>
       prev.includes(sector) ? prev.filter(s => s !== sector) : [...prev, sector]
     );
   };
-  
+
   const toggleDoelgroep = (doelgroep: string) => {
-    setDoelgroepen(prev => 
+    setDoelgroepen(prev =>
       prev.includes(doelgroep) ? prev.filter(d => d !== doelgroep) : [...prev, doelgroep]
     );
   };
-  
+
   const toggleFunctie = (functie: string) => {
-    setFuncties(prev => 
+    setFuncties(prev =>
       prev.includes(functie) ? prev.filter(f => f !== functie) : [...prev, functie]
     );
   };
 
   const nextStep = async () => {
     if (currentStep === 1) {
-      const valid = await trigger(["company", "name", "org_id"]);
+      const valid = await trigger(["name", "org_id"]);
       if (!valid) return;
     }
     setCurrentStep(prev => Math.min(prev + 1, 3));
@@ -161,7 +136,7 @@ export default function NewClientDialog({
     setCurrentStep(prev => Math.max(prev - 1, 1));
   };
 
-  const onSubmit = async (data: ClientFormData) => {
+  const onSubmit = async (data: OrganizationFormData) => {
     setSubmitting(true);
     try {
       const { data: session } = await supabase.auth.getSession();
@@ -170,26 +145,67 @@ export default function NewClientDialog({
         return;
       }
 
-      // Insert client with matching criteria
-      const { error } = await supabase.from("clients").insert({
-        company: data.company,
-        name: data.name,
-        org_id: data.org_id,
-        email: data.email || null,
-        phone: data.phone || null,
-        address: data.address || null,
-        notes: data.notes || null,
-        regio: regios.length > 0 ? regios : null,
-        sector: sectors.length > 0 ? sectors : null,
-        doelgroep: doelgroepen.length > 0 ? doelgroepen : null,
-        gezochte_functies: functies.length > 0 ? functies : null,
+      // Step 1: Create client_organization
+      const { data: newOrg, error: orgError } = await supabase
+        .from("client_organizations")
+        .insert({
+          name: data.name,
+          org_id: data.org_id,
+          kvk_nummer: data.kvk_nummer || null,
+          website: data.website || null,
+          notes: data.notes || null,
+        })
+        .select()
+        .single();
+
+      if (orgError) throw orgError;
+
+      // Step 2: Create hoofdlocatie (main location)
+      const locationName = data.location_naam || `${data.name} Hoofdlocatie`;
+      const { data: newLocation, error: locError } = await supabase
+        .from("client_locations")
+        .insert({
+          client_org_id: newOrg.id,
+          naam: locationName,
+          contactpersoon_naam: data.contactpersoon_naam || null,
+          contactpersoon_email: data.contactpersoon_email || null,
+          telefoon: data.telefoon || null,
+          adres: data.adres || null,
+          postcode: data.postcode || null,
+          plaats: data.plaats || null,
+        })
+        .select()
+        .single();
+
+      if (locError) throw locError;
+
+      // Step 3: Create default sublocation if matching criteria provided
+      if (sectors.length > 0 || doelgroepen.length > 0 || functies.length > 0) {
+        const { error: subError } = await supabase
+          .from("client_sublocations")
+          .insert({
+            location_id: newLocation.id,
+            naam: `${data.name} - Algemeen`,
+            sector: sectors.length > 0 ? sectors : null,
+            doelgroep: doelgroepen.length > 0 ? doelgroepen : null,
+            gezochte_functies: functies.length > 0 ? functies : null,
+            adres: data.adres || null,
+            postcode: data.postcode || null,
+            plaats: data.plaats || null,
+            telefoon: data.telefoon || null,
+          });
+
+        if (subError) {
+          console.error("Error creating sublocation:", subError);
+          // Non-critical, continue
+        }
+      }
+
+      toast.success("Organisatie succesvol toegevoegd", {
+        description: `${data.name} is aangemaakt met hoofdlocatie`,
       });
-
-      if (error) throw error;
-
-      toast.success("Klant succesvol toegevoegd");
+      
       reset();
-      setRegios([]);
       setSectors([]);
       setDoelgroepen([]);
       setFuncties([]);
@@ -197,8 +213,10 @@ export default function NewClientDialog({
       onClientCreated();
       onOpenChange(false);
     } catch (error: any) {
-      console.error("Error creating client:", error);
-      toast.error("Kon klant niet toevoegen");
+      console.error("Error creating organization:", error);
+      toast.error("Kon organisatie niet toevoegen", {
+        description: error.message,
+      });
     } finally {
       setSubmitting(false);
     }
@@ -208,10 +226,17 @@ export default function NewClientDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Nieuwe Klant Toevoegen</DialogTitle>
-          <DialogDescription>
-            Voeg een nieuwe klant toe met contactgegevens
-          </DialogDescription>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <Building2 className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <DialogTitle>Nieuwe Klantorganisatie</DialogTitle>
+              <DialogDescription>
+                Voeg een nieuwe zorgorganisatie toe met locatie en matching criteria
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
         {/* Progress Indicator */}
@@ -242,15 +267,15 @@ export default function NewClientDialog({
 
         <div className="text-center mb-4">
           <p className="text-sm text-muted-foreground">
-            {currentStep === 1 && "Stap 1: Bedrijfsinformatie"}
+            {currentStep === 1 && "Stap 1: Organisatie informatie"}
             {currentStep === 2 && "Stap 2: Matching Criteria"}
-            {currentStep === 3 && "Stap 3: Contact & Notities"}
+            {currentStep === 3 && "Stap 3: Locatie & Contact"}
           </p>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <AnimatePresence mode="wait">
-            {/* Step 1: Bedrijfsinformatie */}
+            {/* Step 1: Organisatie informatie */}
             {currentStep === 1 && (
               <motion.div
                 key="step1"
@@ -261,28 +286,13 @@ export default function NewClientDialog({
                 className="space-y-4"
               >
                 <div className="space-y-2">
-                  <Label htmlFor="company">
-                    Bedrijfsnaam <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="company"
-                    {...register("company")}
-                    placeholder="Bijv. Zorgcentrum De Hof"
-                    className="focus:ring-2 focus:ring-primary transition-all"
-                  />
-                  {errors.company && (
-                    <p className="text-sm text-destructive">{errors.company.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
                   <Label htmlFor="name">
-                    Contactpersoon <span className="text-destructive">*</span>
+                    Organisatienaam <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     id="name"
                     {...register("name")}
-                    placeholder="Bijv. Jan Bakker"
+                    placeholder="Bijv. Stichting Zorggroep De Hof"
                     className="focus:ring-2 focus:ring-primary transition-all"
                   />
                   {errors.name && (
@@ -313,6 +323,27 @@ export default function NewClientDialog({
                     <p className="text-sm text-destructive">{errors.org_id.message}</p>
                   )}
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="kvk_nummer">KvK-nummer</Label>
+                    <Input
+                      id="kvk_nummer"
+                      {...register("kvk_nummer")}
+                      placeholder="12345678"
+                      className="focus:ring-2 focus:ring-primary transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="website">Website</Label>
+                    <Input
+                      id="website"
+                      {...register("website")}
+                      placeholder="www.organisatie.nl"
+                      className="focus:ring-2 focus:ring-primary transition-all"
+                    />
+                  </div>
+                </div>
               </motion.div>
             )}
 
@@ -326,39 +357,10 @@ export default function NewClientDialog({
                 transition={{ duration: 0.2 }}
                 className="space-y-4"
               >
-                {/* Regio's */}
-                <div className="space-y-2">
-                  <Label>Regio's</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      value={newRegio}
-                      onChange={(e) => setNewRegio(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddRegio())}
-                      placeholder="Bijv. Nijmegen, Utrecht..."
-                      className="focus:ring-2 focus:ring-primary transition-all"
-                    />
-                    <Button type="button" onClick={handleAddRegio} variant="outline" size="sm">
-                      +
-                    </Button>
-                  </div>
-                  {regios.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {regios.map((regio) => (
-                        <Badge key={regio} variant="secondary" className="cursor-pointer">
-                          {regio}
-                          <X 
-                            className="ml-1 h-3 w-3" 
-                            onClick={() => handleRemoveRegio(regio)}
-                          />
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
                 {/* Sector */}
                 <div className="space-y-2">
                   <Label>Sector</Label>
+                  <p className="text-xs text-muted-foreground mb-2">In welke zorgsectoren is deze organisatie actief?</p>
                   <div className="flex flex-wrap gap-1.5">
                     {SECTOREN.map((sector) => {
                       const isSelected = sectors.includes(sector);
@@ -383,6 +385,7 @@ export default function NewClientDialog({
                 {/* Doelgroep */}
                 <div className="space-y-2">
                   <Label>Doelgroep</Label>
+                  <p className="text-xs text-muted-foreground mb-2">Welke doelgroepen worden bediend?</p>
                   <div className="flex flex-wrap gap-1.5">
                     {DOELGROEPEN.map((dg) => {
                       const isSelected = doelgroepen.includes(dg);
@@ -407,6 +410,7 @@ export default function NewClientDialog({
                 {/* Gezochte functies */}
                 <div className="space-y-2">
                   <Label>Gezochte functies</Label>
+                  <p className="text-xs text-muted-foreground mb-2">Welke functies zijn gewenst?</p>
                   <div className="flex flex-wrap gap-1.5">
                     {FUNCTIES.map((functie) => {
                       const isSelected = functies.includes(functie);
@@ -430,7 +434,7 @@ export default function NewClientDialog({
               </motion.div>
             )}
 
-            {/* Step 3: Contact & Notities */}
+            {/* Step 3: Locatie & Contact */}
             {currentStep === 3 && (
               <motion.div
                 key="step3"
@@ -440,38 +444,87 @@ export default function NewClientDialog({
                 transition={{ duration: 0.2 }}
                 className="space-y-4"
               >
-                <div className="space-y-2">
-                  <Label htmlFor="email">E-mailadres</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    {...register("email")}
-                    placeholder="Bijv. contact@zorgcentrum.nl"
-                    className="focus:ring-2 focus:ring-primary transition-all"
-                  />
-                  {errors.email && (
-                    <p className="text-sm text-destructive">{errors.email.message}</p>
-                  )}
+                <div className="p-3 rounded-lg bg-muted/50 border">
+                  <p className="text-sm font-medium mb-1">Hoofdlocatie</p>
+                  <p className="text-xs text-muted-foreground">
+                    Deze gegevens worden gebruikt voor de hoofdlocatie van {organizationName || "de organisatie"}
+                  </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Telefoonnummer</Label>
+                  <Label htmlFor="location_naam">Locatienaam (optioneel)</Label>
                   <Input
-                    id="phone"
-                    {...register("phone")}
-                    placeholder="Bijv. 06-12345678"
+                    id="location_naam"
+                    {...register("location_naam")}
+                    placeholder={`${organizationName || "Organisatie"} Hoofdlocatie`}
                     className="focus:ring-2 focus:ring-primary transition-all"
                   />
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="contactpersoon_naam">Contactpersoon</Label>
+                    <Input
+                      id="contactpersoon_naam"
+                      {...register("contactpersoon_naam")}
+                      placeholder="Bijv. Jan Bakker"
+                      className="focus:ring-2 focus:ring-primary transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="contactpersoon_email">E-mail contactpersoon</Label>
+                    <Input
+                      id="contactpersoon_email"
+                      type="email"
+                      {...register("contactpersoon_email")}
+                      placeholder="jan@organisatie.nl"
+                      className="focus:ring-2 focus:ring-primary transition-all"
+                    />
+                    {errors.contactpersoon_email && (
+                      <p className="text-sm text-destructive">{errors.contactpersoon_email.message}</p>
+                    )}
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="address">Adres</Label>
+                  <Label htmlFor="telefoon">Telefoonnummer</Label>
                   <Input
-                    id="address"
-                    {...register("address")}
-                    placeholder="Bijv. Hoofdstraat 123, 1234 AB Amsterdam"
+                    id="telefoon"
+                    {...register("telefoon")}
+                    placeholder="Bijv. 024-1234567"
                     className="focus:ring-2 focus:ring-primary transition-all"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="adres">Adres</Label>
+                  <Input
+                    id="adres"
+                    {...register("adres")}
+                    placeholder="Bijv. Hoofdstraat 123"
+                    className="focus:ring-2 focus:ring-primary transition-all"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="postcode">Postcode</Label>
+                    <Input
+                      id="postcode"
+                      {...register("postcode")}
+                      placeholder="1234 AB"
+                      className="focus:ring-2 focus:ring-primary transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="plaats">Plaats</Label>
+                    <Input
+                      id="plaats"
+                      {...register("plaats")}
+                      placeholder="Amsterdam"
+                      className="focus:ring-2 focus:ring-primary transition-all"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -479,8 +532,8 @@ export default function NewClientDialog({
                   <Textarea
                     id="notes"
                     {...register("notes")}
-                    placeholder="Extra informatie over de klant..."
-                    rows={4}
+                    placeholder="Extra informatie over de organisatie..."
+                    rows={3}
                     className="focus:ring-2 focus:ring-primary transition-all"
                   />
                 </div>
@@ -509,6 +562,9 @@ export default function NewClientDialog({
                 onClick={() => {
                   reset();
                   setCurrentStep(1);
+                  setSectors([]);
+                  setDoelgroepen([]);
+                  setFuncties([]);
                   onOpenChange(false);
                 }}
                 disabled={submitting}
@@ -523,7 +579,7 @@ export default function NewClientDialog({
               ) : (
                 <Button type="submit" disabled={submitting}>
                   {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Klant Toevoegen
+                  Organisatie Toevoegen
                 </Button>
               )}
             </div>
