@@ -3854,6 +3854,145 @@ export type Database = {
         }
         Relationships: []
       }
+      vacancies: {
+        Row: {
+          aantal_fte: number | null
+          beschrijving: string | null
+          created_at: string
+          created_by: string | null
+          deadline: string | null
+          eind_datum: string | null
+          functie_niveau: string
+          gewenste_doelgroep_ervaring: string[] | null
+          gewenste_sector_ervaring: string[] | null
+          id: string
+          start_datum: string | null
+          status: string
+          sublocation_id: string
+          titel: string
+          updated_at: string
+          uren_per_week: number | null
+          urgentie: string
+          uurtarief_indicatie: number | null
+          vereiste_certificaten: string[] | null
+        }
+        Insert: {
+          aantal_fte?: number | null
+          beschrijving?: string | null
+          created_at?: string
+          created_by?: string | null
+          deadline?: string | null
+          eind_datum?: string | null
+          functie_niveau: string
+          gewenste_doelgroep_ervaring?: string[] | null
+          gewenste_sector_ervaring?: string[] | null
+          id?: string
+          start_datum?: string | null
+          status?: string
+          sublocation_id: string
+          titel: string
+          updated_at?: string
+          uren_per_week?: number | null
+          urgentie?: string
+          uurtarief_indicatie?: number | null
+          vereiste_certificaten?: string[] | null
+        }
+        Update: {
+          aantal_fte?: number | null
+          beschrijving?: string | null
+          created_at?: string
+          created_by?: string | null
+          deadline?: string | null
+          eind_datum?: string | null
+          functie_niveau?: string
+          gewenste_doelgroep_ervaring?: string[] | null
+          gewenste_sector_ervaring?: string[] | null
+          id?: string
+          start_datum?: string | null
+          status?: string
+          sublocation_id?: string
+          titel?: string
+          updated_at?: string
+          uren_per_week?: number | null
+          urgentie?: string
+          uurtarief_indicatie?: number | null
+          vereiste_certificaten?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vacancies_sublocation_id_fkey"
+            columns: ["sublocation_id"]
+            isOneToOne: false
+            referencedRelation: "client_sublocations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vacancy_applications: {
+        Row: {
+          applied_at: string
+          id: string
+          match_reasoning: Json | null
+          match_score: number | null
+          notes: string | null
+          professional_id: string
+          status: string
+          updated_at: string
+          vacancy_id: string
+        }
+        Insert: {
+          applied_at?: string
+          id?: string
+          match_reasoning?: Json | null
+          match_score?: number | null
+          notes?: string | null
+          professional_id: string
+          status?: string
+          updated_at?: string
+          vacancy_id: string
+        }
+        Update: {
+          applied_at?: string
+          id?: string
+          match_reasoning?: Json | null
+          match_score?: number | null
+          notes?: string | null
+          professional_id?: string
+          status?: string
+          updated_at?: string
+          vacancy_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vacancy_applications_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vacancy_applications_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_admin_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vacancy_applications_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vacancy_applications_vacancy_id_fkey"
+            columns: ["vacancy_id"]
+            isOneToOne: false
+            referencedRelation: "vacancies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       watches: {
         Row: {
           created_at: string

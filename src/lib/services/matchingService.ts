@@ -757,3 +757,134 @@ export function parseBeschikbaarheid(beschikbaarheid: string | null): { min: num
   
   return null;
 }
+
+// ============= VACANCY MATCHING =============
+
+export interface Vacancy {
+  id: string;
+  sublocation_id: string;
+  titel: string;
+  functie_niveau: string;
+  aantal_fte?: number;
+  uren_per_week?: number;
+  uurtarief_indicatie?: number;
+  start_datum?: string;
+  eind_datum?: string;
+  deadline?: string;
+  vereiste_certificaten?: string[];
+  gewenste_sector_ervaring?: string[];
+  gewenste_doelgroep_ervaring?: string[];
+  beschrijving?: string;
+  status: 'open' | 'in_review' | 'vervuld' | 'gesloten';
+  urgentie: 'laag' | 'normaal' | 'hoog' | 'kritiek';
+  // From sublocation join
+  sublocation_naam?: string;
+  sublocation_plaats?: string;
+  sublocation_provincie?: string;
+}
+
+export interface VacancyMatchScoreBreakdown extends MatchScoreBreakdown {
+  urenMatch: number;
+  certificatenMatch: number;
+  startdatumMatch: number;
+  details: MatchScoreBreakdown['details'] & {
+    uren?: { match: boolean; reason: string };
+    certificaten?: { match: boolean; reason: string; missing: string[] };
+    startdatum?: { match: boolean; reason: string };
+  };
+}
+
+/**
+ * Calculate match score between a candidate and a specific vacancy
+ * More specific than sublocation matching - uses exact vacancy requirements
+ */
+export function calculateVacancyMatchScore(
+  candidate: MatchCandidate,
+  vacancy: Vacancy,
+  sublocationData?: {
+    sector?: string[] | null;
+    doelgroep?: string[] | null;
+    plaats?: string | null;
+    provincie?: string | null;
+  }
+): VacancyMatchScoreBreakdown {
+  // First calculate base score using sublocation data
+  const baseTarget: MatchTarget = {
+    gezochte_functies: [vacancy.functie_niveau],
+    sector: vacancy.gewenste_sector_ervaring || sublocationData?.sector || [],
+    doelgroep: vacancy.gewenste_doelgroep_ervaring || sublocationData?.doelgroep || [],
+    plaats: sublocationData?.plaats,
+    provincie: sublocationData?.provincie,
+    capaciteit_min: vacancy.uren_per_week ? vacancy.uren_per_week - 4 : null,
+    capaciteit_max: vacancy.uren_per_week ? vacancy.uren_per_week + 4 : null,
+  };
+  
+  const baseScore = calculateUnifiedMatchScore(candidate, baseTarget);
+  
+  // Additional vacancy-specific scoring
+  let urenMatch = 0;
+  let certificatenMatch = 0;
+  let startdatumMatch = 0;
+  
+  const extendedDetails: VacancyMatchScoreBreakdown['details'] = { ...baseScore.details };
+  const extendedReasoning = [...baseScore.reasoning];
+
+  // Uren match (bonus if exact match)
+  if (vacancy.uren_per_week && candidate.beschikbaarheid_uren) {
+    const { min, max } = candidate.beschikbaarheid_uren;
+    if (vacancy.uren_per_week >= min && vacancy.uren_per_week <= max) {
+      urenMatch = 5;
+      extendedReasoning.push(`✅ Uren: ${vacancy.uren_per_week} uur past binnen beschikbaarheid`);
+      extendedDetails.uren = { match: true, reason: `${vacancy.uren_per_week} uur past binnen beschikbaarheid` };
+    } else {
+      extendedReasoning.push(`⚠️ Uren: ${vacancy.uren_per_week} uur buiten beschikbaarheid (${min}-${max})`);
+      extendedDetails.uren = { match: false, reason: `${vacancy.uren_per_week} uur buiten beschikbaarheid` };
+    }
+  }
+
+  // Certificaten match
+  if (vacancy.vereiste_certificaten && vacancy.vereiste_certificaten.length > 0) {
+    const candidateCerts = candidate.certificaten || [];
+    const matchedCerts = vacancy.vereiste_certificaten.filter(cert =>
+      candidateCerts.some(cc => cc.toLowerCase().includes(cert.toLowerCase()) || cert.toLowerCase().includes(cc.toLowerCase()))
+    );
+    const missingCerts = vacancy.vereiste_certificaten.filter(cert => !matchedCerts.includes(cert));
+    
+    if (matchedCerts.length === vacancy.vereiste_certificaten.length) {
+      certificatenMatch = 5;
+      extendedReasoning.push(`✅ Certificaten: Alle vereiste certificaten aanwezig`);
+      extendedDetails.certificaten = { match: true, reason: 'Alle vereiste certificaten aanwezig', missing: [] };
+    } else if (matchedCerts.length > 0) {
+      certificatenMatch = 2;
+      extendedReasoning.push(`⚠️ Certificaten: ${matchedCerts.length}/${vacancy.vereiste_certificaten.length} aanwezig`);
+      extendedDetails.certificaten = { match: false, reason: `${missingCerts.length} ontbrekend`, missing: missingCerts };
+    } else {
+      extendedReasoning.push(`❌ Certificaten: Geen van de vereiste certificaten`);
+      extendedDetails.certificaten = { match: false, reason: 'Geen vereiste certificaten', missing: missingCerts };
+    }
+  }
+
+  // Startdatum match (bonus if available before start)
+  if (vacancy.start_datum) {
+    // Assume candidate is available - in real scenario check availability calendar
+    startdatumMatch = 3;
+    extendedReasoning.push(`✅ Startdatum: Beschikbaar voor ${vacancy.start_datum}`);
+    extendedDetails.startdatum = { match: true, reason: `Beschikbaar voor startdatum` };
+  }
+
+  // Calculate total with vacancy-specific bonuses
+  const vacancyBonus = urenMatch + certificatenMatch + startdatumMatch;
+  const totalScore = Math.min(baseScore.totalScore + vacancyBonus, MAX_BASE_SCORE + 15);
+  const normalizedScore = Math.min(Math.round((totalScore / MAX_BASE_SCORE) * 100), 100);
+
+  return {
+    ...baseScore,
+    urenMatch,
+    certificatenMatch,
+    startdatumMatch,
+    totalScore,
+    normalizedScore,
+    reasoning: extendedReasoning,
+    details: extendedDetails,
+  };
+}

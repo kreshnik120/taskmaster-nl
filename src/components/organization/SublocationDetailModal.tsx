@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getOrganizationName, getOrganizationBadgeColor } from "@/lib/organizationMapping";
 import { SublocationMatchingPanel } from "./SublocationMatchingPanel";
+import { VacanciesPanel } from "./VacanciesPanel";
 
 interface Sublocation {
   id: string;
@@ -107,8 +108,9 @@ export function SublocationDetailModal({
         </DialogHeader>
 
         <Tabs defaultValue="gegevens" className="mt-4">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="gegevens">Gegevens</TabsTrigger>
+            <TabsTrigger value="vacatures">Vacatures</TabsTrigger>
             <TabsTrigger value="werk">Werkbeschrijving</TabsTrigger>
             <TabsTrigger value="plaatsingen">Plaatsingen</TabsTrigger>
           </TabsList>
@@ -193,6 +195,16 @@ export function SublocationDetailModal({
                 )}
               </div>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="vacatures" className="space-y-4">
+            <VacanciesPanel
+              sublocationId={sublocation.id}
+              sublocationName={sublocation.naam}
+              gezochte_functies={sublocation.gezochte_functies || []}
+              sector={sublocation.sector || []}
+              doelgroep={sublocation.doelgroep || []}
+            />
           </TabsContent>
 
           <TabsContent value="werk" className="space-y-4">
