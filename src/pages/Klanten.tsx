@@ -97,7 +97,7 @@ export default function Klanten() {
       toast.info("Logo's ophalen gestart - dit kan enkele minuten duren...");
       
       const { data, error } = await supabase.functions.invoke("fetch-organization-logos", {
-        body: { fetchAll: false } // Only fetch for orgs without logos
+        body: { fetchAll: false, includeNameLookup: true } // Fetch for orgs without logos, try name-based lookup
       });
       
       if (error) throw error;
