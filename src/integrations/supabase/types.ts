@@ -2406,6 +2406,7 @@ export type Database = {
           org_id: string | null
           pipeline_stage: string | null
           professional_id: string | null
+          profile_photo_url: string | null
           rejected_at: string | null
           rejection_reason: string | null
           status: string
@@ -2428,6 +2429,7 @@ export type Database = {
           org_id?: string | null
           pipeline_stage?: string | null
           professional_id?: string | null
+          profile_photo_url?: string | null
           rejected_at?: string | null
           rejection_reason?: string | null
           status?: string
@@ -2450,6 +2452,7 @@ export type Database = {
           org_id?: string | null
           pipeline_stage?: string | null
           professional_id?: string | null
+          profile_photo_url?: string | null
           rejected_at?: string | null
           rejection_reason?: string | null
           status?: string
@@ -2766,6 +2769,7 @@ export type Database = {
           kvk_nummer: string | null
           org_id: string
           postcode: string | null
+          profile_photo_url: string | null
           provincie: string | null
           rating: number | null
           regio: string | null
@@ -2797,6 +2801,7 @@ export type Database = {
           kvk_nummer?: string | null
           org_id: string
           postcode?: string | null
+          profile_photo_url?: string | null
           provincie?: string | null
           rating?: number | null
           regio?: string | null
@@ -2828,6 +2833,7 @@ export type Database = {
           kvk_nummer?: string | null
           org_id?: string
           postcode?: string | null
+          profile_photo_url?: string | null
           provincie?: string | null
           rating?: number | null
           regio?: string | null

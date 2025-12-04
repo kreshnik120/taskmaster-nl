@@ -11,7 +11,9 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2, Building2, UserPlus, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
+import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2, Building2, UserPlus, ChevronDown, ChevronUp, Sparkles, MapPin, Cake } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Progress } from "@/components/ui/progress";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1141,48 +1143,122 @@ export function ApplicationDetailModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="flex items-center gap-3">
-              <Mail className="h-5 w-5" />
-              Sollicitatie Details
-            </DialogTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={() => setDeleteDialogOpen(true)}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Verwijderen
-            </Button>
-          </div>
+        <DialogHeader className="sr-only">
+          <DialogTitle>Sollicitatie Details</DialogTitle>
         </DialogHeader>
 
-        {/* Header Metadata */}
-        <div className="space-y-2">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <p className="text-lg font-semibold">{application.email_from}</p>
-              {application.email_subject && (
-                <p className="text-sm text-muted-foreground">{application.email_subject}</p>
+        {/* Hero Header Section */}
+        <div className="flex items-start gap-4 pb-4">
+          {/* Avatar */}
+          <Avatar className="h-16 w-16 border-2 border-border">
+            {application.extracted_data?.profile_photo_url ? (
+              <AvatarImage 
+                src={application.extracted_data.profile_photo_url} 
+                alt={candidateName} 
+              />
+            ) : null}
+            <AvatarFallback className={`text-lg font-semibold ${
+              getFieldValue(application.extracted_data?.functie_niveau) === 'HBO-V' 
+                ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300'
+                : getFieldValue(application.extracted_data?.functie_niveau) === 'VIG'
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                  : getFieldValue(application.extracted_data?.functie_niveau) === 'Begeleider'
+                    ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300'
+                    : 'bg-muted text-muted-foreground'
+            }`}>
+              {candidateName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+            </AvatarFallback>
+          </Avatar>
+
+          {/* Name & Metadata */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h2 className="text-xl font-bold tracking-tight truncate">
+                  {candidateName}
+                </h2>
+                <div className="flex items-center gap-2 mt-0.5 text-sm text-muted-foreground">
+                  {getFieldValue(application.extracted_data?.functie_niveau) && (
+                    <span className="font-medium text-foreground">
+                      {getFieldValue(application.extracted_data?.functie_niveau)}
+                    </span>
+                  )}
+                  {getFieldValue(application.extracted_data?.werkvorm) && (
+                    <>
+                      <span>•</span>
+                      <span>{getFieldValue(application.extracted_data?.werkvorm)}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">{getStageLabel(application.pipeline_stage)}</Badge>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => setDeleteDialogOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Inline NAW Metadata */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
+              {(getFieldValue(application.extracted_data?.woonplaats) || getFieldValue(application.extracted_data?.regio)) && (
+                <div className="flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5" />
+                  <span>
+                    {getFieldValue(application.extracted_data?.woonplaats) || getFieldValue(application.extracted_data?.regio)}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center gap-1">
+                <Mail className="h-3.5 w-3.5" />
+                <a href={`mailto:${application.email_from}`} className="hover:text-primary hover:underline truncate max-w-[200px]">
+                  {application.email_from}
+                </a>
+              </div>
+              {getFieldValue(application.extracted_data?.telefoon) && (
+                <div className="flex items-center gap-1">
+                  <Phone className="h-3.5 w-3.5" />
+                  <a href={`tel:${getFieldValue(application.extracted_data?.telefoon)}`} className="hover:text-primary hover:underline">
+                    {getFieldValue(application.extracted_data?.telefoon)}
+                  </a>
+                </div>
               )}
             </div>
-            <div className="flex gap-2">
-              <Badge variant="outline">{getStageLabel(application.pipeline_stage)}</Badge>
-              <Badge variant="outline">{getStatusLabel(application.status)}</Badge>
-            </div>
-          </div>
 
-          {/* Organization Badge */}
-          {getFieldValue(application.extracted_data?.assigned_organization) && (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-950/20 border border-blue-200">
-              <Building2 className="h-3.5 w-3.5 text-blue-600" />
-              <span className="text-xs font-medium text-blue-700 dark:text-blue-400">
-                {getFieldValue(application.extracted_data?.assigned_organization)}
-              </span>
-            </div>
-          )}
+            {/* Completeness Progress Bar */}
+            {application.completeness_score !== null && (
+              <div className="flex items-center gap-3 mt-3">
+                <Progress 
+                  value={application.completeness_score} 
+                  className={`h-2 flex-1 max-w-[200px] ${
+                    application.completeness_score >= 80 
+                      ? '[&>div]:bg-green-500' 
+                      : application.completeness_score >= 50 
+                        ? '[&>div]:bg-yellow-500' 
+                        : '[&>div]:bg-red-500'
+                  }`}
+                />
+                <span className="text-xs font-medium text-muted-foreground">
+                  {application.completeness_score}% compleet
+                </span>
+              </div>
+            )}
+
+            {/* Organization Badge */}
+            {getFieldValue(application.extracted_data?.assigned_organization) && (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 mt-2 rounded-full bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                <Building2 className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                <span className="text-xs font-medium text-blue-700 dark:text-blue-300">
+                  {getFieldValue(application.extracted_data?.assigned_organization)}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         <Separator />
@@ -1457,10 +1533,54 @@ export function ApplicationDetailModal({
                             </a>
                           </div>
                         )}
-                        {getFieldValue(application.extracted_data?.regio) && (
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm">Regio: {getFieldValue(application.extracted_data?.regio)}</span>
+                        
+                        {/* Persoonsgegevens NAW sectie */}
+                        {(getFieldValue(application.extracted_data?.woonplaats) || 
+                          getFieldValue(application.extracted_data?.postcode) || 
+                          getFieldValue(application.extracted_data?.geboortedatum) ||
+                          getFieldValue(application.extracted_data?.adres) ||
+                          getFieldValue(application.extracted_data?.regio)) && (
+                          <div className="pt-2 mt-2 border-t border-border/50">
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Persoonsgegevens</span>
+                            <div className="space-y-1.5 mt-2">
+                              {getFieldValue(application.extracted_data?.woonplaats) && (
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-sm">
+                                    {getFieldValue(application.extracted_data?.woonplaats)}
+                                    {getFieldValue(application.extracted_data?.postcode) && (
+                                      <span className="text-muted-foreground ml-1">
+                                        ({getFieldValue(application.extracted_data?.postcode)})
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+                              {!getFieldValue(application.extracted_data?.woonplaats) && getFieldValue(application.extracted_data?.postcode) && (
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-sm">Postcode: {getFieldValue(application.extracted_data?.postcode)}</span>
+                                </div>
+                              )}
+                              {getFieldValue(application.extracted_data?.adres) && (
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-sm">{getFieldValue(application.extracted_data?.adres)}</span>
+                                </div>
+                              )}
+                              {!getFieldValue(application.extracted_data?.woonplaats) && getFieldValue(application.extracted_data?.regio) && (
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-sm">Regio: {getFieldValue(application.extracted_data?.regio)}</span>
+                                </div>
+                              )}
+                              {getFieldValue(application.extracted_data?.geboortedatum) && (
+                                <div className="flex items-center gap-2">
+                                  <Cake className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-sm">{getFieldValue(application.extracted_data?.geboortedatum)}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
