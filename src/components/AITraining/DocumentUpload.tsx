@@ -1,13 +1,23 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, FileText, Loader2, CheckCircle, XCircle, AlertCircle, FolderOpen } from "lucide-react";
+import { Upload, FileText, Loader2, CheckCircle, XCircle, AlertCircle, FolderOpen, FileSpreadsheet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
 const LARGE_FILE_THRESHOLD = 100 * 1024 * 1024; // 100MB
@@ -20,6 +30,8 @@ export const DocumentUpload = () => {
   const [processingPending, setProcessingPending] = useState(false);
   const [activeJobs, setActiveJobs] = useState<{[jobId: string]: number}>({});
   const [totalChunks, setTotalChunks] = useState(0);
+  const [excelWarningOpen, setExcelWarningOpen] = useState(false);
+  const [pendingExcelFiles, setPendingExcelFiles] = useState<File[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -160,11 +172,25 @@ export const DocumentUpload = () => {
     return Math.floor(diffMs / 60000);
   };
 
-  const processFiles = async (files: FileList | File[], folderName?: string) => {
+  const processFiles = async (files: FileList | File[], folderName?: string, skipExcelCheck = false) => {
     if (!files || files.length === 0) return;
 
-    setUploading(true);
     const fileArray = Array.from(files);
+    
+    // Check for Excel files and warn user about ABCzorg Import
+    if (!skipExcelCheck) {
+      const excelFiles = fileArray.filter(f => 
+        f.name.toLowerCase().endsWith('.xlsx') || f.name.toLowerCase().endsWith('.xls')
+      );
+      
+      if (excelFiles.length > 0) {
+        setPendingExcelFiles(excelFiles);
+        setExcelWarningOpen(true);
+        return; // Wait for user decision
+      }
+    }
+
+    setUploading(true);
     
     toast({
       title: folderName ? `Map "${folderName}" uploaden...` : "Uploading documenten...",
@@ -341,6 +367,23 @@ export const DocumentUpload = () => {
     if (!files || files.length === 0) return;
     await processFiles(files);
     event.target.value = "";
+  };
+
+  const handleExcelContinue = async () => {
+    setExcelWarningOpen(false);
+    if (pendingExcelFiles.length > 0) {
+      await processFiles(pendingExcelFiles, undefined, true);
+      setPendingExcelFiles([]);
+    }
+  };
+
+  const handleExcelCancel = () => {
+    setExcelWarningOpen(false);
+    setPendingExcelFiles([]);
+    toast({
+      title: "Excel import geannuleerd",
+      description: "Gebruik ABCzorg Excel Import hierboven voor organisatie-data",
+    });
   };
 
   const handleFolderUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -844,6 +887,38 @@ export const DocumentUpload = () => {
           )}
         </div>
       </Card>
+
+      {/* Excel Warning Dialog */}
+      <AlertDialog open={excelWarningOpen} onOpenChange={setExcelWarningOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5 text-amber-500" />
+              Excel bestand gedetecteerd
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p>
+                Dit lijkt een Excel bestand met organisatie-data te zijn.
+              </p>
+              <p className="font-medium text-foreground">
+                Wil je de <span className="text-primary">ABCzorg Excel Import</span> gebruiken? 
+                Deze is speciaal ontworpen voor het importeren van werklocaties naar de database.
+              </p>
+              <p className="text-sm">
+                Document Upload is bedoeld voor kennisextractie uit PDF/DOCX bestanden.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleExcelCancel}>
+              Gebruik ABCzorg Import
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleExcelContinue} className="bg-amber-600 hover:bg-amber-700">
+              Toch doorgaan met kennisextractie
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
