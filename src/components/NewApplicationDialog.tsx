@@ -24,7 +24,7 @@ const applicationSchema = z.object({
   werkvorm: z.string().optional(),
   regio: z.string().optional(),
   beschikbaarheid: z.string().optional(),
-  eigen_vervoer: z.boolean().default(false),
+  eigen_vervoer: z.boolean().nullable().default(null), // null = onbekend, false = expliciet nee
   bron: z.string().optional(),
   opmerkingen: z.string().optional(),
 });
@@ -149,7 +149,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
   } = useForm<ApplicationFormData>({
     resolver: zodResolver(applicationSchema),
     defaultValues: {
-      eigen_vervoer: false,
+      eigen_vervoer: null, // null = onbekend (niet geëxtraheerd uit CV)
     },
   });
 

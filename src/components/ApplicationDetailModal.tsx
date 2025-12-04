@@ -243,7 +243,7 @@ export function ApplicationDetailModal({
     beschikbaarheid: "",
     ervaring_sector: [] as string[],
     doelgroep_ervaring: [] as string[],
-    eigen_vervoer: false,
+    eigen_vervoer: null as boolean | null, // null = onbekend
     bron: "",
     opmerkingen: "",
     assigned_organization: "",
@@ -287,7 +287,7 @@ export function ApplicationDetailModal({
         beschikbaarheid: getFieldValue(application.extracted_data?.beschikbaarheid) || "",
         ervaring_sector: getFieldValue(application.extracted_data?.ervaring_sector) || [],
         doelgroep_ervaring: getFieldValue(application.extracted_data?.doelgroep_ervaring) || [],
-        eigen_vervoer: getFieldValue(application.extracted_data?.eigen_vervoer) || false,
+        eigen_vervoer: getFieldValue(application.extracted_data?.eigen_vervoer) ?? null, // preserve null state
         bron: getFieldValue(application.extracted_data?.bron) || "",
         opmerkingen: getFieldValue(application.extracted_data?.opmerkingen) || "",
         assigned_organization: getFieldValue(application.extracted_data?.assigned_organization) || "",
@@ -1361,16 +1361,22 @@ export function ApplicationDetailModal({
                           </SelectContent>
                         </Select>
 
-                        <div className="flex items-center space-x-2">
-                          <Checkbox
-                            id="eigen_vervoer_edit"
-                            checked={editData.eigen_vervoer}
-                            onCheckedChange={(checked) => setEditData({ ...editData, eigen_vervoer: checked as boolean })}
-                          />
-                          <Label htmlFor="eigen_vervoer_edit" className="cursor-pointer text-sm">
-                            Eigen vervoer beschikbaar
-                          </Label>
-                        </div>
+                        <Select 
+                          value={editData.eigen_vervoer === null ? "onbekend" : editData.eigen_vervoer ? "ja" : "nee"} 
+                          onValueChange={(value) => setEditData({ 
+                            ...editData, 
+                            eigen_vervoer: value === "onbekend" ? null : value === "ja" 
+                          })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Eigen vervoer" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="onbekend">Eigen vervoer onbekend</SelectItem>
+                            <SelectItem value="ja">Ja, eigen vervoer</SelectItem>
+                            <SelectItem value="nee">Nee, geen eigen vervoer</SelectItem>
+                          </SelectContent>
+                        </Select>
 
                         <Select 
                           value={editData.bron} 
@@ -1630,17 +1636,27 @@ export function ApplicationDetailModal({
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-muted-foreground w-32">Mobiliteit:</span>
                           <div className="flex gap-2">
-                            {getFieldValue(application.extracted_data?.eigen_vervoer) && (
-                              <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">Auto ✓</Badge>
-                            )}
-                            {getFieldValue(application.extracted_data?.rijbewijs) && !getFieldValue(application.extracted_data?.eigen_vervoer) && (
+                            {(() => {
+                              const eigenVervoer = getFieldValue(application.extracted_data?.eigen_vervoer);
+                              const rijbewijs = getFieldValue(application.extracted_data?.rijbewijs);
+                              const maxReisafstand = getFieldValue(application.extracted_data?.max_reisafstand_km);
+                              
+                              // Explicitly true = has own transport
+                              if (eigenVervoer === true) {
+                                return <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">Auto ✓</Badge>;
+                              }
+                              // Explicitly false = no own transport
+                              if (eigenVervoer === false) {
+                                return <Badge variant="outline" className="bg-red-100 text-red-700 border-red-300">Geen auto ✗</Badge>;
+                              }
+                              // null/undefined = unknown
+                              return <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-300">Vervoer onbekend</Badge>;
+                            })()}
+                            {getFieldValue(application.extracted_data?.rijbewijs) && (
                               <Badge variant="outline" className="bg-yellow-100 text-yellow-700 border-yellow-300">Rijbewijs ✓</Badge>
                             )}
                             {getFieldValue(application.extracted_data?.max_reisafstand_km) && (
                               <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">Max {getFieldValue(application.extracted_data?.max_reisafstand_km)}km</Badge>
-                            )}
-                            {!getFieldValue(application.extracted_data?.eigen_vervoer) && !getFieldValue(application.extracted_data?.rijbewijs) && (
-                              <span className="text-sm text-muted-foreground">Geen info</span>
                             )}
                             <ConfidenceBadge 
                               field={application.extracted_data?.eigen_vervoer} 
