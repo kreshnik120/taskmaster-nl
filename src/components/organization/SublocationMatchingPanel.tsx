@@ -44,6 +44,12 @@ interface Professional {
   eigen_vervoer?: boolean | null;
   ervaring_sector?: string[] | null;
   doelgroep_ervaring?: string[] | null;
+  // Nieuwe velden direct op professionals tabel
+  jaren_ervaring?: number | null;
+  leidinggevende_ervaring?: boolean | null;
+  nachtdienst_bereid?: boolean | null;
+  weekenddienst_bereid?: boolean | null;
+  certificaten?: string[] | null;
 }
 
 interface Assignment {
@@ -123,45 +129,41 @@ export function SublocationMatchingPanel({
 
       if (!userOrg) throw new Error("No organization found");
 
+      // Vereenvoudigde query - matching velden nu direct op professionals tabel
       const { data, error } = await supabase
         .from("professionals")
-        .select(`
-          *,
-          professional_applications!professional_applications_professional_id_fkey(
-            extracted_data
-          )
-        `)
+        .select("*")
         .eq("org_id", userOrg.org_id)
         .is("deleted_at", null)
         .in("status", ["actief", "beschikbaar"]);
 
       if (error) throw error;
       
-      // Enrich with extracted_data from applications
-      return (data as any[]).map((prof) => {
-        const application = prof.professional_applications?.[0];
-        const extractedData = application?.extracted_data || {};
-        
-        return {
-          id: prof.id,
-          full_name: prof.full_name,
-          functie_niveau: prof.functie_niveau,
-          werkvorm: prof.werkvorm,
-          regio: prof.regio,
-          provincie: prof.provincie,
-          woonplaats: prof.woonplaats,
-          postcode: prof.postcode,
-          skills: prof.skills || [],
-          status: prof.status,
-          beschikbaarheidsnotities: prof.beschikbaarheidsnotities,
-          beschikbaarheid_uren: parseBeschikbaarheid(extractedData.beschikbaarheid || prof.beschikbaarheidsnotities),
-          heeft_auto: prof.heeft_auto,
-          heeft_rijbewijs: prof.heeft_rijbewijs,
-          eigen_vervoer: extractedData.eigen_vervoer || false,
-          ervaring_sector: extractedData.ervaring_sector || [],
-          doelgroep_ervaring: extractedData.doelgroep_ervaring || [],
-        } as Professional;
-      });
+      // Direct mapping zonder JOIN - alle velden nu op professionals tabel
+      return (data as any[]).map((prof) => ({
+        id: prof.id,
+        full_name: prof.full_name,
+        functie_niveau: prof.functie_niveau,
+        werkvorm: prof.werkvorm,
+        regio: prof.regio,
+        provincie: prof.provincie,
+        woonplaats: prof.woonplaats,
+        postcode: prof.postcode,
+        skills: prof.skills || [],
+        status: prof.status,
+        beschikbaarheidsnotities: prof.beschikbaarheidsnotities,
+        beschikbaarheid_uren: parseBeschikbaarheid(prof.beschikbaarheidsnotities),
+        heeft_auto: prof.heeft_auto,
+        heeft_rijbewijs: prof.heeft_rijbewijs,
+        eigen_vervoer: prof.heeft_auto || prof.heeft_rijbewijs || false,
+        ervaring_sector: prof.ervaring_sector || [],
+        doelgroep_ervaring: prof.doelgroep_ervaring || [],
+        jaren_ervaring: prof.jaren_ervaring,
+        leidinggevende_ervaring: prof.leidinggevende_ervaring,
+        nachtdienst_bereid: prof.nachtdienst_bereid,
+        weekenddienst_bereid: prof.weekenddienst_bereid,
+        certificaten: prof.certificaten || [],
+      } as Professional));
     },
   });
 
