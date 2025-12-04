@@ -11,7 +11,7 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2, Building2, UserPlus, ChevronDown, ChevronUp, Sparkles, MapPin, Cake } from "lucide-react";
+import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2, Building2, UserPlus, ChevronDown, ChevronUp, Sparkles, MapPin, Cake, ZoomIn } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -197,6 +197,10 @@ export function ApplicationDetailModal({
   const [updating, setUpdating] = useState(false);
   const [linkedTasks, setLinkedTasks] = useState<LinkedTask[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  
+  // Get photo URL for lightbox
+  const photoUrl = getFieldValue(application.extracted_data?.profile_photo_url) as string | null;
   
   // Collapsible sections (localStorage persistence)
   const [contactOpen, setContactOpen] = useState(() => {
@@ -1151,14 +1155,18 @@ export function ApplicationDetailModal({
         <div className="flex items-start gap-4 pb-4">
           {/* Avatar with Photo Upload */}
           <div className="relative group">
-            <Avatar className="h-16 w-16 border-2 border-border">
-              {getFieldValue(application.extracted_data?.profile_photo_url) ? (
+            <Avatar 
+              className={`h-24 w-24 border-2 border-border ring-4 ring-background shadow-xl ${photoUrl ? 'cursor-pointer hover:ring-primary/30 transition-all' : ''}`}
+              onClick={() => photoUrl && setLightboxOpen(true)}
+            >
+              {photoUrl ? (
                 <AvatarImage 
-                  src={getFieldValue(application.extracted_data?.profile_photo_url) as string} 
+                  src={photoUrl} 
                   alt={candidateName} 
+                  className="object-cover"
                 />
               ) : null}
-              <AvatarFallback className={`text-lg font-semibold ${
+              <AvatarFallback className={`text-2xl font-semibold ${
                 getFieldValue(application.extracted_data?.functie_niveau) === 'HBO-V' 
                   ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300'
                   : getFieldValue(application.extracted_data?.functie_niveau) === 'VIG'
@@ -1171,13 +1179,23 @@ export function ApplicationDetailModal({
               </AvatarFallback>
             </Avatar>
             
+            {/* Zoom indicator when photo exists */}
+            {photoUrl && (
+              <div 
+                className="absolute bottom-0 right-0 bg-black/60 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                onClick={() => setLightboxOpen(true)}
+              >
+                <ZoomIn className="h-4 w-4" />
+              </div>
+            )}
+            
             {/* Photo upload overlay */}
-            {!getFieldValue(application.extracted_data?.profile_photo_url) && (
+            {!photoUrl && (
               <label 
                 className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                 title="Upload foto"
               >
-                <Upload className="h-5 w-5 text-white" />
+                <Upload className="h-6 w-6 text-white" />
                 <input
                   type="file"
                   accept="image/*"
@@ -1225,7 +1243,7 @@ export function ApplicationDetailModal({
             )}
             
             {/* Photo detected badge */}
-            {getFieldValue(application.extracted_data?.has_profile_photo) && !getFieldValue(application.extracted_data?.profile_photo_url) && (
+            {getFieldValue(application.extracted_data?.has_profile_photo) && !photoUrl && (
               <div className="absolute -bottom-1 -right-1 bg-amber-500 text-white text-[10px] rounded-full px-1.5 py-0.5 font-medium">
                 📷
               </div>
@@ -2559,6 +2577,31 @@ export function ApplicationDetailModal({
           onApplicationUpdated();
         }}
       />
+      {/* Photo Lightbox */}
+      <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
+        <DialogContent className="max-w-2xl p-2 bg-black/90 border-0">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Foto van {candidateName}</DialogTitle>
+          </DialogHeader>
+          <div className="relative flex items-center justify-center">
+            {photoUrl && (
+              <img 
+                src={photoUrl} 
+                alt={candidateName}
+                className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
+              />
+            )}
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full"
+              onClick={() => setLightboxOpen(false)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

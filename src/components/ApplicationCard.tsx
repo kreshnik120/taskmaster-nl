@@ -3,7 +3,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
 import { GripVertical, Phone, Calendar, Mail, AlertCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,7 @@ interface Application {
     regio?: string;
     ervaring_sector?: string[];
     doelgroep_ervaring?: string[];
+    profile_photo_url?: string;
   } | null;
   professionals?: {
     full_name: string;
@@ -271,7 +272,14 @@ export function ApplicationCard({ application, onClick, searchQuery = "", isSele
                 <div className="flex-1 min-w-0 space-y-2 cursor-pointer" onClick={onClick}>
                   {/* Header: Avatar + Name + Progress Ring */}
                   <div className="flex items-center gap-2">
-                    <Avatar className="h-6 w-6 flex-shrink-0">
+                    <Avatar className="h-8 w-8 flex-shrink-0 ring-2 ring-background">
+                      {application.extracted_data?.profile_photo_url ? (
+                        <AvatarImage 
+                          src={application.extracted_data.profile_photo_url} 
+                          alt={candidateName}
+                          className="object-cover"
+                        />
+                      ) : null}
                       <AvatarFallback className={`text-xs font-medium ${getAvatarColor(candidateName)}`}>
                         {getInitials(candidateName)}
                       </AvatarFallback>
