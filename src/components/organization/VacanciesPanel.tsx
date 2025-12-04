@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Briefcase } from "lucide-react";
 import { VacancyCard } from "./VacancyCard";
 import { NewVacancyDialog } from "./NewVacancyDialog";
+import { VacancyDetailModal } from "./VacancyDetailModal";
 
 interface VacanciesPanelProps {
   sublocationId: string;
@@ -13,6 +14,29 @@ interface VacanciesPanelProps {
   gezochte_functies?: string[];
   sector?: string[];
   doelgroep?: string[];
+}
+
+interface VacancyWithCount {
+  id: string;
+  sublocation_id: string;
+  titel: string;
+  functie_niveau: string;
+  aantal_fte: number | null;
+  uren_per_week_min: number | null;
+  uren_per_week_max: number | null;
+  uurtarief_indicatie: number | null;
+  start_datum: string | null;
+  eind_datum: string | null;
+  deadline: string | null;
+  vereiste_certificaten: string[];
+  gewenste_sector_ervaring: string[];
+  gewenste_doelgroep_ervaring: string[];
+  beschrijving: string | null;
+  status: string;
+  urgentie: string;
+  created_at: string;
+  created_by: string | null;
+  vacancy_applications: { count: number }[];
 }
 
 export function VacanciesPanel({
@@ -23,18 +47,22 @@ export function VacanciesPanel({
   doelgroep = [],
 }: VacanciesPanelProps) {
   const [showNewDialog, setShowNewDialog] = useState(false);
+  const [selectedVacancy, setSelectedVacancy] = useState<VacancyWithCount | null>(null);
 
   const { data: vacancies, isLoading, refetch } = useQuery({
     queryKey: ["vacancies", sublocationId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("vacancies")
-        .select("*")
+        .select(`
+          *,
+          vacancy_applications(count)
+        `)
         .eq("sublocation_id", sublocationId)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data;
+      return (data || []) as unknown as VacancyWithCount[];
     },
   });
 
@@ -83,11 +111,11 @@ export function VacanciesPanel({
               {openVacancies.map((vacancy) => (
                 <VacancyCard
                   key={vacancy.id}
-                  vacancy={vacancy as any}
-                  onClick={() => {
-                    // TODO: Open vacancy detail modal
-                    console.log("Open vacancy:", vacancy.id);
-                  }}
+                  vacancy={{
+                    ...vacancy,
+                    applications_count: vacancy.vacancy_applications?.[0]?.count || 0,
+                  } as any}
+                  onClick={() => setSelectedVacancy(vacancy)}
                 />
               ))}
             </div>
@@ -99,10 +127,11 @@ export function VacanciesPanel({
               {otherVacancies.map((vacancy) => (
                 <VacancyCard
                   key={vacancy.id}
-                  vacancy={vacancy as any}
-                  onClick={() => {
-                    console.log("Open vacancy:", vacancy.id);
-                  }}
+                  vacancy={{
+                    ...vacancy,
+                    applications_count: vacancy.vacancy_applications?.[0]?.count || 0,
+                  } as any}
+                  onClick={() => setSelectedVacancy(vacancy)}
                 />
               ))}
             </div>
@@ -119,6 +148,14 @@ export function VacanciesPanel({
         defaultSector={sector}
         defaultDoelgroep={doelgroep}
         onSuccess={() => refetch()}
+      />
+
+      <VacancyDetailModal
+        vacancy={selectedVacancy}
+        open={!!selectedVacancy}
+        onOpenChange={(open) => !open && setSelectedVacancy(null)}
+        sublocationName={sublocationName}
+        onUpdate={() => refetch()}
       />
     </div>
   );
