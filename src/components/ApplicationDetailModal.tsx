@@ -712,7 +712,7 @@ export function ApplicationDetailModal({
         .eq('user_id', user.id)
         .single();
 
-      if (!orgData) throw new Error("No organization found");
+      if (!orgData) throw new Error("Je bent niet gekoppeld aan een organisatie. Neem contact op met je beheerder.");
 
       let dueAt = null;
       if (actionDueDate) {
