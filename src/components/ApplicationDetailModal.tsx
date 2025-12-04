@@ -11,7 +11,7 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2, Building2, UserPlus, ChevronDown, ChevronUp, Sparkles, MapPin, Cake, ZoomIn } from "lucide-react";
+import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2, Building2, UserPlus, ChevronDown, ChevronUp, Sparkles, MapPin, Cake, ZoomIn, Briefcase } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -38,7 +38,7 @@ import { AIMatchInsights } from "@/components/recruitment/AIMatchInsights";
 import { AIRecommendationBadge } from "@/components/recruitment/AIRecommendationBadge";
 import { AIFeedbackButtons } from "@/components/recruitment/AIFeedbackButtons";
 import { InterviewSchedulingModal } from "@/components/recruitment/InterviewSchedulingModal";
-import { calculateApplicationToClientMatchWithAI, type MatchScoreBreakdown as MatchScoreBreakdownType } from "@/lib/services/matchingService";
+import { calculateApplicationToClientMatchWithAI, calculateVacancyMatchScore, type MatchScoreBreakdown as MatchScoreBreakdownType, type MatchCandidate, parseBeschikbaarheid } from "@/lib/services/matchingService";
 
 interface Application {
   id: string;
@@ -266,6 +266,11 @@ export function ApplicationDetailModal({
   const [matchedClients, setMatchedClients] = useState<any[]>([]);
   const [matchingLoading, setMatchingLoading] = useState(false);
   const [showMatches, setShowMatches] = useState(false);
+  
+  // Vacancy matching
+  const [matchedVacancies, setMatchedVacancies] = useState<any[]>([]);
+  const [vacancyMatchingLoading, setVacancyMatchingLoading] = useState(false);
+  const [showVacancyMatches, setShowVacancyMatches] = useState(false);
   
   // Delete confirmation
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -919,6 +924,97 @@ export function ApplicationDetailModal({
       toast.error("Fout bij zoeken naar passende klanten");
     } finally {
       setMatchingLoading(false);
+    }
+  };
+
+  const findMatchingVacancies = async () => {
+    if (!application.extracted_data) {
+      toast.error("Onvoldoende sollicitant gegevens");
+      return;
+    }
+
+    setVacancyMatchingLoading(true);
+    setShowVacancyMatches(true);
+    try {
+      // Fetch open vacancies with sublocation data
+      const { data: vacancies, error } = await supabase
+        .from('vacancies')
+        .select(`
+          *,
+          client_sublocations!sublocation_id (
+            naam,
+            plaats,
+            provincie,
+            sector,
+            doelgroep
+          )
+        `)
+        .eq('status', 'open')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      if (!vacancies?.length) {
+        setMatchedVacancies([]);
+        return;
+      }
+
+      const extractedData = application.extracted_data;
+
+      // Build candidate object
+      const candidate: MatchCandidate = {
+        functie_niveau: getFieldValue(extractedData?.functie_niveau) || null,
+        regio: getFieldValue(extractedData?.regio) || null,
+        ervaring_sector: getFieldValue(extractedData?.ervaring_sector) || [],
+        doelgroep_ervaring: getFieldValue(extractedData?.doelgroep_ervaring) || [],
+        heeft_auto: getFieldValue(extractedData?.eigen_vervoer) || false,
+        heeft_rijbewijs: getFieldValue(extractedData?.eigen_vervoer) || false,
+        certificaten: getFieldValue(extractedData?.certificaten) || [],
+        assigned_organization: getFieldValue(extractedData?.assigned_organization) || null,
+        beschikbaarheid_uren: parseBeschikbaarheid(getFieldValue(extractedData?.beschikbaarheid)),
+      };
+
+      // Calculate scores for each vacancy
+      const scored = vacancies.map((vacancy: any) => {
+        const sublocation = vacancy.client_sublocations;
+        const score = calculateVacancyMatchScore(
+          candidate,
+          {
+            ...vacancy,
+            status: vacancy.status as 'open' | 'in_review' | 'vervuld' | 'gesloten',
+            urgentie: vacancy.urgentie as 'laag' | 'normaal' | 'hoog' | 'kritiek',
+          },
+          {
+            sector: sublocation?.sector || [],
+            doelgroep: sublocation?.doelgroep || [],
+            plaats: sublocation?.plaats || null,
+            provincie: sublocation?.provincie || null,
+          }
+        );
+
+        return {
+          ...vacancy,
+          sublocationName: sublocation?.naam || 'Onbekend',
+          sublocationPlaats: sublocation?.plaats || '',
+          matchScore: score.normalizedScore,
+          matchReasons: score.reasoning,
+        };
+      });
+      
+      const topMatches = scored
+        .filter((v: any) => v.matchScore >= 20)
+        .sort((a: any, b: any) => b.matchScore - a.matchScore)
+        .slice(0, 5);
+      
+      setMatchedVacancies(topMatches);
+      
+      if (topMatches.length === 0) {
+        toast.info("Geen passende vacatures gevonden");
+      }
+    } catch (error) {
+      console.error('Error finding matching vacancies:', error);
+      toast.error("Fout bij zoeken naar passende vacatures");
+    } finally {
+      setVacancyMatchingLoading(false);
     }
   };
 
@@ -2306,6 +2402,143 @@ export function ApplicationDetailModal({
                         >
                           Naar Klanten →
                         </Button>
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <Separator />
+
+            {/* Vacancy Matching */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium flex items-center gap-2">
+                  📋 Passende Vacatures
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={findMatchingVacancies}
+                  disabled={vacancyMatchingLoading}
+                >
+                  {vacancyMatchingLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Zoeken...
+                    </>
+                  ) : (
+                    "Zoek Vacatures"
+                  )}
+                </Button>
+              </div>
+
+              {showVacancyMatches && (
+                <>
+                  {vacancyMatchingLoading ? (
+                    <div className="text-sm text-muted-foreground">Zoeken naar passende vacatures...</div>
+                  ) : matchedVacancies.length > 0 ? (
+                    <div className="space-y-3">
+                      {matchedVacancies.map((vacancy: any) => (
+                        <div
+                          key={vacancy.id}
+                          className="p-4 rounded-lg border bg-card hover:bg-accent/30 transition-colors space-y-2"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Briefcase className="h-4 w-4 text-muted-foreground" />
+                                <p className="text-sm font-semibold">{vacancy.titel}</p>
+                                <Badge variant="default" className="text-xs">
+                                  {vacancy.matchScore}% match
+                                </Badge>
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-xs ${
+                                    vacancy.urgentie === 'kritiek' ? 'border-red-500 text-red-500' :
+                                    vacancy.urgentie === 'hoog' ? 'border-orange-500 text-orange-500' :
+                                    vacancy.urgentie === 'normaal' ? 'border-blue-500 text-blue-500' :
+                                    'border-muted text-muted-foreground'
+                                  }`}
+                                >
+                                  {vacancy.urgentie}
+                                </Badge>
+                              </div>
+                              
+                              <div className="text-xs text-muted-foreground space-y-1">
+                                <div className="flex items-center gap-1">
+                                  <MapPin className="h-3 w-3" />
+                                  <span>{vacancy.sublocationName}</span>
+                                  {vacancy.sublocationPlaats && (
+                                    <span className="text-muted-foreground">• {vacancy.sublocationPlaats}</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">Functie:</span>
+                                  <span>{vacancy.functie_niveau}</span>
+                                  {vacancy.uren_per_week && (
+                                    <>
+                                      <span>•</span>
+                                      <span>{vacancy.uren_per_week} uur/week</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+
+                              {vacancy.matchReasons && vacancy.matchReasons.length > 0 && (
+                                <div className="flex flex-wrap gap-1 pt-1">
+                                  {vacancy.matchReasons.slice(0, 4).map((reason: string, idx: number) => (
+                                    <Badge key={idx} variant="secondary" className="text-xs">
+                                      {reason.startsWith('✅') || reason.startsWith('⚠️') ? reason : `✓ ${reason}`}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-2 pt-2">
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  const { error } = await supabase.from("vacancy_applications").insert({
+                                    vacancy_id: vacancy.id,
+                                    professional_id: application.professional_id,
+                                    status: "voorgesteld",
+                                    match_score: vacancy.matchScore,
+                                    match_reasoning: { score: vacancy.matchScore, timestamp: new Date().toISOString() },
+                                  });
+                                  if (error) throw error;
+                                  toast.success(`Sollicitatie ingediend voor ${vacancy.titel}`);
+                                  findMatchingVacancies();
+                                } catch (error) {
+                                  console.error("Error applying to vacancy:", error);
+                                  toast.error("Kon niet solliciteren op vacature");
+                                }
+                              }}
+                              disabled={!application.professional_id}
+                            >
+                              Direct Solliciteren
+                            </Button>
+                            {!application.professional_id && (
+                              <span className="text-xs text-muted-foreground">
+                                Maak eerst een professional profiel aan
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-2 p-3 rounded-lg bg-muted/30">
+                      <p className="text-sm text-muted-foreground">
+                        Geen passende vacatures gevonden
+                      </p>
+                      <p className="text-sm text-amber-600">
+                        💡 Tip: Er zijn mogelijk geen openstaande vacatures die matchen met dit profiel.
                       </p>
                     </div>
                   )}

@@ -30,8 +30,7 @@ interface Vacancy {
   sublocation_id: string;
   titel: string;
   functie_niveau: string;
-  uren_per_week_min: number | null;
-  uren_per_week_max: number | null;
+  uren_per_week: number | null;
   start_datum: string | null;
   vereiste_certificaten: string[];
   gewenste_sector_ervaring: string[];
@@ -124,7 +123,7 @@ export function VacancyMatchingPanel({ vacancy, sublocationName }: VacancyMatchi
       const { data, error } = await supabase
         .from("professionals")
         .select("*")
-        .eq("status", "beschikbaar")
+        .in("status", ["actief", "beschikbaar"])
         .is("deleted_at", null);
 
       if (error) throw error;
@@ -152,7 +151,7 @@ export function VacancyMatchingPanel({ vacancy, sublocationName }: VacancyMatchi
         sublocation_id: vacancy.sublocation_id,
         titel: vacancy.titel,
         functie_niveau: vacancy.functie_niveau,
-        uren_per_week: vacancy.uren_per_week_min || vacancy.uren_per_week_max || undefined,
+        uren_per_week: vacancy.uren_per_week || undefined,
         start_datum: vacancy.start_datum || undefined,
         vereiste_certificaten: vacancy.vereiste_certificaten,
         gewenste_sector_ervaring: vacancy.gewenste_sector_ervaring,

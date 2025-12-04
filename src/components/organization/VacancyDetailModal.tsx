@@ -32,14 +32,14 @@ import { format, differenceInDays, isPast } from "date-fns";
 import { nl } from "date-fns/locale";
 import { toast } from "sonner";
 import { VacancyMatchingPanel } from "./VacancyMatchingPanel";
+import { VacancyEditDialog } from "./VacancyEditDialog";
 
 interface Vacancy {
   id: string;
   sublocation_id: string;
   titel: string;
   functie_niveau: string;
-  uren_per_week_min: number | null;
-  uren_per_week_max: number | null;
+  uren_per_week: number | null;
   uurtarief_indicatie: number | null;
   start_datum: string | null;
   eind_datum: string | null;
@@ -84,6 +84,7 @@ export function VacancyDetailModal({
 }: VacancyDetailModalProps) {
   const queryClient = useQueryClient();
   const [isUpdating, setIsUpdating] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   // Fetch applications count
   const { data: applicationsCount } = useQuery({
@@ -142,6 +143,14 @@ export function VacancyDetailModal({
               </p>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setEditDialogOpen(true)}
+              >
+                <Edit className="h-3 w-3 mr-1" />
+                Bewerken
+              </Button>
               <Badge className={urgentieColors[vacancy.urgentie] || "bg-muted"}>
                 {vacancy.urgentie}
               </Badge>
@@ -214,9 +223,7 @@ export function VacancyDetailModal({
                 <p className="text-xs text-muted-foreground">Uren per week</p>
                 <p className="font-medium flex items-center gap-1">
                   <Clock className="h-3 w-3" />
-                  {vacancy.uren_per_week_min && vacancy.uren_per_week_max
-                    ? `${vacancy.uren_per_week_min}-${vacancy.uren_per_week_max}`
-                    : vacancy.uren_per_week_min || vacancy.uren_per_week_max || "Flexibel"}
+                  {vacancy.uren_per_week || "Flexibel"}
                 </p>
               </div>
               <div className="space-y-1">
@@ -303,6 +310,16 @@ export function VacancyDetailModal({
             />
           </TabsContent>
         </Tabs>
+
+        <VacancyEditDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          vacancy={vacancy}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["vacancies"] });
+            onUpdate?.();
+          }}
+        />
       </DialogContent>
     </Dialog>
   );
