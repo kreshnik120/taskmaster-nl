@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Bot, Sparkles } from "lucide-react";
 import { ChatWidget } from "@/components/AIAssistant/ChatWidget";
 import { DocumentUpload } from "@/components/AITraining/DocumentUpload";
+import { ABCzorgExcelImport } from "@/components/AITraining/ABCzorgExcelImport";
 import { KnowledgeOverview } from "@/components/AITraining/KnowledgeOverview";
 import { SeedClientKnowledge } from "@/components/AITraining/SeedClientKnowledge";
 import { LearningDashboard } from "@/components/AITraining/LearningDashboard";
@@ -366,6 +367,7 @@ const AiTraining = () => {
                     </CardContent>
                   </Card>
                   
+                  <ABCzorgExcelImport />
                   <DocumentUpload />
                   <SeedClientKnowledge />
                   
