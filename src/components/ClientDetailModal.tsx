@@ -990,6 +990,7 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
           organization={{
             id: linkedOrg.id,
             name: linkedOrg.name,
+            org_id: linkedOrg.org_id,
             kvk_nummer: linkedOrg.kvk_nummer,
             logo_url: linkedOrg.logo_url,
             website: linkedOrg.website,

@@ -32,6 +32,7 @@ import { getOrganizationName, getOrganizationBadgeColor } from "@/lib/organizati
 interface Organization {
   id: string;
   name: string;
+  org_id: string;
   kvk_nummer: string | null;
   logo_url: string | null;
   website: string | null;
@@ -139,11 +140,8 @@ export function OrganizationDetailModal({
     proposedAssignments: assignments?.filter(a => a.status === 'proposed')?.length || 0,
   };
 
-  // Count per bureau
-  const abczorgCount = organization?.locations?.reduce((sum, loc) => 
-    sum + (loc.sublocations?.filter(sub => getOrganizationName(sub.gekoppelde_bv_org_id) === "ABCzorg")?.length || 0), 0) || 0;
-  const citozorgCount = organization?.locations?.reduce((sum, loc) => 
-    sum + (loc.sublocations?.filter(sub => getOrganizationName(sub.gekoppelde_bv_org_id) === "CitoZorg")?.length || 0), 0) || 0;
+  // Bureau bepalen op basis van organization.org_id (niet gekoppelde_bv_org_id)
+  const bureauName = getOrganizationName(organization?.org_id || null);
 
   if (!organization) return null;
 
@@ -168,15 +166,10 @@ export function OrganizationDetailModal({
                       KVK: {organization.kvk_nummer}
                     </Badge>
                   )}
-                  {/* Bureau badges */}
-                  {abczorgCount > 0 && (
-                    <Badge variant="outline" className={getOrganizationBadgeColor("ABCzorg")}>
-                      ABCzorg
-                    </Badge>
-                  )}
-                  {citozorgCount > 0 && (
-                    <Badge variant="outline" className={getOrganizationBadgeColor("CitoZorg")}>
-                      CitoZorg
+                  {/* Bureau badge gebaseerd op organization.org_id */}
+                  {bureauName !== "Niet toegewezen" && (
+                    <Badge variant="outline" className={getOrganizationBadgeColor(bureauName)}>
+                      {bureauName}
                     </Badge>
                   )}
                   {organization.website && (
@@ -261,41 +254,27 @@ export function OrganizationDetailModal({
                 </Card>
               )}
 
-              {/* Gekoppelde bureaus - compact en gefilterd */}
-              {(abczorgCount > 0 || citozorgCount > 0) && (
+              {/* Gekoppeld bureau - gebaseerd op organization.org_id */}
+              {bureauName !== "Niet toegewezen" && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Gekoppelde bemiddelingsbureaus</CardTitle>
+                    <CardTitle className="text-lg">Bemiddelingsbureau</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      {abczorgCount > 0 && (
-                        <div className="flex items-center gap-2 px-4 py-2 border rounded-lg">
-                          <Badge variant="outline" className="border-blue-300 text-blue-700">
-                            ABCzorg
-                          </Badge>
-                          <span className="text-sm text-muted-foreground">
-                            • {abczorgCount} {abczorgCount === 1 ? 'sublocatie' : 'sublocaties'}
-                          </span>
-                        </div>
-                      )}
-                      {citozorgCount > 0 && (
-                        <div className="flex items-center gap-2 px-4 py-2 border rounded-lg">
-                          <Badge variant="outline" className="border-green-300 text-green-700">
-                            CitoZorg
-                          </Badge>
-                          <span className="text-sm text-muted-foreground">
-                            • {citozorgCount} {citozorgCount === 1 ? 'sublocatie' : 'sublocaties'}
-                          </span>
-                        </div>
-                      )}
+                    <div className="flex items-center gap-2 px-4 py-2 border rounded-lg w-fit">
+                      <Badge variant="outline" className={getOrganizationBadgeColor(bureauName)}>
+                        {bureauName}
+                      </Badge>
+                      <span className="text-sm text-muted-foreground">
+                        • {stats.totalSublocations} {stats.totalSublocations === 1 ? 'sublocatie' : 'sublocaties'}
+                      </span>
                     </div>
                   </CardContent>
                 </Card>
               )}
               
-              {/* Geen werklocaties melding */}
-              {abczorgCount === 0 && citozorgCount === 0 && (
+              {/* Geen werklocaties melding - gebaseerd op stats.totalSublocations */}
+              {stats.totalSublocations === 0 && (
                 <Card>
                   <CardContent className="py-8 text-center text-muted-foreground">
                     <Building className="h-12 w-12 mx-auto mb-2 opacity-50" />
