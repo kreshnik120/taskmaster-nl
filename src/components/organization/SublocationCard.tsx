@@ -153,7 +153,7 @@ export function SublocationCard({
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          {sublocation.telefoon && (
+          {sublocation.telefoon ? (
             <>
               <Button
                 size="sm"
@@ -174,6 +174,10 @@ export function SublocationCard({
                 <Phone className="h-3.5 w-3.5" />
               </Button>
             </>
+          ) : (
+            <span className="text-xs text-muted-foreground/60 italic px-2">
+              Telefoon onbekend
+            </span>
           )}
           {sublocation.adres && sublocation.plaats && (
             <Button
