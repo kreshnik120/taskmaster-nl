@@ -5,7 +5,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Phone, Mail, Globe, Building2, Users } from "lucide-react";
+import { Phone, Mail, Globe, Building2, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface Location {
@@ -124,9 +124,22 @@ export function OrganizationCardSimple({
     );
   };
 
-  // Data completeness based on sublocation richness
-  const hasRichData = sublocationCount > 0 && allSectors.size > 0;
-  const cardOpacity = hasRichData ? "opacity-100" : "opacity-80";
+  // Data completeness calculation
+  const hasSublocations = sublocationCount > 0;
+  const hasSectors = allSectors.size > 0;
+  const hasPhone = !!primaryPhone;
+  const hasEmail = !!primaryEmail;
+  
+  // Calculate completeness score
+  const completenessScore = [hasSublocations, hasSectors, hasPhone, hasEmail].filter(Boolean).length;
+  const isIncomplete = completenessScore < 3;
+  
+  // Get missing items for tooltip
+  const missingItems: string[] = [];
+  if (!hasSublocations) missingItems.push("werklocaties");
+  if (!hasSectors) missingItems.push("sector");
+  if (!hasPhone) missingItems.push("telefoon");
+  if (!hasEmail) missingItems.push("email");
 
   const handleQuickCall = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -162,7 +175,7 @@ export function OrganizationCardSimple({
           }}
         >
           <Card 
-            className={`cursor-pointer transition-all duration-200 hover:bg-muted/30 hover:shadow-md hover:-translate-y-0.5 ${cardOpacity} flex flex-col overflow-hidden`}
+            className={`cursor-pointer transition-all duration-200 hover:bg-muted/30 hover:shadow-md hover:-translate-y-0.5 ${isIncomplete ? 'opacity-80' : 'opacity-100'} flex flex-col overflow-hidden`}
             onClick={() => onClick(organization)}
           >
             {/* Main content */}
@@ -198,6 +211,24 @@ export function OrganizationCardSimple({
                             </TooltipTrigger>
                             <TooltipContent>
                               {sublocationCount} werklocatie{sublocationCount !== 1 ? 's' : ''}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      {/* Data completeness indicator */}
+                      {isIncomplete && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant="outline" className="text-xs gap-1 border-amber-300 text-amber-600 dark:border-amber-700 dark:text-amber-400">
+                                <AlertCircle className="h-3 w-3" />
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="font-medium">Data incompleet</p>
+                              <p className="text-xs text-muted-foreground">
+                                Ontbreekt: {missingItems.join(", ")}
+                              </p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
