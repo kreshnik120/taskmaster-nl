@@ -367,39 +367,98 @@ function shouldSkip(record: Record<string, string>): boolean {
   return false;
 }
 
-// Fuzzy match organization name
-function fuzzyMatchOrg(name: string, existingOrgs: Map<string, string>): string | undefined {
-  const nameLower = name.toLowerCase().trim();
+// Normalize organization name for consistent matching
+function normalizeOrgName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/^stichting\s+/i, "")
+    .replace(/\s+b\.?v\.?$/i, "")
+    .replace(/\s+bv$/i, "")
+    .replace(/\s+zorg$/i, "")
+    .replace(/\s+groep$/i, "")
+    .replace(/[''`]/g, "'")
+    .replace(/[^a-z0-9\s']/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Calculate similarity score between two strings (0-1)
+function calculateSimilarity(str1: string, str2: string): number {
+  const s1 = str1.toLowerCase();
+  const s2 = str2.toLowerCase();
   
-  // Exact match first
-  if (existingOrgs.has(nameLower)) {
-    return existingOrgs.get(nameLower);
+  if (s1 === s2) return 1;
+  if (s1.length === 0 || s2.length === 0) return 0;
+  
+  // Check if one contains the other
+  if (s1.includes(s2) || s2.includes(s1)) {
+    return Math.min(s1.length, s2.length) / Math.max(s1.length, s2.length);
   }
   
-  // Try variations
+  // Levenshtein-based similarity
+  const matrix: number[][] = [];
+  for (let i = 0; i <= s1.length; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= s2.length; j++) {
+    matrix[0][j] = j;
+  }
+  for (let i = 1; i <= s1.length; i++) {
+    for (let j = 1; j <= s2.length; j++) {
+      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+  
+  const distance = matrix[s1.length][s2.length];
+  return 1 - distance / Math.max(s1.length, s2.length);
+}
+
+// Fuzzy match organization name with improved algorithm
+function fuzzyMatchOrg(name: string, existingOrgs: Map<string, string>): string | undefined {
+  const normalized = normalizeOrgName(name);
+  
+  // Exact normalized match first
+  for (const [key, id] of existingOrgs.entries()) {
+    if (normalizeOrgName(key) === normalized) {
+      return id;
+    }
+  }
+  
+  // Try exact variations
   const variations = [
-    nameLower,
-    nameLower.replace("stichting ", ""),
-    `stichting ${nameLower}`,
-    nameLower.replace(" b.v.", ""),
-    nameLower.replace(" bv", ""),
-    nameLower.split(" ")[0], // First word only
-    nameLower.replace(/[^a-z0-9]/g, ""), // Alphanumeric only
+    name.toLowerCase().trim(),
+    normalized,
+    `stichting ${normalized}`,
+    normalized.replace(/\s/g, ""),
   ];
   
   for (const variation of variations) {
     if (existingOrgs.has(variation)) {
       return existingOrgs.get(variation);
     }
-    // Partial match - if existing org contains the variation
-    for (const [key, id] of existingOrgs.entries()) {
-      if (key.includes(variation) && variation.length > 4) {
-        return id;
-      }
-      if (variation.includes(key) && key.length > 4) {
-        return id;
-      }
+  }
+  
+  // Fuzzy match with high threshold (0.85)
+  let bestMatch: { id: string; score: number } | undefined;
+  
+  for (const [key, id] of existingOrgs.entries()) {
+    const keyNormalized = normalizeOrgName(key);
+    const score = calculateSimilarity(normalized, keyNormalized);
+    
+    if (score >= 0.85 && (!bestMatch || score > bestMatch.score)) {
+      bestMatch = { id, score };
     }
+  }
+  
+  if (bestMatch) {
+    console.log(`Fuzzy matched "${name}" to existing org with score ${bestMatch.score.toFixed(2)}`);
+    return bestMatch.id;
   }
   
   return undefined;
