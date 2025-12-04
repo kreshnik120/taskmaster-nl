@@ -48,6 +48,9 @@ interface Professional {
   regio: string | null;
   woonplaats: string | null;
   postcode: string | null;
+  adres: string | null;
+  geboortedatum: string | null;
+  profile_photo_url: string | null;
   skills: string[];
   status: string;
   rating: number | null;

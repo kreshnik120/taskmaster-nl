@@ -9,13 +9,14 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { toast } from "sonner";
 import { 
   Phone, Mail, MapPin, Briefcase, Car, Calendar, User,
-  Star, Edit, Trash2, CheckCircle2, X, Link2, ChevronDown, Award, Clock
+  Star, Edit, Trash2, CheckCircle2, X, Link2, ChevronDown, Award, Clock, 
+  Home, Cake, Upload
 } from "lucide-react";
 import { PlacementHistory } from "./PlacementHistory";
 import { format } from "date-fns";
@@ -30,6 +31,9 @@ interface Professional {
   regio: string | null;
   woonplaats: string | null;
   postcode: string | null;
+  adres: string | null;
+  geboortedatum: string | null;
+  profile_photo_url: string | null;
   telefoonnummer: string | null;
   email: string | null;
   heeft_auto: boolean | null;
@@ -268,78 +272,142 @@ export function ProfessionalDetailModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Avatar className="h-12 w-12">
-                <AvatarFallback className={getFunctieAvatarColor(professional.functie_niveau)}>
+        {/* Hero Header met Foto */}
+        <div className="relative -m-6 mb-0 p-6 pb-4 bg-gradient-to-br from-primary/5 via-primary/3 to-transparent border-b">
+          <div className="flex items-start gap-6">
+            {/* Large Avatar with Photo */}
+            <div className="relative group">
+              <Avatar className="h-28 w-28 ring-4 ring-background shadow-xl">
+                {professional.profile_photo_url ? (
+                  <AvatarImage 
+                    src={professional.profile_photo_url} 
+                    alt={professional.full_name}
+                    className="object-cover"
+                  />
+                ) : null}
+                <AvatarFallback className={`${getFunctieAvatarColor(professional.functie_niveau)} text-3xl font-semibold`}>
                   {getInitials(professional.full_name)}
                 </AvatarFallback>
               </Avatar>
-              <div>
-                <div className="text-xl font-semibold">
-                  {isEditing ? "Bewerk Professional" : professional.full_name}
+              {/* Photo upload hover overlay */}
+              <label className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                <Upload className="h-8 w-8 text-white" />
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    
+                    try {
+                      const fileExt = file.name.split('.').pop();
+                      const fileName = `${professional.id}-${Date.now()}.${fileExt}`;
+                      
+                      const { error: uploadError } = await supabase.storage
+                        .from('profile-photos')
+                        .upload(fileName, file, { upsert: true });
+                      
+                      if (uploadError) throw uploadError;
+                      
+                      const { data: { publicUrl } } = supabase.storage
+                        .from('profile-photos')
+                        .getPublicUrl(fileName);
+                      
+                      await supabase
+                        .from('professionals')
+                        .update({ profile_photo_url: publicUrl })
+                        .eq('id', professional.id);
+                      
+                      toast.success('Foto geüpload!');
+                      onSuccess?.();
+                    } catch (error) {
+                      console.error('Upload error:', error);
+                      toast.error('Fout bij uploaden foto');
+                    }
+                  }}
+                />
+              </label>
+            </div>
+
+            {/* Name and NAW Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 mb-2">
+                <h2 className="text-2xl font-bold truncate">{professional.full_name}</h2>
+                {/* Completeness indicator */}
+                <div className="relative w-10 h-10 flex-shrink-0">
+                  <svg className="w-10 h-10 -rotate-90">
+                    <circle cx="20" cy="20" r="16" stroke="currentColor" strokeWidth="3" fill="none" className="text-muted" />
+                    <circle
+                      cx="20" cy="20" r="16" stroke="currentColor" strokeWidth="3" fill="none"
+                      strokeDasharray={`${2 * Math.PI * 16}`}
+                      strokeDashoffset={`${2 * Math.PI * 16 * (1 - completeness / 100)}`}
+                      className={`transition-all ${completeness === 100 ? 'text-green-500' : 'text-primary'}`}
+                    />
+                  </svg>
+                  {completeness === 100 ? (
+                    <CheckCircle2 className="absolute inset-0 m-auto h-4 w-4 text-green-500" />
+                  ) : (
+                    <span className="absolute inset-0 flex items-center justify-center text-xs font-medium">{completeness}</span>
+                  )}
                 </div>
-                {!isEditing && (
-                  <div className="text-sm text-muted-foreground font-normal">
-                    {professional.functie_niveau}
-                  </div>
-                )}
               </div>
-              {/* Completeness indicator */}
-              <div className="relative w-10 h-10">
-                <svg className="w-10 h-10 -rotate-90">
-                  <circle
-                    cx="20"
-                    cy="20"
-                    r="16"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                    fill="none"
-                    className="text-muted"
-                  />
-                  <circle
-                    cx="20"
-                    cy="20"
-                    r="16"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                    fill="none"
-                    strokeDasharray={`${2 * Math.PI * 16}`}
-                    strokeDashoffset={`${2 * Math.PI * 16 * (1 - completeness / 100)}`}
-                    className={`transition-all ${completeness === 100 ? 'text-green-500' : 'text-primary'} ${completeness < 100 ? 'animate-pulse' : ''}`}
-                  />
-                </svg>
-                {completeness === 100 ? (
-                  <CheckCircle2 className="absolute inset-0 m-auto h-4 w-4 text-green-500" />
-                ) : (
-                  <span className="absolute inset-0 flex items-center justify-center text-xs font-medium">
-                    {completeness}
+
+              {/* Badges */}
+              <div className="flex flex-wrap gap-2 mb-3">
+                <Badge className={getFunctieColor(professional.functie_niveau)}>{professional.functie_niveau}</Badge>
+                {professional.werkvorm && (
+                  <Badge className={getWerkvormColor(professional.werkvorm)}>{professional.werkvorm}</Badge>
+                )}
+                <Badge variant={professional.status === "actief" ? "default" : "secondary"}>{professional.status}</Badge>
+              </div>
+
+              {/* NAW Inline Info */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                {(professional.woonplaats || professional.postcode) && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3.5 w-3.5" />
+                    {[professional.postcode, professional.woonplaats].filter(Boolean).join(' ')}
+                  </span>
+                )}
+                {professional.email && (
+                  <a href={`mailto:${professional.email}`} className="flex items-center gap-1 hover:text-primary transition-colors">
+                    <Mail className="h-3.5 w-3.5" />
+                    {professional.email}
+                  </a>
+                )}
+                {professional.telefoonnummer && (
+                  <a href={`tel:${professional.telefoonnummer}`} className="flex items-center gap-1 hover:text-primary transition-colors">
+                    <Phone className="h-3.5 w-3.5" />
+                    {professional.telefoonnummer}
+                  </a>
+                )}
+                {professional.geboortedatum && (
+                  <span className="flex items-center gap-1">
+                    <Cake className="h-3.5 w-3.5" />
+                    {format(new Date(professional.geboortedatum), "d MMMM yyyy", { locale: nl })}
                   </span>
                 )}
               </div>
             </div>
+
+            {/* Action Buttons */}
             {!isEditing && (
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2">
                 <Button size="sm" variant="outline" onClick={handleEdit}>
                   <Edit className="h-4 w-4 mr-1" />
                   Bewerken
                 </Button>
-                <Button 
-                  size="sm" 
-                  variant="destructive" 
-                  onClick={handleDelete}
-                  disabled={isDeleting}
-                >
+                <Button size="sm" variant="destructive" onClick={handleDelete} disabled={isDeleting}>
                   <Trash2 className="h-4 w-4 mr-1" />
                   Verwijderen
                 </Button>
               </div>
             )}
-          </DialogTitle>
-        </DialogHeader>
+          </div>
+        </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mt-4">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="profiel">
               <User className="h-4 w-4 mr-2" />
@@ -360,104 +428,38 @@ export function ProfessionalDetailModal({
           </TabsList>
 
           <TabsContent value="profiel" className="space-y-4 mt-6">
-            {/* Large Avatar Section */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <User className="h-4 w-4" />
-                Profiel Foto
-              </h3>
-              <div className="flex items-center justify-center p-6 rounded-lg border border-border/50 bg-gradient-to-br from-muted/30 to-muted/10 backdrop-blur-sm">
-                <Avatar className="h-[120px] w-[120px] shadow-lg">
-                  <AvatarFallback className={`${getFunctieAvatarColor(professional.functie_niveau)} text-4xl`}>
-                    {getInitials(professional.full_name)}
-                  </AvatarFallback>
-                </Avatar>
-              </div>
-            </div>
-
-            {/* Basis Info - Collapsible */}
-            <Collapsible open={basicsOpen} onOpenChange={setBasicsOpen}>
+            {/* Persoonsgegevens Sectie */}
+            <Collapsible defaultOpen>
               <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-muted/50 rounded-lg transition-colors">
                 <h3 className="text-sm font-semibold flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  Basis Informatie
+                  <Home className="h-4 w-4" />
+                  Persoonsgegevens
                 </h3>
-                <ChevronDown className={`h-4 w-4 transition-transform ${basicsOpen ? '' : '-rotate-90'}`} />
+                <ChevronDown className="h-4 w-4" />
               </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-4 mt-3">
-                <div className="grid grid-cols-2 gap-4">
+              <CollapsibleContent className="mt-3">
+                <div className="grid grid-cols-2 gap-4 p-3 bg-muted/20 rounded-lg">
                   <div>
-                    <Label>Naam</Label>
-                    {isEditing ? (
-                      <Input
-                        value={editData.full_name}
-                        onChange={(e) => setEditData({ ...editData, full_name: e.target.value })}
-                        className="focus:ring-2 focus:ring-primary transition-all"
-                      />
-                    ) : (
-                      <p className="text-sm mt-1 p-2 bg-muted/30 rounded-md">{professional.full_name}</p>
-                    )}
+                    <Label className="text-xs text-muted-foreground">Adres</Label>
+                    <p className="text-sm mt-0.5">{professional.adres || "-"}</p>
                   </div>
-                  
                   <div>
-                    <Label>Functieniveau</Label>
-                    {isEditing ? (
-                      <Select
-                        value={editData.functie_niveau}
-                        onValueChange={(value) => setEditData({ ...editData, functie_niveau: value })}
-                      >
-                        <SelectTrigger className="focus:ring-2 focus:ring-primary transition-all">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {FUNCTIE_NIVEAUS.map(niveau => (
-                            <SelectItem key={niveau} value={niveau}>{niveau}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <div className="mt-1">
-                        <Badge className={getFunctieColor(professional.functie_niveau)}>
-                          {professional.functie_niveau}
-                        </Badge>
-                      </div>
-                    )}
+                    <Label className="text-xs text-muted-foreground">Postcode & Plaats</Label>
+                    <p className="text-sm mt-0.5">
+                      {[professional.postcode, professional.woonplaats].filter(Boolean).join(' ') || "-"}
+                    </p>
                   </div>
-
                   <div>
-                    <Label>Werkvorm</Label>
-                    {isEditing ? (
-                      <Select
-                        value={editData.werkvorm}
-                        onValueChange={(value) => setEditData({ ...editData, werkvorm: value })}
-                      >
-                        <SelectTrigger className="focus:ring-2 focus:ring-primary transition-all">
-                          <SelectValue placeholder="Selecteer werkvorm" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {WERKVORMEN.map(vorm => (
-                            <SelectItem key={vorm} value={vorm}>{vorm}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <div className="mt-1">
-                        {professional.werkvorm && (
-                          <Badge className={getWerkvormColor(professional.werkvorm)}>
-                            {professional.werkvorm}
-                          </Badge>
-                        )}
-                      </div>
-                    )}
+                    <Label className="text-xs text-muted-foreground">Geboortedatum</Label>
+                    <p className="text-sm mt-0.5">
+                      {professional.geboortedatum 
+                        ? format(new Date(professional.geboortedatum), "d MMMM yyyy", { locale: nl })
+                        : "-"}
+                    </p>
                   </div>
-
                   <div>
-                    <Label>Status</Label>
-                    <div className="mt-1">
-                      <Badge variant={professional.status === "actief" ? "default" : "secondary"}>
-                        {professional.status}
-                      </Badge>
-                    </div>
+                    <Label className="text-xs text-muted-foreground">Regio</Label>
+                    <p className="text-sm mt-0.5">{professional.regio || "-"}</p>
                   </div>
                 </div>
               </CollapsibleContent>
