@@ -3493,6 +3493,7 @@ export type Database = {
           estimated_hours: number | null
           forecast_metadata: Json | null
           id: string
+          interview_details: Json | null
           is_all_day: boolean
           is_forecast: boolean | null
           next_action: string | null
@@ -3528,6 +3529,7 @@ export type Database = {
           estimated_hours?: number | null
           forecast_metadata?: Json | null
           id?: string
+          interview_details?: Json | null
           is_all_day?: boolean
           is_forecast?: boolean | null
           next_action?: string | null
@@ -3563,6 +3565,7 @@ export type Database = {
           estimated_hours?: number | null
           forecast_metadata?: Json | null
           id?: string
+          interview_details?: Json | null
           is_all_day?: boolean
           is_forecast?: boolean | null
           next_action?: string | null
