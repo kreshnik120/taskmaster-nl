@@ -22,8 +22,7 @@ interface VacancyWithCount {
   titel: string;
   functie_niveau: string;
   aantal_fte: number | null;
-  uren_per_week_min: number | null;
-  uren_per_week_max: number | null;
+  uren_per_week: number | null;
   uurtarief_indicatie: number | null;
   start_datum: string | null;
   eind_datum: string | null;
