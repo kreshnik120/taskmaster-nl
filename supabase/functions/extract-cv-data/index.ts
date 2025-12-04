@@ -401,12 +401,117 @@ console.log("CV extraction complete with per-field confidence scores");
     const photoDesc = getValue(extractedData.photo_description);
     console.log(`📷 Photo detected: ${hasPhoto ? 'YES' : 'NO'}${photoDesc ? ` (${photoDesc})` : ''}`);
     
-    // Note: Profile photos detected but not yet extracted as base64
-    // The AI can detect presence but extracting the actual image requires separate processing
-    // For now, we flag the detection for future manual/automated photo upload
-    if (hasPhoto) {
-      extractedData.photo_detected = { value: true, confidence: getValue(extractedData.has_profile_photo) ? 0.9 : 0.5 };
-      console.log("✅ Profile photo detected in CV - user can upload photo manually");
+    // 🆕 AUTOMATIC PHOTO EXTRACTION using Gemini Image model
+    if (hasPhoto && applicationId) {
+      console.log("🔄 Attempting automatic photo extraction with Gemini Image model...");
+      
+      try {
+        const photoExtractionResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${lovableApiKey}`,
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash-image-preview",
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { 
+                    type: "text", 
+                    text: `Extract ONLY the profile/passport photo from this CV document. 
+                    
+The photo is located: ${photoDesc || 'in the header area'}.
+
+Return ONLY a clean, cropped portrait photo of the person's face suitable for a profile picture.
+Make the image square aspect ratio (1:1), centered on the face.
+Remove any background clutter if possible.
+Do NOT include any text, logos, or other elements - just the person's face.`
+                  },
+                  {
+                    type: "image_url",
+                    image_url: {
+                      url: `data:application/pdf;base64,${pdfBase64}`
+                    }
+                  }
+                ]
+              }
+            ],
+            modalities: ["image", "text"]
+          }),
+        });
+
+        if (photoExtractionResponse.ok) {
+          const photoResult = await photoExtractionResponse.json();
+          console.log("📷 Photo extraction API response received");
+          
+          // Extract base64 image from response
+          const extractedImageData = photoResult.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+          
+          if (extractedImageData && extractedImageData.startsWith('data:image')) {
+            console.log("✅ Profile photo extracted successfully!");
+            
+            // Parse base64 from data URL
+            const base64Match = extractedImageData.match(/^data:image\/(\w+);base64,(.+)$/);
+            if (base64Match) {
+              const imageFormat = base64Match[1]; // png, jpeg, etc.
+              const base64Data = base64Match[2];
+              
+              // Convert base64 to Uint8Array for upload
+              const binaryString = atob(base64Data);
+              const bytes = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+              }
+              
+              // Upload to Supabase Storage
+              const photoFileName = `${applicationId}_extracted.${imageFormat === 'jpeg' ? 'jpg' : imageFormat}`;
+              console.log(`📤 Uploading photo to profile-photos/${photoFileName}`);
+              
+              const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('profile-photos')
+                .upload(photoFileName, bytes, { 
+                  contentType: `image/${imageFormat}`,
+                  upsert: true 
+                });
+              
+              if (uploadError) {
+                console.error("❌ Photo upload error:", uploadError);
+              } else {
+                // Get public URL
+                const { data: urlData } = supabase.storage
+                  .from('profile-photos')
+                  .getPublicUrl(photoFileName);
+                
+                if (urlData?.publicUrl) {
+                  extractedData.profile_photo_url = { 
+                    value: urlData.publicUrl, 
+                    confidence: 0.9 
+                  };
+                  console.log(`✅ Photo uploaded successfully: ${urlData.publicUrl}`);
+                }
+              }
+            }
+          } else {
+            console.log("⚠️ No image returned from photo extraction API - photo may be too small or unclear");
+            extractedData.photo_detected = { value: true, confidence: 0.7 };
+          }
+        } else {
+          const errorText = await photoExtractionResponse.text();
+          console.error("❌ Photo extraction API error:", photoExtractionResponse.status, errorText.substring(0, 200));
+          // Still flag that photo was detected for manual upload
+          extractedData.photo_detected = { value: true, confidence: 0.7 };
+        }
+      } catch (photoError) {
+        console.error("❌ Photo extraction failed:", photoError);
+        // Still flag that photo was detected for manual upload
+        extractedData.photo_detected = { value: true, confidence: 0.7 };
+      }
+    } else if (hasPhoto) {
+      // Photo detected but no applicationId - flag for manual upload
+      extractedData.photo_detected = { value: true, confidence: 0.9 };
+      console.log("✅ Profile photo detected in CV - no applicationId, user can upload manually");
     }
 
     // 🆕 Create searchable knowledge items if orgId is provided
