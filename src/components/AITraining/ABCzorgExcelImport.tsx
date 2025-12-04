@@ -46,8 +46,39 @@ interface PreviewStats {
   recordsWithKvk: number;
   recordsWithPhone: number;
   recordsWithDescription: number;
+  recordsWithAddress: number;
+  recordsWithKostenplaats: number;
+  avgDescriptionLength: number;
   sampleRecords: ExcelRecord[];
+  detectedSectors: { sector: string; count: number }[];
+  detectedDoelgroepen: { doelgroep: string; count: number }[];
 }
+
+// AI-enrichment detection functions (matching edge function logic)
+const detectSectorFromDescription = (desc: string): string[] => {
+  const sectors: string[] = [];
+  const lower = desc.toLowerCase();
+  if (lower.includes('verpleeghuis') || lower.includes('verzorging') || lower.includes('ouderen') || lower.includes('vvt')) sectors.push('VVT');
+  if (lower.includes('ggz') || lower.includes('psychiatr') || lower.includes('geestelijk')) sectors.push('GGZ');
+  if (lower.includes('gehandi') || lower.includes('lvb') || lower.includes('verstandelijk') || lower.includes('ghz')) sectors.push('GHZ');
+  if (lower.includes('jeugd') || lower.includes('kind')) sectors.push('Jeugdzorg');
+  if (lower.includes('thuis')) sectors.push('Thuiszorg');
+  if (lower.includes('ziekenhuis') || lower.includes('klinisch')) sectors.push('Ziekenhuis');
+  return sectors;
+};
+
+const detectDoelgroepFromDescription = (desc: string): string[] => {
+  const doelgroepen: string[] = [];
+  const lower = desc.toLowerCase();
+  if (lower.includes('ouderen') || lower.includes('dementie') || lower.includes('somatiek') || lower.includes('somatisch')) doelgroepen.push('Ouderen');
+  if (lower.includes('lvb') || lower.includes('verstandelijk') || lower.includes('licht verstandelijk')) doelgroepen.push('LVB');
+  if (lower.includes('psychiatr') || lower.includes('ggz')) doelgroepen.push('Psychiatrie');
+  if (lower.includes('verslaving') || lower.includes('verslaafde')) doelgroepen.push('Verslaving');
+  if (lower.includes('jeugd') || lower.includes('kind') || lower.includes('jongere')) doelgroepen.push('Kinderen/Jeugd');
+  if (lower.includes('autis') || lower.includes('ass')) doelgroepen.push('Autisme');
+  if (lower.includes('nah') || lower.includes('hersenletsel')) doelgroepen.push('NAH');
+  return doelgroepen;
+};
 
 export function ABCzorgExcelImport() {
   const [isImporting, setIsImporting] = useState(false);
@@ -67,14 +98,43 @@ export function ABCzorgExcelImport() {
     let withKvk = 0;
     let withPhone = 0;
     let withDesc = 0;
+    let withAddress = 0;
+    let withKostenplaats = 0;
+    let totalDescLength = 0;
+    const sectorCounts = new Map<string, number>();
+    const doelgroepCounts = new Map<string, number>();
 
     records.forEach(r => {
       if (r.Bedrijfsnaam) uniqueOrgs.add(r.Bedrijfsnaam.trim());
       if (r.Locatie) uniqueLocs.add(r.Locatie.trim());
       if (r["KVK nummer"]?.trim()) withKvk++;
       if (r.Telefoon?.trim() || r.Mobiel?.trim()) withPhone++;
-      if (r["Publieke opmerking"]?.trim()) withDesc++;
+      if (r.Adres?.trim() || r.Postcode?.trim()) withAddress++;
+      if (r.Kostenplaats?.trim()) withKostenplaats++;
+      
+      const desc = r["Publieke opmerking"]?.trim() || "";
+      if (desc) {
+        withDesc++;
+        totalDescLength += desc.length;
+        
+        // Detect sectors and doelgroepen for AI-enrichment preview
+        detectSectorFromDescription(desc).forEach(s => {
+          sectorCounts.set(s, (sectorCounts.get(s) || 0) + 1);
+        });
+        detectDoelgroepFromDescription(desc).forEach(d => {
+          doelgroepCounts.set(d, (doelgroepCounts.get(d) || 0) + 1);
+        });
+      }
     });
+
+    // Sort by count descending
+    const detectedSectors = Array.from(sectorCounts.entries())
+      .map(([sector, count]) => ({ sector, count }))
+      .sort((a, b) => b.count - a.count);
+    
+    const detectedDoelgroepen = Array.from(doelgroepCounts.entries())
+      .map(([doelgroep, count]) => ({ doelgroep, count }))
+      .sort((a, b) => b.count - a.count);
 
     return {
       totalRecords: records.length,
@@ -83,7 +143,12 @@ export function ABCzorgExcelImport() {
       recordsWithKvk: withKvk,
       recordsWithPhone: withPhone,
       recordsWithDescription: withDesc,
+      recordsWithAddress: withAddress,
+      recordsWithKostenplaats: withKostenplaats,
+      avgDescriptionLength: withDesc > 0 ? Math.round(totalDescLength / withDesc) : 0,
       sampleRecords: records.slice(0, 5),
+      detectedSectors,
+      detectedDoelgroepen,
     };
   };
 
@@ -286,13 +351,62 @@ export function ABCzorgExcelImport() {
                     KVK: {previewStats.recordsWithKvk}/{previewStats.totalRecords}
                   </Badge>
                   <Badge variant={previewStats.recordsWithPhone > previewStats.totalRecords * 0.5 ? "default" : "secondary"}>
-                    Telefoon: {previewStats.recordsWithPhone}/{previewStats.totalRecords}
+                    📞 Telefoon: {previewStats.recordsWithPhone}/{previewStats.totalRecords}
                   </Badge>
                   <Badge variant={previewStats.recordsWithDescription > previewStats.totalRecords * 0.5 ? "default" : "secondary"}>
-                    Beschrijving: {previewStats.recordsWithDescription}/{previewStats.totalRecords}
+                    📝 Beschrijving: {previewStats.recordsWithDescription}/{previewStats.totalRecords}
+                  </Badge>
+                  <Badge variant={previewStats.recordsWithAddress > previewStats.totalRecords * 0.5 ? "default" : "secondary"}>
+                    📍 Adres: {previewStats.recordsWithAddress}/{previewStats.totalRecords}
+                  </Badge>
+                  <Badge variant={previewStats.recordsWithKostenplaats > 0 ? "default" : "secondary"}>
+                    🏷️ Kostenplaats: {previewStats.recordsWithKostenplaats}/{previewStats.totalRecords}
                   </Badge>
                 </div>
+                {previewStats.avgDescriptionLength > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Gemiddelde beschrijving: {previewStats.avgDescriptionLength} karakters
+                  </p>
+                )}
               </div>
+
+              {/* AI-Enrichment Preview */}
+              {(previewStats.detectedSectors.length > 0 || previewStats.detectedDoelgroepen.length > 0) && (
+                <div className="space-y-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
+                  <h4 className="text-sm font-medium flex items-center gap-2 text-primary">
+                    🤖 AI-Enrichment Preview
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Deze sectoren en doelgroepen worden automatisch gedetecteerd uit de beschrijvingen:
+                  </p>
+                  
+                  {previewStats.detectedSectors.length > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-xs font-medium">Sectoren:</span>
+                      <div className="flex flex-wrap gap-1">
+                        {previewStats.detectedSectors.map(({ sector, count }) => (
+                          <Badge key={sector} variant="outline" className="text-xs bg-blue-50 border-blue-200 text-blue-700">
+                            {sector} ({count}x)
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {previewStats.detectedDoelgroepen.length > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-xs font-medium">Doelgroepen:</span>
+                      <div className="flex flex-wrap gap-1">
+                        {previewStats.detectedDoelgroepen.map(({ doelgroep, count }) => (
+                          <Badge key={doelgroep} variant="outline" className="text-xs bg-green-50 border-green-200 text-green-700">
+                            {doelgroep} ({count}x)
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Sample Organizations */}
               <div className="space-y-2">
@@ -314,11 +428,11 @@ export function ABCzorgExcelImport() {
                 </div>
               </div>
 
-              {/* Sample Records Table */}
+              {/* Sample Records Table - EXPANDED */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
-                  Voorbeeld records
+                  Voorbeeld records (volledige data)
                 </h4>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs border rounded-lg">
@@ -327,21 +441,34 @@ export function ABCzorgExcelImport() {
                         <th className="p-2 text-left">Bedrijfsnaam</th>
                         <th className="p-2 text-left">Locatie</th>
                         <th className="p-2 text-left">Plaats</th>
-                        <th className="p-2 text-left">KVK</th>
+                        <th className="p-2 text-left">📞 Telefoon</th>
+                        <th className="p-2 text-left">🏷️ Kostenplaats</th>
+                        <th className="p-2 text-left min-w-[200px]">📝 Beschrijving</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {previewStats.sampleRecords.map((record, i) => (
-                        <tr key={i} className="border-t">
-                          <td className="p-2 max-w-[150px] truncate">{record.Bedrijfsnaam}</td>
-                          <td className="p-2 max-w-[120px] truncate">{record.Locatie || '-'}</td>
-                          <td className="p-2">{record.Plaats || '-'}</td>
-                          <td className="p-2">{record["KVK nummer"] || '-'}</td>
-                        </tr>
-                      ))}
+                      {previewStats.sampleRecords.map((record, i) => {
+                        const desc = record["Publieke opmerking"]?.trim() || "";
+                        const truncatedDesc = desc.length > 80 ? desc.substring(0, 80) + "..." : desc;
+                        return (
+                          <tr key={i} className="border-t">
+                            <td className="p-2 max-w-[120px] truncate font-medium">{record.Bedrijfsnaam}</td>
+                            <td className="p-2 max-w-[100px] truncate">{record.Locatie || '-'}</td>
+                            <td className="p-2">{record.Plaats || '-'}</td>
+                            <td className="p-2 text-muted-foreground">{record.Telefoon || record.Mobiel || '-'}</td>
+                            <td className="p-2 text-muted-foreground">{record.Kostenplaats || '-'}</td>
+                            <td className="p-2 text-muted-foreground" title={desc}>
+                              {truncatedDesc || <span className="text-destructive/60">Geen beschrijving</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
+                <p className="text-xs text-muted-foreground italic">
+                  ℹ️ Alle data inclusief volledige beschrijvingen, adressen en KVK worden geïmporteerd naar de database.
+                </p>
               </div>
             </CollapsibleContent>
           </Collapsible>
