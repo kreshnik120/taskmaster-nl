@@ -25,13 +25,14 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    // Get user's org
-    const { data: userOrg, error: orgError } = await supabase
+    // Get user's org (handle multiple orgs)
+    const { data: userOrgs, error: orgError } = await supabase
       .from('user_organizations')
       .select('org_id')
       .eq('user_id', user.id)
-      .single();
+      .limit(1);
 
+    const userOrg = userOrgs?.[0];
     if (orgError || !userOrg) {
       throw new Error('Organization not found');
     }
