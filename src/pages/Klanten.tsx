@@ -8,51 +8,66 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Search, X, Users, Building2, Target, LayoutGrid, Network } from "lucide-react";
 import { toast } from "sonner";
 import NewClientDialog from "@/components/NewClientDialog";
-import ClientDetailModal from "@/components/ClientDetailModal";
 import { KPICard } from "@/components/ui/kpi-card";
-import { ClientCard, ClientCardSkeleton } from "@/components/ClientCard";
-import { ClientMatchingUrgency } from "@/components/recruitment/ClientMatchingUrgency";
-import { RecentClientsWidget } from "@/components/recruitment/RecentClientsWidget";
+import { OrganizationCardSimple, OrganizationCardSimpleSkeleton } from "@/components/organization/OrganizationCardSimple";
 import { ClientGroupingToggle } from "@/components/recruitment/ClientGroupingToggle";
 import { DensityToggle } from "@/components/recruitment/DensityToggle";
-import { ClientSection } from "@/components/recruitment/ClientSection";
+import { OrganizationSection } from "@/components/recruitment/OrganizationSection";
 import { OrganizationCard } from "@/components/organization/OrganizationCard";
 import { OrganizationDetailModal } from "@/components/organization/OrganizationDetailModal";
 import { LocationDetailModal } from "@/components/organization/LocationDetailModal";
 import { SublocationDetailModal } from "@/components/organization/SublocationDetailModal";
-import { DataLinkingIndicator } from "@/components/recruitment/DataLinkingIndicator";
 
-interface Client {
+// Unified Organization type used in both views
+interface Sublocation {
   id: string;
-  name: string;
-  company: string;
-  org_id: string;
-  client_org_id?: string | null;
-  created_at: string;
-  email?: string | null;
-  phone?: string | null;
-  address?: string | null;
-  notes?: string | null;
-  regio?: string[] | null;
+  naam: string;
   sector?: string[] | null;
   doelgroep?: string[] | null;
   gezochte_functies?: string[] | null;
-  organizations?: {
-    name: string;
-  };
+  plaats?: string | null;
+  publieke_opmerking?: string | null;
+  hourly_rates_count?: number;
+  tarieven_min?: number;
+  tarieven_max?: number;
 }
 
+interface Location {
+  id: string;
+  naam: string;
+  plaats?: string | null;
+  telefoon?: string | null;
+  contactpersoon_email?: string | null;
+  sublocations?: Sublocation[];
+}
+
+interface Organization {
+  id: string;
+  name: string;
+  org_id: string;
+  kvk_nummer?: string | null;
+  logo_url?: string | null;
+  website?: string | null;
+  centrale_facturatie_email?: string | null;
+  locations?: Location[];
+  bureau?: string; // ABCzorg or CitoZorg (derived from org_id)
+}
+
+// Bureau mapping
+const BUREAU_IDS: Record<string, string> = {
+  '550e8400-e29b-41d4-a716-446655440000': 'ABCzorg',
+  '650e8400-e29b-41d4-a716-446655440001': 'CitoZorg',
+};
+
 export default function Klanten() {
-  const [clients, setClients] = useState<Client[]>([]);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [newClientOpen, setNewClientOpen] = useState(false);
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [selectedOrganization, setSelectedOrganization] = useState<any | null>(null);
+  const [selectedOrganization, setSelectedOrganization] = useState<Organization | null>(null);
   const [isOrgModalOpen, setIsOrgModalOpen] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState<any | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
-  const [selectedSublocation, setSelectedSublocation] = useState<any | null>(null);
+  const [selectedSublocation, setSelectedSublocation] = useState<Sublocation | null>(null);
   const [isSublocationModalOpen, setIsSublocationModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "hierarchy">(() => {
     const saved = localStorage.getItem("klanten-view-mode");
@@ -60,7 +75,10 @@ export default function Klanten() {
   });
   const [grouping, setGrouping] = useState<"bureau" | "sector" | "matching" | "regio" | "alpha">(() => {
     const saved = localStorage.getItem("klanten-grouping");
-    return (saved as any) || "bureau";
+    // Default to bureau if matching was selected (doesn't apply to organizations)
+    const value = saved as any;
+    if (value === "matching") return "bureau";
+    return value || "bureau";
   });
   const [density, setDensity] = useState<"compact" | "comfortable" | "spacious">(() => {
     const saved = localStorage.getItem("klanten-density");
@@ -68,18 +86,13 @@ export default function Klanten() {
   });
   const [allExpanded, setAllExpanded] = useState(true);
   
-  // Hierarchy data (will be loaded from database)
-  const [organizations, setOrganizations] = useState<any[]>([]);
-  const [locations, setLocations] = useState<any[]>([]);
-  const [sublocations, setSublocations] = useState<any[]>([]);
-  
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   
   // Sync filters with URL
   const searchQuery = searchParams.get('search') || '';
-  const orgFilter = searchParams.get('org') || 'all';
-  const matchingFilter = searchParams.get('matching') || 'all';
+  const bureauFilter = searchParams.get('bureau') || 'all';
+  const sectorFilter = searchParams.get('sector') || 'all';
   
   const setSearchQuery = (value: string) => {
     const params = new URLSearchParams(searchParams);
@@ -88,30 +101,22 @@ export default function Klanten() {
     setSearchParams(params);
   };
   
-  const setOrgFilter = (value: string) => {
+  const setBureauFilter = (value: string) => {
     const params = new URLSearchParams(searchParams);
-    if (value !== 'all') params.set('org', value);
-    else params.delete('org');
-    setSearchParams(params);
-  };
-  
-  const setMatchingFilter = (value: string) => {
-    const params = new URLSearchParams(searchParams);
-    if (value !== 'all') params.set('matching', value);
-    else params.delete('matching');
+    if (value !== 'all') params.set('bureau', value);
+    else params.delete('bureau');
     setSearchParams(params);
   };
 
-  // getGreeting removed - not needed for minimal hero design
-
-  // Helper: Open client detail modal
-  const handleClientClick = (client: Client) => {
-    setSelectedClient(client);
-    setIsDetailModalOpen(true);
+  const setSectorFilter = (value: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (value !== 'all') params.set('sector', value);
+    else params.delete('sector');
+    setSearchParams(params);
   };
 
-  // Hierarchy view: Location click handler
-  const handleLocationClick = (location: any, organization?: any) => {
+  // Location click handler
+  const handleLocationClick = (location: Location, organization?: Organization) => {
     setSelectedLocation(location);
     if (organization) {
       setSelectedOrganization(organization);
@@ -119,8 +124,8 @@ export default function Klanten() {
     setIsLocationModalOpen(true);
   };
 
-  // Hierarchy view: Sublocation click handler
-  const handleSublocationClick = (sublocation: any, location?: any, organization?: any) => {
+  // Sublocation click handler
+  const handleSublocationClick = (sublocation: Sublocation, location?: Location, organization?: Organization) => {
     setSelectedSublocation(sublocation);
     if (location) {
       setSelectedLocation(location);
@@ -132,23 +137,26 @@ export default function Klanten() {
   };
 
   useEffect(() => {
-    loadClients();
-    if (viewMode === "hierarchy") {
-      loadHierarchyData();
-    }
-  }, [viewMode]);
+    loadOrganizations();
+  }, []);
   
-  const loadHierarchyData = async () => {
+  const loadOrganizations = async () => {
     try {
+      setLoading(true);
       const { data: session } = await supabase.auth.getSession();
-      if (!session?.session) return;
+      if (!session?.session) {
+        navigate("/auth");
+        return;
+      }
 
       // Load organizations with locations and sublocations
-      const { data: orgsData } = await supabase
+      const { data: orgsData, error: orgsError } = await supabase
         .from("client_organizations")
         .select("*")
         .order("name");
       
+      if (orgsError) throw orgsError;
+
       const { data: locsData } = await supabase
         .from("client_locations")
         .select("*")
@@ -165,10 +173,9 @@ export default function Klanten() {
         `)
         .order("naam");
 
-      // Build hierarchy structure with tariff calculations
-      const orgsWithHierarchy = orgsData?.map(org => ({
-        ...org,
-        locations: locsData?.filter(loc => loc.client_org_id === org.id).map(loc => {
+      // Build hierarchy structure with tariff calculations and bureau mapping
+      const orgsWithHierarchy: Organization[] = orgsData?.map(org => {
+        const orgLocations = locsData?.filter(loc => loc.client_org_id === org.id).map(loc => {
           const locationSubs = sublocsData?.filter(sub => sub.location_id === loc.id) || [];
           return {
             ...loc,
@@ -183,15 +190,21 @@ export default function Klanten() {
               };
             })
           };
-        })
-      })) || [];
+        }) || [];
+
+        return {
+          ...org,
+          locations: orgLocations,
+          bureau: BUREAU_IDS[org.org_id] || 'Onbekend'
+        };
+      }) || [];
 
       setOrganizations(orgsWithHierarchy);
-      setLocations(locsData || []);
-      setSublocations(sublocsData || []);
     } catch (error: any) {
-      console.error("Error loading hierarchy data:", error);
-      toast.error("Kon hiërarchische data niet laden");
+      console.error("Error loading organizations:", error);
+      toast.error("Kon organisaties niet laden");
+    } finally {
+      setLoading(false);
     }
   };
   
@@ -203,12 +216,7 @@ export default function Klanten() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in input or textarea
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      ) {
-        // Allow Escape to clear search
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         if (e.key === "Escape" && searchQuery) {
           setSearchQuery("");
           e.preventDefault();
@@ -216,22 +224,19 @@ export default function Klanten() {
         return;
       }
 
-      // N = New Client
       if (e.key === "n" || e.key === "N") {
         setNewClientOpen(true);
         e.preventDefault();
       }
 
-      // / = Focus search
       if (e.key === "/") {
         document.querySelector<HTMLInputElement>('input[type="text"]')?.focus();
         e.preventDefault();
       }
 
-      // Escape = Close modals, clear search
       if (e.key === "Escape") {
-        if (selectedClient) {
-          setSelectedClient(null);
+        if (isOrgModalOpen) {
+          setIsOrgModalOpen(false);
         } else if (newClientOpen) {
           setNewClientOpen(false);
         } else if (searchQuery) {
@@ -243,113 +248,93 @@ export default function Klanten() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [searchQuery, selectedClient, newClientOpen]);
+  }, [searchQuery, isOrgModalOpen, newClientOpen]);
 
-  const loadClients = async () => {
-    try {
-      const { data: session } = await supabase.auth.getSession();
-      if (!session?.session) {
-        navigate("/auth");
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("clients")
-        .select(`
-          *,
-          organizations!inner(name)
-        `)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setClients(data || []);
-    } catch (error: any) {
-      console.error("Error loading clients:", error);
-      toast.error("Kon klanten niet laden");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const filteredClients = clients.filter(client => {
-    const matchesSearch = client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      client.company.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesOrg = orgFilter === "all" || client.organizations?.name === orgFilter;
-    
-    // Matching filter
-    const hasMatchingData = (client.regio && client.regio.length > 0) ||
-                           (client.sector && client.sector.length > 0) ||
-                           (client.doelgroep && client.doelgroep.length > 0) ||
-                           (client.gezochte_functies && client.gezochte_functies.length > 0);
-    const matchesMatchingFilter = matchingFilter === "all" || 
-      (matchingFilter === "with" && hasMatchingData) ||
-      (matchingFilter === "without" && !hasMatchingData);
-    
-    return matchesSearch && matchesOrg && matchesMatchingFilter;
+  // Get all unique sectors from organizations
+  const allSectors = new Set<string>();
+  organizations.forEach(org => {
+    org.locations?.forEach(loc => {
+      loc.sublocations?.forEach(sub => {
+        sub.sector?.forEach(s => allSectors.add(s));
+      });
+    });
   });
 
-  // Group clients based on selected grouping
-  const groupClients = (clients: Client[]) => {
-    const getCompletenessScore = (client: Client) => {
-      let score = 0;
-      if (client.regio && client.regio.length > 0) score++;
-      if (client.sector && client.sector.length > 0) score++;
-      if (client.doelgroep && client.doelgroep.length > 0) score++;
-      if (client.gezochte_functies && client.gezochte_functies.length > 0) score++;
-      return score;
-    };
+  // Filter organizations
+  const filteredOrganizations = organizations.filter(org => {
+    // Search filter
+    const matchesSearch = org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      org.locations?.some(loc => 
+        loc.naam.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        loc.sublocations?.some(sub => sub.naam.toLowerCase().includes(searchQuery.toLowerCase()))
+      );
+    
+    // Bureau filter
+    const matchesBureau = bureauFilter === "all" || org.bureau === bureauFilter;
+    
+    // Sector filter
+    const orgSectors = new Set<string>();
+    org.locations?.forEach(loc => {
+      loc.sublocations?.forEach(sub => {
+        sub.sector?.forEach(s => orgSectors.add(s));
+      });
+    });
+    const matchesSector = sectorFilter === "all" || orgSectors.has(sectorFilter);
+    
+    return matchesSearch && matchesBureau && matchesSector;
+  });
 
+  // Group organizations based on selected grouping
+  const groupOrganizations = (orgs: Organization[]) => {
     if (grouping === "bureau") {
       return {
-        ABCzorg: clients.filter((c) => c.organizations?.name === "ABCzorg"),
-        CitoZorg: clients.filter((c) => c.organizations?.name === "CitoZorg"),
+        ABCzorg: orgs.filter(o => o.bureau === "ABCzorg"),
+        CitoZorg: orgs.filter(o => o.bureau === "CitoZorg"),
       };
     }
 
     if (grouping === "sector") {
-      const groups: Record<string, Client[]> = {};
+      const groups: Record<string, Organization[]> = {};
       
-      clients.forEach(client => {
-        const primarySector = client.sector && client.sector.length > 0 
-          ? client.sector[0] 
-          : "Geen sector";
+      orgs.forEach(org => {
+        const orgSectors = new Set<string>();
+        org.locations?.forEach(loc => {
+          loc.sublocations?.forEach(sub => {
+            sub.sector?.forEach(s => orgSectors.add(s));
+          });
+        });
+        
+        const primarySector = Array.from(orgSectors)[0] || "Geen sector";
         
         if (!groups[primarySector]) {
           groups[primarySector] = [];
         }
-        groups[primarySector].push(client);
+        groups[primarySector].push(org);
       });
       
       return groups;
     }
     
-    if (grouping === "matching") {
-      return {
-        Volledig: clients.filter((c) => getCompletenessScore(c) === 4),
-        "Deels ingevuld": clients.filter((c) => {
-          const score = getCompletenessScore(c);
-          return score > 0 && score < 4;
-        }),
-        "Geen data": clients.filter((c) => getCompletenessScore(c) === 0),
-      };
-    }
-    
     if (grouping === "regio") {
-      const grouped: Record<string, Client[]> = {};
-      clients.forEach((client) => {
-        const region = client.regio?.[0] || "Onbekend";
-        if (!grouped[region]) grouped[region] = [];
-        grouped[region].push(client);
+      const grouped: Record<string, Organization[]> = {};
+      orgs.forEach(org => {
+        const primaryRegion = org.locations?.find(l => l.plaats)?.plaats ||
+          org.locations?.flatMap(l => l.sublocations || []).find(s => s.plaats)?.plaats ||
+          "Onbekend";
+        if (!grouped[primaryRegion]) grouped[primaryRegion] = [];
+        grouped[primaryRegion].push(org);
       });
       return grouped;
     }
     
     if (grouping === "alpha") {
-      const grouped: Record<string, Client[]> = {};
-      clients.forEach((client) => {
-        const letter = client.company[0]?.toUpperCase() || "#";
+      const grouped: Record<string, Organization[]> = {};
+      orgs.forEach(org => {
+        // Skip common prefixes like "Stichting"
+        const cleanName = org.name.replace(/^(Stichting|De|Het)\s+/i, '');
+        const letter = cleanName[0]?.toUpperCase() || "#";
         if (!grouped[letter]) grouped[letter] = [];
-        grouped[letter].push(client);
+        grouped[letter].push(org);
       });
       return grouped;
     }
@@ -357,15 +342,16 @@ export default function Klanten() {
     return {};
   };
 
-  const groupedClients = groupClients(filteredClients);
+  const groupedOrganizations = groupOrganizations(filteredOrganizations);
 
-  // Save grouping preference to localStorage
+  // Save preferences to localStorage
   const handleGroupingChange = (newGrouping: "bureau" | "sector" | "matching" | "regio" | "alpha") => {
+    // Skip "matching" as it doesn't apply to organizations
+    if (newGrouping === "matching") return;
     setGrouping(newGrouping);
     localStorage.setItem("klanten-grouping", newGrouping);
   };
 
-  // Save density preference to localStorage
   const handleDensityChange = (newDensity: "compact" | "comfortable" | "spacious") => {
     setDensity(newDensity);
     localStorage.setItem("klanten-density", newDensity);
@@ -378,45 +364,31 @@ export default function Klanten() {
     return "grid-cols-1";
   };
 
-  const abczorgCount = clients.filter(c => c.organizations?.name === "ABCzorg").length;
-  const citozorgCount = clients.filter(c => c.organizations?.name === "CitoZorg").length;
-  
-  // Matching readiness stats
-  const clientsWithMatching = clients.filter(c => 
-    (c.regio && c.regio.length > 0) ||
-    (c.sector && c.sector.length > 0) ||
-    (c.doelgroep && c.doelgroep.length > 0) ||
-    (c.gezochte_functies && c.gezochte_functies.length > 0)
+  // Stats
+  const abczorgCount = organizations.filter(o => o.bureau === "ABCzorg").length;
+  const citozorgCount = organizations.filter(o => o.bureau === "CitoZorg").length;
+  const totalSublocations = organizations.reduce((acc, org) => 
+    acc + (org.locations?.reduce((locAcc, loc) => locAcc + (loc.sublocations?.length || 0), 0) || 0), 0
+  );
+  const orgsWithSublocations = organizations.filter(org => 
+    (org.locations?.reduce((acc, loc) => acc + (loc.sublocations?.length || 0), 0) || 0) > 0
   ).length;
-  const matchingPercentage = clients.length > 0 ? Math.round((clientsWithMatching / clients.length) * 100) : 0;
-  const clientsWithoutMatching = clients.length - clientsWithMatching;
+  const dataPercentage = organizations.length > 0 ? Math.round((orgsWithSublocations / organizations.length) * 100) : 0;
 
-  const handleQuickCall = (client: Client) => {
-    if (client.phone) {
-      window.location.href = `tel:${client.phone}`;
-      toast.success(`Bellen naar ${client.name}`);
-    }
-  };
-
-  const handleQuickEmail = (client: Client) => {
-    if (client.email) {
-      window.location.href = `mailto:${client.email}`;
-      toast.success(`Email naar ${client.name}`);
-    }
+  const handleOrganizationClick = (org: Organization) => {
+    setSelectedOrganization(org);
+    setIsOrgModalOpen(true);
   };
   
   // Metric click handlers for filtering
-  const handleMetricClick = (metric: 'total' | 'abczorg' | 'citozorg' | 'matching') => {
+  const handleMetricClick = (metric: 'total' | 'abczorg' | 'citozorg' | 'sublocations') => {
     if (metric === 'total') {
-      setOrgFilter('all');
-      setMatchingFilter('all');
+      setBureauFilter('all');
+      setSectorFilter('all');
     } else if (metric === 'abczorg') {
-      setOrgFilter('ABCzorg');
+      setBureauFilter('ABCzorg');
     } else if (metric === 'citozorg') {
-      setOrgFilter('CitoZorg');
-    } else if (metric === 'matching') {
-      setMatchingFilter('with');
-      setGrouping('matching');
+      setBureauFilter('CitoZorg');
     }
   };
   
@@ -424,359 +396,291 @@ export default function Klanten() {
     setSearchParams(new URLSearchParams());
   };
   
-  const hasActiveFilters = searchQuery || orgFilter !== 'all' || matchingFilter !== 'all';
+  const hasActiveFilters = searchQuery || bureauFilter !== 'all' || sectorFilter !== 'all';
 
   return (
     <div className="space-y-6">
+      {/* Hero Section - Apple Design Minimal */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold">Klanten</h1>
+        <p className="text-muted-foreground text-sm">
+          {organizations.length} organisaties • {totalSublocations} werklocaties
+        </p>
+      </div>
 
-            {/* Hero Section - Apple Design Minimal */}
-            <div className="mb-8">
-              <h1 className="text-2xl font-semibold">Klanten</h1>
-              <p className="text-muted-foreground text-sm">
-                {clients.length} klanten in je portfolio
+      {/* View Toggle */}
+      <div className="flex items-center gap-2 mb-6">
+        <Button
+          variant={viewMode === "cards" ? "default" : "outline"}
+          size="sm"
+          onClick={() => handleViewModeChange("cards")}
+          className="gap-2"
+        >
+          <LayoutGrid className="h-4 w-4" />
+          Kaarten
+        </Button>
+        <Button
+          variant={viewMode === "hierarchy" ? "default" : "outline"}
+          size="sm"
+          onClick={() => handleViewModeChange("hierarchy")}
+          className="gap-2"
+        >
+          <Network className="h-4 w-4" />
+          Hiërarchie
+        </Button>
+      </div>
+
+      {/* KPI Cards - Same for both views now */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KPICard
+          icon={Users}
+          title="Organisaties"
+          value={organizations.length}
+          subtitle="totaal"
+          variant="count"
+          onClick={() => handleMetricClick('total')}
+        />
+        <KPICard
+          icon={Building2}
+          title="ABCzorg"
+          value={abczorgCount}
+          subtitle="organisaties"
+          variant="success"
+          onClick={() => handleMetricClick('abczorg')}
+        />
+        <KPICard
+          icon={Building2}
+          title="CitoZorg"
+          value={citozorgCount}
+          subtitle="organisaties"
+          variant="time"
+          onClick={() => handleMetricClick('citozorg')}
+        />
+        <KPICard
+          icon={Target}
+          title="Werklocaties"
+          value={totalSublocations}
+          subtitle="sublocaties"
+          variant="urgent"
+          onClick={() => handleMetricClick('sublocations')}
+        />
+      </div>
+
+      {/* Search and Filter Bar */}
+      <div className="flex gap-3 flex-wrap items-center mt-8">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Zoek organisatie, locatie of werklocatie..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 pr-12"
+          />
+          <kbd className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+            /
+          </kbd>
+        </div>
+
+        <Select value={bureauFilter} onValueChange={setBureauFilter}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Alle bureaus" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alle bureaus</SelectItem>
+            <SelectItem value="ABCzorg">ABCzorg</SelectItem>
+            <SelectItem value="CitoZorg">CitoZorg</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={sectorFilter} onValueChange={setSectorFilter}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Alle sectoren" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alle sectoren</SelectItem>
+            {Array.from(allSectors).sort().map(sector => (
+              <SelectItem key={sector} value={sector}>{sector}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Button 
+          onClick={() => setNewClientOpen(true)}
+          className="shrink-0"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Nieuwe organisatie
+          <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-background/20 bg-background/20 px-1.5 font-mono text-[10px] font-medium opacity-100">
+            N
+          </kbd>
+        </Button>
+      </div>
+
+      {/* Active Filter Chips */}
+      {hasActiveFilters && (
+        <div className="flex items-center gap-2 flex-wrap mt-4">
+          <span className="text-xs text-muted-foreground">Actieve filters:</span>
+          {searchQuery && (
+            <Badge variant="secondary" className="gap-2">
+              Zoekterm: {searchQuery}
+              <button 
+                onClick={() => setSearchQuery('')}
+                className="hover:bg-muted-foreground/20 rounded-full p-0.5 transition-colors"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          {bureauFilter !== 'all' && (
+            <Badge variant="secondary" className="gap-2">
+              Bureau: {bureauFilter}
+              <button 
+                onClick={() => setBureauFilter('all')}
+                className="hover:bg-muted-foreground/20 rounded-full p-0.5 transition-colors"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          {sectorFilter !== 'all' && (
+            <Badge variant="secondary" className="gap-2">
+              Sector: {sectorFilter}
+              <button 
+                onClick={() => setSectorFilter('all')}
+                className="hover:bg-muted-foreground/20 rounded-full p-0.5 transition-colors"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={clearAllFilters}
+            className="h-7 px-3 text-xs"
+          >
+            Wis filters
+          </Button>
+        </div>
+      )}
+
+      {/* Grouping Toggle & Collapse Controls - Only for Cards view */}
+      {viewMode === "cards" && (
+        <div className="mt-6 flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <ClientGroupingToggle 
+              value={grouping} 
+              onChange={handleGroupingChange}
+            />
+            <DensityToggle value={density} onChange={handleDensityChange} />
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setAllExpanded(!allExpanded)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            {allExpanded ? 'Alles inklappen' : 'Alles uitklappen'}
+          </Button>
+        </div>
+      )}
+
+      {/* Organization grid or hierarchy view */}
+      <div className="space-y-10 mt-8">
+        {viewMode === "cards" ? (
+          loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[...Array(6)].map((_, i) => (
+                <OrganizationCardSimpleSkeleton key={i} />
+              ))}
+            </div>
+          ) : filteredOrganizations.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              {searchQuery ? "Geen organisaties gevonden" : "Nog geen organisaties"}
+            </div>
+          ) : (
+            Object.entries(groupedOrganizations)
+              .sort(([, a], [, b]) => b.length - a.length)
+              .map(([sectionName, sectionOrgs]) => (
+                <OrganizationSection
+                  key={sectionName}
+                  title={sectionName}
+                  organizations={sectionOrgs}
+                  totalOrganizations={filteredOrganizations.length}
+                  groupType={grouping}
+                  onOrganizationClick={handleOrganizationClick}
+                  searchQuery={searchQuery}
+                  defaultOpen={allExpanded}
+                  gridClass={getGridClass()}
+                />
+              ))
+          )
+        ) : (
+          // Hierarchy View
+          loading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="border rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-12 w-12 rounded-full bg-muted animate-pulse" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 w-48 bg-muted animate-pulse rounded" />
+                      <div className="h-3 w-32 bg-muted animate-pulse rounded" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredOrganizations.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
+              <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="text-lg font-medium">Geen organisaties gevonden</p>
+              <p className="text-sm mt-2">
+                {searchQuery ? "Probeer een andere zoekterm" : "Nog geen klantorganisaties"}
               </p>
             </div>
-
-            {/* Data Linking Indicator */}
-            <DataLinkingIndicator onRefresh={loadClients} />
-
-            {/* View Toggle */}
-            <div className="flex items-center gap-2 mb-6">
-              <Button
-                variant={viewMode === "cards" ? "default" : "outline"}
-                size="sm"
-                onClick={() => handleViewModeChange("cards")}
-                className="gap-2"
-              >
-                <LayoutGrid className="h-4 w-4" />
-                Kaarten
-              </Button>
-              <Button
-                variant={viewMode === "hierarchy" ? "default" : "outline"}
-                size="sm"
-                onClick={() => handleViewModeChange("hierarchy")}
-                className="gap-2"
-              >
-                <Network className="h-4 w-4" />
-                Hiërarchie
-              </Button>
-            </div>
-
-            {/* KPI Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {viewMode === "cards" ? (
-                <>
-                  <KPICard
-                    icon={Users}
-                    title="Totaal"
-                    value={clients.length}
-                    subtitle="klanten"
-                    variant="count"
-                    onClick={() => handleMetricClick('total')}
-                  />
-                  <KPICard
-                    icon={Building2}
-                    title="ABCzorg"
-                    value={abczorgCount}
-                    subtitle="klanten"
-                    variant="success"
-                    onClick={() => handleMetricClick('abczorg')}
-                  />
-                  <KPICard
-                    icon={Building2}
-                    title="CitoZorg"
-                    value={citozorgCount}
-                    subtitle="klanten"
-                    variant="time"
-                    onClick={() => handleMetricClick('citozorg')}
-                  />
-                  <KPICard
-                    icon={Target}
-                    title="Met matchdata"
-                    value={matchingPercentage}
-                    subtitle="%"
-                    variant="urgent"
-                    onClick={() => handleMetricClick('matching')}
-                  />
-                </>
-              ) : (
-                <>
-                  <KPICard
-                    icon={Building2}
-                    title="Organisaties"
-                    value={organizations.length}
-                    subtitle={organizations.length === 1 ? "organisatie" : "organisaties"}
-                    variant="count"
-                  />
-                  <KPICard
-                    icon={Building2}
-                    title="Hoofdlocaties"
-                    value={locations.length}
-                    subtitle={locations.length === 1 ? "locatie" : "locaties"}
-                    variant="success"
-                  />
-                  <KPICard
-                    icon={Target}
-                    title="Sublocaties"
-                    value={sublocations.length}
-                    subtitle={sublocations.length === 1 ? "sublocatie" : "sublocaties"}
-                    variant="time"
-                  />
-                  <KPICard
-                    icon={Target}
-                    title="Met tarieven"
-                    value={sublocations.filter((s: any) => s.hourly_rates?.[0]?.count > 0).length}
-                    subtitle={sublocations.filter((s: any) => s.hourly_rates?.[0]?.count > 0).length === 1 ? "sublocatie" : "sublocaties"}
-                    variant="urgent"
-                  />
-                </>
-              )}
-            </div>
-
-            {/* Urgency Banner */}
-            {clientsWithoutMatching > 0 && (
-              <div className="mt-6">
-                <ClientMatchingUrgency
-                  clientsWithoutData={clientsWithoutMatching}
-                  firstClientName={clients.find(c => !c.regio || c.regio.length === 0 || !c.sector || c.sector.length === 0)?.name}
-                  firstClientInitials={clients.find(c => !c.regio || c.regio.length === 0 || !c.sector || c.sector.length === 0)?.company.slice(0, 2).toUpperCase()}
-                  firstClientPhone={clients.find(c => !c.regio || c.regio.length === 0 || !c.sector || c.sector.length === 0)?.phone}
-                  firstClientEmail={clients.find(c => !c.regio || c.regio.length === 0 || !c.sector || c.sector.length === 0)?.email}
-                  onViewClick={() => setMatchingFilter("without")}
+          ) : (
+            <div className="space-y-3">
+              {filteredOrganizations.map((org) => (
+                <OrganizationCard
+                  key={org.id}
+                  organization={org as any}
+                  onOrganizationClick={(clickedOrg) => {
+                    setSelectedOrganization(clickedOrg as any);
+                    setIsOrgModalOpen(true);
+                  }}
+                  onLocationClick={(location) => handleLocationClick(location as any, org)}
+                  onSublocationClick={(sublocation) => {
+                    const location = org.locations?.find((loc: any) => 
+                      loc.sublocations?.some((sub: any) => sub.id === sublocation.id)
+                    );
+                    handleSublocationClick(sublocation as any, location, org);
+                  }}
                 />
-              </div>
-            )}
-
-            {/* Recent Clients Widget - Collapsible */}
-            <div className="mt-6">
-              <RecentClientsWidget
-                clients={clients}
-                isLoading={loading}
-                onClientClick={setSelectedClient}
-              />
+              ))}
             </div>
-
-            {/* Search and Filter Bar */}
-            <div className="flex gap-3 flex-wrap items-center mt-8">
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Zoek op naam of bedrijf..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-12"
-                />
-                <kbd className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
-                  /
-                </kbd>
-              </div>
-
-              <Select value={orgFilter} onValueChange={setOrgFilter}>
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Alle bureaus" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle bureaus</SelectItem>
-                  <SelectItem value="ABCzorg">ABCzorg</SelectItem>
-                  <SelectItem value="CitoZorg">CitoZorg</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={matchingFilter} onValueChange={setMatchingFilter}>
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Alle klanten" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle klanten</SelectItem>
-                  <SelectItem value="with">Met data</SelectItem>
-                  <SelectItem value="without">Zonder data</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Button 
-                onClick={() => setNewClientOpen(true)}
-                className="shrink-0"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Nieuwe klant
-                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-background/20 bg-background/20 px-1.5 font-mono text-[10px] font-medium opacity-100">
-                  N
-                </kbd>
-              </Button>
-            </div>
-
-            {/* Active Filter Chips */}
-            {hasActiveFilters && (
-              <div className="flex items-center gap-2 flex-wrap mt-4">
-                <span className="text-xs text-muted-foreground">Actieve filters:</span>
-                {searchQuery && (
-                  <Badge variant="secondary" className="gap-2">
-                    Zoekterm: {searchQuery}
-                    <button 
-                      onClick={() => setSearchQuery('')}
-                      className="hover:bg-muted-foreground/20 rounded-full p-0.5 transition-colors"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                )}
-                {orgFilter !== 'all' && (
-                  <Badge variant="secondary" className="gap-2">
-                    Bureau: {orgFilter}
-                    <button 
-                      onClick={() => setOrgFilter('all')}
-                      className="hover:bg-muted-foreground/20 rounded-full p-0.5 transition-colors"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                )}
-                {matchingFilter !== 'all' && (
-                  <Badge variant="secondary" className="gap-2">
-                    Data: {matchingFilter === 'with' ? 'Met data' : 'Zonder data'}
-                    <button 
-                      onClick={() => setMatchingFilter('all')}
-                      className="hover:bg-muted-foreground/20 rounded-full p-0.5 transition-colors"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                )}
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={clearAllFilters}
-                  className="h-7 px-3 text-xs"
-                >
-                  Wis filters
-                </Button>
-              </div>
-            )}
-
-            {/* Grouping Toggle & Collapse Controls - Only for Cards view */}
-            {viewMode === "cards" && (
-              <div className="mt-6 flex items-center justify-between flex-wrap gap-4">
-                <div className="flex items-center gap-3">
-                  <ClientGroupingToggle value={grouping} onChange={handleGroupingChange} />
-                  <DensityToggle value={density} onChange={handleDensityChange} />
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setAllExpanded(!allExpanded)}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  {allExpanded ? 'Alles inklappen' : 'Alles uitklappen'}
-                </Button>
-              </div>
-            )}
-
-            {/* Client grid or hierarchy view */}
-            <div className="space-y-10 mt-8">
-              {viewMode === "cards" ? (
-                loading ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {[...Array(6)].map((_, i) => (
-                      <ClientCardSkeleton key={i} />
-                    ))}
-                  </div>
-                ) : filteredClients.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    {searchQuery ? "Geen klanten gevonden" : "Nog geen klanten"}
-                  </div>
-                ) : (
-                  Object.entries(groupedClients)
-                    .sort(([, a], [, b]) => b.length - a.length)
-                    .map(([sectionName, sectionClients]) => (
-                      <ClientSection
-                        key={sectionName}
-                        title={sectionName}
-                        clients={sectionClients}
-                        totalClients={filteredClients.length}
-                        groupType={grouping}
-                        onClientClick={handleClientClick}
-                        searchQuery={searchQuery}
-                        defaultOpen={allExpanded}
-                        gridClass={getGridClass()}
-                      />
-                    ))
-                )
-              ) : (
-                // Hierarchy View
-                loading ? (
-                  <div className="space-y-4">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <div key={i} className="border rounded-lg p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-12 w-12 rounded-full bg-muted animate-pulse" />
-                          <div className="flex-1 space-y-2">
-                            <div className="h-4 w-48 bg-muted animate-pulse rounded" />
-                            <div className="h-3 w-32 bg-muted animate-pulse rounded" />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : organizations.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
-                    <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p className="text-lg font-medium">Nog geen klantorganisaties</p>
-                    <p className="text-sm mt-2">
-                      Hiërarchische structuur is nog leeg
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                     {organizations.map((org) => (
-                       <OrganizationCard
-                        key={org.id}
-                        organization={org}
-                        onOrganizationClick={(org) => {
-                          setSelectedOrganization(org);
-                          setIsOrgModalOpen(true);
-                        }}
-                        onLocationClick={(location) => handleLocationClick(location, org)}
-                        onSublocationClick={(sublocation) => {
-                          // Find the location containing this sublocation
-                          const location = org.locations?.find((loc: any) => 
-                            loc.sublocations?.some((sub: any) => sub.id === sublocation.id)
-                          );
-                          handleSublocationClick(sublocation, location, org);
-                        }}
-                      />
-                     ))}
-                  </div>
-                )
-              )}
-            </div>
+          )
+        )}
+      </div>
 
       <NewClientDialog
         open={newClientOpen}
         onOpenChange={setNewClientOpen}
-        onClientCreated={loadClients}
+        onClientCreated={loadOrganizations}
       />
-
-      {selectedClient && (
-        <ClientDetailModal
-          open={isDetailModalOpen}
-          onOpenChange={setIsDetailModalOpen}
-          client={selectedClient}
-          onUpdate={loadClients}
-        />
-      )}
       
       <OrganizationDetailModal
-        organization={selectedOrganization}
+        organization={selectedOrganization as any}
         open={isOrgModalOpen}
         onOpenChange={setIsOrgModalOpen}
       />
       
       <LocationDetailModal
-        location={selectedLocation}
+        location={selectedLocation as any}
         organizationName={selectedOrganization?.name || ""}
         open={isLocationModalOpen}
         onOpenChange={setIsLocationModalOpen}
-        onSublocationClick={handleSublocationClick}
+        onSublocationClick={(sub) => handleSublocationClick(sub as any)}
         onNavigateToOrganization={() => {
           setIsLocationModalOpen(false);
           setIsOrgModalOpen(true);
@@ -784,7 +688,7 @@ export default function Klanten() {
       />
       
       <SublocationDetailModal
-        sublocation={selectedSublocation}
+        sublocation={selectedSublocation as any}
         organizationName={selectedOrganization?.name || ""}
         locationName={selectedLocation?.naam || ""}
         organizationId={selectedOrganization?.id}
