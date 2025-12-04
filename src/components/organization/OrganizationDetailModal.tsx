@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -23,12 +23,14 @@ import {
   Clock,
   TrendingUp,
   Phone,
-  User
+  User,
+  ImagePlus
 } from "lucide-react";
 import { LocationCard } from "./LocationCard";
 import { SublocationCard } from "./SublocationCard";
 import { LocationDetailModal } from "./LocationDetailModal";
 import { SublocationDetailModal } from "./SublocationDetailModal";
+import { LogoUpload } from "./LogoUpload";
 import { getOrganizationName, getOrganizationBadgeColor } from "@/lib/organizationMapping";
 
 interface Organization {
@@ -100,11 +102,13 @@ export function OrganizationDetailModal({
   open,
   onOpenChange,
 }: OrganizationDetailModalProps) {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("algemeen");
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [selectedSublocation, setSelectedSublocation] = useState<Sublocation | null>(null);
   const [isSublocationModalOpen, setIsSublocationModalOpen] = useState(false);
+  const [currentLogoUrl, setCurrentLogoUrl] = useState<string | null>(organization?.logo_url || null);
 
   const handleLocationClick = (location: Location) => {
     setSelectedLocation(location);
@@ -254,6 +258,28 @@ export function OrganizationDetailModal({
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Logo Upload Sectie */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <ImagePlus className="h-4 w-4" />
+                    Organisatie Logo
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <LogoUpload
+                    organizationId={organization.id}
+                    organizationName={organization.name}
+                    currentLogoUrl={currentLogoUrl}
+                    onLogoUpdate={(newUrl) => {
+                      setCurrentLogoUrl(newUrl);
+                      // Invalidate queries to refresh data
+                      queryClient.invalidateQueries({ queryKey: ["organizations"] });
+                    }}
+                  />
+                </CardContent>
+              </Card>
 
               {/* Organisatie details - alleen tonen als er data is */}
               {organization.centrale_facturatie_email && (
