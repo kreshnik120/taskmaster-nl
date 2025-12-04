@@ -5,6 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Upload, CheckCircle, AlertCircle, FileSpreadsheet } from "lucide-react";
+import * as XLSX from "xlsx";
 
 interface ImportResult {
   batch: number;
@@ -36,10 +37,6 @@ interface ExcelRecord {
   [key: string]: string | undefined;
 }
 
-// Pre-parsed Excel data from ABC_Zorg_20.xlsx (1067 records)
-// This would normally come from file upload parsing, but we include it statically
-const EXCEL_DATA: ExcelRecord[] = [];
-
 export function ABCzorgExcelImport() {
   const [isImporting, setIsImporting] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -48,74 +45,45 @@ export function ABCzorgExcelImport() {
   const [totalUpdated, setTotalUpdated] = useState(0);
   const [parsedData, setParsedData] = useState<ExcelRecord[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
-
-  const parseCSVLine = (line: string): string[] => {
-    const result: string[] = [];
-    let current = "";
-    let inQuotes = false;
-    
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === "|" && !inQuotes) {
-        result.push(current.trim());
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-    result.push(current.trim());
-    return result;
-  };
+  const [fileName, setFileName] = useState<string>("");
 
   const handleFileUpload = useCallback((file: File) => {
+    setFileName(file.name);
     const reader = new FileReader();
+    
     reader.onload = (e) => {
       try {
-        const text = e.target?.result as string;
-        const lines = text.split("\n").filter(line => line.trim());
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: "array" });
         
-        if (lines.length < 2) {
-          toast.error("Bestand bevat geen data");
-          return;
-        }
-
-        // Parse header row (pipe-separated from markdown table)
-        const headerLine = lines[0];
-        const headers = parseCSVLine(headerLine).filter(h => h && h !== "-");
+        // Get first sheet
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
         
-        // Skip separator line (|-|-|-|...)
-        const dataStartIndex = lines[1].includes("|-") ? 2 : 1;
+        // Convert to JSON
+        const jsonData = XLSX.utils.sheet_to_json<ExcelRecord>(worksheet, {
+          defval: "",
+          raw: false,
+        });
         
-        // Parse data rows
-        const records: ExcelRecord[] = [];
-        for (let i = dataStartIndex; i < lines.length; i++) {
-          const line = lines[i];
-          if (!line.trim() || line.includes("|-")) continue;
-          
-          const values = parseCSVLine(line);
-          const record: ExcelRecord = {};
-          
-          headers.forEach((header, index) => {
-            if (values[index]) {
-              record[header] = values[index];
-            }
-          });
-          
-          if (record.Bedrijfsnaam) {
-            records.push(record);
-          }
-        }
-
-        setParsedData(records);
-        toast.success(`${records.length} records geladen uit bestand`);
+        // Filter out empty rows
+        const validRecords = jsonData.filter(row => 
+          row.Bedrijfsnaam && row.Bedrijfsnaam.toString().trim()
+        );
+        
+        setParsedData(validRecords);
+        toast.success(`${validRecords.length} records geladen uit ${file.name}`);
       } catch (error) {
-        console.error("Parse error:", error);
-        toast.error("Fout bij verwerken bestand");
+        console.error("Excel parse error:", error);
+        toast.error("Fout bij verwerken Excel bestand");
       }
     };
-    reader.readAsText(file);
+    
+    reader.onerror = () => {
+      toast.error("Fout bij lezen bestand");
+    };
+    
+    reader.readAsArrayBuffer(file);
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -128,10 +96,8 @@ export function ABCzorgExcelImport() {
   }, [handleFileUpload]);
 
   const handleImport = async () => {
-    const dataToImport = parsedData.length > 0 ? parsedData : EXCEL_DATA;
-    
-    if (dataToImport.length === 0) {
-      toast.error("Geen data om te importeren - upload eerst een bestand");
+    if (parsedData.length === 0) {
+      toast.error("Geen data om te importeren - upload eerst een Excel bestand");
       return;
     }
 
@@ -142,13 +108,13 @@ export function ABCzorgExcelImport() {
     setTotalUpdated(0);
 
     try {
-      toast.info(`Import gestart voor ${dataToImport.length} records...`);
+      toast.info(`Import gestart voor ${parsedData.length} records...`);
 
       // Split into batches of 50 records
       const batchSize = 50;
       const batches: ExcelRecord[][] = [];
-      for (let i = 0; i < dataToImport.length; i += batchSize) {
-        batches.push(dataToImport.slice(i, i + batchSize));
+      for (let i = 0; i < parsedData.length; i += batchSize) {
+        batches.push(parsedData.slice(i, i + batchSize));
       }
 
       let created = 0;
@@ -202,7 +168,7 @@ export function ABCzorgExcelImport() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileSpreadsheet className="h-5 w-5" />
-          ABCzorg Excel Import (ABC_Zorg_20.xlsx)
+          ABCzorg Excel Import
         </CardTitle>
         <CardDescription>
           Importeer werklocaties uit Excel met KVK matching, HTML cleaning, en volledige data enrichment
@@ -225,7 +191,7 @@ export function ABCzorgExcelImport() {
               klik om te uploaden
               <input
                 type="file"
-                accept=".txt,.csv,.md"
+                accept=".xlsx,.xls"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
@@ -236,7 +202,7 @@ export function ABCzorgExcelImport() {
           </p>
           {parsedData.length > 0 && (
             <p className="text-sm text-green-600 mt-2 font-medium">
-              ✓ {parsedData.length} records geladen
+              ✓ {parsedData.length} records geladen uit {fileName}
             </p>
           )}
         </div>
