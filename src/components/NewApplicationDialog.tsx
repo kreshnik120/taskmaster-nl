@@ -279,6 +279,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
       const extractedData = {
         // Form velden
         naam: data.naam,
+        email: data.email || null,
         telefoon: data.telefoon || null,
         functie_niveau: data.functie_niveau || null,
         ervaring_sector: selectedSectoren,
@@ -310,6 +311,10 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
         regio_voorkeur: getFieldValue(cvExtractedData?.regio_voorkeur) || null,
         talen: getFieldValue(cvExtractedData?.talen) || [],
         cv_confidence: getGlobalConfidence() || null,
+        // Foto detectie velden
+        has_profile_photo: getFieldValue(cvExtractedData?.has_profile_photo) || false,
+        photo_description: getFieldValue(cvExtractedData?.photo_description) || null,
+        profile_photo_url: getFieldValue(cvExtractedData?.profile_photo_url) || null,
       };
 
       const completenessScore = calculateCompletenessScore(data);
