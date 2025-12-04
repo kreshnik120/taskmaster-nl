@@ -408,14 +408,31 @@ export function ABCzorgExcelImport() {
       nieuweOrganisaties,
       werklocatiesViaNaam,
       problematicRecords,
-      // Counts
-      hoofdlocatieCount: hoofdlocaties.length,
+      // Counts - calculate over ALL records, not capped arrays
+      hoofdlocatieCount: records.filter(r => 
+        !shouldSkipRecord(r).skip && isHoofdlocatie(r).isHoofd
+      ).length,
       sublocatieViaKvkCount: records.filter(r => {
+        if (shouldSkipRecord(r).skip) return false;
+        if (isHoofdlocatie(r).isHoofd) return false;
         const kvk = extractKvk(r["KVK nummer"]);
-        return kvk && kvkToFirstOrg.has(kvk) && !isHoofdlocatie(r).isHoofd && !shouldSkipRecord(r).skip;
+        return kvk && kvkToFirstOrg.has(kvk);
       }).length,
-      nieuweOrgCount: records.filter(r => isRealOrganization(r) && !shouldSkipRecord(r).skip).length,
-      werklocatieViaNaamCount: records.filter(r => hasKnownParentOrganization(r) && !isRealOrganization(r) && !shouldSkipRecord(r).skip).length,
+      nieuweOrgCount: records.filter(r => {
+        if (shouldSkipRecord(r).skip) return false;
+        if (isHoofdlocatie(r).isHoofd) return false;
+        const kvk = extractKvk(r["KVK nummer"]);
+        if (kvk && kvkToFirstOrg.has(kvk)) return false; // Already matched via KVK
+        return isRealOrganization(r);
+      }).length,
+      werklocatieViaNaamCount: records.filter(r => {
+        if (shouldSkipRecord(r).skip) return false;
+        if (isHoofdlocatie(r).isHoofd) return false;
+        const kvk = extractKvk(r["KVK nummer"]);
+        if (kvk && kvkToFirstOrg.has(kvk)) return false; // Already matched via KVK
+        if (isRealOrganization(r)) return false; // New org, not sublocation
+        return hasKnownParentOrganization(r);
+      }).length,
       recordsToImport,
       uniqueKvkNumbers: uniqueKvks.size,
     };
