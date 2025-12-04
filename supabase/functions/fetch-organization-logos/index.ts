@@ -16,15 +16,14 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { organizationId, fetchAll } = await req.json();
+    const { organizationId, fetchAll, includeNameLookup } = await req.json();
 
-    console.log(`[fetch-organization-logos] Starting - organizationId: ${organizationId}, fetchAll: ${fetchAll}`);
+    console.log(`[fetch-organization-logos] Starting - organizationId: ${organizationId}, fetchAll: ${fetchAll}, includeNameLookup: ${includeNameLookup}`);
 
-    // Get organizations to process
+    // Get organizations to process - include those without website if name lookup is enabled
     let query = supabase
       .from('client_organizations')
-      .select('id, name, website, logo_url')
-      .not('website', 'is', null);
+      .select('id, name, website, logo_url');
 
     if (organizationId) {
       query = query.eq('id', organizationId);
@@ -33,7 +32,12 @@ serve(async (req) => {
       query = query.is('logo_url', null);
     }
 
-    const { data: organizations, error: orgError } = await query.limit(50);
+    // If not doing name lookup, only get orgs with websites
+    if (!includeNameLookup) {
+      query = query.not('website', 'is', null);
+    }
+
+    const { data: organizations, error: orgError } = await query.limit(100);
 
     if (orgError) {
       console.error('[fetch-organization-logos] Error fetching organizations:', orgError);
@@ -53,28 +57,59 @@ serve(async (req) => {
     for (const org of organizations || []) {
       results.processed++;
 
-      if (!org.website) {
-        results.skipped++;
-        results.details.push({ name: org.name, status: 'skipped', error: 'No website URL' });
-        continue;
-      }
-
       try {
-        // Clean and validate website URL
-        let websiteUrl = org.website.trim();
-        if (!websiteUrl.startsWith('http://') && !websiteUrl.startsWith('https://')) {
-          websiteUrl = 'https://' + websiteUrl;
+        let domain: string | null = null;
+        let websiteUrl: string | null = null;
+
+        // Try to get domain from website URL
+        if (org.website) {
+          let tempUrl = org.website.trim();
+          if (!tempUrl.startsWith('http://') && !tempUrl.startsWith('https://')) {
+            tempUrl = 'https://' + tempUrl;
+          }
+          websiteUrl = tempUrl;
+          try {
+            domain = new URL(tempUrl).hostname;
+          } catch {
+            console.log(`[fetch-organization-logos] Invalid URL for ${org.name}: ${tempUrl}`);
+          }
         }
 
-        const domain = new URL(websiteUrl).hostname;
+        // If no domain from website, try name-based lookup
+        if (!domain && includeNameLookup) {
+          // Generate potential domain from organization name
+          const cleanName = org.name
+            .toLowerCase()
+            .replace(/stichting\s*/gi, '')
+            .replace(/[''`]/g, '')
+            .replace(/\s+/g, '')
+            .replace(/[^a-z0-9]/g, '');
+          
+          // Try common Dutch healthcare organization domain patterns
+          const potentialDomains = [
+            `${cleanName}.nl`,
+            `www.${cleanName}.nl`,
+          ];
+          
+          console.log(`[fetch-organization-logos] Name-based lookup for ${org.name} - trying: ${potentialDomains.join(', ')}`);
+          domain = potentialDomains[0];
+          websiteUrl = `https://${domain}`;
+        }
+
+        if (!domain) {
+          results.skipped++;
+          results.details.push({ name: org.name, status: 'skipped', error: 'No website URL and name lookup disabled' });
+          continue;
+        }
+
         console.log(`[fetch-organization-logos] Processing ${org.name} - domain: ${domain}`);
 
         // Try multiple logo sources in order of preference
         const logoSources = [
-          // Google Favicon service (most reliable)
-          `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
-          // Clearbit Logo API (high quality)
+          // Clearbit Logo API (high quality, best for organizations)
           `https://logo.clearbit.com/${domain}`,
+          // Google Favicon service (most reliable fallback)
+          `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
           // DuckDuckGo favicon service
           `https://icons.duckduckgo.com/ip3/${domain}.ico`,
           // Direct favicon
