@@ -175,12 +175,13 @@ export const DocumentUpload = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Niet ingelogd");
 
-      const { data: orgData } = await supabase
+      const { data: orgDataArray } = await supabase
         .from("user_organizations")
         .select("org_id")
         .eq("user_id", user.id)
-        .single();
+        .limit(1);
 
+      const orgData = orgDataArray?.[0];
       if (!orgData) throw new Error("Geen organisatie gevonden");
 
       let successCount = 0;
