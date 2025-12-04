@@ -21,7 +21,9 @@ import {
   Briefcase,
   Calendar,
   Clock,
-  TrendingUp
+  TrendingUp,
+  Phone,
+  User
 } from "lucide-react";
 import { LocationCard } from "./LocationCard";
 import { SublocationCard } from "./SublocationCard";
@@ -140,6 +142,16 @@ export function OrganizationDetailModal({
     proposedAssignments: assignments?.filter(a => a.status === 'proposed')?.length || 0,
   };
 
+  // Verzamel contactpersonen uit locaties
+  const contacts = organization?.locations?.filter(loc => loc.contactpersoon_naam || loc.contactpersoon_email).map(loc => ({
+    naam: loc.contactpersoon_naam,
+    email: loc.contactpersoon_email,
+    telefoon: loc.telefoon,
+    locatie: loc.naam,
+    factuur_email: loc.factuur_email,
+    crediteuren_tav: loc.crediteuren_tav,
+  })) || [];
+
   // Bureau bepalen op basis van organization.org_id (niet gekoppelde_bv_org_id)
   const bureauName = getOrganizationName(organization?.org_id || null);
 
@@ -189,10 +201,13 @@ export function OrganizationDetailModal({
           </DialogHeader>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="algemeen">Algemeen</TabsTrigger>
               <TabsTrigger value="locaties">Locaties ({stats.totalLocations})</TabsTrigger>
               <TabsTrigger value="sublocaties">Sublocaties ({stats.totalSublocations})</TabsTrigger>
+              <TabsTrigger value="contacten">
+                Contacten ({contacts.length})
+              </TabsTrigger>
               <TabsTrigger value="opdrachten">
                 Opdrachten ({stats.activeAssignments})
               </TabsTrigger>
@@ -307,6 +322,64 @@ export function OrganizationDetailModal({
                     onSublocationClick={handleSublocationClick}
                   />
                 ))
+              )}
+            </TabsContent>
+
+            <TabsContent value="contacten" className="space-y-3">
+              {contacts.length === 0 ? (
+                <Card>
+                  <CardContent className="py-8 text-center text-muted-foreground">
+                    <User className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>Nog geen contactpersonen toegevoegd</p>
+                    <p className="text-xs mt-1">Voeg contactpersonen toe via de locatie-instellingen</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {contacts.map((contact, index) => (
+                    <Card key={index} className="hover:shadow-md transition-shadow">
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <User className="h-5 w-5 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <div className="font-medium truncate">
+                              {contact.naam || "Geen naam"}
+                            </div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {contact.locatie}
+                            </div>
+                            {contact.email && (
+                              <a 
+                                href={`mailto:${contact.email}`}
+                                className="flex items-center gap-1.5 text-sm text-primary hover:underline"
+                              >
+                                <Mail className="h-3 w-3" />
+                                <span className="truncate">{contact.email}</span>
+                              </a>
+                            )}
+                            {contact.telefoon && (
+                              <a 
+                                href={`tel:${contact.telefoon}`}
+                                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary"
+                              >
+                                <Phone className="h-3 w-3" />
+                                <span>{contact.telefoon}</span>
+                              </a>
+                            )}
+                            {contact.factuur_email && (
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1 border-t mt-2">
+                                <Mail className="h-3 w-3" />
+                                <span>Factuur: {contact.factuur_email}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               )}
             </TabsContent>
 
