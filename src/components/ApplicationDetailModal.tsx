@@ -35,6 +35,7 @@ import { ApplicationNotes } from "@/components/recruitment/ApplicationNotes";
 import { AIMatchInsights } from "@/components/recruitment/AIMatchInsights";
 import { AIRecommendationBadge } from "@/components/recruitment/AIRecommendationBadge";
 import { AIFeedbackButtons } from "@/components/recruitment/AIFeedbackButtons";
+import { InterviewSchedulingModal } from "@/components/recruitment/InterviewSchedulingModal";
 import { SECTOR_SIMILARITY, functieMatchesAny, calculateRegioScore, calculateErvaringBonus, LEIDINGGEVENDE_BONUS } from "@/lib/constants/matchingConstants";
 import { loadSuccessPatterns, calculateAILearningBoost, getCachedSuccessPatterns, trackPatternUsage } from "@/lib/aiLearningBoost";
 
@@ -263,6 +264,9 @@ export function ApplicationDetailModal({
   
   // Delete confirmation
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  
+  // Interview scheduling modal
+  const [interviewModalOpen, setInterviewModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   // Load linked tasks
@@ -1889,10 +1893,7 @@ export function ApplicationDetailModal({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setActionType("interview");
-                  setShowActionForm(true);
-                }}
+                onClick={() => setInterviewModalOpen(true)}
               >
                 <CalendarClock className="h-4 w-4 mr-2" />
                 Plan interview
@@ -2345,6 +2346,21 @@ export function ApplicationDetailModal({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Interview Scheduling Modal */}
+      <InterviewSchedulingModal
+        open={interviewModalOpen}
+        onOpenChange={setInterviewModalOpen}
+        applicationId={application.id}
+        candidateName={candidateName}
+        candidateEmail={application.email_from}
+        candidatePhone={getFieldValue(application.extracted_data?.telefoon) || undefined}
+        functieNiveau={getFieldValue(application.extracted_data?.functie_niveau) || undefined}
+        onScheduled={() => {
+          loadLinkedTasks();
+          onApplicationUpdated();
+        }}
+      />
     </Dialog>
   );
 }
