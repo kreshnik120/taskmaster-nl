@@ -54,7 +54,7 @@ export interface Organization {
 
 // Bureau mapping constants
 export const BUREAU_IDS = {
-  ABCzorg: "650e8400-e29b-41d4-a716-446655440000",
+  ABCzorg: "550e8400-e29b-41d4-a716-446655440000",
   CitoZorg: "650e8400-e29b-41d4-a716-446655440001",
 } as const;
 
