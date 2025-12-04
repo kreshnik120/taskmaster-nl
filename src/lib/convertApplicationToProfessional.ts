@@ -170,7 +170,7 @@ export async function convertApplicationToProfessional(
       ? (werkvormMapping[application.extracted_data.werkvorm.toLowerCase()] || application.extracted_data.werkvorm)
       : null;
 
-    // Map application data to professional including NAW fields
+    // Map application data to professional including NAW fields + matching fields
     const professionalData = {
       org_id: orgId,
       full_name: application.extracted_data.naam,
@@ -189,7 +189,15 @@ export async function convertApplicationToProfessional(
       postcode: application.extracted_data.postcode || null,
       adres: application.extracted_data.adres || null,
       geboortedatum: application.extracted_data.geboortedatum || null,
-      profile_photo_url: application.extracted_data.profile_photo_url || null
+      profile_photo_url: application.extracted_data.profile_photo_url || null,
+      // Matching fields (unified matching service)
+      ervaring_sector: application.extracted_data.ervaring_sector || [],
+      doelgroep_ervaring: application.extracted_data.doelgroep_ervaring || [],
+      jaren_ervaring: application.extracted_data.jaren_ervaring || null,
+      leidinggevende_ervaring: application.extracted_data.leidinggevende_ervaring || false,
+      nachtdienst_bereid: application.extracted_data.nachtdienst_bereid || false,
+      weekenddienst_bereid: application.extracted_data.weekenddienst_bereid || false,
+      certificaten: application.extracted_data.certificaten || [],
     };
 
     // Create professional

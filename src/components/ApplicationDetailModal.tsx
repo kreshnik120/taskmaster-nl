@@ -38,6 +38,7 @@ import { AIMatchInsights } from "@/components/recruitment/AIMatchInsights";
 import { AIRecommendationBadge } from "@/components/recruitment/AIRecommendationBadge";
 import { AIFeedbackButtons } from "@/components/recruitment/AIFeedbackButtons";
 import { InterviewSchedulingModal } from "@/components/recruitment/InterviewSchedulingModal";
+import { calculateApplicationToClientMatch } from "@/lib/services/matchingService";
 import { SECTOR_SIMILARITY, functieMatchesAny, calculateRegioScore, calculateErvaringBonus, LEIDINGGEVENDE_BONUS } from "@/lib/constants/matchingConstants";
 import { loadSuccessPatterns, calculateAILearningBoost, getCachedSuccessPatterns, trackPatternUsage } from "@/lib/aiLearningBoost";
 
