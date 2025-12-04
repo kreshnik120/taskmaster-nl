@@ -259,7 +259,8 @@ export const DocumentUpload = () => {
 
         if (uploadError) throw uploadError;
 
-        const { error: dbError } = await supabase.from("training_documents").insert({
+        // Insert training document record and get ID for traceability
+        const { data: docRecord, error: dbError } = await supabase.from("training_documents").insert({
           user_id: user.id,
           org_id: orgData.org_id,
           file_name: file.name,
@@ -270,14 +271,16 @@ export const DocumentUpload = () => {
           processing_progress: 0,
           relative_path: folderName ? relativePathWithoutRoot : null,
           original_folder: folderName || null,
-        });
+        }).select('id').single();
 
         if (dbError) throw dbError;
+        
+        const trainingDocumentId = docRecord?.id;
         successCount++;
 
-        // Queue document processing via new background job system
+        // Queue document processing via new background job system (pass trainingDocumentId for traceability)
         const invokeResult = await supabase.functions.invoke("queue-document-processing", {
-          body: { filePath, fileName: file.name },
+          body: { filePath, fileName: file.name, trainingDocumentId },
         });
         
         if (invokeResult.error) {

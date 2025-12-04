@@ -51,16 +51,19 @@ serve(async (req) => {
       // Process based on file type
       let extractedItems = 0;
       let result: any = {};
+      
+      // Extract training_document_id from job metadata for traceability
+      const trainingDocumentId = job.metadata?.training_document_id || null;
 
       if (job.file_type === 'pdf') {
         // Process PDF with Vision API
-        result = await processPDFChunk(fileData, job.chunk_index, supabase, job.org_id, job.user_id, job.file_name);
+        result = await processPDFChunk(fileData, job.chunk_index, supabase, job.org_id, job.user_id, job.file_name, trainingDocumentId);
         extractedItems = result.itemsExtracted || 0;
       } else if (job.file_type === 'excel') {
-        result = await processExcelChunk(fileData, job.chunk_index, supabase, job.org_id, job.user_id, job.file_name);
+        result = await processExcelChunk(fileData, job.chunk_index, supabase, job.org_id, job.user_id, job.file_name, trainingDocumentId);
         extractedItems = result.itemsExtracted || 0;
       } else if (job.file_type === 'text') {
-        result = await processTextChunk(fileData, job.chunk_index, supabase, job.org_id, job.user_id, job.file_name);
+        result = await processTextChunk(fileData, job.chunk_index, supabase, job.org_id, job.user_id, job.file_name, trainingDocumentId);
         extractedItems = result.itemsExtracted || 0;
       }
 
@@ -80,13 +83,39 @@ serve(async (req) => {
         })
         .eq('id', job_id);
 
+      // ✅ SYNC: Update training_documents status when all jobs complete
+      if (isLastChunk) {
+        // Count total items extracted across all jobs for this file
+        const { data: allJobs } = await supabase
+          .from('processing_jobs')
+          .select('items_processed')
+          .eq('file_path', job.file_path)
+          .eq('status', 'done');
+        
+        const totalItemsExtracted = (allJobs || []).reduce((sum: number, j: any) => sum + (j.items_processed || 0), 0);
+        
+        // Update training_documents to completed
+        await supabase
+          .from('training_documents')
+          .update({ 
+            status: 'completed',
+            processing_progress: 100,
+            processed_at: new Date().toISOString(),
+            extracted_knowledge_count: totalItemsExtracted
+          })
+          .eq('file_path', job.file_path);
+        
+        console.log(`[SYNC] ✅ Document "${job.file_name}" marked as completed with ${totalItemsExtracted} items`);
+      }
+
       return new Response(
         JSON.stringify({
           success: true,
           job_id: job_id,
           items_extracted: extractedItems,
           progress: progressPct,
-          status: isLastChunk ? 'done' : 'processing'
+          status: isLastChunk ? 'completed' : 'processing',
+          document_completed: isLastChunk
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -136,7 +165,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-async function processPDFChunk(fileData: Blob, chunkIndex: number, supabase: any, orgId: string, userId: string, fileName: string) {
+async function processPDFChunk(fileData: Blob, chunkIndex: number, supabase: any, orgId: string, userId: string, fileName: string, trainingDocumentId: string | null) {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
     throw new Error("LOVABLE_API_KEY niet geconfigureerd");
@@ -212,7 +241,7 @@ async function processPDFChunk(fileData: Blob, chunkIndex: number, supabase: any
     console.log(`[PDF-CHUNK] ✅ Extracted ${knowledgeItems.length} items via Vision API`);
   }
 
-  // Insert into ai_knowledge_base
+  // Insert into ai_knowledge_base with training_document_id for traceability
   let itemsExtracted = 0;
   for (const item of knowledgeItems) {
     try {
@@ -224,6 +253,7 @@ async function processPDFChunk(fileData: Blob, chunkIndex: number, supabase: any
         value: item.value,
         confidence_score: 0.85,
         source: `${fileName} (chunk ${chunkIndex})`,
+        training_document_id: trainingDocumentId, // ✅ Traceability
         valid_from: new Date().toISOString().split('T')[0],
         valid_to: null,
         jurisdiction: 'NL',
@@ -241,7 +271,7 @@ async function processPDFChunk(fileData: Blob, chunkIndex: number, supabase: any
   return { itemsExtracted, chunkIndex };
 }
 
-async function processExcelChunk(fileData: Blob, chunkIndex: number, supabase: any, orgId: string, userId: string, fileName: string) {
+async function processExcelChunk(fileData: Blob, chunkIndex: number, supabase: any, orgId: string, userId: string, fileName: string, trainingDocumentId: string | null) {
   console.log(`[EXCEL-CHUNK] Processing Excel file with XLSX library`);
   
   // Lazy load XLSX library
@@ -264,13 +294,13 @@ async function processExcelChunk(fileData: Blob, chunkIndex: number, supabase: a
   
   console.log(`[EXCEL-CHUNK] Extracted ${fullText.length} characters from ${workbook.SheetNames.length} sheets`);
   
-  // Process with text-based AI
-  const result = await processTextChunk(fileData, chunkIndex, supabase, orgId, userId, fileName);
+  // Process with text-based AI (pass trainingDocumentId)
+  const result = await processTextChunk(fileData, chunkIndex, supabase, orgId, userId, fileName, trainingDocumentId);
   
   return result;
 }
 
-async function processTextChunk(fileData: Blob, chunkIndex: number, supabase: any, orgId: string, userId: string, fileName: string) {
+async function processTextChunk(fileData: Blob, chunkIndex: number, supabase: any, orgId: string, userId: string, fileName: string, trainingDocumentId: string | null) {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
     throw new Error("LOVABLE_API_KEY niet geconfigureerd");
@@ -350,7 +380,7 @@ async function processTextChunk(fileData: Blob, chunkIndex: number, supabase: an
     knowledgeItems = functionArgs.items || [];
   }
 
-  // Insert items
+  // Insert items with training_document_id for traceability
   let itemsExtracted = 0;
   for (const item of knowledgeItems) {
     try {
@@ -362,6 +392,7 @@ async function processTextChunk(fileData: Blob, chunkIndex: number, supabase: an
         value: item.value,
         confidence_score: 0.80,
         source: `${fileName} (chunk ${chunkIndex})`,
+        training_document_id: trainingDocumentId, // ✅ Traceability
         valid_from: new Date().toISOString().split('T')[0],
         jurisdiction: 'NL',
         confidentiality: 'intern'

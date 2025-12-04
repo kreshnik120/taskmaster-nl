@@ -37,7 +37,7 @@ serve(async (req) => {
       throw new Error('Organization not found');
     }
 
-    const { filePath, fileName } = await req.json();
+    const { filePath, fileName, trainingDocumentId } = await req.json();
 
     // Detect file type
     const extension = fileName.toLowerCase().split('.').pop();
@@ -83,7 +83,10 @@ serve(async (req) => {
           total_chunks: totalChunks,
           status: 'pending',
           priority: 5,
-          metadata: { extension }
+          metadata: { 
+            extension,
+            training_document_id: trainingDocumentId // ✅ Pass for traceability
+          }
         })
         .select()
         .single();
