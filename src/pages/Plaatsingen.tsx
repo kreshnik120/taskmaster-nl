@@ -13,6 +13,7 @@ import { nl } from "date-fns/locale";
 import { PlacementDetailModal } from "@/components/PlacementDetailModal";
 import { motion } from "framer-motion";
 import { KPICard } from "@/components/ui/kpi-card";
+import { PageHero } from "@/components/ui/page-hero";
 import { PlacementEvaluationKPIs } from "@/components/recruitment/PlacementEvaluationKPIs";
 import { AILearningProgressWidget } from "@/components/recruitment/AILearningProgressWidget";
 import { AdminOnly } from "@/components/auth/AdminOnly";
@@ -186,13 +187,11 @@ export default function Plaatsingen() {
 
   return (
     <div className="space-y-6">
-      {/* Hero Section - Minimal */}
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Plaatsingen</h1>
-        <p className="text-muted-foreground">
-          {stats.active} actieve {stats.active === 1 ? 'plaatsing' : 'plaatsingen'}
-        </p>
-      </div>
+      {/* Hero Section - Unified PageHero */}
+      <PageHero
+        title="Plaatsingen"
+        subtitle={`${stats.active} actieve ${stats.active === 1 ? 'plaatsing' : 'plaatsingen'}`}
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

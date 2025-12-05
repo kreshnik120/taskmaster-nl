@@ -9,6 +9,7 @@ import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Phone, Mail, MapPin } from "lucide-react";
 import { getOrganizationName } from "@/lib/organizationMapping";
+import { DirectPlacementButton } from "@/components/DirectPlacementButton";
 
 interface Professional {
   id: string;
@@ -208,10 +209,9 @@ export function ProfessionalCard({
                     variant="ghost"
                     onClick={handlePhoneClick}
                     disabled={!professional.telefoonnummer}
-                    className="flex-1 h-8 text-xs"
+                    className="h-8 text-xs px-2"
                   >
-                    <Phone className="h-3.5 w-3.5 mr-1.5" />
-                    Bellen
+                    <Phone className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -226,10 +226,9 @@ export function ProfessionalCard({
                     variant="ghost"
                     onClick={handleEmailClick}
                     disabled={!professional.email}
-                    className="flex-1 h-8 text-xs"
+                    className="h-8 text-xs px-2"
                   >
-                    <Mail className="h-3.5 w-3.5 mr-1.5" />
-                    E-mail
+                    <Mail className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -244,10 +243,9 @@ export function ProfessionalCard({
                     variant="ghost"
                     onClick={handleLocationClick}
                     disabled={!professional.regio}
-                    className="flex-1 h-8 text-xs"
+                    className="h-8 text-xs px-2"
                   >
-                    <MapPin className="h-3.5 w-3.5 mr-1.5" />
-                    Locatie
+                    <MapPin className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -255,6 +253,20 @@ export function ProfessionalCard({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+
+            {/* Direct Placement Button */}
+            <DirectPlacementButton
+              professionalId={professional.id}
+              professionalName={professional.full_name}
+              professionalData={{
+                functie_niveau: professional.functie_niveau,
+                werkvorm: professional.werkvorm || undefined,
+                regio: professional.regio || undefined,
+              }}
+              variant="outline"
+              size="sm"
+              className="ml-auto h-8 text-xs"
+            />
           </div>
         </Card>
       </HoverCardTrigger>
