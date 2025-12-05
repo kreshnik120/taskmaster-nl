@@ -4,14 +4,13 @@ import { Badge } from "@/components/ui/badge";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Phone, Mail, MapPin } from "lucide-react";
 import { getOrganizationName } from "@/lib/organizationMapping";
 import { DirectPlacementButton } from "@/components/DirectPlacementButton";
-import { ProfessionalAvatar } from "@/components/ui/professional-avatar";
 import { cn } from "@/lib/utils";
-import { TRANSITIONS } from "@/lib/constants/designTokens";
 
 interface Professional {
   id: string;
@@ -34,14 +33,52 @@ interface ProfessionalCardProps {
   onClick: () => void;
 }
 
+// Helper functions
+const getInitials = (name: string): string => {
+  if (!name) return '?';
+  return name
+    .split(' ')
+    .map((n) => n[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+};
+
+const getFunctieColor = (functie?: string): string => {
+  const colors: Record<string, string> = {
+    'HBO-V': 'bg-blue-500',
+    'VIG': 'bg-green-500',
+    'Verpleegkundige MBO': 'bg-cyan-500',
+    'Helpende': 'bg-amber-500',
+    'Begeleider': 'bg-purple-500',
+    'Persoonlijk begeleider': 'bg-indigo-500',
+    'GGZ-agoog': 'bg-rose-500',
+  };
+  return colors[functie || ''] || 'bg-muted-foreground';
+};
+
+const getStatusColor = (status: string): string => {
+  switch (status?.toLowerCase()) {
+    case 'beschikbaar':
+    case 'actief':
+      return 'bg-green-500';
+    case 'bezet':
+    case 'in_behandeling':
+      return 'bg-amber-500';
+    case 'geplaatst':
+      return 'bg-primary';
+    default:
+      return 'bg-muted-foreground/40';
+  }
+};
+
 export function ProfessionalCard({ 
   professional, 
   isSelected, 
   onSelect, 
   onClick 
 }: ProfessionalCardProps) {
-  // Apple-style: removed redundant color functions - now using ProfessionalAvatar component
-
   const timeInStatus = formatDistanceToNow(new Date(professional.created_at), { 
     addSuffix: false, 
     locale: nl 
@@ -68,22 +105,20 @@ export function ProfessionalCard({
     }
   };
 
-  // Apple-style: simplified sector colors to secondary variant only
-
   return (
     <HoverCard openDelay={300}>
       <HoverCardTrigger asChild>
         <Card 
           className={cn(
             "cursor-pointer border-border bg-background overflow-hidden",
-            TRANSITIONS.shadow,
-            "hover:shadow-sm" // Apple-style subtle shadow on hover only
+            "transition-shadow duration-150",
+            "hover:shadow-sm"
           )}
           onClick={onClick}
         >
           <div className="p-4">
             <div className="flex items-start gap-3">
-              {/* Checkbox - Apple style discrete */}
+              {/* Checkbox */}
               <div onClick={(e) => e.stopPropagation()} className="pt-0.5">
                 <Checkbox
                   checked={isSelected}
@@ -92,13 +127,26 @@ export function ProfessionalCard({
                 />
               </div>
 
-              {/* Avatar - Using unified component */}
-              <ProfessionalAvatar
-                name={professional.full_name}
-                status={professional.status}
-                functieNiveau={professional.functie_niveau}
-                size="md"
-              />
+              {/* Avatar */}
+              <div className="relative inline-flex">
+                <Avatar className="h-10 w-10 ring-2 ring-background">
+                  <AvatarFallback className={cn(
+                    getFunctieColor(professional.functie_niveau),
+                    "text-white font-medium text-sm"
+                  )}>
+                    {getInitials(professional.full_name)}
+                  </AvatarFallback>
+                </Avatar>
+                {/* Status dot */}
+                <span 
+                  className={cn(
+                    "absolute rounded-full ring-2 ring-background",
+                    "h-2.5 w-2.5 -bottom-0.5 -right-0.5",
+                    getStatusColor(professional.status)
+                  )}
+                  title={professional.status}
+                />
+              </div>
 
               {/* Content */}
               <div className="flex-1 min-w-0">
@@ -117,7 +165,7 @@ export function ProfessionalCard({
                   )}
                 </div>
 
-                {/* Function · Work Type - Apple style single line */}
+                {/* Function · Work Type */}
                 <p className="text-sm text-muted-foreground mb-1.5">
                   {professional.functie_niveau}
                   {professional.werkvorm && (
@@ -125,14 +173,14 @@ export function ProfessionalCard({
                   )}
                 </p>
 
-                {/* Region - subtle */}
+                {/* Region */}
                 {professional.regio && (
                   <p className="text-sm text-muted-foreground/70 mb-2">
                     {professional.regio}
                   </p>
                 )}
 
-                {/* Skills badges - Apple style simplified (all same color) */}
+                {/* Skills badges */}
                 {professional.skills && professional.skills.length > 0 && (
                   <div className="flex gap-1.5 flex-wrap mb-2">
                     {professional.skills.slice(0, 2).map((skill, idx) => (
@@ -152,7 +200,7 @@ export function ProfessionalCard({
                   </div>
                 )}
 
-                {/* Time in Status - Very subtle */}
+                {/* Time in Status */}
                 <p className="text-xs text-muted-foreground/50">
                   {timeInStatus}
                 </p>
@@ -160,7 +208,7 @@ export function ProfessionalCard({
             </div>
           </div>
 
-          {/* Quick Actions Footer - Apple style no border, very subtle bg */}
+          {/* Quick Actions Footer */}
           <div className="bg-muted/20 px-4 py-2 flex gap-1">
             <TooltipProvider>
               <Tooltip>
@@ -291,7 +339,6 @@ export function ProfessionalCard({
             </div>
           )}
 
-          {/* Skills/Sector badges in HoverCard - Apple style unified */}
           {professional.skills && professional.skills.length > 0 && (
             <div>
               <div className="text-sm font-medium mb-1.5">Sector Ervaring</div>

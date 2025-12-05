@@ -23,7 +23,6 @@ import { PlacementHistory } from "./PlacementHistory";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { SublocationSelectorPanel } from "./SublocationSelectorPanel";
-import { ProfessionalAvatar } from "@/components/ui/professional-avatar";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
