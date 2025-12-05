@@ -96,6 +96,12 @@ const Sollicitaties = () => {
     application: Application | null;
     previousStage: string;
   }>({ open: false, application: null, previousStage: '' });
+  const [werkvormDialog, setWerkvormDialog] = useState<{
+    open: boolean;
+    application: Application | null;
+    previousStage: string;
+    selectedWerkvorm: string;
+  }>({ open: false, application: null, previousStage: '', selectedWerkvorm: '' });
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -331,6 +337,18 @@ const Sollicitaties = () => {
             description: "Verplaats eerst naar Goedgekeurd om een professional profiel aan te maken"
           });
           return;
+        }
+        
+        // Check if werkvorm is set - if not, show werkvorm selection first
+        const werkvorm = application.extracted_data?.werkvorm;
+        if (!werkvorm) {
+          setWerkvormDialog({
+            open: true,
+            application,
+            previousStage,
+            selectedWerkvorm: ''
+          });
+          return; // Stop here, wait for werkvorm selection
         }
         
         setSelectClientDialog({
@@ -619,6 +637,76 @@ const Sollicitaties = () => {
         .eq("id", application.id);
 
       setSelectClientDialog({ open: false, application: null, previousStage: '' });
+      loadApplications();
+      toast.info("Geannuleerd - sollicitatie niet verplaatst");
+    } catch (err: any) {
+      console.error("Error canceling:", err);
+      toast.error("Fout bij annuleren");
+    }
+  };
+
+  // Handle werkvorm selection and proceed to location selection
+  const handleConfirmWerkvorm = async () => {
+    const { application, previousStage, selectedWerkvorm } = werkvormDialog;
+    if (!application || !selectedWerkvorm) return;
+
+    try {
+      // Update application with selected werkvorm
+      const updatedExtractedData = {
+        ...(application.extracted_data || {}),
+        werkvorm: selectedWerkvorm
+      };
+
+      await supabase
+        .from("professional_applications")
+        .update({ 
+          extracted_data: updatedExtractedData,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", application.id);
+
+      // Update local application object
+      application.extracted_data = updatedExtractedData;
+
+      // Close werkvorm dialog and open location selection
+      setWerkvormDialog({ open: false, application: null, previousStage: '', selectedWerkvorm: '' });
+      setSelectClientDialog({
+        open: true,
+        application,
+        previousStage
+      });
+    } catch (err: any) {
+      console.error("Error updating werkvorm:", err);
+      toast.error("Fout bij opslaan werkvorm");
+    }
+  };
+
+  const handleCancelWerkvorm = async () => {
+    const { application, previousStage } = werkvormDialog;
+    if (!application) return;
+
+    // Revert to previous stage
+    try {
+      const stageToStatus: Record<string, string> = {
+        nieuw: "nieuw",
+        screening: "in_verwerking",
+        interview: "in_gesprek",
+        goedgekeurd: "klaar_voor_review",
+        geplaatst: "geaccepteerd",
+      };
+
+      const previousStatus = stageToStatus[previousStage];
+
+      await supabase
+        .from("professional_applications")
+        .update({ 
+          pipeline_stage: previousStage,
+          status: previousStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", application.id);
+
+      setWerkvormDialog({ open: false, application: null, previousStage: '', selectedWerkvorm: '' });
       loadApplications();
       toast.info("Geannuleerd - sollicitatie niet verplaatst");
     } catch (err: any) {
@@ -1180,6 +1268,59 @@ const Sollicitaties = () => {
                 </AlertDialogCancel>
                 <AlertDialogAction onClick={handleConfirmGoedgekeurd}>
                   Ja, maak professional aan
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Werkvorm Selection Dialog */}
+          <AlertDialog open={werkvormDialog.open} onOpenChange={(open) => {
+            if (!open) handleCancelWerkvorm();
+          }}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Selecteer Werkvorm</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Selecteer de werkvorm voor deze plaatsing. Dit is belangrijk voor de juiste matching en facturatie.
+                  
+                  <div className="mt-4 p-3 bg-muted rounded-md">
+                    <strong>{werkvormDialog.application?.extracted_data?.naam}</strong><br/>
+                    <span className="text-sm text-muted-foreground">
+                      {werkvormDialog.application?.extracted_data?.functie_niveau}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 space-y-2">
+                    {WERKVORMEN.map((werkvorm) => (
+                      <button
+                        key={werkvorm}
+                        onClick={() => setWerkvormDialog(prev => ({ ...prev, selectedWerkvorm: werkvorm }))}
+                        className={`w-full p-3 text-left rounded-lg border transition-all ${
+                          werkvormDialog.selectedWerkvorm === werkvorm
+                            ? 'border-primary bg-primary/10 ring-2 ring-primary/20'
+                            : 'border-border hover:border-primary/50 hover:bg-accent/50'
+                        }`}
+                      >
+                        <span className="font-medium">{werkvorm}</span>
+                        <span className="block text-xs text-muted-foreground mt-1">
+                          {werkvorm === 'ZZP' && 'Zelfstandig ondernemer - flexibele inzet'}
+                          {werkvorm === 'Uitzendkracht' && 'Via uitzendbureau - vast tarief'}
+                          {werkvorm === 'ABCito constructie' && 'Speciale constructie ABCzorg/CitoZorg'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={handleCancelWerkvorm}>
+                  Annuleren
+                </AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={handleConfirmWerkvorm}
+                  disabled={!werkvormDialog.selectedWerkvorm}
+                >
+                  Doorgaan naar locatie selectie
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
