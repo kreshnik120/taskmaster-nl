@@ -73,6 +73,16 @@ interface Professional {
   btw_nummer: string | null;
   created_at: string;
   updated_at: string;
+  // New fields for complete data sync
+  ervaring_sector: string[] | null;
+  doelgroep_ervaring: string[] | null;
+  certificaten: string[] | null;
+  specialisaties: string[] | null;
+  opleidingen: unknown;
+  talen: string[] | null;
+  regio_voorkeur: string[] | null;
+  specifieke_doelgroepen: string[] | null;
+  max_reisafstand_km: number | null;
 }
 
 const Professionals = () => {

@@ -27,6 +27,12 @@ interface Professional {
   ervaring_sector?: string[] | null;
   doelgroep_ervaring?: string[] | null;
   eigen_vervoer?: boolean | null;
+  certificaten?: string[] | null;
+  specialisaties?: string[] | null;
+  talen?: string[] | null;
+  regio_voorkeur?: string[] | null;
+  specifieke_doelgroepen?: string[] | null;
+  max_reisafstand_km?: number | null;
 }
 
 interface Sublocation {
