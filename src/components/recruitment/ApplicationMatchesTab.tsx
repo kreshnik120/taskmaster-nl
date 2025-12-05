@@ -3,10 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Building2, MapPin, Users, Briefcase, Link2, Clock, Sparkles, CheckCircle2, AlertCircle, Brain } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Loader2, Building2, MapPin, Users, Briefcase, Link2, Clock, Sparkles, CheckCircle2, AlertCircle, Brain, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { calculateApplicationMatchScore, type MatchScoreBreakdown } from "@/lib/services/matchingService";
+import { MatchScoreBreakdown as MatchScoreBreakdownUI } from "./MatchScoreBreakdown";
 import { loadSuccessPatterns, calculateAILearningBoost, trackPatternUsage, type SuccessPattern } from "@/lib/aiLearningBoost";
 import confetti from "canvas-confetti";
 
@@ -106,11 +108,11 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
       const applicantSectoren = (getFieldValue(data.ervaring_sector) as string[]) || [];
       const applicantDoelgroepen = (getFieldValue(data.doelgroep_ervaring) as string[]) || [];
       const applicantWerkvorm = getFieldValue(data.werkvorm) as string | null;
-      // Fetch active sublocations with their organization info
+      // Fetch active sublocations with their organization info and publieke_opmerking
       const { data: sublocations, error: subError } = await supabase
         .from('client_sublocations')
         .select(`
-          id, naam, plaats, sector, doelgroep, gezochte_functies, provincie,
+          id, naam, plaats, sector, doelgroep, gezochte_functies, provincie, postcode, publieke_opmerking,
           location:client_locations!inner(
             naam,
             client_org:client_organizations!inner(name)
@@ -142,6 +144,8 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             doelgroep: sub.doelgroep,
             plaats: sub.plaats,
             provincie: sub.provincie,
+            postcode: sub.postcode, // NEW: for postcode distance
+            publieke_opmerking: sub.publieke_opmerking, // NEW: for description matching
           };
 
           // === FIX: Calculate AI boost FIRST ===
@@ -508,15 +512,28 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
                   </div>
                   
                   <div className="flex items-center gap-3 flex-shrink-0">
-                    <div className="text-right">
-                      <div className={`text-lg font-bold ${getScoreColor(vacancy.matchScore)}`}>
-                        {vacancy.matchScore}%
-                      </div>
-                      <Progress 
-                        value={vacancy.matchScore} 
-                        className={`h-1.5 w-16 ${getProgressColor(vacancy.matchScore)}`}
-                      />
-                    </div>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button className="text-right cursor-pointer hover:scale-105 transition-transform group">
+                          <div className={`text-lg font-bold ${getScoreColor(vacancy.matchScore)}`}>
+                            {vacancy.matchScore}%
+                          </div>
+                          <Progress 
+                            value={vacancy.matchScore} 
+                            className={`h-1.5 w-16 ${getProgressColor(vacancy.matchScore)}`}
+                          />
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Info className="h-3 w-3" /> Details
+                          </span>
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-0" align="end">
+                        <MatchScoreBreakdownUI 
+                          breakdown={vacancy.matchBreakdown}
+                          totalScore={vacancy.matchScore}
+                        />
+                      </PopoverContent>
+                    </Popover>
                     
                     {!vacancy.existingApplication ? (
                       <Button
@@ -631,15 +648,28 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
                   </div>
                   
                   <div className="flex items-center gap-3 flex-shrink-0">
-                    <div className="text-right">
-                      <div className={`text-lg font-bold ${getScoreColor(sublocation.matchScore)}`}>
-                        {sublocation.matchScore}%
-                      </div>
-                      <Progress 
-                        value={sublocation.matchScore} 
-                        className={`h-1.5 w-16 ${getProgressColor(sublocation.matchScore)}`}
-                      />
-                    </div>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button className="text-right cursor-pointer hover:scale-105 transition-transform group">
+                          <div className={`text-lg font-bold ${getScoreColor(sublocation.matchScore)}`}>
+                            {sublocation.matchScore}%
+                          </div>
+                          <Progress 
+                            value={sublocation.matchScore} 
+                            className={`h-1.5 w-16 ${getProgressColor(sublocation.matchScore)}`}
+                          />
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Info className="h-3 w-3" /> Details
+                          </span>
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-0" align="end">
+                        <MatchScoreBreakdownUI 
+                          breakdown={sublocation.matchBreakdown}
+                          totalScore={sublocation.matchScore}
+                        />
+                      </PopoverContent>
+                    </Popover>
                     
                     {!sublocation.existingMatch ? (
                       <Button

@@ -67,6 +67,7 @@ export interface MatchTarget {
   capaciteit_max?: number | null;
   org_id?: string | null;
   org_name?: string | null;
+  publieke_opmerking?: string | null; // NEW: sublocation description for keyword matching
 }
 
 export interface MatchScoreBreakdown {
@@ -77,6 +78,8 @@ export interface MatchScoreBreakdown {
   mobiliteitMatch: number;
   beschikbaarheidMatch: number;
   werkvormMatch: number;
+  beschrijvingMatch: number; // NEW: keyword matching from description
+  certificaatVereistMatch: number; // NEW: certificate-to-requirement matching
   ervaringBonus: number;
   leidinggevendeBonus: number;
   certificatenBonus: number;
@@ -90,12 +93,14 @@ export interface MatchScoreBreakdown {
   usedPatternIds: string[];
   details: {
     functie?: { match: boolean; reason: string };
-    regio?: { match: boolean; reason: string; matchType: 'exact' | 'province' | 'neighbor' | 'none' };
+    regio?: { match: boolean; reason: string; matchType: 'exact' | 'province' | 'neighbor' | 'none' | 'postcode'; afstandKm?: number };
     sector?: { match: boolean; reason: string; directMatches: string[]; relatedMatches: string[] };
     doelgroep?: { match: boolean; reason: string; directMatches: string[]; relatedMatches: string[] };
     mobiliteit?: { match: boolean; reason: string };
     beschikbaarheid?: { match: boolean; reason: string };
     werkvorm?: { match: boolean; reason: string };
+    beschrijving?: { match: boolean; reason: string; matchedKeywords: string[] }; // NEW
+    certificaatVereist?: { match: boolean; reason: string; matchedCerts: string[]; missingCerts: string[] }; // NEW
     ervaring?: { bonus: number; label: string };
     aiBoost?: { score: number; match: boolean; reason: string };
   };
@@ -151,6 +156,236 @@ function isRuralLocation(plaats: string | null, provincie: string | null): boole
   if (ruralProvinces.some(prov => provincieLower.includes(prov))) return true;
   
   return false;
+}
+
+// ============= NEW: POSTCODE DISTANCE CALCULATION =============
+
+/**
+ * Calculate approximate distance between two Dutch postcodes
+ * Uses first 2 digits (postcode region) for approximation
+ * Returns distance in kilometers (approximate)
+ */
+function calculatePostcodeDistance(pc1: string | null, pc2: string | null): number | null {
+  if (!pc1 || !pc2) return null;
+  
+  // Extract numeric parts (first 4 digits)
+  const num1 = parseInt(pc1.replace(/\D/g, '').substring(0, 4));
+  const num2 = parseInt(pc2.replace(/\D/g, '').substring(0, 4));
+  
+  if (isNaN(num1) || isNaN(num2)) return null;
+  
+  // Dutch postcodes roughly: lower = south, higher = north
+  // First 2 digits indicate rough region
+  const region1 = Math.floor(num1 / 100);
+  const region2 = Math.floor(num2 / 100);
+  
+  // Approximate mapping of region differences to km
+  // Netherlands is ~300km north-south, ~200km east-west
+  // 99 regions total, so roughly 3-5 km per region difference on average
+  const regionDiff = Math.abs(region1 - region2);
+  
+  // More nuanced calculation: same first digit = likely same province
+  const firstDigit1 = Math.floor(region1 / 10);
+  const firstDigit2 = Math.floor(region2 / 10);
+  
+  if (firstDigit1 === firstDigit2) {
+    // Same broad region
+    return regionDiff * 4; // 4km per region difference
+  } else {
+    // Different broad regions
+    return regionDiff * 5; // 5km per region difference
+  }
+}
+
+// ============= NEW: DESCRIPTION KEYWORD EXTRACTION =============
+
+interface DescriptionRequirements {
+  aandoeningen: string[];
+  competenties: string[];
+  methodieken: string[];
+  certificaatVereisten: string[];
+  zorgniveau: 'basis' | 'complex' | 'specialistisch';
+}
+
+/**
+ * Extract requirements from sublocation publieke_opmerking
+ * Mines rich text descriptions for matching criteria
+ */
+function extractRequirementsFromDescription(description: string | null): DescriptionRequirements {
+  if (!description) {
+    return { aandoeningen: [], competenties: [], methodieken: [], certificaatVereisten: [], zorgniveau: 'basis' };
+  }
+  
+  const lowerDesc = description.toLowerCase();
+  
+  // Detecteer aandoeningen/doelgroepen
+  const aandoeningen: string[] = [];
+  const aandoeningPatterns: Record<string, string[]> = {
+    'autisme': ['autisme', 'ass', 'autismespectrumstoornis'],
+    'ADHD': ['adhd', 'add'],
+    'NAH': ['nah', 'niet-aangeboren hersenletsel', 'hersenletsel'],
+    'LVB': ['lvb', 'licht verstandelijke beperking', 'lichte verstandelijke'],
+    'EMB': ['emb', 'ernstige meervoudige beperking'],
+    'PTSS': ['ptss', 'trauma', 'post-traumatisch'],
+    'ODD': ['odd', 'oppositioneel'],
+    'depressie': ['depressie', 'depressief'],
+    'angststoornis': ['angststoornis', 'angst'],
+    'schizofrenie': ['schizofrenie', 'psychose', 'psychotisch'],
+    'dementie': ['dementie', 'alzheimer'],
+    'verslaving': ['verslaving', 'verslaafde', 'middelengebruik'],
+    'borderline': ['borderline', 'persoonlijkheidsstoornis'],
+    'eetstoornissen': ['eetstoornis', 'anorexia', 'boulimia'],
+  };
+  
+  for (const [key, patterns] of Object.entries(aandoeningPatterns)) {
+    if (patterns.some(p => lowerDesc.includes(p))) {
+      aandoeningen.push(key);
+    }
+  }
+  
+  // Detecteer vereiste competenties
+  const competenties: string[] = [];
+  const competentiePatterns: Record<string, string[]> = {
+    'medicatie': ['medicatie', 'medicijn', 'farmaco'],
+    'agressiehantering': ['agressie', 'agressief gedrag', 'fysieke interventie'],
+    'suïcidepreventie': ['suïcide', 'zelfbeschadiging', 'automutilatie'],
+    'zelfstandig werken': ['zelfstandig', 'alleen werken', 'solistisch'],
+    'rapportage': ['rapportage', 'rapporteren', 'documentatie'],
+    'crisisinterventie': ['crisis', 'crisissituatie', 'nood'],
+    'wondverzorging': ['wond', 'wondverzorging', 'verbandleer'],
+    'palliatief': ['palliatief', 'terminaal', 'levenseinde'],
+  };
+  
+  for (const [key, patterns] of Object.entries(competentiePatterns)) {
+    if (patterns.some(p => lowerDesc.includes(p))) {
+      competenties.push(key);
+    }
+  }
+  
+  // Detecteer methodieken
+  const methodieken: string[] = [];
+  const methodiekPatterns: Record<string, string[]> = {
+    'Triple-C': ['triple-c', 'triple c'],
+    'Geef me de 5': ['geef me de 5'],
+    'LACCS': ['laccs'],
+    'Belevingsgerichte zorg': ['belevingsgericht'],
+    'Herstelondersteunende zorg': ['herstelondersteunend', 'herstelgericht'],
+    'Positief Gedrag Ondersteuning': ['positief gedrag', 'pgo'],
+    'Gentle Teaching': ['gentle teaching'],
+  };
+  
+  for (const [key, patterns] of Object.entries(methodiekPatterns)) {
+    if (patterns.some(p => lowerDesc.includes(p))) {
+      methodieken.push(key);
+    }
+  }
+  
+  // Detecteer certificaat vereisten
+  const certificaatVereisten: string[] = [];
+  if (lowerDesc.includes('bopz') || lowerDesc.includes('wzd')) certificaatVereisten.push('BOPZ/WZD');
+  if (lowerDesc.includes('bhv')) certificaatVereisten.push('BHV');
+  if (lowerDesc.includes('voorbehouden handeling')) certificaatVereisten.push('Voorbehouden handelingen');
+  if (lowerDesc.includes('rijbewijs') || lowerDesc.includes('eigen vervoer')) certificaatVereisten.push('Rijbewijs');
+  
+  // Bepaal zorgniveau
+  let zorgniveau: 'basis' | 'complex' | 'specialistisch' = 'basis';
+  if (lowerDesc.includes('specialistisch') || lowerDesc.includes('expert') || aandoeningen.length >= 3) {
+    zorgniveau = 'specialistisch';
+  } else if (lowerDesc.includes('complex') || competenties.length >= 2 || aandoeningen.length >= 2) {
+    zorgniveau = 'complex';
+  }
+  
+  return { aandoeningen, competenties, methodieken, certificaatVereisten, zorgniveau };
+}
+
+// ============= NEW: CERTIFICATE-TO-REQUIREMENT MATCHING =============
+
+/**
+ * Certificate relevance mapping
+ * Maps target group requirements to relevant certificates
+ */
+const CERTIFICAAT_RELEVANTIE: Record<string, string[]> = {
+  'agressiehantering': ['fysieke weerbaarheid', 'agressie', 'weerbaarheid', 'pmto'],
+  'medicatie': ['medicatie', 'voorbehouden handelingen', 'farmaco'],
+  'suïcidepreventie': ['suïcide preventie', 'ggz', 'crisis'],
+  'autisme': ['autisme', 'ass', 'triple-c'],
+  'dementie': ['dementie', 'psychogeriatrie', 'belevingsgericht'],
+  'NAH': ['nah', 'hersenletsel', 'neuro'],
+  'LVB': ['lvb', 'verstandelijke beperking', 'triple-c'],
+  'verslaving': ['verslaving', 'middelengebruik', 'motiverende gespreksvoering'],
+  'palliatief': ['palliatief', 'levenseinde', 'hospice'],
+  'BOPZ/WZD': ['bopz', 'wzd', 'dwang'],
+};
+
+/**
+ * Match candidate certificates against location requirements
+ * Returns score and matched/missing certificates
+ */
+function matchCertificatenToRequirements(
+  candidateCerts: string[] | null,
+  requirements: DescriptionRequirements
+): { score: number; matchedCerts: string[]; missingCerts: string[]; reason: string } {
+  if (!candidateCerts || candidateCerts.length === 0) {
+    if (requirements.certificaatVereisten.length > 0) {
+      return { score: 0, matchedCerts: [], missingCerts: requirements.certificaatVereisten, reason: 'Geen certificaten' };
+    }
+    return { score: 3, matchedCerts: [], missingCerts: [], reason: 'Geen certificaten nodig' };
+  }
+  
+  const normalizedCerts = candidateCerts.map(c => c.toLowerCase());
+  const matchedCerts: string[] = [];
+  const allRequirements = [...requirements.certificaatVereisten];
+  
+  // Check for competency-relevant certificates
+  for (const competentie of requirements.competenties) {
+    const relevantCerts = CERTIFICAAT_RELEVANTIE[competentie] || [];
+    for (const cert of normalizedCerts) {
+      if (relevantCerts.some(rc => cert.includes(rc) || rc.includes(cert))) {
+        matchedCerts.push(`${candidateCerts[normalizedCerts.indexOf(cert)]} (${competentie})`);
+      }
+    }
+  }
+  
+  // Check for aandoening-relevant certificates
+  for (const aandoening of requirements.aandoeningen) {
+    const relevantCerts = CERTIFICAAT_RELEVANTIE[aandoening] || [];
+    for (const cert of normalizedCerts) {
+      if (relevantCerts.some(rc => cert.includes(rc) || rc.includes(cert))) {
+        if (!matchedCerts.some(mc => mc.includes(candidateCerts[normalizedCerts.indexOf(cert)]))) {
+          matchedCerts.push(`${candidateCerts[normalizedCerts.indexOf(cert)]} (${aandoening})`);
+        }
+      }
+    }
+  }
+  
+  // Check direct certificate requirements
+  for (const vereist of requirements.certificaatVereisten) {
+    const vereistLower = vereist.toLowerCase();
+    const hasMatch = normalizedCerts.some(c => c.includes(vereistLower) || vereistLower.includes(c));
+    if (hasMatch && !matchedCerts.some(mc => mc.toLowerCase().includes(vereistLower))) {
+      matchedCerts.push(vereist);
+    }
+  }
+  
+  const missingCerts = allRequirements.filter(req => 
+    !normalizedCerts.some(c => c.includes(req.toLowerCase()) || req.toLowerCase().includes(c))
+  );
+  
+  // Calculate score (max 10 points for certificate matching)
+  let score = 0;
+  if (matchedCerts.length > 0) {
+    score = Math.min(10, 3 + matchedCerts.length * 2);
+  } else if (requirements.competenties.length === 0 && requirements.certificaatVereisten.length === 0) {
+    score = 5; // Neutral if no requirements
+  }
+  
+  const reason = matchedCerts.length > 0 
+    ? `${matchedCerts.length} relevante certificaten` 
+    : missingCerts.length > 0 
+      ? `Ontbreekt: ${missingCerts.join(', ')}` 
+      : 'Geen specifieke vereisten';
+  
+  return { score, matchedCerts, missingCerts, reason };
 }
 
 function calculateSemanticSectorMatch(
@@ -246,6 +481,8 @@ export function calculateUnifiedMatchScore(
   let mobiliteitMatch = 0;
   let beschikbaarheidMatch = 0;
   let werkvormMatch = 0;
+  let beschrijvingMatch = 0; // NEW
+  let certificaatVereistMatch = 0; // NEW
   let ervaringBonus = 0;
   let leidinggevendeBonus = 0;
   let certificatenBonus = 0;
@@ -253,6 +490,9 @@ export function calculateUnifiedMatchScore(
   let aiBoost = 0;
 
   const details: MatchScoreBreakdown['details'] = {};
+  
+  // ===== NEW: Extract requirements from description =====
+  const descriptionReqs = extractRequirementsFromDescription(target.publieke_opmerking || null);
 
   // ===== 1. FUNCTIE MATCH (25 punten) =====
   const gezochte = target.gezochte_functies || [];
@@ -292,11 +532,38 @@ export function calculateUnifiedMatchScore(
     functieMatch = 8; // Lower credit if no criteria
   }
 
-  // ===== 2. REGIO MATCH (20 punten) =====
+  // ===== 2. REGIO MATCH (20 punten) - NOW WITH POSTCODE DISTANCE =====
   const targetRegio = target.regio || (target.plaats ? [target.plaats] : []);
   const candidateRegio = candidate.regio;
   
-  if (candidateRegio && targetRegio.length > 0) {
+  // NEW: Try postcode-based distance first (most accurate)
+  const postcodeDistance = calculatePostcodeDistance(candidate.postcode, target.postcode);
+  
+  if (postcodeDistance !== null) {
+    // Use postcode-based distance scoring
+    if (postcodeDistance < 15) {
+      regioMatch = 20;
+      reasoning.push(`✅ Regio: <15 km afstand (postcode match)`);
+      details.regio = { match: true, reason: `<15 km afstand`, matchType: 'postcode', afstandKm: postcodeDistance };
+    } else if (postcodeDistance < 30) {
+      regioMatch = 17;
+      reasoning.push(`✅ Regio: 15-30 km afstand`);
+      details.regio = { match: true, reason: `~${postcodeDistance} km afstand`, matchType: 'postcode', afstandKm: postcodeDistance };
+    } else if (postcodeDistance < 50) {
+      regioMatch = 12;
+      reasoning.push(`⚠️ Regio: 30-50 km afstand`);
+      details.regio = { match: true, reason: `~${postcodeDistance} km afstand`, matchType: 'postcode', afstandKm: postcodeDistance };
+    } else if (postcodeDistance < 75) {
+      regioMatch = 8;
+      reasoning.push(`⚠️ Regio: 50-75 km afstand`);
+      details.regio = { match: false, reason: `~${postcodeDistance} km afstand (ver)`, matchType: 'postcode', afstandKm: postcodeDistance };
+    } else {
+      regioMatch = 5;
+      reasoning.push(`❌ Regio: >75 km afstand`);
+      details.regio = { match: false, reason: `~${postcodeDistance} km afstand (heel ver)`, matchType: 'postcode', afstandKm: postcodeDistance };
+    }
+  } else if (candidateRegio && targetRegio.length > 0) {
+    // Fallback to text-based region matching
     const candidateRegioLower = candidateRegio.toLowerCase();
     const candidateWoonplaatsLower = candidate.woonplaats?.toLowerCase() || "";
     const candidateProvincieLower = candidate.provincie?.toLowerCase() || "";
@@ -488,6 +755,55 @@ export function calculateUnifiedMatchScore(
     details.werkvorm = { match: false, reason: 'Werkvorm niet opgegeven' };
   }
 
+  // ===== 8. NEW: BESCHRIJVING KEYWORD MATCH (10 punten) =====
+  // Match candidate doelgroep_ervaring against keywords in publieke_opmerking
+  // Note: candidateDoelgroepen already declared above in doelgroep match section
+  
+  if (descriptionReqs.aandoeningen.length > 0 && candidateDoelgroepen.length > 0) {
+    const matchedKeywords: string[] = [];
+    
+    // Check if candidate has experience with detected aandoeningen
+    for (const aandoening of descriptionReqs.aandoeningen) {
+      const aandoeningLower = aandoening.toLowerCase();
+      const hasExperience = candidateDoelgroepen.some(d => 
+        d.toLowerCase().includes(aandoeningLower) || 
+        aandoeningLower.includes(d.toLowerCase())
+      );
+      if (hasExperience) {
+        matchedKeywords.push(aandoening);
+      }
+    }
+    
+    if (matchedKeywords.length > 0) {
+      beschrijvingMatch = Math.min(10, 4 + matchedKeywords.length * 2);
+      reasoning.push(`✅ Beschrijving: Ervaring met ${matchedKeywords.join(', ')}`);
+      details.beschrijving = { match: true, reason: `${matchedKeywords.length} keyword matches`, matchedKeywords };
+    } else {
+      beschrijvingMatch = 2;
+      reasoning.push(`⚠️ Beschrijving: Geen ervaring met ${descriptionReqs.aandoeningen.slice(0, 2).join(', ')}`);
+      details.beschrijving = { match: false, reason: `Ontbreekt: ${descriptionReqs.aandoeningen.slice(0, 2).join(', ')}`, matchedKeywords: [] };
+    }
+  } else if (descriptionReqs.aandoeningen.length === 0) {
+    beschrijvingMatch = 5; // Neutral if no specific requirements in description
+    details.beschrijving = { match: true, reason: 'Geen specifieke vereisten', matchedKeywords: [] };
+  }
+
+  // ===== 9. NEW: CERTIFICAAT-VEREISTE MATCH (10 punten) =====
+  const certMatch = matchCertificatenToRequirements(candidate.certificaten, descriptionReqs);
+  certificaatVereistMatch = certMatch.score;
+  
+  if (certMatch.matchedCerts.length > 0) {
+    reasoning.push(`✅ Certificaten vereist: ${certMatch.matchedCerts.slice(0, 2).join(', ')}`);
+  } else if (certMatch.missingCerts.length > 0) {
+    reasoning.push(`⚠️ Certificaten ontbreken: ${certMatch.missingCerts.slice(0, 2).join(', ')}`);
+  }
+  details.certificaatVereist = { 
+    match: certMatch.score >= 5, 
+    reason: certMatch.reason, 
+    matchedCerts: certMatch.matchedCerts, 
+    missingCerts: certMatch.missingCerts 
+  };
+
   // ===== BONUS POINTS =====
   
   // Ervaring bonus (+5 max)
@@ -544,14 +860,18 @@ export function calculateUnifiedMatchScore(
   }
 
   // ===== TOTAL SCORE =====
+  // Adjusted weights: Functie 20, Regio 18, Sector 15, Doelgroep 10, Beschrijving 10, 
+  // CertificaatVereist 10, Mobiliteit 7, Beschikbaarheid 5, Werkvorm 5 = 100 base
   const totalScore = 
-    functieMatch + 
-    regioMatch + 
-    sectorMatch + 
-    doelgroepMatch + 
-    mobiliteitMatch + 
-    beschikbaarheidMatch + 
-    werkvormMatch +
+    Math.round(functieMatch * 0.8) +  // 25 -> 20 points
+    Math.round(regioMatch * 0.9) +    // 20 -> 18 points  
+    Math.round(sectorMatch * 0.75) +  // 20 -> 15 points
+    Math.round(doelgroepMatch * 0.67) + // 15 -> 10 points
+    beschrijvingMatch +               // 10 points (NEW)
+    certificaatVereistMatch +         // 10 points (NEW)
+    Math.round(mobiliteitMatch * 0.7) + // 10 -> 7 points
+    beschikbaarheidMatch +            // 5 points
+    werkvormMatch +                   // 5 points
     ervaringBonus + 
     leidinggevendeBonus + 
     certificatenBonus + 
@@ -569,6 +889,8 @@ export function calculateUnifiedMatchScore(
     mobiliteitMatch,
     beschikbaarheidMatch,
     werkvormMatch,
+    beschrijvingMatch,
+    certificaatVereistMatch,
     ervaringBonus,
     leidinggevendeBonus,
     certificatenBonus,
