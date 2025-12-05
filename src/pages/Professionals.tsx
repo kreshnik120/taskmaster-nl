@@ -98,12 +98,13 @@ const Professionals = () => {
     telefoonnummer: "",
   });
 
-  // Fetch professionals with active placements
+  // Fetch professionals with active placements (excluding deleted professionals)
   const fetchLinkedProfessionals = async () => {
     const { data } = await supabase
       .from("assignments")
-      .select("professional_id")
-      .eq("status", "active");
+      .select("professional_id, professionals!inner(deleted_at)")
+      .eq("status", "active")
+      .is("professionals.deleted_at", null);
     
     const uniqueIds = new Set(data?.map(a => a.professional_id) || []);
     setLinkedProfessionalIds(uniqueIds);

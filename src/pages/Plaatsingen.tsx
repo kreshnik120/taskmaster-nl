@@ -94,7 +94,7 @@ export default function Plaatsingen() {
         .from("assignments")
         .select(`
           *,
-          professionals (id, full_name, functie_niveau, werkvorm, regio, telefoonnummer, email),
+          professionals!inner (id, full_name, functie_niveau, werkvorm, regio, telefoonnummer, email, deleted_at),
           client_sublocations (
             id, naam, plaats, doelgroep, sector,
             client_locations (
@@ -103,6 +103,8 @@ export default function Plaatsingen() {
             )
           )
         `)
+        .is("professionals.deleted_at", null)
+        .neq("status", "cancelled")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
