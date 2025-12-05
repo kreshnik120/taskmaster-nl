@@ -7,7 +7,6 @@ import { nl } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { TaskDialog } from "@/components/TaskDialog";
 import { useToast } from "@/hooks/use-toast";
@@ -249,41 +248,59 @@ export default function Kalender() {
   const weekNumber = getWeek(currentWeekStart, { locale: nl });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Minimal Hero Section */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Kalender</h1>
-          <p className="text-muted-foreground">Week {weekNumber} · {tasks.length} taken gepland</p>
+          <h1 className="text-xl font-medium tracking-tight">Kalender</h1>
+          <p className="text-sm text-muted-foreground/80">Week {weekNumber} · {tasks.length} taken gepland</p>
         </div>
         
-        <ToggleGroup type="single" value={viewMode} onValueChange={(value) => value && setViewMode(value as "5" | "7")}>
-          <ToggleGroupItem value="5" aria-label="Werkweek">Ma-Vr</ToggleGroupItem>
-          <ToggleGroupItem value="7" aria-label="Volle week">Ma-Zo</ToggleGroupItem>
+        {/* Pill-style Toggle */}
+        <ToggleGroup 
+          type="single" 
+          value={viewMode} 
+          onValueChange={(value) => value && setViewMode(value as "5" | "7")}
+          className="bg-muted/50 p-1 rounded-full"
+        >
+          <ToggleGroupItem 
+            value="5" 
+            aria-label="Werkweek"
+            className="rounded-full px-4 text-sm data-[state=on]:bg-background data-[state=on]:shadow-sm"
+          >
+            Ma-Vr
+          </ToggleGroupItem>
+          <ToggleGroupItem 
+            value="7" 
+            aria-label="Volle week"
+            className="rounded-full px-4 text-sm data-[state=on]:bg-background data-[state=on]:shadow-sm"
+          >
+            Ma-Zo
+          </ToggleGroupItem>
         </ToggleGroup>
       </div>
 
-      {/* KPI Cards met Icons */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* KPI Cards - Minimal variant */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPICard
           icon={Calendar}
           title="Vandaag"
           value={animatedTodayTasks}
-          variant="count"
+          variant="minimal"
           onClick={goToToday}
         />
         <KPICard
           icon={CheckCircle2}
           title="Deze Week"
           value={animatedWeekTasks}
-          variant="success"
+          variant="minimal"
           onClick={goToToday}
         />
         <KPICard
           icon={Clock}
           title="Herinneringen"
           value={animatedReminders}
-          variant="time"
+          variant="minimal"
           isActive={activeKpi === "herinneringen"}
           onClick={() => {
             setActiveKpi(activeKpi === "herinneringen" ? null : "herinneringen");
@@ -295,7 +312,7 @@ export default function Kalender() {
           icon={AlertCircle}
           title="Urgent"
           value={animatedUrgentTasks}
-          variant="urgent"
+          variant="minimal"
           isActive={activeKpi === "urgent"}
           onClick={() => {
             setActiveKpi(activeKpi === "urgent" ? null : "urgent");
@@ -305,27 +322,42 @@ export default function Kalender() {
         />
       </div>
 
-      {/* Compact Week Navigation */}
-      <div className="flex items-center justify-between">
-        <Button variant="ghost" size="sm" onClick={goToPreviousWeek}>
-          <ChevronLeft className="h-4 w-4 mr-1" />Vorige
+      {/* Centered Week Navigation */}
+      <div className="flex items-center justify-center gap-6">
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={goToPreviousWeek}
+          className="h-8 w-8 rounded-full"
+        >
+          <ChevronLeft className="h-4 w-4" />
         </Button>
-        <div className="text-center">
-          <p className="text-sm font-medium">
-            {format(currentWeekStart, 'd MMM', { locale: nl })} - {format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'd MMM yyyy', { locale: nl })}
+        
+        <div className="text-center min-w-[180px]">
+          <p className="text-sm font-medium tabular-nums">
+            {format(currentWeekStart, 'd MMM', { locale: nl }).toLowerCase()} – {format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'd MMM yyyy', { locale: nl }).toLowerCase()}
           </p>
+          <button 
+            onClick={goToToday}
+            className="text-xs text-primary hover:underline transition-colors"
+          >
+            Vandaag
+          </button>
         </div>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={goToToday}>Vandaag</Button>
-          <Button variant="ghost" size="sm" onClick={goToNextWeek}>
-            Volgende<ChevronRight className="h-4 w-4 ml-1" />
-          </Button>
-        </div>
+        
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={goToNextWeek}
+          className="h-8 w-8 rounded-full"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
       </div>
 
       {/* Responsive Calendar Grid */}
       <div className={cn(
-        "grid gap-4",
+        "grid gap-3",
         viewMode === "5" 
           ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-5" 
           : "grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7"
@@ -339,59 +371,59 @@ export default function Kalender() {
             <Card 
               key={day.toISOString()} 
               className={cn(
-                "overflow-hidden min-h-[500px] border-0 shadow-sm transition-all duration-200 hover:shadow-md",
-                isToday && "border-l-4 border-l-primary shadow-md"
+                "overflow-hidden min-h-[480px] border-0 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)]",
+                isToday && "bg-primary/[0.02]"
               )}
             >
               <CardHeader className="pb-3 pt-4 px-4">
-                <CardTitle className="text-base font-medium flex items-center justify-between">
+                <CardTitle className="text-sm font-medium flex items-center justify-between">
                   <span className="flex items-center gap-2">
-                    {format(day, 'EEEE', { locale: nl })}
                     {isToday && (
-                      <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0 h-5">
-                        Vandaag
-                      </Badge>
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                     )}
+                    <span className={cn(isToday ? "text-foreground" : "text-muted-foreground")}>
+                      {format(day, 'EEEE', { locale: nl })}
+                    </span>
                   </span>
-                  <span className="text-sm font-normal text-muted-foreground">{format(day, 'd MMM', { locale: nl })}</span>
+                  <span className="text-xs font-normal text-muted-foreground/60 tabular-nums">
+                    {format(day, 'd MMM', { locale: nl }).toLowerCase()}
+                  </span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 px-4 pb-4">
+              <CardContent className="space-y-2.5 px-4 pb-4">
                 {dayTasks.length === 0 && dayReminders.length === 0 ? (
                   <button 
                     onClick={() => handleDayClick(day)}
-                    className="w-full text-sm text-muted-foreground/40 text-center py-10 hover:bg-muted/30 rounded-xl transition-all duration-200 group"
+                    className="w-full text-center py-12 rounded-xl transition-all duration-200 group hover:bg-muted/20 hover:border hover:border-dashed hover:border-muted-foreground/20"
                   >
-                    <Plus className="h-4 w-4 mx-auto mb-1.5 opacity-20 group-hover:opacity-40 transition-opacity" />
-                    <p className="text-xs">Taak toevoegen</p>
+                    <Plus className="h-4 w-4 mx-auto mb-1.5 text-muted-foreground/30 group-hover:text-muted-foreground/50 transition-colors" />
+                    <p className="text-xs text-muted-foreground/40 group-hover:text-muted-foreground/60 transition-colors">Taak toevoegen</p>
                   </button>
                 ) : (
                   <>
-                    {/* Task Cards - Apple style */}
+                    {/* Task Cards - Ultra-subtle Apple style */}
                     {dayTasks.map((task, taskIndex) => (
                       <div 
                         key={task.id} 
                         onClick={() => handleTaskClick(task)} 
-                        className="p-4 rounded-xl bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-md cursor-pointer transition-all duration-200 hover:scale-[1.02] space-y-2"
+                        className="p-3 rounded-xl bg-background shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] hover:translate-y-[-1px] cursor-pointer transition-all duration-200 space-y-1.5"
                         {...(taskIndex === 0 && (task.priority === 'high' || task.priority === 'critical') && { 'data-urgent-task': true })}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <p className="font-medium text-sm leading-tight line-clamp-2 flex-1">{task.title}</p>
                           {(task.start_at || task.due_at) && (
-                            <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                            <span className="text-[11px] text-muted-foreground/60 tabular-nums shrink-0">
                               {task.start_at ? format(parseISO(task.start_at), 'HH:mm') : format(parseISO(task.due_at!), 'HH:mm')}
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <span className={cn("h-2 w-2 rounded-full", PRIORITY_DOTS[task.priority] || PRIORITY_DOTS.medium)} />
-                            {task.profiles && (
-                              <span className="text-xs text-muted-foreground truncate max-w-[120px]">
-                                {task.profiles.name || task.profiles.email}
-                              </span>
-                            )}
-                          </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className={cn("h-1.5 w-1.5 rounded-full", PRIORITY_DOTS[task.priority] || PRIORITY_DOTS.medium)} />
+                          {task.profiles && (
+                            <span className="text-[11px] text-muted-foreground/60 truncate max-w-[100px]">
+                              {task.profiles.name || task.profiles.email}
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -399,21 +431,21 @@ export default function Kalender() {
                     {dayReminders.map((reminder, reminderIndex) => (
                       <div 
                         key={reminder.id} 
-                        className="p-4 rounded-xl bg-muted/20 group transition-all duration-200 hover:bg-muted/30"
+                        className="p-3 rounded-xl bg-muted/15 group transition-all duration-200 hover:bg-muted/25"
                         {...(reminderIndex === 0 && { 'data-reminders': true })}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 space-y-1">
+                          <div className="flex-1 space-y-0.5">
                             <p className="font-medium text-sm line-clamp-2">{reminder.title || "Herinnering"}</p>
-                            <p className="text-xs text-muted-foreground tabular-nums">{format(parseISO(reminder.at), 'HH:mm')}</p>
+                            <p className="text-[11px] text-muted-foreground/60 tabular-nums">{format(parseISO(reminder.at), 'HH:mm')}</p>
                           </div>
                           <Button 
                             variant="ghost" 
                             size="sm" 
                             onClick={(e) => handleDeleteReminder(reminder.id, e)} 
-                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all"
+                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Trash2 className="h-3 w-3" />
                           </Button>
                         </div>
                       </div>

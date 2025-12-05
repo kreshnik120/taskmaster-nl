@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { useCountUp } from "@/hooks/useCountUp";
 import { LucideIcon } from "lucide-react";
 
-type KPIVariant = "count" | "success" | "time" | "urgent" | "personal";
+type KPIVariant = "count" | "success" | "time" | "urgent" | "personal" | "minimal";
 
 interface KPICardProps {
   icon: LucideIcon;
@@ -24,6 +24,7 @@ const variantConfig: Record<KPIVariant, {
   iconColor: string;
   shadowColor: string;
   ringColor: string;
+  accentDot?: string;
 }> = {
   count: {
     gradient: "from-blue-50/80 to-white/60 dark:from-blue-950/30 dark:to-background/60",
@@ -32,6 +33,7 @@ const variantConfig: Record<KPIVariant, {
     iconColor: "text-blue-500",
     shadowColor: "hover:shadow-blue-500/10",
     ringColor: "ring-blue-500",
+    accentDot: "bg-blue-500",
   },
   success: {
     gradient: "from-green-50/80 to-white/60 dark:from-green-950/30 dark:to-background/60",
@@ -40,6 +42,7 @@ const variantConfig: Record<KPIVariant, {
     iconColor: "text-green-500",
     shadowColor: "hover:shadow-green-500/10",
     ringColor: "ring-green-500",
+    accentDot: "bg-green-500",
   },
   time: {
     gradient: "from-amber-50/80 to-white/60 dark:from-amber-950/30 dark:to-background/60",
@@ -48,6 +51,7 @@ const variantConfig: Record<KPIVariant, {
     iconColor: "text-amber-500",
     shadowColor: "hover:shadow-amber-500/10",
     ringColor: "ring-amber-500",
+    accentDot: "bg-amber-500",
   },
   urgent: {
     gradient: "from-orange-50/80 to-white/60 dark:from-orange-950/30 dark:to-background/60",
@@ -56,6 +60,7 @@ const variantConfig: Record<KPIVariant, {
     iconColor: "text-orange-500",
     shadowColor: "hover:shadow-orange-500/10",
     ringColor: "ring-orange-500",
+    accentDot: "bg-orange-500",
   },
   personal: {
     gradient: "from-purple-50/80 to-white/60 dark:from-purple-950/30 dark:to-background/60",
@@ -64,6 +69,16 @@ const variantConfig: Record<KPIVariant, {
     iconColor: "text-purple-500",
     shadowColor: "hover:shadow-purple-500/10",
     ringColor: "ring-purple-500",
+    accentDot: "bg-purple-500",
+  },
+  minimal: {
+    gradient: "",
+    borderColor: "",
+    textColor: "text-foreground",
+    iconColor: "text-muted-foreground",
+    shadowColor: "hover:shadow-md",
+    ringColor: "ring-primary",
+    accentDot: "bg-primary",
   },
 };
 
@@ -80,33 +95,48 @@ export function KPICard({
 }: KPICardProps) {
   const animatedValue = useCountUp({ end: value, duration: 600 });
   const config = variantConfig[variant];
+  const isMinimal = variant === "minimal";
 
   return (
     <Card
       className={cn(
-        "relative overflow-hidden border border-white/50 dark:border-white/10",
-        "backdrop-blur-sm transition-all duration-200",
-        config.borderColor,
-        "border-t-4",
-        config.shadowColor,
-        onClick && "cursor-pointer hover:scale-[1.02]",
+        "relative overflow-hidden transition-all duration-200",
+        isMinimal 
+          ? "border-0 bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
+          : cn(
+              "border border-white/50 dark:border-white/10 backdrop-blur-sm",
+              config.borderColor,
+              "border-t-4",
+              config.shadowColor
+            ),
+        onClick && "cursor-pointer hover:translate-y-[-1px]",
         isActive && `ring-2 ring-offset-2 ${config.ringColor}`,
         className
       )}
       onClick={onClick}
     >
-      <div className={cn(
-        "absolute inset-0 bg-gradient-to-br opacity-90",
-        config.gradient
-      )} />
+      {!isMinimal && (
+        <div className={cn(
+          "absolute inset-0 bg-gradient-to-br opacity-90",
+          config.gradient
+        )} />
+      )}
       
-      <CardContent className="relative p-4">
+      <CardContent className={cn("relative", isMinimal ? "p-4" : "p-4")}>
         <div className="flex items-start justify-between mb-3">
-          <Icon className={cn("h-5 w-5", config.iconColor)} />
+          <div className="flex items-center gap-2">
+            {isMinimal && config.accentDot && (
+              <span className={cn("h-2 w-2 rounded-full", config.accentDot)} />
+            )}
+            <Icon className={cn(isMinimal ? "h-4 w-4" : "h-5 w-5", config.iconColor)} />
+          </div>
         </div>
         
         <div className="space-y-1">
-          <div className={cn("text-3xl font-bold", config.textColor)}>
+          <div className={cn(
+            "font-bold tabular-nums",
+            isMinimal ? "text-2xl text-foreground" : cn("text-3xl", config.textColor)
+          )}>
             {animatedValue}{suffix}
           </div>
           <div className="text-sm font-medium text-muted-foreground">
