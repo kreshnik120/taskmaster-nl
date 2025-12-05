@@ -1054,10 +1054,10 @@ export function ApplicationDetailModal({
         <Separator />
 
         {/* Tabbed Interface */}
-        {/* Check if werkvorm is known for showing Matches tab */}
+        {/* Check if werkvorm is CONFIRMED (not just present from CV) for showing Matches tab */}
         {(() => {
-          const werkvormKnown = !!getFieldValue(application.extracted_data?.werkvorm);
-          const hasMatches = werkvormKnown;
+          const werkvormBevestigd = !!application.extracted_data?.werkvorm_bevestigd;
+          const hasMatches = werkvormBevestigd;
           
           return (
             <Tabs defaultValue="overview" className="w-full">

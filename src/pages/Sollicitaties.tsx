@@ -320,15 +320,17 @@ const Sollicitaties = () => {
         duration: 5000,
       });
 
-      // Special handling for "interview" - ask for werkvorm if not known
+      // Special handling for "interview" - ALWAYS ask for werkvorm confirmation (even if pre-filled from CV)
       if (newStage === "interview") {
-        const werkvorm = application.extracted_data?.werkvorm;
-        if (!werkvorm) {
+        const werkvormBevestigd = application.extracted_data?.werkvorm_bevestigd;
+        if (!werkvormBevestigd) {
+          // Pre-select werkvorm from CV if available
+          const cvWerkvorm = application.extracted_data?.werkvorm || '';
           setWerkvormDialog({
             open: true,
             application,
             previousStage,
-            selectedWerkvorm: ''
+            selectedWerkvorm: cvWerkvorm
           });
           return; // Stop here, wait for werkvorm selection
         }
@@ -653,10 +655,11 @@ const Sollicitaties = () => {
     if (!application || !selectedWerkvorm) return;
 
     try {
-      // Update application with selected werkvorm
+      // Update application with selected werkvorm AND mark as confirmed
       const updatedExtractedData = {
         ...(application.extracted_data || {}),
-        werkvorm: selectedWerkvorm
+        werkvorm: selectedWerkvorm,
+        werkvorm_bevestigd: true
       };
 
       await supabase
