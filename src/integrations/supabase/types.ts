@@ -2851,16 +2851,22 @@ export type Database = {
           jaren_ervaring: number | null
           kvk_nummer: string | null
           leidinggevende_ervaring: boolean | null
+          max_reisafstand_km: number | null
           nachtdienst_bereid: boolean | null
+          opleidingen: Json | null
           org_id: string
           postcode: string | null
           profile_photo_url: string | null
           provincie: string | null
           rating: number | null
           regio: string | null
+          regio_voorkeur: string[] | null
           skills: string[] | null
+          specialisaties: string[] | null
+          specifieke_doelgroepen: string[] | null
           status: string
           tags: string[] | null
+          talen: string[] | null
           telefoonnummer: string | null
           updated_at: string
           vog_date: string | null
@@ -2892,16 +2898,22 @@ export type Database = {
           jaren_ervaring?: number | null
           kvk_nummer?: string | null
           leidinggevende_ervaring?: boolean | null
+          max_reisafstand_km?: number | null
           nachtdienst_bereid?: boolean | null
+          opleidingen?: Json | null
           org_id: string
           postcode?: string | null
           profile_photo_url?: string | null
           provincie?: string | null
           rating?: number | null
           regio?: string | null
+          regio_voorkeur?: string[] | null
           skills?: string[] | null
+          specialisaties?: string[] | null
+          specifieke_doelgroepen?: string[] | null
           status?: string
           tags?: string[] | null
+          talen?: string[] | null
           telefoonnummer?: string | null
           updated_at?: string
           vog_date?: string | null
@@ -2933,16 +2945,22 @@ export type Database = {
           jaren_ervaring?: number | null
           kvk_nummer?: string | null
           leidinggevende_ervaring?: boolean | null
+          max_reisafstand_km?: number | null
           nachtdienst_bereid?: boolean | null
+          opleidingen?: Json | null
           org_id?: string
           postcode?: string | null
           profile_photo_url?: string | null
           provincie?: string | null
           rating?: number | null
           regio?: string | null
+          regio_voorkeur?: string[] | null
           skills?: string[] | null
+          specialisaties?: string[] | null
+          specifieke_doelgroepen?: string[] | null
           status?: string
           tags?: string[] | null
+          talen?: string[] | null
           telefoonnummer?: string | null
           updated_at?: string
           vog_date?: string | null

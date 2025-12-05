@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { 
   User, Building2, Calendar, TrendingUp, CheckCircle2, 
-  Clock, Phone, Mail, MapPin, Award, Briefcase, CalendarIcon, Star, Check
+  Clock, Phone, Mail, MapPin, Award, Briefcase, CalendarIcon, Star, Check, ChevronRight, FileText, Users
 } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -67,6 +68,7 @@ interface PlacementDetailModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onStatusChange?: (placementId: string, newStatus: string, completedAt?: Date) => void;
+  applicationId?: string | null;
 }
 
 const WERKVORM_LABELS: Record<string, string> = {
@@ -163,8 +165,10 @@ export function PlacementDetailModal({
   placement, 
   open, 
   onOpenChange,
-  onStatusChange 
+  onStatusChange,
+  applicationId
 }: PlacementDetailModalProps) {
+  const navigate = useNavigate();
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
   const [completionDate, setCompletionDate] = useState<Date>(new Date());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
@@ -272,6 +276,36 @@ export function PlacementDetailModal({
               </Badge>
             </DialogTitle>
           </DialogHeader>
+
+          {/* Breadcrumb Trail - Flow Continuity (Phase 5) */}
+          <div className="flex items-center gap-2 text-sm text-muted-foreground border-b pb-3 mb-2">
+            <button
+              onClick={() => {
+                onOpenChange(false);
+                navigate('/sollicitaties');
+              }}
+              className="flex items-center gap-1 hover:text-foreground transition-colors"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Sollicitaties
+            </button>
+            <ChevronRight className="h-3.5 w-3.5" />
+            <button
+              onClick={() => {
+                onOpenChange(false);
+                navigate('/professionals');
+              }}
+              className="flex items-center gap-1 hover:text-foreground transition-colors"
+            >
+              <Users className="h-3.5 w-3.5" />
+              {placement.professionals?.full_name || 'Professional'}
+            </button>
+            <ChevronRight className="h-3.5 w-3.5" />
+            <span className="text-foreground font-medium flex items-center gap-1">
+              <TrendingUp className="h-3.5 w-3.5" />
+              Plaatsing
+            </span>
+          </div>
 
           <div className="space-y-6">
             {/* Werkvorm & Plaatsing Type Info */}

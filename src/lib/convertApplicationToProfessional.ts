@@ -171,6 +171,7 @@ export async function convertApplicationToProfessional(
       : null;
 
     // Map application data to professional including NAW fields + matching fields
+    // COMPLETE DATA MAPPING - ensures all extracted_data transfers to professional
     const professionalData = {
       org_id: orgId,
       full_name: application.extracted_data.naam,
@@ -197,7 +198,14 @@ export async function convertApplicationToProfessional(
       leidinggevende_ervaring: application.extracted_data.leidinggevende_ervaring || false,
       nachtdienst_bereid: application.extracted_data.nachtdienst_bereid || false,
       weekenddienst_bereid: application.extracted_data.weekenddienst_bereid || false,
+      // NEW: Extended data fields for complete synchronization
       certificaten: application.extracted_data.certificaten || [],
+      opleidingen: application.extracted_data.opleidingen || [],
+      talen: application.extracted_data.talen || [],
+      regio_voorkeur: application.extracted_data.regio_voorkeur || [],
+      specifieke_doelgroepen: application.extracted_data.specifieke_doelgroepen || [],
+      max_reisafstand_km: application.extracted_data.max_reisafstand_km || null,
+      specialisaties: application.extracted_data.specialisaties || [],
     };
 
     // Create professional

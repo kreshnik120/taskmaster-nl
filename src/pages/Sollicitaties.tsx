@@ -502,8 +502,8 @@ const Sollicitaties = () => {
     }
   };
 
-  // Handle sublocation selection for "geplaatst" - writes to assignments table
-  const handleSelectSublocation = async (sublocationId: string, sublocationName: string) => {
+  // Handle sublocation selection for "geplaatst" - writes to assignments table with ai_match_reasoning
+  const handleSelectSublocation = async (sublocationId: string, sublocationName: string, sublocationData?: any) => {
     const { application } = selectClientDialog;
     if (!application || !application.professional_id) return;
 
@@ -511,8 +511,33 @@ const Sollicitaties = () => {
       // Get werkvorm from application
       const werkvorm = application.extracted_data?.werkvorm || null;
 
-      // Create assignment in correct table
-      const { error: assignmentError } = await supabase
+      // Build AI match reasoning for data enrichment (Phase 4)
+      const aiMatchReasoning = {
+        calculated_at: new Date().toISOString(),
+        professional_data: {
+          functie_niveau: application.extracted_data?.functie_niveau,
+          ervaring_sector: application.extracted_data?.ervaring_sector,
+          regio: application.extracted_data?.regio,
+          werkvorm: werkvorm,
+          postcode: application.extracted_data?.postcode,
+          doelgroep_ervaring: application.extracted_data?.doelgroep_ervaring,
+        },
+        sublocation_data: sublocationData ? {
+          naam: sublocationData.naam,
+          sector: sublocationData.sector,
+          gezochte_functies: sublocationData.gezochte_functies,
+          plaats: sublocationData.plaats,
+          provincie: sublocationData.provincie,
+        } : { naam: sublocationName },
+        score_breakdown: {
+          source: 'sollicitaties_kanban',
+          pipeline_stage: 'geplaatst',
+          match_score: sublocationData?.matchScore || null
+        }
+      };
+
+      // Create assignment with ai_match_reasoning
+      const { data: assignment, error: assignmentError } = await supabase
         .from('assignments')
         .insert({
           professional_id: application.professional_id,
@@ -521,8 +546,12 @@ const Sollicitaties = () => {
           status: 'active',
           werkvorm: werkvorm,
           weekly_hours: 0,
-          notes: `Geplaatst vanuit sollicitatie ${application.id}`
-        });
+          notes: `Geplaatst vanuit sollicitatie ${application.id}`,
+          ai_match_score: sublocationData?.matchScore || null,
+          ai_match_reasoning: aiMatchReasoning
+        })
+        .select()
+        .single();
 
       if (assignmentError) throw assignmentError;
 
@@ -541,13 +570,14 @@ const Sollicitaties = () => {
           user_id: user?.id,
           event_type: 'placement_created',
           entity_type: 'assignment',
-          entity_id: application.professional_id,
+          entity_id: assignment.id,
           event_data: {
             application_id: application.id,
             professional_id: application.professional_id,
             sublocation_id: sublocationId,
             sublocation_name: sublocationName,
             werkvorm: werkvorm,
+            ai_match_score: sublocationData?.matchScore || null,
             candidate_name: application.extracted_data?.naam || application.email_from
           },
           metadata: {
