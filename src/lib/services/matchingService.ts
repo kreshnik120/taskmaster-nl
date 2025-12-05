@@ -8,10 +8,10 @@
  * - Functie: 25 punten
  * - Regio: 20 punten
  * - Sector: 20 punten
- * - Doelgroep: 10 punten
+ * - Doelgroep: 15 punten (verhoogd van 10)
  * - Mobiliteit: 10 punten
  * - Beschikbaarheid: 5 punten
- * - Bureau: 5 punten
+ * - Werkvorm: 5 punten (nieuw - vervangt bureau match)
  * - Bonus: Ervaring (+5), Leidinggevende (+3), Certificaten (+3), Nacht/Weekend (+2)
  * - AI Boost: up to +15 punten (from learned success patterns)
  */
@@ -52,7 +52,7 @@ export interface MatchCandidate {
   nachtdienst_bereid?: boolean | null;
   weekenddienst_bereid?: boolean | null;
   certificaten?: string[] | null;
-  assigned_organization?: string | null;
+  werkvorm?: string | null; // ZZP | Uitzendkracht | ABCito constructie
 }
 
 export interface MatchTarget {
@@ -76,7 +76,7 @@ export interface MatchScoreBreakdown {
   doelgroepMatch: number;
   mobiliteitMatch: number;
   beschikbaarheidMatch: number;
-  bureauMatch: number;
+  werkvormMatch: number;
   ervaringBonus: number;
   leidinggevendeBonus: number;
   certificatenBonus: number;
@@ -95,7 +95,7 @@ export interface MatchScoreBreakdown {
     doelgroep?: { match: boolean; reason: string; directMatches: string[]; relatedMatches: string[] };
     mobiliteit?: { match: boolean; reason: string };
     beschikbaarheid?: { match: boolean; reason: string };
-    bureau?: { match: boolean; reason: string };
+    werkvorm?: { match: boolean; reason: string };
     ervaring?: { bonus: number; label: string };
     aiBoost?: { score: number; match: boolean; reason: string };
   };
@@ -134,12 +134,6 @@ const FUNCTIE_COMPATIBILITY: Record<string, { compatible: string[]; score: numbe
   "Sportinstructeur": { compatible: ["Sportinstructeur"], score: 25 },
   "Agrarisch medewerker": { compatible: ["Agrarisch medewerker"], score: 25 },
   "Hovenier": { compatible: ["Hovenier"], score: 25 },
-};
-
-// Bureau ID mapping
-const BUREAU_MAPPING: Record<string, string> = {
-  '550e8400-e29b-41d4-a716-446655440000': 'ABCzorg',
-  '650e8400-e29b-41d4-a716-446655440001': 'CitoZorg',
 };
 
 // ============= HELPER FUNCTIONS =============
@@ -251,7 +245,7 @@ export function calculateUnifiedMatchScore(
   let doelgroepMatch = 0;
   let mobiliteitMatch = 0;
   let beschikbaarheidMatch = 0;
-  let bureauMatch = 0;
+  let werkvormMatch = 0;
   let ervaringBonus = 0;
   let leidinggevendeBonus = 0;
   let certificatenBonus = 0;
@@ -422,13 +416,13 @@ export function calculateUnifiedMatchScore(
     sectorMatch = 5;
   }
 
-  // ===== 5. DOELGROEP MATCH (10 punten) =====
+  // ===== 5. DOELGROEP MATCH (15 punten - verhoogd voor betere differentiatie) =====
   const targetDoelgroepen = target.doelgroep || [];
   const candidateDoelgroepen = candidate.doelgroep_ervaring || [];
   
   if (targetDoelgroepen.length > 0 && candidateDoelgroepen.length > 0) {
     const semanticMatch = calculateSemanticDoelgroepMatch(candidateDoelgroepen, targetDoelgroepen);
-    doelgroepMatch = Math.round(semanticMatch.score * 10);
+    doelgroepMatch = Math.round(semanticMatch.score * 15);
     
     if (semanticMatch.directMatches.length > 0) {
       reasoning.push(`✅ Doelgroep: ${semanticMatch.directMatches.join(", ")} (exact match)`);
@@ -444,7 +438,7 @@ export function calculateUnifiedMatchScore(
       relatedMatches: semanticMatch.relatedMatches
     };
   } else if (targetDoelgroepen.length === 0) {
-    doelgroepMatch = 3;
+    doelgroepMatch = 4;
   }
 
   // ===== 6. BESCHIKBAARHEID MATCH (5 punten) =====
@@ -480,16 +474,18 @@ export function calculateUnifiedMatchScore(
     beschikbaarheidMatch = 3; // Neutral
   }
 
-  // ===== 7. BUREAU MATCH (5 punten) =====
-  const targetOrgName = target.org_name || (target.org_id ? BUREAU_MAPPING[target.org_id] : null);
-  const candidateOrg = candidate.assigned_organization;
+  // ===== 7. WERKVORM MATCH (5 punten - vervangt bureau match) =====
+  // Bureau match is verwijderd: ABCzorg en CitoZorg zijn beide eigenaar van het systeem
+  // Professionals kunnen via beide bureaus geplaatst worden
+  const candidateWerkvorm = candidate.werkvorm;
   
-  if (candidateOrg && targetOrgName && candidateOrg === targetOrgName) {
-    bureauMatch = 5;
-    reasoning.push(`✅ Bureau: Zelfde bemiddelingsbureau (${targetOrgName})`);
-    details.bureau = { match: true, reason: `Zelfde bureau: ${targetOrgName}` };
-  } else if (candidateOrg && targetOrgName) {
-    details.bureau = { match: false, reason: 'Ander bureau' };
+  if (candidateWerkvorm) {
+    werkvormMatch = 5;
+    reasoning.push(`✅ Werkvorm: ${candidateWerkvorm}`);
+    details.werkvorm = { match: true, reason: candidateWerkvorm };
+  } else {
+    werkvormMatch = 2; // Gedeeltelijke score als werkvorm nog niet bekend
+    details.werkvorm = { match: false, reason: 'Werkvorm niet opgegeven' };
   }
 
   // ===== BONUS POINTS =====
@@ -555,7 +551,7 @@ export function calculateUnifiedMatchScore(
     doelgroepMatch + 
     mobiliteitMatch + 
     beschikbaarheidMatch + 
-    bureauMatch +
+    werkvormMatch +
     ervaringBonus + 
     leidinggevendeBonus + 
     certificatenBonus + 
@@ -572,7 +568,7 @@ export function calculateUnifiedMatchScore(
     doelgroepMatch,
     mobiliteitMatch,
     beschikbaarheidMatch,
-    bureauMatch,
+    werkvormMatch,
     ervaringBonus,
     leidinggevendeBonus,
     certificatenBonus,
@@ -641,7 +637,7 @@ export function calculateApplicationToClientMatch(
     nachtdienst_bereid?: boolean | null;
     weekenddienst_bereid?: boolean | null;
     certificaten?: string[] | null;
-    assigned_organization?: string | null;
+    werkvorm?: string | null;
   },
   client: {
     gezochte_functies?: string[] | null;
@@ -666,7 +662,7 @@ export function calculateApplicationToClientMatch(
       nachtdienst_bereid: extractedData.nachtdienst_bereid,
       weekenddienst_bereid: extractedData.weekenddienst_bereid,
       certificaten: extractedData.certificaten,
-      assigned_organization: extractedData.assigned_organization,
+      werkvorm: extractedData.werkvorm,
     },
     {
       gezochte_functies: client.gezochte_functies,
@@ -696,7 +692,7 @@ export async function calculateApplicationToClientMatchWithAI(
     nachtdienst_bereid?: boolean | null;
     weekenddienst_bereid?: boolean | null;
     certificaten?: string[] | null;
-    assigned_organization?: string | null;
+    werkvorm?: string | null;
   },
   client: {
     gezochte_functies?: string[] | null;
@@ -935,7 +931,7 @@ export function calculateApplicationMatchScore(
     nachtdienst_bereid: getExtractedValue(data.nachtdienst_bereid),
     weekenddienst_bereid: getExtractedValue(data.weekenddienst_bereid),
     certificaten: getExtractedValue(data.certificaten) || [],
-    assigned_organization: getExtractedValue(data.assigned_organization),
+    werkvorm: getExtractedValue(data.werkvorm),
   };
   
   // Use unified match calculation
