@@ -15,6 +15,7 @@
  * - Bonus: Ervaring (+5), Leidinggevende (+3), Certificaten (+3), Nacht/Weekend (+2)
  * - AI Boost: up to +15 punten (from learned success patterns)
  * - Track Record: up to +8 punten (from historical performance)
+ * - Expert Boost: up to +12 punten (from specialisme expert knowledge)
  */
 
 import { supabase } from "@/integrations/supabase/client";
@@ -84,6 +85,34 @@ export interface ProfessionalPerformance {
   totalEvaluations: number;
 }
 
+// ============= EXPERT KNOWLEDGE INTERFACES =============
+
+export interface ExpertKnowledge {
+  id: string;
+  specialisme: string;
+  expert_naam: string;
+  vereiste_certificaten: string[];
+  vereiste_ervaring: string[];
+  methodieken: string[];
+  match_criteria: {
+    certificaat_gewicht: number;
+    ervaring_gewicht: number;
+    methodiek_gewicht: number;
+  };
+  keywords: string[];
+  uitleg_template: string | null;
+}
+
+export interface ExpertAdvies {
+  expert: string;
+  specialisme: string;
+  score: number;
+  maxScore: number;
+  advies: string;
+  matchedCerts: string[];
+  matchedErvaring: string[];
+}
+
 export interface MatchScoreBreakdown {
   functieMatch: number;
   regioMatch: number;
@@ -92,9 +121,10 @@ export interface MatchScoreBreakdown {
   mobiliteitMatch: number;
   beschikbaarheidMatch: number;
   werkvormMatch: number;
-  beschrijvingMatch: number; // NEW: keyword matching from description
-  certificaatVereistMatch: number; // NEW: certificate-to-requirement matching
-  trackRecordBonus: number; // NEW: professional historical performance
+  beschrijvingMatch: number;
+  certificaatVereistMatch: number;
+  trackRecordBonus: number;
+  expertBonus: number; // NEW: expert knowledge bonus
   ervaringBonus: number;
   leidinggevendeBonus: number;
   certificatenBonus: number;
@@ -106,7 +136,9 @@ export interface MatchScoreBreakdown {
   hasAIBoost: boolean;
   aiBoostReasons: string[];
   usedPatternIds: string[];
-  hasTrackRecord: boolean; // NEW
+  hasTrackRecord: boolean;
+  hasExpertAdvies: boolean; // NEW
+  expertAdvies: ExpertAdvies[]; // NEW
   details: {
     functie?: { match: boolean; reason: string };
     regio?: { match: boolean; reason: string; matchType: 'exact' | 'province' | 'neighbor' | 'none' | 'postcode'; afstandKm?: number };
@@ -115,9 +147,10 @@ export interface MatchScoreBreakdown {
     mobiliteit?: { match: boolean; reason: string };
     beschikbaarheid?: { match: boolean; reason: string };
     werkvorm?: { match: boolean; reason: string };
-    beschrijving?: { match: boolean; reason: string; matchedKeywords: string[] }; // NEW
-    certificaatVereist?: { match: boolean; reason: string; matchedCerts: string[]; missingCerts: string[] }; // NEW
-    trackRecord?: { score: number; match: boolean; reason: string; wouldRehireRate?: number; avgRating?: number }; // NEW
+    beschrijving?: { match: boolean; reason: string; matchedKeywords: string[] };
+    certificaatVereist?: { match: boolean; reason: string; matchedCerts: string[]; missingCerts: string[] };
+    trackRecord?: { score: number; match: boolean; reason: string; wouldRehireRate?: number; avgRating?: number };
+    expertAdvies?: { score: number; match: boolean; reason: string; expertCount: number }; // NEW
     ervaring?: { bonus: number; label: string };
     aiBoost?: { score: number; match: boolean; reason: string };
   };
@@ -198,6 +231,89 @@ export async function getProfessionalPerformance(professionalId: string): Promis
 // ============= CONSTANTS =============
 
 const MAX_BASE_SCORE = 100;
+
+// ============= EXPERT KNOWLEDGE CACHE & DETECTION =============
+
+let expertKnowledgeCache: ExpertKnowledge[] = [];
+let expertCacheLoaded = false;
+
+/**
+ * Load expert knowledge from database (cached)
+ */
+export async function loadExpertKnowledge(): Promise<ExpertKnowledge[]> {
+  if (expertCacheLoaded && expertKnowledgeCache.length > 0) {
+    return expertKnowledgeCache;
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('specialisme_expert_knowledge')
+      .select('*');
+    
+    if (error) {
+      console.error('[loadExpertKnowledge] Error:', error);
+      return [];
+    }
+    
+    expertKnowledgeCache = (data || []).map(row => ({
+      id: row.id,
+      specialisme: row.specialisme,
+      expert_naam: row.expert_naam,
+      vereiste_certificaten: row.vereiste_certificaten || [],
+      vereiste_ervaring: row.vereiste_ervaring || [],
+      methodieken: row.methodieken || [],
+      match_criteria: row.match_criteria as ExpertKnowledge['match_criteria'],
+      keywords: row.keywords || [],
+      uitleg_template: row.uitleg_template
+    }));
+    
+    expertCacheLoaded = true;
+    console.log(`[loadExpertKnowledge] Loaded ${expertKnowledgeCache.length} experts`);
+    return expertKnowledgeCache;
+  } catch (err) {
+    console.error('[loadExpertKnowledge] Error:', err);
+    return [];
+  }
+}
+
+/**
+ * Detect specialisms from description text using expert keywords
+ */
+function detectSpecialismen(descriptionLower: string): string[] {
+  const detected: string[] = [];
+  
+  // Use expert keywords if cached
+  if (expertKnowledgeCache.length > 0) {
+    for (const expert of expertKnowledgeCache) {
+      if (expert.keywords.some(kw => descriptionLower.includes(kw.toLowerCase()))) {
+        detected.push(expert.specialisme);
+      }
+    }
+    return detected;
+  }
+  
+  // Fallback: hardcoded detection
+  if (descriptionLower.includes('ass') || descriptionLower.includes('autisme') || descriptionLower.includes('autistisch')) {
+    detected.push('ASS');
+  }
+  if (descriptionLower.includes('nah') || descriptionLower.includes('hersenletsel') || descriptionLower.includes('cva')) {
+    detected.push('NAH');
+  }
+  if (descriptionLower.includes('epilepsie') || descriptionLower.includes('aanval') || descriptionLower.includes('insult')) {
+    detected.push('Epilepsie');
+  }
+  if (descriptionLower.includes('agressie') || descriptionLower.includes('gedrag') || descriptionLower.includes('grensoverschrijdend')) {
+    detected.push('Gedrag');
+  }
+  if (descriptionLower.includes('verpleegtechnisch') || descriptionLower.includes('katheter') || descriptionLower.includes('sonde') || descriptionLower.includes('medisch')) {
+    detected.push('Medisch');
+  }
+  if (descriptionLower.includes('verslaving') || descriptionLower.includes('middelen') || descriptionLower.includes('alcohol')) {
+    detected.push('Verslaving');
+  }
+  
+  return detected;
+}
 
 // Functie equivalentie matrix - Alle healthcare functies met hiërarchische compatibiliteit
 const FUNCTIE_COMPATIBILITY: Record<string, { compatible: string[]; score: number }> = {
@@ -986,17 +1102,101 @@ export function calculateUnifiedMatchScore(
     };
   }
 
+  // ===== NEW: EXPERT BONUS (up to +12 points) =====
+  let expertBonus = 0;
+  let hasExpertAdvies = false;
+  const expertAdvies: ExpertAdvies[] = [];
+  
+  // Detect specialisms from description
+  const descriptionLower = (target.publieke_opmerking || '').toLowerCase();
+  const detectedSpecialismen = detectSpecialismen(descriptionLower);
+  
+  if (detectedSpecialismen.length > 0 && expertKnowledgeCache.length > 0) {
+    // Match against each detected specialism
+    for (const specialisme of detectedSpecialismen) {
+      const expert = expertKnowledgeCache.find(e => e.specialisme === specialisme);
+      if (!expert) continue;
+      
+      const matchedCerts: string[] = [];
+      const matchedErvaring: string[] = [];
+      let expertScore = 0;
+      const maxScore = expert.match_criteria.certificaat_gewicht + expert.match_criteria.ervaring_gewicht + expert.match_criteria.methodiek_gewicht;
+      
+      // Match certificates
+      const candidateCertsLower = (candidate.certificaten || []).map(c => c.toLowerCase());
+      for (const vereistCert of expert.vereiste_certificaten) {
+        if (candidateCertsLower.some(c => c.includes(vereistCert.toLowerCase()) || vereistCert.toLowerCase().includes(c))) {
+          matchedCerts.push(vereistCert);
+        }
+      }
+      if (matchedCerts.length > 0) {
+        expertScore += Math.min(expert.match_criteria.certificaat_gewicht, matchedCerts.length * 5);
+      }
+      
+      // Match experience
+      const candidateDoelgroepenLower = (candidate.doelgroep_ervaring || []).map(d => d.toLowerCase());
+      const candidateSectorenLower = (candidate.ervaring_sector || []).map(s => s.toLowerCase());
+      const allCandidateExp = [...candidateDoelgroepenLower, ...candidateSectorenLower];
+      
+      for (const vereistExp of expert.vereiste_ervaring) {
+        if (allCandidateExp.some(e => e.includes(vereistExp.toLowerCase()) || vereistExp.toLowerCase().includes(e))) {
+          matchedErvaring.push(vereistExp);
+        }
+      }
+      if (matchedErvaring.length > 0) {
+        expertScore += Math.min(expert.match_criteria.ervaring_gewicht, matchedErvaring.length * 8);
+      }
+      
+      // Generate advice
+      const matchStatus = expertScore >= maxScore * 0.6 
+        ? 'Kandidaat voldoet aan criteria.' 
+        : expertScore >= maxScore * 0.3 
+          ? 'Kandidaat heeft beperkte ervaring.' 
+          : 'Kandidaat mist relevante ervaring.';
+      
+      const advies = expert.uitleg_template 
+        ? expert.uitleg_template.replace('{match_status}', matchStatus)
+        : `${expert.expert_naam}: ${matchStatus}`;
+      
+      expertAdvies.push({
+        expert: expert.expert_naam,
+        specialisme: expert.specialisme,
+        score: expertScore,
+        maxScore,
+        advies,
+        matchedCerts,
+        matchedErvaring
+      });
+      
+      // Add to total bonus (max 12 points total across all experts)
+      expertBonus += Math.min(4, Math.round(expertScore / maxScore * 4)); // max 4 per expert
+    }
+    
+    expertBonus = Math.min(12, expertBonus);
+    hasExpertAdvies = expertAdvies.length > 0;
+    
+    if (hasExpertAdvies) {
+      reasoning.push(`🎓 Expert Advies: ${expertAdvies.length} specialist(en) geraadpleegd (+${expertBonus})`);
+      details.expertAdvies = {
+        score: expertBonus,
+        match: expertBonus >= 4,
+        reason: `${expertAdvies.length} specialist(en): ${expertAdvies.map(e => e.specialisme).join(', ')}`,
+        expertCount: expertAdvies.length
+      };
+    }
+  }
+
   // ===== TOTAL SCORE =====
   // Adjusted weights: Functie 20, Regio 18, Sector 15, Doelgroep 10, Beschrijving 10, 
   // CertificaatVereist 10, Mobiliteit 7, Beschikbaarheid 5, Werkvorm 5 = 100 base
-  // + Track Record bonus (up to +8) + AI boost (up to +15)
+  // + Track Record bonus (up to +8) + AI boost (up to +15) + Expert bonus (up to +12)
   const totalScore = 
     Math.round(functieMatch * 0.8) +  // 25 -> 20 points
     Math.round(regioMatch * 0.9) +    // 20 -> 18 points  
     Math.round(sectorMatch * 0.75) +  // 20 -> 15 points
     Math.round(doelgroepMatch * 0.67) + // 15 -> 10 points
-    beschrijvingMatch +               // 10 points (NEW)
-    certificaatVereistMatch +         // 10 points (NEW)
+    beschrijvingMatch +               // 10 points
+    certificaatVereistMatch +         // 10 points
     Math.round(mobiliteitMatch * 0.7) + // 10 -> 7 points
     beschikbaarheidMatch +            // 5 points
     werkvormMatch +                   // 5 points
@@ -1004,7 +1204,8 @@ export function calculateUnifiedMatchScore(
     leidinggevendeBonus + 
     certificatenBonus + 
     dienstBonus +
-    trackRecordBonus +                // NEW: up to +8 points
+    trackRecordBonus +                // up to +8 points
+    expertBonus +                     // NEW: up to +12 points
     aiBoost;
 
   // Normalize to 0-100 scale (max base is 100, but with bonuses can go slightly higher)
@@ -1021,6 +1222,7 @@ export function calculateUnifiedMatchScore(
     beschrijvingMatch,
     certificaatVereistMatch,
     trackRecordBonus,
+    expertBonus,
     ervaringBonus,
     leidinggevendeBonus,
     certificatenBonus,
@@ -1031,6 +1233,8 @@ export function calculateUnifiedMatchScore(
     reasoning,
     hasAIBoost,
     hasTrackRecord,
+    hasExpertAdvies,
+    expertAdvies,
     aiBoostReasons,
     usedPatternIds,
     details
