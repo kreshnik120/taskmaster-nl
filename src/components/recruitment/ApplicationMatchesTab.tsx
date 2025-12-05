@@ -133,7 +133,7 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
       const allUsedPatternIds: string[] = [];
       let maxAIBoost = 0;
 
-      // Calculate match scores with AI boost
+      // Calculate match scores with AI boost integrated
       const scoredSublocations: MatchedSublocation[] = (sublocations || [])
         .map(sub => {
           const target = {
@@ -144,16 +144,12 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             provincie: sub.provincie,
           };
 
-          // Calculate base match score
-          const matchBreakdown = calculateApplicationMatchScore(application, target);
-
-          // === FASE 4: Calculate AI boost with domain knowledge ===
+          // === FIX: Calculate AI boost FIRST ===
           const aiBoostResult = calculateAILearningBoost(
             applicantFunctie,
             applicantSectoren,
             applicantDoelgroepen,
             aiPatterns,
-            // Target parameters for domain knowledge boost
             sub.gezochte_functies?.[0] || null,
             sub.sector || [],
             sub.doelgroep || []
@@ -163,13 +159,18 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
           if (aiBoostResult.usedPatternIds.length > 0) {
             allUsedPatternIds.push(...aiBoostResult.usedPatternIds);
           }
-
-          // Apply AI boost to final score
-          const boostedScore = Math.min(100, matchBreakdown.normalizedScore + aiBoostResult.boost);
           if (aiBoostResult.boost > maxAIBoost) {
             maxAIBoost = aiBoostResult.boost;
           }
 
+          // === FIX: Pass aiBoostData to calculateApplicationMatchScore ===
+          const matchBreakdown = calculateApplicationMatchScore(application, target, {
+            boost: aiBoostResult.boost,
+            reasons: aiBoostResult.reasons,
+            usedPatternIds: aiBoostResult.usedPatternIds
+          });
+
+          // matchBreakdown.normalizedScore now already includes AI boost
           return {
             id: sub.id,
             naam: sub.naam,
@@ -177,16 +178,13 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             sector: sub.sector,
             doelgroep: sub.doelgroep,
             gezochte_functies: sub.gezochte_functies,
-            matchScore: boostedScore,
-            matchBreakdown: {
-              ...matchBreakdown,
-              normalizedScore: boostedScore,
-            },
+            matchScore: matchBreakdown.normalizedScore,
+            matchBreakdown,
             organization_name: (sub.location as any)?.client_org?.name || 'Onbekend',
             location_name: (sub.location as any)?.naam || 'Onbekend',
             existingMatch: existingMatchMap.get(sub.id),
-            aiBoost: aiBoostResult.boost,
-            aiReasons: aiBoostResult.reasons,
+            aiBoost: matchBreakdown.aiBoost,
+            aiReasons: matchBreakdown.aiBoostReasons,
           };
         })
         .filter(sub => sub.matchScore >= 40)
@@ -221,7 +219,7 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
 
       const existingVacMap = new Map(existingVacApps?.map(v => [v.vacancy_id, v]) || []);
 
-      // Calculate vacancy match scores with AI boost
+      // Calculate vacancy match scores with AI boost integrated
       const scoredVacancies: MatchedVacancy[] = (vacancies || [])
         .filter(vac => vac.sublocation)
         .map(vac => {
@@ -234,9 +232,7 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             provincie: sub?.provincie,
           };
 
-          const matchBreakdown = calculateApplicationMatchScore(application, target);
-
-          // === FASE 4: Calculate AI boost with domain knowledge ===
+          // === FIX: Calculate AI boost FIRST ===
           const aiBoostResult = calculateAILearningBoost(
             applicantFunctie,
             applicantSectoren,
@@ -250,12 +246,18 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
           if (aiBoostResult.usedPatternIds.length > 0) {
             allUsedPatternIds.push(...aiBoostResult.usedPatternIds);
           }
-
-          const boostedScore = Math.min(100, matchBreakdown.normalizedScore + aiBoostResult.boost);
           if (aiBoostResult.boost > maxAIBoost) {
             maxAIBoost = aiBoostResult.boost;
           }
 
+          // === FIX: Pass aiBoostData to calculateApplicationMatchScore ===
+          const matchBreakdown = calculateApplicationMatchScore(application, target, {
+            boost: aiBoostResult.boost,
+            reasons: aiBoostResult.reasons,
+            usedPatternIds: aiBoostResult.usedPatternIds
+          });
+
+          // matchBreakdown.normalizedScore now already includes AI boost
           return {
             id: vac.id,
             titel: vac.titel,
@@ -265,14 +267,11 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             plaats: sub?.plaats,
             urgentie: vac.urgentie,
             uren_per_week: vac.uren_per_week,
-            matchScore: boostedScore,
-            matchBreakdown: {
-              ...matchBreakdown,
-              normalizedScore: boostedScore,
-            },
+            matchScore: matchBreakdown.normalizedScore,
+            matchBreakdown,
             existingApplication: existingVacMap.get(vac.id),
-            aiBoost: aiBoostResult.boost,
-            aiReasons: aiBoostResult.reasons,
+            aiBoost: matchBreakdown.aiBoost,
+            aiReasons: matchBreakdown.aiBoostReasons,
           };
         })
         .filter(vac => vac.matchScore >= 40)
