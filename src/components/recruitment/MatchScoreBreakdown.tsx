@@ -107,9 +107,21 @@ function CategoryRow({
   );
 }
 
-export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdownProps) {
-  // Use categoryContributions from backend if available, else calculate locally
-  const categories = breakdown?.categoryContributions || {
+// Helper: validate categoryContributions has correct structure (geschiktheid/locatie/ervaring/praktisch with points/max)
+function hasValidCategoryStructure(cc: any): boolean {
+  if (!cc || typeof cc !== 'object') return false;
+  
+  return (
+    cc.geschiktheid && typeof cc.geschiktheid.points === 'number' && typeof cc.geschiktheid.max === 'number' &&
+    cc.locatie && typeof cc.locatie.points === 'number' && typeof cc.locatie.max === 'number' &&
+    cc.ervaring && typeof cc.ervaring.points === 'number' && typeof cc.ervaring.max === 'number' &&
+    cc.praktisch && typeof cc.praktisch.points === 'number' && typeof cc.praktisch.max === 'number'
+  );
+}
+
+// Helper: calculate fallback categories from breakdown scores
+function calculateFallbackCategories(breakdown: ServiceMatchBreakdown | null | undefined) {
+  return {
     geschiktheid: {
       points: (breakdown?.functieMatch || 0) + (breakdown?.sectorMatch || 0) + (breakdown?.doelgroepMatch || 0),
       max: 60,
@@ -131,6 +143,13 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
       percentage: Math.round(((breakdown?.beschikbaarheidMatch || 0) + (breakdown?.werkvormMatch || 0)) / 10 * 100)
     }
   };
+}
+
+export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdownProps) {
+  // Use categoryContributions only if valid structure, else calculate fallback
+  const categories = (breakdown?.categoryContributions && hasValidCategoryStructure(breakdown.categoryContributions))
+    ? breakdown.categoryContributions
+    : calculateFallbackCategories(breakdown);
 
   // Expert advies filtering
   const relevantExperts = breakdown?.expertAdvies?.filter(e => 
