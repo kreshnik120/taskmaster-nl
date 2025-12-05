@@ -2,7 +2,8 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertCircle, CheckCircle2, AlertTriangle, Sparkles, FileText, Award, MapPin, Trophy, Star } from "lucide-react";
+import { AlertCircle, CheckCircle2, AlertTriangle, Sparkles, FileText, Award, MapPin, Trophy, Star, GraduationCap } from "lucide-react";
+import { type ExpertAdvies } from "@/lib/services/matchingService";
 
 // Interface matching the actual service response (MatchScoreBreakdown from matchingService.ts)
 interface ServiceMatchBreakdown {
@@ -13,14 +14,17 @@ interface ServiceMatchBreakdown {
   mobiliteitMatch: number;
   beschikbaarheidMatch: number;
   werkvormMatch: number;
-  beschrijvingMatch?: number; // NEW: from description keyword matching
-  certificaatVereistMatch?: number; // NEW: certificate-to-requirement matching
-  trackRecordBonus?: number; // NEW: historical performance
+  beschrijvingMatch?: number;
+  certificaatVereistMatch?: number;
+  trackRecordBonus?: number;
+  expertBonus?: number; // NEW
   aiBoost: number;
   totalScore: number;
   normalizedScore: number;
   hasAIBoost: boolean;
-  hasTrackRecord?: boolean; // NEW
+  hasTrackRecord?: boolean;
+  hasExpertAdvies?: boolean; // NEW
+  expertAdvies?: ExpertAdvies[]; // NEW
   aiBoostReasons: string[];
   details: {
     functie?: { match: boolean; reason: string };
@@ -30,9 +34,10 @@ interface ServiceMatchBreakdown {
     mobiliteit?: { match: boolean; reason: string };
     beschikbaarheid?: { match: boolean; reason: string };
     werkvorm?: { match: boolean; reason: string };
-    beschrijving?: { match: boolean; reason: string; matchedKeywords?: string[] }; // NEW
-    certificaatVereist?: { match: boolean; reason: string; matchedCerts?: string[]; missingCerts?: string[] }; // NEW
-    trackRecord?: { score: number; match: boolean; reason: string; wouldRehireRate?: number; avgRating?: number }; // NEW
+    beschrijving?: { match: boolean; reason: string; matchedKeywords?: string[] };
+    certificaatVereist?: { match: boolean; reason: string; matchedCerts?: string[]; missingCerts?: string[] };
+    trackRecord?: { score: number; match: boolean; reason: string; wouldRehireRate?: number; avgRating?: number };
+    expertAdvies?: { score: number; match: boolean; reason: string; expertCount: number }; // NEW
     aiBoost?: { score: number; match: boolean; reason: string };
   };
 }
@@ -181,6 +186,58 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Expert Advies indicator */}
+        {breakdown?.hasExpertAdvies && breakdown.expertAdvies && breakdown.expertAdvies.length > 0 && (
+          <div className="space-y-2 p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
+            <div className="flex items-center gap-2">
+              <GraduationCap className="h-4 w-4 text-indigo-600" />
+              <span className="text-xs text-indigo-700 dark:text-indigo-300 font-medium">
+                Expert Advies: +{breakdown.expertBonus || 0} punten
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              {breakdown.expertAdvies.map((expert, idx) => (
+                <div key={idx} className="pl-6 border-l-2 border-indigo-300 dark:border-indigo-600">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-medium text-indigo-800 dark:text-indigo-200">
+                      {expert.expert} ({expert.specialisme})
+                    </span>
+                    <Badge 
+                      variant="outline" 
+                      className={`text-[9px] px-1 py-0 ${
+                        expert.score >= expert.maxScore * 0.6 
+                          ? 'bg-green-50 text-green-700 border-green-200' 
+                          : expert.score >= expert.maxScore * 0.3 
+                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : 'bg-red-50 text-red-700 border-red-200'
+                      }`}
+                    >
+                      {expert.score}/{expert.maxScore}
+                    </Badge>
+                  </div>
+                  <p className="text-[9px] text-indigo-600 dark:text-indigo-400 mt-0.5">
+                    {expert.advies}
+                  </p>
+                  {(expert.matchedCerts.length > 0 || expert.matchedErvaring.length > 0) && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {expert.matchedCerts.map((cert, i) => (
+                        <Badge key={`cert-${i}`} variant="outline" className="text-[8px] px-1 py-0 bg-indigo-100 border-indigo-300">
+                          {cert}
+                        </Badge>
+                      ))}
+                      {expert.matchedErvaring.map((exp, i) => (
+                        <Badge key={`exp-${i}`} variant="outline" className="text-[8px] px-1 py-0 bg-purple-100 border-purple-300">
+                          {exp}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}

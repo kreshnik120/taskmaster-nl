@@ -3222,6 +3222,48 @@ export type Database = {
           },
         ]
       }
+      specialisme_expert_knowledge: {
+        Row: {
+          created_at: string
+          expert_naam: string
+          id: string
+          keywords: string[] | null
+          match_criteria: Json
+          methodieken: string[] | null
+          specialisme: string
+          uitleg_template: string | null
+          updated_at: string
+          vereiste_certificaten: string[] | null
+          vereiste_ervaring: string[] | null
+        }
+        Insert: {
+          created_at?: string
+          expert_naam: string
+          id?: string
+          keywords?: string[] | null
+          match_criteria?: Json
+          methodieken?: string[] | null
+          specialisme: string
+          uitleg_template?: string | null
+          updated_at?: string
+          vereiste_certificaten?: string[] | null
+          vereiste_ervaring?: string[] | null
+        }
+        Update: {
+          created_at?: string
+          expert_naam?: string
+          id?: string
+          keywords?: string[] | null
+          match_criteria?: Json
+          methodieken?: string[] | null
+          specialisme?: string
+          uitleg_template?: string | null
+          updated_at?: string
+          vereiste_certificaten?: string[] | null
+          vereiste_ervaring?: string[] | null
+        }
+        Relationships: []
+      }
       spending_alerts: {
         Row: {
           acknowledged_at: string | null
