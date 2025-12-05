@@ -15,7 +15,6 @@ import { motion } from "framer-motion";
 import { KPICard } from "@/components/ui/kpi-card";
 import { PageHero } from "@/components/ui/page-hero";
 import { PlacementEvaluationKPIs } from "@/components/recruitment/PlacementEvaluationKPIs";
-import { AILearningProgressWidget } from "@/components/recruitment/AILearningProgressWidget";
 import { AdminOnly } from "@/components/auth/AdminOnly";
 
 interface Placement {
@@ -233,21 +232,15 @@ export default function Plaatsingen() {
         />
       </div>
 
-      {/* AI Learning & Evaluation Section - Admin Only */}
-      <AdminOnly>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* AI Learning Progress Widget */}
-          <AILearningProgressWidget />
-          
-          {/* Evaluation KPIs - Only show when there are completed placements */}
-          {stats.completed > 0 && (
-            <div className="lg:col-span-2 space-y-2">
-              <h3 className="text-sm font-medium text-muted-foreground">AI Evaluatie Inzichten</h3>
-              <PlacementEvaluationKPIs />
-            </div>
-          )}
-        </div>
-      </AdminOnly>
+      {/* AI Evaluation Section - Admin Only */}
+      {stats.completed > 0 && (
+        <AdminOnly>
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium text-muted-foreground">AI Evaluatie Inzichten</h3>
+            <PlacementEvaluationKPIs />
+          </div>
+        </AdminOnly>
+      )}
 
       {/* Filters */}
       <div className="flex gap-4">
