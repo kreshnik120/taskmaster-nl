@@ -3,10 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Building2, MapPin, Users, Briefcase, Link2, Clock, Sparkles, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, Building2, MapPin, Users, Briefcase, Link2, Clock, Sparkles, CheckCircle2, AlertCircle, Brain } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { calculateApplicationMatchScore, type MatchScoreBreakdown } from "@/lib/services/matchingService";
+import { loadSuccessPatterns, calculateAILearningBoost, trackPatternUsage, type SuccessPattern } from "@/lib/aiLearningBoost";
 import confetti from "canvas-confetti";
 
 interface ApplicationMatchesTabProps {
@@ -31,6 +32,8 @@ interface MatchedSublocation {
   organization_name: string;
   location_name: string;
   existingMatch?: { id: string; status: string };
+  aiBoost?: number;
+  aiReasons?: string[];
 }
 
 interface MatchedVacancy {
@@ -45,6 +48,8 @@ interface MatchedVacancy {
   matchScore: number;
   matchBreakdown: MatchScoreBreakdown;
   existingApplication?: { id: string; status: string };
+  aiBoost?: number;
+  aiReasons?: string[];
 }
 
 // Helper to get value from {value, confidence} or plain value
@@ -73,6 +78,8 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
   const [matchedSublocations, setMatchedSublocations] = useState<MatchedSublocation[]>([]);
   const [matchedVacancies, setMatchedVacancies] = useState<MatchedVacancy[]>([]);
   const [linking, setLinking] = useState<string | null>(null);
+  const [totalAIBoost, setTotalAIBoost] = useState(0);
+  const [aiPatternsLoaded, setAiPatternsLoaded] = useState(0);
 
   const completenessScore = application.completeness_score || 0;
   const canMatch = completenessScore >= 50;
@@ -89,6 +96,15 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
     setLoading(true);
     try {
       const data = application.extracted_data || {};
+
+      // === FASE 1 & 4: Load AI success patterns for boost ===
+      const aiPatterns = await loadSuccessPatterns();
+      setAiPatternsLoaded(aiPatterns.length);
+
+      // Extract applicant data for AI boost calculation
+      const applicantFunctie = getFieldValue(data.functie_niveau) as string | null;
+      const applicantSectoren = (getFieldValue(data.ervaring_sector) as string[]) || [];
+      const applicantDoelgroepen = (getFieldValue(data.doelgroep_ervaring) as string[]) || [];
 
       // Fetch active sublocations with their organization info
       const { data: sublocations, error: subError } = await supabase
@@ -113,7 +129,11 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
 
       const existingMatchMap = new Map(existingMatches?.map(m => [m.sublocation_id, m]) || []);
 
-      // Calculate match scores
+      // Track all used pattern IDs for usage updates
+      const allUsedPatternIds: string[] = [];
+      let maxAIBoost = 0;
+
+      // Calculate match scores with AI boost
       const scoredSublocations: MatchedSublocation[] = (sublocations || [])
         .map(sub => {
           const target = {
@@ -124,7 +144,31 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             provincie: sub.provincie,
           };
 
+          // Calculate base match score
           const matchBreakdown = calculateApplicationMatchScore(application, target);
+
+          // === FASE 4: Calculate AI boost with domain knowledge ===
+          const aiBoostResult = calculateAILearningBoost(
+            applicantFunctie,
+            applicantSectoren,
+            applicantDoelgroepen,
+            aiPatterns,
+            // Target parameters for domain knowledge boost
+            sub.gezochte_functies?.[0] || null,
+            sub.sector || [],
+            sub.doelgroep || []
+          );
+
+          // Track used patterns
+          if (aiBoostResult.usedPatternIds.length > 0) {
+            allUsedPatternIds.push(...aiBoostResult.usedPatternIds);
+          }
+
+          // Apply AI boost to final score
+          const boostedScore = Math.min(100, matchBreakdown.normalizedScore + aiBoostResult.boost);
+          if (aiBoostResult.boost > maxAIBoost) {
+            maxAIBoost = aiBoostResult.boost;
+          }
 
           return {
             id: sub.id,
@@ -133,11 +177,16 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             sector: sub.sector,
             doelgroep: sub.doelgroep,
             gezochte_functies: sub.gezochte_functies,
-            matchScore: matchBreakdown.normalizedScore,
-            matchBreakdown,
+            matchScore: boostedScore,
+            matchBreakdown: {
+              ...matchBreakdown,
+              normalizedScore: boostedScore,
+            },
             organization_name: (sub.location as any)?.client_org?.name || 'Onbekend',
             location_name: (sub.location as any)?.naam || 'Onbekend',
             existingMatch: existingMatchMap.get(sub.id),
+            aiBoost: aiBoostResult.boost,
+            aiReasons: aiBoostResult.reasons,
           };
         })
         .filter(sub => sub.matchScore >= 40)
@@ -172,7 +221,7 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
 
       const existingVacMap = new Map(existingVacApps?.map(v => [v.vacancy_id, v]) || []);
 
-      // Calculate vacancy match scores
+      // Calculate vacancy match scores with AI boost
       const scoredVacancies: MatchedVacancy[] = (vacancies || [])
         .filter(vac => vac.sublocation)
         .map(vac => {
@@ -187,6 +236,26 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
 
           const matchBreakdown = calculateApplicationMatchScore(application, target);
 
+          // === FASE 4: Calculate AI boost with domain knowledge ===
+          const aiBoostResult = calculateAILearningBoost(
+            applicantFunctie,
+            applicantSectoren,
+            applicantDoelgroepen,
+            aiPatterns,
+            vac.functie_niveau,
+            sub?.sector || [],
+            sub?.doelgroep || []
+          );
+
+          if (aiBoostResult.usedPatternIds.length > 0) {
+            allUsedPatternIds.push(...aiBoostResult.usedPatternIds);
+          }
+
+          const boostedScore = Math.min(100, matchBreakdown.normalizedScore + aiBoostResult.boost);
+          if (aiBoostResult.boost > maxAIBoost) {
+            maxAIBoost = aiBoostResult.boost;
+          }
+
           return {
             id: vac.id,
             titel: vac.titel,
@@ -196,9 +265,14 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             plaats: sub?.plaats,
             urgentie: vac.urgentie,
             uren_per_week: vac.uren_per_week,
-            matchScore: matchBreakdown.normalizedScore,
-            matchBreakdown,
+            matchScore: boostedScore,
+            matchBreakdown: {
+              ...matchBreakdown,
+              normalizedScore: boostedScore,
+            },
             existingApplication: existingVacMap.get(vac.id),
+            aiBoost: aiBoostResult.boost,
+            aiReasons: aiBoostResult.reasons,
           };
         })
         .filter(vac => vac.matchScore >= 40)
@@ -206,6 +280,13 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
         .slice(0, 10);
 
       setMatchedVacancies(scoredVacancies);
+      setTotalAIBoost(maxAIBoost);
+
+      // Track pattern usage for AI learning
+      const uniquePatternIds = [...new Set(allUsedPatternIds)];
+      if (uniquePatternIds.length > 0) {
+        trackPatternUsage(uniquePatternIds);
+      }
 
     } catch (error) {
       console.error('Error calculating matches:', error);
@@ -226,14 +307,17 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
           application_id: application.id,
           sublocation_id: sublocation.id,
           match_score: sublocation.matchScore,
-          match_reasoning: sublocation.matchBreakdown as any,
+          match_reasoning: {
+            ...sublocation.matchBreakdown,
+            aiBoost: sublocation.aiBoost,
+            aiReasons: sublocation.aiReasons,
+          } as any,
           status: 'voorgesteld',
           created_by: user?.id,
         } as any);
 
       if (error) throw error;
 
-      // Trigger confetti
       confetti({
         particleCount: 100,
         spread: 70,
@@ -241,10 +325,9 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
       });
 
       toast.success(`Gekoppeld aan ${sublocation.naam}`, {
-        description: `Match score: ${sublocation.matchScore}%`
+        description: `Match score: ${sublocation.matchScore}%${sublocation.aiBoost ? ` (+${sublocation.aiBoost}% AI)` : ''}`
       });
 
-      // Refresh matches
       await calculateMatches();
       onApplicationUpdated();
     } catch (error: any) {
@@ -263,10 +346,15 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
         .insert({
           vacancy_id: vacancy.id,
           application_id: application.id,
-          professional_id: application.professional_id, // Can be null now
+          professional_id: application.professional_id,
           status: 'voorgesteld',
           match_score: vacancy.matchScore,
-          match_reasoning: { score: vacancy.matchScore, breakdown: vacancy.matchBreakdown },
+          match_reasoning: { 
+            score: vacancy.matchScore, 
+            breakdown: vacancy.matchBreakdown,
+            aiBoost: vacancy.aiBoost,
+            aiReasons: vacancy.aiReasons,
+          },
         } as any);
 
       if (error) throw error;
@@ -278,7 +366,7 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
       });
 
       toast.success(`Gekoppeld aan vacature: ${vacancy.titel}`, {
-        description: `Match score: ${vacancy.matchScore}%`
+        description: `Match score: ${vacancy.matchScore}%${vacancy.aiBoost ? ` (+${vacancy.aiBoost}% AI)` : ''}`
       });
 
       await calculateMatches();
@@ -317,19 +405,35 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
     return (
       <div className="flex flex-col items-center justify-center py-12 gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Matches berekenen...</p>
+        <p className="text-sm text-muted-foreground">AI-gedreven matches berekenen...</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* AI Match Header */}
-      <div className="flex items-center gap-2 text-sm">
-        <Sparkles className="h-4 w-4 text-purple-500" />
-        <span className="font-medium">AI-gedreven matching</span>
-        <span className="text-muted-foreground">• Gebaseerd op {completenessScore}% profiel compleetheid</span>
+      {/* === FASE 3: AI Match Header with Boost Badge === */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm">
+          <Brain className="h-4 w-4 text-purple-500" />
+          <span className="font-medium">AI-gedreven matching</span>
+          <span className="text-muted-foreground">• Gebaseerd op {completenessScore}% profiel compleetheid</span>
+        </div>
+        {totalAIBoost > 0 && (
+          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-300 dark:bg-purple-950 dark:text-purple-300">
+            <Sparkles className="h-3 w-3 mr-1" />
+            +{totalAIBoost}% AI boost actief
+          </Badge>
+        )}
       </div>
+
+      {/* AI Patterns Info */}
+      {aiPatternsLoaded > 0 && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
+          <Sparkles className="h-3 w-3 text-purple-400" />
+          <span>{aiPatternsLoaded} geleerde patronen worden toegepast op matching</span>
+        </div>
+      )}
 
       {/* Matching Vacatures Section */}
       <div className="space-y-3">
@@ -351,14 +455,23 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             {matchedVacancies.slice(0, 5).map((vacancy) => (
               <div 
                 key={vacancy.id}
-                className="p-3 rounded-lg border bg-card hover:shadow-sm transition-shadow"
+                className={`p-3 rounded-lg border bg-card hover:shadow-sm transition-shadow ${
+                  vacancy.aiBoost && vacancy.aiBoost > 0 ? 'ring-1 ring-purple-300/50' : ''
+                }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium truncate">{vacancy.titel}</span>
                       {vacancy.urgentie === 'hoog' && (
                         <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Urgent</Badge>
+                      )}
+                      {/* === FASE 3: AI Boost Badge === */}
+                      {vacancy.aiBoost && vacancy.aiBoost > 0 && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-purple-50 text-purple-700 border-purple-300">
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          +{vacancy.aiBoost}% AI
+                        </Badge>
                       )}
                       {vacancy.existingApplication && (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-50 text-green-700 border-green-300">
@@ -383,6 +496,16 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
                         </span>
                       )}
                     </div>
+                    {/* AI Reasons */}
+                    {vacancy.aiReasons && vacancy.aiReasons.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {vacancy.aiReasons.slice(0, 2).map((reason, idx) => (
+                          <Badge key={idx} variant="secondary" className="text-[10px] bg-purple-50 text-purple-600">
+                            {reason}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   
                   <div className="flex items-center gap-3 flex-shrink-0">
@@ -447,12 +570,21 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             {matchedSublocations.slice(0, 5).map((sublocation) => (
               <div 
                 key={sublocation.id}
-                className="p-3 rounded-lg border bg-card hover:shadow-sm transition-shadow"
+                className={`p-3 rounded-lg border bg-card hover:shadow-sm transition-shadow ${
+                  sublocation.aiBoost && sublocation.aiBoost > 0 ? 'ring-1 ring-purple-300/50' : ''
+                }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium truncate">{sublocation.naam}</span>
+                      {/* === FASE 3: AI Boost Badge === */}
+                      {sublocation.aiBoost && sublocation.aiBoost > 0 && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-purple-50 text-purple-700 border-purple-300">
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          +{sublocation.aiBoost}% AI
+                        </Badge>
+                      )}
                       {sublocation.existingMatch && (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-50 text-green-700 border-green-300">
                           <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -472,15 +604,31 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
                         </span>
                       )}
                     </div>
-                    {/* Sector/Doelgroep badges */}
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {sublocation.sector?.slice(0, 2).map(s => (
-                        <Badge key={s} variant="outline" className="text-[10px] px-1.5 py-0">{s}</Badge>
-                      ))}
-                      {sublocation.doelgroep?.slice(0, 2).map(d => (
-                        <Badge key={d} variant="outline" className="text-[10px] px-1.5 py-0 bg-purple-50 text-purple-700 border-purple-300">{d}</Badge>
-                      ))}
-                    </div>
+                    {/* Sector & Doelgroep tags */}
+                    {(sublocation.sector?.length || sublocation.doelgroep?.length) && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {sublocation.sector?.slice(0, 2).map((s, idx) => (
+                          <Badge key={`s-${idx}`} variant="outline" className="text-[10px]">
+                            {s}
+                          </Badge>
+                        ))}
+                        {sublocation.doelgroep?.slice(0, 2).map((d, idx) => (
+                          <Badge key={`d-${idx}`} variant="secondary" className="text-[10px]">
+                            {d}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {/* AI Reasons */}
+                    {sublocation.aiReasons && sublocation.aiReasons.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {sublocation.aiReasons.slice(0, 2).map((reason, idx) => (
+                          <Badge key={idx} variant="secondary" className="text-[10px] bg-purple-50 text-purple-600">
+                            {reason}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   
                   <div className="flex items-center gap-3 flex-shrink-0">
@@ -512,6 +660,7 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
                       </Button>
                     ) : (
                       <Button size="sm" variant="ghost" disabled>
+                        <CheckCircle2 className="h-4 w-4 mr-1" />
                         Voorgesteld
                       </Button>
                     )}
@@ -523,6 +672,9 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
         ) : (
           <div className="p-4 rounded-lg bg-muted/30 text-center">
             <p className="text-sm text-muted-foreground">Geen passende werklocaties gevonden</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              💡 Tip: Zorg dat klanten regio's en sectoren hebben ingesteld
+            </p>
           </div>
         )}
       </div>
