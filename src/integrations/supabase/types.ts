@@ -743,6 +743,73 @@ export type Database = {
           },
         ]
       }
+      application_sublocation_matches: {
+        Row: {
+          application_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          klant_reactie: string | null
+          match_reasoning: Json | null
+          match_score: number
+          status: string
+          sublocation_id: string
+          updated_at: string | null
+          vacancy_id: string | null
+          voorgesteld_aan_klant_at: string | null
+        }
+        Insert: {
+          application_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          klant_reactie?: string | null
+          match_reasoning?: Json | null
+          match_score: number
+          status?: string
+          sublocation_id: string
+          updated_at?: string | null
+          vacancy_id?: string | null
+          voorgesteld_aan_klant_at?: string | null
+        }
+        Update: {
+          application_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          klant_reactie?: string | null
+          match_reasoning?: Json | null
+          match_score?: number
+          status?: string
+          sublocation_id?: string
+          updated_at?: string | null
+          vacancy_id?: string | null
+          voorgesteld_aan_klant_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "application_sublocation_matches_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "application_sublocation_matches_sublocation_id_fkey"
+            columns: ["sublocation_id"]
+            isOneToOne: false
+            referencedRelation: "client_sublocations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "application_sublocation_matches_vacancy_id_fkey"
+            columns: ["vacancy_id"]
+            isOneToOne: false
+            referencedRelation: "vacancies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assignment_evaluations: {
         Row: {
           assignment_id: string
@@ -3930,39 +3997,49 @@ export type Database = {
       }
       vacancy_applications: {
         Row: {
+          application_id: string | null
           applied_at: string
           id: string
           match_reasoning: Json | null
           match_score: number | null
           notes: string | null
-          professional_id: string
+          professional_id: string | null
           status: string
           updated_at: string
           vacancy_id: string
         }
         Insert: {
+          application_id?: string | null
           applied_at?: string
           id?: string
           match_reasoning?: Json | null
           match_score?: number | null
           notes?: string | null
-          professional_id: string
+          professional_id?: string | null
           status?: string
           updated_at?: string
           vacancy_id: string
         }
         Update: {
+          application_id?: string | null
           applied_at?: string
           id?: string
           match_reasoning?: Json | null
           match_score?: number | null
           notes?: string | null
-          professional_id?: string
+          professional_id?: string | null
           status?: string
           updated_at?: string
           vacancy_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "vacancy_applications_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "vacancy_applications_professional_id_fkey"
             columns: ["professional_id"]

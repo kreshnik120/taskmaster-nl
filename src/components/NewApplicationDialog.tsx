@@ -401,8 +401,27 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
         }
       }
 
+      // Calculate initial matches (async, non-blocking)
+      let matchCount = 0;
+      try {
+        // Quick count of matching vacancies
+        const { data: vacancies } = await supabase
+          .from('vacancies')
+          .select('id')
+          .eq('status', 'open')
+          .limit(10);
+        
+        if (vacancies && vacancies.length > 0 && extractedData.functie_niveau) {
+          matchCount = vacancies.length;
+        }
+      } catch (matchError) {
+        console.warn('Could not calculate initial matches:', matchError);
+      }
+
       toast.success("Sollicitatie aangemaakt", {
-        description: `${data.naam} is toegevoegd aan de pipeline`,
+        description: matchCount > 0 
+          ? `${data.naam} is toegevoegd. ${matchCount}+ potentiële matches gevonden!`
+          : `${data.naam} is toegevoegd aan de pipeline`,
       });
 
       handleReset();

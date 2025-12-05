@@ -39,6 +39,7 @@ import { AIRecommendationBadge } from "@/components/recruitment/AIRecommendation
 import { AIFeedbackButtons } from "@/components/recruitment/AIFeedbackButtons";
 import { InterviewSchedulingModal } from "@/components/recruitment/InterviewSchedulingModal";
 import { calculateApplicationToClientMatchWithAI, calculateVacancyMatchScore, type MatchScoreBreakdown as MatchScoreBreakdownType, type MatchCandidate, parseBeschikbaarheid } from "@/lib/services/matchingService";
+import { ApplicationMatchesTab } from "@/components/recruitment/ApplicationMatchesTab";
 
 interface Application {
   id: string;
@@ -1264,11 +1265,28 @@ export function ApplicationDetailModal({
 
         {/* Tabbed Interface */}
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Overzicht</TabsTrigger>
-            <TabsTrigger value="actions">Acties & Matching</TabsTrigger>
+            <TabsTrigger value="matches" className="flex items-center gap-1">
+              <Sparkles className="h-3 w-3" />
+              Matches
+            </TabsTrigger>
+            <TabsTrigger value="actions">Acties</TabsTrigger>
             <TabsTrigger value="activity">Activiteit</TabsTrigger>
           </TabsList>
+
+          {/* TAB: Matches - Direct applicant matching */}
+          <TabsContent value="matches">
+            <ApplicationMatchesTab 
+              application={{
+                id: application.id,
+                extracted_data: application.extracted_data,
+                completeness_score: application.completeness_score,
+                professional_id: application.professional_id,
+              }}
+              onApplicationUpdated={onApplicationUpdated}
+            />
+          </TabsContent>
 
           {/* TAB 1: Overzicht */}
           <TabsContent value="overview" className="space-y-4">
