@@ -343,7 +343,7 @@ export default function Kalender() {
                 isToday && "border-l-4 border-l-primary shadow-md"
               )}
             >
-              <CardHeader className="pb-3 pt-5 px-5">
+              <CardHeader className="pb-3 pt-4 px-4">
                 <CardTitle className="text-base font-medium flex items-center justify-between">
                   <span className="flex items-center gap-2">
                     {format(day, 'EEEE', { locale: nl })}
@@ -356,13 +356,13 @@ export default function Kalender() {
                   <span className="text-sm font-normal text-muted-foreground">{format(day, 'd MMM', { locale: nl })}</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 px-5 pb-5">
+              <CardContent className="space-y-3 px-4 pb-4">
                 {dayTasks.length === 0 && dayReminders.length === 0 ? (
                   <button 
                     onClick={() => handleDayClick(day)}
-                    className="w-full text-sm text-muted-foreground/60 text-center py-10 hover:bg-muted/30 rounded-xl transition-all duration-200 group"
+                    className="w-full text-sm text-muted-foreground/40 text-center py-10 hover:bg-muted/30 rounded-xl transition-all duration-200 group"
                   >
-                    <Plus className="h-4 w-4 mx-auto mb-1.5 opacity-30 group-hover:opacity-60 transition-opacity" />
+                    <Plus className="h-4 w-4 mx-auto mb-1.5 opacity-20 group-hover:opacity-40 transition-opacity" />
                     <p className="text-xs">Taak toevoegen</p>
                   </button>
                 ) : (
@@ -372,11 +372,11 @@ export default function Kalender() {
                       <div 
                         key={task.id} 
                         onClick={() => handleTaskClick(task)} 
-                        className="p-4 rounded-xl bg-background shadow-sm hover:shadow-md cursor-pointer transition-all duration-200 hover:scale-[1.02] space-y-2"
+                        className="p-4 rounded-xl bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-md cursor-pointer transition-all duration-200 hover:scale-[1.02] space-y-2"
                         {...(taskIndex === 0 && (task.priority === 'high' || task.priority === 'critical') && { 'data-urgent-task': true })}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <p className="font-semibold text-sm leading-tight line-clamp-2 flex-1">{task.title}</p>
+                          <p className="font-medium text-sm leading-tight line-clamp-2 flex-1">{task.title}</p>
                           {(task.start_at || task.due_at) && (
                             <span className="text-xs text-muted-foreground tabular-nums shrink-0">
                               {task.start_at ? format(parseISO(task.start_at), 'HH:mm') : format(parseISO(task.due_at!), 'HH:mm')}
