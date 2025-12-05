@@ -87,6 +87,14 @@ const priorityConfig = {
   CRITICAL: { label: "Kritiek", variant: "destructive" as const, color: "bg-priority-critical" },
 };
 
+// Fase 1: Priority Badge Amber Kleursysteem
+const PRIORITY_BADGE_STYLES: Record<string, string> = {
+  LOW: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800",
+  MEDIUM: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800",
+  HIGH: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800",
+  CRITICAL: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800"
+};
+
 export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: TaskDetailModalProps) {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
@@ -439,28 +447,31 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
           <DialogHeader>
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
-                <DialogTitle className="text-2xl font-bold leading-tight">{task.title}</DialogTitle>
-                <DialogDescription className="mt-1 text-sm text-muted-foreground">
+                {/* Fase 10: Dialog Header Eleganter */}
+                <DialogTitle className="text-xl font-semibold leading-tight tracking-tight">{task.title}</DialogTitle>
+                <DialogDescription className="mt-1 text-sm text-muted-foreground/70">
                   Bekijk en beheer alle details van deze taak
                 </DialogDescription>
               </div>
+              {/* Fase 3: Keyboard Hints Hover-only */}
               <Button 
                 variant="outline" 
                 size="sm" 
                 onClick={handleEdit} 
-                className="shrink-0"
+                className="shrink-0 group"
                 aria-label="Bewerk taak (sneltoets: e)"
               >
                 <Edit className="h-4 w-4 mr-2" />
                 Bewerken
-                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-50">
+                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-0 group-hover:opacity-40 transition-opacity">
                   E
                 </kbd>
               </Button>
             </div>
           </DialogHeader>
 
-          <div className="space-y-6">
+          {/* Fase 8: Spacing Harmonisatie */}
+          <div className="space-y-5">
             {/* Progress Indicator */}
             {subtasks.length > 0 && (
               <div className="p-4 rounded-lg bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/20 space-y-3 animate-fade-in">
@@ -482,25 +493,25 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               </div>
             )}
 
-            {/* Quick Actions */}
-            <div className="flex flex-wrap gap-2">
+            {/* Fase 2: Quick Actions Grid Layout */}
+            <div className="grid grid-cols-3 gap-3">
               <Button 
                 onClick={() => setConfirmCompleteOpen(true)}
-                className="flex-1 min-w-[200px]"
+                className="group"
                 size="lg"
                 disabled={completing}
                 aria-label="Taak afronden (sneltoets: c)"
               >
                 <CheckCircle2 className="h-4 w-4 mr-2" />
                 Taak Afronden
-                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-50">
+                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-0 group-hover:opacity-40 transition-opacity">
                   C
                 </kbd>
               </Button>
               <Button 
                 variant={isTimerActive ? "destructive" : "outline"}
                 className={cn(
-                  "flex-1 min-w-[200px] transition-all",
+                  "transition-all group",
                   isTimerActive && "animate-pulse border-2"
                 )}
                 size="lg"
@@ -519,7 +530,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                     Start Timer
                   </>
                 )}
-                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-50">
+                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-0 group-hover:opacity-40 transition-opacity">
                   T
                 </kbd>
               </Button>
@@ -528,6 +539,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                   variant="outline"
                   size="lg"
                   onClick={() => setReminderDialogOpen(true)}
+                  className="flex-1"
                 >
                   <Bell className="h-4 w-4 mr-2" />
                   Herinnering
@@ -544,119 +556,124 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               </div>
             </div>
 
-            {/* Linked Application */}
+            {/* Fase 4: Linked Application Sectie Strakker */}
             {linkedApplication && (
-              <div className="p-4 rounded-lg bg-muted/20 border-l-4 border-l-primary/60 space-y-2 animate-fade-in">
+              <div className="p-4 rounded-xl bg-primary/[0.04] border border-primary/10 space-y-3 animate-fade-in">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-semibold">Gekoppeld aan sollicitatie</span>
+                    <Mail className="h-4 w-4 text-primary/80" />
+                    <span className="text-sm font-medium text-foreground/80">Gekoppeld aan sollicitatie</span>
                   </div>
                   <Button
                     variant="ghost"
-                    size="sm"
+                    size="icon"
+                    className="h-7 w-7"
                     onClick={() => {
                       navigate(`/sollicitaties?application=${linkedApplication.id}`);
                     }}
                   >
-                    <ExternalLink className="h-4 w-4" />
+                    <ExternalLink className="h-3.5 w-3.5 text-muted-foreground/60 hover:text-primary" />
                   </Button>
                 </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <span className="font-medium">
+                <div className="flex items-center gap-3">
+                  <span className="font-medium text-sm">
                     {linkedApplication.professionals?.full_name || linkedApplication.email_from}
                   </span>
-                  <Badge variant="outline" className="text-xs">
+                  <Badge variant="outline" className="text-xs font-normal">
                     {linkedApplication.pipeline_stage}
                   </Badge>
                 </div>
                 {task.recruitment_action_type && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground/70">
                     Type: {task.recruitment_action_type}
                   </p>
                 )}
               </div>
             )}
 
-            {/* Basic Info Section */}
+            {/* Basic Info Section - Fase 5, 7, 8, 9 */}
             <Collapsible 
               open={sectionsOpen.info} 
               onOpenChange={() => toggleSection('info')}
             >
-              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/30 transition-colors group">
+              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/20 transition-colors duration-150 group">
                 <div className="flex items-center gap-2">
-                  <Info className="h-5 w-5 text-primary" />
+                  <Info className="h-5 w-5 text-primary/80" />
                   <h3 className="font-semibold text-foreground">Basis informatie</h3>
                 </div>
                 <ChevronDown className={cn(
-                  "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                  "h-4 w-4 text-muted-foreground/60 transition-transform duration-200",
                   sectionsOpen.info && "rotate-180"
                 )} />
               </CollapsibleTrigger>
-              <CollapsibleContent className="pt-4 space-y-3 animate-accordion-down">
-                {/* Priority */}
-                <div className="flex items-center gap-3 px-3">
-                  <span className="text-sm font-medium text-muted-foreground min-w-[100px]">Prioriteit</span>
-                  <Badge variant={priorityInfo.variant}>{priorityInfo.label}</Badge>
+              {/* Fase 5: Grid Alignment + Fase 8: pt-3 */}
+              <CollapsibleContent className="pt-3 animate-accordion-down">
+                <div className="grid grid-cols-[100px_1fr] gap-y-3 gap-x-4 px-3">
+                  {/* Priority - Fase 1: Amber kleursysteem */}
+                  <span className="text-sm text-muted-foreground/80">Prioriteit</span>
+                  <Badge className={cn("border w-fit", PRIORITY_BADGE_STYLES[task.priority] || PRIORITY_BADGE_STYLES.MEDIUM)}>
+                    {priorityInfo.label}
+                  </Badge>
+
+                  {/* Assignee */}
+                  {task.profiles && (
+                    <>
+                      <span className="text-sm text-muted-foreground/80">Toegewezen aan</span>
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-muted-foreground/60" />
+                        <span className="text-sm">{task.profiles.name || task.profiles.email}</span>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Start Date */}
+                  {task.start_at && (
+                    <>
+                      <span className="text-sm text-muted-foreground/80">Start</span>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground/60" />
+                        <span className="text-sm">
+                          {format(parseISO(task.start_at), "EEEE d MMMM yyyy 'om' HH:mm", { locale: nl })}
+                        </span>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Due Date */}
+                  {task.due_at && (
+                    <>
+                      <span className="text-sm text-muted-foreground/80">Deadline</span>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground/60" />
+                        <span className="text-sm">
+                          {format(parseISO(task.due_at), "EEEE d MMMM yyyy 'om' HH:mm", { locale: nl })}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
-
-                {/* Assignee */}
-                {task.profiles && (
-                  <div className="flex items-center gap-3 px-3">
-                    <span className="text-sm font-medium text-muted-foreground min-w-[100px]">Toegewezen aan</span>
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">{task.profiles.name || task.profiles.email}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Start Date */}
-                {task.start_at && (
-                  <div className="flex items-center gap-3 px-3">
-                    <span className="text-sm font-medium text-muted-foreground min-w-[100px]">Start</span>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">
-                        {format(parseISO(task.start_at), "EEEE d MMMM yyyy 'om' HH:mm", { locale: nl })}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Due Date */}
-                {task.due_at && (
-                  <div className="flex items-center gap-3 px-3">
-                    <span className="text-sm font-medium text-muted-foreground min-w-[100px]">Deadline</span>
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">
-                        {format(parseISO(task.due_at), "EEEE d MMMM yyyy 'om' HH:mm", { locale: nl })}
-                      </span>
-                    </div>
-                  </div>
-                )}
               </CollapsibleContent>
             </Collapsible>
 
-            {/* Description Section */}
+            {/* Description Section - Fase 6, 7, 8, 9 */}
             {task.description && (
               <Collapsible 
                 open={sectionsOpen.description} 
                 onOpenChange={() => toggleSection('description')}
               >
-                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/30 transition-colors group">
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/20 transition-colors duration-150 group">
                   <div className="flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-primary" />
+                    <FileText className="h-5 w-5 text-primary/80" />
                     <h3 className="font-semibold text-foreground">Beschrijving</h3>
                   </div>
                   <ChevronDown className={cn(
-                    "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                    "h-4 w-4 text-muted-foreground/60 transition-transform duration-200",
                     sectionsOpen.description && "rotate-180"
                   )} />
                 </CollapsibleTrigger>
-                <CollapsibleContent className="pt-4 animate-accordion-down">
-                  <div className="bg-muted/50 rounded-lg p-4 mx-3">
+                {/* Fase 6: bg subtieler + Fase 8: pt-3 */}
+                <CollapsibleContent className="pt-3 animate-accordion-down">
+                  <div className="bg-muted/30 dark:bg-muted/20 rounded-xl p-4 mx-3">
                     <p className="text-sm whitespace-pre-wrap leading-relaxed">{task.description}</p>
                   </div>
                 </CollapsibleContent>
@@ -676,26 +693,26 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               </div>
             )}
 
-            {/* Process Steps Section */}
+            {/* Process Steps Section - Fase 7, 8, 9 */}
             {subtasks.length > 0 && (
               <Collapsible 
                 open={sectionsOpen.steps} 
                 onOpenChange={() => toggleSection('steps')}
               >
-                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/30 transition-colors group">
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/20 transition-colors duration-150 group">
                   <div className="flex items-center gap-2">
-                    <ListChecks className="h-5 w-5 text-primary" />
+                    <ListChecks className="h-5 w-5 text-primary/80" />
                     <h3 className="font-semibold text-foreground">Processtappen</h3>
                     <Badge variant="secondary" className="ml-2">
                       {completedCount}/{totalCount}
                     </Badge>
                   </div>
                   <ChevronDown className={cn(
-                    "h-4 w-4 text-muted-foreground transition-transform duration-200",
+                    "h-4 w-4 text-muted-foreground/60 transition-transform duration-200",
                     sectionsOpen.steps && "rotate-180"
                   )} />
                 </CollapsibleTrigger>
-                <CollapsibleContent className="pt-4 animate-accordion-down">
+                <CollapsibleContent className="pt-3 animate-accordion-down">
                   {loadingSubtasks ? (
                     <div className="text-sm text-muted-foreground px-3">Laden...</div>
                   ) : (
