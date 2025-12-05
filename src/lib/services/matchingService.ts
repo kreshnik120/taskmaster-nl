@@ -1375,8 +1375,43 @@ export function calculateUnifiedMatchScore(
       details.beschrijving = { match: false, reason: `Ontbreekt: ${descriptionReqs.aandoeningen.slice(0, 2).join(', ')}`, matchedKeywords: [] };
     }
   } else if (descriptionReqs.aandoeningen.length === 0) {
-    beschrijvingMatch = 7; // Neutral if no specific requirements in description
-    details.beschrijving = { match: true, reason: 'Geen specifieke vereisten', matchedKeywords: [] };
+    // FALLBACK: Als geen keywords in beschrijving, match direct op doelgroep overlap
+    // Dit voorkomt dat kandidaten met sterke doelgroep match toch lage ervaring score krijgen
+    const targetDoelgroepen = (target.doelgroep || []).map(d => d.toLowerCase());
+    
+    if (candidateDoelgroepen.length > 0 && targetDoelgroepen.length > 0) {
+      // Check directe doelgroep overlap
+      const directMatches: string[] = [];
+      for (const candDoelgroep of candidateDoelgroepen) {
+        const candLower = candDoelgroep.toLowerCase();
+        for (const targetDoelgroep of targetDoelgroepen) {
+          // Direct match of alias match
+          if (candLower.includes(targetDoelgroep) || targetDoelgroep.includes(candLower)) {
+            directMatches.push(candDoelgroep);
+            break;
+          }
+          // Check aliases
+          const aliases = KEYWORD_ALIASES[candLower] || [];
+          if (aliases.some(a => targetDoelgroep.includes(a))) {
+            directMatches.push(candDoelgroep);
+            break;
+          }
+        }
+      }
+      
+      if (directMatches.length > 0) {
+        // Geef 10-15 punten bij directe doelgroep match (i.p.v. 7 neutral)
+        beschrijvingMatch = Math.min(15, 8 + directMatches.length * 2);
+        reasoning.push(`✅ Beschrijving: Directe doelgroep match: ${directMatches.slice(0, 3).join(', ')}`);
+        details.beschrijving = { match: true, reason: `Doelgroep fallback: ${directMatches.length} matches`, matchedKeywords: directMatches };
+      } else {
+        beschrijvingMatch = 5; // Basis als geen directe match maar wel ervaring
+        details.beschrijving = { match: false, reason: 'Geen directe doelgroep overlap', matchedKeywords: [] };
+      }
+    } else {
+      beschrijvingMatch = 7; // Neutral if no specific requirements
+      details.beschrijving = { match: true, reason: 'Geen specifieke vereisten', matchedKeywords: [] };
+    }
   }
 
   // ===== 9. NEW: CERTIFICAAT-VEREISTE MATCH (10 punten) =====
@@ -1670,9 +1705,9 @@ export function calculateUnifiedMatchScore(
     expertBonus +          // max +12
     aiBoost;               // max +15 = 48 max bonus
   
-  // IMPROVED: Verhoogde bonus impact voor betere score differentiatie (8-12%)
-  // Bonussen nu 0.35x voor meer onderscheidend vermogen
-  const bonusPercentage = Math.round(bonusPoints * 0.35); // 48 max * 0.35 = max +17%
+  // IMPROVED: Verhoogde bonus impact voor betere score differentiatie (10-15%)
+  // Bonussen nu 0.45x voor meer onderscheidend vermogen
+  const bonusPercentage = Math.round(bonusPoints * 0.45); // 48 max * 0.45 = max +22%
   
   const totalScore = rawBaseScore + bonusPoints; // For backwards compat in return
   const normalizedScore = Math.min(100, basePercentage + bonusPercentage);
