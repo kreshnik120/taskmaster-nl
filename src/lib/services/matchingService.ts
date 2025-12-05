@@ -119,6 +119,13 @@ export interface ExpertAdvies {
   matchedMethodieken?: string[];
 }
 
+// Category contribution for Apple UI transparency
+export interface CategoryContribution {
+  points: number;
+  max: number;
+  percentage: number; // Contribution to total (e.g., 48% of base score)
+}
+
 export interface MatchScoreBreakdown {
   functieMatch: number;
   regioMatch: number;
@@ -130,7 +137,7 @@ export interface MatchScoreBreakdown {
   beschrijvingMatch: number;
   certificaatVereistMatch: number;
   trackRecordBonus: number;
-  expertBonus: number; // NEW: expert knowledge bonus
+  expertBonus: number;
   ervaringBonus: number;
   leidinggevendeBonus: number;
   certificatenBonus: number;
@@ -138,13 +145,22 @@ export interface MatchScoreBreakdown {
   aiBoost: number;
   totalScore: number;
   normalizedScore: number;
+  // NEW: Category contributions for Apple UI
+  categoryContributions: {
+    geschiktheid: CategoryContribution;
+    locatie: CategoryContribution;
+    ervaring: CategoryContribution;
+    praktisch: CategoryContribution;
+  };
+  bonusTotal: number;
+  bonusPercentage: number;
   reasoning: string[];
   hasAIBoost: boolean;
   aiBoostReasons: string[];
   usedPatternIds: string[];
   hasTrackRecord: boolean;
-  hasExpertAdvies: boolean; // NEW
-  expertAdvies: ExpertAdvies[]; // NEW
+  hasExpertAdvies: boolean;
+  expertAdvies: ExpertAdvies[];
   details: {
     functie?: { match: boolean; reason: string };
     regio?: { match: boolean; reason: string; matchType: 'exact' | 'province' | 'neighbor' | 'none' | 'postcode'; afstandKm?: number };
@@ -1661,6 +1677,46 @@ export function calculateUnifiedMatchScore(
   const totalScore = rawBaseScore + bonusPoints; // For backwards compat in return
   const normalizedScore = Math.min(100, basePercentage + bonusPercentage);
 
+  // APPLE UI: Calculate category contributions for transparent UI
+  // Geschiktheid = functie (25) + sector (20) + doelgroep (15) = max 60
+  const geschiktheidPoints = functieMatch + sectorMatch + doelgroepMatch;
+  const geschiktheidMax = 60;
+  
+  // Locatie = regio (20) + mobiliteit (10) = max 30
+  const locatiePoints = regioMatch + mobiliteitMatch;
+  const locatieMax = 30;
+  
+  // Ervaring = beschrijving (15) + certificaat (10) = max 25
+  const ervaringPoints = beschrijvingMatch + certificaatVereistMatch;
+  const ervaringMax = 25;
+  
+  // Praktisch = beschikbaarheid (5) + werkvorm (5) = max 10
+  const praktischPoints = beschikbaarheidMatch + werkvormMatch;
+  const praktischMax = 10;
+
+  const categoryContributions = {
+    geschiktheid: {
+      points: geschiktheidPoints,
+      max: geschiktheidMax,
+      percentage: Math.round((geschiktheidPoints / geschiktheidMax) * 100)
+    },
+    locatie: {
+      points: locatiePoints,
+      max: locatieMax,
+      percentage: Math.round((locatiePoints / locatieMax) * 100)
+    },
+    ervaring: {
+      points: ervaringPoints,
+      max: ervaringMax,
+      percentage: Math.round((ervaringPoints / ervaringMax) * 100)
+    },
+    praktisch: {
+      points: praktischPoints,
+      max: praktischMax,
+      percentage: Math.round((praktischPoints / praktischMax) * 100)
+    }
+  };
+
   return {
     functieMatch,
     regioMatch,
@@ -1680,6 +1736,9 @@ export function calculateUnifiedMatchScore(
     aiBoost,
     totalScore,
     normalizedScore,
+    categoryContributions,
+    bonusTotal: bonusPoints,
+    bonusPercentage,
     reasoning,
     hasAIBoost,
     hasTrackRecord,

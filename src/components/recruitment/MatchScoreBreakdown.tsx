@@ -2,10 +2,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sparkles, Trophy, Star, GraduationCap, Info } from "lucide-react";
-import { type ExpertAdvies } from "@/lib/services/matchingService";
+import { type ExpertAdvies, type CategoryContribution } from "@/lib/services/matchingService";
 import { cn } from "@/lib/utils";
 
-// Interface matching the actual service response (MatchScoreBreakdown from matchingService.ts)
+// Interface matching the actual service response
 interface ServiceMatchBreakdown {
   functieMatch: number;
   regioMatch: number;
@@ -21,6 +21,14 @@ interface ServiceMatchBreakdown {
   aiBoost: number;
   totalScore: number;
   normalizedScore: number;
+  categoryContributions?: {
+    geschiktheid: CategoryContribution;
+    locatie: CategoryContribution;
+    ervaring: CategoryContribution;
+    praktisch: CategoryContribution;
+  };
+  bonusTotal?: number;
+  bonusPercentage?: number;
   hasAIBoost: boolean;
   hasTrackRecord?: boolean;
   hasExpertAdvies?: boolean;
@@ -47,37 +55,52 @@ interface MatchScoreBreakdownProps {
   totalScore: number;
 }
 
-// Apple-style minimalist score indicator
-function ScoreIndicator({ score, label, sublabel }: { score: number; label: string; sublabel?: string }) {
-  const getScoreStyle = (s: number) => {
-    if (s >= 80) return 'text-foreground';
-    if (s >= 50) return 'text-muted-foreground';
-    return 'text-muted-foreground/60';
-  };
-
-  const getBarColor = (s: number) => {
-    if (s >= 80) return 'bg-primary';
-    if (s >= 50) return 'bg-muted-foreground/40';
-    return 'bg-muted-foreground/20';
-  };
-
+// Apple-style category row with points/max display
+function CategoryRow({ 
+  label, 
+  points, 
+  max, 
+  percentage,
+  detail 
+}: { 
+  label: string; 
+  points: number;
+  max: number;
+  percentage: number;
+  detail?: string;
+}) {
   return (
-    <div className="flex items-center justify-between py-2">
-      <div className="flex-1">
-        <span className="text-sm text-foreground">{label}</span>
-        {sublabel && (
-          <span className="text-xs text-muted-foreground ml-2">{sublabel}</span>
+    <div className="flex items-center justify-between py-2.5 group">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-sm text-foreground font-medium">{label}</span>
+        {detail && (
+          <span className="text-xs text-muted-foreground truncate max-w-[120px]">
+            {detail}
+          </span>
         )}
       </div>
       <div className="flex items-center gap-3">
-        <div className="w-16 h-1 bg-muted rounded-full overflow-hidden">
+        {/* Progress bar - Apple style 4px */}
+        <div className="w-20 h-1 bg-muted rounded-full overflow-hidden">
           <div 
-            className={cn("h-full rounded-full transition-all", getBarColor(score))}
-            style={{ width: `${score}%` }}
+            className={cn(
+              "h-full rounded-full transition-all duration-300",
+              percentage >= 80 ? "bg-primary" : 
+              percentage >= 50 ? "bg-primary/60" : 
+              "bg-muted-foreground/30"
+            )}
+            style={{ width: `${percentage}%` }}
           />
         </div>
-        <span className={cn("text-sm font-medium w-8 text-right", getScoreStyle(score))}>
-          {Math.round(score)}
+        {/* Points display */}
+        <span className="text-sm tabular-nums text-muted-foreground w-12 text-right">
+          <span className={cn(
+            "font-medium",
+            percentage >= 80 ? "text-foreground" : "text-muted-foreground"
+          )}>
+            {points}
+          </span>
+          <span className="text-muted-foreground/60">/{max}</span>
         </span>
       </div>
     </div>
@@ -85,65 +108,70 @@ function ScoreIndicator({ score, label, sublabel }: { score: number; label: stri
 }
 
 export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdownProps) {
-  // FASE 2 FIX: UI berekeningen SYNC met backend
-  // Backend: raw scores / 125 * 100 = percentage
-  // UI moet dezelfde percentages tonen
-  
-  // Geschiktheid = functie (25) + sector (20) + doelgroep (15) = max 60 raw
-  const geschiktheidRaw = (breakdown?.functieMatch || 0) + (breakdown?.sectorMatch || 0) + (breakdown?.doelgroepMatch || 0);
-  const geschiktheid = Math.round((geschiktheidRaw / 60) * 100);
-  
-  // Locatie = regio (20) + mobiliteit (10) = max 30 raw
-  const locatieRaw = (breakdown?.regioMatch || 0) + (breakdown?.mobiliteitMatch || 0);
-  const locatie = Math.round((locatieRaw / 30) * 100);
-  
-  // Ervaring = beschrijving (15) + certificaat (10) = max 25 raw
-  const ervaringRaw = (breakdown?.beschrijvingMatch || 0) + (breakdown?.certificaatVereistMatch || 0);
-  const ervaring = Math.round((ervaringRaw / 25) * 100);
-  
-  // Praktisch = beschikbaarheid (5) + werkvorm (5) = max 10 raw
-  const praktischRaw = (breakdown?.beschikbaarheidMatch || 0) + (breakdown?.werkvormMatch || 0);
-  const praktisch = Math.round((praktischRaw / 10) * 100);
-
-  // Get sublabels from details
-  const geschiktheidSub = breakdown?.details?.functie?.reason || '';
-  const locatieSub = breakdown?.details?.regio?.afstandKm 
-    ? `~${breakdown.details.regio.afstandKm} km` 
-    : breakdown?.details?.regio?.reason || '';
-  const ervaringSub = breakdown?.details?.beschrijving?.matchedKeywords?.length 
-    ? `${breakdown.details.beschrijving.matchedKeywords.length} matches`
-    : '';
-  const praktischSub = breakdown?.details?.beschikbaarheid?.reason || '';
+  // Use categoryContributions from backend if available, else calculate locally
+  const categories = breakdown?.categoryContributions || {
+    geschiktheid: {
+      points: (breakdown?.functieMatch || 0) + (breakdown?.sectorMatch || 0) + (breakdown?.doelgroepMatch || 0),
+      max: 60,
+      percentage: Math.round(((breakdown?.functieMatch || 0) + (breakdown?.sectorMatch || 0) + (breakdown?.doelgroepMatch || 0)) / 60 * 100)
+    },
+    locatie: {
+      points: (breakdown?.regioMatch || 0) + (breakdown?.mobiliteitMatch || 0),
+      max: 30,
+      percentage: Math.round(((breakdown?.regioMatch || 0) + (breakdown?.mobiliteitMatch || 0)) / 30 * 100)
+    },
+    ervaring: {
+      points: (breakdown?.beschrijvingMatch || 0) + (breakdown?.certificaatVereistMatch || 0),
+      max: 25,
+      percentage: Math.round(((breakdown?.beschrijvingMatch || 0) + (breakdown?.certificaatVereistMatch || 0)) / 25 * 100)
+    },
+    praktisch: {
+      points: (breakdown?.beschikbaarheidMatch || 0) + (breakdown?.werkvormMatch || 0),
+      max: 10,
+      percentage: Math.round(((breakdown?.beschikbaarheidMatch || 0) + (breakdown?.werkvormMatch || 0)) / 10 * 100)
+    }
+  };
 
   // Expert advies filtering
   const relevantExperts = breakdown?.expertAdvies?.filter(e => 
     e.score > 0 || (e as any).isLocationRelevant
   ) || [];
 
+  // Calculate total bonus
+  const bonusTotal = breakdown?.bonusTotal ?? (
+    (breakdown?.trackRecordBonus || 0) + 
+    (breakdown?.expertBonus || 0) + 
+    (breakdown?.aiBoost || 0)
+  );
+
   return (
-    <Card className="border-border/40">
-      <CardContent className="p-4 space-y-4">
-        {/* Total Score - Minimal */}
-        <div className="flex items-center justify-between pb-3 border-b border-border/30">
-          <span className="text-sm text-muted-foreground">Match Score</span>
-          <span className="text-2xl font-semibold tracking-tight">{totalScore}%</span>
+    <Card className="border-0 shadow-sm bg-background/95 backdrop-blur-sm">
+      <CardContent className="p-4 space-y-3">
+        {/* Hero Score - Apple style centered */}
+        <div className="text-center py-3 border-b border-border/40">
+          <div className="flex items-center justify-center gap-1">
+            <span className="text-4xl font-light tracking-tight text-foreground">
+              {totalScore}
+            </span>
+            <span className="text-xl text-muted-foreground font-light">%</span>
+          </div>
+          {bonusTotal > 0 && (
+            <span className="text-xs text-green-600 font-medium">
+              +{breakdown?.bonusPercentage || Math.round(bonusTotal * 0.2)}% bonus
+            </span>
+          )}
         </div>
 
-        {/* Bonus Indicators - Subtle */}
+        {/* Bonus Badges - Subtle pills */}
         {(breakdown?.hasTrackRecord || breakdown?.hasAIBoost || relevantExperts.length > 0) && (
-          <div className="flex flex-wrap gap-2 pb-3 border-b border-border/30">
+          <div className="flex flex-wrap gap-1.5 justify-center pb-2 border-b border-border/30">
             {breakdown?.hasTrackRecord && breakdown.trackRecordBonus && breakdown.trackRecordBonus > 0 && (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger>
-                    <Badge variant="secondary" className="gap-1 font-normal">
-                      <Trophy className="h-3 w-3" />
+                    <Badge variant="secondary" className="gap-1 font-normal text-xs px-2 py-0.5 bg-muted/50">
+                      <Trophy className="h-3 w-3 text-amber-500" />
                       +{breakdown.trackRecordBonus}
-                      {breakdown.details?.trackRecord?.wouldRehireRate !== undefined && (
-                        <span className="text-muted-foreground ml-1">
-                          ({breakdown.details.trackRecord.wouldRehireRate.toFixed(0)}%)
-                        </span>
-                      )}
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="text-xs">
@@ -154,8 +182,8 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                       )}
                       {breakdown.details?.trackRecord?.avgRating && (
                         <p className="flex items-center gap-1">
-                          <Star className="h-3 w-3 fill-current" />
-                          {breakdown.details.trackRecord.avgRating.toFixed(1)} gemiddelde rating
+                          <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                          {breakdown.details.trackRecord.avgRating.toFixed(1)}
                         </p>
                       )}
                     </div>
@@ -164,28 +192,24 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
               </TooltipProvider>
             )}
 
-            {relevantExperts.length > 0 && (
+            {relevantExperts.length > 0 && (breakdown?.expertBonus || 0) > 0 && (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger>
-                    <Badge variant="secondary" className="gap-1 font-normal">
-                      <GraduationCap className="h-3 w-3" />
-                      +{breakdown.expertBonus || 0}
-                      <span className="text-muted-foreground">({relevantExperts.length})</span>
+                    <Badge variant="secondary" className="gap-1 font-normal text-xs px-2 py-0.5 bg-muted/50">
+                      <GraduationCap className="h-3 w-3 text-blue-500" />
+                      +{breakdown?.expertBonus || 0}
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-xs text-xs">
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <p className="font-medium">Expert Advies</p>
                       {relevantExperts.slice(0, 3).map((expert, idx) => (
-                        <div key={idx} className="flex items-center justify-between gap-4">
-                          <span>{expert.specialisme}</span>
-                          <span className="text-muted-foreground">{expert.score}/{expert.maxScore}</span>
+                        <div key={idx} className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">{expert.specialisme}</span>
+                          <span className="tabular-nums">{expert.score}/{expert.maxScore}</span>
                         </div>
                       ))}
-                      {relevantExperts.length > 3 && (
-                        <p className="text-muted-foreground">+{relevantExperts.length - 3} meer</p>
-                      )}
                     </div>
                   </TooltipContent>
                 </Tooltip>
@@ -196,13 +220,13 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger>
-                    <Badge variant="secondary" className="gap-1 font-normal">
-                      <Sparkles className="h-3 w-3" />
+                    <Badge variant="secondary" className="gap-1 font-normal text-xs px-2 py-0.5 bg-muted/50">
+                      <Sparkles className="h-3 w-3 text-violet-500" />
                       +{breakdown.aiBoost}
                     </Badge>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs">
-                    <p className="font-medium">AI Learning Boost</p>
+                  <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                    <p className="font-medium">AI Learning</p>
                     {breakdown.aiBoostReasons.slice(0, 2).map((reason, idx) => (
                       <p key={idx} className="text-muted-foreground">{reason}</p>
                     ))}
@@ -213,66 +237,70 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
           </div>
         )}
 
-        {/* Core Metrics - Clean list */}
-        <div className="space-y-0">
-          <ScoreIndicator 
-            score={geschiktheid} 
-            label="Geschiktheid" 
-            sublabel={geschiktheidSub}
+        {/* Category Breakdown - Apple style rows */}
+        <div className="space-y-0 divide-y divide-border/20">
+          <CategoryRow 
+            label="Geschiktheid"
+            points={categories.geschiktheid.points}
+            max={categories.geschiktheid.max}
+            percentage={categories.geschiktheid.percentage}
+            detail={breakdown?.details?.functie?.reason?.slice(0, 20)}
           />
-          <ScoreIndicator 
-            score={locatie} 
-            label="Locatie" 
-            sublabel={locatieSub}
+          <CategoryRow 
+            label="Locatie"
+            points={categories.locatie.points}
+            max={categories.locatie.max}
+            percentage={categories.locatie.percentage}
+            detail={breakdown?.details?.regio?.afstandKm ? `~${breakdown.details.regio.afstandKm}km` : undefined}
           />
-          <ScoreIndicator 
-            score={ervaring} 
-            label="Ervaring" 
-            sublabel={ervaringSub}
+          <CategoryRow 
+            label="Ervaring"
+            points={categories.ervaring.points}
+            max={categories.ervaring.max}
+            percentage={categories.ervaring.percentage}
+            detail={breakdown?.details?.beschrijving?.matchedKeywords?.length 
+              ? `${breakdown.details.beschrijving.matchedKeywords.length} matches` 
+              : undefined}
           />
-          <ScoreIndicator 
-            score={praktisch} 
-            label="Praktisch" 
-            sublabel={praktischSub}
+          <CategoryRow 
+            label="Praktisch"
+            points={categories.praktisch.points}
+            max={categories.praktisch.max}
+            percentage={categories.praktisch.percentage}
+            detail={breakdown?.details?.werkvorm?.reason}
           />
         </div>
 
-        {/* Detailed breakdown toggle - Optional */}
+        {/* Details toggle - Minimal */}
         {(breakdown?.details?.sector?.directMatches?.length || 
           breakdown?.details?.sector?.relatedMatches?.length ||
           breakdown?.details?.beschrijving?.matchedKeywords?.length) && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger className="w-full">
-                <div className="flex items-center justify-center gap-1 pt-2 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                <div className="flex items-center justify-center gap-1 pt-1 text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors">
                   <Info className="h-3 w-3" />
                   <span>Details</span>
                 </div>
               </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-sm text-xs">
+              <TooltipContent side="bottom" className="max-w-xs text-xs">
                 <div className="space-y-2">
-                  {breakdown?.details?.sector?.directMatches?.length > 0 && (
+                  {breakdown?.details?.sector?.directMatches && breakdown.details.sector.directMatches.length > 0 && (
                     <div>
-                      <p className="font-medium text-green-600">Sector match</p>
-                      <p>{breakdown.details.sector.directMatches.join(', ')}</p>
+                      <p className="font-medium text-green-600">Sector</p>
+                      <p className="text-muted-foreground">{breakdown.details.sector.directMatches.join(', ')}</p>
                     </div>
                   )}
-                  {breakdown?.details?.sector?.relatedMatches?.length > 0 && (
+                  {breakdown?.details?.sector?.relatedMatches && breakdown.details.sector.relatedMatches.length > 0 && (
                     <div>
-                      <p className="font-medium text-amber-600">Gerelateerde sector</p>
-                      <p>{breakdown.details.sector.relatedMatches.join(', ')}</p>
+                      <p className="font-medium text-amber-600">Gerelateerd</p>
+                      <p className="text-muted-foreground">{breakdown.details.sector.relatedMatches.join(', ')}</p>
                     </div>
                   )}
-                  {breakdown?.details?.beschrijving?.matchedKeywords?.length > 0 && (
+                  {breakdown?.details?.beschrijving?.matchedKeywords && breakdown.details.beschrijving.matchedKeywords.length > 0 && (
                     <div>
-                      <p className="font-medium text-blue-600">Ervaring matches</p>
-                      <p>{breakdown.details.beschrijving.matchedKeywords.join(', ')}</p>
-                    </div>
-                  )}
-                  {breakdown?.details?.certificaatVereist?.matchedCerts?.length > 0 && (
-                    <div>
-                      <p className="font-medium text-purple-600">Certificaten</p>
-                      <p>{breakdown.details.certificaatVereist.matchedCerts.join(', ')}</p>
+                      <p className="font-medium text-blue-600">Ervaring</p>
+                      <p className="text-muted-foreground">{breakdown.details.beschrijving.matchedKeywords.join(', ')}</p>
                     </div>
                   )}
                 </div>
@@ -281,10 +309,10 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
           </TooltipProvider>
         )}
 
-        {/* Low score hint - Minimal */}
+        {/* Low score hint */}
         {totalScore < 50 && (
-          <p className="text-xs text-muted-foreground text-center pt-2 border-t border-border/30">
-            Meer profieldata nodig voor betere matches
+          <p className="text-xs text-muted-foreground/60 text-center pt-1">
+            Meer profieldata nodig
           </p>
         )}
       </CardContent>
