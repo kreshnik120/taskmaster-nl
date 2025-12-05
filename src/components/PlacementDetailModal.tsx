@@ -18,6 +18,8 @@ import {
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { MatchScoreBreakdown } from "./recruitment/MatchScoreBreakdown";
+import { SimpleMatchScore } from "./recruitment/SimpleMatchScore";
+import { isValidMatchBreakdown } from "@/types/matchReasoning";
 import { cn } from "@/lib/utils";
 import confetti from "canvas-confetti";
 import { supabase } from "@/integrations/supabase/client";
@@ -464,17 +466,24 @@ export function PlacementDetailModal({
             <Separator />
 
             {/* Match Score Breakdown */}
-            {placement.ai_match_score !== null && placement.ai_match_reasoning && (
+            {placement.ai_match_score !== null && (
               <>
                 <div>
                   <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                     <Award className="h-4 w-4" />
                     Match Score Analyse
                   </h3>
-                  <MatchScoreBreakdown
-                    breakdown={placement.ai_match_reasoning}
-                    totalScore={Math.round(placement.ai_match_score)}
-                  />
+                  {isValidMatchBreakdown(placement.ai_match_reasoning) ? (
+                    <MatchScoreBreakdown
+                      breakdown={{
+                        ...placement.ai_match_reasoning,
+                        aiBoostReasons: placement.ai_match_reasoning?.aiBoostReasons || []
+                      }}
+                      totalScore={Math.round(placement.ai_match_score)}
+                    />
+                  ) : (
+                    <SimpleMatchScore score={placement.ai_match_score} />
+                  )}
                 </div>
                 <Separator />
               </>

@@ -227,7 +227,7 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="text-xs max-w-[200px]">
                     <p className="font-medium">AI Learning</p>
-                    {breakdown.aiBoostReasons.slice(0, 2).map((reason, idx) => (
+                    {(breakdown?.aiBoostReasons || []).slice(0, 2).map((reason, idx) => (
                       <p key={idx} className="text-muted-foreground">{reason}</p>
                     ))}
                   </TooltipContent>

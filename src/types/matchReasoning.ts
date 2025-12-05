@@ -57,6 +57,9 @@ export interface StoredMatchReasoning {
   hasTrackRecord?: boolean;
   hasExpertAdvies?: boolean;
   
+  // AI boost reasons (required for MatchScoreBreakdown)
+  aiBoostReasons: string[];
+  
   // Detailed breakdown data
   details: MatchDetails;
   categoryContributions?: CategoryContributions;
@@ -91,13 +94,37 @@ export function hasFullBreakdown(reasoning: any): reasoning is StoredMatchReason
 }
 
 /**
+ * Check if breakdown data is valid and complete enough to render MatchScoreBreakdown
+ * Used to decide between full breakdown vs simple fallback display
+ */
+export function isValidMatchBreakdown(reasoning: any): boolean {
+  if (!reasoning || typeof reasoning !== 'object') return false;
+  
+  // Check it's not an empty object
+  const hasContent = Object.keys(reasoning).length > 0;
+  if (!hasContent) return false;
+  
+  // Must have at least totalScore or functieMatch to be renderable
+  const hasBasicScore = typeof reasoning.totalScore === 'number' || 
+                        typeof reasoning.normalizedScore === 'number' ||
+                        typeof reasoning.functieMatch === 'number';
+  
+  return hasBasicScore;
+}
+
+/**
  * Extract display-ready breakdown from stored reasoning
+ * Ensures aiBoostReasons is always an array to prevent crashes
  */
 export function extractBreakdownForDisplay(reasoning: any): Partial<StoredMatchReasoning> | null {
   if (!reasoning) return null;
   
   if (hasFullBreakdown(reasoning)) {
-    return reasoning;
+    // Ensure aiBoostReasons is always an array (null-safe)
+    return {
+      ...reasoning,
+      aiBoostReasons: reasoning.aiBoostReasons || []
+    };
   }
   
   // Legacy format - try to extract what we can
@@ -114,6 +141,7 @@ export function extractBreakdownForDisplay(reasoning: any): Partial<StoredMatchR
     totalScore: reasoning.score_breakdown?.match_score || 0,
     normalizedScore: reasoning.score_breakdown?.match_score || 0,
     hasAIBoost: false,
+    aiBoostReasons: [],
     details: {},
     professional_data: reasoning.professional_data || {},
     sublocation_data: reasoning.sublocation_data || {},
