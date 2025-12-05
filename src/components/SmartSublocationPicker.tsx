@@ -3,17 +3,19 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Building2, MapPin, Users, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, Building2, MapPin, Users, Sparkles, ChevronDown, ChevronUp, CheckCircle2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { 
   preloadExpertKnowledge, 
   calculateUnifiedMatchScore,
   parseBeschikbaarheid,
   type MatchScoreBreakdown 
 } from "@/lib/services/matchingService";
+import { getActivePlacementSublocationIds } from "@/lib/checkExistingPlacement";
 
 export interface Sublocation {
   id: string;
@@ -57,6 +59,7 @@ export interface ProfessionalData {
 }
 
 interface SmartSublocationPickerProps {
+  professionalId?: string;
   professionalData?: ProfessionalData;
   onSelect: (sublocationId: string, sublocationName: string, sublocationData?: ScoredSublocation) => void;
   onCancel: () => void;
@@ -66,9 +69,11 @@ export interface ScoredSublocation extends Sublocation {
   matchScore: number;
   matchBreakdown?: MatchScoreBreakdown;
   isRecommended: boolean;
+  isAlreadyPlaced?: boolean;
 }
 
 export function SmartSublocationPicker({ 
+  professionalId,
   professionalData, 
   onSelect, 
   onCancel 
@@ -76,11 +81,19 @@ export function SmartSublocationPicker({
   const [searchQuery, setSearchQuery] = useState("");
   const [showAllLocations, setShowAllLocations] = useState(false);
   const [expertsLoaded, setExpertsLoaded] = useState(false);
+  const [existingPlacementIds, setExistingPlacementIds] = useState<string[]>([]);
 
   // Preload expert knowledge on mount
   useEffect(() => {
     preloadExpertKnowledge().then(() => setExpertsLoaded(true));
   }, []);
+
+  // Fetch existing active placements for this professional
+  useEffect(() => {
+    if (professionalId) {
+      getActivePlacementSublocationIds(professionalId).then(setExistingPlacementIds);
+    }
+  }, [professionalId]);
 
   const { data: sublocations, isLoading } = useQuery({
     queryKey: ['sublocations-for-smart-placement'],
@@ -171,10 +184,16 @@ export function SmartSublocationPicker({
         ...sub,
         matchScore,
         matchBreakdown,
-        isRecommended: matchScore >= 50
+        isRecommended: matchScore >= 50,
+        isAlreadyPlaced: existingPlacementIds.includes(sub.id)
       } as ScoredSublocation;
-    }).sort((a, b) => b.matchScore - a.matchScore);
-  }, [sublocations, professionalData, expertsLoaded]);
+    }).sort((a, b) => {
+      // Sort already-placed to the bottom
+      if (a.isAlreadyPlaced && !b.isAlreadyPlaced) return 1;
+      if (!a.isAlreadyPlaced && b.isAlreadyPlaced) return -1;
+      return b.matchScore - a.matchScore;
+    });
+  }, [sublocations, professionalData, expertsLoaded, existingPlacementIds]);
 
   // Filter by search
   const filteredSublocations = useMemo(() => {
@@ -203,40 +222,58 @@ export function SmartSublocationPicker({
     return "text-muted-foreground bg-muted/50 border-border";
   };
 
-  const renderSublocationCard = (sub: ScoredSublocation) => (
-    <button
-      key={sub.id}
-      onClick={() => onSelect(sub.id, sub.naam, sub)}
-      className="w-full text-left p-4 rounded-lg border hover:border-primary hover:bg-accent/50 transition-all group"
-    >
-      <div className="space-y-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="font-medium truncate">{sub.naam}</div>
-            {sub.location?.client_org && (
-              <div className="text-sm text-muted-foreground flex items-center gap-1">
-                <Building2 className="h-3 w-3 flex-shrink-0" />
-                <span className="truncate">{sub.location.client_org.name}</span>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {sub.matchScore > 0 && (
-              <Badge 
-                variant="outline" 
-                className={`text-xs font-medium ${getScoreColor(sub.matchScore)}`}
-              >
-                {Math.round(sub.matchScore)}%
-              </Badge>
-            )}
-            {sub.plaats && (
-              <Badge variant="outline" className="flex items-center gap-1">
-                <MapPin className="h-3 w-3" />
-                {sub.plaats}
-              </Badge>
-            )}
-          </div>
-        </div>
+  const renderSublocationCard = (sub: ScoredSublocation) => {
+    const isDisabled = sub.isAlreadyPlaced;
+    
+    return (
+      <TooltipProvider key={sub.id}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => !isDisabled && onSelect(sub.id, sub.naam, sub)}
+              disabled={isDisabled}
+              className={`w-full text-left p-4 rounded-lg border transition-all group ${
+                isDisabled 
+                  ? "opacity-50 cursor-not-allowed bg-muted/30" 
+                  : "hover:border-primary hover:bg-accent/50"
+              }`}
+            >
+              <div className="space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate flex items-center gap-2">
+                      {sub.naam}
+                      {isDisabled && (
+                        <Badge variant="secondary" className="text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Al geplaatst
+                        </Badge>
+                      )}
+                    </div>
+                    {sub.location?.client_org && (
+                      <div className="text-sm text-muted-foreground flex items-center gap-1">
+                        <Building2 className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">{sub.location.client_org.name}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {sub.matchScore > 0 && !isDisabled && (
+                      <Badge 
+                        variant="outline" 
+                        className={`text-xs font-medium ${getScoreColor(sub.matchScore)}`}
+                      >
+                        {Math.round(sub.matchScore)}%
+                      </Badge>
+                    )}
+                    {sub.plaats && (
+                      <Badge variant="outline" className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {sub.plaats}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
         
         {sub.sector && sub.sector.length > 0 && (
           <div className="flex gap-1 flex-wrap">
@@ -253,16 +290,25 @@ export function SmartSublocationPicker({
           </div>
         )}
 
-        {sub.doelgroep && sub.doelgroep.length > 0 && (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Users className="h-3 w-3" />
-            {sub.doelgroep.slice(0, 3).join(", ")}
-            {sub.doelgroep.length > 3 && ` +${sub.doelgroep.length - 3}`}
-          </div>
-        )}
-      </div>
-    </button>
-  );
+                {sub.doelgroep && sub.doelgroep.length > 0 && (
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Users className="h-3 w-3" />
+                    {sub.doelgroep.slice(0, 3).join(", ")}
+                    {sub.doelgroep.length > 3 && ` +${sub.doelgroep.length - 3}`}
+                  </div>
+                )}
+              </div>
+            </button>
+          </TooltipTrigger>
+          {isDisabled && (
+            <TooltipContent>
+              <p>Professional is hier al actief geplaatst</p>
+            </TooltipContent>
+          )}
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
 
   return (
     <div className="space-y-4">

@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SmartSublocationPicker } from "@/components/SmartSublocationPicker";
+import { checkExistingActivePlacement } from "@/lib/checkExistingPlacement";
 
 interface DirectPlacementButtonProps {
   professionalId: string;
@@ -57,6 +58,15 @@ export function DirectPlacementButton({
     setIsPlacing(true);
     
     try {
+      // Check for existing active placement FIRST
+      const { exists } = await checkExistingActivePlacement(professionalId, sublocationId);
+      if (exists) {
+        toast.error(`${professionalName} is al actief geplaatst bij ${sublocationName}`, {
+          description: "Een professional kan maar één actieve plaatsing per locatie hebben"
+        });
+        setIsPlacing(false);
+        return;
+      }
       // Build comprehensive AI match reasoning including full breakdown
       const aiMatchReasoning = professionalData && sublocationData ? {
         calculated_at: new Date().toISOString(),
@@ -197,6 +207,7 @@ export function DirectPlacementButton({
             </DialogTitle>
           </DialogHeader>
           <SmartSublocationPicker
+            professionalId={professionalId}
             professionalData={professionalData}
             onSelect={handleSelectSublocation}
             onCancel={() => setDialogOpen(false)}

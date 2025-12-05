@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { checkExistingActivePlacement } from "@/lib/checkExistingPlacement";
 import {
   Dialog,
   DialogContent,
@@ -237,6 +238,16 @@ export function PlacementConfirmDialog({
     setIsSubmitting(true);
 
     try {
+      // Check for existing active placement FIRST
+      const { exists } = await checkExistingActivePlacement(professionalId, sublocationId);
+      if (exists) {
+        toast.error(`${professionalName} is al actief geplaatst bij ${sublocationName}`, {
+          description: "Een professional kan maar één actieve plaatsing per locatie hebben"
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 

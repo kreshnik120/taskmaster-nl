@@ -6,8 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { MapPin, Building2, Sparkles, Search, SlidersHorizontal } from "lucide-react";
+import { MapPin, Building2, Sparkles, Search, SlidersHorizontal, CheckCircle2 } from "lucide-react";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { 
   preloadExpertKnowledge, 
   calculateUnifiedMatchScore,
@@ -15,6 +16,7 @@ import {
   type MatchScoreBreakdown 
 } from "@/lib/services/matchingService";
 import { PlacementConfirmDialog } from "@/components/organization/PlacementConfirmDialog";
+import { getActivePlacementSublocationIds } from "@/lib/checkExistingPlacement";
 
 interface Professional {
   id: string;
@@ -86,11 +88,19 @@ export function SublocationSelectorPanel({
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [selectedSublocation, setSelectedSublocation] = useState<any>(null);
   const [expertsLoaded, setExpertsLoaded] = useState(false);
+  const [existingPlacementIds, setExistingPlacementIds] = useState<string[]>([]);
 
   // Preload expert knowledge on mount
   useEffect(() => {
     preloadExpertKnowledge().then(() => setExpertsLoaded(true));
   }, []);
+
+  // Fetch existing active placements for this professional
+  useEffect(() => {
+    if (professionalId) {
+      getActivePlacementSublocationIds(professionalId).then(setExistingPlacementIds);
+    }
+  }, [professionalId]);
 
   // Fetch sublocations with rates
   const { data: sublocations, isLoading } = useQuery({
@@ -195,6 +205,7 @@ export function SublocationSelectorPanel({
         ...sublocation,
         matchScore: matchResult.normalizedScore,
         matchBreakdown: matchResult,
+        isAlreadyPlaced: existingPlacementIds.includes(sublocation.id),
       };
     })
     .filter((sublocation) => {
@@ -226,7 +237,12 @@ export function SublocationSelectorPanel({
 
       return true;
     })
-    .sort((a, b) => b.matchScore - a.matchScore);
+    .sort((a, b) => {
+      // Sort already-placed to the bottom
+      if (a.isAlreadyPlaced && !b.isAlreadyPlaced) return 1;
+      if (!a.isAlreadyPlaced && b.isAlreadyPlaced) return -1;
+      return b.matchScore - a.matchScore;
+    });
 
   const openConfirmDialog = (sublocation: any) => {
     setSelectedSublocation(sublocation);
@@ -330,73 +346,105 @@ export function SublocationSelectorPanel({
 
       {/* Sublocations List */}
       <div className="space-y-3 max-h-[600px] overflow-y-auto">
-        {processedSublocations?.map((sublocation) => (
-          <Card key={sublocation.id} className="hover:shadow-sm transition-shadow">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-muted-foreground" />
-                    {sublocation.naam}
-                  </CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    {sublocation.location.naam} • {sublocation.location.client_org.name}
-                  </p>
-                </div>
-                <Badge
-                  variant={
-                    sublocation.matchScore >= 80
-                      ? "default"
-                      : sublocation.matchScore >= 60
-                      ? "secondary"
-                      : "outline"
-                  }
-                  className="text-xs"
-                >
-                  {Math.round(sublocation.matchScore)}% match
-                </Badge>
-              </div>
-            </CardHeader>
+        {processedSublocations?.map((sublocation) => {
+          const isDisabled = sublocation.isAlreadyPlaced;
+          
+          return (
+            <TooltipProvider key={sublocation.id}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Card 
+                    className={`transition-shadow ${
+                      isDisabled 
+                        ? "opacity-50 cursor-not-allowed" 
+                        : "hover:shadow-sm"
+                    }`}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1">
+                          <CardTitle className="text-base flex items-center gap-2">
+                            <Building2 className="h-4 w-4 text-muted-foreground" />
+                            {sublocation.naam}
+                            {isDisabled && (
+                              <Badge variant="secondary" className="text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                Al geplaatst
+                              </Badge>
+                            )}
+                          </CardTitle>
+                          <p className="text-sm text-muted-foreground">
+                            {sublocation.location.naam} • {sublocation.location.client_org.name}
+                          </p>
+                        </div>
+                        {!isDisabled && (
+                          <Badge
+                            variant={
+                              sublocation.matchScore >= 80
+                                ? "default"
+                                : sublocation.matchScore >= 60
+                                ? "secondary"
+                                : "outline"
+                            }
+                            className="text-xs"
+                          >
+                            {Math.round(sublocation.matchScore)}% match
+                          </Badge>
+                        )}
+                      </div>
+                    </CardHeader>
 
-            <CardContent className="space-y-4 pt-0">
-              {/* Location & Info */}
-              {sublocation.plaats && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <MapPin className="h-4 w-4" />
-                  {sublocation.plaats}
-                </div>
-              )}
+                    <CardContent className="space-y-4 pt-0">
+                      {/* Location & Info */}
+                      {sublocation.plaats && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <MapPin className="h-4 w-4" />
+                          {sublocation.plaats}
+                        </div>
+                      )}
 
-              {/* Match Breakdown */}
-              {sublocation.matchScore > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Match details:</p>
-                  <div className="space-y-1">
-                    {sublocation.matchBreakdown.reasoning.map((reason: string, idx: number) => (
-                      <p key={idx} className="text-xs text-muted-foreground">
-                        • {reason}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              )}
+                      {/* Match Breakdown - only show if not already placed */}
+                      {!isDisabled && sublocation.matchScore > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium text-muted-foreground">Match details:</p>
+                          <div className="space-y-1">
+                            {sublocation.matchBreakdown.reasoning.map((reason: string, idx: number) => (
+                              <p key={idx} className="text-xs text-muted-foreground">
+                                • {reason}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
-              <p className="text-xs text-muted-foreground italic mt-2">
-                💡 Tarieven worden bepaald na keuze werkvorm
-              </p>
+                      {!isDisabled && (
+                        <p className="text-xs text-muted-foreground italic mt-2">
+                          💡 Tarieven worden bepaald na keuze werkvorm
+                        </p>
+                      )}
 
-              {/* Action Button */}
-              <Button
-                size="sm"
-                className="w-full"
-                onClick={() => openConfirmDialog(sublocation)}
-              >
-                Plaats hier
-                <Sparkles className="h-4 w-4 ml-2" />
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+                      {/* Action Button */}
+                      <Button
+                        size="sm"
+                        className="w-full"
+                        onClick={() => !isDisabled && openConfirmDialog(sublocation)}
+                        disabled={isDisabled}
+                      >
+                        {isDisabled ? "Al geplaatst" : "Plaats hier"}
+                        {!isDisabled && <Sparkles className="h-4 w-4 ml-2" />}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </TooltipTrigger>
+                {isDisabled && (
+                  <TooltipContent>
+                    <p>Professional is hier al actief geplaatst</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+          );
+        })}
       </div>
 
       {/* Placement Confirm Dialog */}
