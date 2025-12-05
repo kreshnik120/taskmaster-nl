@@ -14,9 +14,12 @@
  * - Werkvorm: 5 punten (nieuw - vervangt bureau match)
  * - Bonus: Ervaring (+5), Leidinggevende (+3), Certificaten (+3), Nacht/Weekend (+2)
  * - AI Boost: up to +15 punten (from learned success patterns)
+ * - Track Record: up to +8 punten (from historical performance)
  */
 
-import { 
+import { supabase } from "@/integrations/supabase/client";
+
+import {
   SECTOR_SIMILARITY, 
   DOELGROEP_RELATIONS, 
   calculateErvaringBonus, 
@@ -70,6 +73,17 @@ export interface MatchTarget {
   publieke_opmerking?: string | null; // NEW: sublocation description for keyword matching
 }
 
+// ============= PROFESSIONAL PERFORMANCE INTERFACE =============
+
+export interface ProfessionalPerformance {
+  professionalId: string;
+  totalPlacements: number;
+  successfulPlacements: number;
+  avgRating: number | null;
+  wouldRehireRate: number;
+  totalEvaluations: number;
+}
+
 export interface MatchScoreBreakdown {
   functieMatch: number;
   regioMatch: number;
@@ -80,6 +94,7 @@ export interface MatchScoreBreakdown {
   werkvormMatch: number;
   beschrijvingMatch: number; // NEW: keyword matching from description
   certificaatVereistMatch: number; // NEW: certificate-to-requirement matching
+  trackRecordBonus: number; // NEW: professional historical performance
   ervaringBonus: number;
   leidinggevendeBonus: number;
   certificatenBonus: number;
@@ -91,6 +106,7 @@ export interface MatchScoreBreakdown {
   hasAIBoost: boolean;
   aiBoostReasons: string[];
   usedPatternIds: string[];
+  hasTrackRecord: boolean; // NEW
   details: {
     functie?: { match: boolean; reason: string };
     regio?: { match: boolean; reason: string; matchType: 'exact' | 'province' | 'neighbor' | 'none' | 'postcode'; afstandKm?: number };
@@ -101,9 +117,82 @@ export interface MatchScoreBreakdown {
     werkvorm?: { match: boolean; reason: string };
     beschrijving?: { match: boolean; reason: string; matchedKeywords: string[] }; // NEW
     certificaatVereist?: { match: boolean; reason: string; matchedCerts: string[]; missingCerts: string[] }; // NEW
+    trackRecord?: { score: number; match: boolean; reason: string; wouldRehireRate?: number; avgRating?: number }; // NEW
     ervaring?: { bonus: number; label: string };
     aiBoost?: { score: number; match: boolean; reason: string };
   };
+}
+
+// ============= PROFESSIONAL PERFORMANCE FUNCTIONS =============
+
+/**
+ * Fetch historical performance data for a professional
+ * Used to calculate track record bonus in matching
+ */
+export async function getProfessionalPerformance(professionalId: string): Promise<ProfessionalPerformance> {
+  const defaultPerformance: ProfessionalPerformance = {
+    professionalId,
+    totalPlacements: 0,
+    successfulPlacements: 0,
+    avgRating: null,
+    wouldRehireRate: 0,
+    totalEvaluations: 0
+  };
+
+  try {
+    // Fetch all assignments with evaluations for this professional
+    const { data: assignments, error } = await supabase
+      .from('assignments')
+      .select(`
+        id,
+        status,
+        completed_at,
+        assignment_evaluations (
+          rating,
+          would_rehire
+        )
+      `)
+      .eq('professional_id', professionalId)
+      .eq('is_test_data', false);
+
+    if (error || !assignments || assignments.length === 0) {
+      return defaultPerformance;
+    }
+
+    // Calculate metrics
+    const totalPlacements = assignments.length;
+    const completedPlacements = assignments.filter(a => 
+      a.status === 'completed' || a.status === 'active'
+    );
+    const successfulPlacements = completedPlacements.length;
+
+    // Extract evaluations
+    const evaluations = assignments
+      .flatMap(a => a.assignment_evaluations || [])
+      .filter(e => e !== null);
+
+    const totalEvaluations = evaluations.length;
+    
+    // Calculate average rating
+    const ratingsSum = evaluations.reduce((sum, e) => sum + (e.rating || 0), 0);
+    const avgRating = totalEvaluations > 0 ? ratingsSum / totalEvaluations : null;
+
+    // Calculate would rehire rate
+    const wouldRehireCount = evaluations.filter(e => e.would_rehire === true).length;
+    const wouldRehireRate = totalEvaluations > 0 ? (wouldRehireCount / totalEvaluations) * 100 : 0;
+
+    return {
+      professionalId,
+      totalPlacements,
+      successfulPlacements,
+      avgRating,
+      wouldRehireRate,
+      totalEvaluations
+    };
+  } catch (err) {
+    console.error('[getProfessionalPerformance] Error:', err);
+    return defaultPerformance;
+  }
 }
 
 // ============= CONSTANTS =============
@@ -471,7 +560,8 @@ function calculateSemanticDoelgroepMatch(
 export function calculateUnifiedMatchScore(
   candidate: MatchCandidate,
   target: MatchTarget,
-  aiBoostData?: { boost: number; reasons: string[]; usedPatternIds: string[] }
+  aiBoostData?: { boost: number; reasons: string[]; usedPatternIds: string[] },
+  professionalPerformance?: ProfessionalPerformance | null
 ): MatchScoreBreakdown {
   const reasoning: string[] = [];
   let functieMatch = 0;
@@ -483,6 +573,7 @@ export function calculateUnifiedMatchScore(
   let werkvormMatch = 0;
   let beschrijvingMatch = 0; // NEW
   let certificaatVereistMatch = 0; // NEW
+  let trackRecordBonus = 0; // NEW: historical performance
   let ervaringBonus = 0;
   let leidinggevendeBonus = 0;
   let certificatenBonus = 0;
@@ -859,9 +950,46 @@ export function calculateUnifiedMatchScore(
     };
   }
 
+  // ===== NEW: TRACK RECORD BONUS (up to +8 points) =====
+  let hasTrackRecord = false;
+  
+  if (professionalPerformance && professionalPerformance.totalPlacements > 0) {
+    hasTrackRecord = true;
+    const { wouldRehireRate, avgRating, totalPlacements, totalEvaluations } = professionalPerformance;
+    
+    // Calculate bonus based on would_rehire rate (max 8 points)
+    // 100% rehire = 8 points, 80% = 6 points, 60% = 4 points, etc.
+    trackRecordBonus = Math.round(wouldRehireRate * 8 / 100);
+    
+    // Extra boost for high ratings
+    if (avgRating && avgRating >= 4.5 && totalEvaluations >= 2) {
+      trackRecordBonus = Math.min(8, trackRecordBonus + 2);
+    }
+    
+    const reasonText = avgRating 
+      ? `${wouldRehireRate.toFixed(0)}% zou opnieuw inhuren, ${avgRating.toFixed(1)}★ (${totalPlacements} plaatsingen)`
+      : `${wouldRehireRate.toFixed(0)}% zou opnieuw inhuren (${totalPlacements} plaatsingen)`;
+    
+    reasoning.push(`🏆 Track Record: ${reasonText} (+${trackRecordBonus})`);
+    details.trackRecord = { 
+      score: trackRecordBonus, 
+      match: trackRecordBonus >= 4, 
+      reason: reasonText,
+      wouldRehireRate,
+      avgRating: avgRating || undefined
+    };
+  } else {
+    details.trackRecord = { 
+      score: 0, 
+      match: false, 
+      reason: 'Geen eerdere plaatsingen' 
+    };
+  }
+
   // ===== TOTAL SCORE =====
   // Adjusted weights: Functie 20, Regio 18, Sector 15, Doelgroep 10, Beschrijving 10, 
   // CertificaatVereist 10, Mobiliteit 7, Beschikbaarheid 5, Werkvorm 5 = 100 base
+  // + Track Record bonus (up to +8) + AI boost (up to +15)
   const totalScore = 
     Math.round(functieMatch * 0.8) +  // 25 -> 20 points
     Math.round(regioMatch * 0.9) +    // 20 -> 18 points  
@@ -876,9 +1004,10 @@ export function calculateUnifiedMatchScore(
     leidinggevendeBonus + 
     certificatenBonus + 
     dienstBonus +
+    trackRecordBonus +                // NEW: up to +8 points
     aiBoost;
 
-  // Normalize to 0-100 scale (max base is 100, but with AI boost can go slightly higher)
+  // Normalize to 0-100 scale (max base is 100, but with bonuses can go slightly higher)
   const normalizedScore = Math.round(Math.min(100, Math.max(0, totalScore)));
 
   return {
@@ -891,6 +1020,7 @@ export function calculateUnifiedMatchScore(
     werkvormMatch,
     beschrijvingMatch,
     certificaatVereistMatch,
+    trackRecordBonus,
     ervaringBonus,
     leidinggevendeBonus,
     certificatenBonus,
@@ -900,6 +1030,7 @@ export function calculateUnifiedMatchScore(
     normalizedScore,
     reasoning,
     hasAIBoost,
+    hasTrackRecord,
     aiBoostReasons,
     usedPatternIds,
     details
