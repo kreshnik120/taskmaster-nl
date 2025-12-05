@@ -2,7 +2,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertCircle, CheckCircle2, AlertTriangle, Sparkles, FileText, Award, MapPin } from "lucide-react";
+import { AlertCircle, CheckCircle2, AlertTriangle, Sparkles, FileText, Award, MapPin, Trophy, Star } from "lucide-react";
 
 // Interface matching the actual service response (MatchScoreBreakdown from matchingService.ts)
 interface ServiceMatchBreakdown {
@@ -15,10 +15,12 @@ interface ServiceMatchBreakdown {
   werkvormMatch: number;
   beschrijvingMatch?: number; // NEW: from description keyword matching
   certificaatVereistMatch?: number; // NEW: certificate-to-requirement matching
+  trackRecordBonus?: number; // NEW: historical performance
   aiBoost: number;
   totalScore: number;
   normalizedScore: number;
   hasAIBoost: boolean;
+  hasTrackRecord?: boolean; // NEW
   aiBoostReasons: string[];
   details: {
     functie?: { match: boolean; reason: string };
@@ -30,6 +32,7 @@ interface ServiceMatchBreakdown {
     werkvorm?: { match: boolean; reason: string };
     beschrijving?: { match: boolean; reason: string; matchedKeywords?: string[] }; // NEW
     certificaatVereist?: { match: boolean; reason: string; matchedCerts?: string[]; missingCerts?: string[] }; // NEW
+    trackRecord?: { score: number; match: boolean; reason: string; wouldRehireRate?: number; avgRating?: number }; // NEW
     aiBoost?: { score: number; match: boolean; reason: string };
   };
 }
@@ -156,6 +159,31 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
             {totalScore ?? 0}%
           </Badge>
         </div>
+
+        {/* Track Record indicator */}
+        {breakdown?.hasTrackRecord && breakdown.trackRecordBonus && breakdown.trackRecordBonus > 0 && (
+          <div className="flex items-center gap-2 p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+            <Trophy className="h-4 w-4 text-amber-600" />
+            <div className="flex-1">
+              <span className="text-xs text-amber-700 dark:text-amber-300 font-medium">
+                Track Record: +{breakdown.trackRecordBonus} punten
+              </span>
+              {breakdown.details?.trackRecord?.wouldRehireRate !== undefined && (
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400">
+                    {breakdown.details.trackRecord.wouldRehireRate.toFixed(0)}% zou opnieuw inhuren
+                  </span>
+                  {breakdown.details.trackRecord.avgRating && (
+                    <span className="flex items-center text-[10px] text-amber-600 dark:text-amber-400">
+                      <Star className="h-3 w-3 mr-0.5 fill-amber-500 text-amber-500" />
+                      {breakdown.details.trackRecord.avgRating.toFixed(1)}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* AI Boost indicator */}
         {breakdown?.hasAIBoost && breakdown.aiBoost > 0 && (
