@@ -1171,13 +1171,25 @@ export function calculateUnifiedMatchScore(
     }
   }
 
-  // ===== 4. SECTOR MATCH (20 punten) =====
+  // ===== 4. SECTOR MATCH (20 punten) - Phase 4: Direct match bonus =====
   const targetSectors = target.sector || [];
   const candidateSectors = candidate.ervaring_sector || [];
   
   if (targetSectors.length > 0 && candidateSectors.length > 0) {
     const semanticMatch = calculateSemanticSectorMatch(candidateSectors, targetSectors);
-    sectorMatch = Math.round(semanticMatch.score * 20);
+    
+    // Phase 4: Extra bonus for DIRECT sector match vs related
+    const hasDirectMatch = semanticMatch.directMatches.length > 0;
+    const baseScore = Math.round(semanticMatch.score * 20);
+    
+    // Direct match gets full 20, related match caps at 14 (70%)
+    if (hasDirectMatch) {
+      sectorMatch = Math.max(baseScore, 18); // Ensure direct matches score high
+    } else if (semanticMatch.relatedMatches.length > 0) {
+      sectorMatch = Math.min(baseScore, 14); // Cap related matches
+    } else {
+      sectorMatch = baseScore;
+    }
     
     if (semanticMatch.directMatches.length > 0) {
       reasoning.push(`✅ Sector: ${semanticMatch.directMatches.join(", ")} (exact match)`);
@@ -1191,7 +1203,11 @@ export function calculateUnifiedMatchScore(
     
     details.sector = {
       match: sectorMatch > 0,
-      reason: sectorMatch > 0 ? `${Math.round(semanticMatch.score * 100)}% match` : 'Geen sector overlap',
+      reason: hasDirectMatch 
+        ? `Direct: ${semanticMatch.directMatches.join(', ')}`
+        : sectorMatch > 0 
+          ? `${Math.round(semanticMatch.score * 100)}% gerelateerd` 
+          : 'Geen sector overlap',
       directMatches: semanticMatch.directMatches,
       relatedMatches: semanticMatch.relatedMatches
     };
@@ -1224,14 +1240,24 @@ export function calculateUnifiedMatchScore(
     doelgroepMatch = 4;
   }
 
-  // ===== 6. BESCHIKBAARHEID MATCH (5 punten) =====
+  // ===== 6. BESCHIKBAARHEID MATCH (5 punten) - FIX: Flexibel candidates =====
   const candidateBeschikbaarheid = candidate.beschikbaarheid_uren;
   const targetCapaciteit = 
     target.capaciteit_min !== null && target.capaciteit_max !== null
       ? { min: target.capaciteit_min, max: target.capaciteit_max }
       : null;
 
-  if (candidateBeschikbaarheid && targetCapaciteit) {
+  // FIX Phase 2: "Flexibel" candidates should get full score
+  // Detect flexibility based on beschikbaarheid_uren values (32-40 or higher = flexible)
+  const isFlexibel = candidateBeschikbaarheid && 
+                     candidateBeschikbaarheid.max >= 32 && 
+                     (candidateBeschikbaarheid.max - candidateBeschikbaarheid.min) >= 8;
+  
+  if (isFlexibel) {
+    beschikbaarheidMatch = 5;
+    reasoning.push(`✅ Beschikbaarheid: Flexibel (${candidateBeschikbaarheid!.min}-${candidateBeschikbaarheid!.max} uur)`);
+    details.beschikbaarheid = { match: true, reason: 'Flexibel beschikbaar' };
+  } else if (candidateBeschikbaarheid && targetCapaciteit) {
     const overlapMin = Math.max(candidateBeschikbaarheid.min, targetCapaciteit.min);
     const overlapMax = Math.min(candidateBeschikbaarheid.max, targetCapaciteit.max);
     
@@ -1253,8 +1279,12 @@ export function calculateUnifiedMatchScore(
       reasoning.push(`❌ Beschikbaarheid: Geen overlap`);
       details.beschikbaarheid = { match: false, reason: 'Geen overlap' };
     }
+  } else if (!candidateBeschikbaarheid) {
+    beschikbaarheidMatch = 3; // Neutral when no data
+    details.beschikbaarheid = { match: false, reason: 'Niet opgegeven' };
   } else {
-    beschikbaarheidMatch = 3; // Neutral
+    beschikbaarheidMatch = 4; // Partial when some data available
+    details.beschikbaarheid = { match: true, reason: `${candidateBeschikbaarheid.min}-${candidateBeschikbaarheid.max} uur` };
   }
 
   // ===== 7. WERKVORM MATCH (5 punten - vervangt bureau match) =====
@@ -1271,27 +1301,60 @@ export function calculateUnifiedMatchScore(
     details.werkvorm = { match: false, reason: 'Werkvorm niet opgegeven' };
   }
 
-  // ===== 8. NEW: BESCHRIJVING KEYWORD MATCH (10 punten) =====
+  // ===== 8. NEW: BESCHRIJVING KEYWORD MATCH (15 punten - verhoogd voor differentiatie) =====
   // Match candidate doelgroep_ervaring against keywords in publieke_opmerking
+  // FIX Phase 3: Use KEYWORD_ALIASES for ASS/autisme cross-mapping
   // Note: candidateDoelgroepen already declared above in doelgroep match section
+  
+  // Phase 3: Keyword aliases for better matching
+  const KEYWORD_ALIASES: Record<string, string[]> = {
+    'autisme': ['ass', 'autismespectrumstoornis', 'asperger', 'pdd-nos', 'pdd', 'spectrum'],
+    'ass': ['autisme', 'autismespectrumstoornis', 'asperger', 'pdd-nos', 'spectrum'],
+    'lvb': ['licht verstandelijke beperking', 'zwakbegaafd', 'verstandelijke beperking', 'licht verstandelijk'],
+    'nah': ['niet-aangeboren hersenletsel', 'hersenletsel', 'cva', 'hersenbeschadiging'],
+    'psychiatrie': ['ggz', 'geestelijke gezondheidszorg', 'psychisch', 'psychiatrisch'],
+    'ggz': ['psychiatrie', 'geestelijke gezondheidszorg', 'psychisch'],
+    'dementie': ['alzheimer', 'psychogeriatrie', 'geheugenproblemen'],
+    'verslaving': ['middelengebruik', 'verslaafde', 'drugs', 'alcohol'],
+  };
   
   if (descriptionReqs.aandoeningen.length > 0 && candidateDoelgroepen.length > 0) {
     const matchedKeywords: string[] = [];
     
-    // Check if candidate has experience with detected aandoeningen
+    // Expand candidate experience with aliases
+    const expandedCandidateExp = new Set<string>();
+    for (const d of candidateDoelgroepen) {
+      const dLower = d.toLowerCase();
+      expandedCandidateExp.add(dLower);
+      // Add aliases
+      for (const [key, aliases] of Object.entries(KEYWORD_ALIASES)) {
+        if (dLower.includes(key) || aliases.some(a => dLower.includes(a))) {
+          expandedCandidateExp.add(key);
+          aliases.forEach(a => expandedCandidateExp.add(a));
+        }
+      }
+    }
+    
+    // Check if candidate has experience with detected aandoeningen (using aliases)
     for (const aandoening of descriptionReqs.aandoeningen) {
       const aandoeningLower = aandoening.toLowerCase();
-      const hasExperience = candidateDoelgroepen.some(d => 
-        d.toLowerCase().includes(aandoeningLower) || 
-        aandoeningLower.includes(d.toLowerCase())
-      );
+      const aandoeningAliases = KEYWORD_ALIASES[aandoeningLower] || [];
+      
+      // Direct match or alias match
+      const hasExperience = expandedCandidateExp.has(aandoeningLower) ||
+        aandoeningAliases.some(alias => expandedCandidateExp.has(alias)) ||
+        Array.from(expandedCandidateExp).some(exp => 
+          exp.includes(aandoeningLower) || aandoeningLower.includes(exp)
+        );
+      
       if (hasExperience) {
         matchedKeywords.push(aandoening);
       }
     }
     
     if (matchedKeywords.length > 0) {
-      beschrijvingMatch = Math.min(10, 4 + matchedKeywords.length * 2);
+      // Phase 4: Increased weighting for better differentiation (15 max instead of 10)
+      beschrijvingMatch = Math.min(15, 5 + matchedKeywords.length * 3);
       reasoning.push(`✅ Beschrijving: Ervaring met ${matchedKeywords.join(', ')}`);
       details.beschrijving = { match: true, reason: `${matchedKeywords.length} keyword matches`, matchedKeywords };
     } else {
@@ -1300,7 +1363,7 @@ export function calculateUnifiedMatchScore(
       details.beschrijving = { match: false, reason: `Ontbreekt: ${descriptionReqs.aandoeningen.slice(0, 2).join(', ')}`, matchedKeywords: [] };
     }
   } else if (descriptionReqs.aandoeningen.length === 0) {
-    beschrijvingMatch = 5; // Neutral if no specific requirements in description
+    beschrijvingMatch = 7; // Neutral if no specific requirements in description
     details.beschrijving = { match: true, reason: 'Geen specifieke vereisten', matchedKeywords: [] };
   }
 
