@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Loader2, Building2, MapPin, Users, Briefcase, Link2, Clock, Sparkles, CheckCircle2, AlertCircle, Brain, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { calculateApplicationMatchScore, type MatchScoreBreakdown } from "@/lib/services/matchingService";
+import { calculateApplicationMatchScoreWithExperts, preloadExpertKnowledge, calculateApplicationMatchScore, type MatchScoreBreakdown } from "@/lib/services/matchingService";
 import { MatchScoreBreakdown as MatchScoreBreakdownUI } from "./MatchScoreBreakdown";
 import { loadSuccessPatterns, calculateAILearningBoost, trackPatternUsage, type SuccessPattern } from "@/lib/aiLearningBoost";
 import confetti from "canvas-confetti";
@@ -98,6 +98,10 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
     setLoading(true);
     try {
       const data = application.extracted_data || {};
+
+      // === FIX 1: Preload expert knowledge for expert advice in matching ===
+      const expertCount = await preloadExpertKnowledge();
+      console.log(`[ApplicationMatchesTab] Loaded ${expertCount} expert specialisms`);
 
       // === FASE 1 & 4: Load AI success patterns for boost ===
       const aiPatterns = await loadSuccessPatterns();
