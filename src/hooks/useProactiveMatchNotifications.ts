@@ -60,7 +60,7 @@ function calculateQuickMatchScore(application: Application, client: Client): num
     score += 20;
   }
   
-  // Doelgroep match (15 points)
+  // Doelgroep match (15 points - verhoogd)
   const applicantDoelgroepen = extractedData.doelgroep_ervaring || [];
   const clientDoelgroepen = client.doelgroep || [];
   if (applicantDoelgroepen.some((d: string) => clientDoelgroepen.includes(d))) {
