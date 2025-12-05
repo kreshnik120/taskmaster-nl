@@ -395,62 +395,12 @@ const Sollicitaties = () => {
         }
       }
 
-      // Haal AI suggestie op voor taak
-      const { data: suggestionData } = await supabase.functions.invoke(
-        'suggest-recruitment-actions',
-        { 
-          body: { 
-            application_id: application.id, 
-            old_stage: previousStage, 
-            new_stage: newStage 
-          } 
-        }
-      );
-
-      // Priority mapping van edge function naar database enum (uppercase)
-      const priorityMapping: Record<string, 'LOW' | 'MEDIUM' | 'HIGH'> = {
-        'critical': 'HIGH',
-        'high': 'HIGH', 
-        'medium': 'MEDIUM',
-        'low': 'LOW'
-      };
-
-      // Maak automatisch taak aan
-      if (suggestionData?.suggestion) {
-        const { data: { user } } = await supabase.auth.getUser();
-        const { data: userOrg } = await supabase
-          .from('user_organizations')
-          .select('org_id')
-          .eq('user_id', user?.id)
-          .limit(1)
-          .maybeSingle();
-
-        if (userOrg?.org_id) {
-          const mappedPriority = priorityMapping[suggestionData.suggestion.priority?.toLowerCase()] || 'MEDIUM';
-          
-          const { error: taskError } = await supabase.from('tasks').insert([{
-            org_id: userOrg.org_id,
-            title: suggestionData.suggestion.title,
-            description: suggestionData.suggestion.description,
-            priority: mappedPriority,
-            application_id: application.id,
-            recruitment_action_type: suggestionData.suggestion.recruitment_action_type,
-            reporter_id: user?.id,
-            status: 'todo'
-          }]);
-
-          if (taskError) {
-            console.error("Error creating task:", taskError);
-          }
-        }
-      }
-
-      // Smart toast met acties
+      // Smart toast met acties (taken worden alleen aangemaakt via Acties tab)
       const candidateName = application.extracted_data?.naam || application.email_from;
       toast.success(`${candidateName} is goedgekeurd! 🎉`, {
         description: professionalCreated 
-          ? "Professional profiel aangemaakt. Klaar voor matching!"
-          : suggestionData?.suggestion?.title || "Contract kan worden opgemaakt",
+          ? "Professional profiel aangemaakt. Gebruik Acties tab voor vervolgstappen."
+          : "Klaar voor matching. Gebruik Acties tab voor vervolgstappen.",
         action: {
           label: "Bekijk Matching",
           onClick: () => {
