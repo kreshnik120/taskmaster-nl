@@ -453,7 +453,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               >
                 <Edit className="h-4 w-4 mr-2" />
                 Bewerken
-                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-50">
                   E
                 </kbd>
               </Button>
@@ -493,7 +493,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               >
                 <CheckCircle2 className="h-4 w-4 mr-2" />
                 Taak Afronden
-                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-50">
                   C
                 </kbd>
               </Button>
@@ -519,7 +519,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                     Start Timer
                   </>
                 )}
-                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                <kbd className="ml-2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-50">
                   T
                 </kbd>
               </Button>
@@ -546,7 +546,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
 
             {/* Linked Application */}
             {linkedApplication && (
-              <div className="p-4 rounded-lg bg-accent/30 border border-accent space-y-2 animate-fade-in">
+              <div className="p-4 rounded-lg bg-muted/20 border-l-4 border-l-primary/60 space-y-2 animate-fade-in">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Mail className="h-4 w-4 text-primary" />
@@ -583,7 +583,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               open={sectionsOpen.info} 
               onOpenChange={() => toggleSection('info')}
             >
-              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-accent/50 transition-colors group">
+              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/30 transition-colors group">
                 <div className="flex items-center gap-2">
                   <Info className="h-5 w-5 text-primary" />
                   <h3 className="font-semibold text-foreground">Basis informatie</h3>
@@ -645,7 +645,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 open={sectionsOpen.description} 
                 onOpenChange={() => toggleSection('description')}
               >
-                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-accent/50 transition-colors group">
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/30 transition-colors group">
                   <div className="flex items-center gap-2">
                     <FileText className="h-5 w-5 text-primary" />
                     <h3 className="font-semibold text-foreground">Beschrijving</h3>
@@ -682,7 +682,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 open={sectionsOpen.steps} 
                 onOpenChange={() => toggleSection('steps')}
               >
-                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-accent/50 transition-colors group">
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/30 transition-colors group">
                   <div className="flex items-center gap-2">
                     <ListChecks className="h-5 w-5 text-primary" />
                     <h3 className="font-semibold text-foreground">Processtappen</h3>
