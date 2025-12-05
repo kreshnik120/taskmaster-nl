@@ -1178,27 +1178,23 @@ export function calculateUnifiedMatchScore(
   if (targetSectors.length > 0 && candidateSectors.length > 0) {
     const semanticMatch = calculateSemanticSectorMatch(candidateSectors, targetSectors);
     
-    // Phase 4: Extra bonus for DIRECT sector match vs related
+    // FASE 3 FIX: DIRECTE sector match moet SIGNIFICANT hoger scoren
     const hasDirectMatch = semanticMatch.directMatches.length > 0;
-    const baseScore = Math.round(semanticMatch.score * 20);
     
-    // Direct match gets full 20, related match caps at 14 (70%)
+    // Direct GGZ-GGZ match: 20 punten
+    // Related GGZ-GHZ match: 12 punten (60%)
+    // Geen match: 4 punten base
     if (hasDirectMatch) {
-      sectorMatch = Math.max(baseScore, 18); // Ensure direct matches score high
+      sectorMatch = 20; // Direct match = FULL points
+      reasoning.push(`✅ Sector: ${semanticMatch.directMatches.join(', ')} (directe match)`);
     } else if (semanticMatch.relatedMatches.length > 0) {
-      sectorMatch = Math.min(baseScore, 14); // Cap related matches
+      // Related match (e.g., GGZ-GHZ) = max 14 punten (70%)
+      sectorMatch = Math.min(14, Math.round(semanticMatch.score * 14));
+      reasoning.push(`⚠️ Sector: ${semanticMatch.relatedMatches.join(', ')} (gerelateerd)`);
     } else {
-      sectorMatch = baseScore;
-    }
-    
-    if (semanticMatch.directMatches.length > 0) {
-      reasoning.push(`✅ Sector: ${semanticMatch.directMatches.join(", ")} (exact match)`);
-    }
-    if (semanticMatch.relatedMatches.length > 0) {
-      reasoning.push(`⚠️ Sector: ${semanticMatch.relatedMatches.join(", ")} (gerelateerd)`);
-    }
-    if (semanticMatch.directMatches.length === 0 && semanticMatch.relatedMatches.length === 0) {
-      reasoning.push(`❌ Sector: Geen match met ${targetSectors.join(", ")}`);
+      // Geen match
+      sectorMatch = 0;
+      reasoning.push(`❌ Sector: Geen match met ${targetSectors.join(', ')}`);
     }
     
     details.sector = {
@@ -1627,22 +1623,29 @@ export function calculateUnifiedMatchScore(
   }
 
   // ===== TOTAL SCORE =====
-  // CRITICAL FIX: Correct weighting to exactly 92 base points + bonuses
-  // Functie 20, Regio 17, Sector 13, Doelgroep 10, Beschrijving 10, CertificaatVereist 8, 
-  // Mobiliteit 7, Beschikbaarheid 4, Werkvorm 3 = 92 base
-  // + Track Record (max 8) + Expert (max 12) + AI boost (max 15) = max 127
-  const baseScore = 
-    Math.round(functieMatch * 0.8) +  // 25 * 0.8 = 20 points max
-    Math.round(regioMatch * 0.85) +   // 20 * 0.85 = 17 points max
-    Math.round(sectorMatch * 0.65) +  // 20 * 0.65 = 13 points max
-    Math.round(doelgroepMatch * 0.67) + // 15 * 0.67 = 10 points max
-    Math.round(beschrijvingMatch * 0.67) + // FIX 2: 15 * 0.67 = 10 points max (was 1.5!)
-    Math.round(certificaatVereistMatch * 0.8) + // 10 * 0.8 = 8 points max
-    Math.round(mobiliteitMatch * 0.7) + // 10 * 0.7 = 7 points max
-    Math.round(beschikbaarheidMatch * 0.8) + // 5 * 0.8 = 4 points max
-    Math.round(werkvormMatch * 0.6);  // 5 * 0.6 = 3 points max = 92 total
+  // CRITICAL FIX FASE 1: Base score normaliseert naar 100%, bonussen zijn EXTRA
+  // Base components sum to 100 points MAX (not 92!)
+  // Functie 25, Regio 20, Sector 20, Doelgroep 15, Beschrijving 15, Certificaat 10, 
+  // Mobiliteit 10, Beschikbaarheid 5, Werkvorm 5 = 125 raw max → normalized to 100
+  
+  // Raw base score (max 125 from raw components)
+  const rawBaseScore = 
+    functieMatch +              // max 25
+    regioMatch +                // max 20
+    sectorMatch +               // max 20
+    doelgroepMatch +            // max 15
+    beschrijvingMatch +         // max 15
+    certificaatVereistMatch +   // max 10
+    mobiliteitMatch +           // max 10
+    beschikbaarheidMatch +      // max 5
+    werkvormMatch;              // max 5 = 125 total raw
+  
+  // FASE 1 FIX: Base normaliseert naar percentage van 100 (niet delen door 140!)
+  const maxRawBase = 125;
+  const basePercentage = Math.round((rawBaseScore / maxRawBase) * 100);
 
-  const bonusScore = 
+  // Bonus points zijn EXTRA bovenop base percentage
+  const bonusPoints = 
     ervaringBonus +        // max +5
     leidinggevendeBonus +  // max +3  
     certificatenBonus +    // max +3
@@ -1651,13 +1654,12 @@ export function calculateUnifiedMatchScore(
     expertBonus +          // max +12
     aiBoost;               // max +15 = 48 max bonus
   
-  const totalScore = baseScore + bonusScore;
+  // FASE 1 FIX: Bonussen voegen punten toe, maar finale score cap at 100
+  // Een perfecte base (125/125) = 100%, bonussen kunnen +5-10% toevoegen voor differentiatie
+  const bonusPercentage = Math.round(bonusPoints * 0.2); // 48 max * 0.2 = max +10%
   
-  // FIX 4: Proportional normalization instead of hard cap
-  // Max possible = 92 base + 48 bonus = 140 theoretical max
-  // Normalize proportionally to maintain differentiation
-  const maxPossibleScore = 92 + 48; // 140
-  const normalizedScore = Math.round(Math.min(100, (totalScore / maxPossibleScore) * 100));
+  const totalScore = rawBaseScore + bonusPoints; // For backwards compat in return
+  const normalizedScore = Math.min(100, basePercentage + bonusPercentage);
 
   return {
     functieMatch,

@@ -85,23 +85,25 @@ function ScoreIndicator({ score, label, sublabel }: { score: number; label: stri
 }
 
 export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdownProps) {
-  // Condensed criteria groups for Apple minimalism
-  const geschiktheid = Math.round(
-    ((breakdown?.functieMatch || 0) / 25 * 40 + (breakdown?.sectorMatch || 0) / 20 * 30 + (breakdown?.doelgroepMatch || 0) / 15 * 30) / 100 * 100
-  );
+  // FASE 2 FIX: UI berekeningen SYNC met backend
+  // Backend: raw scores / 125 * 100 = percentage
+  // UI moet dezelfde percentages tonen
   
-  const locatie = Math.round(
-    ((breakdown?.regioMatch || 0) / 20 * 70 + (breakdown?.mobiliteitMatch || 0) / 10 * 30) / 100 * 100
-  );
+  // Geschiktheid = functie (25) + sector (20) + doelgroep (15) = max 60 raw
+  const geschiktheidRaw = (breakdown?.functieMatch || 0) + (breakdown?.sectorMatch || 0) + (breakdown?.doelgroepMatch || 0);
+  const geschiktheid = Math.round((geschiktheidRaw / 60) * 100);
   
-  const ervaring = Math.round(
-    ((breakdown?.beschrijvingMatch || 0) / 15 * 50 + (breakdown?.certificaatVereistMatch || 0) / 8 * 50) / 100 * 100
-  );
+  // Locatie = regio (20) + mobiliteit (10) = max 30 raw
+  const locatieRaw = (breakdown?.regioMatch || 0) + (breakdown?.mobiliteitMatch || 0);
+  const locatie = Math.round((locatieRaw / 30) * 100);
   
-  // FIX 1: werkvormMatch max is 5, niet 3!
-  const praktisch = Math.round(
-    ((breakdown?.beschikbaarheidMatch || 0) / 5 * 50 + (breakdown?.werkvormMatch || 0) / 5 * 50) / 100 * 100
-  );
+  // Ervaring = beschrijving (15) + certificaat (10) = max 25 raw
+  const ervaringRaw = (breakdown?.beschrijvingMatch || 0) + (breakdown?.certificaatVereistMatch || 0);
+  const ervaring = Math.round((ervaringRaw / 25) * 100);
+  
+  // Praktisch = beschikbaarheid (5) + werkvorm (5) = max 10 raw
+  const praktischRaw = (breakdown?.beschikbaarheidMatch || 0) + (breakdown?.werkvormMatch || 0);
+  const praktisch = Math.round((praktischRaw / 10) * 100);
 
   // Get sublabels from details
   const geschiktheidSub = breakdown?.details?.functie?.reason || '';
