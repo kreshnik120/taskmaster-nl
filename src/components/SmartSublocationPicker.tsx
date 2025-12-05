@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,12 +8,19 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { 
+  preloadExpertKnowledge, 
+  calculateUnifiedMatchScore,
+  parseBeschikbaarheid,
+  type MatchScoreBreakdown 
+} from "@/lib/services/matchingService";
 
 export interface Sublocation {
   id: string;
   naam: string;
   plaats: string | null;
   provincie?: string | null;
+  postcode?: string | null;
   sector: string[] | null;
   doelgroep: string[] | null;
   gezochte_functies: string[] | null;
@@ -32,12 +39,21 @@ export interface ProfessionalData {
   functie_niveau?: string;
   werkvorm?: string;
   regio?: string;
+  woonplaats?: string;
   postcode?: string;
+  provincie?: string;
   beschikbaarheid?: string;
   ervaring_sector?: string[];
   doelgroep_ervaring?: string[];
   heeft_auto?: boolean;
   heeft_rijbewijs?: boolean;
+  eigen_vervoer?: boolean;
+  certificaten?: string[];
+  specialisaties?: string[];
+  jaren_ervaring?: number;
+  leidinggevende_ervaring?: boolean;
+  nachtdienst_bereid?: boolean;
+  weekenddienst_bereid?: boolean;
 }
 
 interface SmartSublocationPickerProps {
@@ -48,63 +64,8 @@ interface SmartSublocationPickerProps {
 
 export interface ScoredSublocation extends Sublocation {
   matchScore: number;
+  matchBreakdown?: MatchScoreBreakdown;
   isRecommended: boolean;
-}
-
-// Simple inline scoring for sublocation matching - exported for use in DirectPlacementButton
-export function calculateSimpleMatchScore(
-  professional: ProfessionalData,
-  sublocation: Sublocation
-): number {
-  let score = 0;
-  
-  // Functie match (30 punten)
-  if (professional.functie_niveau && sublocation.gezochte_functies?.length) {
-    const functieMatch = sublocation.gezochte_functies.some(f => 
-      f.toLowerCase().includes(professional.functie_niveau!.toLowerCase()) ||
-      professional.functie_niveau!.toLowerCase().includes(f.toLowerCase())
-    );
-    if (functieMatch) score += 30;
-  }
-  
-  // Sector match (25 punten)
-  if (professional.ervaring_sector?.length && sublocation.sector?.length) {
-    const sectorMatches = professional.ervaring_sector.filter(s =>
-      sublocation.sector!.some(ts => 
-        s.toLowerCase() === ts.toLowerCase() ||
-        s.toLowerCase().includes(ts.toLowerCase()) ||
-        ts.toLowerCase().includes(s.toLowerCase())
-      )
-    );
-    score += Math.min(25, sectorMatches.length * 12);
-  }
-  
-  // Doelgroep match (20 punten)
-  if (professional.doelgroep_ervaring?.length && sublocation.doelgroep?.length) {
-    const doelgroepMatches = professional.doelgroep_ervaring.filter(d =>
-      sublocation.doelgroep!.some(td => 
-        d.toLowerCase() === td.toLowerCase() ||
-        d.toLowerCase().includes(td.toLowerCase()) ||
-        td.toLowerCase().includes(d.toLowerCase())
-      )
-    );
-    score += Math.min(20, doelgroepMatches.length * 10);
-  }
-  
-  // Regio match (15 punten)
-  if (professional.regio && sublocation.plaats) {
-    const regioLower = professional.regio.toLowerCase();
-    const plaatsLower = sublocation.plaats.toLowerCase();
-    if (regioLower.includes(plaatsLower) || plaatsLower.includes(regioLower)) {
-      score += 15;
-    }
-  }
-  
-  // Base score for having data (10 punten)
-  if (professional.functie_niveau) score += 5;
-  if (professional.regio || professional.postcode) score += 5;
-  
-  return Math.min(100, score);
 }
 
 export function SmartSublocationPicker({ 
@@ -114,6 +75,12 @@ export function SmartSublocationPicker({
 }: SmartSublocationPickerProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [showAllLocations, setShowAllLocations] = useState(false);
+  const [expertsLoaded, setExpertsLoaded] = useState(false);
+
+  // Preload expert knowledge on mount
+  useEffect(() => {
+    preloadExpertKnowledge().then(() => setExpertsLoaded(true));
+  }, []);
 
   const { data: sublocations, isLoading } = useQuery({
     queryKey: ['sublocations-for-smart-placement'],
@@ -127,6 +94,8 @@ export function SmartSublocationPicker({
           id,
           naam,
           plaats,
+          provincie,
+          postcode,
           sector,
           doelgroep,
           gezochte_functies,
@@ -152,24 +121,60 @@ export function SmartSublocationPicker({
     }
   });
 
-  // Calculate match scores for each sublocation
+  // Calculate match scores using the unified matching service
   const scoredSublocations = useMemo(() => {
     if (!sublocations) return [];
 
     return sublocations.map(sub => {
       let matchScore = 0;
+      let matchBreakdown: MatchScoreBreakdown | undefined;
 
-      if (professionalData) {
-        matchScore = calculateSimpleMatchScore(professionalData, sub);
+      if (professionalData && expertsLoaded) {
+        // Use unified matching service with full features
+        const result = calculateUnifiedMatchScore(
+          {
+            functie_niveau: professionalData.functie_niveau || null,
+            regio: professionalData.regio || professionalData.woonplaats || null,
+            woonplaats: professionalData.woonplaats,
+            postcode: professionalData.postcode,
+            provincie: professionalData.provincie,
+            ervaring_sector: professionalData.ervaring_sector,
+            doelgroep_ervaring: professionalData.doelgroep_ervaring,
+            jaren_ervaring: professionalData.jaren_ervaring,
+            leidinggevende_ervaring: professionalData.leidinggevende_ervaring,
+            heeft_auto: professionalData.heeft_auto,
+            heeft_rijbewijs: professionalData.heeft_rijbewijs,
+            eigen_vervoer: professionalData.eigen_vervoer,
+            beschikbaarheid_uren: parseBeschikbaarheid(professionalData.beschikbaarheid || null),
+            nachtdienst_bereid: professionalData.nachtdienst_bereid,
+            weekenddienst_bereid: professionalData.weekenddienst_bereid,
+            certificaten: professionalData.certificaten,
+            werkvorm: professionalData.werkvorm,
+            specialisaties: professionalData.specialisaties,
+          },
+          {
+            gezochte_functies: sub.gezochte_functies,
+            sector: sub.sector,
+            doelgroep: sub.doelgroep,
+            plaats: sub.plaats,
+            provincie: sub.provincie,
+            postcode: sub.postcode,
+            publieke_opmerking: sub.publieke_opmerking,
+          }
+        );
+        
+        matchScore = result.normalizedScore;
+        matchBreakdown = result;
       }
 
       return {
         ...sub,
         matchScore,
+        matchBreakdown,
         isRecommended: matchScore >= 50
       } as ScoredSublocation;
     }).sort((a, b) => b.matchScore - a.matchScore);
-  }, [sublocations, professionalData]);
+  }, [sublocations, professionalData, expertsLoaded]);
 
   // Filter by search
   const filteredSublocations = useMemo(() => {

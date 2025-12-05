@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,9 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { MapPin, Building2, Target, Users, Sparkles, Search, SlidersHorizontal } from "lucide-react";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { calculateSublocationMatchScore, parseBeschikbaarheid } from "@/lib/calculateSublocationMatchScore";
+import { MapPin, Building2, Sparkles, Search, SlidersHorizontal } from "lucide-react";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { 
+  preloadExpertKnowledge, 
+  calculateUnifiedMatchScore,
+  parseBeschikbaarheid,
+  type MatchScoreBreakdown 
+} from "@/lib/services/matchingService";
 import { PlacementConfirmDialog } from "@/components/organization/PlacementConfirmDialog";
 
 interface Professional {
@@ -19,6 +24,7 @@ interface Professional {
   regio: string | null;
   woonplaats: string | null;
   postcode: string | null;
+  provincie?: string | null;
   skills: string[] | null;
   status: string | null;
   beschikbaarheidsnotities: string | null;
@@ -33,6 +39,10 @@ interface Professional {
   regio_voorkeur?: string[] | null;
   specifieke_doelgroepen?: string[] | null;
   max_reisafstand_km?: number | null;
+  jaren_ervaring?: number | null;
+  leidinggevende_ervaring?: boolean | null;
+  nachtdienst_bereid?: boolean | null;
+  weekenddienst_bereid?: boolean | null;
 }
 
 interface Sublocation {
@@ -40,9 +50,11 @@ interface Sublocation {
   naam: string;
   plaats: string | null;
   provincie: string | null;
+  postcode?: string | null;
   sector: string[] | null;
   doelgroep: string[] | null;
   gezochte_functies: string[] | null;
+  publieke_opmerking?: string | null;
   capaciteit_min: number | null;
   capaciteit_max: number | null;
   location: {
@@ -73,6 +85,12 @@ export function SublocationSelectorPanel({
   const [showFilters, setShowFilters] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [selectedSublocation, setSelectedSublocation] = useState<any>(null);
+  const [expertsLoaded, setExpertsLoaded] = useState(false);
+
+  // Preload expert knowledge on mount
+  useEffect(() => {
+    preloadExpertKnowledge().then(() => setExpertsLoaded(true));
+  }, []);
 
   // Fetch sublocations with rates
   const { data: sublocations, isLoading } = useQuery({
@@ -85,9 +103,11 @@ export function SublocationSelectorPanel({
           naam,
           plaats,
           provincie,
+          postcode,
           sector,
           doelgroep,
           gezochte_functies,
+          publieke_opmerking,
           capaciteit_min,
           capaciteit_max,
           location:client_locations(
@@ -103,23 +123,30 @@ export function SublocationSelectorPanel({
     },
   });
 
-  // Calculate match scores and filter
+  // Calculate match scores using unified matching service
   const processedSublocations = sublocations
     ?.map((sublocation) => {
-      const matchResult = calculateSublocationMatchScore(
+      // Use unified matching service with full features
+      const matchResult = expertsLoaded ? calculateUnifiedMatchScore(
         {
-          functie_niveau: professionalData.functie_niveau || "",
-          regio: professionalData.regio,
-          skills: professionalData.skills || [],
-          beschikbaarheidsnotities: professionalData.beschikbaarheidsnotities,
-          beschikbaarheid_uren: parseBeschikbaarheid(professionalData.beschikbaarheidsnotities),
+          functie_niveau: professionalData.functie_niveau || null,
+          regio: professionalData.regio || professionalData.woonplaats || null,
+          woonplaats: professionalData.woonplaats,
+          postcode: professionalData.postcode,
+          provincie: professionalData.provincie,
+          ervaring_sector: professionalData.ervaring_sector,
+          doelgroep_ervaring: professionalData.doelgroep_ervaring,
+          jaren_ervaring: professionalData.jaren_ervaring,
+          leidinggevende_ervaring: professionalData.leidinggevende_ervaring,
           heeft_auto: professionalData.heeft_auto,
           heeft_rijbewijs: professionalData.heeft_rijbewijs,
           eigen_vervoer: professionalData.eigen_vervoer,
-          woonplaats: professionalData.woonplaats,
-          postcode: professionalData.postcode,
-          ervaring_sector: professionalData.ervaring_sector,
-          doelgroep_ervaring: professionalData.doelgroep_ervaring,
+          beschikbaarheid_uren: parseBeschikbaarheid(professionalData.beschikbaarheidsnotities),
+          nachtdienst_bereid: professionalData.nachtdienst_bereid,
+          weekenddienst_bereid: professionalData.weekenddienst_bereid,
+          certificaten: professionalData.certificaten,
+          werkvorm: professionalData.werkvorm,
+          specialisaties: professionalData.specialisaties,
         },
         {
           gezochte_functies: sublocation.gezochte_functies || [],
@@ -127,14 +154,46 @@ export function SublocationSelectorPanel({
           doelgroep: sublocation.doelgroep || [],
           plaats: sublocation.plaats,
           provincie: sublocation.provincie,
+          postcode: sublocation.postcode,
           capaciteit_min: sublocation.capaciteit_min,
           capaciteit_max: sublocation.capaciteit_max,
+          publieke_opmerking: sublocation.publieke_opmerking,
         }
-      );
+      ) : {
+        normalizedScore: 0,
+        reasoning: [] as string[],
+        totalScore: 0,
+        functieMatch: 0,
+        regioMatch: 0,
+        sectorMatch: 0,
+        doelgroepMatch: 0,
+        mobiliteitMatch: 0,
+        beschikbaarheidMatch: 0,
+        werkvormMatch: 0,
+        beschrijvingMatch: 0,
+        certificaatVereistMatch: 0,
+        trackRecordBonus: 0,
+        expertBonus: 0,
+        ervaringBonus: 0,
+        leidinggevendeBonus: 0,
+        certificatenBonus: 0,
+        dienstBonus: 0,
+        aiBoost: 0,
+        hasAIBoost: false,
+        hasTrackRecord: false,
+        hasExpertAdvies: false,
+        expertAdvies: [],
+        aiBoostReasons: [],
+        usedPatternIds: [],
+        bonusTotal: 0,
+        bonusPercentage: 0,
+        categoryContributions: { geschiktheid: { points: 0, max: 60, percentage: 0 }, locatie: { points: 0, max: 30, percentage: 0 }, ervaring: { points: 0, max: 25, percentage: 0 }, praktisch: { points: 0, max: 10, percentage: 0 } },
+        details: {}
+      };
 
       return {
         ...sublocation,
-        matchScore: matchResult.totalScore,
+        matchScore: matchResult.normalizedScore,
         matchBreakdown: matchResult,
       };
     })
