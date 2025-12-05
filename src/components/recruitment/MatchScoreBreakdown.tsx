@@ -190,77 +190,124 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
           </div>
         )}
 
-        {/* Expert Advies indicator - FIX 5: Enhanced UI with tips */}
-        {breakdown?.hasExpertAdvies && breakdown.expertAdvies && breakdown.expertAdvies.length > 0 && (
-          <div className="space-y-2 p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
-            <div className="flex items-center gap-2">
-              <GraduationCap className="h-4 w-4 text-indigo-600" />
-              <span className="text-xs text-indigo-700 dark:text-indigo-300 font-medium">
-                Expert Advies: +{breakdown.expertBonus || 0} punten
-              </span>
-            </div>
-            <div className="space-y-1.5">
-              {breakdown.expertAdvies.map((expert, idx) => (
-                <div key={idx} className="pl-6 border-l-2 border-indigo-300 dark:border-indigo-600">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-medium text-indigo-800 dark:text-indigo-200">
-                      {expert.expert} ({expert.specialisme})
-                    </span>
-                    <Badge 
-                      variant="outline" 
-                      className={`text-[9px] px-1 py-0 ${
-                        expert.score >= expert.maxScore * 0.6 
-                          ? 'bg-green-50 text-green-700 border-green-200' 
-                          : expert.score > 0
-                            ? 'bg-amber-50 text-amber-700 border-amber-200'
-                            : 'bg-red-50 text-red-700 border-red-200'
-                      }`}
-                    >
-                      {expert.score}/{expert.maxScore}
-                    </Badge>
-                  </div>
-                  <p className="text-[9px] text-indigo-600 dark:text-indigo-400 mt-0.5">
-                    {expert.advies}
-                  </p>
-                  {/* FIX 5: Show tips when score is 0 */}
-                  {expert.score === 0 && (
-                    <div className="mt-1 p-1.5 bg-amber-50 dark:bg-amber-900/30 rounded border border-amber-200 dark:border-amber-700">
-                      <p className="text-[9px] text-amber-700 dark:text-amber-300 font-medium">
-                        💡 Tip voor {expert.specialisme} match:
-                      </p>
-                      <ul className="text-[8px] text-amber-600 dark:text-amber-400 list-disc pl-3 mt-0.5">
-                        <li>Overweeg relevante certificaten toe te voegen</li>
-                        <li>Ervaring in gerelateerde doelgroepen kan helpen</li>
-                      </ul>
-                    </div>
-                  )}
-                  {(expert.matchedCerts.length > 0 || expert.matchedErvaring.length > 0) && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {expert.matchedCerts.map((cert, i) => (
-                        <Badge key={`cert-${i}`} variant="outline" className="text-[8px] px-1 py-0 bg-indigo-100 border-indigo-300">
-                          ✓ {cert}
-                        </Badge>
-                      ))}
-                      {expert.matchedErvaring.map((exp, i) => (
+        {/* Expert Advies indicator - OPTIM 2: Contextual filtering + OPTIM 5: Confidence indicator */}
+        {breakdown?.hasExpertAdvies && breakdown.expertAdvies && breakdown.expertAdvies.length > 0 && (() => {
+          // OPTIM 2: Filter to show only relevant experts (score > 0 OR location-relevant)
+          const relevantExperts = breakdown.expertAdvies.filter(e => 
+            e.score > 0 || (e as any).isLocationRelevant
+          );
+          
+          if (relevantExperts.length === 0) return null;
+          
+          return (
+            <div className="space-y-2 p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
+              <div className="flex items-center gap-2">
+                <GraduationCap className="h-4 w-4 text-indigo-600" />
+                <span className="text-xs text-indigo-700 dark:text-indigo-300 font-medium">
+                  Expert Advies: +{breakdown.expertBonus || 0} punten
+                </span>
+                <Badge variant="outline" className="text-[9px] px-1 py-0 bg-indigo-100 border-indigo-300">
+                  {relevantExperts.length} relevant
+                </Badge>
+              </div>
+              <div className="space-y-1.5">
+                {relevantExperts.map((expert, idx) => {
+                  // OPTIM 5: Get confidence level
+                  const confidence = (expert as any).confidence as 'high' | 'medium' | 'low' | undefined;
+                  const isLocationRelevant = (expert as any).isLocationRelevant;
+                  
+                  return (
+                    <div key={idx} className={`pl-6 border-l-2 ${
+                      isLocationRelevant 
+                        ? 'border-green-400 dark:border-green-600 bg-green-50/50 dark:bg-green-900/10 rounded-r' 
+                        : 'border-indigo-300 dark:border-indigo-600'
+                    }`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-medium text-indigo-800 dark:text-indigo-200">
+                            {expert.expert} ({expert.specialisme})
+                          </span>
+                          {/* OPTIM 4: Location relevance indicator */}
+                          {isLocationRelevant && (
+                            <Badge variant="outline" className="text-[8px] px-1 py-0 bg-green-100 text-green-700 border-green-300">
+                              📍 Locatie
+                            </Badge>
+                          )}
+                          {/* OPTIM 5: Confidence indicator */}
+                          {confidence && (
+                            <Badge 
+                              variant="outline" 
+                              className={`text-[8px] px-1 py-0 ${
+                                confidence === 'high' 
+                                  ? 'bg-green-100 text-green-700 border-green-300' 
+                                  : confidence === 'medium'
+                                    ? 'bg-amber-100 text-amber-700 border-amber-300'
+                                    : 'bg-gray-100 text-gray-600 border-gray-300'
+                              }`}
+                            >
+                              {confidence === 'high' ? '✓✓' : confidence === 'medium' ? '✓' : '?'} {confidence === 'high' ? 'Hoog' : confidence === 'medium' ? 'Medium' : 'Laag'}
+                            </Badge>
+                          )}
+                        </div>
                         <Badge 
-                          key={`exp-${i}`} 
                           variant="outline" 
-                          className={`text-[8px] px-1 py-0 ${
-                            exp.includes('gerelateerd') 
-                              ? 'bg-amber-100 border-amber-300 text-amber-700' 
-                              : 'bg-purple-100 border-purple-300'
+                          className={`text-[9px] px-1 py-0 ${
+                            expert.score >= expert.maxScore * 0.6 
+                              ? 'bg-green-50 text-green-700 border-green-200' 
+                              : expert.score > 0
+                                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                : 'bg-red-50 text-red-700 border-red-200'
                           }`}
                         >
-                          {exp.includes('gerelateerd') ? '⚡' : '✓'} {exp}
+                          {expert.score}/{expert.maxScore}
                         </Badge>
-                      ))}
+                      </div>
+                      <p className="text-[9px] text-indigo-600 dark:text-indigo-400 mt-0.5">
+                        {expert.advies}
+                      </p>
+                      {/* Show tips when score is 0 but location-relevant */}
+                      {expert.score === 0 && isLocationRelevant && (
+                        <div className="mt-1 p-1.5 bg-amber-50 dark:bg-amber-900/30 rounded border border-amber-200 dark:border-amber-700">
+                          <p className="text-[9px] text-amber-700 dark:text-amber-300 font-medium">
+                            💡 Tip voor {expert.specialisme} match:
+                          </p>
+                          <ul className="text-[8px] text-amber-600 dark:text-amber-400 list-disc pl-3 mt-0.5">
+                            <li>Overweeg relevante certificaten toe te voegen</li>
+                            <li>Ervaring in gerelateerde doelgroepen kan helpen</li>
+                          </ul>
+                        </div>
+                      )}
+                      {(expert.matchedCerts.length > 0 || expert.matchedErvaring.length > 0) && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {expert.matchedCerts.map((cert, i) => (
+                            <Badge key={`cert-${i}`} variant="outline" className="text-[8px] px-1 py-0 bg-indigo-100 border-indigo-300">
+                              ✓ {cert}
+                            </Badge>
+                          ))}
+                          {expert.matchedErvaring.map((exp, i) => (
+                            <Badge 
+                              key={`exp-${i}`} 
+                              variant="outline" 
+                              className={`text-[8px] px-1 py-0 ${
+                                exp.includes('gerelateerd') 
+                                  ? 'bg-amber-100 border-amber-300 text-amber-700' 
+                                  : exp.includes('specialisatie')
+                                    ? 'bg-blue-100 border-blue-300 text-blue-700'
+                                    : 'bg-purple-100 border-purple-300'
+                              }`}
+                            >
+                              {exp.includes('gerelateerd') ? '⚡' : exp.includes('specialisatie') ? '🎯' : '✓'} {exp}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* AI Boost indicator */}
         {breakdown?.hasAIBoost && breakdown.aiBoost > 0 && (
