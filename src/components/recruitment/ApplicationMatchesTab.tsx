@@ -105,7 +105,7 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
       const applicantFunctie = getFieldValue(data.functie_niveau) as string | null;
       const applicantSectoren = (getFieldValue(data.ervaring_sector) as string[]) || [];
       const applicantDoelgroepen = (getFieldValue(data.doelgroep_ervaring) as string[]) || [];
-
+      const applicantWerkvorm = getFieldValue(data.werkvorm) as string | null;
       // Fetch active sublocations with their organization info
       const { data: sublocations, error: subError } = await supabase
         .from('client_sublocations')
