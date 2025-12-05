@@ -30,6 +30,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { SublocationSelectionDialog } from "@/components/SublocationSelectionDialog";
+import { SmartSublocationPicker } from "@/components/SmartSublocationPicker";
 import { KPICard } from "@/components/ui/kpi-card";
 import { useProactiveMatchNotifications } from "@/hooks/useProactiveMatchNotifications";
 
@@ -569,7 +570,11 @@ const Sollicitaties = () => {
 
       const candidateName = application.extracted_data?.naam || application.email_from;
       toast.success(`${candidateName} is geplaatst bij ${sublocationName}! 🎊`, {
-        description: "Plaatsing aangemaakt. Ga naar Plaatsingen voor details.",
+        description: "Plaatsing succesvol aangemaakt",
+        action: {
+          label: "Bekijk plaatsing",
+          onClick: () => navigate("/plaatsingen")
+        },
         duration: 8000,
       });
 
@@ -1176,14 +1181,22 @@ const Sollicitaties = () => {
           <AlertDialog open={selectClientDialog.open} onOpenChange={(open) => {
             if (!open) handleCancelClientSelection();
           }}>
-            <AlertDialogContent className="max-w-2xl">
+            <AlertDialogContent className="max-w-2xl max-h-[85vh]">
               <AlertDialogHeader>
                 <AlertDialogTitle>Selecteer Werklocatie voor Plaatsing</AlertDialogTitle>
                 <AlertDialogDescription>
                   Kies een werklocatie om {selectClientDialog.application?.extracted_data?.naam} aan te koppelen.
                 </AlertDialogDescription>
               </AlertDialogHeader>
-              <SublocationSelectionDialog
+              <SmartSublocationPicker
+                professionalData={{
+                  functie_niveau: selectClientDialog.application?.extracted_data?.functie_niveau,
+                  werkvorm: selectClientDialog.application?.extracted_data?.werkvorm,
+                  regio: selectClientDialog.application?.extracted_data?.regio,
+                  postcode: selectClientDialog.application?.extracted_data?.postcode,
+                  ervaring_sector: selectClientDialog.application?.extracted_data?.ervaring_sector,
+                  doelgroep_ervaring: selectClientDialog.application?.extracted_data?.doelgroep_ervaring,
+                }}
                 onSelect={handleSelectSublocation}
                 onCancel={handleCancelClientSelection}
               />

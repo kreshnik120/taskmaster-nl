@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,8 @@ import { motion } from "framer-motion";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { KPICard } from "@/components/ui/kpi-card";
+import { PageHero } from "@/components/ui/page-hero";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -39,7 +41,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ProfessionalDetailModal } from "@/components/ProfessionalDetailModal";
+
+// Lazy load heavy modal
+const ProfessionalDetailModal = lazy(() => 
+  import("@/components/ProfessionalDetailModal").then(mod => ({ default: mod.ProfessionalDetailModal }))
+);
 
 interface Professional {
   id: string;
@@ -405,123 +411,118 @@ const Professionals = () => {
 
   return (
     <div className="space-y-6">
-      {/* Hero Section - Minimal */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Professionals</h1>
-            <p className="text-muted-foreground">
-              {professionals.length} professionals in je netwerk
-            </p>
-          </div>
-          {canEdit() && (
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Toevoegen
+      {/* Hero Section - Unified PageHero */}
+      <PageHero
+        title="Professionals"
+        subtitle={`${professionals.length} professionals in je netwerk`}
+      >
+        {canEdit() && (
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">
+                <Plus className="w-4 h-4 mr-2" />
+                Toevoegen
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Nieuwe Professional</DialogTitle>
+                <DialogDescription>
+                  Voeg een nieuwe professional toe aan het systeem
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="full_name">Volledige naam *</Label>
+                  <Input
+                    id="full_name"
+                    value={newProfessional.full_name}
+                    onChange={(e) =>
+                      setNewProfessional({ ...newProfessional, full_name: e.target.value })
+                    }
+                    placeholder="John Doe"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="functie_niveau">Functieniveau *</Label>
+                  <Select
+                    value={newProfessional.functie_niveau}
+                    onValueChange={(value) =>
+                      setNewProfessional({ ...newProfessional, functie_niveau: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecteer functieniveau" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="VIG">VIG</SelectItem>
+                      <SelectItem value="HBO-V">HBO-V</SelectItem>
+                      <SelectItem value="Verpleegkundige MBO">Verpleegkundige MBO</SelectItem>
+                      <SelectItem value="Helpende">Helpende</SelectItem>
+                      <SelectItem value="Begeleider">Begeleider</SelectItem>
+                      <SelectItem value="Persoonlijk begeleider">Persoonlijk begeleider</SelectItem>
+                      <SelectItem value="GGZ-agoog">GGZ-agoog</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={newProfessional.email}
+                      onChange={(e) =>
+                        setNewProfessional({ ...newProfessional, email: e.target.value })
+                      }
+                      placeholder="professional@example.com"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="telefoonnummer">Telefoonnummer</Label>
+                    <Input
+                      id="telefoonnummer"
+                      value={newProfessional.telefoonnummer}
+                      onChange={(e) =>
+                        setNewProfessional({ ...newProfessional, telefoonnummer: e.target.value })
+                      }
+                      placeholder="+31612345678"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="regio">Regio</Label>
+                  <Input
+                    id="regio"
+                    value={newProfessional.regio}
+                    onChange={(e) =>
+                      setNewProfessional({ ...newProfessional, regio: e.target.value })
+                    }
+                    placeholder="Amsterdam"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="skills">Vaardigheden (kommagescheiden)</Label>
+                  <Input
+                    id="skills"
+                    value={newProfessional.skills}
+                    onChange={(e) =>
+                      setNewProfessional({ ...newProfessional, skills: e.target.value })
+                    }
+                    placeholder="Wondverzorging, Medicatie, ..."
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                  Annuleren
                 </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Nieuwe Professional</DialogTitle>
-                  <DialogDescription>
-                    Voeg een nieuwe professional toe aan het systeem
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="full_name">Volledige naam *</Label>
-                    <Input
-                      id="full_name"
-                      value={newProfessional.full_name}
-                      onChange={(e) =>
-                        setNewProfessional({ ...newProfessional, full_name: e.target.value })
-                      }
-                      placeholder="John Doe"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="functie_niveau">Functieniveau *</Label>
-                    <Select
-                      value={newProfessional.functie_niveau}
-                      onValueChange={(value) =>
-                        setNewProfessional({ ...newProfessional, functie_niveau: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecteer functieniveau" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="VIG">VIG</SelectItem>
-                        <SelectItem value="HBO-V">HBO-V</SelectItem>
-                        <SelectItem value="Verpleegkundige MBO">Verpleegkundige MBO</SelectItem>
-                        <SelectItem value="Helpende">Helpende</SelectItem>
-                        <SelectItem value="Begeleider">Begeleider</SelectItem>
-                        <SelectItem value="Persoonlijk begeleider">Persoonlijk begeleider</SelectItem>
-                        <SelectItem value="GGZ-agoog">GGZ-agoog</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="email">Email</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={newProfessional.email}
-                        onChange={(e) =>
-                          setNewProfessional({ ...newProfessional, email: e.target.value })
-                        }
-                        placeholder="professional@example.com"
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="telefoonnummer">Telefoonnummer</Label>
-                      <Input
-                        id="telefoonnummer"
-                        value={newProfessional.telefoonnummer}
-                        onChange={(e) =>
-                          setNewProfessional({ ...newProfessional, telefoonnummer: e.target.value })
-                        }
-                        placeholder="+31612345678"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="regio">Regio</Label>
-                    <Input
-                      id="regio"
-                      value={newProfessional.regio}
-                      onChange={(e) =>
-                        setNewProfessional({ ...newProfessional, regio: e.target.value })
-                      }
-                      placeholder="Amsterdam"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="skills">Vaardigheden (kommagescheiden)</Label>
-                    <Input
-                      id="skills"
-                      value={newProfessional.skills}
-                      onChange={(e) =>
-                        setNewProfessional({ ...newProfessional, skills: e.target.value })
-                      }
-                      placeholder="Wondverzorging, Medicatie, ..."
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                    Annuleren
-                  </Button>
-                  <Button onClick={handleAddProfessional}>Toevoegen</Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          )}
-        </div>
-      </div>
+                <Button onClick={handleAddProfessional}>Toevoegen</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+      </PageHero>
 
       {/* KPI Cards met Icons */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -681,13 +682,15 @@ const Professionals = () => {
         </div>
       )}
 
-      {/* Detail Modal */}
-      <ProfessionalDetailModal
-        professional={selectedProfessional}
-        open={detailModalOpen}
-        onOpenChange={setDetailModalOpen}
-        onSuccess={fetchProfessionals}
-      />
+      {/* Detail Modal - Lazy Loaded */}
+      <Suspense fallback={<div className="p-4"><Skeleton className="h-96 w-full" /></div>}>
+        <ProfessionalDetailModal
+          professional={selectedProfessional}
+          open={detailModalOpen}
+          onOpenChange={setDetailModalOpen}
+          onSuccess={fetchProfessionals}
+        />
+      </Suspense>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
