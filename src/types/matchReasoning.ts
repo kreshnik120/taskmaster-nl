@@ -3,20 +3,19 @@
  * Ensures consistent data structure for match breakdown persistence and retrieval
  */
 
+// Aligned with matchingService.ts CategoryContribution interface
 export interface CategoryContribution {
-  score: number;
-  maxScore: number;
+  points: number;
+  max: number;
   percentage: number;
 }
 
+// Aligned with matchingService.ts grouped categories
 export interface CategoryContributions {
-  functie?: CategoryContribution;
-  sector?: CategoryContribution;
-  regio?: CategoryContribution;
-  doelgroep?: CategoryContribution;
-  beschikbaarheid?: CategoryContribution;
-  mobiliteit?: CategoryContribution;
-  werkvorm?: CategoryContribution;
+  geschiktheid: CategoryContribution;
+  locatie: CategoryContribution;
+  ervaring: CategoryContribution;
+  praktisch: CategoryContribution;
 }
 
 export interface MatchDetails {
@@ -109,7 +108,25 @@ export function isValidMatchBreakdown(reasoning: any): boolean {
                         typeof reasoning.normalizedScore === 'number' ||
                         typeof reasoning.functieMatch === 'number';
   
-  return hasBasicScore;
+  if (!hasBasicScore) return false;
+  
+  // If categoryContributions exists, it must have the correct structure (points/max, not score/maxScore)
+  if (reasoning.categoryContributions) {
+    const cc = reasoning.categoryContributions;
+    // Check for new structure (geschiktheid/locatie/ervaring/praktisch with points/max)
+    const hasValidStructure = 
+      cc.geschiktheid && typeof cc.geschiktheid.points === 'number' &&
+      cc.locatie && typeof cc.locatie.points === 'number';
+    
+    // If old structure (functie/sector with score/maxScore), invalidate so fallback is calculated
+    const hasOldStructure = cc.functie && typeof cc.functie.score === 'number';
+    
+    if (hasOldStructure && !hasValidStructure) {
+      return false; // Force fallback for old data structure
+    }
+  }
+  
+  return true;
 }
 
 /**
