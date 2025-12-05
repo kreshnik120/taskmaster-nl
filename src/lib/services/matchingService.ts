@@ -888,3 +888,140 @@ export function calculateVacancyMatchScore(
     details: extendedDetails,
   };
 }
+
+// ============= APPLICATION DIRECT MATCHING =============
+// Calculate match score directly from application.extracted_data without professional conversion
+
+interface ApplicationMatchSource {
+  extracted_data: any;
+  completeness_score?: number | null;
+}
+
+// Helper to get value from {value, confidence} or plain value
+function getExtractedValue<T>(field: T | { value: T; confidence: number } | null | undefined): T | null {
+  if (field === null || field === undefined) return null;
+  if (typeof field === 'object' && field !== null && 'value' in field) {
+    return (field as { value: T; confidence: number }).value;
+  }
+  return field as T;
+}
+
+/**
+ * Calculate match score directly from application extracted_data
+ * This enables matching BEFORE professional conversion
+ */
+export function calculateApplicationMatchScore(
+  application: ApplicationMatchSource,
+  target: MatchTarget,
+  aiBoostData?: { boost: number; reasons: string[]; usedPatternIds: string[] }
+): MatchScoreBreakdown {
+  const data = application.extracted_data || {};
+  
+  // Map extracted_data to MatchCandidate interface
+  const candidate: MatchCandidate = {
+    functie_niveau: getExtractedValue(data.functie_niveau),
+    regio: getExtractedValue(data.regio) || getExtractedValue(data.woonplaats),
+    woonplaats: getExtractedValue(data.woonplaats),
+    postcode: getExtractedValue(data.postcode),
+    provincie: null, // Could derive from postcode if needed
+    ervaring_sector: getExtractedValue(data.ervaring_sector) || [],
+    doelgroep_ervaring: getExtractedValue(data.doelgroep_ervaring) || getExtractedValue(data.specifieke_doelgroepen) || [],
+    jaren_ervaring: getExtractedValue(data.jaren_ervaring),
+    leidinggevende_ervaring: getExtractedValue(data.leidinggevende_ervaring),
+    heeft_auto: getExtractedValue(data.eigen_vervoer),
+    heeft_rijbewijs: getExtractedValue(data.rijbewijs) ? true : null,
+    eigen_vervoer: getExtractedValue(data.eigen_vervoer),
+    beschikbaarheid_uren: parseBeschikbaarheid(getExtractedValue(data.beschikbaarheid) || getExtractedValue(data.voorkeur_uren_per_week)),
+    nachtdienst_bereid: getExtractedValue(data.nachtdienst_bereid),
+    weekenddienst_bereid: getExtractedValue(data.weekenddienst_bereid),
+    certificaten: getExtractedValue(data.certificaten) || [],
+    assigned_organization: getExtractedValue(data.assigned_organization),
+  };
+  
+  // Use unified match calculation
+  return calculateUnifiedMatchScore(candidate, target, aiBoostData);
+}
+
+/**
+ * Batch calculate top matches for an application against all sublocations and vacancies
+ */
+export async function calculateTopMatchesForApplication(
+  supabaseClient: any,
+  applicationId: string,
+  extractedData: any,
+  options?: {
+    sublocationLimit?: number;
+    vacancyLimit?: number;
+    minScore?: number;
+  }
+): Promise<{
+  sublocations: Array<{ sublocation: any; score: MatchScoreBreakdown }>;
+  vacancies: Array<{ vacancy: any; score: MatchScoreBreakdown }>;
+}> {
+  const limit = options?.sublocationLimit || 10;
+  const vacancyLimit = options?.vacancyLimit || 10;
+  const minScore = options?.minScore || 40;
+  
+  const application = { extracted_data: extractedData };
+  
+  // Fetch active sublocations
+  const { data: sublocations } = await supabaseClient
+    .from('client_sublocations')
+    .select(`
+      id, naam, plaats, sector, doelgroep, gezochte_functies, provincie,
+      location:client_locations(naam, client_org:client_organizations(name))
+    `)
+    .eq('is_active', true)
+    .limit(200);
+
+  // Fetch open vacancies
+  const { data: vacancies } = await supabaseClient
+    .from('vacancies')
+    .select(`
+      id, titel, functie_niveau, urgentie, uren_per_week,
+      sublocation:client_sublocations(naam, plaats, sector, doelgroep, gezochte_functies, provincie)
+    `)
+    .eq('status', 'open')
+    .limit(100);
+
+  // Calculate sublocation scores
+  const scoredSublocations = (sublocations || [])
+    .map((sub: any) => {
+      const target: MatchTarget = {
+        gezochte_functies: sub.gezochte_functies,
+        sector: sub.sector,
+        doelgroep: sub.doelgroep,
+        plaats: sub.plaats,
+        provincie: sub.provincie,
+      };
+      const score = calculateApplicationMatchScore(application, target);
+      return { sublocation: sub, score };
+    })
+    .filter(item => item.score.normalizedScore >= minScore)
+    .sort((a, b) => b.score.normalizedScore - a.score.normalizedScore)
+    .slice(0, limit);
+
+  // Calculate vacancy scores
+  const scoredVacancies = (vacancies || [])
+    .filter((vac: any) => vac.sublocation)
+    .map((vac: any) => {
+      const sub = vac.sublocation;
+      const target: MatchTarget = {
+        gezochte_functies: [vac.functie_niveau, ...(sub?.gezochte_functies || [])],
+        sector: sub?.sector,
+        doelgroep: sub?.doelgroep,
+        plaats: sub?.plaats,
+        provincie: sub?.provincie,
+      };
+      const score = calculateApplicationMatchScore(application, target);
+      return { vacancy: vac, score };
+    })
+    .filter(item => item.score.normalizedScore >= minScore)
+    .sort((a, b) => b.score.normalizedScore - a.score.normalizedScore)
+    .slice(0, vacancyLimit);
+
+  return {
+    sublocations: scoredSublocations,
+    vacancies: scoredVacancies,
+  };
+}
