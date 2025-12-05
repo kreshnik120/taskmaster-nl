@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { Plus, Search, ChevronDown, X, Users, CheckCircle, UserPlus, TrendingUp } from "lucide-react";
 import { ProfessionalBulkActionBar } from "@/components/recruitment/ProfessionalBulkActionBar";
 import { ProfessionalCard } from "@/components/recruitment/ProfessionalCard";
+import { ProfessionalDetailModal } from "@/components/ProfessionalDetailModal";
 import { motion } from "framer-motion";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -41,11 +42,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-// Lazy load heavy modal
-const ProfessionalDetailModal = lazy(() => 
-  import("@/components/ProfessionalDetailModal").then(mod => ({ default: mod.ProfessionalDetailModal }))
-);
 
 interface Professional {
   id: string;
@@ -692,15 +688,13 @@ const Professionals = () => {
         </div>
       )}
 
-      {/* Detail Modal - Lazy Loaded */}
-      <Suspense fallback={<div className="p-4"><Skeleton className="h-96 w-full" /></div>}>
-        <ProfessionalDetailModal
-          professional={selectedProfessional}
-          open={detailModalOpen}
-          onOpenChange={setDetailModalOpen}
-          onSuccess={fetchProfessionals}
-        />
-      </Suspense>
+      {/* Detail Modal */}
+      <ProfessionalDetailModal
+        professional={selectedProfessional}
+        open={detailModalOpen}
+        onOpenChange={setDetailModalOpen}
+        onSuccess={fetchProfessionals}
+      />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
