@@ -1627,30 +1627,37 @@ export function calculateUnifiedMatchScore(
   }
 
   // ===== TOTAL SCORE =====
-  // FIX 3: Adjusted weights - Beschrijving verhoogd naar 15 punten voor betere differentiatie
-  // Functie 20, Regio 18, Sector 15 (FIX 4: directe match bonus), Doelgroep 10, Beschrijving 15 (was 10)
-  // CertificaatVereist 8, Mobiliteit 7, Beschikbaarheid 4, Werkvorm 3 = 100 base
-  // + Track Record bonus (up to +8) + AI boost (up to +15) + Expert bonus (up to +12)
-  const totalScore = 
-    Math.round(functieMatch * 0.8) +  // 25 -> 20 points
-    Math.round(regioMatch * 0.9) +    // 20 -> 18 points  
-    Math.round(sectorMatch * 0.75) +  // 20 -> 15 points (FIX 4: already has direct match bonus in sector calc)
-    Math.round(doelgroepMatch * 0.67) + // 15 -> 10 points
-    Math.round(beschrijvingMatch * 1.5) + // FIX 3: 10 -> 15 points (verhoogd voor differentiatie)
-    Math.round(certificaatVereistMatch * 0.8) + // 10 -> 8 points
-    Math.round(mobiliteitMatch * 0.7) + // 10 -> 7 points
-    Math.round(beschikbaarheidMatch * 0.8) + // 5 -> 4 points
-    Math.round(werkvormMatch * 0.6) + // 5 -> 3 points
-    ervaringBonus + 
-    leidinggevendeBonus + 
-    certificatenBonus + 
-    dienstBonus +
-    trackRecordBonus +                // up to +8 points
-    expertBonus +                     // up to +12 points
-    aiBoost;
+  // CRITICAL FIX: Correct weighting to exactly 92 base points + bonuses
+  // Functie 20, Regio 17, Sector 13, Doelgroep 10, Beschrijving 10, CertificaatVereist 8, 
+  // Mobiliteit 7, Beschikbaarheid 4, Werkvorm 3 = 92 base
+  // + Track Record (max 8) + Expert (max 12) + AI boost (max 15) = max 127
+  const baseScore = 
+    Math.round(functieMatch * 0.8) +  // 25 * 0.8 = 20 points max
+    Math.round(regioMatch * 0.85) +   // 20 * 0.85 = 17 points max
+    Math.round(sectorMatch * 0.65) +  // 20 * 0.65 = 13 points max
+    Math.round(doelgroepMatch * 0.67) + // 15 * 0.67 = 10 points max
+    Math.round(beschrijvingMatch * 0.67) + // FIX 2: 15 * 0.67 = 10 points max (was 1.5!)
+    Math.round(certificaatVereistMatch * 0.8) + // 10 * 0.8 = 8 points max
+    Math.round(mobiliteitMatch * 0.7) + // 10 * 0.7 = 7 points max
+    Math.round(beschikbaarheidMatch * 0.8) + // 5 * 0.8 = 4 points max
+    Math.round(werkvormMatch * 0.6);  // 5 * 0.6 = 3 points max = 92 total
 
-  // Normalize to 0-100 scale (max base is 100, but with bonuses can go slightly higher)
-  const normalizedScore = Math.round(Math.min(100, Math.max(0, totalScore)));
+  const bonusScore = 
+    ervaringBonus +        // max +5
+    leidinggevendeBonus +  // max +3  
+    certificatenBonus +    // max +3
+    dienstBonus +          // max +2
+    trackRecordBonus +     // max +8
+    expertBonus +          // max +12
+    aiBoost;               // max +15 = 48 max bonus
+  
+  const totalScore = baseScore + bonusScore;
+  
+  // FIX 4: Proportional normalization instead of hard cap
+  // Max possible = 92 base + 48 bonus = 140 theoretical max
+  // Normalize proportionally to maintain differentiation
+  const maxPossibleScore = 92 + 48; // 140
+  const normalizedScore = Math.round(Math.min(100, (totalScore / maxPossibleScore) * 100));
 
   return {
     functieMatch,
