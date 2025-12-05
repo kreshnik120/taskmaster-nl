@@ -49,6 +49,14 @@ const PRIORITY_DOTS: Record<string, string> = {
   critical: "bg-red-500",
 };
 
+// Priority border-left accents
+const PRIORITY_BORDERS: Record<string, string> = {
+  low: "border-l-emerald-500",
+  medium: "border-l-blue-500", 
+  high: "border-l-amber-500",
+  critical: "border-l-red-500",
+};
+
 export default function Kalender() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -330,7 +338,7 @@ export default function Kalender() {
           onClick={goToPreviousWeek}
           className="h-8 w-8 rounded-full"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-3.5 w-3.5" />
         </Button>
         
         <div className="text-center min-w-[180px]">
@@ -339,7 +347,7 @@ export default function Kalender() {
           </p>
           <button 
             onClick={goToToday}
-            className="text-xs text-primary hover:underline transition-colors"
+            className="text-[11px] text-primary/80 hover:text-primary hover:underline transition-colors"
           >
             Vandaag
           </button>
@@ -351,7 +359,7 @@ export default function Kalender() {
           onClick={goToNextWeek}
           className="h-8 w-8 rounded-full"
         >
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-3.5 w-3.5" />
         </Button>
       </div>
 
@@ -371,12 +379,12 @@ export default function Kalender() {
             <Card 
               key={day.toISOString()} 
               className={cn(
-                "overflow-hidden min-h-[480px] border-0 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)]",
+                "overflow-hidden min-h-[480px] border border-border/20 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)]",
                 isToday && "bg-primary/[0.02]"
               )}
             >
-              <CardHeader className="pb-3 pt-4 px-4">
-                <CardTitle className="text-sm font-medium flex items-center justify-between">
+              <CardHeader className="pb-3 pt-3.5 px-3.5">
+                <CardTitle className="text-sm font-normal tracking-wide flex items-center justify-between">
                   <span className="flex items-center gap-2">
                     {isToday && (
                       <span className="h-1.5 w-1.5 rounded-full bg-primary" />
@@ -385,28 +393,31 @@ export default function Kalender() {
                       {format(day, 'EEEE', { locale: nl })}
                     </span>
                   </span>
-                  <span className="text-xs font-normal text-muted-foreground/60 tabular-nums">
+                  <span className="text-[11px] font-normal text-muted-foreground/50 tabular-nums">
                     {format(day, 'd MMM', { locale: nl }).toLowerCase()}
                   </span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2.5 px-4 pb-4">
+              <CardContent className="space-y-2.5 px-3.5 pb-3.5">
                 {dayTasks.length === 0 && dayReminders.length === 0 ? (
                   <button 
                     onClick={() => handleDayClick(day)}
-                    className="w-full text-center py-12 rounded-xl transition-all duration-200 group hover:bg-muted/20 hover:border hover:border-dashed hover:border-muted-foreground/20"
+                    className="w-full text-center py-12 rounded-xl transition-all duration-200 group border border-dashed border-muted-foreground/10 hover:border-muted-foreground/25 hover:bg-muted/20"
                   >
-                    <Plus className="h-4 w-4 mx-auto mb-1.5 text-muted-foreground/30 group-hover:text-muted-foreground/50 transition-colors" />
+                    <Plus className="h-4 w-4 mx-auto mb-1.5 text-muted-foreground/20 group-hover:text-muted-foreground/50 transition-colors" />
                     <p className="text-xs text-muted-foreground/40 group-hover:text-muted-foreground/60 transition-colors">Taak toevoegen</p>
                   </button>
                 ) : (
                   <>
-                    {/* Task Cards - Ultra-subtle Apple style */}
+                    {/* Task Cards - Ultra-subtle Apple style with priority border */}
                     {dayTasks.map((task, taskIndex) => (
                       <div 
                         key={task.id} 
                         onClick={() => handleTaskClick(task)} 
-                        className="p-3 rounded-xl bg-background shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] hover:translate-y-[-1px] cursor-pointer transition-all duration-200 space-y-1.5"
+                        className={cn(
+                          "p-3 rounded-xl bg-background border-l-2 shadow-[0_0.5px_1px_rgba(0,0,0,0.02)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] hover:translate-y-[-0.5px] cursor-pointer transition-all duration-200 space-y-1.5",
+                          PRIORITY_BORDERS[task.priority] || PRIORITY_BORDERS.medium
+                        )}
                         {...(taskIndex === 0 && (task.priority === 'high' || task.priority === 'critical') && { 'data-urgent-task': true })}
                       >
                         <div className="flex items-start justify-between gap-2">
