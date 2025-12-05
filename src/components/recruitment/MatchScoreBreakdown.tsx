@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { AlertCircle, CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
 
 interface ScoreBreakdown {
-  regio: { score: number; match: boolean; reason: string };
+  regio: { score: number; match: boolean; reason: string; matchType?: string };
   sector: { 
     score: number; 
     match: boolean; 
@@ -13,9 +13,11 @@ interface ScoreBreakdown {
     directMatches?: string[];
     relatedMatches?: string[];
   };
-  doelgroep: { score: number; match: boolean; reason: string };
+  doelgroep: { score: number; match: boolean; reason: string; directMatches?: string[]; relatedMatches?: string[] };
   functie: { score: number; match: boolean; reason: string };
-  bureau: { score: number; match: boolean; reason: string };
+  mobiliteit?: { score: number; match: boolean; reason: string };
+  beschikbaarheid?: { score: number; match: boolean; reason: string };
+  werkvorm?: { score: number; match: boolean; reason: string };
   aiBoost?: { score: number; match: boolean; reason: string };
 }
 
@@ -31,9 +33,11 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
   const safeBreakdown = {
     regio: breakdown?.regio || defaultCriterion,
     sector: breakdown?.sector || { ...defaultCriterion, directMatches: [], relatedMatches: [] },
-    doelgroep: breakdown?.doelgroep || defaultCriterion,
+    doelgroep: breakdown?.doelgroep || { ...defaultCriterion, directMatches: [], relatedMatches: [] },
     functie: breakdown?.functie || defaultCriterion,
-    bureau: breakdown?.bureau || defaultCriterion,
+    mobiliteit: breakdown?.mobiliteit || defaultCriterion,
+    beschikbaarheid: breakdown?.beschikbaarheid || defaultCriterion,
+    werkvorm: breakdown?.werkvorm || defaultCriterion,
     aiBoost: breakdown?.aiBoost,
   };
 
@@ -42,8 +46,10 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
     { key: 'functie', label: 'Functieniveau', weight: 25, maxScore: 25, ...safeBreakdown.functie },
     { key: 'regio', label: 'Regio', weight: 20, maxScore: 20, ...safeBreakdown.regio },
     { key: 'sector', label: 'Sector', weight: 20, maxScore: 20, ...safeBreakdown.sector },
-    { key: 'doelgroep', label: 'Doelgroep', weight: 10, maxScore: 10, ...safeBreakdown.doelgroep },
-    { key: 'bureau', label: 'Bureau', weight: 5, maxScore: 5, ...safeBreakdown.bureau },
+    { key: 'doelgroep', label: 'Doelgroep', weight: 15, maxScore: 15, ...safeBreakdown.doelgroep },
+    { key: 'mobiliteit', label: 'Mobiliteit', weight: 10, maxScore: 10, ...safeBreakdown.mobiliteit },
+    { key: 'beschikbaarheid', label: 'Beschikbaarheid', weight: 5, maxScore: 5, ...safeBreakdown.beschikbaarheid },
+    { key: 'werkvorm', label: 'Werkvorm', weight: 5, maxScore: 5, ...safeBreakdown.werkvorm },
   ];
 
   const getScoreColor = (score: number, maxScore: number) => {
