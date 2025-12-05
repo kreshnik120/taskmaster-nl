@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Loader2, Building2, MapPin, Users, Briefcase, Link2, Clock, Sparkles, CheckCircle2, AlertCircle, Brain, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { calculateApplicationMatchScoreWithExperts, preloadExpertKnowledge, calculateApplicationMatchScore, type MatchScoreBreakdown } from "@/lib/services/matchingService";
+import { calculateApplicationMatchScoreWithExperts, preloadExpertKnowledge, type MatchScoreBreakdown } from "@/lib/services/matchingService";
 import { MatchScoreBreakdown as MatchScoreBreakdownUI } from "./MatchScoreBreakdown";
 import { loadSuccessPatterns, calculateAILearningBoost, trackPatternUsage, type SuccessPattern } from "@/lib/aiLearningBoost";
 import confetti from "canvas-confetti";
@@ -139,62 +139,64 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
       const allUsedPatternIds: string[] = [];
       let maxAIBoost = 0;
 
-      // Calculate match scores with AI boost integrated
-      const scoredSublocations: MatchedSublocation[] = (sublocations || [])
-        .map(sub => {
-          const target = {
-            gezochte_functies: sub.gezochte_functies,
-            sector: sub.sector,
-            doelgroep: sub.doelgroep,
-            plaats: sub.plaats,
-            provincie: sub.provincie,
-            postcode: sub.postcode, // NEW: for postcode distance
-            publieke_opmerking: sub.publieke_opmerking, // NEW: for description matching
-          };
+      // Calculate match scores with AI boost integrated (ASYNC for expert knowledge)
+      const scoredSublocationsPromises = (sublocations || []).map(async (sub) => {
+        const target = {
+          gezochte_functies: sub.gezochte_functies,
+          sector: sub.sector,
+          doelgroep: sub.doelgroep,
+          plaats: sub.plaats,
+          provincie: sub.provincie,
+          postcode: sub.postcode,
+          publieke_opmerking: sub.publieke_opmerking,
+        };
 
-          // === FIX: Calculate AI boost FIRST ===
-          const aiBoostResult = calculateAILearningBoost(
-            applicantFunctie,
-            applicantSectoren,
-            applicantDoelgroepen,
-            aiPatterns,
-            sub.gezochte_functies?.[0] || null,
-            sub.sector || [],
-            sub.doelgroep || []
-          );
+        // Calculate AI boost FIRST
+        const aiBoostResult = calculateAILearningBoost(
+          applicantFunctie,
+          applicantSectoren,
+          applicantDoelgroepen,
+          aiPatterns,
+          sub.gezochte_functies?.[0] || null,
+          sub.sector || [],
+          sub.doelgroep || []
+        );
 
-          // Track used patterns
-          if (aiBoostResult.usedPatternIds.length > 0) {
-            allUsedPatternIds.push(...aiBoostResult.usedPatternIds);
-          }
-          if (aiBoostResult.boost > maxAIBoost) {
-            maxAIBoost = aiBoostResult.boost;
-          }
+        // Track used patterns
+        if (aiBoostResult.usedPatternIds.length > 0) {
+          allUsedPatternIds.push(...aiBoostResult.usedPatternIds);
+        }
+        if (aiBoostResult.boost > maxAIBoost) {
+          maxAIBoost = aiBoostResult.boost;
+        }
 
-          // === FIX: Pass aiBoostData to calculateApplicationMatchScore ===
-          const matchBreakdown = calculateApplicationMatchScore(application, target, {
-            boost: aiBoostResult.boost,
-            reasons: aiBoostResult.reasons,
-            usedPatternIds: aiBoostResult.usedPatternIds
-          });
+        // === FIX: Use async calculateApplicationMatchScoreWithExperts for Expert Panel ===
+        const matchBreakdown = await calculateApplicationMatchScoreWithExperts(application, target, {
+          boost: aiBoostResult.boost,
+          reasons: aiBoostResult.reasons,
+          usedPatternIds: aiBoostResult.usedPatternIds
+        });
 
-          // matchBreakdown.normalizedScore now already includes AI boost
-          return {
-            id: sub.id,
-            naam: sub.naam,
-            plaats: sub.plaats,
-            sector: sub.sector,
-            doelgroep: sub.doelgroep,
-            gezochte_functies: sub.gezochte_functies,
-            matchScore: matchBreakdown.normalizedScore,
-            matchBreakdown,
-            organization_name: (sub.location as any)?.client_org?.name || 'Onbekend',
-            location_name: (sub.location as any)?.naam || 'Onbekend',
-            existingMatch: existingMatchMap.get(sub.id),
-            aiBoost: matchBreakdown.aiBoost,
-            aiReasons: matchBreakdown.aiBoostReasons,
-          };
-        })
+        return {
+          id: sub.id,
+          naam: sub.naam,
+          plaats: sub.plaats,
+          sector: sub.sector,
+          doelgroep: sub.doelgroep,
+          gezochte_functies: sub.gezochte_functies,
+          matchScore: matchBreakdown.normalizedScore,
+          matchBreakdown,
+          organization_name: (sub.location as any)?.client_org?.name || 'Onbekend',
+          location_name: (sub.location as any)?.naam || 'Onbekend',
+          existingMatch: existingMatchMap.get(sub.id),
+          aiBoost: matchBreakdown.aiBoost,
+          aiReasons: matchBreakdown.aiBoostReasons,
+        };
+      });
+
+      // Await all sublocation calculations
+      const scoredSublocationsRaw = await Promise.all(scoredSublocationsPromises);
+      const scoredSublocations = scoredSublocationsRaw
         .filter(sub => sub.matchScore >= 40)
         .sort((a, b) => b.matchScore - a.matchScore)
         .slice(0, 10);
@@ -227,10 +229,10 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
 
       const existingVacMap = new Map(existingVacApps?.map(v => [v.vacancy_id, v]) || []);
 
-      // Calculate vacancy match scores with AI boost integrated
-      const scoredVacancies: MatchedVacancy[] = (vacancies || [])
+      // Calculate vacancy match scores with AI boost integrated (ASYNC for expert knowledge)
+      const scoredVacanciesPromises = (vacancies || [])
         .filter(vac => vac.sublocation)
-        .map(vac => {
+        .map(async (vac) => {
           const sub = vac.sublocation as any;
           const target = {
             gezochte_functies: [vac.functie_niveau, ...(sub?.gezochte_functies || [])],
@@ -240,7 +242,6 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             provincie: sub?.provincie,
           };
 
-          // === FIX: Calculate AI boost FIRST ===
           const aiBoostResult = calculateAILearningBoost(
             applicantFunctie,
             applicantSectoren,
@@ -258,14 +259,13 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             maxAIBoost = aiBoostResult.boost;
           }
 
-          // === FIX: Pass aiBoostData to calculateApplicationMatchScore ===
-          const matchBreakdown = calculateApplicationMatchScore(application, target, {
+          // === FIX: Use async calculateApplicationMatchScoreWithExperts for Expert Panel ===
+          const matchBreakdown = await calculateApplicationMatchScoreWithExperts(application, target, {
             boost: aiBoostResult.boost,
             reasons: aiBoostResult.reasons,
             usedPatternIds: aiBoostResult.usedPatternIds
           });
 
-          // matchBreakdown.normalizedScore now already includes AI boost
           return {
             id: vac.id,
             titel: vac.titel,
@@ -281,7 +281,11 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             aiBoost: matchBreakdown.aiBoost,
             aiReasons: matchBreakdown.aiBoostReasons,
           };
-        })
+        });
+
+      // Await all vacancy calculations
+      const scoredVacanciesRaw = await Promise.all(scoredVacanciesPromises);
+      const scoredVacancies = scoredVacanciesRaw
         .filter(vac => vac.matchScore >= 40)
         .sort((a, b) => b.matchScore - a.matchScore)
         .slice(0, 10);
