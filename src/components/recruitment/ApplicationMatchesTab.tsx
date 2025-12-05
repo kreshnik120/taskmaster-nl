@@ -4,7 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Loader2, Building2, MapPin, Users, Briefcase, Link2, Clock, Sparkles, CheckCircle2, AlertCircle, Brain, Info } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Loader2, Building2, MapPin, Users, Briefcase, Link2, Clock, Sparkles, CheckCircle2, AlertCircle, Brain, Info, X, ListChecks } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { calculateApplicationMatchScoreWithExperts, preloadExpertKnowledge, type MatchScoreBreakdown } from "@/lib/services/matchingService";
@@ -82,6 +83,11 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
   const [linking, setLinking] = useState<string | null>(null);
   const [totalAIBoost, setTotalAIBoost] = useState(0);
   const [aiPatternsLoaded, setAiPatternsLoaded] = useState(0);
+  
+  // Multi-select state
+  const [selectedSublocations, setSelectedSublocations] = useState<Set<string>>(new Set());
+  const [selectedVacancies, setSelectedVacancies] = useState<Set<string>>(new Set());
+  const [bulkLinking, setBulkLinking] = useState(false);
 
   const completenessScore = application.completeness_score || 0;
   const canMatch = completenessScore >= 50;
@@ -390,6 +396,145 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
     }
   };
 
+  // Multi-select toggle functions
+  const toggleSublocationSelection = (id: string) => {
+    setSelectedSublocations(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleVacancySelection = (id: string) => {
+    setSelectedVacancies(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllSublocations = () => {
+    const linkableIds = matchedSublocations
+      .filter(s => !s.existingMatch)
+      .map(s => s.id);
+    setSelectedSublocations(new Set(linkableIds));
+  };
+
+  const selectAllVacancies = () => {
+    const linkableIds = matchedVacancies
+      .filter(v => !v.existingApplication)
+      .map(v => v.id);
+    setSelectedVacancies(new Set(linkableIds));
+  };
+
+  const clearSelection = () => {
+    setSelectedSublocations(new Set());
+    setSelectedVacancies(new Set());
+  };
+
+  // Bulk link handlers
+  const handleBulkLinkSublocations = async () => {
+    if (selectedSublocations.size === 0) return;
+    
+    setBulkLinking(true);
+    const toLink = matchedSublocations.filter(s => 
+      selectedSublocations.has(s.id) && !s.existingMatch
+    );
+
+    let successCount = 0;
+    for (const sublocation of toLink) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        await supabase
+          .from('application_sublocation_matches')
+          .insert({
+            application_id: application.id,
+            sublocation_id: sublocation.id,
+            match_score: sublocation.matchScore,
+            match_reasoning: {
+              ...sublocation.matchBreakdown,
+              aiBoost: sublocation.aiBoost,
+              aiReasons: sublocation.aiReasons,
+            } as any,
+            status: 'voorgesteld',
+            created_by: user?.id,
+          } as any);
+        successCount++;
+      } catch (error) {
+        console.error(`Error linking ${sublocation.naam}:`, error);
+      }
+    }
+
+    if (successCount > 0) {
+      confetti({
+        particleCount: 150,
+        spread: 100,
+        origin: { y: 0.6 }
+      });
+      toast.success(`${successCount} locaties voorgesteld`, {
+        description: 'Alle geselecteerde locaties zijn gekoppeld'
+      });
+    }
+
+    setSelectedSublocations(new Set());
+    setBulkLinking(false);
+    await calculateMatches();
+    onApplicationUpdated();
+  };
+
+  const handleBulkLinkVacancies = async () => {
+    if (selectedVacancies.size === 0) return;
+    
+    setBulkLinking(true);
+    const toLink = matchedVacancies.filter(v => 
+      selectedVacancies.has(v.id) && !v.existingApplication
+    );
+
+    let successCount = 0;
+    for (const vacancy of toLink) {
+      try {
+        await supabase
+          .from('vacancy_applications')
+          .insert({
+            vacancy_id: vacancy.id,
+            application_id: application.id,
+            professional_id: application.professional_id,
+            status: 'voorgesteld',
+            match_score: vacancy.matchScore,
+            match_reasoning: { 
+              score: vacancy.matchScore, 
+              breakdown: vacancy.matchBreakdown,
+              aiBoost: vacancy.aiBoost,
+              aiReasons: vacancy.aiReasons,
+            },
+          } as any);
+        successCount++;
+      } catch (error) {
+        console.error(`Error linking ${vacancy.titel}:`, error);
+      }
+    }
+
+    if (successCount > 0) {
+      confetti({
+        particleCount: 150,
+        spread: 100,
+        origin: { y: 0.6 }
+      });
+      toast.success(`${successCount} vacatures gekoppeld`, {
+        description: 'Alle geselecteerde vacatures zijn gekoppeld'
+      });
+    }
+
+    setSelectedVacancies(new Set());
+    setBulkLinking(false);
+    await calculateMatches();
+    onApplicationUpdated();
+  };
+
+  const totalSelected = selectedSublocations.size + selectedVacancies.size;
+
   if (!canMatch) {
     return (
       <div className="space-y-4 py-4">
@@ -449,13 +594,22 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
       {/* Matching Vacatures Section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold flex items-center gap-2">
-            <Briefcase className="h-4 w-4" />
-            Passende Vacatures
-            {matchedVacancies.length > 0 && (
-              <Badge variant="secondary" className="ml-1">{matchedVacancies.length}</Badge>
+          <div className="flex items-center gap-3">
+            {matchedVacancies.filter(v => !v.existingApplication).length > 0 && (
+              <Checkbox
+                checked={selectedVacancies.size === matchedVacancies.filter(v => !v.existingApplication).length && selectedVacancies.size > 0}
+                onCheckedChange={(checked) => checked ? selectAllVacancies() : setSelectedVacancies(new Set())}
+                className="h-4 w-4"
+              />
             )}
-          </h3>
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              <Briefcase className="h-4 w-4" />
+              Passende Vacatures
+              {matchedVacancies.length > 0 && (
+                <Badge variant="secondary" className="ml-1">{matchedVacancies.length}</Badge>
+              )}
+            </h3>
+          </div>
           <Button variant="ghost" size="sm" onClick={calculateMatches}>
             Ververs
           </Button>
@@ -466,18 +620,26 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             {matchedVacancies.slice(0, 5).map((vacancy) => (
               <div 
                 key={vacancy.id}
-                className={`p-3 rounded-lg border bg-card hover:shadow-sm transition-shadow ${
+                className={`p-3 rounded-lg border bg-card hover:shadow-sm transition-all ${
                   vacancy.aiBoost && vacancy.aiBoost > 0 ? 'ring-1 ring-purple-300/50' : ''
-                }`}
+                } ${selectedVacancies.has(vacancy.id) ? 'ring-2 ring-primary bg-primary/5' : ''}`}
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  {/* Checkbox */}
+                  {!vacancy.existingApplication && (
+                    <Checkbox
+                      checked={selectedVacancies.has(vacancy.id)}
+                      onCheckedChange={() => toggleVacancySelection(vacancy.id)}
+                      className="mt-1 h-4 w-4"
+                    />
+                  )}
+                  
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium truncate">{vacancy.titel}</span>
                       {vacancy.urgentie === 'hoog' && (
                         <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Urgent</Badge>
                       )}
-                      {/* === FASE 3: AI Boost Badge === */}
                       {vacancy.aiBoost && vacancy.aiBoost > 0 && (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-purple-50 text-purple-700 border-purple-300">
                           <Sparkles className="h-3 w-3 mr-1" />
@@ -507,7 +669,6 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
                         </span>
                       )}
                     </div>
-                    {/* AI Reasons */}
                     {vacancy.aiReasons && vacancy.aiReasons.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {vacancy.aiReasons.slice(0, 2).map((reason, idx) => (
@@ -547,7 +708,7 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
                       <Button
                         size="sm"
                         onClick={() => handleLinkToVacancy(vacancy)}
-                        disabled={linking === vacancy.id}
+                        disabled={linking === vacancy.id || selectedVacancies.size > 0}
                       >
                         {linking === vacancy.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -580,13 +741,22 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
       {/* Matching Sublocaties Section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
-            Passende Werklocaties
-            {matchedSublocations.length > 0 && (
-              <Badge variant="secondary" className="ml-1">{matchedSublocations.length}</Badge>
+          <div className="flex items-center gap-3">
+            {matchedSublocations.filter(s => !s.existingMatch).length > 0 && (
+              <Checkbox
+                checked={selectedSublocations.size === matchedSublocations.filter(s => !s.existingMatch).length && selectedSublocations.size > 0}
+                onCheckedChange={(checked) => checked ? selectAllSublocations() : setSelectedSublocations(new Set())}
+                className="h-4 w-4"
+              />
             )}
-          </h3>
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
+              Passende Werklocaties
+              {matchedSublocations.length > 0 && (
+                <Badge variant="secondary" className="ml-1">{matchedSublocations.length}</Badge>
+              )}
+            </h3>
+          </div>
         </div>
 
         {matchedSublocations.length > 0 ? (
@@ -594,15 +764,23 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             {matchedSublocations.slice(0, 5).map((sublocation) => (
               <div 
                 key={sublocation.id}
-                className={`p-3 rounded-lg border bg-card hover:shadow-sm transition-shadow ${
+                className={`p-3 rounded-lg border bg-card hover:shadow-sm transition-all ${
                   sublocation.aiBoost && sublocation.aiBoost > 0 ? 'ring-1 ring-purple-300/50' : ''
-                }`}
+                } ${selectedSublocations.has(sublocation.id) ? 'ring-2 ring-primary bg-primary/5' : ''}`}
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  {/* Checkbox */}
+                  {!sublocation.existingMatch && (
+                    <Checkbox
+                      checked={selectedSublocations.has(sublocation.id)}
+                      onCheckedChange={() => toggleSublocationSelection(sublocation.id)}
+                      className="mt-1 h-4 w-4"
+                    />
+                  )}
+                  
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium truncate">{sublocation.naam}</span>
-                      {/* === FASE 3: AI Boost Badge === */}
                       {sublocation.aiBoost && sublocation.aiBoost > 0 && (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-purple-50 text-purple-700 border-purple-300">
                           <Sparkles className="h-3 w-3 mr-1" />
@@ -628,7 +806,6 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
                         </span>
                       )}
                     </div>
-                    {/* Sector & Doelgroep tags */}
                     {(sublocation.sector?.length || sublocation.doelgroep?.length) && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {sublocation.sector?.slice(0, 2).map((s, idx) => (
@@ -643,7 +820,6 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
                         ))}
                       </div>
                     )}
-                    {/* AI Reasons */}
                     {sublocation.aiReasons && sublocation.aiReasons.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {sublocation.aiReasons.slice(0, 2).map((reason, idx) => (
@@ -684,7 +860,7 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
                         size="sm"
                         variant="outline"
                         onClick={() => handleLinkToSublocation(sublocation)}
-                        disabled={linking === sublocation.id}
+                        disabled={linking === sublocation.id || selectedSublocations.size > 0}
                       >
                         {linking === sublocation.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -715,6 +891,62 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
           </div>
         )}
       </div>
+
+      {/* Floating Bulk Action Bar */}
+      {totalSelected > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 duration-200">
+          <div className="flex items-center gap-3 bg-background/95 backdrop-blur-lg border shadow-xl rounded-full px-5 py-3">
+            <div className="flex items-center gap-2">
+              <ListChecks className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">{totalSelected} geselecteerd</span>
+            </div>
+            
+            <Separator orientation="vertical" className="h-6" />
+            
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              onClick={clearSelection}
+              className="text-muted-foreground"
+            >
+              <X className="h-4 w-4 mr-1" />
+              Deselecteer
+            </Button>
+            
+            {selectedSublocations.size > 0 && (
+              <Button 
+                size="sm" 
+                onClick={handleBulkLinkSublocations}
+                disabled={bulkLinking}
+                className="bg-primary hover:bg-primary/90"
+              >
+                {bulkLinking ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : (
+                  <Link2 className="h-4 w-4 mr-1" />
+                )}
+                Voorstel {selectedSublocations.size} locatie{selectedSublocations.size !== 1 ? 's' : ''}
+              </Button>
+            )}
+            
+            {selectedVacancies.size > 0 && (
+              <Button 
+                size="sm" 
+                onClick={handleBulkLinkVacancies}
+                disabled={bulkLinking}
+                className="bg-primary hover:bg-primary/90"
+              >
+                {bulkLinking ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : (
+                  <Link2 className="h-4 w-4 mr-1" />
+                )}
+                Koppel {selectedVacancies.size} vacature{selectedVacancies.size !== 1 ? 's' : ''}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
