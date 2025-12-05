@@ -58,8 +58,8 @@ interface Application {
 
 const PIPELINE_STAGES = [
   { id: "nieuw", name: "Nieuw", color: "", borderColor: "border-t-4 border-t-recruitment-nieuw", countColor: "text-recruitment-nieuw" },
-  { id: "screening", name: "Screening", color: "", borderColor: "border-t-4 border-t-recruitment-screening", countColor: "text-recruitment-screening" },
   { id: "interview", name: "Interview", color: "", borderColor: "border-t-4 border-t-recruitment-interview", countColor: "text-recruitment-interview" },
+  { id: "screening", name: "Screening", color: "", borderColor: "border-t-4 border-t-recruitment-screening", countColor: "text-recruitment-screening" },
   { id: "goedgekeurd", name: "Goedgekeurd", color: "", borderColor: "border-t-4 border-t-recruitment-goedgekeurd", countColor: "text-recruitment-goedgekeurd" },
   { id: "geplaatst", name: "Geplaatst", color: "", borderColor: "border-t-4 border-t-recruitment-geplaatst", countColor: "text-recruitment-geplaatst" },
   { id: "afgewezen", name: "Afgewezen", color: "", borderColor: "border-t-4 border-t-recruitment-afgewezen", countColor: "text-recruitment-afgewezen" },
@@ -320,6 +320,20 @@ const Sollicitaties = () => {
         duration: 5000,
       });
 
+      // Special handling for "interview" - ask for werkvorm if not known
+      if (newStage === "interview") {
+        const werkvorm = application.extracted_data?.werkvorm;
+        if (!werkvorm) {
+          setWerkvormDialog({
+            open: true,
+            application,
+            previousStage,
+            selectedWerkvorm: ''
+          });
+          return; // Stop here, wait for werkvorm selection
+        }
+      }
+
       // Special handling for "goedgekeurd" - show confirmation dialog
       if (newStage === "goedgekeurd") {
         setConfirmGoedgekeurdDialog({
@@ -337,18 +351,6 @@ const Sollicitaties = () => {
             description: "Verplaats eerst naar Goedgekeurd om een professional profiel aan te maken"
           });
           return;
-        }
-        
-        // Check if werkvorm is set - if not, show werkvorm selection first
-        const werkvorm = application.extracted_data?.werkvorm;
-        if (!werkvorm) {
-          setWerkvormDialog({
-            open: true,
-            application,
-            previousStage,
-            selectedWerkvorm: ''
-          });
-          return; // Stop here, wait for werkvorm selection
         }
         
         setSelectClientDialog({
@@ -645,9 +647,9 @@ const Sollicitaties = () => {
     }
   };
 
-  // Handle werkvorm selection and proceed to location selection
+  // Handle werkvorm selection for interview stage
   const handleConfirmWerkvorm = async () => {
-    const { application, previousStage, selectedWerkvorm } = werkvormDialog;
+    const { application, selectedWerkvorm } = werkvormDialog;
     if (!application || !selectedWerkvorm) return;
 
     try {
@@ -665,15 +667,12 @@ const Sollicitaties = () => {
         })
         .eq("id", application.id);
 
-      // Update local application object
-      application.extracted_data = updatedExtractedData;
-
-      // Close werkvorm dialog and open location selection
+      // Close dialog and refresh
       setWerkvormDialog({ open: false, application: null, previousStage: '', selectedWerkvorm: '' });
-      setSelectClientDialog({
-        open: true,
-        application,
-        previousStage
+      loadApplications();
+      
+      toast.success(`Werkvorm ingesteld op ${selectedWerkvorm}`, {
+        description: "AI matching is nu beschikbaar via de Matches tab"
       });
     } catch (err: any) {
       console.error("Error updating werkvorm:", err);
@@ -1279,9 +1278,9 @@ const Sollicitaties = () => {
           }}>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Selecteer Werkvorm</AlertDialogTitle>
+                <AlertDialogTitle>Welke werkvorm wil de kandidaat?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Selecteer de werkvorm voor deze plaatsing. Dit is belangrijk voor de juiste matching en facturatie.
+                  Bepaal na het gesprek welke werkvorm de kandidaat prefereert. Dit is essentieel voor de juiste AI matching.
                   
                   <div className="mt-4 p-3 bg-muted rounded-md">
                     <strong>{werkvormDialog.application?.extracted_data?.naam}</strong><br/>
@@ -1320,7 +1319,7 @@ const Sollicitaties = () => {
                   onClick={handleConfirmWerkvorm}
                   disabled={!werkvormDialog.selectedWerkvorm}
                 >
-                  Doorgaan naar locatie selectie
+                  Bevestigen
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

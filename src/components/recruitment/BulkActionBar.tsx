@@ -24,8 +24,8 @@ interface BulkActionBarProps {
 
 const PIPELINE_STAGES = [
   { id: "nieuw", label: "Nieuw" },
-  { id: "screening", label: "Screening" },
   { id: "interview", label: "Interview" },
+  { id: "screening", label: "Screening" },
   { id: "goedgekeurd", label: "Goedgekeurd" },
   { id: "geplaatst", label: "Geplaatst" },
 ];
