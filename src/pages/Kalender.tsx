@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { format, startOfWeek, endOfDay, startOfDay, addDays, isSameDay, parseISO, getWeek, endOfWeek } from "date-fns";
 import { nl } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, User, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -42,11 +42,12 @@ interface Reminder {
   subtasks?: { title: string } | null;
 }
 
-const priorityConfig = {
-  low: { label: "Laag", variant: "outline" as const },
-  medium: { label: "Normaal", variant: "secondary" as const },
-  high: { label: "Hoog", variant: "default" as const },
-  critical: { label: "Kritiek", variant: "destructive" as const },
+// Apple-style priority dots
+const PRIORITY_DOTS: Record<string, string> = {
+  low: "bg-emerald-500",
+  medium: "bg-blue-500", 
+  high: "bg-amber-500",
+  critical: "bg-red-500",
 };
 
 export default function Kalender() {
@@ -335,61 +336,86 @@ export default function Kalender() {
           const isToday = isSameDay(day, new Date());
 
           return (
-            <Card key={day.toISOString()} className={cn("overflow-hidden transition-all hover:shadow-md min-h-[500px]", isToday && "ring-2 ring-primary")}>
-              <CardHeader className={cn("pb-3", isToday && "bg-accent/50")}>
-                <CardTitle className="text-lg flex items-center justify-between">
+            <Card 
+              key={day.toISOString()} 
+              className={cn(
+                "overflow-hidden min-h-[500px] border-0 shadow-sm transition-all duration-200 hover:shadow-md",
+                isToday && "border-l-4 border-l-primary shadow-md"
+              )}
+            >
+              <CardHeader className="pb-3 pt-5 px-5">
+                <CardTitle className="text-base font-medium flex items-center justify-between">
                   <span className="flex items-center gap-2">
                     {format(day, 'EEEE', { locale: nl })}
-                    {isToday && <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full">Vandaag</span>}
+                    {isToday && (
+                      <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0 h-5">
+                        Vandaag
+                      </Badge>
+                    )}
                   </span>
                   <span className="text-sm font-normal text-muted-foreground">{format(day, 'd MMM', { locale: nl })}</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="space-y-3 px-5 pb-5">
                 {dayTasks.length === 0 && dayReminders.length === 0 ? (
                   <button 
                     onClick={() => handleDayClick(day)}
-                    className="w-full text-sm text-muted-foreground text-center py-8 hover:bg-accent/50 rounded-lg transition-colors group"
+                    className="w-full text-sm text-muted-foreground/60 text-center py-10 hover:bg-muted/30 rounded-xl transition-all duration-200 group"
                   >
-                    <Plus className="h-5 w-5 mx-auto mb-2 opacity-50 group-hover:opacity-100" />
-                    <p>Klik om taak toe te voegen</p>
+                    <Plus className="h-4 w-4 mx-auto mb-1.5 opacity-30 group-hover:opacity-60 transition-opacity" />
+                    <p className="text-xs">Taak toevoegen</p>
                   </button>
                 ) : (
                   <>
+                    {/* Task Cards - Apple style */}
                     {dayTasks.map((task, taskIndex) => (
                       <div 
                         key={task.id} 
                         onClick={() => handleTaskClick(task)} 
-                        className="p-3 rounded-lg border bg-card hover:bg-accent/50 cursor-pointer transition-colors space-y-1.5"
+                        className="p-4 rounded-xl bg-background shadow-sm hover:shadow-md cursor-pointer transition-all duration-200 hover:scale-[1.02] space-y-2"
                         {...(taskIndex === 0 && (task.priority === 'high' || task.priority === 'critical') && { 'data-urgent-task': true })}
                       >
-                        <p className="font-medium text-sm line-clamp-2">{task.title}</p>
-                        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                          <span>{priorityConfig[task.priority as keyof typeof priorityConfig]?.label || priorityConfig.medium.label}</span>
-                          {task.start_at && <span>{format(parseISO(task.start_at), 'HH:mm')}</span>}
-                          {!task.start_at && task.due_at && <span>{format(parseISO(task.due_at), 'HH:mm')}</span>}
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-semibold text-sm leading-tight line-clamp-2 flex-1">{task.title}</p>
+                          {(task.start_at || task.due_at) && (
+                            <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                              {task.start_at ? format(parseISO(task.start_at), 'HH:mm') : format(parseISO(task.due_at!), 'HH:mm')}
+                            </span>
+                          )}
                         </div>
-                        {task.profiles && (
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <User className="h-3 w-3" />
-                            <span className="truncate">{task.profiles.name || task.profiles.email}</span>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className={cn("h-2 w-2 rounded-full", PRIORITY_DOTS[task.priority] || PRIORITY_DOTS.medium)} />
+                            {task.profiles && (
+                              <span className="text-xs text-muted-foreground truncate max-w-[120px]">
+                                {task.profiles.name || task.profiles.email}
+                              </span>
+                            )}
                           </div>
-                        )}
+                        </div>
                       </div>
                     ))}
+                    {/* Reminder Cards - Subtle Apple style */}
                     {dayReminders.map((reminder, reminderIndex) => (
                       <div 
                         key={reminder.id} 
-                        className="p-3 rounded-lg border bg-muted/30 space-y-1"
+                        className="p-4 rounded-xl bg-muted/20 group transition-all duration-200 hover:bg-muted/30"
                         {...(reminderIndex === 0 && { 'data-reminders': true })}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <p className="font-medium text-sm line-clamp-2 flex-1">{reminder.title || "Herinnering"}</p>
-                          <Button variant="ghost" size="sm" onClick={(e) => handleDeleteReminder(reminder.id, e)} className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive">
-                            <Trash2 className="h-3 w-3" />
+                          <div className="flex-1 space-y-1">
+                            <p className="font-medium text-sm line-clamp-2">{reminder.title || "Herinnering"}</p>
+                            <p className="text-xs text-muted-foreground tabular-nums">{format(parseISO(reminder.at), 'HH:mm')}</p>
+                          </div>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={(e) => handleDeleteReminder(reminder.id, e)} 
+                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
-                        <p className="text-xs text-muted-foreground">{format(parseISO(reminder.at), 'HH:mm')}</p>
                       </div>
                     ))}
                   </>
