@@ -1054,29 +1054,39 @@ export function ApplicationDetailModal({
         <Separator />
 
         {/* Tabbed Interface */}
-        <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="overview">Overzicht</TabsTrigger>
-            <TabsTrigger value="matches" className="flex items-center gap-1">
-              <Sparkles className="h-3 w-3" />
-              Matches
-            </TabsTrigger>
-            <TabsTrigger value="actions">Acties</TabsTrigger>
-            <TabsTrigger value="activity">Activiteit</TabsTrigger>
-          </TabsList>
+        {/* Check if werkvorm is known for showing Matches tab */}
+        {(() => {
+          const werkvormKnown = !!getFieldValue(application.extracted_data?.werkvorm);
+          const hasMatches = werkvormKnown;
+          
+          return (
+            <Tabs defaultValue="overview" className="w-full">
+              <TabsList className={`grid w-full ${hasMatches ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                <TabsTrigger value="overview">Overzicht</TabsTrigger>
+                {hasMatches && (
+                  <TabsTrigger value="matches" className="flex items-center gap-1">
+                    <Sparkles className="h-3 w-3" />
+                    Matches
+                  </TabsTrigger>
+                )}
+                <TabsTrigger value="actions">Acties</TabsTrigger>
+                <TabsTrigger value="activity">Activiteit</TabsTrigger>
+              </TabsList>
 
-          {/* TAB: Matches - Direct applicant matching */}
-          <TabsContent value="matches">
-            <ApplicationMatchesTab 
-              application={{
-                id: application.id,
-                extracted_data: application.extracted_data,
-                completeness_score: application.completeness_score,
-                professional_id: application.professional_id,
-              }}
-              onApplicationUpdated={onApplicationUpdated}
-            />
-          </TabsContent>
+              {/* TAB: Matches - Only shown when werkvorm is known */}
+              {hasMatches && (
+                <TabsContent value="matches">
+                  <ApplicationMatchesTab 
+                    application={{
+                      id: application.id,
+                      extracted_data: application.extracted_data,
+                      completeness_score: application.completeness_score,
+                      professional_id: application.professional_id,
+                    }}
+                    onApplicationUpdated={onApplicationUpdated}
+                  />
+                </TabsContent>
+              )}
 
           {/* TAB 1: Overzicht */}
           <TabsContent value="overview" className="space-y-4">
@@ -2104,7 +2114,9 @@ export function ApplicationDetailModal({
               </div>
             </div>
           </TabsContent>
-        </Tabs>
+            </Tabs>
+          );
+        })()}
       </DialogContent>
 
       {/* Delete Confirmation Dialog */}
