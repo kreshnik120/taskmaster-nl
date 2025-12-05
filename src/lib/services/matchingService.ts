@@ -541,76 +541,93 @@ function calculatePostcodeDistance(pc1: string | null, pc2: string | null): numb
  * Used for distance-based matching when only woonplaats is known
  */
 const WOONPLAATS_POSTCODE_MAP: Record<string, string> = {
-  // Noord-Brabant
-  'cuijk': '5431',
-  'boxmeer': '5831',
-  'uden': '5401',
-  'veghel': '5461',
-  'oss': '5341',
-  'eindhoven': '5611',
-  'helmond': '5701',
-  'tilburg': '5038',
-  's-hertogenbosch': '5211',
-  'den bosch': '5211',
-  'breda': '4811',
-  // Gelderland
-  'nijmegen': '6511',
-  'arnhem': '6811',
-  'apeldoorn': '7311',
-  'ede': '6711',
-  'wageningen': '6701',
-  'doetinchem': '7001',
-  'winterswijk': '7101',
-  // Limburg
-  'maastricht': '6211',
-  'heerlen': '6411',
-  'roermond': '6041',
-  'venlo': '5911',
-  'venray': '5801',
-  'sittard': '6131',
-  // Zuid-Holland
-  'rotterdam': '3011',
-  'den haag': '2511',
-  "'s-gravenhage": '2511',
-  'leiden': '2311',
-  'dordrecht': '3311',
-  'delft': '2611',
-  'zoetermeer': '2701',
-  // Noord-Holland
-  'amsterdam': '1011',
-  'haarlem': '2011',
-  'hilversum': '1211',
-  'zaandam': '1501',
-  'alkmaar': '1811',
-  // Utrecht
-  'utrecht': '3511',
-  'amersfoort': '3811',
-  'zeist': '3701',
-  'nieuwegein': '3431',
-  // Overijssel
-  'zwolle': '8011',
-  'enschede': '7511',
-  'deventer': '7411',
-  'almelo': '7601',
-  'hengelo': '7551',
-  // Groningen
-  'groningen': '9711',
-  'assen': '9401',
-  // Friesland
-  'leeuwarden': '8911',
-  // Zeeland
-  'middelburg': '4331',
-  'goes': '4461',
-  // Flevoland
-  'almere': '1311',
-  'lelystad': '8221',
-  // Drenthe
-  'emmen': '7811',
-  'hoogeveen': '7901',
+  // Noord-Brabant (25+ steden)
+  'cuijk': '5431', 'boxmeer': '5831', 'uden': '5401', 'veghel': '5461',
+  'oss': '5341', 'eindhoven': '5611', 'helmond': '5701', 'tilburg': '5038',
+  's-hertogenbosch': '5211', 'den bosch': '5211', 'breda': '4811',
+  'waalwijk': '5141', 'roosendaal': '4701', 'bergen op zoom': '4611',
+  'oosterhout': '4901', 'dongen': '5101', 'mill': '5451', 'grave': '5361',
+  'beugen': '5835', 'sambeek': '5836', 'sint-michielsgestel': '5271',
+  'vught': '5261', 'meierijstad': '5461', 'best': '5681', 'nuenen': '5671',
+  'geldrop': '5661', 'valkenswaard': '5551', 'bladel': '5531', 'eersel': '5521',
+  
+  // Gelderland (25+ steden)
+  'nijmegen': '6511', 'arnhem': '6811', 'apeldoorn': '7311', 'ede': '6711',
+  'wageningen': '6701', 'doetinchem': '7001', 'winterswijk': '7101',
+  'elst': '6661', 'wijchen': '6601', 'tiel': '4001', 'zaltbommel': '5301',
+  'culemborg': '4101', 'geldermalsen': '4191', 'buren': '4001', 'druten': '6651',
+  'beuningen': '6641', 'groesbeek': '6561', 'heumen': '6581', 'berg en dal': '6571',
+  'zevenaar': '6901', 'duiven': '6921', 'westervoort': '6931', 'rheden': '6991',
+  'rozendaal': '6891', 'brummen': '6971', 'lochem': '7241', 'zutphen': '7201',
+  'voorst': '7391', 'epe': '8161', 'hattem': '8051', 'heerde': '8181',
+  'harderwijk': '3841', 'ermelo': '3851', 'putten': '3881', 'nunspeet': '8071',
+  'barneveld': '3771', 'scherpenzeel': '3991', 'nijkerk': '3861',
+  
+  // Limburg (20+ steden)
+  'maastricht': '6211', 'heerlen': '6411', 'roermond': '6041', 'venlo': '5911',
+  'venray': '5801', 'sittard': '6131', 'kerkrade': '6461', 'weert': '6001',
+  'geleen': '6161', 'stein': '6171', 'brunssum': '6441', 'landgraaf': '6371',
+  'valkenburg': '6301', 'meerssen': '6231', 'beek': '6191', 'nuth': '6361',
+  'simpelveld': '6369', 'gulpen': '6271', 'vaals': '6291', 'eijsden': '6245',
+  'peel en maas': '5988', 'horst aan de maas': '5961', 'bergen': '5854',
+  'gennep': '6591', 'mook en middelaar': '6585',
+  
+  // Zuid-Holland (20+ steden)
+  'rotterdam': '3011', 'den haag': '2511', "'s-gravenhage": '2511',
+  'leiden': '2311', 'dordrecht': '3311', 'delft': '2611', 'zoetermeer': '2701',
+  'gouda': '2801', 'alphen aan den rijn': '2401', 'katwijk': '2221',
+  'leidschendam': '2261', 'voorburg': '2271', 'rijswijk': '2281',
+  'schiedam': '3111', 'vlaardingen': '3131', 'maassluis': '3141',
+  'spijkenisse': '3201', 'hellevoetsluis': '3221', 'brielle': '3231',
+  'capelle aan den ijssel': '2901', 'krimpen aan den ijssel': '2921',
+  
+  // Noord-Holland (20+ steden)
+  'amsterdam': '1011', 'haarlem': '2011', 'hilversum': '1211', 'zaandam': '1501',
+  'alkmaar': '1811', 'hoofddorp': '2131', 'amstelveen': '1181', 'purmerend': '1441',
+  'hoorn': '1621', 'den helder': '1781', 'heerhugowaard': '1701', 'schagen': '1741',
+  'beverwijk': '1941', 'ijmuiden': '1971', 'velsen': '1981', 'castricum': '1901',
+  'uitgeest': '1911', 'heemskerk': '1961', 'diemen': '1111', 'weesp': '1381',
+  'bussum': '1401', 'naarden': '1411', 'huizen': '1271', 'blaricum': '1261',
+  
+  // Utrecht (15+ steden)
+  'utrecht': '3511', 'amersfoort': '3811', 'zeist': '3701', 'nieuwegein': '3431',
+  'veenendaal': '3901', 'woerden': '3441', 'houten': '3991', 'ijsselstein': '3401',
+  'maarssen': '3601', 'bilthoven': '3721', 'soest': '3761', 'baarn': '3741',
+  'bunschoten': '3751', 'leusden': '3831', 'woudenberg': '3931',
+  'renswoude': '3927', 'rhenen': '3911', 'cuneraweg': '3911',
+  
+  // Overijssel (15+ steden)
+  'zwolle': '8011', 'enschede': '7511', 'deventer': '7411', 'almelo': '7601',
+  'hengelo': '7551', 'kampen': '8261', 'oldenzaal': '7571', 'raalte': '8101',
+  'ommen': '7731', 'hardenberg': '7771', 'dalfsen': '7721', 'staphorst': '7951',
+  'steenwijkerland': '8331', 'zwartewaterland': '8064', 'olst-wijhe': '8121',
+  
+  // Groningen (10+ steden)
+  'groningen': '9711', 'veendam': '9641', 'hoogezand': '9601', 'stadskanaal': '9501',
+  'winschoten': '9671', 'delfzijl': '9931', 'appingedam': '9901', 'leek': '9351',
+  'haren': '9751', 'zuidhorn': '9801',
+  
+  // Friesland (10+ steden)
+  'leeuwarden': '8911', 'drachten': '9201', 'sneek': '8601', 'heerenveen': '8441',
+  'harlingen': '8861', 'franeker': '8801', 'bolsward': '8701', 'dokkum': '9101',
+  'lemmer': '8531', 'joure': '8501',
+  
+  // Zeeland (8+ steden)
+  'middelburg': '4331', 'goes': '4461', 'vlissingen': '4381', 'terneuzen': '4531',
+  'hulst': '4561', 'sluis': '4524', 'tholen': '4691', 'veere': '4351',
+  
+  // Flevoland (5+ steden)
+  'almere': '1311', 'lelystad': '8221', 'dronten': '8251', 'zeewolde': '3891',
+  'urk': '8321', 'noordoostpolder': '8301',
+  
+  // Drenthe (10+ steden)
+  'emmen': '7811', 'hoogeveen': '7901', 'meppel': '7941', 'assen': '9401',
+  'coevorden': '7741', 'borger-odoorn': '7875', 'aa en hunze': '9461',
+  'tynaarlo': '9481', 'noordenveld': '9331', 'westerveld': '7961',
 };
 
 /**
- * Dutch city to province mapping
+ * Dutch city to province mapping (50+ cities)
  */
 const WOONPLAATS_PROVINCIE_MAP: Record<string, string> = {
   // Noord-Brabant
@@ -619,39 +636,61 @@ const WOONPLAATS_PROVINCIE_MAP: Record<string, string> = {
   'helmond': 'noord-brabant', 'tilburg': 'noord-brabant', 's-hertogenbosch': 'noord-brabant',
   'den bosch': 'noord-brabant', 'breda': 'noord-brabant', 'mill': 'noord-brabant',
   'grave': 'noord-brabant', 'beugen': 'noord-brabant', 'sambeek': 'noord-brabant',
+  'waalwijk': 'noord-brabant', 'roosendaal': 'noord-brabant', 'bergen op zoom': 'noord-brabant',
+  'oosterhout': 'noord-brabant', 'dongen': 'noord-brabant', 'sint-michielsgestel': 'noord-brabant',
+  'vught': 'noord-brabant', 'meierijstad': 'noord-brabant', 'best': 'noord-brabant',
+  'nuenen': 'noord-brabant', 'geldrop': 'noord-brabant', 'valkenswaard': 'noord-brabant',
+  'bladel': 'noord-brabant', 'eersel': 'noord-brabant',
   // Gelderland
   'nijmegen': 'gelderland', 'arnhem': 'gelderland', 'apeldoorn': 'gelderland',
   'ede': 'gelderland', 'wageningen': 'gelderland', 'doetinchem': 'gelderland',
   'winterswijk': 'gelderland', 'elst': 'gelderland', 'wijchen': 'gelderland',
-  'tiel': 'gelderland', 'zaltbommel': 'gelderland',
+  'tiel': 'gelderland', 'zaltbommel': 'gelderland', 'culemborg': 'gelderland',
+  'zevenaar': 'gelderland', 'duiven': 'gelderland', 'westervoort': 'gelderland',
+  'zutphen': 'gelderland', 'lochem': 'gelderland', 'harderwijk': 'gelderland',
+  'ermelo': 'gelderland', 'barneveld': 'gelderland', 'nijkerk': 'gelderland',
+  'groesbeek': 'gelderland', 'beuningen': 'gelderland', 'druten': 'gelderland',
   // Limburg
   'maastricht': 'limburg', 'heerlen': 'limburg', 'roermond': 'limburg',
   'venlo': 'limburg', 'venray': 'limburg', 'sittard': 'limburg',
   'kerkrade': 'limburg', 'weert': 'limburg', 'geleen': 'limburg',
+  'brunssum': 'limburg', 'landgraaf': 'limburg', 'valkenburg': 'limburg',
+  'gennep': 'limburg', 'mook en middelaar': 'limburg', 'bergen': 'limburg',
   // Zuid-Holland
   'rotterdam': 'zuid-holland', 'den haag': 'zuid-holland', "'s-gravenhage": 'zuid-holland',
   'leiden': 'zuid-holland', 'dordrecht': 'zuid-holland', 'delft': 'zuid-holland',
   'zoetermeer': 'zuid-holland', 'gouda': 'zuid-holland', 'alphen aan den rijn': 'zuid-holland',
+  'katwijk': 'zuid-holland', 'schiedam': 'zuid-holland', 'vlaardingen': 'zuid-holland',
+  'spijkenisse': 'zuid-holland', 'capelle aan den ijssel': 'zuid-holland',
   // Noord-Holland
   'amsterdam': 'noord-holland', 'haarlem': 'noord-holland', 'hilversum': 'noord-holland',
   'zaandam': 'noord-holland', 'alkmaar': 'noord-holland', 'hoofddorp': 'noord-holland',
-  'amstelveen': 'noord-holland', 'purmerend': 'noord-holland',
+  'amstelveen': 'noord-holland', 'purmerend': 'noord-holland', 'hoorn': 'noord-holland',
+  'den helder': 'noord-holland', 'heerhugowaard': 'noord-holland', 'beverwijk': 'noord-holland',
+  'bussum': 'noord-holland', 'huizen': 'noord-holland', 'diemen': 'noord-holland',
   // Utrecht
   'utrecht': 'utrecht', 'amersfoort': 'utrecht', 'zeist': 'utrecht',
   'nieuwegein': 'utrecht', 'veenendaal': 'utrecht', 'woerden': 'utrecht',
+  'houten': 'utrecht', 'ijsselstein': 'utrecht', 'soest': 'utrecht',
+  'baarn': 'utrecht', 'leusden': 'utrecht', 'bunschoten': 'utrecht',
   // Overijssel
   'zwolle': 'overijssel', 'enschede': 'overijssel', 'deventer': 'overijssel',
   'almelo': 'overijssel', 'hengelo': 'overijssel', 'kampen': 'overijssel',
+  'oldenzaal': 'overijssel', 'raalte': 'overijssel', 'hardenberg': 'overijssel',
   // Groningen
-  'groningen': 'groningen', 'assen': 'drenthe',
+  'groningen': 'groningen', 'veendam': 'groningen', 'hoogezand': 'groningen',
+  'stadskanaal': 'groningen', 'winschoten': 'groningen', 'delfzijl': 'groningen',
   // Friesland
   'leeuwarden': 'friesland', 'drachten': 'friesland', 'sneek': 'friesland',
+  'heerenveen': 'friesland', 'harlingen': 'friesland', 'franeker': 'friesland',
   // Zeeland
   'middelburg': 'zeeland', 'goes': 'zeeland', 'vlissingen': 'zeeland',
+  'terneuzen': 'zeeland', 'hulst': 'zeeland',
   // Flevoland
-  'almere': 'flevoland', 'lelystad': 'flevoland',
+  'almere': 'flevoland', 'lelystad': 'flevoland', 'dronten': 'flevoland',
   // Drenthe
   'emmen': 'drenthe', 'hoogeveen': 'drenthe', 'meppel': 'drenthe',
+  'assen': 'drenthe', 'coevorden': 'drenthe',
 };
 
 /**
@@ -1411,13 +1450,20 @@ export function calculateUnifiedMatchScore(
         expertScore += Math.min(expert.match_criteria.certificaat_gewicht, matchedCerts.length * 5);
       }
       
-      // Match experience (direct matches)
+      // Match experience (direct matches) - FIX 2: Use expanded aliases!
       const candidateDoelgroepenLower = (candidate.doelgroep_ervaring || []).map(d => d.toLowerCase());
       const candidateSectorenLower = (candidate.ervaring_sector || []).map(s => s.toLowerCase());
-      const allCandidateExp = [...candidateDoelgroepenLower, ...candidateSectorenLower];
+      const allCandidateExpRaw = [...candidateDoelgroepenLower, ...candidateSectorenLower];
+      // CRITICAL FIX: Expand with aliases to match "NAH" → "niet-aangeboren hersenletsel"
+      const allCandidateExp = expandExperienceWithAliases([
+        ...(candidate.doelgroep_ervaring || []),
+        ...(candidate.ervaring_sector || [])
+      ]);
       
       for (const vereistExp of expert.vereiste_ervaring) {
-        if (allCandidateExp.some(e => e.includes(vereistExp.toLowerCase()) || vereistExp.toLowerCase().includes(e))) {
+        const vereistLower = vereistExp.toLowerCase();
+        // Check both original and expanded experience
+        if (allCandidateExp.some(e => e.includes(vereistLower) || vereistLower.includes(e))) {
           matchedErvaring.push(vereistExp);
         }
       }
@@ -1518,25 +1564,26 @@ export function calculateUnifiedMatchScore(
   }
 
   // ===== TOTAL SCORE =====
-  // Adjusted weights: Functie 20, Regio 18, Sector 15, Doelgroep 10, Beschrijving 10, 
-  // CertificaatVereist 10, Mobiliteit 7, Beschikbaarheid 5, Werkvorm 5 = 100 base
+  // FIX 3: Adjusted weights - Beschrijving verhoogd naar 15 punten voor betere differentiatie
+  // Functie 20, Regio 18, Sector 15 (FIX 4: directe match bonus), Doelgroep 10, Beschrijving 15 (was 10)
+  // CertificaatVereist 8, Mobiliteit 7, Beschikbaarheid 4, Werkvorm 3 = 100 base
   // + Track Record bonus (up to +8) + AI boost (up to +15) + Expert bonus (up to +12)
   const totalScore = 
     Math.round(functieMatch * 0.8) +  // 25 -> 20 points
     Math.round(regioMatch * 0.9) +    // 20 -> 18 points  
-    Math.round(sectorMatch * 0.75) +  // 20 -> 15 points
+    Math.round(sectorMatch * 0.75) +  // 20 -> 15 points (FIX 4: already has direct match bonus in sector calc)
     Math.round(doelgroepMatch * 0.67) + // 15 -> 10 points
-    beschrijvingMatch +               // 10 points
-    certificaatVereistMatch +         // 10 points
+    Math.round(beschrijvingMatch * 1.5) + // FIX 3: 10 -> 15 points (verhoogd voor differentiatie)
+    Math.round(certificaatVereistMatch * 0.8) + // 10 -> 8 points
     Math.round(mobiliteitMatch * 0.7) + // 10 -> 7 points
-    beschikbaarheidMatch +            // 5 points
-    werkvormMatch +                   // 5 points
+    Math.round(beschikbaarheidMatch * 0.8) + // 5 -> 4 points
+    Math.round(werkvormMatch * 0.6) + // 5 -> 3 points
     ervaringBonus + 
     leidinggevendeBonus + 
     certificatenBonus + 
     dienstBonus +
     trackRecordBonus +                // up to +8 points
-    expertBonus +                     // NEW: up to +12 points
+    expertBonus +                     // up to +12 points
     aiBoost;
 
   // Normalize to 0-100 scale (max base is 100, but with bonuses can go slightly higher)
