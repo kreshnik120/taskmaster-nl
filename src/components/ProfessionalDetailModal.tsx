@@ -1,4 +1,5 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,12 +17,15 @@ import { toast } from "sonner";
 import { 
   Phone, Mail, MapPin, Briefcase, Car, Calendar, User, Users,
   Star, Edit, Trash2, CheckCircle2, X, Link2, ChevronDown, Award, Clock, 
-  Home, Cake, Upload
+  Home, Cake, Upload, MoreHorizontal
 } from "lucide-react";
 import { PlacementHistory } from "./PlacementHistory";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { SublocationSelectorPanel } from "./SublocationSelectorPanel";
+import { ProfessionalAvatar } from "@/components/ui/professional-avatar";
+import { cn } from "@/lib/utils";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 interface Professional {
   id: string;
@@ -140,6 +144,7 @@ export function ProfessionalDetailModal({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [basicsOpen, setBasicsOpen] = useState(true);
   const [contactOpen, setContactOpen] = useState(true);
   const [financialOpen, setFinancialOpen] = useState(false);
@@ -226,10 +231,6 @@ export function ProfessionalDetailModal({
   const handleDelete = async () => {
     if (!professional) return;
     
-    if (!confirm(`Weet je zeker dat je ${professional.full_name} wilt verwijderen?`)) {
-      return;
-    }
-    
     setIsDeleting(true);
     try {
       const { error } = await supabase
@@ -240,6 +241,7 @@ export function ProfessionalDetailModal({
       if (error) throw error;
 
       toast.success("Professional succesvol verwijderd");
+      setDeleteDialogOpen(false);
       onOpenChange(false);
       onSuccess?.();
     } catch (error: any) {
@@ -401,40 +403,64 @@ export function ProfessionalDetailModal({
               </div>
             </div>
 
-            {/* Action Buttons */}
+            {/* Action Buttons - Apple style with overflow menu for destructive */}
             {!isEditing && (
-              <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" onClick={handleEdit}>
                   <Edit className="h-4 w-4 mr-1" />
                   Bewerken
                 </Button>
-                <Button size="sm" variant="destructive" onClick={handleDelete} disabled={isDeleting}>
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  Verwijderen
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem 
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => setDeleteDialogOpen(true)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Verwijderen
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             )}
           </div>
         </div>
 
+        {/* Delete Confirmation Dialog - Apple style */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Professional verwijderen</AlertDialogTitle>
+              <AlertDialogDescription>
+                Weet je zeker dat je <span className="font-medium">{professional.full_name}</span> wilt verwijderen? 
+                Deze actie kan niet ongedaan worden gemaakt.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Annuleren</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isDeleting ? "Verwijderen..." : "Verwijderen"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mt-4">
+          {/* Apple style tabs - text only, no icons */}
           <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="profiel">
-              <User className="h-4 w-4 mr-2" />
-              Profiel
-            </TabsTrigger>
-            <TabsTrigger value="ervaring">
-              <Award className="h-4 w-4 mr-2" />
-              Ervaring
-            </TabsTrigger>
-            <TabsTrigger value="historiek">
-              <Clock className="h-4 w-4 mr-2" />
-              Historiek
-            </TabsTrigger>
-            <TabsTrigger value="plaatsing">
-              <Link2 className="h-4 w-4 mr-2" />
-              Plaatsing
-            </TabsTrigger>
+            <TabsTrigger value="profiel">Profiel</TabsTrigger>
+            <TabsTrigger value="ervaring">Ervaring</TabsTrigger>
+            <TabsTrigger value="historiek">Historiek</TabsTrigger>
+            <TabsTrigger value="plaatsing">Plaatsing</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profiel" className="space-y-4 mt-6">
