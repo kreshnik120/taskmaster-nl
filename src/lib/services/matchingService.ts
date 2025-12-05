@@ -1670,9 +1670,9 @@ export function calculateUnifiedMatchScore(
     expertBonus +          // max +12
     aiBoost;               // max +15 = 48 max bonus
   
-  // FASE 1 FIX: Bonussen voegen punten toe, maar finale score cap at 100
-  // Een perfecte base (125/125) = 100%, bonussen kunnen +5-10% toevoegen voor differentiatie
-  const bonusPercentage = Math.round(bonusPoints * 0.2); // 48 max * 0.2 = max +10%
+  // IMPROVED: Verhoogde bonus impact voor betere score differentiatie (8-12%)
+  // Bonussen nu 0.35x voor meer onderscheidend vermogen
+  const bonusPercentage = Math.round(bonusPoints * 0.35); // 48 max * 0.35 = max +17%
   
   const totalScore = rawBaseScore + bonusPoints; // For backwards compat in return
   const normalizedScore = Math.min(100, basePercentage + bonusPercentage);
