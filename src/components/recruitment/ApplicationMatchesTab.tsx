@@ -78,16 +78,24 @@ const getProgressColor = (score: number) => {
 
 export function ApplicationMatchesTab({ application, onApplicationUpdated }: ApplicationMatchesTabProps) {
   const [loading, setLoading] = useState(true);
-  const [matchedSublocations, setMatchedSublocations] = useState<MatchedSublocation[]>([]);
-  const [matchedVacancies, setMatchedVacancies] = useState<MatchedVacancy[]>([]);
+  const [allMatchedSublocations, setAllMatchedSublocations] = useState<MatchedSublocation[]>([]);
+  const [allMatchedVacancies, setAllMatchedVacancies] = useState<MatchedVacancy[]>([]);
   const [linking, setLinking] = useState<string | null>(null);
   const [totalAIBoost, setTotalAIBoost] = useState(0);
   const [aiPatternsLoaded, setAiPatternsLoaded] = useState(0);
+  
+  // Pagination state
+  const [visibleSublocationCount, setVisibleSublocationCount] = useState(20);
+  const [visibleVacancyCount, setVisibleVacancyCount] = useState(20);
   
   // Multi-select state
   const [selectedSublocations, setSelectedSublocations] = useState<Set<string>>(new Set());
   const [selectedVacancies, setSelectedVacancies] = useState<Set<string>>(new Set());
   const [bulkLinking, setBulkLinking] = useState(false);
+  
+  // Visible subsets based on pagination
+  const matchedSublocations = allMatchedSublocations.slice(0, visibleSublocationCount);
+  const matchedVacancies = allMatchedVacancies.slice(0, visibleVacancyCount);
 
   const completenessScore = application.completeness_score || 0;
   const canMatch = completenessScore >= 50;
@@ -129,7 +137,7 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
           )
         `)
         .eq('is_active', true)
-        .limit(200);
+        .limit(1000);
 
       if (subError) throw subError;
 
@@ -200,14 +208,13 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
         };
       });
 
-      // Await all sublocation calculations
+      // Await all sublocation calculations - NO LIMIT, store all matches
       const scoredSublocationsRaw = await Promise.all(scoredSublocationsPromises);
-      const scoredSublocations = scoredSublocationsRaw
+      const allScoredSublocations = scoredSublocationsRaw
         .filter(sub => sub.matchScore >= 40)
-        .sort((a, b) => b.matchScore - a.matchScore)
-        .slice(0, 10);
+        .sort((a, b) => b.matchScore - a.matchScore);
 
-      setMatchedSublocations(scoredSublocations);
+      setAllMatchedSublocations(allScoredSublocations);
 
       // Fetch open vacancies
       const { data: vacancies, error: vacError } = await supabase
@@ -289,14 +296,13 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
           };
         });
 
-      // Await all vacancy calculations
+      // Await all vacancy calculations - NO LIMIT, store all matches
       const scoredVacanciesRaw = await Promise.all(scoredVacanciesPromises);
-      const scoredVacancies = scoredVacanciesRaw
+      const allScoredVacancies = scoredVacanciesRaw
         .filter(vac => vac.matchScore >= 40)
-        .sort((a, b) => b.matchScore - a.matchScore)
-        .slice(0, 10);
+        .sort((a, b) => b.matchScore - a.matchScore);
 
-      setMatchedVacancies(scoredVacancies);
+      setAllMatchedVacancies(allScoredVacancies);
       setTotalAIBoost(maxAIBoost);
 
       // Track pattern usage for AI learning
@@ -416,14 +422,16 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
   };
 
   const selectAllSublocations = () => {
-    const linkableIds = matchedSublocations
+    // Select from ALL matches, not just visible
+    const linkableIds = allMatchedSublocations
       .filter(s => !s.existingMatch)
       .map(s => s.id);
     setSelectedSublocations(new Set(linkableIds));
   };
 
   const selectAllVacancies = () => {
-    const linkableIds = matchedVacancies
+    // Select from ALL matches, not just visible
+    const linkableIds = allMatchedVacancies
       .filter(v => !v.existingApplication)
       .map(v => v.id);
     setSelectedVacancies(new Set(linkableIds));
@@ -439,7 +447,8 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
     if (selectedSublocations.size === 0) return;
     
     setBulkLinking(true);
-    const toLink = matchedSublocations.filter(s => 
+    // Use ALL matches, not just visible
+    const toLink = allMatchedSublocations.filter(s =>
       selectedSublocations.has(s.id) && !s.existingMatch
     );
 
@@ -488,7 +497,8 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
     if (selectedVacancies.size === 0) return;
     
     setBulkLinking(true);
-    const toLink = matchedVacancies.filter(v => 
+    // Use ALL matches, not just visible
+    const toLink = allMatchedVacancies.filter(v => 
       selectedVacancies.has(v.id) && !v.existingApplication
     );
 
@@ -605,8 +615,8 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             <h3 className="text-sm font-semibold flex items-center gap-2">
               <Briefcase className="h-4 w-4" />
               Passende Vacatures
-              {matchedVacancies.length > 0 && (
-                <Badge variant="secondary" className="ml-1">{matchedVacancies.length}</Badge>
+              {allMatchedVacancies.length > 0 && (
+                <Badge variant="secondary" className="ml-1">{allMatchedVacancies.length}</Badge>
               )}
             </h3>
           </div>
@@ -617,7 +627,7 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
 
         {matchedVacancies.length > 0 ? (
           <div className="space-y-2">
-            {matchedVacancies.slice(0, 5).map((vacancy) => (
+            {matchedVacancies.map((vacancy) => (
               <div 
                 key={vacancy.id}
                 className={`p-3 rounded-lg border bg-card hover:shadow-sm transition-all ${
@@ -728,6 +738,17 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
                 </div>
               </div>
             ))}
+            
+            {/* Toon meer vacatures button */}
+            {allMatchedVacancies.length > visibleVacancyCount && (
+              <Button 
+                variant="outline" 
+                className="w-full mt-3"
+                onClick={() => setVisibleVacancyCount(prev => prev + 20)}
+              >
+                Toon meer vacatures ({visibleVacancyCount} van {allMatchedVacancies.length})
+              </Button>
+            )}
           </div>
         ) : (
           <div className="p-4 rounded-lg bg-muted/30 text-center">
@@ -752,8 +773,8 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             <h3 className="text-sm font-semibold flex items-center gap-2">
               <Building2 className="h-4 w-4" />
               Passende Werklocaties
-              {matchedSublocations.length > 0 && (
-                <Badge variant="secondary" className="ml-1">{matchedSublocations.length}</Badge>
+              {allMatchedSublocations.length > 0 && (
+                <Badge variant="secondary" className="ml-1">{allMatchedSublocations.length}</Badge>
               )}
             </h3>
           </div>
@@ -761,7 +782,7 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
 
         {matchedSublocations.length > 0 ? (
           <div className="space-y-2">
-            {matchedSublocations.slice(0, 5).map((sublocation) => (
+            {matchedSublocations.map((sublocation) => (
               <div 
                 key={sublocation.id}
                 className={`p-3 rounded-lg border bg-card hover:shadow-sm transition-all ${
@@ -881,6 +902,17 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
                 </div>
               </div>
             ))}
+            
+            {/* Toon meer werklocaties button */}
+            {allMatchedSublocations.length > visibleSublocationCount && (
+              <Button 
+                variant="outline" 
+                className="w-full mt-3"
+                onClick={() => setVisibleSublocationCount(prev => prev + 20)}
+              >
+                Toon meer locaties ({visibleSublocationCount} van {allMatchedSublocations.length})
+              </Button>
+            )}
           </div>
         ) : (
           <div className="p-4 rounded-lg bg-muted/30 text-center">
