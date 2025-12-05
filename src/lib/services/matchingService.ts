@@ -276,6 +276,45 @@ export async function loadExpertKnowledge(): Promise<ExpertKnowledge[]> {
   }
 }
 
+// ============= FIX 3: ERVARING CROSS-MAPPING MATRIX =============
+/**
+ * Experience cross-mapping: related experiences that transfer skills
+ * Used to give partial credit when candidate has related but not exact experience
+ */
+const ERVARING_RELATIES: Record<string, { related: string[]; score: number }> = {
+  'ASS': { related: ['Autisme', 'Psychiatrie', 'Gedragsproblematiek', 'Prikkelverwerking', 'GGZ', 'GHZ'], score: 0.6 },
+  'NAH': { related: ['Hersenletsel', 'CVA', 'Somatiek', 'Cognitief', 'Neurologie', 'Revalidatie'], score: 0.6 },
+  'Gedrag': { related: ['Agressie', 'Psychiatrie', 'Forensisch', 'Grensoverschrijdend', 'GGZ', 'Jeugdzorg'], score: 0.6 },
+  'Epilepsie': { related: ['Neurologie', 'Aanvallen', 'Somatiek', 'Medisch', 'VVT'], score: 0.6 },
+  'Medisch': { related: ['Verpleging', 'Somatiek', 'Palliatief', 'VVT', 'Ziekenhuis', 'Thuiszorg'], score: 0.6 },
+  'Verslaving': { related: ['GGZ', 'Psychiatrie', 'Dubbele diagnose', 'FACT', 'Maatschappelijke opvang'], score: 0.6 },
+  'Dementie': { related: ['Ouderen', 'VVT', 'Psychogeriatrie', 'Verpleeghuiszorg', 'Thuiszorg'], score: 0.7 },
+  'Palliatief': { related: ['Terminale zorg', 'VVT', 'Ouderen', 'Hospice', 'Medisch'], score: 0.7 },
+  'Jeugd': { related: ['Jeugdzorg', 'Kinderen', 'Orthopedagogiek', 'Gezinshulp', 'Pleegzorg'], score: 0.6 },
+  'LVB': { related: ['Verstandelijke beperking', 'GHZ', 'Gehandicaptenzorg', 'MVB', 'EVB', 'Begeleiding'], score: 0.7 },
+};
+
+/**
+ * Check if candidate has related experience for a specialisme
+ */
+function hasRelatedExperience(candidateExp: string[], specialisme: string): { hasRelated: boolean; relatedMatches: string[] } {
+  const relation = ERVARING_RELATIES[specialisme];
+  if (!relation) return { hasRelated: false, relatedMatches: [] };
+  
+  const relatedMatches: string[] = [];
+  for (const exp of candidateExp) {
+    const expLower = exp.toLowerCase();
+    for (const relatedExp of relation.related) {
+      if (expLower.includes(relatedExp.toLowerCase()) || relatedExp.toLowerCase().includes(expLower)) {
+        relatedMatches.push(exp);
+        break;
+      }
+    }
+  }
+  
+  return { hasRelated: relatedMatches.length > 0, relatedMatches };
+}
+
 /**
  * Detect specialisms from description text using expert keywords
  */
@@ -292,24 +331,37 @@ function detectSpecialismen(descriptionLower: string): string[] {
     return detected;
   }
   
-  // Fallback: hardcoded detection
-  if (descriptionLower.includes('ass') || descriptionLower.includes('autisme') || descriptionLower.includes('autistisch')) {
+  // Fallback: hardcoded detection (extended with new experts)
+  if (descriptionLower.includes('ass') || descriptionLower.includes('autisme') || descriptionLower.includes('autistisch') || descriptionLower.includes('spectrum')) {
     detected.push('ASS');
   }
-  if (descriptionLower.includes('nah') || descriptionLower.includes('hersenletsel') || descriptionLower.includes('cva')) {
+  if (descriptionLower.includes('nah') || descriptionLower.includes('hersenletsel') || descriptionLower.includes('cva') || descriptionLower.includes('hersenbeschadiging')) {
     detected.push('NAH');
   }
-  if (descriptionLower.includes('epilepsie') || descriptionLower.includes('aanval') || descriptionLower.includes('insult')) {
+  if (descriptionLower.includes('epilepsie') || descriptionLower.includes('aanval') || descriptionLower.includes('insult') || descriptionLower.includes('toeval')) {
     detected.push('Epilepsie');
   }
-  if (descriptionLower.includes('agressie') || descriptionLower.includes('gedrag') || descriptionLower.includes('grensoverschrijdend')) {
+  if (descriptionLower.includes('agressie') || descriptionLower.includes('gedrag') || descriptionLower.includes('grensoverschrijdend') || descriptionLower.includes('weerbaar')) {
     detected.push('Gedrag');
   }
   if (descriptionLower.includes('verpleegtechnisch') || descriptionLower.includes('katheter') || descriptionLower.includes('sonde') || descriptionLower.includes('medisch')) {
     detected.push('Medisch');
   }
-  if (descriptionLower.includes('verslaving') || descriptionLower.includes('middelen') || descriptionLower.includes('alcohol')) {
+  if (descriptionLower.includes('verslaving') || descriptionLower.includes('middelen') || descriptionLower.includes('alcohol') || descriptionLower.includes('drugs')) {
     detected.push('Verslaving');
+  }
+  // New experts fallback detection
+  if (descriptionLower.includes('dementie') || descriptionLower.includes('alzheimer') || descriptionLower.includes('psychogeriatr')) {
+    detected.push('Dementie');
+  }
+  if (descriptionLower.includes('palliatief') || descriptionLower.includes('terminaal') || descriptionLower.includes('hospice') || descriptionLower.includes('levenseinde')) {
+    detected.push('Palliatief');
+  }
+  if (descriptionLower.includes('jeugd') || descriptionLower.includes('kind') || descriptionLower.includes('orthopeda') || descriptionLower.includes('pleegzorg')) {
+    detected.push('Jeugd');
+  }
+  if (descriptionLower.includes('lvb') || descriptionLower.includes('mvb') || descriptionLower.includes('verstandelijk') || descriptionLower.includes('zwakbegaafd')) {
+    detected.push('LVB');
   }
   
   return detected;
@@ -1259,13 +1311,16 @@ export function calculateUnifiedMatchScore(
       
       const matchedCerts: string[] = [];
       const matchedErvaring: string[] = [];
+      const relatedErvaring: string[] = [];
       let expertScore = 0;
       const maxScore = expert.match_criteria.certificaat_gewicht + expert.match_criteria.ervaring_gewicht + expert.match_criteria.methodiek_gewicht;
       
-      // Match certificates
+      // Match certificates (with expanded synonyms)
       const candidateCertsLower = (candidate.certificaten || []).map(c => c.toLowerCase());
       for (const vereistCert of expert.vereiste_certificaten) {
-        if (candidateCertsLower.some(c => c.includes(vereistCert.toLowerCase()) || vereistCert.toLowerCase().includes(c))) {
+        const vereistLower = vereistCert.toLowerCase();
+        // Check for substring match in both directions
+        if (candidateCertsLower.some(c => c.includes(vereistLower) || vereistLower.includes(c))) {
           matchedCerts.push(vereistCert);
         }
       }
@@ -1273,7 +1328,7 @@ export function calculateUnifiedMatchScore(
         expertScore += Math.min(expert.match_criteria.certificaat_gewicht, matchedCerts.length * 5);
       }
       
-      // Match experience
+      // Match experience (direct matches)
       const candidateDoelgroepenLower = (candidate.doelgroep_ervaring || []).map(d => d.toLowerCase());
       const candidateSectorenLower = (candidate.ervaring_sector || []).map(s => s.toLowerCase());
       const allCandidateExp = [...candidateDoelgroepenLower, ...candidateSectorenLower];
@@ -1287,16 +1342,34 @@ export function calculateUnifiedMatchScore(
         expertScore += Math.min(expert.match_criteria.ervaring_gewicht, matchedErvaring.length * 8);
       }
       
+      // FIX 3: Check for RELATED experience using cross-mapping matrix
+      if (matchedErvaring.length === 0) {
+        const allExpStrings = [...(candidate.doelgroep_ervaring || []), ...(candidate.ervaring_sector || [])];
+        const { hasRelated, relatedMatches } = hasRelatedExperience(allExpStrings, specialisme);
+        
+        if (hasRelated) {
+          relatedErvaring.push(...relatedMatches);
+          // Give 60% credit for related experience
+          const relatedCredit = Math.min(expert.match_criteria.ervaring_gewicht * 0.6, relatedMatches.length * 5);
+          expertScore += relatedCredit;
+        }
+      }
+      
       // Generate advice
       const matchStatus = expertScore >= maxScore * 0.6 
         ? 'Kandidaat voldoet aan criteria.' 
         : expertScore >= maxScore * 0.3 
           ? 'Kandidaat heeft beperkte ervaring.' 
-          : 'Kandidaat mist relevante ervaring.';
+          : expertScore > 0
+            ? 'Kandidaat heeft gerelateerde ervaring.'
+            : 'Kandidaat mist relevante ervaring.';
       
       const advies = expert.uitleg_template 
         ? expert.uitleg_template.replace('{match_status}', matchStatus)
         : `${expert.expert_naam}: ${matchStatus}`;
+      
+      // Include related experience in matched for display
+      const allMatchedErvaring = [...matchedErvaring, ...relatedErvaring.map(e => `${e} (gerelateerd)`)];
       
       expertAdvies.push({
         expert: expert.expert_naam,
@@ -1305,11 +1378,16 @@ export function calculateUnifiedMatchScore(
         maxScore,
         advies,
         matchedCerts,
-        matchedErvaring
+        matchedErvaring: allMatchedErvaring
       });
       
-      // Add to total bonus (max 12 points total across all experts)
-      expertBonus += Math.min(4, Math.round(expertScore / maxScore * 4)); // max 4 per expert
+      // FIX 1: Expert Bonus Threshold - ensure any positive match gives at least 1 bonus point
+      // Changed from: Math.round(expertScore / maxScore * 4) which rounds 5/60 = 0.33 = 0
+      // To: if score > 0, give at least 1 point
+      const bonusForExpert = expertScore > 0 
+        ? Math.max(1, Math.min(4, Math.round(expertScore / maxScore * 4)))
+        : 0;
+      expertBonus += bonusForExpert;
     }
     
     expertBonus = Math.min(12, expertBonus);
@@ -1319,7 +1397,7 @@ export function calculateUnifiedMatchScore(
       reasoning.push(`🎓 Expert Advies: ${expertAdvies.length} specialist(en) geraadpleegd (+${expertBonus})`);
       details.expertAdvies = {
         score: expertBonus,
-        match: expertBonus >= 4,
+        match: expertBonus >= 2, // Lowered threshold from 4 to 2
         reason: `${expertAdvies.length} specialist(en): ${expertAdvies.map(e => e.specialisme).join(', ')}`,
         expertCount: expertAdvies.length
       };

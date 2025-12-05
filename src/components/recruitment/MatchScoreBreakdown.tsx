@@ -190,7 +190,7 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
           </div>
         )}
 
-        {/* Expert Advies indicator */}
+        {/* Expert Advies indicator - FIX 5: Enhanced UI with tips */}
         {breakdown?.hasExpertAdvies && breakdown.expertAdvies && breakdown.expertAdvies.length > 0 && (
           <div className="space-y-2 p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
             <div className="flex items-center gap-2">
@@ -211,7 +211,7 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                       className={`text-[9px] px-1 py-0 ${
                         expert.score >= expert.maxScore * 0.6 
                           ? 'bg-green-50 text-green-700 border-green-200' 
-                          : expert.score >= expert.maxScore * 0.3 
+                          : expert.score > 0
                             ? 'bg-amber-50 text-amber-700 border-amber-200'
                             : 'bg-red-50 text-red-700 border-red-200'
                       }`}
@@ -222,16 +222,36 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                   <p className="text-[9px] text-indigo-600 dark:text-indigo-400 mt-0.5">
                     {expert.advies}
                   </p>
+                  {/* FIX 5: Show tips when score is 0 */}
+                  {expert.score === 0 && (
+                    <div className="mt-1 p-1.5 bg-amber-50 dark:bg-amber-900/30 rounded border border-amber-200 dark:border-amber-700">
+                      <p className="text-[9px] text-amber-700 dark:text-amber-300 font-medium">
+                        💡 Tip voor {expert.specialisme} match:
+                      </p>
+                      <ul className="text-[8px] text-amber-600 dark:text-amber-400 list-disc pl-3 mt-0.5">
+                        <li>Overweeg relevante certificaten toe te voegen</li>
+                        <li>Ervaring in gerelateerde doelgroepen kan helpen</li>
+                      </ul>
+                    </div>
+                  )}
                   {(expert.matchedCerts.length > 0 || expert.matchedErvaring.length > 0) && (
                     <div className="flex flex-wrap gap-1 mt-1">
                       {expert.matchedCerts.map((cert, i) => (
                         <Badge key={`cert-${i}`} variant="outline" className="text-[8px] px-1 py-0 bg-indigo-100 border-indigo-300">
-                          {cert}
+                          ✓ {cert}
                         </Badge>
                       ))}
                       {expert.matchedErvaring.map((exp, i) => (
-                        <Badge key={`exp-${i}`} variant="outline" className="text-[8px] px-1 py-0 bg-purple-100 border-purple-300">
-                          {exp}
+                        <Badge 
+                          key={`exp-${i}`} 
+                          variant="outline" 
+                          className={`text-[8px] px-1 py-0 ${
+                            exp.includes('gerelateerd') 
+                              ? 'bg-amber-100 border-amber-300 text-amber-700' 
+                              : 'bg-purple-100 border-purple-300'
+                          }`}
+                        >
+                          {exp.includes('gerelateerd') ? '⚡' : '✓'} {exp}
                         </Badge>
                       ))}
                     </div>
