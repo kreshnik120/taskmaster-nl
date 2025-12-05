@@ -9,10 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-interface Sublocation {
+export interface Sublocation {
   id: string;
   naam: string;
   plaats: string | null;
+  provincie?: string | null;
   sector: string[] | null;
   doelgroep: string[] | null;
   gezochte_functies: string[] | null;
@@ -27,7 +28,7 @@ interface Sublocation {
   } | null;
 }
 
-interface ProfessionalData {
+export interface ProfessionalData {
   functie_niveau?: string;
   werkvorm?: string;
   regio?: string;
@@ -41,17 +42,17 @@ interface ProfessionalData {
 
 interface SmartSublocationPickerProps {
   professionalData?: ProfessionalData;
-  onSelect: (sublocationId: string, sublocationName: string) => void;
+  onSelect: (sublocationId: string, sublocationName: string, sublocationData?: ScoredSublocation) => void;
   onCancel: () => void;
 }
 
-interface ScoredSublocation extends Sublocation {
+export interface ScoredSublocation extends Sublocation {
   matchScore: number;
   isRecommended: boolean;
 }
 
-// Simple inline scoring for sublocation matching
-function calculateSimpleMatchScore(
+// Simple inline scoring for sublocation matching - exported for use in DirectPlacementButton
+export function calculateSimpleMatchScore(
   professional: ProfessionalData,
   sublocation: Sublocation
 ): number {
@@ -200,7 +201,7 @@ export function SmartSublocationPicker({
   const renderSublocationCard = (sub: ScoredSublocation) => (
     <button
       key={sub.id}
-      onClick={() => onSelect(sub.id, sub.naam)}
+      onClick={() => onSelect(sub.id, sub.naam, sub)}
       className="w-full text-left p-4 rounded-lg border hover:border-primary hover:bg-accent/50 transition-all group"
     >
       <div className="space-y-2">

@@ -44,11 +44,34 @@ export function DirectPlacementButton({
   const [isPlacing, setIsPlacing] = useState(false);
   const navigate = useNavigate();
 
-  const handleSelectSublocation = async (sublocationId: string, sublocationName: string) => {
+  const handleSelectSublocation = async (sublocationId: string, sublocationName: string, sublocationData?: any) => {
     setIsPlacing(true);
     
     try {
-      // Create assignment record
+      // Calculate AI match reasoning for data enrichment
+      const aiMatchReasoning = professionalData && sublocationData ? {
+        calculated_at: new Date().toISOString(),
+        professional_data: {
+          functie_niveau: professionalData.functie_niveau,
+          ervaring_sector: professionalData.ervaring_sector,
+          regio: professionalData.regio,
+          werkvorm: professionalData.werkvorm,
+          postcode: professionalData.postcode,
+        },
+        sublocation_data: {
+          naam: sublocationData.naam,
+          sector: sublocationData.sector,
+          gezochte_functies: sublocationData.gezochte_functies,
+          plaats: sublocationData.plaats,
+          provincie: sublocationData.provincie,
+        },
+        score_breakdown: {
+          source: 'direct_placement_button',
+          match_score: sublocationData.matchScore || null
+        }
+      } : null;
+
+      // Create assignment record with ai_match_reasoning
       const { data: assignment, error } = await supabase
         .from("assignments")
         .insert({
@@ -57,7 +80,9 @@ export function DirectPlacementButton({
           status: "active",
           start_date: new Date().toISOString().split('T')[0],
           werkvorm: professionalData?.werkvorm || null,
-          weekly_hours: 32
+          weekly_hours: 32,
+          ai_match_score: sublocationData?.matchScore || null,
+          ai_match_reasoning: aiMatchReasoning
         })
         .select()
         .single();
@@ -85,6 +110,7 @@ export function DirectPlacementButton({
               professional_name: professionalName,
               sublocation_id: sublocationId,
               sublocation_name: sublocationName,
+              ai_match_score: sublocationData?.matchScore || null,
               source: "direct_placement_button"
             }
           });
