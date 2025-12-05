@@ -57,6 +57,14 @@ const PRIORITY_BORDERS: Record<string, string> = {
   critical: "border-l-red-500",
 };
 
+// Priority background tints (very subtle)
+const PRIORITY_BG: Record<string, string> = {
+  low: "bg-emerald-50/30 dark:bg-emerald-950/10",
+  medium: "bg-blue-50/30 dark:bg-blue-950/10",
+  high: "bg-amber-50/30 dark:bg-amber-950/10",
+  critical: "bg-red-50/30 dark:bg-red-950/10",
+};
+
 export default function Kalender() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -274,14 +282,14 @@ export default function Kalender() {
           <ToggleGroupItem 
             value="5" 
             aria-label="Werkweek"
-            className="rounded-full px-4 text-sm data-[state=on]:bg-background data-[state=on]:shadow-sm"
+            className="rounded-full px-4 text-sm data-[state=on]:bg-background data-[state=on]:shadow-sm data-[state=on]:text-primary"
           >
             Ma-Vr
           </ToggleGroupItem>
           <ToggleGroupItem 
             value="7" 
             aria-label="Volle week"
-            className="rounded-full px-4 text-sm data-[state=on]:bg-background data-[state=on]:shadow-sm"
+            className="rounded-full px-4 text-sm data-[state=on]:bg-background data-[state=on]:shadow-sm data-[state=on]:text-primary"
           >
             Ma-Zo
           </ToggleGroupItem>
@@ -336,7 +344,7 @@ export default function Kalender() {
           variant="ghost" 
           size="icon" 
           onClick={goToPreviousWeek}
-          className="h-8 w-8 rounded-full"
+          className="h-8 w-8 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/5"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
         </Button>
@@ -357,7 +365,7 @@ export default function Kalender() {
           variant="ghost" 
           size="icon" 
           onClick={goToNextWeek}
-          className="h-8 w-8 rounded-full"
+          className="h-8 w-8 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/5"
         >
           <ChevronRight className="h-3.5 w-3.5" />
         </Button>
@@ -374,26 +382,29 @@ export default function Kalender() {
           const dayTasks = getTasksForDay(day);
           const dayReminders = getRemindersForDay(day);
           const isToday = isSameDay(day, new Date());
+          const dayOfWeek = day.getDay();
+          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
           return (
             <Card 
               key={day.toISOString()} 
               className={cn(
                 "overflow-hidden min-h-[480px] border border-border/20 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)]",
-                isToday && "bg-primary/[0.02]"
+                isToday && "bg-primary/[0.03] border-primary/10",
+                isWeekend && !isToday && "bg-muted/[0.02]"
               )}
             >
               <CardHeader className="pb-3 pt-3.5 px-3.5">
                 <CardTitle className="text-sm font-normal tracking-wide flex items-center justify-between">
                   <span className="flex items-center gap-2">
                     {isToday && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
                     )}
                     <span className={cn(isToday ? "text-foreground" : "text-muted-foreground")}>
                       {format(day, 'EEEE', { locale: nl })}
                     </span>
                   </span>
-                  <span className="text-[11px] font-normal text-muted-foreground/50 tabular-nums">
+                  <span className="text-[11px] font-normal text-muted-foreground/60 tabular-nums">
                     {format(day, 'd MMM', { locale: nl }).toLowerCase()}
                   </span>
                 </CardTitle>
@@ -402,21 +413,22 @@ export default function Kalender() {
                 {dayTasks.length === 0 && dayReminders.length === 0 ? (
                   <button 
                     onClick={() => handleDayClick(day)}
-                    className="w-full text-center py-12 rounded-xl transition-all duration-200 group border border-dashed border-muted-foreground/10 hover:border-muted-foreground/25 hover:bg-muted/20"
+                    className="w-full text-center py-12 rounded-xl transition-all duration-200 group border border-dashed border-muted-foreground/10 hover:border-muted-foreground/25 hover:bg-primary/[0.03]"
                   >
-                    <Plus className="h-4 w-4 mx-auto mb-1.5 text-muted-foreground/20 group-hover:text-muted-foreground/50 transition-colors" />
+                    <Plus className="h-4 w-4 mx-auto mb-1.5 text-muted-foreground/20 group-hover:text-primary/50 transition-colors" />
                     <p className="text-xs text-muted-foreground/40 group-hover:text-muted-foreground/60 transition-colors">Taak toevoegen</p>
                   </button>
                 ) : (
                   <>
-                    {/* Task Cards - Ultra-subtle Apple style with priority border */}
+                    {/* Task Cards - Ultra-subtle Apple style with priority border + bg tint */}
                     {dayTasks.map((task, taskIndex) => (
                       <div 
                         key={task.id} 
                         onClick={() => handleTaskClick(task)} 
                         className={cn(
-                          "p-3 rounded-xl bg-background border-l-2 shadow-[0_0.5px_1px_rgba(0,0,0,0.02)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] hover:translate-y-[-0.5px] cursor-pointer transition-all duration-200 space-y-1.5",
-                          PRIORITY_BORDERS[task.priority] || PRIORITY_BORDERS.medium
+                          "p-3 rounded-xl border-l-2 shadow-[0_0.5px_1px_rgba(0,0,0,0.02)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] hover:translate-y-[-0.5px] cursor-pointer transition-all duration-200 space-y-1.5",
+                          PRIORITY_BORDERS[task.priority] || PRIORITY_BORDERS.medium,
+                          PRIORITY_BG[task.priority] || PRIORITY_BG.medium
                         )}
                         {...(taskIndex === 0 && (task.priority === 'high' || task.priority === 'critical') && { 'data-urgent-task': true })}
                       >
@@ -438,11 +450,11 @@ export default function Kalender() {
                         </div>
                       </div>
                     ))}
-                    {/* Reminder Cards - Subtle Apple style */}
+                    {/* Reminder Cards - Amber accent style */}
                     {dayReminders.map((reminder, reminderIndex) => (
                       <div 
                         key={reminder.id} 
-                        className="p-3 rounded-xl bg-muted/15 group transition-all duration-200 hover:bg-muted/25"
+                        className="p-3 rounded-xl bg-amber-50/20 dark:bg-amber-950/10 border-l-2 border-l-amber-400/50 group transition-all duration-200 hover:bg-amber-50/30 dark:hover:bg-amber-950/20"
                         {...(reminderIndex === 0 && { 'data-reminders': true })}
                       >
                         <div className="flex items-start justify-between gap-2">
