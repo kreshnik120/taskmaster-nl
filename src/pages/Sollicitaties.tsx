@@ -29,7 +29,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ClientSelectionDialog } from "@/components/ClientSelectionDialog";
+import { SublocationSelectionDialog } from "@/components/SublocationSelectionDialog";
 import { KPICard } from "@/components/ui/kpi-card";
 import { useProactiveMatchNotifications } from "@/hooks/useProactiveMatchNotifications";
 
@@ -501,13 +501,31 @@ const Sollicitaties = () => {
     }
   };
 
-  // Handle client selection for "geplaatst"
-  const handleSelectClient = async (clientId: string) => {
+  // Handle sublocation selection for "geplaatst" - writes to assignments table
+  const handleSelectSublocation = async (sublocationId: string, sublocationName: string) => {
     const { application } = selectClientDialog;
     if (!application || !application.professional_id) return;
 
     try {
-      // Create placement
+      // Get werkvorm from application
+      const werkvorm = application.extracted_data?.werkvorm || null;
+
+      // Create assignment in correct table
+      const { error: assignmentError } = await supabase
+        .from('assignments')
+        .insert({
+          professional_id: application.professional_id,
+          sublocation_id: sublocationId,
+          start_date: new Date().toISOString().split('T')[0],
+          status: 'active',
+          werkvorm: werkvorm,
+          weekly_hours: 0,
+          notes: `Geplaatst vanuit sollicitatie ${application.id}`
+        });
+
+      if (assignmentError) throw assignmentError;
+
+      // Log system event for AI learning
       const { data: { user } } = await supabase.auth.getUser();
       const { data: userOrg } = await supabase
         .from('user_organizations')
@@ -516,21 +534,27 @@ const Sollicitaties = () => {
         .limit(1)
         .maybeSingle();
 
-      if (!userOrg?.org_id) {
-        toast.error("Geen organisatie gevonden");
-        return;
-      }
-
-      const { error: placementError } = await supabase
-        .from('professional_clients')
-        .insert({
-          professional_id: application.professional_id,
-          client_id: clientId,
-          start_date: new Date().toISOString().split('T')[0],
-          is_active: true
+      if (userOrg?.org_id) {
+        await supabase.from('system_events').insert({
+          org_id: userOrg.org_id,
+          user_id: user?.id,
+          event_type: 'placement_created',
+          entity_type: 'assignment',
+          entity_id: application.professional_id,
+          event_data: {
+            application_id: application.id,
+            professional_id: application.professional_id,
+            sublocation_id: sublocationId,
+            sublocation_name: sublocationName,
+            werkvorm: werkvorm,
+            candidate_name: application.extracted_data?.naam || application.email_from
+          },
+          metadata: {
+            source: 'sollicitaties_kanban',
+            pipeline_stage: 'geplaatst'
+          }
         });
-
-      if (placementError) throw placementError;
+      }
 
       // Close dialog
       setSelectClientDialog({ open: false, application: null, previousStage: '' });
@@ -544,14 +568,14 @@ const Sollicitaties = () => {
       });
 
       const candidateName = application.extracted_data?.naam || application.email_from;
-      toast.success(`${candidateName} is geplaatst! 🎊`, {
+      toast.success(`${candidateName} is geplaatst bij ${sublocationName}! 🎊`, {
         description: "Plaatsing aangemaakt. Ga naar Plaatsingen voor details.",
         duration: 8000,
       });
 
       loadApplications();
     } catch (err: any) {
-      console.error("Error creating placement:", err);
+      console.error("Error creating assignment:", err);
       toast.error(`Fout bij plaatsing: ${err?.message || 'Onbekende fout'}`);
     }
   };
@@ -1148,19 +1172,19 @@ const Sollicitaties = () => {
             </AlertDialogContent>
           </AlertDialog>
 
-          {/* Client Selection Dialog */}
+          {/* Sublocation Selection Dialog */}
           <AlertDialog open={selectClientDialog.open} onOpenChange={(open) => {
             if (!open) handleCancelClientSelection();
           }}>
             <AlertDialogContent className="max-w-2xl">
               <AlertDialogHeader>
-                <AlertDialogTitle>Selecteer Klant voor Plaatsing</AlertDialogTitle>
+                <AlertDialogTitle>Selecteer Werklocatie voor Plaatsing</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Kies een klant om {selectClientDialog.application?.extracted_data?.naam} aan te koppelen.
+                  Kies een werklocatie om {selectClientDialog.application?.extracted_data?.naam} aan te koppelen.
                 </AlertDialogDescription>
               </AlertDialogHeader>
-              <ClientSelectionDialog
-                onSelect={handleSelectClient}
+              <SublocationSelectionDialog
+                onSelect={handleSelectSublocation}
                 onCancel={handleCancelClientSelection}
               />
             </AlertDialogContent>
