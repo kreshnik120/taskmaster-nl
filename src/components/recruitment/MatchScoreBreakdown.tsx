@@ -127,7 +127,7 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
         <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg">
           <span className="text-sm font-medium">Totale Match Score</span>
           <Badge variant="outline" className="text-base font-bold">
-            {totalScore}%
+            {totalScore ?? 0}%
           </Badge>
         </div>
 
@@ -197,20 +197,18 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                   </span>
                 </div>
                 
-                <div className="relative">
-                  <Progress 
-                    value={percentage} 
-                    className="h-2"
-                  />
-                  <div 
-                    className={`absolute top-0 left-0 h-2 rounded-full transition-all ${
-                      hasRelatedMatches
-                        ? 'bg-amber-500'
-                        : getProgressColor(criterion.score, criterion.maxScore)
-                    }`}
-                    style={{ width: `${percentage}%` }}
-                  />
-                </div>
+                <Progress 
+                  value={percentage} 
+                  className={`h-2 ${
+                    hasRelatedMatches 
+                      ? '[&>div]:bg-amber-500' 
+                      : criterion.score >= criterion.maxScore * 0.8 
+                        ? '[&>div]:bg-green-500' 
+                        : criterion.score >= criterion.maxScore * 0.5 
+                          ? '[&>div]:bg-yellow-500' 
+                          : '[&>div]:bg-red-500'
+                  }`}
+                />
                 
                 <p className="text-xs text-muted-foreground pl-6">
                   {criterion.reason}
