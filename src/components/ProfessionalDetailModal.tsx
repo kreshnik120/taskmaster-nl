@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { toast } from "sonner";
 import { 
-  Phone, Mail, MapPin, Briefcase, Car, Calendar, User,
+  Phone, Mail, MapPin, Briefcase, Car, Calendar, User, Users,
   Star, Edit, Trash2, CheckCircle2, X, Link2, ChevronDown, Award, Clock, 
   Home, Cake, Upload
 } from "lucide-react";
@@ -48,6 +48,16 @@ interface Professional {
   btw_nummer: string | null;
   created_at: string;
   updated_at: string;
+  // New fields for complete data sync
+  ervaring_sector: string[] | null;
+  doelgroep_ervaring: string[] | null;
+  certificaten: string[] | null;
+  specialisaties: string[] | null;
+  opleidingen: unknown;
+  talen: string[] | null;
+  regio_voorkeur: string[] | null;
+  specifieke_doelgroepen: string[] | null;
+  max_reisafstand_km: number | null;
 }
 
 interface ProfessionalDetailModalProps {
@@ -653,47 +663,166 @@ export function ProfessionalDetailModal({
             )}
           </TabsContent>
 
-          <TabsContent value="ervaring" className="space-y-4 mt-6">
-            {/* Skills & Sector Ervaring */}
-            <div>
-              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          <TabsContent value="ervaring" className="space-y-6 mt-6">
+            {/* Sector Ervaring */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
                 <Briefcase className="h-4 w-4" />
                 Sector Ervaring
               </h3>
-              {isEditing ? (
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-2">
-                    {SECTOREN.map((sector) => (
-                      <Badge
-                        key={sector}
-                        className={`cursor-pointer transition-all ${
-                          editData.skills.includes(sector)
-                            ? getSectorColor(sector)
-                            : "bg-transparent border-2 hover:bg-muted"
-                        }`}
-                        onClick={() => toggleSkill(sector)}
-                      >
-                        {sector}
-                      </Badge>
+              <div className="flex flex-wrap gap-2">
+                {(professional.ervaring_sector?.length ?? 0) > 0 ? (
+                  professional.ervaring_sector?.map((sector) => (
+                    <Badge key={sector} className={getSectorColor(sector)}>{sector}</Badge>
+                  ))
+                ) : professional.skills?.length > 0 ? (
+                  professional.skills.map((skill) => (
+                    <Badge key={skill} className={getSectorColor(skill)}>{skill}</Badge>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">Geen sector ervaring opgegeven</p>
+                )}
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Doelgroep Ervaring */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Doelgroep Ervaring
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {(professional.doelgroep_ervaring?.length ?? 0) > 0 ? (
+                  professional.doelgroep_ervaring?.map((doelgroep) => (
+                    <Badge key={doelgroep} variant="outline" className="bg-violet-500/10 text-violet-700 border-violet-200">
+                      {doelgroep}
+                    </Badge>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">Geen doelgroep ervaring opgegeven</p>
+                )}
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Certificaten */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Award className="h-4 w-4" />
+                Certificaten
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {(professional.certificaten?.length ?? 0) > 0 ? (
+                  professional.certificaten?.map((cert) => (
+                    <Badge key={cert} variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-200">
+                      {cert}
+                    </Badge>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">Geen certificaten opgegeven</p>
+                )}
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Opleidingen */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Award className="h-4 w-4" />
+                Opleidingen
+              </h3>
+              {(() => {
+                const opleidingen = Array.isArray(professional.opleidingen) ? professional.opleidingen : [];
+                return opleidingen.length > 0 ? (
+                  <div className="space-y-2">
+                    {opleidingen.map((opl: any, idx: number) => (
+                      <div key={idx} className="p-3 bg-muted/30 rounded-lg">
+                        <p className="text-sm font-medium">{opl.naam || opl}</p>
+                        {(opl.niveau || opl.jaar) && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {[opl.niveau, opl.jaar].filter(Boolean).join(' • ')}
+                          </p>
+                        )}
+                      </div>
                     ))}
                   </div>
-                </div>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {professional.skills?.length > 0 ? (
-                    professional.skills.map((skill) => (
-                      <Badge key={skill} className={getSectorColor(skill)}>{skill}</Badge>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">Geen sector ervaring opgegeven</p>
-                  )}
-                </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Geen opleidingen opgegeven</p>
+                );
+              })()}
+            </div>
+
+            <Separator />
+
+            {/* Talen */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <span className="text-base">🗣️</span>
+                Talen
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {(professional.talen?.length ?? 0) > 0 ? (
+                  professional.talen?.map((taal) => (
+                    <Badge key={taal} variant="secondary">{taal}</Badge>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">Geen talen opgegeven</p>
+                )}
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Regio Voorkeur */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Regio Voorkeur
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {(professional.regio_voorkeur?.length ?? 0) > 0 ? (
+                  professional.regio_voorkeur?.map((regio) => (
+                    <Badge key={regio} variant="outline">{regio}</Badge>
+                  ))
+                ) : professional.regio ? (
+                  <Badge variant="outline">{professional.regio}</Badge>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Geen regio voorkeur opgegeven</p>
+                )}
+              </div>
+              {professional.max_reisafstand_km && (
+                <p className="text-sm text-muted-foreground">
+                  Max. reisafstand: {professional.max_reisafstand_km} km
+                </p>
               )}
             </div>
 
+            <Separator />
+
+            {/* Specialisaties */}
+            {(professional.specialisaties?.length ?? 0) > 0 && (
+              <>
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <Star className="h-4 w-4" />
+                    Specialisaties
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {professional.specialisaties?.map((spec) => (
+                      <Badge key={spec} className="bg-primary/10 text-primary border-primary/20">{spec}</Badge>
+                    ))}
+                  </div>
+                </div>
+                <Separator />
+              </>
+            )}
+
             {professional.rating && (
               <>
-                <Separator />
                 <div>
                   <Label>Rating</Label>
                   <div className="flex items-center gap-1 mt-1">
@@ -701,10 +830,9 @@ export function ProfessionalDetailModal({
                     <span className="text-sm font-medium">{professional.rating.toFixed(1)}</span>
                   </div>
                 </div>
+                <Separator />
               </>
             )}
-
-            <Separator />
 
             {/* Beschikbaarheid */}
             <div>
@@ -717,7 +845,7 @@ export function ProfessionalDetailModal({
                   className="focus:ring-2 focus:ring-primary transition-all min-h-[100px]"
                 />
               ) : (
-                <p className="text-sm mt-1 p-3 bg-muted/30 rounded-md min-h-[100px]">
+                <p className="text-sm mt-1 p-3 bg-muted/30 rounded-md min-h-[60px]">
                   {professional.beschikbaarheidsnotities || "Geen notities"}
                 </p>
               )}
@@ -759,6 +887,14 @@ export function ProfessionalDetailModal({
                 beschikbaarheidsnotities: professional.beschikbaarheidsnotities,
                 heeft_auto: professional.heeft_auto,
                 heeft_rijbewijs: professional.heeft_rijbewijs,
+                ervaring_sector: professional.ervaring_sector,
+                doelgroep_ervaring: professional.doelgroep_ervaring,
+                certificaten: professional.certificaten,
+                specialisaties: professional.specialisaties,
+                talen: professional.talen,
+                regio_voorkeur: professional.regio_voorkeur,
+                specifieke_doelgroepen: professional.specifieke_doelgroepen,
+                max_reisafstand_km: professional.max_reisafstand_km,
               }}
               onSuccess={onSuccess}
             />
