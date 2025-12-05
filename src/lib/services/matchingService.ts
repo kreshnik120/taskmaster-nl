@@ -402,6 +402,144 @@ function calculatePostcodeDistance(pc1: string | null, pc2: string | null): numb
   }
 }
 
+// ============= FIX 4: POSTCODE & PROVINCIE ENRICHMENT FROM WOONPLAATS =============
+
+/**
+ * Dutch city to postcode prefix mapping (approximate first 4 digits)
+ * Used for distance-based matching when only woonplaats is known
+ */
+const WOONPLAATS_POSTCODE_MAP: Record<string, string> = {
+  // Noord-Brabant
+  'cuijk': '5431',
+  'boxmeer': '5831',
+  'uden': '5401',
+  'veghel': '5461',
+  'oss': '5341',
+  'eindhoven': '5611',
+  'helmond': '5701',
+  'tilburg': '5038',
+  's-hertogenbosch': '5211',
+  'den bosch': '5211',
+  'breda': '4811',
+  // Gelderland
+  'nijmegen': '6511',
+  'arnhem': '6811',
+  'apeldoorn': '7311',
+  'ede': '6711',
+  'wageningen': '6701',
+  'doetinchem': '7001',
+  'winterswijk': '7101',
+  // Limburg
+  'maastricht': '6211',
+  'heerlen': '6411',
+  'roermond': '6041',
+  'venlo': '5911',
+  'venray': '5801',
+  'sittard': '6131',
+  // Zuid-Holland
+  'rotterdam': '3011',
+  'den haag': '2511',
+  "'s-gravenhage": '2511',
+  'leiden': '2311',
+  'dordrecht': '3311',
+  'delft': '2611',
+  'zoetermeer': '2701',
+  // Noord-Holland
+  'amsterdam': '1011',
+  'haarlem': '2011',
+  'hilversum': '1211',
+  'zaandam': '1501',
+  'alkmaar': '1811',
+  // Utrecht
+  'utrecht': '3511',
+  'amersfoort': '3811',
+  'zeist': '3701',
+  'nieuwegein': '3431',
+  // Overijssel
+  'zwolle': '8011',
+  'enschede': '7511',
+  'deventer': '7411',
+  'almelo': '7601',
+  'hengelo': '7551',
+  // Groningen
+  'groningen': '9711',
+  'assen': '9401',
+  // Friesland
+  'leeuwarden': '8911',
+  // Zeeland
+  'middelburg': '4331',
+  'goes': '4461',
+  // Flevoland
+  'almere': '1311',
+  'lelystad': '8221',
+  // Drenthe
+  'emmen': '7811',
+  'hoogeveen': '7901',
+};
+
+/**
+ * Dutch city to province mapping
+ */
+const WOONPLAATS_PROVINCIE_MAP: Record<string, string> = {
+  // Noord-Brabant
+  'cuijk': 'noord-brabant', 'boxmeer': 'noord-brabant', 'uden': 'noord-brabant',
+  'veghel': 'noord-brabant', 'oss': 'noord-brabant', 'eindhoven': 'noord-brabant',
+  'helmond': 'noord-brabant', 'tilburg': 'noord-brabant', 's-hertogenbosch': 'noord-brabant',
+  'den bosch': 'noord-brabant', 'breda': 'noord-brabant', 'mill': 'noord-brabant',
+  'grave': 'noord-brabant', 'beugen': 'noord-brabant', 'sambeek': 'noord-brabant',
+  // Gelderland
+  'nijmegen': 'gelderland', 'arnhem': 'gelderland', 'apeldoorn': 'gelderland',
+  'ede': 'gelderland', 'wageningen': 'gelderland', 'doetinchem': 'gelderland',
+  'winterswijk': 'gelderland', 'elst': 'gelderland', 'wijchen': 'gelderland',
+  'tiel': 'gelderland', 'zaltbommel': 'gelderland',
+  // Limburg
+  'maastricht': 'limburg', 'heerlen': 'limburg', 'roermond': 'limburg',
+  'venlo': 'limburg', 'venray': 'limburg', 'sittard': 'limburg',
+  'kerkrade': 'limburg', 'weert': 'limburg', 'geleen': 'limburg',
+  // Zuid-Holland
+  'rotterdam': 'zuid-holland', 'den haag': 'zuid-holland', "'s-gravenhage": 'zuid-holland',
+  'leiden': 'zuid-holland', 'dordrecht': 'zuid-holland', 'delft': 'zuid-holland',
+  'zoetermeer': 'zuid-holland', 'gouda': 'zuid-holland', 'alphen aan den rijn': 'zuid-holland',
+  // Noord-Holland
+  'amsterdam': 'noord-holland', 'haarlem': 'noord-holland', 'hilversum': 'noord-holland',
+  'zaandam': 'noord-holland', 'alkmaar': 'noord-holland', 'hoofddorp': 'noord-holland',
+  'amstelveen': 'noord-holland', 'purmerend': 'noord-holland',
+  // Utrecht
+  'utrecht': 'utrecht', 'amersfoort': 'utrecht', 'zeist': 'utrecht',
+  'nieuwegein': 'utrecht', 'veenendaal': 'utrecht', 'woerden': 'utrecht',
+  // Overijssel
+  'zwolle': 'overijssel', 'enschede': 'overijssel', 'deventer': 'overijssel',
+  'almelo': 'overijssel', 'hengelo': 'overijssel', 'kampen': 'overijssel',
+  // Groningen
+  'groningen': 'groningen', 'assen': 'drenthe',
+  // Friesland
+  'leeuwarden': 'friesland', 'drachten': 'friesland', 'sneek': 'friesland',
+  // Zeeland
+  'middelburg': 'zeeland', 'goes': 'zeeland', 'vlissingen': 'zeeland',
+  // Flevoland
+  'almere': 'flevoland', 'lelystad': 'flevoland',
+  // Drenthe
+  'emmen': 'drenthe', 'hoogeveen': 'drenthe', 'meppel': 'drenthe',
+};
+
+/**
+ * Derive approximate postcode from woonplaats for distance matching
+ */
+function derivePostcodeFromWoonplaats(woonplaats: string | null): string | null {
+  if (!woonplaats) return null;
+  const key = woonplaats.toLowerCase().trim();
+  return WOONPLAATS_POSTCODE_MAP[key] || null;
+}
+
+/**
+ * Derive provincie from woonplaats
+ */
+function deriveProvincieFromWoonplaats(woonplaats: string | null): string | null {
+  if (!woonplaats) return null;
+  const key = woonplaats.toLowerCase().trim();
+  return WOONPLAATS_PROVINCIE_MAP[key] || null;
+}
+
 // ============= NEW: DESCRIPTION KEYWORD EXTRACTION =============
 
 interface DescriptionRequirements {
@@ -1053,8 +1191,10 @@ export function calculateUnifiedMatchScore(
   let usedPatternIds: string[] = [];
 
   if (aiBoostData && aiBoostData.boost > 0) {
-    // AI boost is already in percentage, convert to points (max 15)
-    aiBoost = Math.min(15, Math.round(aiBoostData.boost * 15 / 100));
+    // FIX: aiBoostData.boost is already a percentage (0-20), use directly as points (max 15)
+    // Previously: aiBoost = Math.round(aiBoostData.boost * 15 / 100) gave only 0-3 points
+    // Correct: Use the boost percentage as-is (capped at 15)
+    aiBoost = Math.min(15, Math.round(aiBoostData.boost));
     hasAIBoost = true;
     aiBoostReasons = aiBoostData.reasons;
     usedPatternIds = aiBoostData.usedPatternIds;
@@ -1062,7 +1202,7 @@ export function calculateUnifiedMatchScore(
     details.aiBoost = { 
       score: aiBoost, 
       match: true, 
-      reason: `AI geleerd patroon (+${aiBoostData.boost}%)` 
+      reason: `AI geleerd patroon (+${aiBoost} punten)` 
     };
   }
 
@@ -1570,13 +1710,22 @@ export function calculateApplicationMatchScore(
 ): MatchScoreBreakdown {
   const data = application.extracted_data || {};
   
+  // FIX 4: Postcode Enrichment - derive postcode from woonplaats if not present
+  let postcode = getExtractedValue(data.postcode);
+  const woonplaats = getExtractedValue(data.woonplaats) as string | null;
+  
+  if (!postcode && woonplaats) {
+    // Try to derive postcode prefix from woonplaats
+    postcode = derivePostcodeFromWoonplaats(woonplaats);
+  }
+  
   // Map extracted_data to MatchCandidate interface
   const candidate: MatchCandidate = {
     functie_niveau: getExtractedValue(data.functie_niveau),
-    regio: getExtractedValue(data.regio) || getExtractedValue(data.woonplaats),
-    woonplaats: getExtractedValue(data.woonplaats),
-    postcode: getExtractedValue(data.postcode),
-    provincie: null, // Could derive from postcode if needed
+    regio: getExtractedValue(data.regio) || woonplaats,
+    woonplaats: woonplaats,
+    postcode: postcode,
+    provincie: deriveProvincieFromWoonplaats(woonplaats), // FIX: derive from woonplaats
     ervaring_sector: getExtractedValue(data.ervaring_sector) || [],
     doelgroep_ervaring: getExtractedValue(data.doelgroep_ervaring) || getExtractedValue(data.specifieke_doelgroepen) || [],
     jaren_ervaring: getExtractedValue(data.jaren_ervaring),
@@ -1677,4 +1826,33 @@ export async function calculateTopMatchesForApplication(
     sublocations: scoredSublocations,
     vacancies: scoredVacancies,
   };
+}
+
+// ============= FIX 1: ASYNC APPLICATION MATCHING WITH EXPERT KNOWLEDGE =============
+
+/**
+ * Calculate match score with expert knowledge loading
+ * Use this when you need expert advice in the score breakdown
+ */
+export async function calculateApplicationMatchScoreWithExperts(
+  application: ApplicationMatchSource,
+  target: MatchTarget,
+  aiBoostData?: { boost: number; reasons: string[]; usedPatternIds: string[] }
+): Promise<MatchScoreBreakdown> {
+  // Load expert knowledge into cache if not already loaded
+  if (expertKnowledgeCache.length === 0) {
+    await loadExpertKnowledge();
+  }
+  
+  // Now calculate with expert knowledge available in cache
+  return calculateApplicationMatchScore(application, target, aiBoostData);
+}
+
+/**
+ * Pre-load expert knowledge cache
+ * Call this once at app startup or before batch calculations
+ */
+export async function preloadExpertKnowledge(): Promise<number> {
+  const experts = await loadExpertKnowledge();
+  return experts.length;
 }
