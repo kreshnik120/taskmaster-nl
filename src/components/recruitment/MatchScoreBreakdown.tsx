@@ -2,7 +2,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertCircle, CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
+import { AlertCircle, CheckCircle2, AlertTriangle, Sparkles, FileText, Award, MapPin } from "lucide-react";
 
 // Interface matching the actual service response (MatchScoreBreakdown from matchingService.ts)
 interface ServiceMatchBreakdown {
@@ -13,6 +13,8 @@ interface ServiceMatchBreakdown {
   mobiliteitMatch: number;
   beschikbaarheidMatch: number;
   werkvormMatch: number;
+  beschrijvingMatch?: number; // NEW: from description keyword matching
+  certificaatVereistMatch?: number; // NEW: certificate-to-requirement matching
   aiBoost: number;
   totalScore: number;
   normalizedScore: number;
@@ -20,12 +22,14 @@ interface ServiceMatchBreakdown {
   aiBoostReasons: string[];
   details: {
     functie?: { match: boolean; reason: string };
-    regio?: { match: boolean; reason: string; matchType?: string };
+    regio?: { match: boolean; reason: string; matchType?: string; afstandKm?: number };
     sector?: { match: boolean; reason: string; directMatches?: string[]; relatedMatches?: string[] };
     doelgroep?: { match: boolean; reason: string; directMatches?: string[]; relatedMatches?: string[] };
     mobiliteit?: { match: boolean; reason: string };
     beschikbaarheid?: { match: boolean; reason: string };
     werkvorm?: { match: boolean; reason: string };
+    beschrijving?: { match: boolean; reason: string; matchedKeywords?: string[] }; // NEW
+    certificaatVereist?: { match: boolean; reason: string; matchedCerts?: string[]; missingCerts?: string[] }; // NEW
     aiBoost?: { score: number; match: boolean; reason: string };
   };
 }
@@ -44,44 +48,66 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
     { 
       key: 'functie', 
       label: 'Functieniveau', 
-      maxScore: 25, 
-      score: breakdown?.functieMatch ?? 0,
+      maxScore: 20, 
+      score: breakdown?.functieMatch != null ? Math.round(breakdown.functieMatch * 0.8) : 0,
       match: breakdown?.details?.functie?.match ?? false,
       reason: breakdown?.details?.functie?.reason ?? 'Geen data beschikbaar'
     },
     { 
       key: 'regio', 
-      label: 'Regio', 
-      maxScore: 20, 
-      score: breakdown?.regioMatch ?? 0,
+      label: 'Regio/Afstand', 
+      maxScore: 18, 
+      score: breakdown?.regioMatch != null ? Math.round(breakdown.regioMatch * 0.9) : 0,
       match: breakdown?.details?.regio?.match ?? false,
-      reason: breakdown?.details?.regio?.reason ?? 'Geen data beschikbaar'
+      reason: breakdown?.details?.regio?.reason ?? 'Geen data beschikbaar',
+      afstandKm: breakdown?.details?.regio?.afstandKm
     },
     { 
       key: 'sector', 
       label: 'Sector', 
-      maxScore: 20, 
-      score: breakdown?.sectorMatch ?? 0,
+      maxScore: 15, 
+      score: breakdown?.sectorMatch != null ? Math.round(breakdown.sectorMatch * 0.75) : 0,
       match: breakdown?.details?.sector?.match ?? false,
       reason: breakdown?.details?.sector?.reason ?? 'Geen data beschikbaar',
       directMatches: breakdown?.details?.sector?.directMatches ?? [],
       relatedMatches: breakdown?.details?.sector?.relatedMatches ?? []
     },
     { 
+      key: 'beschrijving', 
+      label: 'Beschrijving Match', 
+      maxScore: 10, 
+      score: breakdown?.beschrijvingMatch ?? 0,
+      match: breakdown?.details?.beschrijving?.match ?? false,
+      reason: breakdown?.details?.beschrijving?.reason ?? 'Geen beschrijving',
+      matchedKeywords: breakdown?.details?.beschrijving?.matchedKeywords ?? [],
+      icon: 'FileText'
+    },
+    { 
       key: 'doelgroep', 
       label: 'Doelgroep', 
-      maxScore: 15, 
-      score: breakdown?.doelgroepMatch ?? 0,
+      maxScore: 10, 
+      score: breakdown?.doelgroepMatch != null ? Math.round(breakdown.doelgroepMatch * 0.67) : 0,
       match: breakdown?.details?.doelgroep?.match ?? false,
       reason: breakdown?.details?.doelgroep?.reason ?? 'Geen data beschikbaar',
       directMatches: breakdown?.details?.doelgroep?.directMatches ?? [],
       relatedMatches: breakdown?.details?.doelgroep?.relatedMatches ?? []
     },
     { 
+      key: 'certificaatVereist', 
+      label: 'Certificaten Vereist', 
+      maxScore: 10, 
+      score: breakdown?.certificaatVereistMatch ?? 0,
+      match: breakdown?.details?.certificaatVereist?.match ?? false,
+      reason: breakdown?.details?.certificaatVereist?.reason ?? 'Geen vereisten',
+      matchedCerts: breakdown?.details?.certificaatVereist?.matchedCerts ?? [],
+      missingCerts: breakdown?.details?.certificaatVereist?.missingCerts ?? [],
+      icon: 'Award'
+    },
+    { 
       key: 'mobiliteit', 
       label: 'Mobiliteit', 
-      maxScore: 10, 
-      score: breakdown?.mobiliteitMatch ?? 0,
+      maxScore: 7, 
+      score: breakdown?.mobiliteitMatch != null ? Math.round(breakdown.mobiliteitMatch * 0.7) : 0,
       match: breakdown?.details?.mobiliteit?.match ?? false,
       reason: breakdown?.details?.mobiliteit?.reason ?? 'Geen data beschikbaar'
     },
@@ -146,6 +172,7 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
           {criteria.map((criterion) => {
             const percentage = criterion.maxScore > 0 ? (criterion.score / criterion.maxScore) * 100 : 0;
             const hasRelatedMatches = criterion.key === 'sector' && sectorDetails?.relatedMatches && sectorDetails.relatedMatches.length > 0;
+            const isNewCriteria = criterion.key === 'beschrijving' || criterion.key === 'certificaatVereist';
             
             return (
               <div key={criterion.key} className="space-y-2">
@@ -154,7 +181,13 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger>
-                          {hasRelatedMatches ? (
+                          {criterion.key === 'beschrijving' ? (
+                            <FileText className={`h-4 w-4 ${criterion.match ? 'text-blue-600' : 'text-muted-foreground'}`} />
+                          ) : criterion.key === 'certificaatVereist' ? (
+                            <Award className={`h-4 w-4 ${criterion.match ? 'text-purple-600' : 'text-muted-foreground'}`} />
+                          ) : criterion.key === 'regio' && (criterion as any).afstandKm ? (
+                            <MapPin className={`h-4 w-4 ${criterion.match ? 'text-green-600' : 'text-muted-foreground'}`} />
+                          ) : hasRelatedMatches ? (
                             <AlertTriangle className="h-4 w-4 text-amber-500" />
                           ) : criterion.match ? (
                             <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -185,9 +218,30 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                             </p>
                           </TooltipContent>
                         )}
+                        {criterion.key === 'beschrijving' && (criterion as any).matchedKeywords?.length > 0 && (
+                          <TooltipContent>
+                            <p className="text-xs">
+                              <span className="font-medium">Gematchte keywords:</span><br />
+                              {(criterion as any).matchedKeywords.join(', ')}
+                            </p>
+                          </TooltipContent>
+                        )}
+                        {criterion.key === 'certificaatVereist' && (criterion as any).matchedCerts?.length > 0 && (
+                          <TooltipContent>
+                            <p className="text-xs">
+                              <span className="font-medium">Relevante certificaten:</span><br />
+                              {(criterion as any).matchedCerts.join(', ')}
+                            </p>
+                          </TooltipContent>
+                        )}
                       </Tooltip>
                     </TooltipProvider>
                     <span className="font-medium">{criterion.label}</span>
+                    {isNewCriteria && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 bg-blue-50 text-blue-700 border-blue-200">
+                        2.0
+                      </Badge>
+                    )}
                     <Badge variant="outline" className="text-xs">
                       max {criterion.maxScore}
                     </Badge>
@@ -200,13 +254,17 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                 <Progress 
                   value={percentage} 
                   className={`h-2 ${
-                    hasRelatedMatches 
-                      ? '[&>div]:bg-amber-500' 
-                      : criterion.score >= criterion.maxScore * 0.8 
-                        ? '[&>div]:bg-green-500' 
-                        : criterion.score >= criterion.maxScore * 0.5 
-                          ? '[&>div]:bg-yellow-500' 
-                          : '[&>div]:bg-red-500'
+                    criterion.key === 'beschrijving' 
+                      ? '[&>div]:bg-blue-500' 
+                      : criterion.key === 'certificaatVereist'
+                        ? '[&>div]:bg-purple-500'
+                        : hasRelatedMatches 
+                          ? '[&>div]:bg-amber-500' 
+                          : criterion.score >= criterion.maxScore * 0.8 
+                            ? '[&>div]:bg-green-500' 
+                            : criterion.score >= criterion.maxScore * 0.5 
+                              ? '[&>div]:bg-yellow-500' 
+                              : '[&>div]:bg-red-500'
                   }`}
                 />
                 
