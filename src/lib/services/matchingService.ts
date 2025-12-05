@@ -57,6 +57,8 @@ export interface MatchCandidate {
   weekenddienst_bereid?: boolean | null;
   certificaten?: string[] | null;
   werkvorm?: string | null; // ZZP | Uitzendkracht | ABCito constructie
+  // OPTIM 1: Specialisaties for expert matching (ADL, HIC, PAAZ, EMB, etc.)
+  specialisaties?: string[] | null;
 }
 
 export interface MatchTarget {
@@ -111,6 +113,10 @@ export interface ExpertAdvies {
   advies: string;
   matchedCerts: string[];
   matchedErvaring: string[];
+  // OPTIM: Additional fields for UI optimizations
+  isLocationRelevant?: boolean;
+  confidence?: 'high' | 'medium' | 'low';
+  matchedMethodieken?: string[];
 }
 
 export interface MatchScoreBreakdown {
@@ -1295,6 +1301,7 @@ export function calculateUnifiedMatchScore(
   }
 
   // ===== NEW: EXPERT BONUS (up to +12 points) =====
+  // Optimalisaties: Specialisatie-keywords, Proportionele bonus, Locatie-specifieke detectie, Confidence indicator
   let expertBonus = 0;
   let hasExpertAdvies = false;
   const expertAdvies: ExpertAdvies[] = [];
@@ -1303,15 +1310,18 @@ export function calculateUnifiedMatchScore(
   const descriptionLower = (target.publieke_opmerking || '').toLowerCase();
   const detectedSpecialismen = detectSpecialismen(descriptionLower);
   
-  if (detectedSpecialismen.length > 0 && expertKnowledgeCache.length > 0) {
-    // Match against each detected specialism
-    for (const specialisme of detectedSpecialismen) {
-      const expert = expertKnowledgeCache.find(e => e.specialisme === specialisme);
-      if (!expert) continue;
+  // OPTIM 1: Extract candidate specializations (ADL, HIC, PAAZ, EMB, etc.)
+  const candidateSpecialisaties = (candidate.specialisaties || []).map(s => s.toLowerCase());
+  
+  if (expertKnowledgeCache.length > 0) {
+    // OPTIM 2 & 4: Process ALL experts, but boost location-relevant ones
+    for (const expert of expertKnowledgeCache) {
+      const isLocationRelevant = detectedSpecialismen.includes(expert.specialisme);
       
       const matchedCerts: string[] = [];
       const matchedErvaring: string[] = [];
       const relatedErvaring: string[] = [];
+      const matchedMethodieken: string[] = [];
       let expertScore = 0;
       const maxScore = expert.match_criteria.certificaat_gewicht + expert.match_criteria.ervaring_gewicht + expert.match_criteria.methodiek_gewicht;
       
@@ -1319,7 +1329,6 @@ export function calculateUnifiedMatchScore(
       const candidateCertsLower = (candidate.certificaten || []).map(c => c.toLowerCase());
       for (const vereistCert of expert.vereiste_certificaten) {
         const vereistLower = vereistCert.toLowerCase();
-        // Check for substring match in both directions
         if (candidateCertsLower.some(c => c.includes(vereistLower) || vereistLower.includes(c))) {
           matchedCerts.push(vereistCert);
         }
@@ -1342,18 +1351,40 @@ export function calculateUnifiedMatchScore(
         expertScore += Math.min(expert.match_criteria.ervaring_gewicht, matchedErvaring.length * 8);
       }
       
-      // FIX 3: Check for RELATED experience using cross-mapping matrix
+      // OPTIM 1: Match candidate specializations against expert methodieken
+      for (const methodiek of expert.methodieken || []) {
+        const methodiekLower = methodiek.toLowerCase();
+        if (candidateSpecialisaties.some(s => s.includes(methodiekLower) || methodiekLower.includes(s))) {
+          matchedMethodieken.push(methodiek);
+        }
+      }
+      if (matchedMethodieken.length > 0) {
+        expertScore += Math.min(expert.match_criteria.methodiek_gewicht || 10, matchedMethodieken.length * 5);
+      }
+      
+      // Check for RELATED experience using cross-mapping matrix (if no direct match)
       if (matchedErvaring.length === 0) {
         const allExpStrings = [...(candidate.doelgroep_ervaring || []), ...(candidate.ervaring_sector || [])];
-        const { hasRelated, relatedMatches } = hasRelatedExperience(allExpStrings, specialisme);
+        const { hasRelated, relatedMatches } = hasRelatedExperience(allExpStrings, expert.specialisme);
         
         if (hasRelated) {
           relatedErvaring.push(...relatedMatches);
-          // Give 60% credit for related experience
           const relatedCredit = Math.min(expert.match_criteria.ervaring_gewicht * 0.6, relatedMatches.length * 5);
           expertScore += relatedCredit;
         }
       }
+      
+      // OPTIM 4: Location-specific boost - 25% bonus for relevant experts
+      if (isLocationRelevant && expertScore > 0) {
+        expertScore = Math.round(expertScore * 1.25);
+      }
+      
+      // OPTIM 5: Calculate confidence level (High/Medium/Low)
+      const matchedCriteria = (matchedCerts.length > 0 ? 1 : 0) + 
+                             (matchedErvaring.length > 0 || relatedErvaring.length > 0 ? 1 : 0) + 
+                             (matchedMethodieken.length > 0 ? 1 : 0);
+      const confidence: 'high' | 'medium' | 'low' = 
+        matchedCriteria >= 2 ? 'high' : matchedCriteria === 1 ? 'medium' : 'low';
       
       // Generate advice
       const matchStatus = expertScore >= maxScore * 0.6 
@@ -1368,8 +1399,12 @@ export function calculateUnifiedMatchScore(
         ? expert.uitleg_template.replace('{match_status}', matchStatus)
         : `${expert.expert_naam}: ${matchStatus}`;
       
-      // Include related experience in matched for display
-      const allMatchedErvaring = [...matchedErvaring, ...relatedErvaring.map(e => `${e} (gerelateerd)`)];
+      // Include related experience and methodieken in matched for display
+      const allMatchedErvaring = [
+        ...matchedErvaring, 
+        ...relatedErvaring.map(e => `${e} (gerelateerd)`),
+        ...matchedMethodieken.map(m => `${m} (specialisatie)`)
+      ];
       
       expertAdvies.push({
         expert: expert.expert_naam,
@@ -1378,28 +1413,32 @@ export function calculateUnifiedMatchScore(
         maxScore,
         advies,
         matchedCerts,
-        matchedErvaring: allMatchedErvaring
+        matchedErvaring: allMatchedErvaring,
+        // NEW: Additional data for UI optimizations
+        isLocationRelevant,
+        confidence,
+        matchedMethodieken
       });
       
-      // FIX 1: Expert Bonus Threshold - ensure any positive match gives at least 1 bonus point
-      // Changed from: Math.round(expertScore / maxScore * 4) which rounds 5/60 = 0.33 = 0
-      // To: if score > 0, give at least 1 point
-      const bonusForExpert = expertScore > 0 
+      // OPTIM 3: Proportionele bonus - 10% minimum threshold for any bonus
+      const minThreshold = maxScore * 0.1; // 10% threshold
+      const bonusForExpert = expertScore >= minThreshold 
         ? Math.max(1, Math.min(4, Math.round(expertScore / maxScore * 4)))
         : 0;
       expertBonus += bonusForExpert;
     }
     
     expertBonus = Math.min(12, expertBonus);
-    hasExpertAdvies = expertAdvies.length > 0;
+    hasExpertAdvies = expertAdvies.some(e => e.score > 0 || e.isLocationRelevant);
     
     if (hasExpertAdvies) {
-      reasoning.push(`🎓 Expert Advies: ${expertAdvies.length} specialist(en) geraadpleegd (+${expertBonus})`);
+      const relevantExperts = expertAdvies.filter(e => e.score > 0 || e.isLocationRelevant);
+      reasoning.push(`🎓 Expert Advies: ${relevantExperts.length} specialist(en) geraadpleegd (+${expertBonus})`);
       details.expertAdvies = {
         score: expertBonus,
-        match: expertBonus >= 2, // Lowered threshold from 4 to 2
-        reason: `${expertAdvies.length} specialist(en): ${expertAdvies.map(e => e.specialisme).join(', ')}`,
-        expertCount: expertAdvies.length
+        match: expertBonus >= 2,
+        reason: `${relevantExperts.length} specialist(en): ${relevantExperts.map(e => e.specialisme).join(', ')}`,
+        expertCount: relevantExperts.length
       };
     }
   }
