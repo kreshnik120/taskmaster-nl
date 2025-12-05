@@ -1,7 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -10,6 +9,9 @@ import { nl } from "date-fns/locale";
 import { Phone, Mail, MapPin } from "lucide-react";
 import { getOrganizationName } from "@/lib/organizationMapping";
 import { DirectPlacementButton } from "@/components/DirectPlacementButton";
+import { ProfessionalAvatar } from "@/components/ui/professional-avatar";
+import { cn } from "@/lib/utils";
+import { TRANSITIONS } from "@/lib/constants/designTokens";
 
 interface Professional {
   id: string;
@@ -38,36 +40,7 @@ export function ProfessionalCard({
   onSelect, 
   onClick 
 }: ProfessionalCardProps) {
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "actief": return "bg-green-500";
-      case "inactief": return "bg-gray-400";
-      case "op_pauze": return "bg-orange-500";
-      default: return "bg-gray-400";
-    }
-  };
-
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map(n => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
-  const getFunctieAvatarColor = (functieNiveau: string) => {
-    switch (functieNiveau) {
-      case "VIG": return "bg-blue-600 text-white";
-      case "HBO-V": return "bg-purple-600 text-white";
-      case "Verpleegkundige MBO": return "bg-green-600 text-white";
-      case "Helpende": return "bg-orange-500 text-white";
-      case "Begeleider": return "bg-cyan-600 text-white";
-      case "Persoonlijk begeleider": return "bg-pink-600 text-white";
-      case "GGZ-agoog": return "bg-indigo-600 text-white";
-      default: return "bg-gray-500 text-white";
-    }
-  };
+  // Apple-style: removed redundant color functions - now using ProfessionalAvatar component
 
   const timeInStatus = formatDistanceToNow(new Date(professional.created_at), { 
     addSuffix: false, 
@@ -95,112 +68,100 @@ export function ProfessionalCard({
     }
   };
 
-  const getSectorColor = (sector: string) => {
-    const colors: Record<string, string> = {
-      "VVT": "bg-blue-500/10 text-blue-700 border-blue-200",
-      "GGZ": "bg-purple-500/10 text-purple-700 border-purple-200",
-      "GHZ": "bg-green-500/10 text-green-700 border-green-200",
-      "Jeugdzorg": "bg-orange-500/10 text-orange-700 border-orange-200",
-      "Ziekenhuis": "bg-red-500/10 text-red-700 border-red-200",
-      "Thuiszorg": "bg-teal-500/10 text-teal-700 border-teal-200",
-    };
-    return colors[sector] || "bg-muted";
-  };
+  // Apple-style: simplified sector colors to secondary variant only
 
   return (
     <HoverCard openDelay={300}>
       <HoverCardTrigger asChild>
         <Card 
-          className="hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer border-border bg-background overflow-hidden"
+          className={cn(
+            "cursor-pointer border-border bg-background overflow-hidden",
+            TRANSITIONS.shadow,
+            "hover:shadow-sm" // Apple-style subtle shadow on hover only
+          )}
           onClick={onClick}
         >
           <div className="p-4">
             <div className="flex items-start gap-3">
-              {/* Checkbox */}
-              <div onClick={(e) => e.stopPropagation()}>
+              {/* Checkbox - Apple style discrete */}
+              <div onClick={(e) => e.stopPropagation()} className="pt-0.5">
                 <Checkbox
                   checked={isSelected}
                   onCheckedChange={(checked) => onSelect(professional.id, checked as boolean)}
+                  className="data-[state=checked]:bg-primary"
                 />
               </div>
 
-              {/* Avatar */}
-              <Avatar className="h-10 w-10 flex-shrink-0">
-                <AvatarFallback className={getFunctieAvatarColor(professional.functie_niveau)}>
-                  {getInitials(professional.full_name)}
-                </AvatarFallback>
-              </Avatar>
+              {/* Avatar - Using unified component */}
+              <ProfessionalAvatar
+                name={professional.full_name}
+                status={professional.status}
+                functieNiveau={professional.functie_niveau}
+                size="md"
+              />
 
               {/* Content */}
               <div className="flex-1 min-w-0">
-                {/* Header: Name + Bureau + Status Dot */}
-                <div className="flex items-center gap-2 mb-1">
+                {/* Header: Name + Bureau */}
+                <div className="flex items-center gap-2 mb-0.5">
                   <h3 className="font-medium text-foreground truncate">
                     {professional.full_name}
                   </h3>
                   {professional.org_id && (
                     <Badge 
-                      variant="outline" 
-                      className={`text-[10px] px-1.5 py-0 h-4 flex-shrink-0 ${
-                        getOrganizationName(professional.org_id) === "ABCzorg" 
-                          ? "border-blue-300 text-blue-600 bg-blue-50/50" 
-                          : "border-green-300 text-green-600 bg-green-50/50"
-                      }`}
+                      variant="ghost"
+                      className="text-[10px] px-1.5 py-0 h-4 flex-shrink-0"
                     >
                       {getOrganizationName(professional.org_id)}
                     </Badge>
                   )}
-                  <div className={`w-2 h-2 rounded-full ${getStatusColor(professional.status)} flex-shrink-0`} />
                 </div>
 
-                {/* Function · Work Type */}
-                <p className="text-sm text-muted-foreground mb-2">
+                {/* Function · Work Type - Apple style single line */}
+                <p className="text-sm text-muted-foreground mb-1.5">
                   {professional.functie_niveau}
                   {professional.werkvorm && (
-                    <>
-                      <span className="mx-1.5">·</span>
-                      {professional.werkvorm}
-                    </>
+                    <span className="text-muted-foreground/60"> · {professional.werkvorm}</span>
                   )}
                 </p>
 
-                {/* Region */}
+                {/* Region - subtle */}
                 {professional.regio && (
-                  <p className="text-sm text-muted-foreground/80 mb-2">
+                  <p className="text-sm text-muted-foreground/70 mb-2">
                     {professional.regio}
                   </p>
                 )}
 
-                {/* Skills badges - max 2 + overflow */}
+                {/* Skills badges - Apple style simplified (all same color) */}
                 {professional.skills && professional.skills.length > 0 && (
-                  <div className="flex gap-1.5 flex-wrap mb-3">
+                  <div className="flex gap-1.5 flex-wrap mb-2">
                     {professional.skills.slice(0, 2).map((skill, idx) => (
                       <Badge 
                         key={idx} 
-                        variant="outline" 
-                        className={`text-xs ${getSectorColor(skill)}`}
+                        variant="secondary"
+                        className="text-xs font-normal"
                       >
                         {skill}
                       </Badge>
                     ))}
                     {professional.skills.length > 2 && (
-                      <Badge variant="secondary" className="text-xs">
+                      <Badge variant="ghost" className="text-xs font-normal">
                         +{professional.skills.length - 2}
                       </Badge>
                     )}
                   </div>
                 )}
 
-                {/* Time in Status - Subtle gray */}
-                <p className="text-xs text-muted-foreground/60">
-                  In deze status: {timeInStatus}
+                {/* Time in Status - Very subtle */}
+                <p className="text-xs text-muted-foreground/50">
+                  {timeInStatus}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Quick Actions Footer */}
-          <div className="border-t border-border/50 bg-muted/30 px-4 py-2 flex gap-2">
+          {/* Quick Actions Footer - Apple style no border, very subtle bg */}
+          <div className="bg-muted/20 px-4 py-2 flex gap-1">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -330,7 +291,7 @@ export function ProfessionalCard({
             </div>
           )}
 
-          {/* Skills/Sector badges in HoverCard */}
+          {/* Skills/Sector badges in HoverCard - Apple style unified */}
           {professional.skills && professional.skills.length > 0 && (
             <div>
               <div className="text-sm font-medium mb-1.5">Sector Ervaring</div>
@@ -338,8 +299,8 @@ export function ProfessionalCard({
                 {professional.skills.map((skill, idx) => (
                   <Badge 
                     key={idx} 
-                    variant="outline" 
-                    className={`text-xs ${getSectorColor(skill)}`}
+                    variant="secondary"
+                    className="text-xs font-normal"
                   >
                     {skill}
                   </Badge>

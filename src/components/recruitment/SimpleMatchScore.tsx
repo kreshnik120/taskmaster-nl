@@ -1,6 +1,6 @@
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { getScoreColor, getScoreProgressColor, TRANSITIONS } from "@/lib/constants/designTokens";
 
 interface SimpleMatchScoreProps {
   score: number;
@@ -13,20 +13,6 @@ interface SimpleMatchScoreProps {
  */
 export function SimpleMatchScore({ score, label = "Match Score" }: SimpleMatchScoreProps) {
   const roundedScore = Math.round(score);
-  
-  const getScoreColor = () => {
-    if (roundedScore >= 80) return "text-green-600";
-    if (roundedScore >= 60) return "text-primary";
-    if (roundedScore >= 40) return "text-amber-600";
-    return "text-muted-foreground";
-  };
-
-  const getProgressColor = () => {
-    if (roundedScore >= 80) return "bg-green-500";
-    if (roundedScore >= 60) return "bg-primary";
-    if (roundedScore >= 40) return "bg-amber-500";
-    return "bg-muted-foreground/30";
-  };
 
   return (
     <Card className="border-0 shadow-sm bg-background/95 backdrop-blur-sm">
@@ -35,17 +21,21 @@ export function SimpleMatchScore({ score, label = "Match Score" }: SimpleMatchSc
         <div className="text-center py-3">
           <p className="text-xs text-muted-foreground mb-1">{label}</p>
           <div className="flex items-center justify-center gap-1">
-            <span className={cn("text-4xl font-light tracking-tight", getScoreColor())}>
+            <span className={cn("text-4xl font-light tracking-tight", getScoreColor(roundedScore))}>
               {roundedScore}
             </span>
             <span className="text-xl text-muted-foreground font-light">%</span>
           </div>
         </div>
         
-        {/* Simple progress bar */}
-        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden mt-2">
+        {/* Simple progress bar - Apple 4px */}
+        <div className="w-full h-1 bg-muted rounded-full overflow-hidden mt-2">
           <div 
-            className={cn("h-full rounded-full transition-all duration-500", getProgressColor())}
+            className={cn(
+              "h-full rounded-full",
+              TRANSITIONS.slow,
+              getScoreProgressColor(roundedScore)
+            )}
             style={{ width: `${roundedScore}%` }}
           />
         </div>

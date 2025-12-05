@@ -1,5 +1,6 @@
-import { Building2, TrendingUp } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Building2 } from "lucide-react";
+import { MatchScoreIndicator } from "@/components/ui/match-score-indicator";
+import { cn } from "@/lib/utils";
 
 interface InlineMatchPreviewProps {
   clientName: string;
@@ -7,36 +8,28 @@ interface InlineMatchPreviewProps {
   matchReasoning: string[];
 }
 
+/**
+ * Apple-style inline match preview for hover cards
+ * Simplified design with unified score indicator
+ */
 export function InlineMatchPreview({ clientName, matchScore, matchReasoning }: InlineMatchPreviewProps) {
-  const getScoreColor = () => {
-    if (matchScore >= 80) return "text-emerald-600 dark:text-emerald-400";
-    if (matchScore >= 60) return "text-blue-600 dark:text-blue-400";
-    return "text-amber-600 dark:text-amber-400";
-  };
-
-  const getBgColor = () => {
-    if (matchScore >= 80) return "bg-emerald-50 dark:bg-emerald-950/30";
-    if (matchScore >= 60) return "bg-blue-50 dark:bg-blue-950/30";
-    return "bg-amber-50 dark:bg-amber-950/30";
-  };
-
   return (
-    <div className={`p-3 rounded-lg border ${getBgColor()} border-border/50 space-y-2`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Building2 className="h-4 w-4 text-muted-foreground" />
+    <div className={cn(
+      "p-3 rounded-lg bg-muted/30 space-y-2",
+      "transition-colors duration-150"
+    )}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
           <span className="text-sm font-medium text-foreground truncate">{clientName}</span>
         </div>
-        <Badge variant="outline" className={`${getScoreColor()} border-current`}>
-          <TrendingUp className="h-3 w-3 mr-1" />
-          {matchScore}%
-        </Badge>
+        <MatchScoreIndicator score={matchScore} size="sm" />
       </div>
       {matchReasoning.length > 0 && (
-        <div className="space-y-1">
+        <div className="space-y-0.5 pl-6">
           {matchReasoning.slice(0, 2).map((reason, idx) => (
-            <p key={idx} className="text-xs text-muted-foreground leading-relaxed">
-              • {reason}
+            <p key={idx} className="text-xs text-muted-foreground/80 leading-relaxed">
+              {reason}
             </p>
           ))}
         </div>
