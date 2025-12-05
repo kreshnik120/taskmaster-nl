@@ -59,10 +59,10 @@ const PRIORITY_BORDERS: Record<string, string> = {
 
 // Priority background tints (very subtle)
 const PRIORITY_BG: Record<string, string> = {
-  low: "bg-emerald-50/30 dark:bg-emerald-950/10",
-  medium: "bg-blue-50/30 dark:bg-blue-950/10",
-  high: "bg-amber-50/30 dark:bg-amber-950/10",
-  critical: "bg-red-50/30 dark:bg-red-950/10",
+  low: "bg-emerald-50/30 dark:bg-emerald-900/15",
+  medium: "bg-blue-50/30 dark:bg-blue-900/15",
+  high: "bg-amber-50/30 dark:bg-amber-900/15",
+  critical: "bg-red-50/30 dark:bg-red-900/15",
 };
 
 export default function Kalender() {
@@ -355,7 +355,7 @@ export default function Kalender() {
           </p>
           <button 
             onClick={goToToday}
-            className="text-[11px] text-primary/80 hover:text-primary hover:underline transition-colors"
+            className="text-[11px] font-medium text-primary hover:text-primary/80 hover:underline transition-colors"
           >
             Vandaag
           </button>
@@ -391,7 +391,7 @@ export default function Kalender() {
               className={cn(
                 "overflow-hidden min-h-[480px] border border-border/20 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)]",
                 isToday && "bg-primary/[0.03] border-primary/10",
-                isWeekend && !isToday && "bg-muted/[0.02]"
+                isWeekend && !isToday && "bg-muted/[0.02] dark:bg-muted/[0.04]"
               )}
             >
               <CardHeader className="pb-3 pt-3.5 px-3.5">
@@ -400,11 +400,14 @@ export default function Kalender() {
                     {isToday && (
                       <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
                     )}
-                    <span className={cn(isToday ? "text-foreground" : "text-muted-foreground")}>
+                    <span className={cn(
+                      isToday ? "text-primary font-semibold" : "text-muted-foreground",
+                      isWeekend && !isToday && "text-muted-foreground/70"
+                    )}>
                       {format(day, 'EEEE', { locale: nl })}
                     </span>
                   </span>
-                  <span className="text-[11px] font-normal text-muted-foreground/60 tabular-nums">
+                  <span className="text-[11px] font-normal text-muted-foreground/50 tabular-nums">
                     {format(day, 'd MMM', { locale: nl }).toLowerCase()}
                   </span>
                 </CardTitle>
@@ -413,10 +416,10 @@ export default function Kalender() {
                 {dayTasks.length === 0 && dayReminders.length === 0 ? (
                   <button 
                     onClick={() => handleDayClick(day)}
-                    className="w-full text-center py-12 rounded-xl transition-all duration-200 group border border-dashed border-muted-foreground/10 hover:border-muted-foreground/25 hover:bg-primary/[0.03]"
+                    className="w-full text-center py-12 rounded-xl transition-all duration-200 group border border-dashed border-muted-foreground/10 hover:border-muted-foreground/25 hover:bg-primary/[0.04]"
                   >
-                    <Plus className="h-4 w-4 mx-auto mb-1.5 text-muted-foreground/20 group-hover:text-primary/50 transition-colors" />
-                    <p className="text-xs text-muted-foreground/40 group-hover:text-muted-foreground/60 transition-colors">Taak toevoegen</p>
+                    <Plus className="h-4 w-4 mx-auto mb-1.5 text-muted-foreground/25 group-hover:text-primary/50 transition-colors" />
+                    <p className="text-xs text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors">Taak toevoegen</p>
                   </button>
                 ) : (
                   <>
@@ -426,14 +429,14 @@ export default function Kalender() {
                         key={task.id} 
                         onClick={() => handleTaskClick(task)} 
                         className={cn(
-                          "p-3 rounded-xl border-l-2 shadow-[0_0.5px_1px_rgba(0,0,0,0.02)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] hover:translate-y-[-0.5px] cursor-pointer transition-all duration-200 space-y-1.5",
+                          "p-3 rounded-xl border-l-2 shadow-[0_0.5px_1px_rgba(0,0,0,0.02)] hover:shadow-[0_3px_10px_rgba(0,0,0,0.06)] hover:translate-y-[-0.5px] cursor-pointer transition-all duration-200 space-y-1.5",
                           PRIORITY_BORDERS[task.priority] || PRIORITY_BORDERS.medium,
                           PRIORITY_BG[task.priority] || PRIORITY_BG.medium
                         )}
                         {...(taskIndex === 0 && (task.priority === 'high' || task.priority === 'critical') && { 'data-urgent-task': true })}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <p className="font-medium text-sm leading-tight line-clamp-2 flex-1">{task.title}</p>
+                          <p className="font-medium text-sm text-foreground/90 leading-tight line-clamp-2 flex-1">{task.title}</p>
                           {(task.start_at || task.due_at) && (
                             <span className="text-[11px] text-muted-foreground/60 tabular-nums shrink-0">
                               {task.start_at ? format(parseISO(task.start_at), 'HH:mm') : format(parseISO(task.due_at!), 'HH:mm')}
@@ -454,7 +457,7 @@ export default function Kalender() {
                     {dayReminders.map((reminder, reminderIndex) => (
                       <div 
                         key={reminder.id} 
-                        className="p-3 rounded-xl bg-amber-50/20 dark:bg-amber-950/10 border-l-2 border-l-amber-400/50 group transition-all duration-200 hover:bg-amber-50/30 dark:hover:bg-amber-950/20"
+                        className="p-3 rounded-xl bg-amber-50/20 dark:bg-amber-900/15 border-l-2 border-l-amber-400/50 group transition-all duration-200 hover:bg-amber-50/30 dark:hover:bg-amber-900/25"
                         {...(reminderIndex === 0 && { 'data-reminders': true })}
                       >
                         <div className="flex items-start justify-between gap-2">
