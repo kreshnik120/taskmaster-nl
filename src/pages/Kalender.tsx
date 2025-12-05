@@ -280,27 +280,27 @@ export default function Kalender() {
         </ToggleGroup>
       </div>
 
-      {/* KPI Cards - Minimal variant */}
+      {/* KPI Cards - System style variants */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPICard
           icon={Calendar}
           title="Vandaag"
           value={animatedTodayTasks}
-          variant="minimal"
+          variant="count"
           onClick={goToToday}
         />
         <KPICard
           icon={CheckCircle2}
           title="Deze Week"
           value={animatedWeekTasks}
-          variant="minimal"
+          variant="success"
           onClick={goToToday}
         />
         <KPICard
           icon={Clock}
           title="Herinneringen"
           value={animatedReminders}
-          variant="minimal"
+          variant="time"
           isActive={activeKpi === "herinneringen"}
           onClick={() => {
             setActiveKpi(activeKpi === "herinneringen" ? null : "herinneringen");
@@ -312,7 +312,7 @@ export default function Kalender() {
           icon={AlertCircle}
           title="Urgent"
           value={animatedUrgentTasks}
-          variant="minimal"
+          variant="urgent"
           isActive={activeKpi === "urgent"}
           onClick={() => {
             setActiveKpi(activeKpi === "urgent" ? null : "urgent");
