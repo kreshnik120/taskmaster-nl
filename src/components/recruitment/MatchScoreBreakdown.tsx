@@ -98,8 +98,9 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
     ((breakdown?.beschrijvingMatch || 0) / 15 * 50 + (breakdown?.certificaatVereistMatch || 0) / 8 * 50) / 100 * 100
   );
   
+  // FIX 1: werkvormMatch max is 5, niet 3!
   const praktisch = Math.round(
-    ((breakdown?.beschikbaarheidMatch || 0) / 5 * 60 + (breakdown?.werkvormMatch || 0) / 3 * 40) / 100 * 100
+    ((breakdown?.beschikbaarheidMatch || 0) / 5 * 50 + (breakdown?.werkvormMatch || 0) / 5 * 50) / 100 * 100
   );
 
   // Get sublabels from details
