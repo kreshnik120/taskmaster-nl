@@ -511,9 +511,31 @@ const Sollicitaties = () => {
       // Get werkvorm from application
       const werkvorm = application.extracted_data?.werkvorm || null;
 
-      // Build AI match reasoning for data enrichment (Phase 4)
+      // Build comprehensive AI match reasoning including full breakdown for transparency and AI learning
       const aiMatchReasoning = {
         calculated_at: new Date().toISOString(),
+        source: 'sollicitaties_kanban',
+        pipeline_stage: 'geplaatst',
+        match_score: sublocationData?.matchScore || null,
+        // Include full match breakdown
+        ...(sublocationData?.matchBreakdown ? {
+          functieMatch: sublocationData.matchBreakdown.functieMatch || 0,
+          regioMatch: sublocationData.matchBreakdown.regioMatch || 0,
+          sectorMatch: sublocationData.matchBreakdown.sectorMatch || 0,
+          doelgroepMatch: sublocationData.matchBreakdown.doelgroepMatch || 0,
+          mobiliteitMatch: sublocationData.matchBreakdown.mobiliteitMatch || 0,
+          beschikbaarheidMatch: sublocationData.matchBreakdown.beschikbaarheidMatch || 0,
+          werkvormMatch: sublocationData.matchBreakdown.werkvormMatch || 0,
+          aiBoost: sublocationData.matchBreakdown.aiBoost || 0,
+          totalScore: sublocationData.matchBreakdown.totalScore || 0,
+          normalizedScore: sublocationData.matchBreakdown.normalizedScore || 0,
+          hasAIBoost: sublocationData.matchBreakdown.hasAIBoost || false,
+          hasTrackRecord: sublocationData.matchBreakdown.hasTrackRecord || false,
+          hasExpertAdvies: sublocationData.matchBreakdown.hasExpertAdvies || false,
+          details: sublocationData.matchBreakdown.details || {},
+          categoryContributions: sublocationData.matchBreakdown.categoryContributions || null,
+        } : {}),
+        // Context data for reference
         professional_data: {
           functie_niveau: application.extracted_data?.functie_niveau,
           ervaring_sector: application.extracted_data?.ervaring_sector,
@@ -529,11 +551,6 @@ const Sollicitaties = () => {
           plaats: sublocationData.plaats,
           provincie: sublocationData.provincie,
         } : { naam: sublocationName },
-        score_breakdown: {
-          source: 'sollicitaties_kanban',
-          pipeline_stage: 'geplaatst',
-          match_score: sublocationData?.matchScore || null
-        }
       };
 
       // Create assignment with ai_match_reasoning

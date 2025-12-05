@@ -57,9 +57,30 @@ export function DirectPlacementButton({
     setIsPlacing(true);
     
     try {
-      // Calculate AI match reasoning for data enrichment
+      // Build comprehensive AI match reasoning including full breakdown
       const aiMatchReasoning = professionalData && sublocationData ? {
         calculated_at: new Date().toISOString(),
+        source: 'direct_placement_button',
+        match_score: sublocationData.matchScore || null,
+        // Include full match breakdown for transparency and AI learning
+        ...(sublocationData.matchBreakdown ? {
+          functieMatch: sublocationData.matchBreakdown.functieMatch || 0,
+          regioMatch: sublocationData.matchBreakdown.regioMatch || 0,
+          sectorMatch: sublocationData.matchBreakdown.sectorMatch || 0,
+          doelgroepMatch: sublocationData.matchBreakdown.doelgroepMatch || 0,
+          mobiliteitMatch: sublocationData.matchBreakdown.mobiliteitMatch || 0,
+          beschikbaarheidMatch: sublocationData.matchBreakdown.beschikbaarheidMatch || 0,
+          werkvormMatch: sublocationData.matchBreakdown.werkvormMatch || 0,
+          aiBoost: sublocationData.matchBreakdown.aiBoost || 0,
+          totalScore: sublocationData.matchBreakdown.totalScore || 0,
+          normalizedScore: sublocationData.matchBreakdown.normalizedScore || 0,
+          hasAIBoost: sublocationData.matchBreakdown.hasAIBoost || false,
+          hasTrackRecord: sublocationData.matchBreakdown.hasTrackRecord || false,
+          hasExpertAdvies: sublocationData.matchBreakdown.hasExpertAdvies || false,
+          details: sublocationData.matchBreakdown.details || {},
+          categoryContributions: sublocationData.matchBreakdown.categoryContributions || null,
+        } : {}),
+        // Context data for reference
         professional_data: {
           functie_niveau: professionalData.functie_niveau,
           ervaring_sector: professionalData.ervaring_sector,
@@ -74,10 +95,6 @@ export function DirectPlacementButton({
           plaats: sublocationData.plaats,
           provincie: sublocationData.provincie,
         },
-        score_breakdown: {
-          source: 'direct_placement_button',
-          match_score: sublocationData.matchScore || null
-        }
       } : null;
 
       // Create assignment record with ai_match_reasoning
