@@ -33,6 +33,7 @@ import { SublocationSelectionDialog } from "@/components/SublocationSelectionDia
 import { SmartSublocationPicker } from "@/components/SmartSublocationPicker";
 import { KPICard } from "@/components/ui/kpi-card";
 import { useProactiveMatchNotifications } from "@/hooks/useProactiveMatchNotifications";
+import { checkExistingActivePlacement } from "@/lib/checkExistingPlacement";
 
 interface Application {
   id: string;
@@ -508,6 +509,16 @@ const Sollicitaties = () => {
     if (!application || !application.professional_id) return;
 
     try {
+      // Check for existing active placement FIRST
+      const { exists } = await checkExistingActivePlacement(application.professional_id, sublocationId);
+      if (exists) {
+        const candidateName = application.extracted_data?.naam || application.email_from;
+        toast.error(`${candidateName} is al actief geplaatst bij ${sublocationName}`, {
+          description: "Een professional kan maar één actieve plaatsing per locatie hebben"
+        });
+        return;
+      }
+
       // Get werkvorm from application
       const werkvorm = application.extracted_data?.werkvorm || null;
 
@@ -1236,6 +1247,7 @@ const Sollicitaties = () => {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <SmartSublocationPicker
+                professionalId={selectClientDialog.application?.professional_id || undefined}
                 professionalData={{
                   functie_niveau: selectClientDialog.application?.extracted_data?.functie_niveau,
                   werkvorm: selectClientDialog.application?.extracted_data?.werkvorm,
