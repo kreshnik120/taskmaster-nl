@@ -300,18 +300,92 @@ const ERVARING_RELATIES: Record<string, { related: string[]; score: number }> = 
   'LVB': { related: ['Verstandelijke beperking', 'GHZ', 'Gehandicaptenzorg', 'MVB', 'EVB', 'Begeleiding'], score: 0.7 },
 };
 
+// ============= ERVARING_ALIASES: Afkortingen → Volledige termen =============
+/**
+ * Maps abbreviations to their full forms for expert matching
+ * This ensures "NAH" in candidate profile matches "Niet-aangeboren hersenletsel" in expert requirements
+ */
+const ERVARING_ALIASES: Record<string, string[]> = {
+  // Doelgroep afkortingen
+  'NAH': ['nah', 'niet-aangeboren hersenletsel', 'hersenletsel', 'cva', 'hersenbeschadiging'],
+  'LVB': ['lvb', 'licht verstandelijke beperking', 'verstandelijke beperking', 'licht verstandelijk'],
+  'MVB': ['mvb', 'matig verstandelijke beperking', 'matig verstandelijk'],
+  'EVB': ['evb', 'ernstig verstandelijke beperking', 'ernstig verstandelijk', 'ernstig meervoudig'],
+  'ASS': ['ass', 'autisme', 'autismespectrumstoornis', 'autistisch', 'spectrum'],
+  'EMB': ['emb', 'ernstig meervoudig beperkt', 'meervoudig beperkt', 'ernstig meervoudig'],
+  
+  // Sector afkortingen
+  'GGZ': ['ggz', 'geestelijke gezondheidszorg', 'psychiatrie', 'psychisch'],
+  'GHZ': ['ghz', 'gehandicaptenzorg', 'verstandelijk gehandicaptenzorg', 'gehandicapt'],
+  'VVT': ['vvt', 'verpleging verzorging thuiszorg', 'ouderenzorg', 'verpleging en verzorging'],
+  
+  // Specialisaties
+  'HIC': ['hic', 'high intensive care', 'high care', 'intensieve zorg'],
+  'PAAZ': ['paaz', 'psychiatrische afdeling algemeen ziekenhuis', 'psychiatrische afdeling'],
+  'ADL': ['adl', 'algemene dagelijkse levensverrichtingen', 'dagelijkse levensverrichtingen'],
+  'FACT': ['fact', 'flexible assertive community treatment', 'flexibele behandeling'],
+  
+  // Ziektebeelden
+  'ODD': ['odd', 'oppositioneel-opstandige gedragsstoornis', 'oppositioneel'],
+  'ADHD': ['adhd', 'attention deficit hyperactivity disorder', 'aandachtstekort'],
+  'PTSS': ['ptss', 'posttraumatische stressstoornis', 'trauma', 'posttraumatisch'],
+  'PDD-NOS': ['pdd-nos', 'pervasieve ontwikkelingsstoornis', 'pdd'],
+};
+
+/**
+ * Expand candidate experience using aliases
+ * Converts abbreviations to full forms for better matching
+ */
+function expandExperienceWithAliases(experiences: string[]): string[] {
+  const expanded = new Set<string>();
+  
+  for (const exp of experiences) {
+    expanded.add(exp.toLowerCase());
+    
+    // Check if this experience matches any alias key
+    const expUpper = exp.toUpperCase();
+    const expLower = exp.toLowerCase();
+    
+    // Direct key match (e.g., "NAH" → add all aliases)
+    if (ERVARING_ALIASES[expUpper]) {
+      ERVARING_ALIASES[expUpper].forEach(alias => expanded.add(alias.toLowerCase()));
+    }
+    
+    // Check if exp is one of the alias values
+    for (const [key, aliases] of Object.entries(ERVARING_ALIASES)) {
+      if (aliases.some(alias => alias.toLowerCase() === expLower || expLower.includes(alias.toLowerCase()))) {
+        expanded.add(key.toLowerCase());
+        aliases.forEach(alias => expanded.add(alias.toLowerCase()));
+      }
+    }
+  }
+  
+  return Array.from(expanded);
+}
+
 /**
  * Check if candidate has related experience for a specialisme
+ * Now uses expanded aliases for better matching
  */
 function hasRelatedExperience(candidateExp: string[], specialisme: string): { hasRelated: boolean; relatedMatches: string[] } {
   const relation = ERVARING_RELATIES[specialisme];
   if (!relation) return { hasRelated: false, relatedMatches: [] };
   
+  // Expand candidate experience with aliases
+  const expandedExp = expandExperienceWithAliases(candidateExp);
+  
   const relatedMatches: string[] = [];
   for (const exp of candidateExp) {
     const expLower = exp.toLowerCase();
     for (const relatedExp of relation.related) {
-      if (expLower.includes(relatedExp.toLowerCase()) || relatedExp.toLowerCase().includes(expLower)) {
+      const relatedLower = relatedExp.toLowerCase();
+      // Check direct match
+      if (expLower.includes(relatedLower) || relatedLower.includes(expLower)) {
+        relatedMatches.push(exp);
+        break;
+      }
+      // Check if expanded experience contains the related experience
+      if (expandedExp.some(expanded => expanded.includes(relatedLower) || relatedLower.includes(expanded))) {
         relatedMatches.push(exp);
         break;
       }
