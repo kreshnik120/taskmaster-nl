@@ -41,28 +41,28 @@ interface Reminder {
   subtasks?: { title: string } | null;
 }
 
-// Apple-style priority dots
+// Apple-style priority dots (larger + subtler opacity)
 const PRIORITY_DOTS: Record<string, string> = {
-  low: "bg-emerald-500",
-  medium: "bg-blue-500", 
-  high: "bg-amber-500",
-  critical: "bg-red-500",
+  low: "bg-emerald-500/80",
+  medium: "bg-blue-500/80", 
+  high: "bg-amber-500/80",
+  critical: "bg-red-500/80",
 };
 
-// Priority border-left accents
+// Priority border-left accents (subtler /70 opacity)
 const PRIORITY_BORDERS: Record<string, string> = {
-  low: "border-l-emerald-500",
-  medium: "border-l-blue-500", 
-  high: "border-l-amber-500",
-  critical: "border-l-red-500",
+  low: "border-l-emerald-500/70",
+  medium: "border-l-blue-500/70", 
+  high: "border-l-amber-500/70",
+  critical: "border-l-red-500/70",
 };
 
-// Priority background tints (very subtle)
+// Priority background tints (stronger /40 light, /20 dark)
 const PRIORITY_BG: Record<string, string> = {
-  low: "bg-emerald-50/30 dark:bg-emerald-900/15",
-  medium: "bg-blue-50/30 dark:bg-blue-900/15",
-  high: "bg-amber-50/30 dark:bg-amber-900/15",
-  critical: "bg-red-50/30 dark:bg-red-900/15",
+  low: "bg-emerald-50/40 dark:bg-emerald-900/20",
+  medium: "bg-blue-50/40 dark:bg-blue-900/20",
+  high: "bg-amber-50/40 dark:bg-amber-900/20",
+  critical: "bg-red-50/40 dark:bg-red-900/20",
 };
 
 export default function Kalender() {
@@ -429,24 +429,24 @@ export default function Kalender() {
                         key={task.id} 
                         onClick={() => handleTaskClick(task)} 
                         className={cn(
-                          "p-3 rounded-xl border-l-2 shadow-[0_0.5px_1px_rgba(0,0,0,0.02)] hover:shadow-[0_3px_10px_rgba(0,0,0,0.06)] hover:translate-y-[-0.5px] cursor-pointer transition-all duration-200 space-y-1.5",
+                          "p-3.5 rounded-lg border-l-2 shadow-[0_0.5px_1px_rgba(0,0,0,0.02)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.05)] hover:translate-y-[-0.5px] cursor-pointer transition-all duration-200 space-y-1.5",
                           PRIORITY_BORDERS[task.priority] || PRIORITY_BORDERS.medium,
                           PRIORITY_BG[task.priority] || PRIORITY_BG.medium
                         )}
                         {...(taskIndex === 0 && (task.priority === 'high' || task.priority === 'critical') && { 'data-urgent-task': true })}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <p className="font-medium text-sm text-foreground/90 leading-tight line-clamp-2 flex-1">{task.title}</p>
+                          <p className="font-medium text-sm text-foreground/90 leading-tight tracking-tight line-clamp-2 flex-1">{task.title}</p>
                           {(task.start_at || task.due_at) && (
-                            <span className="text-[11px] text-muted-foreground/60 tabular-nums shrink-0">
+                            <span className="text-[11px] text-muted-foreground/70 tabular-nums shrink-0">
                               {task.start_at ? format(parseISO(task.start_at), 'HH:mm') : format(parseISO(task.due_at!), 'HH:mm')}
                             </span>
                           )}
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className={cn("h-1.5 w-1.5 rounded-full", PRIORITY_DOTS[task.priority] || PRIORITY_DOTS.medium)} />
+                          <span className={cn("h-2 w-2 rounded-full", PRIORITY_DOTS[task.priority] || PRIORITY_DOTS.medium)} />
                           {task.profiles && (
-                            <span className="text-[11px] text-muted-foreground/60 truncate max-w-[100px]">
+                            <span className="text-[11px] text-muted-foreground/70 truncate max-w-[120px]">
                               {task.profiles.name || task.profiles.email}
                             </span>
                           )}
