@@ -187,3 +187,10 @@ verify_jwt = false
 
 [functions.fetch-organization-logos]
 verify_jwt = false
+
+[functions.ai-agent-orchestrator]
+verify_jwt = false
+schedule = "*/5 * * * *"
+
+[functions.n8n-webhook-bridge]
+verify_jwt = false
