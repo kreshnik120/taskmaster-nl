@@ -14,6 +14,226 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_actions: {
+        Row: {
+          action_description: string | null
+          action_order: number
+          action_type: string
+          callback_received: boolean | null
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          external_id: string | null
+          goal_id: string
+          id: string
+          input_data: Json | null
+          max_retries: number | null
+          output_data: Json | null
+          retry_count: number | null
+          scheduled_at: string | null
+          started_at: string | null
+          status: string
+          updated_at: string
+          webhook_url: string | null
+        }
+        Insert: {
+          action_description?: string | null
+          action_order?: number
+          action_type: string
+          callback_received?: boolean | null
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          external_id?: string | null
+          goal_id: string
+          id?: string
+          input_data?: Json | null
+          max_retries?: number | null
+          output_data?: Json | null
+          retry_count?: number | null
+          scheduled_at?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          webhook_url?: string | null
+        }
+        Update: {
+          action_description?: string | null
+          action_order?: number
+          action_type?: string
+          callback_received?: boolean | null
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          external_id?: string | null
+          goal_id?: string
+          id?: string
+          input_data?: Json | null
+          max_retries?: number | null
+          output_data?: Json | null
+          retry_count?: number | null
+          scheduled_at?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          webhook_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_actions_goal_id_fkey"
+            columns: ["goal_id"]
+            isOneToOne: false
+            referencedRelation: "agent_goals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_goals: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          deadline: string | null
+          goal_description: string
+          goal_type: string
+          id: string
+          input_data: Json | null
+          learnings: Json | null
+          org_id: string
+          output_data: Json | null
+          plan: Json | null
+          priority: number
+          started_at: string | null
+          status: string
+          success_score: number | null
+          trigger_event: Json | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          deadline?: string | null
+          goal_description: string
+          goal_type: string
+          id?: string
+          input_data?: Json | null
+          learnings?: Json | null
+          org_id: string
+          output_data?: Json | null
+          plan?: Json | null
+          priority?: number
+          started_at?: string | null
+          status?: string
+          success_score?: number | null
+          trigger_event?: Json | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          deadline?: string | null
+          goal_description?: string
+          goal_type?: string
+          id?: string
+          input_data?: Json | null
+          learnings?: Json | null
+          org_id?: string
+          output_data?: Json | null
+          plan?: Json | null
+          priority?: number
+          started_at?: string | null
+          status?: string
+          success_score?: number | null
+          trigger_event?: Json | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_goals_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_task_queue: {
+        Row: {
+          action_id: string | null
+          attempt_count: number | null
+          created_at: string
+          error_message: string | null
+          execute_after: string | null
+          execution_data: Json | null
+          goal_id: string | null
+          id: string
+          locked_by: string | null
+          locked_until: string | null
+          max_attempts: number | null
+          priority: number
+          processed_at: string | null
+          result_data: Json | null
+          scheduled_at: string
+          status: string
+          task_type: string
+        }
+        Insert: {
+          action_id?: string | null
+          attempt_count?: number | null
+          created_at?: string
+          error_message?: string | null
+          execute_after?: string | null
+          execution_data?: Json | null
+          goal_id?: string | null
+          id?: string
+          locked_by?: string | null
+          locked_until?: string | null
+          max_attempts?: number | null
+          priority?: number
+          processed_at?: string | null
+          result_data?: Json | null
+          scheduled_at?: string
+          status?: string
+          task_type: string
+        }
+        Update: {
+          action_id?: string | null
+          attempt_count?: number | null
+          created_at?: string
+          error_message?: string | null
+          execute_after?: string | null
+          execution_data?: Json | null
+          goal_id?: string | null
+          id?: string
+          locked_by?: string | null
+          locked_until?: string | null
+          max_attempts?: number | null
+          priority?: number
+          processed_at?: string | null
+          result_data?: Json | null
+          scheduled_at?: string
+          status?: string
+          task_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_task_queue_action_id_fkey"
+            columns: ["action_id"]
+            isOneToOne: false
+            referencedRelation: "agent_actions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_task_queue_goal_id_fkey"
+            columns: ["goal_id"]
+            isOneToOne: false
+            referencedRelation: "agent_goals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_categories: {
         Row: {
           auto_generated: boolean | null
