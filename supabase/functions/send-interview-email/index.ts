@@ -1,8 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -21,6 +19,7 @@ interface InterviewEmailRequest {
   locationDetails?: string;
   notes?: string;
   recruiterName?: string;
+  createCalendarEvent?: boolean;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -52,6 +51,7 @@ const handler = async (req: Request): Promise<Response> => {
       locationDetails,
       notes,
       recruiterName = "Het recruitmentteam",
+      createCalendarEvent = false,
     } = body;
 
     // Validate required fields
@@ -187,36 +187,84 @@ const handler = async (req: Request): Promise<Response> => {
 </html>
     `;
 
-    // Send email via Resend API
-    console.log("[send-interview-email] Sending email to:", candidateEmail);
-    
-    const emailResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "ABCzorg <onboarding@resend.dev>",
-        to: [candidateEmail],
-        subject: "Bevestiging interview afspraak",
-        html: htmlEmail,
-      }),
-    });
-
-    const emailData = await emailResponse.json();
-    
-    if (!emailResponse.ok) {
-      console.error("[send-interview-email] Resend error:", emailData);
-      throw new Error(emailData.message || "Failed to send email");
-    }
-
-    console.log("[send-interview-email] Email sent successfully:", emailData);
-
-    // Log to Supabase for audit trail
+    // Initialize Supabase
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // ==========================================================
+    // UNIFIED EMAIL ROUTING: Send via n8n/Outlook (not Resend)
+    // ==========================================================
+    const n8nWebhookUrl = Deno.env.get("N8N_WEBHOOK_URL");
+    
+    let emailResult: any = { sent_via: 'none', success: false };
+    
+    if (n8nWebhookUrl) {
+      console.log("[send-interview-email] Sending via n8n webhook...");
+      
+      try {
+        const webhookUrl = `${n8nWebhookUrl}/interview-email`;
+        const callbackUrl = `${supabaseUrl}/functions/v1/n8n-webhook-bridge`;
+        
+        const response = await fetch(webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action_type: "send_interview_email",
+            candidateEmail,
+            candidateName,
+            candidatePhone,
+            functieNiveau,
+            emailSubject: "Bevestiging interview afspraak",
+            emailHtml: htmlEmail,
+            scheduledAt,
+            duration,
+            locationType,
+            locationDetails,
+            notes,
+            recruiterName,
+            applicationId,
+            taskId,
+            createCalendarEvent,
+            callback_url: callbackUrl
+          })
+        });
+        
+        if (response.ok) {
+          const n8nData = await response.json().catch(() => ({}));
+          emailResult = { 
+            sent_via: 'n8n_outlook', 
+            success: true, 
+            n8n_response: n8nData,
+            message: "Email verzonden via n8n/Outlook"
+          };
+          console.log("[send-interview-email] n8n response:", n8nData);
+        } else {
+          const errorText = await response.text();
+          console.error("[send-interview-email] n8n error:", response.status, errorText);
+          emailResult = { 
+            sent_via: 'n8n_failed', 
+            success: false, 
+            error: `n8n returned ${response.status}: ${errorText}` 
+          };
+        }
+      } catch (n8nError) {
+        console.error("[send-interview-email] n8n exception:", n8nError);
+        emailResult = { 
+          sent_via: 'n8n_exception', 
+          success: false, 
+          error: n8nError instanceof Error ? n8nError.message : String(n8nError) 
+        };
+      }
+    } else {
+      console.log("[send-interview-email] N8N_WEBHOOK_URL not configured - email not sent");
+      emailResult = { 
+        sent_via: 'simulated', 
+        success: true, 
+        message: "Email gesimuleerd (n8n niet geconfigureerd)",
+        emailHtml: htmlEmail
+      };
+    }
 
     // Log system event for AI learning
     await supabase.from("system_events").insert({
@@ -231,34 +279,39 @@ const handler = async (req: Request): Promise<Response> => {
         scheduled_at: scheduledAt,
         duration,
         location_type: locationType,
-        email_id: emailData.id,
+        email_result: emailResult.sent_via,
       },
       metadata: {
         task_id: taskId,
         functie_niveau: functieNiveau,
+        create_calendar_event: createCalendarEvent
       },
     });
 
-    // Also log to application_conversations for history
+    // Log to application_conversations for history
     await supabase.from("application_conversations").insert({
       application_id: applicationId,
       role: "system",
-      content: `Interview bevestigingsmail verzonden naar ${candidateEmail} voor ${formattedDate} om ${formattedTime}`,
+      content: `Interview bevestigingsmail ${emailResult.success ? 'verzonden' : 'geprobeerd'} naar ${candidateEmail} voor ${formattedDate} om ${formattedTime}${emailResult.sent_via === 'simulated' ? ' (gesimuleerd)' : ''}`,
       metadata: {
         email_type: "interview_confirmation",
-        email_id: emailData.id,
         scheduled_at: scheduledAt,
+        sent_via: emailResult.sent_via,
+        success: emailResult.success
       },
     });
 
     return new Response(
       JSON.stringify({
-        success: true,
-        emailId: emailData.id,
-        message: "Interview email sent successfully",
+        success: emailResult.success,
+        sent_via: emailResult.sent_via,
+        message: emailResult.success 
+          ? "Interview email verstuurd via n8n/Outlook" 
+          : `Email kon niet worden verstuurd: ${emailResult.error}`,
+        ...emailResult
       }),
       {
-        status: 200,
+        status: emailResult.success ? 200 : 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
