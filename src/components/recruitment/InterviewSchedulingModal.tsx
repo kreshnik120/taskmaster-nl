@@ -164,14 +164,17 @@ END:VCALENDAR`;
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Niet ingelogd");
 
-      // Get user's organization
-      const { data: orgData } = await supabase
+      // Get user's first organization (use limit(1) instead of single() to handle multiple orgs)
+      const { data: userOrgData } = await supabase
         .from('user_organizations')
         .select('org_id')
         .eq('user_id', user.id)
-        .single();
-
-      if (!orgData) throw new Error("Geen organisatie gevonden");
+        .limit(1);
+      
+      if (!userOrgData || userOrgData.length === 0) {
+        throw new Error("Geen organisatie gevonden");
+      }
+      const orgId = userOrgData[0].org_id;
 
       // Combine date and time
       const [hours, minutes] = time.split(':').map(Number);
@@ -193,7 +196,7 @@ END:VCALENDAR`;
       const { data: taskData, error: taskError } = await supabase
         .from('tasks')
         .insert([{
-          org_id: orgData.org_id,
+          org_id: orgId,
           application_id: applicationId,
           recruitment_action_type: 'interview',
           title: `Interview met ${candidateName}`,
