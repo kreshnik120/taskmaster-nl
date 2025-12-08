@@ -30,7 +30,61 @@ const GOAL_CONFIGS: Record<string, {
   planGenerator: (goal: AgentGoal, context: any) => AgentAction[];
   requiredFields: string[];
 }> = {
-  // NEW: Send interview email via n8n
+  // =====================================================
+  // NEW: Application Intake Completion - Autonome follow-up
+  // =====================================================
+  'application_intake_completion': {
+    requiredFields: ['application_id', 'candidate_email'],
+    planGenerator: (goal, context) => {
+      const missingInfo = goal.input_data.missing_info || [];
+      
+      // Prioriteit volgorde voor vragen (kritieke velden eerst)
+      const priorityFields = [
+        'functie_niveau',    // Kritiek voor matching
+        'werkvorm',          // Kritiek voor matching
+        'regio',             // Kritiek voor matching
+        'beschikbaarheid',   // Belangrijk voor plaatsing
+        'telefoonnummer',    // Belangrijk voor contact
+        'ervaring_sector',   // Belangrijk voor matching
+        'doelgroep_ervaring',// Belangrijk voor matching
+        'naam',              // Basis info
+        'email',             // Basis info
+        'eigen_vervoer',     // Praktisch
+        'vog',               // Administratief
+        'big_registratie',   // Administratief
+      ];
+      
+      // Filter en sorteer missing info op prioriteit
+      const sortedMissing = [...missingInfo].sort((a: string, b: string) => {
+        const aIndex = priorityFields.indexOf(a);
+        const bIndex = priorityFields.indexOf(b);
+        return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+      });
+      
+      // Neem max 3 items per email (niet overweldigend)
+      const fieldsToAsk = sortedMissing.slice(0, 3);
+      
+      return [
+        {
+          action_type: 'send_followup_question',
+          action_order: 1,
+          action_description: `Vraag ontbrekende info: ${fieldsToAsk.join(', ')}`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            application_id: goal.input_data.application_id,
+            candidate_email: goal.input_data.candidate_email,
+            candidate_name: goal.input_data.candidate_name,
+            fields_to_ask: fieldsToAsk,
+            all_missing_info: missingInfo,
+            current_completeness: goal.input_data.current_completeness,
+            follow_up_count: goal.input_data.follow_up_count || 0,
+          }
+        }
+      ];
+    }
+  },
+
+  // Send interview email via n8n
   'send_interview_email': {
     requiredFields: ['candidateEmail', 'candidateName', 'scheduledAt'],
     planGenerator: (goal, context) => {
@@ -465,9 +519,13 @@ async function executeTask(supabase: any, task: any) {
 
   // Execute based on action type
   switch (action.action_type) {
+    case 'send_followup_question': // NEW: Follow-up vragen voor incomplete applicaties
+      result = await executeFollowupQuestion(supabase, action);
+      break;
+    
     case 'send_reminder':
     case 'send_welcome':
-    case 'send_interview_email': // NEW: Interview email via n8n
+    case 'send_interview_email': // Interview email via n8n
       result = await executeExternalAction(supabase, action);
       break;
     
@@ -611,6 +669,109 @@ async function checkAttendance(supabase: any, action: any) {
   }
 
   return { status: 'attended', interview_status: interview.status };
+}
+
+// =====================================================
+// NEW: Execute Follow-up Question via n8n
+// =====================================================
+async function executeFollowupQuestion(supabase: any, action: any) {
+  const { 
+    application_id, 
+    candidate_email, 
+    candidate_name, 
+    fields_to_ask,
+    current_completeness,
+    follow_up_count 
+  } = action.input_data;
+
+  console.log(`[Orchestrator] Executing follow-up question for ${candidate_email}`);
+  console.log(`[Orchestrator] Fields to ask: ${fields_to_ask?.join(', ')}`);
+
+  // Rate limiting: Max 3 follow-ups per application
+  if (follow_up_count >= 3) {
+    console.log(`[Orchestrator] Max follow-ups reached for application ${application_id}`);
+    return { 
+      status: 'skipped', 
+      reason: 'Max follow-ups (3) reached',
+      follow_up_count 
+    };
+  }
+
+  // 1. Generate email via Lovable AI
+  const { data: emailData, error: genError } = await supabase.functions.invoke('generate-followup-email', {
+    body: {
+      application_id,
+      candidate_name,
+      candidate_email,
+      fields_to_ask,
+      current_completeness,
+      follow_up_count
+    }
+  });
+
+  if (genError || !emailData?.emailHtml) {
+    console.error('[Orchestrator] Email generation failed:', genError);
+    throw new Error(`Email generation failed: ${genError?.message || 'Unknown error'}`);
+  }
+
+  console.log(`[Orchestrator] Email generated: ${emailData.emailSubject}`);
+
+  // 2. Send to n8n for email delivery
+  const n8nWebhookUrl = Deno.env.get('N8N_WEBHOOK_URL');
+  
+  if (!n8nWebhookUrl) {
+    console.log('[Orchestrator] N8N_WEBHOOK_URL not configured, simulating send');
+    return { 
+      status: 'simulated', 
+      note: 'n8n not configured',
+      email_generated: true,
+      email_subject: emailData.emailSubject 
+    };
+  }
+
+  const callbackUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/n8n-webhook-bridge`;
+  const webhookUrl = `${n8nWebhookUrl}/followup-question`;
+
+  console.log(`[Orchestrator] Sending to n8n: ${webhookUrl}`);
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action_id: action.id,
+        action_type: 'send_followup_question',
+        candidateEmail: candidate_email,
+        candidateName: candidate_name,
+        emailSubject: emailData.emailSubject,
+        emailHtml: emailData.emailHtml,
+        applicationId: application_id,
+        callback_url: callbackUrl,
+        fields_asked: fields_to_ask,
+        follow_up_count: follow_up_count + 1
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Orchestrator] n8n responded with ${response.status}: ${errorText}`);
+      throw new Error(`n8n error: ${response.status}`);
+    }
+
+    const n8nResult = await response.json().catch(() => ({}));
+    console.log('[Orchestrator] n8n response:', n8nResult);
+
+    return { 
+      status: 'sent_via_n8n', 
+      email_subject: emailData.emailSubject,
+      fields_asked: fields_to_ask,
+      n8n_response: n8nResult
+    };
+
+  } catch (error) {
+    console.error('[Orchestrator] n8n webhook failed:', error);
+    throw error;
+  }
 }
 
 // Find matching opportunities for a professional

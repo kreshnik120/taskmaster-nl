@@ -448,6 +448,54 @@ Return JSON in dit formaat:
       if (appUpdateError) {
         console.error("Error updating application:", appUpdateError);
       }
+
+      // =====================================================
+      // STAP 7: Continue Follow-up Loop
+      // Als completeness nog < 80%, trigger nieuwe agent_goal
+      // =====================================================
+      if (newCompletenessScore < 80 && analysis.remaining_missing_info?.length > 0) {
+        console.log("Completeness still < 80%, triggering new follow-up goal...");
+        
+        // Check hoeveel follow-ups er al zijn geweest
+        const { count: existingFollowups } = await supabase
+          .from("agent_goals")
+          .select("*", { count: "exact", head: true })
+          .eq("goal_type", "application_intake_completion")
+          .contains("input_data", { application_id: applicationId });
+
+        const followUpCount = existingFollowups || 0;
+
+        // Max 3 follow-ups per applicatie
+        if (followUpCount < 3) {
+          const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
+          
+          const { error: goalError } = await supabase
+            .from("agent_goals")
+            .insert({
+              org_id: application.org_id,
+              goal_type: "application_intake_completion",
+              goal_description: `Vervolg follow-up voor ${professionalName} (${followUpCount + 1}/3)`,
+              priority: 100 - newCompletenessScore,
+              input_data: {
+                application_id: applicationId,
+                candidate_email: from,
+                candidate_name: professionalName,
+                missing_info: analysis.remaining_missing_info,
+                current_completeness: newCompletenessScore,
+                follow_up_count: followUpCount,
+              },
+              status: "pending"
+            });
+
+          if (goalError) {
+            console.error("Error creating follow-up goal:", goalError);
+          } else {
+            console.log(`Created follow-up goal #${followUpCount + 1} for application ${applicationId}`);
+          }
+        } else {
+          console.log(`Max follow-ups (3) reached for application ${applicationId}`);
+        }
+      }
     }
 
     // Generate intelligent response
