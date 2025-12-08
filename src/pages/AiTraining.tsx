@@ -43,6 +43,7 @@ import { SystemLearningDashboard } from "@/components/AITraining/SystemLearningD
 import { EvaluationLearningWidget } from "@/components/AITraining/EvaluationLearningWidget";
 import { TriggerLearningButton } from "@/components/AITraining/TriggerLearningButton";
 import { AIAgentTestPanel } from "@/components/AITraining/AIAgentTestPanel";
+import { N8nIntegrationTestPanel } from "@/components/AITraining/N8nIntegrationTestPanel";
 import { toast } from "sonner";
 
 const AiTraining = () => {
@@ -208,6 +209,7 @@ const AiTraining = () => {
                   <TabsContent value="ai-agent" className="mt-4">
                     <div className="space-y-6">
                       <AIAgentTestPanel />
+                      <N8nIntegrationTestPanel />
                     </div>
                   </TabsContent>
                   
