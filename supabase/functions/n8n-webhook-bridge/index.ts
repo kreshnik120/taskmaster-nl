@@ -6,13 +6,18 @@ const corsHeaders = {
 };
 
 /**
- * n8n Webhook Bridge
+ * n8n Webhook Bridge - Centrale Dispatcher Routing
  * 
- * This function serves as the bridge between the AI Agent and n8n workflows.
- * It can:
- * 1. Receive triggers from the AI Agent and forward to n8n
- * 2. Receive callbacks from n8n and update action status
- * 3. List available n8n workflows
+ * Alle requests gaan naar de basis N8N_WEBHOOK_URL met gestandaardiseerd payload formaat.
+ * n8n "My workflow" routeert intern op basis van action_type.
+ * 
+ * Ondersteunde action types:
+ * - send_followup_question: Follow-up vragen voor incomplete intake
+ * - send_interview_email: Interview uitnodigingen
+ * - send_document_request: Documenten opvragen (VOG, diploma, CV)
+ * - send_general_email: Algemene emails
+ * - create_calendar_event: Calendar events aanmaken
+ * - send_reminder: Herinneringen via email/WhatsApp
  */
 
 Deno.serve(async (req) => {
@@ -29,12 +34,11 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const path = url.pathname.split('/').pop();
 
-    // Parse body
     const body = await req.json().catch(() => ({}));
 
-    console.log(`[n8n Bridge] Path: ${path}, Method: ${req.method}`);
+    console.log(`[n8n Bridge] Path: ${path}, Method: ${req.method}, Action: ${body.action || body.action_type}`);
 
-    // Route: /trigger - Send action to n8n
+    // Route: /trigger - Send action to n8n via central dispatcher
     if (path === 'trigger' || body.action === 'trigger') {
       return await triggerN8nWorkflow(supabase, body);
     }
@@ -44,9 +48,9 @@ Deno.serve(async (req) => {
       return await handleN8nCallback(supabase, body);
     }
 
-    // Route: /workflows - List available n8n workflows
+    // Route: /workflows - List available action types
     if (path === 'workflows' || body.action === 'list_workflows') {
-      return await listN8nWorkflows();
+      return await listAvailableActions();
     }
 
     // Route: /test - Test n8n connection
@@ -54,17 +58,19 @@ Deno.serve(async (req) => {
       return await testN8nConnection();
     }
 
-    // Default: Show available routes
+    // Default response
     return new Response(
       JSON.stringify({
-        message: 'n8n Webhook Bridge',
+        message: 'n8n Webhook Bridge - Centrale Dispatcher',
         available_actions: ['trigger', 'callback', 'list_workflows', 'test'],
-        usage: {
-          trigger: 'Forward an agent action to n8n',
-          callback: 'Receive callback from n8n after action completion',
-          list_workflows: 'List available n8n workflows',
-          test: 'Test n8n connection'
-        }
+        supported_action_types: [
+          'send_followup_question',
+          'send_interview_email', 
+          'send_document_request',
+          'send_general_email',
+          'create_calendar_event',
+          'send_reminder'
+        ]
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -79,11 +85,13 @@ Deno.serve(async (req) => {
   }
 });
 
-// Trigger an n8n workflow
+/**
+ * Trigger n8n workflow via centrale dispatcher
+ * Alle requests gaan naar dezelfde basis URL met action_type in de body
+ */
 async function triggerN8nWorkflow(supabase: any, body: any) {
-  const { action_id, action_type, workflow_id, input_data } = body;
+  const { action_id, action_type, input_data, org_id } = body;
 
-  // Get n8n configuration
   const n8nBaseUrl = Deno.env.get('N8N_WEBHOOK_URL');
   
   if (!n8nBaseUrl) {
@@ -98,7 +106,7 @@ async function triggerN8nWorkflow(supabase: any, body: any) {
     );
   }
 
-  // Update action status
+  // Update action status to executing
   if (action_id) {
     await supabase
       .from('agent_actions')
@@ -110,38 +118,51 @@ async function triggerN8nWorkflow(supabase: any, body: any) {
       .eq('id', action_id);
   }
 
-  // Map action types to n8n workflow IDs/paths
-  const workflowMapping: Record<string, string> = {
-    'send_reminder': 'interview-reminder',
-    'send_welcome': 'welcome-message',
-    'send_whatsapp': 'whatsapp-message',
-    'send_email': 'email-sender',
-    'send_interview_email': 'interview-email',
-    'send_followup_question': 'followup-question', // NEW: Follow-up vragen voor intake
-    'slack_notification': 'slack-notify'
+  // Get org_id from action if not provided
+  let effectiveOrgId = org_id;
+  if (!effectiveOrgId && action_id) {
+    const { data: action } = await supabase
+      .from('agent_actions')
+      .select('agent_goals(org_id)')
+      .eq('id', action_id)
+      .single();
+    effectiveOrgId = action?.agent_goals?.org_id;
+  }
+
+  // Build standardized payload for n8n central dispatcher
+  const callbackUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/n8n-webhook-bridge`;
+  
+  const n8nPayload = {
+    // Routing info for n8n dispatcher
+    action_type: action_type,
+    action_id: action_id,
+    org_id: effectiveOrgId,
+    callback_url: callbackUrl,
+    
+    // Timestamp
+    timestamp: new Date().toISOString(),
+    
+    // All input data flattened for n8n access
+    input_data: input_data || {},
+    
+    // Also spread common fields for easy n8n access
+    ...(input_data || {})
   };
 
-  const targetWorkflow = workflow_id || workflowMapping[action_type] || 'default-webhook';
-  const webhookUrl = n8nBaseUrl.includes('?') 
-    ? n8nBaseUrl 
-    : `${n8nBaseUrl}/${targetWorkflow}`;
+  console.log(`[n8n Bridge] Sending to central dispatcher: ${action_type}`);
+  console.log(`[n8n Bridge] Payload:`, JSON.stringify(n8nPayload, null, 2));
 
   try {
-    // Call n8n webhook
-    const response = await fetch(webhookUrl, {
+    // Send to central n8n dispatcher (no path suffix!)
+    const response = await fetch(n8nBaseUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Action-ID': action_id || '',
-        'X-Action-Type': action_type || ''
+        'X-Action-Type': action_type || '',
+        'X-Org-ID': effectiveOrgId || ''
       },
-      body: JSON.stringify({
-        action_id,
-        action_type,
-        callback_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/n8n-webhook-bridge`,
-        timestamp: new Date().toISOString(),
-        ...input_data
-      })
+      body: JSON.stringify(n8nPayload)
     });
 
     const responseText = await response.text();
@@ -151,6 +172,8 @@ async function triggerN8nWorkflow(supabase: any, body: any) {
     } catch {
       responseData = { raw: responseText };
     }
+
+    console.log(`[n8n Bridge] Response status: ${response.status}`);
 
     if (response.ok) {
       // Update action with external ID if provided
@@ -164,7 +187,8 @@ async function triggerN8nWorkflow(supabase: any, body: any) {
       return new Response(
         JSON.stringify({
           status: 'triggered',
-          workflow: targetWorkflow,
+          action_type: action_type,
+          dispatcher: 'central',
           n8n_response: responseData
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -177,7 +201,6 @@ async function triggerN8nWorkflow(supabase: any, body: any) {
     console.error('[n8n Bridge] Trigger failed:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-    // Update action status on failure
     if (action_id) {
       await supabase
         .from('agent_actions')
@@ -192,14 +215,16 @@ async function triggerN8nWorkflow(supabase: any, body: any) {
       JSON.stringify({
         status: 'error',
         error: errorMessage,
-        workflow: targetWorkflow
+        action_type: action_type
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 }
 
-// Handle callback from n8n
+/**
+ * Handle callback from n8n
+ */
 async function handleN8nCallback(supabase: any, body: any) {
   const { action_id, status, result, error } = body;
 
@@ -212,7 +237,6 @@ async function handleN8nCallback(supabase: any, body: any) {
     );
   }
 
-  // Get the action
   const { data: action, error: fetchError } = await supabase
     .from('agent_actions')
     .select('*, agent_goals(*)')
@@ -226,7 +250,6 @@ async function handleN8nCallback(supabase: any, body: any) {
     );
   }
 
-  // Update action based on callback
   const updateData: any = {
     callback_received: true,
     updated_at: new Date().toISOString()
@@ -241,9 +264,8 @@ async function handleN8nCallback(supabase: any, body: any) {
     updateData.error_message = error || 'Unknown error from n8n';
     updateData.retry_count = (action.retry_count || 0) + 1;
 
-    // Check if we should retry
-    if (updateData.retry_count < action.max_retries) {
-      updateData.status = 'pending'; // Will be retried
+    if (updateData.retry_count < (action.max_retries || 3)) {
+      updateData.status = 'pending';
     }
   }
 
@@ -252,7 +274,6 @@ async function handleN8nCallback(supabase: any, body: any) {
     .update(updateData)
     .eq('id', action_id);
 
-  // Check if goal is complete
   if (updateData.status === 'completed') {
     await checkGoalCompletion(supabase, action.goal_id);
   }
@@ -266,7 +287,7 @@ async function handleN8nCallback(supabase: any, body: any) {
       action_type: action.action_type,
       goal_type: action.agent_goals?.goal_type,
       status: updateData.status,
-      executed_via: 'n8n'
+      executed_via: 'n8n_central_dispatcher'
     },
     outcome: updateData.status === 'completed' ? 'success' : 'failure'
   });
@@ -280,7 +301,9 @@ async function handleN8nCallback(supabase: any, body: any) {
   );
 }
 
-// Check if all actions for a goal are complete
+/**
+ * Check if all actions for a goal are complete
+ */
 async function checkGoalCompletion(supabase: any, goalId: string) {
   const { data: actions } = await supabase
     .from('agent_actions')
@@ -305,66 +328,74 @@ async function checkGoalCompletion(supabase: any, goalId: string) {
   }
 }
 
-// List available n8n workflows (via MCP if available)
-async function listN8nWorkflows() {
-  // This would integrate with n8n MCP to list workflows
-  // For now, return a list of expected workflow types
-  
+/**
+ * List available action types for n8n central dispatcher
+ */
+async function listAvailableActions() {
   return new Response(
     JSON.stringify({
-      workflows: [
+      dispatcher: 'central',
+      description: 'Alle requests gaan naar één n8n webhook. n8n routeert intern op action_type.',
+      action_types: [
         {
-          id: 'followup-question',
-          name: 'Follow-up Question',
-          description: 'Sends AI-generated follow-up emails to gather missing application info',
-          triggers: ['send_followup_question'],
-          status: 'active',
-          webhook_url: 'https://citozorg.app.n8n.cloud/webhook/followup-question'
+          type: 'send_followup_question',
+          description: 'Stuur AI-gegenereerde follow-up vragen voor incomplete intake',
+          required_fields: ['to_email', 'candidate_name', 'missing_fields'],
+          optional_fields: ['subject', 'questions']
         },
         {
-          id: 'interview-email',
-          name: 'Interview Email',
-          description: 'Sends interview invitations to candidates',
-          triggers: ['send_interview_email'],
-          status: 'active',
-          webhook_url: 'https://citozorg.app.n8n.cloud/webhook/interview-email'
+          type: 'send_interview_email',
+          description: 'Stuur interview uitnodiging naar kandidaat',
+          required_fields: ['to_email', 'candidate_name', 'interview_datetime', 'location'],
+          optional_fields: ['interviewer_name', 'notes', 'meeting_link']
         },
         {
-          id: 'interview-reminder',
-          name: 'Interview Reminder',
-          description: 'Sends interview reminder via WhatsApp/Email',
-          triggers: ['send_reminder'],
-          status: 'template'
+          type: 'send_document_request',
+          description: 'Vraag documenten op (VOG, diploma, CV)',
+          required_fields: ['to_email', 'candidate_name', 'documents'],
+          optional_fields: ['deadline', 'instructions']
         },
         {
-          id: 'welcome-message',
-          name: 'Welcome Message',
-          description: 'Sends welcome message to new professionals',
-          triggers: ['send_welcome'],
-          status: 'template'
+          type: 'send_general_email',
+          description: 'Stuur algemene email',
+          required_fields: ['to_email', 'subject', 'body'],
+          optional_fields: ['cc', 'attachments']
         },
         {
-          id: 'whatsapp-message',
-          name: 'WhatsApp Message',
-          description: 'Generic WhatsApp message sender',
-          triggers: ['send_whatsapp'],
-          status: 'template'
+          type: 'create_calendar_event',
+          description: 'Maak calendar event aan (met optionele Teams meeting)',
+          required_fields: ['title', 'start_datetime', 'end_datetime'],
+          optional_fields: ['attendees', 'location', 'description', 'create_teams_meeting']
         },
         {
-          id: 'email-sender',
-          name: 'Email Sender',
-          description: 'Generic email sender',
-          triggers: ['send_email'],
-          status: 'template'
+          type: 'send_reminder',
+          description: 'Stuur herinnering via email of WhatsApp',
+          required_fields: ['to', 'message', 'channel'],
+          optional_fields: ['scheduled_at']
         }
       ],
-      note: 'Connect your n8n instance and create these workflows to enable full automation'
+      payload_format: {
+        action_type: 'string (required)',
+        action_id: 'uuid (required)',
+        org_id: 'uuid (optional)',
+        callback_url: 'string (auto-generated)',
+        input_data: 'object with action-specific fields'
+      },
+      callback_format: {
+        action: 'callback',
+        action_id: 'uuid',
+        status: 'success | failed',
+        result: 'object (optional)',
+        error: 'string (if failed)'
+      }
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 }
 
-// Test n8n connection
+/**
+ * Test n8n connection
+ */
 async function testN8nConnection() {
   const n8nWebhookUrl = Deno.env.get('N8N_WEBHOOK_URL');
   
@@ -374,10 +405,10 @@ async function testN8nConnection() {
         status: 'not_configured',
         message: 'N8N_WEBHOOK_URL secret is not set',
         instructions: [
-          '1. Go to your n8n instance',
-          '2. Create a webhook workflow',
-          '3. Copy the webhook URL',
-          '4. Add N8N_WEBHOOK_URL secret in Lovable'
+          '1. Ga naar je n8n instance',
+          '2. Kopieer de webhook URL van je centrale "My workflow"',
+          '3. Voeg N8N_WEBHOOK_URL secret toe in Lovable',
+          '4. De URL moet zijn: https://citozorg.app.n8n.cloud/webhook'
         ]
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -389,7 +420,8 @@ async function testN8nConnection() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        test: true,
+        action_type: 'test',
+        action_id: 'test-connection',
         timestamp: new Date().toISOString(),
         source: 'lovable-ai-agent'
       })
@@ -398,6 +430,7 @@ async function testN8nConnection() {
     return new Response(
       JSON.stringify({
         status: 'connected',
+        dispatcher: 'central',
         webhook_url: n8nWebhookUrl.substring(0, 50) + '...',
         response_status: response.status,
         response_ok: response.ok
