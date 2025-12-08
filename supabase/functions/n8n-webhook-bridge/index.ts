@@ -116,7 +116,8 @@ async function triggerN8nWorkflow(supabase: any, body: any) {
     'send_welcome': 'welcome-message',
     'send_whatsapp': 'whatsapp-message',
     'send_email': 'email-sender',
-    'send_interview_email': 'interview-email', // NEW: Interview confirmation email
+    'send_interview_email': 'interview-email',
+    'send_followup_question': 'followup-question', // NEW: Follow-up vragen voor intake
     'slack_notification': 'slack-notify'
   };
 
@@ -312,6 +313,22 @@ async function listN8nWorkflows() {
   return new Response(
     JSON.stringify({
       workflows: [
+        {
+          id: 'followup-question',
+          name: 'Follow-up Question',
+          description: 'Sends AI-generated follow-up emails to gather missing application info',
+          triggers: ['send_followup_question'],
+          status: 'active',
+          webhook_url: 'https://citozorg.app.n8n.cloud/webhook/followup-question'
+        },
+        {
+          id: 'interview-email',
+          name: 'Interview Email',
+          description: 'Sends interview invitations to candidates',
+          triggers: ['send_interview_email'],
+          status: 'active',
+          webhook_url: 'https://citozorg.app.n8n.cloud/webhook/interview-email'
+        },
         {
           id: 'interview-reminder',
           name: 'Interview Reminder',
