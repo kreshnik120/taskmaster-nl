@@ -213,45 +213,42 @@ END:VCALENDAR`;
 
       if (taskError) throw taskError;
 
-      // Send email via n8n webhook (uses Microsoft Outlook)
+      // Create AI Agent goal to send interview email via n8n
       if (sendEmail && candidateEmail) {
         try {
-          const n8nWebhookUrl = 'https://citozorg.app.n8n.cloud/webhook/interview-email';
-          
-          const webhookResponse = await fetch(n8nWebhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            mode: 'no-cors', // Handle CORS for external webhook
-            body: JSON.stringify({
-              actionType: 'interview_scheduled',
-              applicationId,
-              taskId: taskData.id,
-              candidateEmail,
-              candidateName,
-              candidatePhone,
-              functieNiveau,
-              scheduledAt: scheduledAt.toISOString(),
-              duration: parseInt(duration),
-              locationType,
-              locationDetails,
-              notes,
-              recruiterName,
-              orgId,
-            })
-          });
+          const { error: goalError } = await supabase
+            .from('agent_goals')
+            .insert({
+              org_id: orgId,
+              goal_type: 'send_interview_email',
+              goal_description: `Stuur interview bevestigingsmail naar ${candidateName}`,
+              status: 'pending',
+              priority: 8,
+              input_data: {
+                applicationId,
+                taskId: taskData.id,
+                candidateEmail,
+                candidateName,
+                candidatePhone,
+                functieNiveau,
+                scheduledAt: scheduledAt.toISOString(),
+                duration: parseInt(duration),
+                locationType,
+                locationDetails,
+                notes,
+                recruiterName,
+                emailPreview: getEmailPreview(),
+              }
+            });
 
-          // With no-cors, we can't check response status, but request was sent
-          console.log('Interview email webhook triggered via n8n');
-          
-          // Update task to mark email as sent (optimistic)
-          await supabase
-            .from('tasks')
-            .update({
-              interview_details: { ...interviewDetails, email_sent: true }
-            })
-            .eq('id', taskData.id);
+          if (goalError) {
+            console.error('Goal creation error:', goalError);
+            toast.warning("Interview gepland, maar email taak kon niet worden aangemaakt");
+          } else {
+            console.log('Interview email goal created - AI Agent will process');
+          }
         } catch (emailError) {
-          console.error('n8n webhook error:', emailError);
+          console.error('Goal creation error:', emailError);
           toast.warning("Interview gepland, maar email kon niet worden verzonden");
         }
       }

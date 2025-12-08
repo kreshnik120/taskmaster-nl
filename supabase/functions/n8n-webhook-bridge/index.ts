@@ -116,6 +116,7 @@ async function triggerN8nWorkflow(supabase: any, body: any) {
     'send_welcome': 'welcome-message',
     'send_whatsapp': 'whatsapp-message',
     'send_email': 'email-sender',
+    'send_interview_email': 'interview-email', // NEW: Interview confirmation email
     'slack_notification': 'slack-notify'
   };
 
