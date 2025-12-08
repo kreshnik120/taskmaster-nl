@@ -30,6 +30,35 @@ const GOAL_CONFIGS: Record<string, {
   planGenerator: (goal: AgentGoal, context: any) => AgentAction[];
   requiredFields: string[];
 }> = {
+  // NEW: Send interview email via n8n
+  'send_interview_email': {
+    requiredFields: ['candidateEmail', 'candidateName', 'scheduledAt'],
+    planGenerator: (goal, context) => {
+      return [
+        {
+          action_type: 'send_interview_email',
+          action_order: 1,
+          action_description: `Stuur interview bevestigingsmail naar ${goal.input_data.candidateName}`,
+          scheduled_at: new Date().toISOString(), // Execute immediately
+          input_data: {
+            candidateEmail: goal.input_data.candidateEmail,
+            candidateName: goal.input_data.candidateName,
+            candidatePhone: goal.input_data.candidatePhone,
+            functieNiveau: goal.input_data.functieNiveau,
+            scheduledAt: goal.input_data.scheduledAt,
+            duration: goal.input_data.duration,
+            locationType: goal.input_data.locationType,
+            locationDetails: goal.input_data.locationDetails,
+            notes: goal.input_data.notes,
+            recruiterName: goal.input_data.recruiterName,
+            emailPreview: goal.input_data.emailPreview,
+            applicationId: goal.input_data.applicationId,
+            taskId: goal.input_data.taskId,
+          }
+        }
+      ];
+    }
+  },
   'interview_reminder': {
     requiredFields: ['interview_id', 'scheduled_at', 'professional_id'],
     planGenerator: (goal, context) => {
@@ -438,6 +467,7 @@ async function executeTask(supabase: any, task: any) {
   switch (action.action_type) {
     case 'send_reminder':
     case 'send_welcome':
+    case 'send_interview_email': // NEW: Interview email via n8n
       result = await executeExternalAction(supabase, action);
       break;
     
