@@ -213,36 +213,46 @@ END:VCALENDAR`;
 
       if (taskError) throw taskError;
 
-      // Send email if enabled
+      // Send email via n8n webhook (uses Microsoft Outlook)
       if (sendEmail && candidateEmail) {
-        const { error: emailError } = await supabase.functions.invoke('send-interview-email', {
-          body: {
-            applicationId,
-            taskId: taskData.id,
-            candidateEmail,
-            candidateName,
-            candidatePhone,
-            functieNiveau,
-            scheduledAt: scheduledAt.toISOString(),
-            duration: parseInt(duration),
-            locationType,
-            locationDetails,
-            notes,
-            recruiterName,
-          }
-        });
+        try {
+          const n8nWebhookUrl = 'https://citozorg.app.n8n.cloud/webhook/interview-email';
+          
+          const webhookResponse = await fetch(n8nWebhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            mode: 'no-cors', // Handle CORS for external webhook
+            body: JSON.stringify({
+              actionType: 'interview_scheduled',
+              applicationId,
+              taskId: taskData.id,
+              candidateEmail,
+              candidateName,
+              candidatePhone,
+              functieNiveau,
+              scheduledAt: scheduledAt.toISOString(),
+              duration: parseInt(duration),
+              locationType,
+              locationDetails,
+              notes,
+              recruiterName,
+              orgId,
+            })
+          });
 
-        if (emailError) {
-          console.error('Email error:', emailError);
-          toast.warning("Interview gepland, maar email kon niet worden verzonden");
-        } else {
-          // Update task to mark email as sent
+          // With no-cors, we can't check response status, but request was sent
+          console.log('Interview email webhook triggered via n8n');
+          
+          // Update task to mark email as sent (optimistic)
           await supabase
             .from('tasks')
             .update({
               interview_details: { ...interviewDetails, email_sent: true }
             })
             .eq('id', taskData.id);
+        } catch (emailError) {
+          console.error('n8n webhook error:', emailError);
+          toast.warning("Interview gepland, maar email kon niet worden verzonden");
         }
       }
 
