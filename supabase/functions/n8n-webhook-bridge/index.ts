@@ -129,22 +129,18 @@ async function triggerN8nWorkflow(supabase: any, body: any) {
     effectiveOrgId = action?.agent_goals?.org_id;
   }
 
-  // Determine organization for n8n routing (PascalCase for n8n)
+  // Determine organization for n8n routing (lowercase for n8n Switch node)
   let effectiveOrganization = organization;
   if (!effectiveOrganization && effectiveOrgId) {
     // Map org_id to organization name for n8n routing
     if (effectiveOrgId === '550e8400-e29b-41d4-a716-446655440000') {
-      effectiveOrganization = 'ABCzorg';
+      effectiveOrganization = 'abczorg';
     } else {
-      effectiveOrganization = 'CitoZorg'; // default
+      effectiveOrganization = 'citozorg'; // default
     }
   } else if (effectiveOrganization) {
-    // Normalize to correct casing
-    if (effectiveOrganization.toLowerCase() === 'abczorg') {
-      effectiveOrganization = 'ABCzorg';
-    } else if (effectiveOrganization.toLowerCase() === 'citozorg') {
-      effectiveOrganization = 'CitoZorg';
-    }
+    // Normalize to lowercase for n8n
+    effectiveOrganization = effectiveOrganization.toLowerCase();
   }
 
   // Build standardized payload for n8n central dispatcher
@@ -160,8 +156,8 @@ async function triggerN8nWorkflow(supabase: any, body: any) {
     // Input data with all fields
     input_data: input_data || {},
     
-    // Organization for routing (PascalCase)
-    organization: effectiveOrganization || 'CitoZorg',
+    // Organization for routing (lowercase for n8n)
+    organization: effectiveOrganization || 'citozorg',
     
     // Additional metadata for callbacks
     action_id: action_id,
@@ -448,7 +444,7 @@ async function testN8nConnection() {
           action_type: 'test'
         },
         input_data: {},
-        organization: 'CitoZorg',
+        organization: 'citozorg',
         action_id: 'test-connection',
         timestamp: new Date().toISOString(),
         source: 'lovable-ai-agent'
