@@ -19,6 +19,7 @@ import { ApplicationDetailModal } from "@/components/ApplicationDetailModal";
 import { NewApplicationDialog } from "@/components/NewApplicationDialog";
 import { BulkActionBar } from "@/components/recruitment/BulkActionBar";
 import { AnalyticsSheet } from "@/components/recruitment/AnalyticsSheet";
+import { AIIntakeStatusWidget } from "@/components/recruitment/AIIntakeStatusWidget";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -979,8 +980,9 @@ const Sollicitaties = () => {
     <div className="flex flex-col h-full space-y-6">
             {/* Compact Header - Apple Minimalism */}
             <div className="flex items-center justify-between py-4">
-              <div>
+              <div className="flex items-center gap-4">
                 <h1 className="text-xl font-medium text-foreground">Sollicitaties</h1>
+                <AIIntakeStatusWidget />
               </div>
               <div className="flex items-center gap-2">
                 <AnalyticsSheet 

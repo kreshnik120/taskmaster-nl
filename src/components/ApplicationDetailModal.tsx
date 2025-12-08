@@ -35,6 +35,7 @@ import { EmailTemplateSuggestions } from "@/components/recruitment/EmailTemplate
 import { ApplicationNotes } from "@/components/recruitment/ApplicationNotes";
 import { InterviewSchedulingModal } from "@/components/recruitment/InterviewSchedulingModal";
 import { ApplicationMatchesTab } from "@/components/recruitment/ApplicationMatchesTab";
+import { AIFollowupButton } from "@/components/recruitment/AIFollowupButton";
 
 interface Application {
   id: string;
@@ -1020,7 +1021,7 @@ export function ApplicationDetailModal({
               )}
             </div>
 
-            {/* Completeness Progress Bar */}
+            {/* Completeness Progress Bar with AI Followup Button */}
             {application.completeness_score !== null && (
               <div className="flex items-center gap-3 mt-3">
                 <Progress 
@@ -1036,6 +1037,12 @@ export function ApplicationDetailModal({
                 <span className="text-xs font-medium text-muted-foreground">
                   {application.completeness_score}% compleet
                 </span>
+                <AIFollowupButton
+                  applicationId={application.id}
+                  completenessScore={application.completeness_score}
+                  candidateEmail={application.email_from}
+                  candidateName={candidateName}
+                />
               </div>
             )}
 

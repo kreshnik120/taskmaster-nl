@@ -42,6 +42,7 @@ import { CleanupDuplicateFields } from "@/components/AITraining/CleanupDuplicate
 import { SystemLearningDashboard } from "@/components/AITraining/SystemLearningDashboard";
 import { EvaluationLearningWidget } from "@/components/AITraining/EvaluationLearningWidget";
 import { TriggerLearningButton } from "@/components/AITraining/TriggerLearningButton";
+import { AIAgentTestPanel } from "@/components/AITraining/AIAgentTestPanel";
 import { toast } from "sonner";
 
 const AiTraining = () => {
@@ -186,8 +187,9 @@ const AiTraining = () => {
               {/* 📊 OVERZICHT */}
               <TabsContent value="overview" className="mt-6">
                 <Tabs defaultValue="dashboard" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2">
+                  <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+                    <TabsTrigger value="ai-agent">AI Agent</TabsTrigger>
                     <TabsTrigger value="health">Systeem Health</TabsTrigger>
                   </TabsList>
                   
@@ -200,6 +202,12 @@ const AiTraining = () => {
                       <SystemLearningDashboard />
                       <AutoLearnedKnowledgeDashboard />
                       <LearningDashboard />
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="ai-agent" className="mt-4">
+                    <div className="space-y-6">
+                      <AIAgentTestPanel />
                     </div>
                   </TabsContent>
                   
