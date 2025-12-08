@@ -113,6 +113,76 @@ const GOAL_CONFIGS: Record<string, {
       ];
     }
   },
+  
+  // Request documents from candidate
+  'request_documents': {
+    requiredFields: ['application_id', 'candidate_email', 'candidate_name', 'documents'],
+    planGenerator: (goal, context) => {
+      return [
+        {
+          action_type: 'send_document_request',
+          action_order: 1,
+          action_description: `Vraag documenten op bij ${goal.input_data.candidate_name}: ${goal.input_data.documents.join(', ')}`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            application_id: goal.input_data.application_id,
+            candidate_email: goal.input_data.candidate_email,
+            candidate_name: goal.input_data.candidate_name,
+            documents: goal.input_data.documents,
+            deadline: goal.input_data.deadline,
+            urgent: goal.input_data.urgent || false
+          }
+        }
+      ];
+    }
+  },
+
+  // Send general email
+  'send_general_email': {
+    requiredFields: ['recipient_email', 'recipient_name', 'subject'],
+    planGenerator: (goal, context) => {
+      return [
+        {
+          action_type: 'send_general_email',
+          action_order: 1,
+          action_description: `Stuur email naar ${goal.input_data.recipient_name}: ${goal.input_data.subject}`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            recipient_email: goal.input_data.recipient_email,
+            recipient_name: goal.input_data.recipient_name,
+            subject: goal.input_data.subject,
+            email_type: goal.input_data.email_type,
+            ...goal.input_data
+          }
+        }
+      ];
+    }
+  },
+
+  // Create calendar event
+  'create_calendar_event': {
+    requiredFields: ['title', 'start_time', 'end_time', 'attendees'],
+    planGenerator: (goal, context) => {
+      return [
+        {
+          action_type: 'create_calendar_event',
+          action_order: 1,
+          action_description: `Maak kalenderafspraak: ${goal.input_data.title}`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            title: goal.input_data.title,
+            start_time: goal.input_data.start_time,
+            end_time: goal.input_data.end_time,
+            attendees: goal.input_data.attendees,
+            location: goal.input_data.location,
+            description: goal.input_data.description,
+            is_online_meeting: goal.input_data.is_online_meeting || false
+          }
+        }
+      ];
+    }
+  },
+
   'interview_reminder': {
     requiredFields: ['interview_id', 'scheduled_at', 'professional_id'],
     planGenerator: (goal, context) => {
@@ -526,6 +596,9 @@ async function executeTask(supabase: any, task: any) {
     case 'send_reminder':
     case 'send_welcome':
     case 'send_interview_email': // Interview email via n8n
+    case 'send_document_request': // Document request via n8n
+    case 'send_general_email': // General email via n8n
+    case 'create_calendar_event': // Calendar event via n8n/Microsoft Graph
       result = await executeExternalAction(supabase, action);
       break;
     

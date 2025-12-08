@@ -3181,6 +3181,190 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
             }
           }
         }
+      },
+      // =====================================================
+      // AI AGENT ACTIE TOOLS - Voert acties uit via orchestrator
+      // =====================================================
+      {
+        type: "function",
+        function: {
+          name: "send_email",
+          description: "Verstuur een email naar een kandidaat of klant. Gebruik dit wanneer de gebruiker vraagt om een email te sturen, follow-up te doen, of contact op te nemen. De AI genereert de email inhoud en verstuurt via n8n/Outlook.",
+          parameters: {
+            type: "object",
+            properties: {
+              recipient_email: {
+                type: "string",
+                description: "Email adres van de ontvanger"
+              },
+              recipient_name: {
+                type: "string",
+                description: "Naam van de ontvanger"
+              },
+              subject: {
+                type: "string",
+                description: "Onderwerp van de email"
+              },
+              email_type: {
+                type: "string",
+                enum: ["followup", "interview_confirmation", "document_request", "general", "reminder"],
+                description: "Type email (bepaalt template en stijl)"
+              },
+              context: {
+                type: "object",
+                description: "Extra context voor email generatie (bijv. application_id, fields_to_ask, interview_details)",
+                properties: {
+                  application_id: { type: "string" },
+                  fields_to_ask: { type: "array", items: { type: "string" } },
+                  interview_date: { type: "string" },
+                  interview_time: { type: "string" },
+                  location: { type: "string" },
+                  documents_needed: { type: "array", items: { type: "string" } }
+                }
+              }
+            },
+            required: ["recipient_email", "recipient_name", "subject", "email_type"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "schedule_interview",
+          description: "Plan een interview afspraak in met een kandidaat. Creëert taak, stuurt bevestigingsmail, en maakt optioneel een kalender event aan.",
+          parameters: {
+            type: "object",
+            properties: {
+              application_id: {
+                type: "string",
+                description: "UUID van de sollicitatie"
+              },
+              candidate_email: {
+                type: "string",
+                description: "Email van de kandidaat"
+              },
+              candidate_name: {
+                type: "string",
+                description: "Naam van de kandidaat"
+              },
+              scheduled_at: {
+                type: "string",
+                description: "Datum en tijd in ISO format (bijv. 2025-12-10T14:00:00+01:00)"
+              },
+              duration_minutes: {
+                type: "number",
+                description: "Duur van interview in minuten (default: 30)",
+                default: 30
+              },
+              location_type: {
+                type: "string",
+                enum: ["video", "kantoor", "telefoon"],
+                description: "Type locatie"
+              },
+              location_details: {
+                type: "string",
+                description: "Adres of meeting link details"
+              },
+              send_confirmation: {
+                type: "boolean",
+                description: "Verstuur bevestigingsmail naar kandidaat",
+                default: true
+              },
+              create_calendar_event: {
+                type: "boolean",
+                description: "Maak kalender event aan",
+                default: true
+              }
+            },
+            required: ["application_id", "candidate_email", "candidate_name", "scheduled_at", "location_type"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "request_documents",
+          description: "Vraag documenten op bij een kandidaat (VOG, diploma's, certificaten, etc.). Verstuurt een vriendelijke email met instructies.",
+          parameters: {
+            type: "object",
+            properties: {
+              application_id: {
+                type: "string",
+                description: "UUID van de sollicitatie"
+              },
+              candidate_email: {
+                type: "string",
+                description: "Email van de kandidaat"
+              },
+              candidate_name: {
+                type: "string",
+                description: "Naam van de kandidaat"
+              },
+              documents: {
+                type: "array",
+                items: {
+                  type: "string",
+                  enum: ["VOG", "diploma", "BIG_registratie", "certificaten", "cv", "id_bewijs", "referenties", "anders"]
+                },
+                description: "Welke documenten worden gevraagd"
+              },
+              deadline_days: {
+                type: "number",
+                description: "Deadline in dagen (default: 7)",
+                default: 7
+              },
+              urgent: {
+                type: "boolean",
+                description: "Is dit urgent?",
+                default: false
+              }
+            },
+            required: ["application_id", "candidate_email", "candidate_name", "documents"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "create_calendar_event",
+          description: "Maak een kalender afspraak aan (los van interview). Stuurt uitnodiging via Outlook/Teams.",
+          parameters: {
+            type: "object",
+            properties: {
+              title: {
+                type: "string",
+                description: "Titel van de afspraak"
+              },
+              start_time: {
+                type: "string",
+                description: "Start tijd in ISO format"
+              },
+              end_time: {
+                type: "string",
+                description: "Eind tijd in ISO format"
+              },
+              attendees: {
+                type: "array",
+                items: { type: "string" },
+                description: "Email adressen van deelnemers"
+              },
+              location: {
+                type: "string",
+                description: "Locatie (adres of 'Microsoft Teams')"
+              },
+              description: {
+                type: "string",
+                description: "Beschrijving/agenda van de afspraak"
+              },
+              is_online_meeting: {
+                type: "boolean",
+                description: "Maak Teams meeting link aan",
+                default: false
+              }
+            },
+            required: ["title", "start_time", "end_time", "attendees"]
+          }
+        }
       }
     ];
 
@@ -4924,8 +5108,222 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                           };
                           break;
 
+                        // =====================================================
+                        // AI AGENT ACTION TOOLS - Execute via orchestrator
+                        // =====================================================
+                        case "send_email":
+                          console.log("📧 AI Agent: send_email tool called", args);
+                          
+                          // Create AI Agent goal for email sending
+                          const emailGoalResult = await supabaseServiceClient
+                            .from('agent_goals')
+                            .insert({
+                              org_id: userOrgId,
+                              goal_type: args.email_type === 'followup' ? 'application_intake_completion' :
+                                        args.email_type === 'interview_confirmation' ? 'send_interview_email' :
+                                        args.email_type === 'document_request' ? 'request_documents' : 'send_general_email',
+                              goal_description: `Email naar ${args.recipient_name}: ${args.subject}`,
+                              status: 'pending',
+                              priority: args.email_type === 'interview_confirmation' ? 8 : 5,
+                              input_data: {
+                                recipient_email: args.recipient_email,
+                                recipient_name: args.recipient_name,
+                                subject: args.subject,
+                                email_type: args.email_type,
+                                ...args.context
+                              }
+                            })
+                            .select()
+                            .single();
+                          
+                          if (emailGoalResult.error) {
+                            console.error("Email goal creation error:", emailGoalResult.error);
+                            result = {
+                              success: false,
+                              message: `❌ Fout bij aanmaken email taak: ${emailGoalResult.error.message}`
+                            };
+                          } else {
+                            // Trigger orchestrator to process immediately
+                            await supabaseServiceClient.functions.invoke('ai-agent-orchestrator', {
+                              body: { action: 'plan_goal', goal_id: emailGoalResult.data.id }
+                            });
+                            
+                            result = {
+                              success: true,
+                              message: `📧 Email taak aangemaakt!\n├─ Naar: ${args.recipient_email}\n├─ Onderwerp: ${args.subject}\n└─ Status: In afwachting van verzending via n8n/Outlook`,
+                              goal_id: emailGoalResult.data.id
+                            };
+                          }
+                          break;
+
+                        case "schedule_interview":
+                          console.log("📅 AI Agent: schedule_interview tool called", args);
+                          
+                          // Parse scheduled_at to create proper date
+                          const interviewDate = new Date(args.scheduled_at);
+                          const endTime = new Date(interviewDate.getTime() + (args.duration_minutes || 30) * 60 * 1000);
+                          
+                          // Create task for interview
+                          const { data: interviewTask, error: taskError } = await supabaseClient
+                            .from('tasks')
+                            .insert({
+                              org_id: userOrgId,
+                              application_id: args.application_id,
+                              recruitment_action_type: 'interview',
+                              title: `Interview met ${args.candidate_name}`,
+                              description: `Interview afspraak op ${interviewDate.toLocaleDateString('nl-NL')} om ${interviewDate.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`,
+                              priority: 'HIGH',
+                              category: 'recruitment',
+                              status: 'todo',
+                              reporter_id: user.id,
+                              due_at: interviewDate.toISOString(),
+                              interview_details: {
+                                scheduled_at: args.scheduled_at,
+                                duration_minutes: args.duration_minutes || 30,
+                                location_type: args.location_type,
+                                location_details: args.location_details
+                              }
+                            })
+                            .select()
+                            .single();
+                          
+                          if (taskError) {
+                            console.error("Interview task creation error:", taskError);
+                            result = {
+                              success: false,
+                              message: `❌ Fout bij aanmaken interview taak: ${taskError.message}`
+                            };
+                            break;
+                          }
+                          
+                          // Create AI Agent goal for email and calendar if requested
+                          if (args.send_confirmation !== false) {
+                            await supabaseServiceClient
+                              .from('agent_goals')
+                              .insert({
+                                org_id: userOrgId,
+                                goal_type: 'send_interview_email',
+                                goal_description: `Stuur interview bevestigingsmail naar ${args.candidate_name}`,
+                                status: 'pending',
+                                priority: 8,
+                                input_data: {
+                                  applicationId: args.application_id,
+                                  taskId: interviewTask.id,
+                                  candidateEmail: args.candidate_email,
+                                  candidateName: args.candidate_name,
+                                  scheduledAt: args.scheduled_at,
+                                  duration: args.duration_minutes || 30,
+                                  locationType: args.location_type,
+                                  locationDetails: args.location_details,
+                                  createCalendarEvent: args.create_calendar_event
+                                }
+                              });
+                          }
+                          
+                          // Trigger orchestrator
+                          await supabaseServiceClient.functions.invoke('ai-agent-orchestrator', {
+                            body: { action: 'process_pending_goals' }
+                          });
+                          
+                          result = {
+                            success: true,
+                            message: `📅 Interview ingepland!\n├─ Kandidaat: ${args.candidate_name}\n├─ Datum: ${interviewDate.toLocaleDateString('nl-NL')}\n├─ Tijd: ${interviewDate.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}\n├─ Locatie: ${args.location_type === 'video' ? 'Microsoft Teams' : args.location_type === 'kantoor' ? args.location_details || 'Kantoor' : 'Telefonisch'}\n└─ ${args.send_confirmation !== false ? '✅ Bevestigingsmail wordt verstuurd' : '⚠️ Geen bevestigingsmail'}`
+                          };
+                          break;
+
+                        case "request_documents":
+                          console.log("📄 AI Agent: request_documents tool called", args);
+                          
+                          const documentsToRequest = args.documents || [];
+                          const deadline = new Date();
+                          deadline.setDate(deadline.getDate() + (args.deadline_days || 7));
+                          
+                          // Create AI Agent goal for document request
+                          const docGoalResult = await supabaseServiceClient
+                            .from('agent_goals')
+                            .insert({
+                              org_id: userOrgId,
+                              goal_type: 'request_documents',
+                              goal_description: `Vraag documenten op bij ${args.candidate_name}: ${documentsToRequest.join(', ')}`,
+                              status: 'pending',
+                              priority: args.urgent ? 9 : 6,
+                              input_data: {
+                                application_id: args.application_id,
+                                candidate_email: args.candidate_email,
+                                candidate_name: args.candidate_name,
+                                documents: documentsToRequest,
+                                deadline: deadline.toISOString(),
+                                urgent: args.urgent || false
+                              }
+                            })
+                            .select()
+                            .single();
+                          
+                          if (docGoalResult.error) {
+                            result = {
+                              success: false,
+                              message: `❌ Fout bij aanmaken documentverzoek: ${docGoalResult.error.message}`
+                            };
+                          } else {
+                            // Trigger orchestrator
+                            await supabaseServiceClient.functions.invoke('ai-agent-orchestrator', {
+                              body: { action: 'plan_goal', goal_id: docGoalResult.data.id }
+                            });
+                            
+                            result = {
+                              success: true,
+                              message: `📄 Documentverzoek aangemaakt!\n├─ Kandidaat: ${args.candidate_name}\n├─ Documenten: ${documentsToRequest.join(', ')}\n├─ Deadline: ${deadline.toLocaleDateString('nl-NL')}\n└─ Status: Email wordt verstuurd via n8n/Outlook`
+                            };
+                          }
+                          break;
+
+                        case "create_calendar_event":
+                          console.log("📆 AI Agent: create_calendar_event tool called", args);
+                          
+                          // Create AI Agent goal for calendar event
+                          const calendarGoalResult = await supabaseServiceClient
+                            .from('agent_goals')
+                            .insert({
+                              org_id: userOrgId,
+                              goal_type: 'create_calendar_event',
+                              goal_description: `Maak kalenderafspraak: ${args.title}`,
+                              status: 'pending',
+                              priority: 7,
+                              input_data: {
+                                title: args.title,
+                                start_time: args.start_time,
+                                end_time: args.end_time,
+                                attendees: args.attendees,
+                                location: args.location,
+                                description: args.description,
+                                is_online_meeting: args.is_online_meeting || false
+                              }
+                            })
+                            .select()
+                            .single();
+                          
+                          if (calendarGoalResult.error) {
+                            result = {
+                              success: false,
+                              message: `❌ Fout bij aanmaken kalenderafspraak: ${calendarGoalResult.error.message}`
+                            };
+                          } else {
+                            // Trigger orchestrator
+                            await supabaseServiceClient.functions.invoke('ai-agent-orchestrator', {
+                              body: { action: 'plan_goal', goal_id: calendarGoalResult.data.id }
+                            });
+                            
+                            const eventDate = new Date(args.start_time);
+                            result = {
+                              success: true,
+                              message: `📆 Kalenderafspraak aangemaakt!\n├─ Titel: ${args.title}\n├─ Datum: ${eventDate.toLocaleDateString('nl-NL')}\n├─ Tijd: ${eventDate.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}\n├─ Deelnemers: ${args.attendees?.join(', ') || 'Geen'}\n└─ ${args.is_online_meeting ? '🎥 Teams meeting link wordt aangemaakt' : '📍 Locatie: ' + (args.location || 'Nader te bepalen')}`
+                            };
+                          }
+                          break;
+
                         default:
                           result = { success: false, message: `Onbekende tool: ${toolCall.function.name}` };
+                          break;
                       }
 
                       // Send tool result back to user as content
