@@ -7,16 +7,25 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Bot, Send, Loader2, CheckCircle2, XCircle, Clock, Activity, RefreshCw, Zap } from "lucide-react";
+import { Bot, Send, Loader2, CheckCircle2, XCircle, Clock, Activity, RefreshCw, Zap, Mail, Copy, FileText, Code } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+
+interface GeneratedEmail {
+  subject: string;
+  htmlContent: string;
+  plainTextContent: string;
+  fieldsAsked: string[];
+}
 
 export function AIAgentTestPanel() {
   const [testEmail, setTestEmail] = useState("");
   const [testName, setTestName] = useState("Test Kandidaat");
   const [sending, setSending] = useState(false);
+  const [generatedEmail, setGeneratedEmail] = useState<GeneratedEmail | null>(null);
 
   // Fetch recent AI agent activity
   const { data: recentActivity, isLoading, refetch } = useQuery({
@@ -89,8 +98,16 @@ export function AIAgentTestPanel() {
 
       if (error) throw error;
 
+      // Store generated email for preview
+      setGeneratedEmail({
+        subject: data.emailSubject || "Geen onderwerp",
+        htmlContent: data.emailHtml || "",
+        plainTextContent: data.emailPlainText || "",
+        fieldsAsked: data.fieldsAsked || ["telefoon", "regio", "functie_niveau"],
+      });
+
       toast.success("✅ Test email gegenereerd", {
-        description: `Preview: "${data.emailSubject?.substring(0, 50)}..."`,
+        description: "Bekijk de preview hieronder",
       });
 
       console.log("Generated email:", data);
@@ -214,6 +231,74 @@ export function AIAgentTestPanel() {
             </Button>
           </div>
         </div>
+
+        {/* Email Preview Section */}
+        {generatedEmail && (
+          <>
+            <Separator />
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-primary" />
+                  Gegenereerde Email Preview
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1 text-xs"
+                  onClick={() => {
+                    navigator.clipboard.writeText(generatedEmail.plainTextContent);
+                    toast.success("Gekopieerd naar klembord");
+                  }}
+                >
+                  <Copy className="h-3 w-3" />
+                  Kopiëren
+                </Button>
+              </div>
+
+              {/* Subject */}
+              <div className="p-3 bg-muted/50 rounded-lg">
+                <div className="text-xs text-muted-foreground mb-1">Onderwerp</div>
+                <div className="font-medium">{generatedEmail.subject}</div>
+              </div>
+
+              {/* Fields Asked */}
+              <div className="flex flex-wrap gap-2">
+                <span className="text-xs text-muted-foreground">Gevraagde velden:</span>
+                {generatedEmail.fieldsAsked.map((field) => (
+                  <Badge key={field} variant="secondary" className="text-xs">
+                    {field}
+                  </Badge>
+                ))}
+              </div>
+
+              {/* HTML/Plain Text Tabs */}
+              <Tabs defaultValue="html" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="html" className="gap-1 text-xs">
+                    <Code className="h-3 w-3" />
+                    HTML Preview
+                  </TabsTrigger>
+                  <TabsTrigger value="plain" className="gap-1 text-xs">
+                    <FileText className="h-3 w-3" />
+                    Plain Text
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="html" className="mt-3">
+                  <div 
+                    className="p-4 bg-background border rounded-lg max-h-[300px] overflow-auto prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: generatedEmail.htmlContent }}
+                  />
+                </TabsContent>
+                <TabsContent value="plain" className="mt-3">
+                  <pre className="p-4 bg-muted/50 rounded-lg text-sm whitespace-pre-wrap max-h-[300px] overflow-auto font-mono">
+                    {generatedEmail.plainTextContent}
+                  </pre>
+                </TabsContent>
+              </Tabs>
+            </div>
+          </>
+        )}
 
         <Separator />
 
