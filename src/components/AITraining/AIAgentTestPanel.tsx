@@ -81,8 +81,9 @@ export function AIAgentTestPanel() {
           application_id: "test-" + Date.now(),
           candidate_name: testName,
           candidate_email: testEmail,
-          missing_fields: ["telefoon", "regio", "functie_niveau"],
-          current_data: {},
+          fields_to_ask: ["telefoon", "regio", "functie_niveau"],
+          current_completeness: 65,
+          follow_up_count: 0,
         },
       });
 
