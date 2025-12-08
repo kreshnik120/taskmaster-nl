@@ -644,31 +644,41 @@ async function executeTask(supabase: any, task: any) {
   return result;
 }
 
-// Execute external action via n8n webhook
+// Execute external action via n8n-webhook-bridge (NOT directly to n8n!)
 async function executeExternalAction(supabase: any, action: any) {
-  // Try to call n8n webhook bridge
-  const n8nWebhookUrl = Deno.env.get('N8N_WEBHOOK_URL');
+  const org_id = action.agent_goals?.org_id;
   
-  if (n8nWebhookUrl) {
-    try {
-      const response = await fetch(n8nWebhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action_id: action.id,
-          action_type: action.action_type,
-          goal_type: action.agent_goals?.goal_type,
-          input_data: action.input_data
-        })
-      });
+  // Determine organization for n8n routing
+  let organization = 'citozorg'; // default
+  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
+    organization = 'abczorg';
+  }
 
-      if (response.ok) {
-        const result = await response.json();
-        return { executed_via: 'n8n', ...result };
+  console.log(`[Orchestrator] Executing external action via bridge: ${action.action_type} for ${organization}`);
+
+  try {
+    // Route through n8n-webhook-bridge instead of directly to n8n
+    const { data, error } = await supabase.functions.invoke('n8n-webhook-bridge', {
+      body: {
+        action: 'trigger',
+        action_type: action.action_type,
+        action_id: action.id,
+        org_id: org_id,
+        organization: organization, // For n8n routing
+        input_data: action.input_data
       }
-    } catch (err) {
-      console.error('[Orchestrator] n8n webhook failed:', err);
+    });
+
+    if (error) {
+      console.error('[Orchestrator] Bridge invocation failed:', error);
+      throw error;
     }
+
+    console.log('[Orchestrator] Bridge response:', data);
+    return { executed_via: 'n8n_bridge', organization, ...data };
+    
+  } catch (err) {
+    console.error('[Orchestrator] External action failed:', err);
   }
 
   // Fallback: use internal send-reminder-email function
@@ -705,7 +715,7 @@ async function executeExternalAction(supabase: any, action: any) {
     }
   }
 
-  return { executed_via: 'simulated', note: 'n8n not configured, action simulated' };
+  return { executed_via: 'simulated', note: 'n8n bridge call failed, action simulated' };
 }
 
 // Check interview attendance
@@ -789,61 +799,59 @@ async function executeFollowupQuestion(supabase: any, action: any) {
 
   console.log(`[Orchestrator] Email generated: ${emailData.emailSubject}`);
 
-  // 2. Send to n8n for email delivery
-  const n8nWebhookUrl = Deno.env.get('N8N_WEBHOOK_URL');
-  
-  if (!n8nWebhookUrl) {
-    console.log('[Orchestrator] N8N_WEBHOOK_URL not configured, simulating send');
-    return { 
-      status: 'simulated', 
-      note: 'n8n not configured',
-      email_generated: true,
-      email_subject: emailData.emailSubject 
-    };
+  // 2. Send via n8n-webhook-bridge (NOT directly to n8n!)
+  const org_id = action.agent_goals?.org_id;
+  let organization = 'citozorg';
+  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
+    organization = 'abczorg';
   }
 
-  const callbackUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/n8n-webhook-bridge`;
-  const webhookUrl = `${n8nWebhookUrl}/followup-question`;
-
-  console.log(`[Orchestrator] Sending to n8n: ${webhookUrl}`);
+  console.log(`[Orchestrator] Sending followup via bridge to ${organization}`);
 
   try {
-    const response = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action_id: action.id,
+    const { data, error } = await supabase.functions.invoke('n8n-webhook-bridge', {
+      body: {
+        action: 'trigger',
         action_type: 'send_followup_question',
-        candidateEmail: candidate_email,
-        candidateName: candidate_name,
-        emailSubject: emailData.emailSubject,
-        emailHtml: emailData.emailHtml,
-        applicationId: application_id,
-        callback_url: callbackUrl,
-        fields_asked: fields_to_ask,
-        follow_up_count: follow_up_count + 1
-      })
+        action_id: action.id,
+        org_id: org_id,
+        organization: organization,
+        input_data: {
+          to_email: candidate_email,
+          candidate_name: candidate_name,
+          subject: emailData.emailSubject,
+          body: emailData.emailHtml,
+          application_id: application_id,
+          fields_asked: fields_to_ask,
+          follow_up_count: follow_up_count + 1
+        }
+      }
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[Orchestrator] n8n responded with ${response.status}: ${errorText}`);
-      throw new Error(`n8n error: ${response.status}`);
+    if (error) {
+      console.error('[Orchestrator] Bridge invocation failed:', error);
+      throw error;
     }
 
-    const n8nResult = await response.json().catch(() => ({}));
-    console.log('[Orchestrator] n8n response:', n8nResult);
+    console.log('[Orchestrator] Bridge response:', data);
 
     return { 
-      status: 'sent_via_n8n', 
+      status: 'sent_via_bridge', 
+      organization,
       email_subject: emailData.emailSubject,
       fields_asked: fields_to_ask,
-      n8n_response: n8nResult
+      bridge_response: data
     };
 
   } catch (error) {
-    console.error('[Orchestrator] n8n webhook failed:', error);
-    throw error;
+    console.error('[Orchestrator] Followup send failed:', error);
+    // Return simulated for graceful degradation
+    return { 
+      status: 'simulated', 
+      note: 'Bridge call failed',
+      email_generated: true,
+      email_subject: emailData.emailSubject 
+    };
   }
 }
 

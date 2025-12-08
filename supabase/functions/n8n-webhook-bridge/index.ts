@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
  * Alle requests gaan naar dezelfde basis URL met action_type in de body
  */
 async function triggerN8nWorkflow(supabase: any, body: any) {
-  const { action_id, action_type, input_data, org_id } = body;
+  const { action_id, action_type, input_data, org_id, organization } = body;
 
   const n8nBaseUrl = Deno.env.get('N8N_WEBHOOK_URL');
   
@@ -129,11 +129,23 @@ async function triggerN8nWorkflow(supabase: any, body: any) {
     effectiveOrgId = action?.agent_goals?.org_id;
   }
 
+  // Determine organization for n8n routing
+  let effectiveOrganization = organization;
+  if (!effectiveOrganization && effectiveOrgId) {
+    // Map org_id to organization name for n8n routing
+    if (effectiveOrgId === '550e8400-e29b-41d4-a716-446655440000') {
+      effectiveOrganization = 'abczorg';
+    } else {
+      effectiveOrganization = 'citozorg'; // default
+    }
+  }
+
   // Build standardized payload for n8n central dispatcher
   const callbackUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/n8n-webhook-bridge`;
   
   const n8nPayload = {
     // Routing info for n8n dispatcher
+    organization: effectiveOrganization, // NEW: For n8n Switch routing
     action_type: action_type,
     action_id: action_id,
     org_id: effectiveOrgId,

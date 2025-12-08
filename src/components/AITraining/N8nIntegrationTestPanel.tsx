@@ -78,17 +78,21 @@ export function N8nIntegrationTestPanel() {
     setIsTestingConnection(true);
     try {
       const { data, error } = await supabase.functions.invoke("n8n-webhook-bridge", {
-        body: { action: "test_connection" }
+        body: { action: "test" }  // Fixed: was "test_connection", must be "test"
       });
 
       if (error) throw error;
 
-      if (data?.success) {
+      // Fixed: check for status === 'connected' instead of success
+      if (data?.status === "connected") {
         setConnectionStatus("connected");
         toast.success("n8n verbinding succesvol!");
+      } else if (data?.status === "not_configured") {
+        setConnectionStatus("error");
+        toast.error("N8N_WEBHOOK_URL secret niet geconfigureerd");
       } else {
         setConnectionStatus("error");
-        toast.error(data?.message || "Verbinding mislukt");
+        toast.error(data?.message || data?.error || "Verbinding mislukt");
       }
     } catch (err) {
       setConnectionStatus("error");
