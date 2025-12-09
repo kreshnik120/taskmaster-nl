@@ -371,26 +371,106 @@ Belangrijk:
       }
     }
 
-    // Calculate completeness score (0-100%)
-    const totalFields = 13; // full_name, telefoonnummer, email, adres, postcode, woonplaats, functie_niveau, werkvorm, skills, regio, uurloon, VOG, BIG, auto, rijbewijs
-    const filledFields = [
-      extractedData.full_name,
-      extractedData.telefoonnummer,
-      extractedData.email,
-      extractedData.adres,
-      extractedData.postcode,
-      extractedData.woonplaats,
-      extractedData.functie_niveau,
-      extractedData.werkvorm,
-      extractedData.skills?.length > 0,
-      extractedData.regio,
-      extractedData.gewenst_uurloon,
-      extractedData.vog_date,
-      extractedData.big_nummer,
-    ].filter(Boolean).length;
-    const completenessScore = Math.round((filledFields / totalFields) * 100);
+    // 🧠 HR SPECIALIST POST-PROCESSING: Detect placeholder phones and generate smart missing_info
+    const PLACEHOLDER_PHONE_PATTERNS = [
+      /^06[-\s]?0{6,}$/,              // 06-00000000, 06 000000
+      /^06[-\s]?1234567[89]?$/,       // 06-12345678, 06-123456789
+      /^000/,                          // starts with 000
+      /^06[-\s]?9{6,}$/,              // 06-99999999
+      /^(\d)\1{7,}$/,                  // all same digit like 00000000
+      /^0612345/,                      // obvious test pattern
+    ];
     
-    console.log(`Completeness: ${completenessScore}% (${filledFields}/${totalFields} fields filled)`);
+    // Check for placeholder phone and set to null if detected
+    if (extractedData.telefoonnummer) {
+      const phone = extractedData.telefoonnummer;
+      const cleanedPhone = phone.replace(/[\s-]/g, '');
+      const isPlaceholder = PLACEHOLDER_PHONE_PATTERNS.some(p => p.test(phone) || p.test(cleanedPhone));
+      
+      if (isPlaceholder) {
+        console.log(`🧠 HR Smart: Detected placeholder phone "${phone}" - setting to null`);
+        extractedData.telefoonnummer = null;
+        if (!extractedData.missing_info.includes('Telefoonnummer')) {
+          extractedData.missing_info.push('Telefoonnummer');
+        }
+      }
+    }
+    
+    // 💼 ZZP-specific required fields check
+    if (extractedData.werkvorm === 'ZZP') {
+      if (!extractedData.gewenst_uurloon && !extractedData.missing_info.includes('Uurtarief')) {
+        console.log('🧠 HR Smart: ZZP missing uurtarief - adding to missing_info');
+        extractedData.missing_info.push('Uurtarief');
+      }
+      if (!extractedData.kvk_nummer && !extractedData.missing_info.includes('KvK-nummer')) {
+        console.log('🧠 HR Smart: ZZP missing KvK - adding to missing_info');
+        extractedData.missing_info.push('KvK-nummer');
+      }
+      if (!extractedData.btw_nummer && !extractedData.missing_info.includes('BTW-nummer')) {
+        console.log('🧠 HR Smart: ZZP missing BTW - adding to missing_info');
+        extractedData.missing_info.push('BTW-nummer');
+      }
+      if (!extractedData.vog_date && !extractedData.missing_info.includes('VOG')) {
+        console.log('🧠 HR Smart: ZZP missing VOG - adding to missing_info');
+        extractedData.missing_info.push('VOG');
+      }
+    }
+    
+    // 🌙 Night/weekend availability check
+    if (extractedData.nachtdienst_bereid === null || extractedData.nachtdienst_bereid === undefined) {
+      if (!extractedData.missing_info.includes('Nachtdienst bereidheid')) {
+        extractedData.missing_info.push('Nachtdienst bereidheid');
+      }
+    }
+    if (extractedData.weekenddienst_bereid === null || extractedData.weekenddienst_bereid === undefined) {
+      if (!extractedData.missing_info.includes('Weekenddienst bereidheid')) {
+        extractedData.missing_info.push('Weekenddienst bereidheid');
+      }
+    }
+
+    // Calculate completeness score (0-100%) - HR Specialist weighted scoring
+    const fieldWeights: Record<string, number> = {
+      full_name: 10,
+      telefoonnummer: 8,
+      email: 10,
+      adres: 3,
+      postcode: 3,
+      woonplaats: 4,
+      functie_niveau: 15,
+      werkvorm: 10,
+      skills: 4,
+      regio: 10,
+      // ZZP-specific weights (only count if ZZP)
+      gewenst_uurloon: extractedData.werkvorm === 'ZZP' ? 8 : 2,
+      kvk_nummer: extractedData.werkvorm === 'ZZP' ? 5 : 0,
+      btw_nummer: extractedData.werkvorm === 'ZZP' ? 3 : 0,
+      vog_date: 5,
+      big_nummer: 3,
+      nachtdienst_bereid: 3,
+      weekenddienst_bereid: 3,
+    };
+    
+    let earnedPoints = 0;
+    let totalPoints = 0;
+    
+    for (const [field, weight] of Object.entries(fieldWeights)) {
+      if (weight === 0) continue;
+      totalPoints += weight;
+      
+      const value = extractedData[field];
+      if (value !== null && value !== undefined && value !== '') {
+        if (Array.isArray(value) && value.length > 0) {
+          earnedPoints += weight;
+        } else if (!Array.isArray(value)) {
+          earnedPoints += weight;
+        }
+      }
+    }
+    
+    const completenessScore = Math.round((earnedPoints / totalPoints) * 100);
+    
+    console.log(`Completeness (HR-weighted): ${completenessScore}% (${earnedPoints}/${totalPoints} points)`);
+    console.log(`Missing info count: ${extractedData.missing_info?.length || 0}`);
 
     // Insert application record (WITHOUT professional_id - will be created at 100% completeness)
     console.log("Creating application record...");

@@ -210,21 +210,30 @@ serve(async (req) => {
         
         // ============================================================
         // AUTOMATISCHE AGENT GOAL CREATIE VOOR NIEUWE SOLLICITATIES
+        // HR SPECIALIST LEVEL: Smart validation met placeholder detectie
         // ============================================================
         if (event.event_type === 'application_created') {
           const eventData = event.event_data || {};
           const completenessScore = eventData.completeness_score || 0;
-          const missingInfo = eventData.missing_info || [];
+          let missingInfo = eventData.missing_info || [];
           const candidateEmail = eventData.email_from;
           const candidateName = eventData.extracted_data?.naam || eventData.extracted_data?.name;
+          const extractedData = eventData.extracted_data || {};
+          
+          // 🧠 HR SPECIALIST SMART VALIDATION
+          // Generate missing_info on-the-fly if empty but completeness < 90
+          if (missingInfo.length === 0 && completenessScore < 90) {
+            missingInfo = generateSmartMissingInfo(extractedData);
+            console.log(`🧠 HR Smart Validation: Generated ${missingInfo.length} missing fields`);
+          }
           
           console.log(`📋 Application event: completeness=${completenessScore}%, missing=${missingInfo.length} fields, email=${candidateEmail}`);
           
           // Alleen follow-up als:
-          // 1. completeness < 95%
-          // 2. Er missing info is
+          // 1. completeness < 90% (verlaagd van 95% voor striktere HR standaard)
+          // 2. Er missing info is (inclusief smart-generated)
           // 3. Kandidaat heeft een email
-          if (completenessScore < 95 && missingInfo.length > 0 && candidateEmail) {
+          if (completenessScore < 90 && missingInfo.length > 0 && candidateEmail) {
             // Bepaal org_id voor de goal
             const goalOrgId = event.org_id || eventData.org_id || '550e8400-e29b-41d4-a716-446655440000'; // ABCzorg fallback
             
@@ -581,4 +590,92 @@ Return ALLEEN een JSON object (geen andere tekst):
       reasoning: error instanceof Error ? error.message : 'Unknown error'
     };
   }
+}
+
+// ============================================================
+// HR SPECIALIST SMART VALIDATION FUNCTIONS
+// ============================================================
+
+// Placeholder phone patterns that indicate fake/test data
+const PLACEHOLDER_PHONE_PATTERNS = [
+  /^06[-\s]?0{6,}$/,              // 06-00000000, 06 000000
+  /^06[-\s]?1234567[89]?$/,       // 06-12345678, 06-123456789
+  /^000/,                          // starts with 000
+  /^06[-\s]?9{6,}$/,              // 06-99999999
+  /^(\d)\1{7,}$/,                  // all same digit like 00000000
+  /^0612345/,                      // obvious test pattern
+];
+
+/**
+ * Validates if a phone number is a real number vs placeholder
+ */
+function isValidPhone(phone: string | null | undefined): boolean {
+  if (!phone) return false;
+  
+  // Clean phone number
+  const cleaned = phone.replace(/[\s-]/g, '');
+  
+  // Must be at least 10 digits for Dutch numbers
+  if (cleaned.length < 10) return false;
+  
+  // Check against placeholder patterns
+  for (const pattern of PLACEHOLDER_PHONE_PATTERNS) {
+    if (pattern.test(phone) || pattern.test(cleaned)) {
+      return false;
+    }
+  }
+  
+  return true;
+}
+
+/**
+ * Generate missing info like an HR Specialist would
+ * Detects placeholder phones, ZZP-specific requirements, and night/weekend availability
+ */
+function generateSmartMissingInfo(extractedData: Record<string, unknown>): string[] {
+  const missing: string[] = [];
+  
+  // Basic required fields
+  if (!extractedData.naam && !extractedData.full_name) missing.push('naam');
+  if (!extractedData.functie_niveau) missing.push('functie_niveau');
+  if (!extractedData.werkvorm) missing.push('werkvorm');
+  if (!extractedData.regio) missing.push('regio');
+  
+  // 🧠 Smart phone validation - detect placeholders!
+  const phone = (extractedData.telefoonnummer || extractedData.telefoon) as string;
+  if (!isValidPhone(phone)) {
+    missing.push('telefoonnummer');
+    console.log(`🔍 HR Smart: Detected invalid/placeholder phone: "${phone}"`);
+  }
+  
+  // 💼 ZZP-specific required fields (kritiek voor facturatie)
+  const werkvorm = extractedData.werkvorm as string;
+  if (werkvorm === 'ZZP') {
+    if (!extractedData.gewenst_uurloon && !extractedData.uurtarief) {
+      missing.push('uurtarief');
+      console.log('🔍 HR Smart: ZZP profile missing uurtarief');
+    }
+    if (!extractedData.kvk_nummer) {
+      missing.push('kvk_nummer');
+      console.log('🔍 HR Smart: ZZP profile missing KvK-nummer');
+    }
+    if (!extractedData.btw_nummer) {
+      missing.push('btw_nummer');
+      console.log('🔍 HR Smart: ZZP profile missing BTW-nummer');
+    }
+    if (!extractedData.vog_date && !extractedData.vog) {
+      missing.push('vog');
+      console.log('🔍 HR Smart: ZZP profile missing VOG');
+    }
+  }
+  
+  // 🌙 Night/weekend availability (belangrijk voor zorg matching)
+  if (extractedData.nachtdienst_bereid === null || extractedData.nachtdienst_bereid === undefined) {
+    missing.push('nachtdienst_bereid');
+  }
+  if (extractedData.weekenddienst_bereid === null || extractedData.weekenddienst_bereid === undefined) {
+    missing.push('weekenddienst_bereid');
+  }
+  
+  return missing;
 }
