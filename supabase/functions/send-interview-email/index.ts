@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { Resend } from "https://esm.sh/resend@4.0.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,7 +21,22 @@ interface InterviewEmailRequest {
   notes?: string;
   recruiterName?: string;
   createCalendarEvent?: boolean;
+  organization?: string; // 'citozorg' or 'abczorg'
 }
+
+// Organization email configuration
+const ORG_EMAIL_CONFIG: Record<string, { from: string; name: string; replyTo: string }> = {
+  'citozorg': {
+    from: 'personeel@citozorg.nl',
+    name: 'CitoZorg Recruitment',
+    replyTo: 'personeel@citozorg.nl'
+  },
+  'abczorg': {
+    from: 'personeel@abczorg.nl', // TODO: Configure when domain is added to Resend
+    name: 'ABCzorg Recruitment',
+    replyTo: 'personeel@abczorg.nl'
+  }
+};
 
 const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight
@@ -36,6 +52,7 @@ const handler = async (req: Request): Promise<Response> => {
       candidateEmail: body.candidateEmail,
       candidateName: body.candidateName,
       scheduledAt: body.scheduledAt,
+      organization: body.organization
     });
 
     const {
@@ -52,6 +69,7 @@ const handler = async (req: Request): Promise<Response> => {
       notes,
       recruiterName = "Het recruitmentteam",
       createCalendarEvent = false,
+      organization = 'citozorg'
     } = body;
 
     // Validate required fields
@@ -61,6 +79,10 @@ const handler = async (req: Request): Promise<Response> => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Get email configuration for organization
+    const emailConfig = ORG_EMAIL_CONFIG[organization] || ORG_EMAIL_CONFIG['citozorg'];
+    const orgName = organization === 'abczorg' ? 'ABCzorg' : 'CitoZorg';
 
     // Format date and time
     const date = new Date(scheduledAt);
@@ -111,7 +133,7 @@ const handler = async (req: Request): Promise<Response> => {
   
   <div style="background: linear-gradient(135deg, #0070f3 0%, #00a8ff 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
     <h1 style="color: white; margin: 0; font-size: 24px;">Bevestiging Interview</h1>
-    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">ABCzorg / CitoZorg</p>
+    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">${orgName}</p>
   </div>
   
   <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 12px 12px; border: 1px solid #e9ecef; border-top: none;">
@@ -173,97 +195,114 @@ const handler = async (req: Request): Promise<Response> => {
     <div style="border-top: 1px solid #e9ecef; padding-top: 20px; margin-top: 25px;">
       <p style="margin: 0; color: #666;">Met vriendelijke groet,</p>
       <p style="margin: 5px 0 0 0; font-weight: 600;">${recruiterName}</p>
-      <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">ABCzorg / CitoZorg</p>
+      <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">${orgName}</p>
     </div>
     
   </div>
   
   <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
     <p style="margin: 0;">Dit is een automatisch gegenereerde email.</p>
-    <p style="margin: 5px 0 0 0;">© ${new Date().getFullYear()} ABCzorg / CitoZorg</p>
+    <p style="margin: 5px 0 0 0;">© ${new Date().getFullYear()} ${orgName}</p>
   </div>
   
 </body>
 </html>
     `;
 
-    // Initialize Supabase
+    // Initialize clients
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const resendApiKey = Deno.env.get("RESEND_API_KEY")!;
+    
     const supabase = createClient(supabaseUrl, supabaseKey);
+    const resend = new Resend(resendApiKey);
 
     // ==========================================================
-    // UNIFIED EMAIL ROUTING: Send via n8n/Outlook (not Resend)
+    // SEND VIA RESEND (Direct, no n8n dependency for email)
     // ==========================================================
-    const n8nWebhookUrl = Deno.env.get("N8N_WEBHOOK_URL");
+    console.log(`[send-interview-email] Sending via Resend as ${emailConfig.name}...`);
     
     let emailResult: any = { sent_via: 'none', success: false };
     
-    if (n8nWebhookUrl) {
-      console.log("[send-interview-email] Sending via n8n webhook...");
-      
-      try {
-        const webhookUrl = `${n8nWebhookUrl}/interview-email`;
-        const callbackUrl = `${supabaseUrl}/functions/v1/n8n-webhook-bridge`;
-        
-        const response = await fetch(webhookUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action_type: "send_interview_email",
-            candidateEmail,
-            candidateName,
-            candidatePhone,
-            functieNiveau,
-            emailSubject: "Bevestiging interview afspraak",
-            emailHtml: htmlEmail,
-            scheduledAt,
-            duration,
-            locationType,
-            locationDetails,
-            notes,
-            recruiterName,
-            applicationId,
-            taskId,
-            createCalendarEvent,
-            callback_url: callbackUrl
-          })
-        });
-        
-        if (response.ok) {
-          const n8nData = await response.json().catch(() => ({}));
-          emailResult = { 
-            sent_via: 'n8n_outlook', 
-            success: true, 
-            n8n_response: n8nData,
-            message: "Email verzonden via n8n/Outlook"
-          };
-          console.log("[send-interview-email] n8n response:", n8nData);
-        } else {
-          const errorText = await response.text();
-          console.error("[send-interview-email] n8n error:", response.status, errorText);
-          emailResult = { 
-            sent_via: 'n8n_failed', 
-            success: false, 
-            error: `n8n returned ${response.status}: ${errorText}` 
-          };
-        }
-      } catch (n8nError) {
-        console.error("[send-interview-email] n8n exception:", n8nError);
+    try {
+      const resendResponse = await resend.emails.send({
+        from: `${emailConfig.name} <${emailConfig.from}>`,
+        to: [candidateEmail],
+        replyTo: emailConfig.replyTo,
+        subject: "Bevestiging interview afspraak",
+        html: htmlEmail,
+      });
+
+      console.log("[send-interview-email] Resend response:", resendResponse);
+
+      if (resendResponse.error) {
+        console.error("[send-interview-email] Resend error:", resendResponse.error);
         emailResult = { 
-          sent_via: 'n8n_exception', 
+          sent_via: 'resend_failed', 
           success: false, 
-          error: n8nError instanceof Error ? n8nError.message : String(n8nError) 
+          error: resendResponse.error.message 
+        };
+      } else {
+        emailResult = { 
+          sent_via: 'resend', 
+          success: true, 
+          email_id: resendResponse.data?.id,
+          message: `Email verzonden via Resend naar ${candidateEmail}`
         };
       }
-    } else {
-      console.log("[send-interview-email] N8N_WEBHOOK_URL not configured - email not sent");
+    } catch (resendError: any) {
+      console.error("[send-interview-email] Resend exception:", resendError);
       emailResult = { 
-        sent_via: 'simulated', 
-        success: true, 
-        message: "Email gesimuleerd (n8n niet geconfigureerd)",
-        emailHtml: htmlEmail
+        sent_via: 'resend_exception', 
+        success: false, 
+        error: resendError.message 
       };
+    }
+
+    // ==========================================================
+    // CALENDAR EVENT: Still send to n8n if requested
+    // ==========================================================
+    if (createCalendarEvent) {
+      const n8nWebhookUrl = Deno.env.get("N8N_WEBHOOK_URL");
+      
+      if (n8nWebhookUrl) {
+        console.log("[send-interview-email] Creating calendar event via n8n...");
+        
+        try {
+          const webhookUrl = `${n8nWebhookUrl}/calendar-event`;
+          
+          const calendarResponse = await fetch(webhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action_type: "create_calendar_event",
+              title: `Interview ${candidateName}${functieNiveau ? ` - ${functieNiveau}` : ''}`,
+              start: scheduledAt,
+              end: new Date(new Date(scheduledAt).getTime() + duration * 60 * 1000).toISOString(),
+              attendees: [candidateEmail],
+              location: locationType === 'video' ? 'Microsoft Teams' : locationDetails,
+              description: `Interview met ${candidateName}${notes ? `\n\nOpmerkingen: ${notes}` : ''}`,
+              create_teams_link: locationType === 'video',
+              organization: organization,
+              application_id: applicationId
+            })
+          });
+          
+          if (calendarResponse.ok) {
+            const calendarData = await calendarResponse.json().catch(() => ({}));
+            emailResult.calendar_created = true;
+            emailResult.calendar_response = calendarData;
+            console.log("[send-interview-email] Calendar event created:", calendarData);
+          } else {
+            console.error("[send-interview-email] Calendar creation failed:", await calendarResponse.text());
+            emailResult.calendar_created = false;
+          }
+        } catch (calError: any) {
+          console.error("[send-interview-email] Calendar exception:", calError);
+          emailResult.calendar_created = false;
+          emailResult.calendar_error = calError.message;
+        }
+      }
     }
 
     // Log system event for AI learning
@@ -280,11 +319,13 @@ const handler = async (req: Request): Promise<Response> => {
         duration,
         location_type: locationType,
         email_result: emailResult.sent_via,
+        organization
       },
       metadata: {
         task_id: taskId,
         functie_niveau: functieNiveau,
-        create_calendar_event: createCalendarEvent
+        create_calendar_event: createCalendarEvent,
+        calendar_created: emailResult.calendar_created
       },
     });
 
@@ -292,12 +333,13 @@ const handler = async (req: Request): Promise<Response> => {
     await supabase.from("application_conversations").insert({
       application_id: applicationId,
       role: "system",
-      content: `Interview bevestigingsmail ${emailResult.success ? 'verzonden' : 'geprobeerd'} naar ${candidateEmail} voor ${formattedDate} om ${formattedTime}${emailResult.sent_via === 'simulated' ? ' (gesimuleerd)' : ''}`,
+      content: `Interview bevestigingsmail ${emailResult.success ? 'verzonden' : 'geprobeerd'} naar ${candidateEmail} voor ${formattedDate} om ${formattedTime}`,
       metadata: {
         email_type: "interview_confirmation",
         scheduled_at: scheduledAt,
         sent_via: emailResult.sent_via,
-        success: emailResult.success
+        success: emailResult.success,
+        organization
       },
     });
 
@@ -306,7 +348,7 @@ const handler = async (req: Request): Promise<Response> => {
         success: emailResult.success,
         sent_via: emailResult.sent_via,
         message: emailResult.success 
-          ? "Interview email verstuurd via n8n/Outlook" 
+          ? `Interview email verstuurd via Resend` 
           : `Email kon niet worden verstuurd: ${emailResult.error}`,
         ...emailResult
       }),
