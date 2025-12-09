@@ -925,6 +925,62 @@ export type Database = {
           },
         ]
       }
+      application_documents: {
+        Row: {
+          application_id: string
+          content_type: string | null
+          created_at: string | null
+          document_type: string | null
+          file_path: string
+          filename: string
+          id: string
+          is_verified: boolean | null
+          metadata: Json | null
+          verified_at: string | null
+          verified_by: string | null
+          vog_expiry_status: string | null
+          vog_issue_date: string | null
+        }
+        Insert: {
+          application_id: string
+          content_type?: string | null
+          created_at?: string | null
+          document_type?: string | null
+          file_path: string
+          filename: string
+          id?: string
+          is_verified?: boolean | null
+          metadata?: Json | null
+          verified_at?: string | null
+          verified_by?: string | null
+          vog_expiry_status?: string | null
+          vog_issue_date?: string | null
+        }
+        Update: {
+          application_id?: string
+          content_type?: string | null
+          created_at?: string | null
+          document_type?: string | null
+          file_path?: string
+          filename?: string
+          id?: string
+          is_verified?: boolean | null
+          metadata?: Json | null
+          verified_at?: string | null
+          verified_by?: string | null
+          vog_expiry_status?: string | null
+          vog_issue_date?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "application_documents_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       application_notes: {
         Row: {
           application_id: string

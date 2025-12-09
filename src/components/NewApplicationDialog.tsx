@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { useState, useCallback } from "react";
 import { Loader2, X, ChevronRight, ChevronLeft, CheckCircle2, Upload, FileText, Sparkles, ChevronDown, Search, AlertCircle, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { detectMissingInfoHR, isValidPhone, getVogExpiryStatus, getMissingInfoDescription } from "@/lib/hrValidation";
 
 const applicationSchema = z.object({
   naam: z.string().min(1, "Naam is verplicht"),
@@ -216,18 +217,31 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
     return { label: "Basis", color: "bg-amber-100 text-amber-700 border-amber-300" };
   };
 
+  // Use HR Specialist validation with VOG expiration and placeholder detection
   const detectMissingInfo = (data: ApplicationFormData): string[] => {
-    const missing: string[] = [];
+    const missing = detectMissingInfoHR({
+      naam: data.naam,
+      email: data.email,
+      telefoonnummer: data.telefoon,
+      telefoon: data.telefoon,
+      functie_niveau: data.functie_niveau,
+      werkvorm: data.werkvorm,
+      regio: data.regio,
+      beschikbaarheid: data.beschikbaarheid,
+      gewenst_uurloon: getFieldValue(cvExtractedData?.gewenst_uurloon) as number | null,
+      kvk_nummer: getFieldValue(cvExtractedData?.kvk_nummer) as string | null,
+      btw_nummer: getFieldValue(cvExtractedData?.btw_nummer) as string | null,
+      vog_date: getFieldValue(cvExtractedData?.vog_date) as string | null,
+      nachtdienst_bereid: getFieldValue(cvExtractedData?.nachtdienst_bereid) as boolean | null,
+      weekenddienst_bereid: getFieldValue(cvExtractedData?.weekenddienst_bereid) as boolean | null,
+    });
     
-    if (!data.functie_niveau) missing.push("Functieniveau ontbreekt - cruciaal voor matching");
-    if (!data.werkvorm) missing.push("Gewenste werkvorm niet aangegeven");
-    if (!data.regio) missing.push("Werkgebied/regio niet bekend");
-    if (!data.telefoon) missing.push("Telefoonnummer niet opgegeven");
-    if (selectedSectoren.length === 0) missing.push("Ervaring sector niet aangegeven");
-    if (selectedDoelgroepen.length === 0) missing.push("Doelgroep ervaring niet opgegeven");
-    if (!data.beschikbaarheid) missing.push("Beschikbaarheid niet aangegeven");
-
-    return missing;
+    // Add sector/doelgroep missing info (not handled by HR validation)
+    if (selectedSectoren.length === 0) missing.push('ervaring_sector');
+    if (selectedDoelgroepen.length === 0) missing.push('doelgroep_ervaring');
+    
+    // Convert to readable descriptions
+    return missing.map(field => getMissingInfoDescription(field));
   };
 
   // Check of email al bestaat in professional_applications (database-side case-insensitive check)

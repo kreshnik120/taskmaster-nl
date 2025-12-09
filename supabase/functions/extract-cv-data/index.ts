@@ -393,7 +393,32 @@ Belangrijk:
         : 0.5;
     }
 
-console.log("CV extraction complete with per-field confidence scores");
+    // === HR SPECIALIST POST-PROCESSING ===
+    // Detect and nullify placeholder phone numbers
+    const PLACEHOLDER_PHONE_PATTERNS = [
+      /^06[-\s]?0{6,}$/,              // 06-00000000, 06 000000
+      /^06[-\s]?1234567[89]?$/,       // 06-12345678, 06-123456789
+      /^000/,                          // starts with 000
+      /^06[-\s]?9{6,}$/,              // 06-99999999
+      /^(\d)\1{7,}$/,                  // all same digit
+      /^0612345/,                      // obvious test pattern
+    ];
+
+    const telefoonValue = getValue(extractedData.telefoon);
+    if (telefoonValue) {
+      const cleanedPhone = String(telefoonValue).replace(/[\s-]/g, '');
+      const isPlaceholder = PLACEHOLDER_PHONE_PATTERNS.some(p => 
+        p.test(String(telefoonValue)) || p.test(cleanedPhone)
+      );
+      
+      if (isPlaceholder) {
+        console.log(`⚠️ HR Specialist: Placeholder phone detected: ${telefoonValue} → null`);
+        extractedData.telefoon = { value: null, confidence: 0 };
+        extractedData.placeholder_phone_detected = { value: true, confidence: 1.0 };
+      }
+    }
+
+    console.log("CV extraction complete with per-field confidence scores");
     console.log("Global confidence:", extractedData.global_confidence);
     
     // Log photo detection status
