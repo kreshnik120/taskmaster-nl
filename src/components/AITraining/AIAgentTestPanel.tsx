@@ -123,47 +123,76 @@ export function AIAgentTestPanel() {
   };
 
   const handleActuallySendEmail = async () => {
-    if (!generatedEmail || !testEmail) {
-      toast.error("Genereer eerst een email");
+    // STAP 1: Bevestig dat functie wordt aangeroepen
+    console.log("🚀 handleActuallySendEmail CALLED!");
+    toast.info("📧 Email versturen gestart...");
+
+    // STAP 2: Validatie met duidelijke errors
+    if (!generatedEmail) {
+      console.error("❌ No generatedEmail object");
+      toast.error("Geen email gegenereerd - genereer eerst een email");
+      return;
+    }
+    
+    if (!testEmail) {
+      console.error("❌ No testEmail");
+      toast.error("Geen email adres ingevuld");
       return;
     }
 
+    console.log("✅ Validation passed, generatedEmail:", generatedEmail);
+    console.log("✅ testEmail:", testEmail);
+
     setSendingEmail(true);
+    
     try {
+      // STAP 3: Log exacte payload
       const requestBody = {
         email_type: "followup_question",
         recipient_email: testEmail,
-        recipient_name: testName,
+        recipient_name: testName || "Kandidaat",
         subject: generatedEmail.subject,
         html_content: generatedEmail.htmlContent,
-        plain_text: generatedEmail.plainTextContent, // Fixed: was plain_content
-        org_id: "650e8400-e29b-41d4-a716-446655440001", // Fixed: CitoZorg UUID
+        plain_text: generatedEmail.plainTextContent,
+        org_id: "650e8400-e29b-41d4-a716-446655440001", // CitoZorg UUID
         metadata: {
           test_panel: true,
           fields_asked: generatedEmail.fieldsAsked,
         },
       };
 
-      console.log("📧 Sending email with body:", requestBody);
+      console.log("📧 REQUEST BODY:", JSON.stringify(requestBody, null, 2));
+      toast.info("Verbinden met server...");
 
+      // STAP 4: Edge function call met timing
+      const startTime = Date.now();
+      console.log("🔄 Calling supabase.functions.invoke('send-ai-email')...");
+      
       const { data, error } = await supabase.functions.invoke("send-ai-email", {
         body: requestBody,
       });
 
-      console.log("📧 Edge function response:", { data, error });
+      const duration = Date.now() - startTime;
+      console.log(`📧 RESPONSE (${duration}ms):`, { data, error });
 
-      if (error) throw error;
+      if (error) {
+        console.error("❌ Edge function returned error:", error);
+        toast.error(`Server error: ${error.message}`);
+        return;
+      }
 
+      console.log("✅ Email sent successfully!");
       toast.success("✅ Email verzonden via Resend!", {
         description: `Verstuurd naar ${testEmail}`,
       });
+
     } catch (error: any) {
-      console.error("❌ Send email error:", error);
-      toast.error("Fout bij versturen email", {
-        description: error.message,
-      });
+      console.error("❌ CATCH BLOCK ERROR:", error);
+      console.error("Error stack:", error.stack);
+      toast.error(`Onverwachte fout: ${error.message}`);
     } finally {
       setSendingEmail(false);
+      console.log("🏁 handleActuallySendEmail FINISHED");
     }
   };
 
