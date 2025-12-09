@@ -13,14 +13,14 @@ const corsHeaders = {
  */
 
 // Field descriptions for generating natural questions
-// Enhanced with ZZP-specific fields and night/weekend availability
+// Enhanced with ZZP-specific fields, VOG expiration info, and night/weekend availability
 const FIELD_DESCRIPTIONS: Record<string, string> = {
   // Basic fields
   'functie_niveau': 'je opleidingsniveau/functie (bijv. VIG, HBO-V, Verpleegkundige MBO)',
   'werkvorm': 'je gewenste werkvorm (ZZP, Uitzendkracht, of ABCito constructie)',
   'regio': 'in welke regio je wilt werken',
   'beschikbaarheid': 'hoeveel uur per week je beschikbaar bent',
-  'telefoonnummer': 'een telefoonnummer waarop we je kunnen bereiken (geen placeholder zoals 06-00000000)',
+  'telefoonnummer': 'een geldig telefoonnummer waarop we je kunnen bereiken',
   'ervaring_sector': 'in welke sector(en) je ervaring hebt (VVT, GGZ, GHZ, etc.)',
   'doelgroep_ervaring': 'met welke doelgroepen je ervaring hebt',
   'eigen_vervoer': 'of je beschikt over eigen vervoer',
@@ -28,14 +28,15 @@ const FIELD_DESCRIPTIONS: Record<string, string> = {
   'email': 'je emailadres',
   
   // ZZP-specific fields (kritiek voor facturatie en compliance)
-  'uurtarief': 'je gewenste uurtarief (exclusief BTW) - dit is essentieel voor onze offerte aan opdrachtgevers',
-  'gewenst_uurloon': 'je gewenste uurtarief (exclusief BTW) - dit is essentieel voor onze offerte aan opdrachtgevers',
+  'uurtarief': 'je gewenste uurtarief (exclusief BTW) - dit helpt ons bij het matchen met opdrachtgevers',
+  'gewenst_uurloon': 'je gewenste uurtarief (exclusief BTW) - dit helpt ons bij het matchen met opdrachtgevers',
   'kvk_nummer': 'je KvK-nummer (verplicht voor ZZP-facturatie)',
-  'btw_nummer': 'je BTW-identificatienummer (verplicht voor facturatie)',
+  'btw_nummer': 'je BTW-identificatienummer (verplicht voor ZZP-facturatie)',
   
-  // Compliance fields
-  'vog': 'of je een geldige VOG hebt en de uitgiftedatum - dit is verplicht in de zorg',
-  'vog_date': 'de uitgiftedatum van je VOG - dit is verplicht in de zorg',
+  // VOG fields with expiration awareness
+  'vog': 'of je een recente VOG hebt (niet ouder dan 3 maanden) en de uitgiftedatum - dit is wettelijk verplicht in de zorg',
+  'vog_date': 'de uitgiftedatum van je VOG - deze mag niet ouder dan 3 maanden zijn',
+  'vog_verlopen': 'een nieuwe VOG aanvragen - je huidige VOG is helaas ouder dan 3 maanden en daarom niet meer geldig voor zorgwerk',
   'big_registratie': 'je BIG-registratienummer indien van toepassing',
   
   // Night/weekend availability (belangrijk voor matching)

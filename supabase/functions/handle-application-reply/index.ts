@@ -355,9 +355,167 @@ Return JSON in dit formaat:
 
       const normalized = analysis.new_data.functie_niveau.toLowerCase().trim();
       if (functieNiveauMapping[normalized]) {
-        console.log(`Mapped functie_niveau: "${analysis.new_data.functie_niveau}" → "${functieNiveauMapping[normalized]}"`);
+      console.log(`Mapped functie_niveau: "${analysis.new_data.functie_niveau}" → "${functieNiveauMapping[normalized]}"`);
         analysis.new_data.functie_niveau = functieNiveauMapping[normalized];
       }
+    }
+
+    // =====================================================
+    // DOCUMENT ATTACHMENT PROCESSING
+    // =====================================================
+    const processedDocuments: Array<{
+      filename: string;
+      file_path: string;
+      document_type: string;
+      vog_expiry_status?: string;
+    }> = [];
+
+    if (payload.data.attachments && payload.data.attachments.length > 0) {
+      console.log(`📎 Processing ${payload.data.attachments.length} attachments...`);
+      
+      for (const attachment of payload.data.attachments) {
+        try {
+          console.log(`📄 Attachment: ${attachment.filename} (${attachment.content_type})`);
+          
+          // Detect document type from filename
+          const detectDocType = (filename: string): 'vog' | 'diploma' | 'certificate' | 'cv' | 'id' | 'other' => {
+            const lower = filename.toLowerCase();
+            if (lower.includes('vog') || lower.includes('verklaring omtrent') || lower.includes('verklaring_omtrent')) return 'vog';
+            if (lower.includes('diploma') || lower.includes('getuigschrift')) return 'diploma';
+            if (lower.includes('certificaat') || lower.includes('certificate') || lower.includes('bhv') || lower.includes('ehbo')) return 'certificate';
+            if (lower.includes('cv') || lower.includes('curriculum') || lower.includes('resume')) return 'cv';
+            if (lower.includes('id') || lower.includes('paspoort') || lower.includes('rijbewijs') || lower.includes('identiteit')) return 'id';
+            return 'other';
+          };
+
+          const documentType = detectDocType(attachment.filename);
+          
+          // Decode base64 content
+          const fileBuffer = Uint8Array.from(atob(attachment.content), c => c.charCodeAt(0));
+          const filePath = `${applicationId}/${Date.now()}_${attachment.filename}`;
+          
+          // Upload to Storage
+          const { error: uploadError } = await supabase.storage
+            .from('application-documents')
+            .upload(filePath, fileBuffer, { 
+              contentType: attachment.content_type,
+              upsert: false 
+            });
+          
+          if (uploadError) {
+            console.error(`❌ Failed to upload ${attachment.filename}:`, uploadError);
+            continue;
+          }
+          
+          console.log(`✅ Uploaded: ${filePath}`);
+          
+          // Determine VOG expiry status if it's a VOG document
+          let vogExpiryStatus: string | null = null;
+          let vogIssueDate: string | null = null;
+          
+          if (documentType === 'vog') {
+            // Try to extract date from filename
+            const extractDateFromFilename = (filename: string): Date | null => {
+              const isoMatch = filename.match(/(\d{4})-(\d{2})-(\d{2})/);
+              if (isoMatch) {
+                const date = new Date(`${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`);
+                if (!isNaN(date.getTime())) return date;
+              }
+              const euMatch = filename.match(/(\d{2})[-.]?(\d{2})[-.]?(\d{4})/);
+              if (euMatch) {
+                const date = new Date(`${euMatch[3]}-${euMatch[2]}-${euMatch[1]}`);
+                if (!isNaN(date.getTime())) return date;
+              }
+              return null;
+            };
+
+            const parsedDate = extractDateFromFilename(attachment.filename);
+            
+            if (parsedDate) {
+              vogIssueDate = parsedDate.toISOString().split('T')[0];
+              
+              // Check if VOG is expired (older than 3 months)
+              const threeMonthsAgo = new Date();
+              threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+              
+              if (parsedDate < threeMonthsAgo) {
+                vogExpiryStatus = 'expired';
+                console.log(`⚠️ VOG is EXPIRED (issued ${vogIssueDate})`);
+              } else {
+                // Check if expiring soon (within 2 weeks)
+                const expiryDate = new Date(parsedDate);
+                expiryDate.setMonth(expiryDate.getMonth() + 3);
+                const twoWeeksFromNow = new Date();
+                twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
+                
+                if (expiryDate <= twoWeeksFromNow) {
+                  vogExpiryStatus = 'expiring_soon';
+                  console.log(`⚠️ VOG expiring soon (issued ${vogIssueDate})`);
+                } else {
+                  vogExpiryStatus = 'valid';
+                  console.log(`✅ VOG is valid (issued ${vogIssueDate})`);
+                }
+              }
+            } else {
+              // Date not found in filename - assume valid for now, but flag for manual review
+              vogExpiryStatus = 'valid';
+              console.log(`ℹ️ VOG uploaded, date not detected in filename - assuming valid`);
+            }
+          }
+          
+          // Insert document record into database
+          const { error: docInsertError } = await supabase
+            .from('application_documents')
+            .insert({
+              application_id: applicationId,
+              filename: attachment.filename,
+              file_path: filePath,
+              content_type: attachment.content_type,
+              document_type: documentType,
+              vog_issue_date: vogIssueDate,
+              vog_expiry_status: vogExpiryStatus,
+              metadata: {
+                uploaded_via: 'email_reply',
+                original_email_id: message_id,
+              }
+            });
+          
+          if (docInsertError) {
+            console.error(`❌ Failed to log document:`, docInsertError);
+          } else {
+            processedDocuments.push({
+              filename: attachment.filename,
+              file_path: filePath,
+              document_type: documentType,
+              vog_expiry_status: vogExpiryStatus || undefined,
+            });
+            
+            // Update extracted_data based on document type
+            if (documentType === 'vog' && vogExpiryStatus === 'valid') {
+              analysis.new_data.vog_file_path = filePath;
+              analysis.new_data.vog_uploaded = true;
+              if (vogIssueDate) {
+                analysis.new_data.vog_date = vogIssueDate;
+              }
+              // Remove 'vog' from remaining_missing_info
+              if (analysis.remaining_missing_info) {
+                analysis.remaining_missing_info = analysis.remaining_missing_info
+                  .filter((item: string) => !item.toLowerCase().includes('vog'));
+              }
+              console.log(`✅ VOG validated and linked to application`);
+            } else if (documentType === 'vog' && vogExpiryStatus === 'expired') {
+              // VOG is expired - don't remove from missing_info
+              analysis.new_data.vog_file_path = filePath;
+              analysis.new_data.vog_expired = true;
+              console.log(`⚠️ VOG expired - still in missing_info`);
+            }
+          }
+        } catch (attachmentError) {
+          console.error(`❌ Error processing attachment ${attachment.filename}:`, attachmentError);
+        }
+      }
+      
+      console.log(`📎 Processed ${processedDocuments.length} documents`);
     }
 
     // Calculate new completeness score
