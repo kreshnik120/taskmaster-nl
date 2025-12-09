@@ -30,12 +30,12 @@ const ORG_EMAIL_CONFIG: Record<string, { from: string; name: string; replyTo: st
   'citozorg': {
     from: 'personeel@citozorg.nl',
     name: 'CitoZorg Recruitment',
-    replyTo: 'recruitment@inbound.citozorg.nl' // Resend inbound webhook voor AI verwerking
+    replyTo: 'recruitment@send.inbound.citozorg.nl' // Resend inbound webhook voor AI verwerking
   },
   'abczorg': {
     from: 'personeel@citozorg.nl', // Using citozorg.nl (verified) until abczorg.nl is added to Resend
     name: 'CitoZorg Recruitment', // Using CitoZorg name because from domain is citozorg.nl
-    replyTo: 'recruitment@inbound.citozorg.nl' // Resend inbound webhook voor AI verwerking
+    replyTo: 'recruitment@send.inbound.citozorg.nl' // Resend inbound webhook voor AI verwerking
   }
 };
 
