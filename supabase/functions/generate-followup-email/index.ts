@@ -13,19 +13,35 @@ const corsHeaders = {
  */
 
 // Field descriptions for generating natural questions
+// Enhanced with ZZP-specific fields and night/weekend availability
 const FIELD_DESCRIPTIONS: Record<string, string> = {
+  // Basic fields
   'functie_niveau': 'je opleidingsniveau/functie (bijv. VIG, HBO-V, Verpleegkundige MBO)',
   'werkvorm': 'je gewenste werkvorm (ZZP, Uitzendkracht, of ABCito constructie)',
   'regio': 'in welke regio je wilt werken',
   'beschikbaarheid': 'hoeveel uur per week je beschikbaar bent',
-  'telefoonnummer': 'je telefoonnummer zodat we je kunnen bereiken',
+  'telefoonnummer': 'een telefoonnummer waarop we je kunnen bereiken (geen placeholder zoals 06-00000000)',
   'ervaring_sector': 'in welke sector(en) je ervaring hebt (VVT, GGZ, GHZ, etc.)',
   'doelgroep_ervaring': 'met welke doelgroepen je ervaring hebt',
   'eigen_vervoer': 'of je beschikt over eigen vervoer',
-  'vog': 'of je een geldige VOG hebt',
-  'big_registratie': 'je BIG-registratienummer indien van toepassing',
   'naam': 'je volledige naam',
   'email': 'je emailadres',
+  
+  // ZZP-specific fields (kritiek voor facturatie en compliance)
+  'uurtarief': 'je gewenste uurtarief (exclusief BTW) - dit is essentieel voor onze offerte aan opdrachtgevers',
+  'gewenst_uurloon': 'je gewenste uurtarief (exclusief BTW) - dit is essentieel voor onze offerte aan opdrachtgevers',
+  'kvk_nummer': 'je KvK-nummer (verplicht voor ZZP-facturatie)',
+  'btw_nummer': 'je BTW-identificatienummer (verplicht voor facturatie)',
+  
+  // Compliance fields
+  'vog': 'of je een geldige VOG hebt en de uitgiftedatum - dit is verplicht in de zorg',
+  'vog_date': 'de uitgiftedatum van je VOG - dit is verplicht in de zorg',
+  'big_registratie': 'je BIG-registratienummer indien van toepassing',
+  
+  // Night/weekend availability (belangrijk voor matching)
+  'nachtdienst_bereid': 'of je bereid bent om nachtdiensten te draaien (veel opdrachtgevers zoeken hier specifiek naar)',
+  'weekenddienst_bereid': 'of je bereid bent om in het weekend te werken (dit vergroot je inzetmogelijkheden)',
+  'beschikbare_uren': 'hoeveel uur per week je minimaal en maximaal beschikbaar bent',
 };
 
 Deno.serve(async (req) => {
