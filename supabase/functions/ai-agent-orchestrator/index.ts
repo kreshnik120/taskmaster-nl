@@ -27,7 +27,7 @@ interface AgentAction {
 
 // Goal type configurations
 const GOAL_CONFIGS: Record<string, {
-  planGenerator: (goal: AgentGoal, context: any) => AgentAction[];
+  planGenerator: (goal: AgentGoal, context: any) => AgentAction[] | Promise<AgentAction[]>;
   requiredFields: string[];
 }> = {
   // =====================================================
@@ -35,8 +35,30 @@ const GOAL_CONFIGS: Record<string, {
   // =====================================================
   'application_intake_completion': {
     requiredFields: ['application_id', 'candidate_email'],
-    planGenerator: (goal, context) => {
-      const missingInfo = goal.input_data.missing_info || [];
+    planGenerator: async (goal, context) => {
+      // Get missing_info from input_data or fallback to database query
+      let missingInfo = goal.input_data.missing_info || [];
+      
+      // FALLBACK: If missing_info is empty, query the database directly
+      if (missingInfo.length === 0 && goal.input_data.application_id && context?.supabase) {
+        console.log('📋 [Orchestrator] missing_info empty, querying database...');
+        const { data: app } = await context.supabase
+          .from('professional_applications')
+          .select('missing_info, extracted_data')
+          .eq('id', goal.input_data.application_id)
+          .single();
+        
+        if (app?.missing_info && app.missing_info.length > 0) {
+          missingInfo = app.missing_info;
+          console.log('✅ [Orchestrator] Got missing_info from database:', missingInfo);
+        } else if (app?.extracted_data) {
+          // Derive from extracted_data if missing_info column is empty
+          const extractedData = app.extracted_data as Record<string, any>;
+          const criticalFields = ['functie_niveau', 'werkvorm', 'regio', 'beschikbaarheid', 'telefoonnummer'];
+          missingInfo = criticalFields.filter(field => !extractedData[field]);
+          console.log('✅ [Orchestrator] Derived missing_info from extracted_data:', missingInfo);
+        }
+      }
       
       // Prioriteit volgorde voor vragen (kritieke velden eerst)
       const priorityFields = [
@@ -64,11 +86,13 @@ const GOAL_CONFIGS: Record<string, {
       // Neem max 3 items per email (niet overweldigend)
       const fieldsToAsk = sortedMissing.slice(0, 3);
       
+      console.log('📧 [Orchestrator] Fields to ask:', fieldsToAsk, 'from missing:', missingInfo);
+      
       return [
         {
           action_type: 'send_followup_question',
           action_order: 1,
-          action_description: `Vraag ontbrekende info: ${fieldsToAsk.join(', ')}`,
+          action_description: `Vraag ontbrekende info: ${fieldsToAsk.join(', ') || 'geen specifieke velden'}`,
           scheduled_at: new Date().toISOString(),
           input_data: {
             application_id: goal.input_data.application_id,
@@ -504,8 +528,8 @@ async function planAndQueueGoal(supabase: any, goal: AgentGoal) {
     .update({ status: 'planning', started_at: new Date().toISOString() })
     .eq('id', goal.id);
 
-  // Generate action plan
-  const actions = config.planGenerator(goal, {});
+  // Generate action plan (may be async for some goal types)
+  const actions = await Promise.resolve(config.planGenerator(goal, { supabase }));
   
   // Save plan to goal
   await supabase

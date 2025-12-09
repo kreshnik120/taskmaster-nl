@@ -53,10 +53,10 @@ export function AIFollowupButton({
 
     setTriggering(true);
     try {
-      // Get org_id
+      // Get org_id AND missing_info from application
       const { data: appData } = await supabase
         .from("professional_applications")
-        .select("org_id")
+        .select("org_id, missing_info, extracted_data")
         .eq("id", applicationId)
         .single();
 
@@ -64,7 +64,23 @@ export function AIFollowupButton({
         throw new Error("Applicatie heeft geen organisatie");
       }
 
-      // Create AI Agent goal
+      // Get missing_info - either from column or derive from extracted_data
+      let missingInfo: string[] = [];
+      
+      if (Array.isArray(appData.missing_info)) {
+        missingInfo = appData.missing_info as string[];
+      }
+      
+      // If no missing_info stored, derive from extracted_data completeness
+      if (missingInfo.length === 0 && appData.extracted_data) {
+        const extractedData = appData.extracted_data as Record<string, unknown>;
+        const criticalFields = ['functie_niveau', 'werkvorm', 'regio', 'beschikbaarheid', 'telefoonnummer'];
+        missingInfo = criticalFields.filter(field => !extractedData[field]);
+      }
+
+      console.log('🤖 AIFollowupButton: Creating goal with missing_info:', missingInfo);
+
+      // Create AI Agent goal with missing_info included
       const { error } = await supabase.from("agent_goals").insert({
         org_id: appData.org_id,
         goal_type: "application_intake_completion",
@@ -77,13 +93,14 @@ export function AIFollowupButton({
           candidate_name: candidateName,
           current_completeness: score,
           target_completeness: 80,
+          missing_info: missingInfo,
         },
       });
 
       if (error) throw error;
 
       toast.success("🤖 AI Agent geactiveerd", {
-        description: `Follow-up email wordt voorbereid voor ${candidateName}`,
+        description: `Follow-up email wordt voorbereid voor ${candidateName} (${missingInfo.length} ontbrekende velden)`,
       });
 
       refetch();
