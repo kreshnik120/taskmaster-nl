@@ -30,13 +30,13 @@ serve(async (req) => {
     const orgId = orgs[0].id;
     console.log('🔗 Source Validator checking external sources...');
 
-    // Get all items with external sources
+    // Get all items with external sources - batch size reduced for stability
     const { data: items } = await supabase
       .from('ai_knowledge_base')
       .select('id, key, category, value')
       .eq('org_id', orgId)
       .is('deleted_at', null)
-      .limit(500);
+      .limit(50);  // Reduced from 500 to prevent gateway timeouts
 
     if (!items || items.length === 0) {
       return new Response(JSON.stringify({ success: true, sources_validated: 0 }), {
