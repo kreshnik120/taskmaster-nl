@@ -589,15 +589,21 @@ async function executeTask(supabase: any, task: any) {
 
   // Execute based on action type
   switch (action.action_type) {
-    case 'send_followup_question': // NEW: Follow-up vragen voor incomplete applicaties
+    case 'send_followup_question': // Follow-up vragen voor incomplete applicaties
       result = await executeFollowupQuestion(supabase, action);
       break;
     
-    case 'send_reminder':
-    case 'send_welcome':
-    case 'send_interview_email': // Interview email via n8n
-    case 'send_document_request': // Document request via n8n
-    case 'send_general_email': // General email via n8n
+    case 'send_interview_email': // Interview email via send-interview-email (Resend)
+      result = await executeInterviewEmail(supabase, action);
+      break;
+    
+    case 'send_document_request': // Document request via send-ai-email
+    case 'send_general_email': // General email via send-ai-email
+    case 'send_reminder': // Reminders via send-ai-email
+    case 'send_welcome': // Welcome email via send-ai-email
+      result = await executeSendAiEmail(supabase, action);
+      break;
+    
     case 'create_calendar_event': // Calendar event via n8n/Microsoft Graph
       result = await executeExternalAction(supabase, action);
       break;
@@ -644,7 +650,101 @@ async function executeTask(supabase: any, task: any) {
   return result;
 }
 
-// Execute external action via n8n-webhook-bridge (NOT directly to n8n!)
+// =====================================================
+// NEW: Execute Interview Email via send-interview-email (Resend)
+// =====================================================
+async function executeInterviewEmail(supabase: any, action: any) {
+  const org_id = action.agent_goals?.org_id;
+  let organization = 'citozorg';
+  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
+    organization = 'abczorg';
+  }
+
+  console.log(`[Orchestrator] Sending interview email via Resend for ${organization}`);
+
+  try {
+    const { data, error } = await supabase.functions.invoke('send-interview-email', {
+      body: {
+        ...action.input_data,
+        organization
+      }
+    });
+
+    if (error) {
+      console.error('[Orchestrator] send-interview-email failed:', error);
+      throw error;
+    }
+
+    console.log('[Orchestrator] Interview email result:', data);
+    return { executed_via: 'resend', organization, ...data };
+
+  } catch (err: any) {
+    console.error('[Orchestrator] Interview email failed:', err);
+    return { 
+      executed_via: 'failed', 
+      error: err.message,
+      organization
+    };
+  }
+}
+
+// =====================================================
+// NEW: Execute AI Email via send-ai-email (Resend)
+// =====================================================
+async function executeSendAiEmail(supabase: any, action: any) {
+  const org_id = action.agent_goals?.org_id;
+  let organization = 'citozorg';
+  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
+    organization = 'abczorg';
+  }
+
+  // Map action types to email types
+  const emailTypeMap: Record<string, string> = {
+    'send_document_request': 'document_request',
+    'send_general_email': 'general',
+    'send_reminder': 'followup_question',
+    'send_welcome': 'welcome'
+  };
+
+  const emailType = emailTypeMap[action.action_type] || 'general';
+
+  console.log(`[Orchestrator] Sending ${emailType} email via send-ai-email for ${organization}`);
+
+  try {
+    const { data, error } = await supabase.functions.invoke('send-ai-email', {
+      body: {
+        email_type: emailType,
+        recipient_email: action.input_data.to_email || action.input_data.recipient_email || action.input_data.candidate_email,
+        recipient_name: action.input_data.recipient_name || action.input_data.candidate_name,
+        subject: action.input_data.subject || action.input_data.emailSubject,
+        html_content: action.input_data.body || action.input_data.emailHtml,
+        template_data: action.input_data,
+        application_id: action.input_data.application_id,
+        professional_id: action.input_data.professional_id,
+        org_id: org_id
+      }
+    });
+
+    if (error) {
+      console.error('[Orchestrator] send-ai-email failed:', error);
+      throw error;
+    }
+
+    console.log('[Orchestrator] AI email result:', data);
+    return { executed_via: 'resend', email_type: emailType, organization, ...data };
+
+  } catch (err: any) {
+    console.error('[Orchestrator] AI email failed:', err);
+    return { 
+      executed_via: 'failed', 
+      error: err.message,
+      email_type: emailType,
+      organization
+    };
+  }
+}
+
+// Execute external action via n8n-webhook-bridge (for calendar events only now)
 async function executeExternalAction(supabase: any, action: any) {
   const org_id = action.agent_goals?.org_id;
   
@@ -657,14 +757,14 @@ async function executeExternalAction(supabase: any, action: any) {
   console.log(`[Orchestrator] Executing external action via bridge: ${action.action_type} for ${organization}`);
 
   try {
-    // Route through n8n-webhook-bridge instead of directly to n8n
+    // Route through n8n-webhook-bridge for calendar events
     const { data, error } = await supabase.functions.invoke('n8n-webhook-bridge', {
       body: {
         action: 'trigger',
         action_type: action.action_type,
         action_id: action.id,
         org_id: org_id,
-        organization: organization, // For n8n routing
+        organization: organization,
         input_data: action.input_data
       }
     });
@@ -679,43 +779,8 @@ async function executeExternalAction(supabase: any, action: any) {
     
   } catch (err) {
     console.error('[Orchestrator] External action failed:', err);
+    return { executed_via: 'simulated', note: 'n8n bridge call failed, action simulated' };
   }
-
-  // Fallback: use internal send-reminder-email function
-  if (action.action_type === 'send_reminder') {
-    try {
-      const { data: interview } = await supabase
-        .from('interview_appointments')
-        .select('*, professionals(*), professional_applications(*)')
-        .eq('id', action.input_data.interview_id)
-        .single();
-
-      if (interview) {
-        // Call internal email function
-        const emailResult = await supabase.functions.invoke('send-reminder-email', {
-          body: {
-            to: interview.professionals?.email || interview.professional_applications?.email_from,
-            subject: action.input_data.reminder_type === '24h' 
-              ? 'Herinnering: Morgen interview' 
-              : 'Herinnering: Interview over 1 uur',
-            template: action.input_data.message_template,
-            data: {
-              candidate_name: interview.professionals?.full_name,
-              interview_time: interview.scheduled_at,
-              location: interview.location,
-              meeting_link: interview.meeting_link
-            }
-          }
-        });
-
-        return { executed_via: 'internal', email_result: emailResult };
-      }
-    } catch (err) {
-      console.error('[Orchestrator] Internal email failed:', err);
-    }
-  }
-
-  return { executed_via: 'simulated', note: 'n8n bridge call failed, action simulated' };
 }
 
 // Check interview attendance
@@ -755,7 +820,7 @@ async function checkAttendance(supabase: any, action: any) {
 }
 
 // =====================================================
-// NEW: Execute Follow-up Question via n8n
+// Execute Follow-up Question via send-ai-email (Resend)
 // =====================================================
 async function executeFollowupQuestion(supabase: any, action: any) {
   const { 
@@ -780,77 +845,62 @@ async function executeFollowupQuestion(supabase: any, action: any) {
     };
   }
 
-  // 1. Generate email via Lovable AI
-  const { data: emailData, error: genError } = await supabase.functions.invoke('generate-followup-email', {
-    body: {
-      application_id,
-      candidate_name,
-      candidate_email,
-      fields_to_ask,
-      current_completeness,
-      follow_up_count
-    }
-  });
-
-  if (genError || !emailData?.emailHtml) {
-    console.error('[Orchestrator] Email generation failed:', genError);
-    throw new Error(`Email generation failed: ${genError?.message || 'Unknown error'}`);
-  }
-
-  console.log(`[Orchestrator] Email generated: ${emailData.emailSubject}`);
-
-  // 2. Send via n8n-webhook-bridge (NOT directly to n8n!)
   const org_id = action.agent_goals?.org_id;
   let organization = 'citozorg';
   if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
     organization = 'abczorg';
   }
 
-  console.log(`[Orchestrator] Sending followup via bridge to ${organization}`);
+  console.log(`[Orchestrator] Sending followup via send-ai-email for ${organization}`);
 
   try {
-    const { data, error } = await supabase.functions.invoke('n8n-webhook-bridge', {
+    // Send directly via send-ai-email (Resend) instead of n8n
+    const { data, error } = await supabase.functions.invoke('send-ai-email', {
       body: {
-        action: 'trigger',
-        action_type: 'send_followup_question',
-        action_id: action.id,
-        org_id: org_id,
-        organization: organization,
-        input_data: {
-          to_email: candidate_email,
-          candidate_name: candidate_name,
-          subject: emailData.emailSubject,
-          body: emailData.emailHtml,
-          application_id: application_id,
-          fields_asked: fields_to_ask,
+        email_type: 'followup_question',
+        recipient_email: candidate_email,
+        recipient_name: candidate_name || 'Sollicitant',
+        subject: `Aanvullende informatie nodig voor je sollicitatie`,
+        template_data: {
+          fields_to_ask,
+          current_completeness,
           follow_up_count: follow_up_count + 1
-        }
+        },
+        application_id,
+        org_id
       }
     });
 
     if (error) {
-      console.error('[Orchestrator] Bridge invocation failed:', error);
+      console.error('[Orchestrator] send-ai-email failed:', error);
       throw error;
     }
 
-    console.log('[Orchestrator] Bridge response:', data);
+    console.log('[Orchestrator] Follow-up email result:', data);
+
+    // Update application with follow-up count
+    await supabase
+      .from('professional_applications')
+      .update({ 
+        follow_up_count: (follow_up_count || 0) + 1,
+        last_followup_at: new Date().toISOString()
+      })
+      .eq('id', application_id);
 
     return { 
-      status: 'sent_via_bridge', 
+      status: 'sent_via_resend', 
       organization,
-      email_subject: emailData.emailSubject,
       fields_asked: fields_to_ask,
-      bridge_response: data
+      follow_up_count: follow_up_count + 1,
+      ...data
     };
 
-  } catch (error) {
-    console.error('[Orchestrator] Followup send failed:', error);
-    // Return simulated for graceful degradation
+  } catch (err: any) {
+    console.error('[Orchestrator] Followup send failed:', err);
     return { 
-      status: 'simulated', 
-      note: 'Bridge call failed',
-      email_generated: true,
-      email_subject: emailData.emailSubject 
+      status: 'failed', 
+      error: err.message,
+      organization
     };
   }
 }
