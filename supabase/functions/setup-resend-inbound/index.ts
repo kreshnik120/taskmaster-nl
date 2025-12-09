@@ -99,6 +99,7 @@ serve(async (req: Request): Promise<Response> => {
           },
           body: JSON.stringify({
             name: inboundDomain,
+            region: "eu-west-1", // Ireland - consistent met andere domeinen
           }),
         });
 
