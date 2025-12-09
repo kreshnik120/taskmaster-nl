@@ -25,16 +25,17 @@ interface InterviewEmailRequest {
 }
 
 // Organization email configuration
+// Reply-To uses Resend inbound address for AI processing of candidate replies
 const ORG_EMAIL_CONFIG: Record<string, { from: string; name: string; replyTo: string }> = {
   'citozorg': {
     from: 'personeel@citozorg.nl',
     name: 'CitoZorg Recruitment',
-    replyTo: 'personeel@citozorg.nl'
+    replyTo: 'recruitment@inbound.citozorg.nl' // Resend inbound webhook voor AI verwerking
   },
   'abczorg': {
-    from: 'personeel@abczorg.nl', // TODO: Configure when domain is added to Resend
-    name: 'ABCzorg Recruitment',
-    replyTo: 'personeel@abczorg.nl'
+    from: 'personeel@citozorg.nl', // Using citozorg.nl (verified) until abczorg.nl is added to Resend
+    name: 'CitoZorg Recruitment', // Using CitoZorg name because from domain is citozorg.nl
+    replyTo: 'recruitment@inbound.citozorg.nl' // Resend inbound webhook voor AI verwerking
   }
 };
 
