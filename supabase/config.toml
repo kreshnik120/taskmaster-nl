@@ -100,9 +100,6 @@ verify_jwt = false
 [functions.handle-application-reply]
 verify_jwt = false
 
-[functions.retroactive-training-evaluator]
-verify_jwt = true
-
 [functions.auto-resolve-alerts]
 verify_jwt = false
 schedule = "*/30 * * * *"  # Elke 30 minuten - automatische conflict resolutie
