@@ -310,9 +310,9 @@ Deno.serve(async (req) => {
     );
 
     const body = await req.json().catch(() => ({}));
-    const { action, goal_id, limit = 10 } = body;
+    const { action, goal_id, limit = 10, force_execute_task_id } = body;
 
-    console.log(`[AI Agent Orchestrator] Action: ${action}, Goal ID: ${goal_id}`);
+    console.log(`🤖 [AI Agent Orchestrator] Action: ${action}, Goal ID: ${goal_id}`);
 
     // Action: Process pending goals
     if (action === 'process_pending_goals' || !action) {
@@ -329,6 +329,11 @@ Deno.serve(async (req) => {
       return await executePendingActions(supabase, limit);
     }
 
+    // Action: Force execute a specific task (bypass queue checks)
+    if (action === 'force_execute' && force_execute_task_id) {
+      return await forceExecuteTask(supabase, force_execute_task_id);
+    }
+
     // Action: Process task queue
     if (action === 'process_queue') {
       return await processTaskQueue(supabase, limit);
@@ -339,16 +344,21 @@ Deno.serve(async (req) => {
       return await createGoal(supabase, body);
     }
 
+    // Action: Debug queue status
+    if (action === 'debug_queue') {
+      return await debugQueueStatus(supabase);
+    }
+
     return new Response(
       JSON.stringify({ 
         error: 'Unknown action',
-        available_actions: ['process_pending_goals', 'plan_goal', 'execute_actions', 'process_queue', 'create_goal']
+        available_actions: ['process_pending_goals', 'plan_goal', 'execute_actions', 'force_execute', 'process_queue', 'create_goal', 'debug_queue']
       }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error: unknown) {
-    console.error('[AI Agent Orchestrator] Error:', error);
+    console.error('❌ [AI Agent Orchestrator] Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
       JSON.stringify({ error: errorMessage }),
@@ -357,8 +367,63 @@ Deno.serve(async (req) => {
   }
 });
 
+// Debug queue status
+async function debugQueueStatus(supabase: any) {
+  console.log('🔍 [DEBUG] Checking queue status...');
+  
+  // Get all queue items
+  const { data: allQueue, error: queueError } = await supabase
+    .from('agent_task_queue')
+    .select('id, status, scheduled_at, execute_after, locked_by, created_at, task_type')
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  // Get all pending actions
+  const { data: allActions, error: actionsError } = await supabase
+    .from('agent_actions')
+    .select('id, action_type, status, scheduled_at, created_at')
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  const now = new Date().toISOString();
+  
+  // Count by status
+  const queueByStatus = (allQueue || []).reduce((acc: any, item: any) => {
+    acc[item.status] = (acc[item.status] || 0) + 1;
+    return acc;
+  }, {});
+
+  const actionsByStatus = (allActions || []).reduce((acc: any, item: any) => {
+    acc[item.status] = (acc[item.status] || 0) + 1;
+    return acc;
+  }, {});
+
+  console.log('📊 Queue status:', queueByStatus);
+  console.log('📊 Actions status:', actionsByStatus);
+  console.log('⏰ Current time:', now);
+
+  return new Response(
+    JSON.stringify({
+      current_time: now,
+      queue: {
+        total: allQueue?.length || 0,
+        by_status: queueByStatus,
+        items: allQueue
+      },
+      actions: {
+        total: allActions?.length || 0,
+        by_status: actionsByStatus,
+        items: allActions
+      }
+    }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
+
 // Process all pending goals
 async function processPendingGoals(supabase: any, limit: number) {
+  console.log('📋 [Orchestrator] Processing pending goals...');
+  
   const { data: goals, error } = await supabase
     .from('agent_goals')
     .select('*')
@@ -369,6 +434,8 @@ async function processPendingGoals(supabase: any, limit: number) {
 
   if (error) throw error;
 
+  console.log(`📋 Found ${goals?.length || 0} pending goals`);
+
   const results: Array<{ goal_id: string; success: boolean; error?: string; actions_created?: number }> = [];
   for (const goal of goals || []) {
     try {
@@ -376,7 +443,7 @@ async function processPendingGoals(supabase: any, limit: number) {
       results.push({ goal_id: goal.id, success: true, actions_created: result.actions_created });
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error(`[Orchestrator] Failed to process goal ${goal.id}:`, err);
+      console.error(`❌ [Orchestrator] Failed to process goal ${goal.id}:`, err);
       results.push({ goal_id: goal.id, success: false, error: errorMessage });
       
       // Mark goal as failed
@@ -464,6 +531,8 @@ async function planAndQueueGoal(supabase: any, goal: AgentGoal) {
 
   if (actionsError) throw actionsError;
 
+  console.log(`✅ Created ${createdActions?.length || 0} actions for goal ${goal.id}`);
+
   // Queue first action(s) that are ready
   const now = new Date();
   for (const action of createdActions || []) {
@@ -498,11 +567,14 @@ async function planAndQueueGoal(supabase: any, goal: AgentGoal) {
 
 // Queue an action for immediate execution
 async function queueAction(supabase: any, goalId: string, actionId: string, action: any) {
+  console.log(`📥 Queueing action ${actionId} for immediate execution`);
+  
   await supabase.from('agent_task_queue').insert({
     goal_id: goalId,
     action_id: actionId,
     task_type: 'execute_action',
     priority: 5,
+    status: 'pending',
     scheduled_at: new Date().toISOString(),
     execution_data: action.input_data
   });
@@ -513,37 +585,105 @@ async function queueAction(supabase: any, goalId: string, actionId: string, acti
     .eq('id', actionId);
 }
 
-// Execute pending actions from the queue
+// Execute pending actions from the queue - IMPROVED with better logging and query
 async function executePendingActions(supabase: any, limit: number) {
   const workerId = `worker-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const lockDuration = 5 * 60 * 1000; // 5 minutes
+  const now = new Date();
+  const nowIso = now.toISOString();
   
-  // Lock tasks for processing
-  const { data: tasks, error } = await supabase
+  console.log(`🔄 [Execute] Starting execution with worker ${workerId}`);
+  console.log(`⏰ [Execute] Current time: ${nowIso}`);
+
+  // STEP 1: First, find eligible tasks (separate SELECT)
+  const { data: eligibleTasks, error: findError } = await supabase
     .from('agent_task_queue')
-    .update({
-      status: 'locked',
-      locked_by: workerId,
-      locked_until: new Date(Date.now() + lockDuration).toISOString()
-    })
+    .select('id, status, scheduled_at, execute_after, task_type, action_id')
     .eq('status', 'pending')
-    .lte('scheduled_at', new Date().toISOString())
-    .or('execute_after.is.null,execute_after.lte.' + new Date().toISOString())
     .order('priority', { ascending: false })
     .order('scheduled_at', { ascending: true })
-    .limit(limit)
-    .select();
+    .limit(limit);
 
-  if (error) throw error;
+  if (findError) {
+    console.error('❌ [Execute] Error finding tasks:', findError);
+    throw findError;
+  }
 
+  console.log(`📊 [Execute] Found ${eligibleTasks?.length || 0} pending tasks in queue`);
+  
+  if (!eligibleTasks || eligibleTasks.length === 0) {
+    return new Response(
+      JSON.stringify({ 
+        executed: 0, 
+        message: 'No pending tasks in queue',
+        debug: { current_time: nowIso }
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Log each task's timing
+  for (const task of eligibleTasks) {
+    const scheduledAt = task.scheduled_at ? new Date(task.scheduled_at) : null;
+    const executeAfter = task.execute_after ? new Date(task.execute_after) : null;
+    const isReady = (!scheduledAt || scheduledAt <= now) && (!executeAfter || executeAfter <= now);
+    
+    console.log(`📋 Task ${task.id.slice(0, 8)}... | scheduled: ${task.scheduled_at} | execute_after: ${task.execute_after} | ready: ${isReady}`);
+  }
+
+  // STEP 2: Filter tasks that are ready to execute
+  const readyTasks = eligibleTasks.filter((task: any) => {
+    const scheduledAt = task.scheduled_at ? new Date(task.scheduled_at) : null;
+    const executeAfter = task.execute_after ? new Date(task.execute_after) : null;
+    return (!scheduledAt || scheduledAt <= now) && (!executeAfter || executeAfter <= now);
+  });
+
+  console.log(`✅ [Execute] ${readyTasks.length} tasks are ready for execution`);
+
+  if (readyTasks.length === 0) {
+    return new Response(
+      JSON.stringify({ 
+        executed: 0, 
+        message: 'Tasks found but none are ready yet (scheduled for future)',
+        pending_count: eligibleTasks.length,
+        debug: { current_time: nowIso }
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // STEP 3: Lock and process ready tasks
   const results: Array<{ task_id: string; success: boolean; error?: string; result?: any }> = [];
-  for (const task of tasks || []) {
+  
+  for (const task of readyTasks) {
     try {
+      // Lock this specific task
+      const { error: lockError } = await supabase
+        .from('agent_task_queue')
+        .update({
+          status: 'locked',
+          locked_by: workerId,
+          locked_until: new Date(Date.now() + lockDuration).toISOString()
+        })
+        .eq('id', task.id)
+        .eq('status', 'pending'); // Only lock if still pending
+
+      if (lockError) {
+        console.error(`❌ [Execute] Failed to lock task ${task.id}:`, lockError);
+        continue;
+      }
+
+      console.log(`🔒 [Execute] Locked task ${task.id}, executing...`);
+
+      // Execute the task
       const result = await executeTask(supabase, task);
       results.push({ task_id: task.id, success: true, result });
+      
+      console.log(`✅ [Execute] Task ${task.id} completed successfully`);
+      
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error(`[Orchestrator] Task ${task.id} failed:`, err);
+      console.error(`❌ [Execute] Task ${task.id} failed:`, err);
       results.push({ task_id: task.id, success: false, error: errorMessage });
       
       // Update task as failed
@@ -558,15 +698,88 @@ async function executePendingActions(supabase: any, limit: number) {
     }
   }
 
+  console.log(`🏁 [Execute] Finished. Executed ${results.length} tasks`);
+
   return new Response(
-    JSON.stringify({ executed: results.length, results }),
+    JSON.stringify({ 
+      executed: results.length, 
+      results,
+      debug: { 
+        current_time: nowIso,
+        worker_id: workerId,
+        pending_found: eligibleTasks.length,
+        ready_count: readyTasks.length
+      }
+    }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 }
 
+// Force execute a specific task (bypass queue checks)
+async function forceExecuteTask(supabase: any, taskId: string) {
+  console.log(`🔧 [Force Execute] Task ${taskId}`);
+
+  // Get the task
+  const { data: task, error: taskError } = await supabase
+    .from('agent_task_queue')
+    .select('*')
+    .eq('id', taskId)
+    .single();
+
+  if (taskError || !task) {
+    return new Response(
+      JSON.stringify({ error: 'Task not found' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  console.log(`📋 [Force Execute] Task found: ${task.task_type}, status: ${task.status}`);
+
+  try {
+    // Update status to locked
+    await supabase
+      .from('agent_task_queue')
+      .update({ status: 'locked', locked_by: 'force-execute' })
+      .eq('id', taskId);
+
+    // Execute the task
+    const result = await executeTask(supabase, task);
+
+    return new Response(
+      JSON.stringify({ success: true, task_id: taskId, result }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    console.error(`❌ [Force Execute] Failed:`, err);
+    
+    await supabase
+      .from('agent_task_queue')
+      .update({ status: 'failed', error_message: errorMessage })
+      .eq('id', taskId);
+
+    return new Response(
+      JSON.stringify({ success: false, task_id: taskId, error: errorMessage }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+}
+
+// Process task queue (includes scheduled tasks)
+async function processTaskQueue(supabase: any, limit: number) {
+  console.log('📋 [Process Queue] Starting...');
+  
+  // First process pending goals
+  await processPendingGoals(supabase, limit);
+  
+  // Then execute pending actions
+  return await executePendingActions(supabase, limit);
+}
+
 // Execute a single task
 async function executeTask(supabase: any, task: any) {
-  console.log(`[Orchestrator] Executing task ${task.id} (${task.task_type})`);
+  console.log(`⚙️ [Execute Task] ${task.id} (${task.task_type})`);
 
   // Get the action details
   const { data: action, error: actionError } = await supabase
@@ -576,8 +789,11 @@ async function executeTask(supabase: any, task: any) {
     .single();
 
   if (actionError || !action) {
+    console.error(`❌ [Execute Task] Action not found for task ${task.id}:`, actionError);
     throw new Error('Action not found');
   }
+
+  console.log(`📧 [Execute Task] Action type: ${action.action_type}`);
 
   // Update action status
   await supabase
@@ -621,6 +837,7 @@ async function executeTask(supabase: any, task: any) {
       break;
     
     default:
+      console.warn(`⚠️ [Execute Task] Unknown action type: ${action.action_type}`);
       result = { status: 'skipped', reason: `Unknown action type: ${action.action_type}` };
   }
 
@@ -651,7 +868,74 @@ async function executeTask(supabase: any, task: any) {
 }
 
 // =====================================================
-// NEW: Execute Interview Email via send-interview-email (Resend)
+// Execute Follow-up Question via send-ai-email
+// =====================================================
+async function executeFollowupQuestion(supabase: any, action: any) {
+  const org_id = action.agent_goals?.org_id;
+  let organization = 'citozorg';
+  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
+    organization = 'abczorg';
+  }
+
+  console.log(`📧 [Followup] Sending follow-up email for ${organization}`);
+
+  try {
+    // Generate followup email using generate-followup-email
+    const { data: emailData, error: genError } = await supabase.functions.invoke('generate-followup-email', {
+      body: {
+        application_id: action.input_data.application_id,
+        fields_to_ask: action.input_data.fields_to_ask,
+        candidate_name: action.input_data.candidate_name,
+        current_completeness: action.input_data.current_completeness
+      }
+    });
+
+    if (genError) {
+      console.error('[Followup] Email generation failed:', genError);
+      throw genError;
+    }
+
+    console.log('[Followup] Email generated, sending via Resend...');
+
+    // Send via send-ai-email
+    const { data: sendData, error: sendError } = await supabase.functions.invoke('send-ai-email', {
+      body: {
+        email_type: 'followup_question',
+        recipient_email: action.input_data.candidate_email,
+        recipient_name: action.input_data.candidate_name,
+        subject: emailData?.subject || `Aanvullende informatie nodig - ${action.input_data.candidate_name}`,
+        html_content: emailData?.html || emailData?.content,
+        application_id: action.input_data.application_id,
+        org_id: org_id
+      }
+    });
+
+    if (sendError) {
+      console.error('[Followup] Email send failed:', sendError);
+      throw sendError;
+    }
+
+    console.log('✅ [Followup] Email sent successfully');
+    return { 
+      executed_via: 'resend', 
+      organization, 
+      email_generated: !!emailData,
+      email_sent: !!sendData,
+      ...sendData 
+    };
+
+  } catch (err: any) {
+    console.error('❌ [Followup] Failed:', err);
+    return { 
+      executed_via: 'failed', 
+      error: err.message,
+      organization
+    };
+  }
+}
+
+// =====================================================
+// Execute Interview Email via send-interview-email (Resend)
 // =====================================================
 async function executeInterviewEmail(supabase: any, action: any) {
   const org_id = action.agent_goals?.org_id;
@@ -660,7 +944,7 @@ async function executeInterviewEmail(supabase: any, action: any) {
     organization = 'abczorg';
   }
 
-  console.log(`[Orchestrator] Sending interview email via Resend for ${organization}`);
+  console.log(`📧 [Interview] Sending interview email via Resend for ${organization}`);
 
   try {
     const { data, error } = await supabase.functions.invoke('send-interview-email', {
@@ -671,15 +955,15 @@ async function executeInterviewEmail(supabase: any, action: any) {
     });
 
     if (error) {
-      console.error('[Orchestrator] send-interview-email failed:', error);
+      console.error('[Interview] send-interview-email failed:', error);
       throw error;
     }
 
-    console.log('[Orchestrator] Interview email result:', data);
+    console.log('✅ [Interview] Email sent:', data);
     return { executed_via: 'resend', organization, ...data };
 
   } catch (err: any) {
-    console.error('[Orchestrator] Interview email failed:', err);
+    console.error('❌ [Interview] Email failed:', err);
     return { 
       executed_via: 'failed', 
       error: err.message,
@@ -689,7 +973,7 @@ async function executeInterviewEmail(supabase: any, action: any) {
 }
 
 // =====================================================
-// NEW: Execute AI Email via send-ai-email (Resend)
+// Execute AI Email via send-ai-email (Resend)
 // =====================================================
 async function executeSendAiEmail(supabase: any, action: any) {
   const org_id = action.agent_goals?.org_id;
@@ -708,7 +992,7 @@ async function executeSendAiEmail(supabase: any, action: any) {
 
   const emailType = emailTypeMap[action.action_type] || 'general';
 
-  console.log(`[Orchestrator] Sending ${emailType} email via send-ai-email for ${organization}`);
+  console.log(`📧 [AI Email] Sending ${emailType} email via send-ai-email for ${organization}`);
 
   try {
     const { data, error } = await supabase.functions.invoke('send-ai-email', {
@@ -726,15 +1010,15 @@ async function executeSendAiEmail(supabase: any, action: any) {
     });
 
     if (error) {
-      console.error('[Orchestrator] send-ai-email failed:', error);
+      console.error('[AI Email] send-ai-email failed:', error);
       throw error;
     }
 
-    console.log('[Orchestrator] AI email result:', data);
+    console.log('✅ [AI Email] Result:', data);
     return { executed_via: 'resend', email_type: emailType, organization, ...data };
 
   } catch (err: any) {
-    console.error('[Orchestrator] AI email failed:', err);
+    console.error('❌ [AI Email] Failed:', err);
     return { 
       executed_via: 'failed', 
       error: err.message,
@@ -754,7 +1038,7 @@ async function executeExternalAction(supabase: any, action: any) {
     organization = 'abczorg';
   }
 
-  console.log(`[Orchestrator] Executing external action via bridge: ${action.action_type} for ${organization}`);
+  console.log(`🌐 [External] Executing via n8n bridge: ${action.action_type} for ${organization}`);
 
   try {
     // Route through n8n-webhook-bridge for calendar events
@@ -770,15 +1054,15 @@ async function executeExternalAction(supabase: any, action: any) {
     });
 
     if (error) {
-      console.error('[Orchestrator] Bridge invocation failed:', error);
+      console.error('[External] Bridge invocation failed:', error);
       throw error;
     }
 
-    console.log('[Orchestrator] Bridge response:', data);
+    console.log('✅ [External] Bridge response:', data);
     return { executed_via: 'n8n_bridge', organization, ...data };
     
   } catch (err) {
-    console.error('[Orchestrator] External action failed:', err);
+    console.error('❌ [External] Action failed:', err);
     return { executed_via: 'simulated', note: 'n8n bridge call failed, action simulated' };
   }
 }
@@ -800,141 +1084,57 @@ async function checkAttendance(supabase: any, action: any) {
     // Create alert in business_intelligence
     await supabase.from('business_intelligence').insert({
       org_id: interview.org_id,
-      intelligence_type: 'workflow_pattern',
-      title: 'Mogelijke no-show gedetecteerd',
-      description: `Kandidaat is niet verschenen voor interview`,
-      severity: 'medium',
-      priority: 'high',
-      data: {
-        interview_id: interview.id,
-        scheduled_at: interview.scheduled_at,
-        professional_id: interview.professional_id,
-        category: 'no_show_detection'
-      }
+      intelligence_type: 'no_show_alert',
+      title: `Mogelijke no-show: ${interview.id}`,
+      description: 'Interview was gepland maar status is nog steeds "scheduled" na de geplande tijd',
+      data: { interview_id: interview.id, scheduled_at: interview.scheduled_at },
+      severity: 'warning'
     });
 
-    return { status: 'no_show_detected', interview_id: interview.id };
+    return { status: 'alert_created', interview_status: interview.status };
   }
 
-  return { status: 'attended', interview_status: interview.status };
-}
-
-// =====================================================
-// Execute Follow-up Question via send-ai-email (Resend)
-// =====================================================
-async function executeFollowupQuestion(supabase: any, action: any) {
-  const { 
-    application_id, 
-    candidate_email, 
-    candidate_name, 
-    fields_to_ask,
-    current_completeness,
-    follow_up_count 
-  } = action.input_data;
-
-  console.log(`[Orchestrator] Executing follow-up question for ${candidate_email}`);
-  console.log(`[Orchestrator] Fields to ask: ${fields_to_ask?.join(', ')}`);
-
-  // Rate limiting: Max 3 follow-ups per application
-  if (follow_up_count >= 3) {
-    console.log(`[Orchestrator] Max follow-ups reached for application ${application_id}`);
-    return { 
-      status: 'skipped', 
-      reason: 'Max follow-ups (3) reached',
-      follow_up_count 
-    };
-  }
-
-  const org_id = action.agent_goals?.org_id;
-  let organization = 'citozorg';
-  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
-    organization = 'abczorg';
-  }
-
-  console.log(`[Orchestrator] Sending followup via send-ai-email for ${organization}`);
-
-  try {
-    // Send directly via send-ai-email (Resend) instead of n8n
-    const { data, error } = await supabase.functions.invoke('send-ai-email', {
-      body: {
-        email_type: 'followup_question',
-        recipient_email: candidate_email,
-        recipient_name: candidate_name || 'Sollicitant',
-        subject: `Aanvullende informatie nodig voor je sollicitatie`,
-        template_data: {
-          fields_to_ask,
-          current_completeness,
-          follow_up_count: follow_up_count + 1
-        },
-        application_id,
-        org_id
-      }
-    });
-
-    if (error) {
-      console.error('[Orchestrator] send-ai-email failed:', error);
-      throw error;
-    }
-
-    console.log('[Orchestrator] Follow-up email result:', data);
-
-    // Update application with follow-up count
-    await supabase
-      .from('professional_applications')
-      .update({ 
-        follow_up_count: (follow_up_count || 0) + 1,
-        last_followup_at: new Date().toISOString()
-      })
-      .eq('id', application_id);
-
-    return { 
-      status: 'sent_via_resend', 
-      organization,
-      fields_asked: fields_to_ask,
-      follow_up_count: follow_up_count + 1,
-      ...data
-    };
-
-  } catch (err: any) {
-    console.error('[Orchestrator] Followup send failed:', err);
-    return { 
-      status: 'failed', 
-      error: err.message,
-      organization
-    };
-  }
+  return { status: 'checked', interview_status: interview.status };
 }
 
 // Find matching opportunities for a professional
 async function findMatches(supabase: any, action: any) {
   // This would integrate with the matching service
   // For now, return a placeholder
-  return { status: 'matches_found', count: 0, note: 'Matching service integration pending' };
+  console.log(`🔍 [Find Matches] Finding matches for professional ${action.input_data.professional_id}`);
+  
+  return { 
+    status: 'completed', 
+    matches_found: 0,
+    note: 'Matching integration pending'
+  };
 }
 
 // Create onboarding tasks
 async function createOnboardingTasks(supabase: any, action: any) {
-  const { data: professional } = await supabase
-    .from('professionals')
-    .select('*, profiles:user_id(*)')
-    .eq('id', action.input_data.professional_id)
-    .single();
+  console.log(`📝 [Onboarding] Creating tasks for professional ${action.input_data.professional_id}`);
+  
+  // Get the default org_id
+  const org_id = '550e8400-e29b-41d4-a716-446655440000';
+  
+  const onboardingTasks = [
+    { title: 'VOG aanvragen', category: 'Onboarding' },
+    { title: 'BIG-registratie verifiëren', category: 'Onboarding' },
+    { title: 'Contractdocumenten verzamelen', category: 'Onboarding' },
+  ];
 
-  if (!professional) {
-    return { status: 'skipped', reason: 'Professional not found' };
+  for (const taskTemplate of onboardingTasks) {
+    await supabase.from('tasks').insert({
+      org_id: org_id,
+      title: taskTemplate.title,
+      category: taskTemplate.category,
+      priority: 'medium',
+      status: 'pending',
+      description: `Onboarding taak voor professional ${action.input_data.professional_id}`
+    });
   }
 
-  // Create onboarding task
-  const { data: task, error } = await supabase.from('tasks').insert({
-    org_id: professional.org_id,
-    title: `Onboarding: ${professional.full_name}`,
-    description: 'Onboarding checklist voor nieuwe professional',
-    priority: 'high',
-    category: 'recruitment',
-    status: 'todo'
-  }).select().single();
-
-  return { status: 'task_created', task_id: task?.id };
+  return { status: 'completed', tasks_created: onboardingTasks.length };
 }
 
 // Check if all actions for a goal are complete
@@ -944,44 +1144,47 @@ async function checkGoalCompletion(supabase: any, goalId: string) {
     .select('status')
     .eq('goal_id', goalId);
 
-  const allComplete = actions?.every((a: { status: string }) =>
-    a.status === 'completed' || a.status === 'skipped'
-  );
+  if (!actions || actions.length === 0) return;
 
-  if (allComplete) {
+  const allCompleted = actions.every((a: any) => a.status === 'completed');
+  const anyFailed = actions.some((a: any) => a.status === 'failed');
+
+  if (allCompleted) {
     await supabase
       .from('agent_goals')
-      .update({
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-        success_score: 1.0
+      .update({ 
+        status: 'completed', 
+        completed_at: new Date().toISOString() 
       })
       .eq('id', goalId);
-
-    console.log(`[Orchestrator] Goal ${goalId} completed successfully`);
+    console.log(`🎉 [Goal] ${goalId} completed!`);
+  } else if (anyFailed) {
+    await supabase
+      .from('agent_goals')
+      .update({ status: 'partially_failed' })
+      .eq('id', goalId);
+    console.log(`⚠️ [Goal] ${goalId} partially failed`);
   }
 }
 
-// Process the task queue (called by cron)
-async function processTaskQueue(supabase: any, limit: number) {
-  // Release stale locks
-  await supabase
-    .from('agent_task_queue')
-    .update({ status: 'pending', locked_by: null, locked_until: null })
-    .eq('status', 'locked')
-    .lt('locked_until', new Date().toISOString());
-
-  // Execute pending actions
-  return await executePendingActions(supabase, limit);
-}
-
-// Create a new goal manually
+// Create a new goal
 async function createGoal(supabase: any, body: any) {
-  const { org_id, goal_type, goal_description, input_data, priority = 5 } = body;
+  const { goal_type, goal_description, input_data, priority = 5, org_id } = body;
 
-  if (!org_id || !goal_type) {
+  if (!goal_type || !goal_description || !input_data) {
     return new Response(
-      JSON.stringify({ error: 'org_id and goal_type are required' }),
+      JSON.stringify({ error: 'Missing required fields: goal_type, goal_description, input_data' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Validate goal type
+  if (!GOAL_CONFIGS[goal_type]) {
+    return new Response(
+      JSON.stringify({ 
+        error: `Unknown goal type: ${goal_type}`,
+        available_types: Object.keys(GOAL_CONFIGS)
+      }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
@@ -989,22 +1192,22 @@ async function createGoal(supabase: any, body: any) {
   const { data: goal, error } = await supabase
     .from('agent_goals')
     .insert({
-      org_id,
+      org_id: org_id || '550e8400-e29b-41d4-a716-446655440000',
       goal_type,
-      goal_description: goal_description || `${goal_type} goal`,
-      input_data: input_data || {},
-      priority
+      goal_description,
+      input_data,
+      priority,
+      status: 'pending'
     })
     .select()
     .single();
 
   if (error) throw error;
 
-  // Immediately plan the goal
-  const planResult = await planAndQueueGoal(supabase, goal);
+  console.log(`✅ [Create Goal] Created goal ${goal.id} of type ${goal_type}`);
 
   return new Response(
-    JSON.stringify({ success: true, goal, ...planResult }),
+    JSON.stringify({ success: true, goal }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 }
