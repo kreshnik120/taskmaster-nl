@@ -65,16 +65,17 @@ interface SendEmailRequest {
 
 // Organization email configuration
 // NOTE: ABCzorg uses citozorg.nl domain because abczorg.nl is not yet verified in Resend
+// Reply-To uses Resend inbound address for AI processing of candidate replies
 const ORG_EMAIL_CONFIG: Record<string, { from: string; name: string; replyTo: string }> = {
   'citozorg': {
     from: 'personeel@citozorg.nl',
     name: 'CitoZorg Recruitment',
-    replyTo: 'k.atashi@citozorg.nl' // Tijdelijk: tot personeel@citozorg.nl een echte mailbox is
+    replyTo: 'recruitment@inbound.citozorg.nl' // Resend inbound webhook voor AI verwerking
   },
   'abczorg': {
     from: 'personeel@citozorg.nl', // Using citozorg.nl (verified) until abczorg.nl is added to Resend
     name: 'CitoZorg Recruitment', // Using CitoZorg name because from domain is citozorg.nl
-    replyTo: 'k.atashi@citozorg.nl' // Tijdelijk: tot personeel@citozorg.nl een echte mailbox is
+    replyTo: 'recruitment@inbound.citozorg.nl' // Resend inbound webhook voor AI verwerking
   }
 };
 
