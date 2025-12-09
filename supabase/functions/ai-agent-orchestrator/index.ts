@@ -905,7 +905,8 @@ async function executeFollowupQuestion(supabase: any, action: any) {
         recipient_email: action.input_data.candidate_email,
         recipient_name: action.input_data.candidate_name,
         subject: emailData?.subject || `Aanvullende informatie nodig - ${action.input_data.candidate_name}`,
-        html_content: emailData?.html || emailData?.content,
+        html_content: emailData?.emailHtml,
+        plain_text: emailData?.emailPlainText,
         application_id: action.input_data.application_id,
         org_id: org_id
       }

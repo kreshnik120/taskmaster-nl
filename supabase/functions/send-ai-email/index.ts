@@ -69,12 +69,12 @@ const ORG_EMAIL_CONFIG: Record<string, { from: string; name: string; replyTo: st
   'citozorg': {
     from: 'personeel@citozorg.nl',
     name: 'CitoZorg Recruitment',
-    replyTo: 'personeel@citozorg.nl'
+    replyTo: 'k.atashi@citozorg.nl' // Tijdelijk: tot personeel@citozorg.nl een echte mailbox is
   },
   'abczorg': {
     from: 'personeel@citozorg.nl', // Using citozorg.nl (verified) until abczorg.nl is added to Resend
-    name: 'ABCzorg Recruitment',
-    replyTo: 'personeel@citozorg.nl'
+    name: 'CitoZorg Recruitment', // Using CitoZorg name because from domain is citozorg.nl
+    replyTo: 'k.atashi@citozorg.nl' // Tijdelijk: tot personeel@citozorg.nl een echte mailbox is
   }
 };
 
