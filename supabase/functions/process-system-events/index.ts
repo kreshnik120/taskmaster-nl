@@ -207,6 +207,72 @@ serve(async (req) => {
         } else {
           processedCount++;
         }
+        
+        // ============================================================
+        // AUTOMATISCHE AGENT GOAL CREATIE VOOR NIEUWE SOLLICITATIES
+        // ============================================================
+        if (event.event_type === 'application_created') {
+          const eventData = event.event_data || {};
+          const completenessScore = eventData.completeness_score || 0;
+          const missingInfo = eventData.missing_info || [];
+          const candidateEmail = eventData.email_from;
+          const candidateName = eventData.extracted_data?.naam || eventData.extracted_data?.name;
+          
+          console.log(`📋 Application event: completeness=${completenessScore}%, missing=${missingInfo.length} fields, email=${candidateEmail}`);
+          
+          // Alleen follow-up als:
+          // 1. completeness < 95%
+          // 2. Er missing info is
+          // 3. Kandidaat heeft een email
+          if (completenessScore < 95 && missingInfo.length > 0 && candidateEmail) {
+            // Bepaal org_id voor de goal
+            const goalOrgId = event.org_id || eventData.org_id || '550e8400-e29b-41d4-a716-446655440000'; // ABCzorg fallback
+            
+            // Check of er al een pending goal bestaat voor deze application
+            const { data: existingGoal } = await supabase
+              .from('agent_goals')
+              .select('id')
+              .eq('goal_type', 'application_intake_completion')
+              .eq('status', 'pending')
+              .filter('input_data->>application_id', 'eq', eventData.id)
+              .maybeSingle();
+            
+            if (!existingGoal) {
+              console.log(`🎯 Creating agent_goal for incomplete application ${eventData.id}...`);
+              
+              const { data: newGoal, error: goalError } = await supabase
+                .from('agent_goals')
+                .insert({
+                  org_id: goalOrgId,
+                  goal_type: 'application_intake_completion',
+                  goal_description: `Verzamel ontbrekende informatie voor ${candidateName || 'kandidaat'}`,
+                  priority: Math.round(100 - completenessScore), // Hogere prioriteit voor lagere completeness
+                  input_data: {
+                    application_id: eventData.id,
+                    candidate_email: candidateEmail,
+                    candidate_name: candidateName,
+                    current_completeness: completenessScore,
+                    missing_info: missingInfo,
+                    follow_up_count: 0
+                  },
+                  status: 'pending'
+                })
+                .select('id')
+                .single();
+              
+              if (goalError) {
+                console.error(`❌ Failed to create agent_goal:`, goalError);
+                errors.push(`Goal creation failed: ${goalError.message}`);
+              } else {
+                console.log(`✅ Agent goal created: ${newGoal.id} for ${candidateName || eventData.id}`);
+              }
+            } else {
+              console.log(`⏭️ Skipping goal creation - pending goal already exists: ${existingGoal.id}`);
+            }
+          } else {
+            console.log(`⏭️ Skipping goal creation - completeness=${completenessScore}% (>=95%) or no email or no missing info`);
+          }
+        }
       } catch (eventError) {
         console.error(`❌ Error processing event ${event.id}:`, eventError);
         errors.push(`Event ${event.id}: ${eventError instanceof Error ? eventError.message : 'Unknown error'}`);
