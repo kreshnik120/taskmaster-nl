@@ -37,9 +37,14 @@ export async function verifySvixSignature(
   }
 
   // Compute expected signature using Web Crypto API
+  // Svix/Resend secrets have format "whsec_<base64>" - we need to strip prefix and decode
   const signedContent = `${id}.${timestamp}.${payload}`;
   const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret);
+  
+  // Strip whsec_ prefix if present and base64-decode the secret
+  const secretPart = secret.startsWith('whsec_') ? secret.substring(6) : secret;
+  const keyData = Uint8Array.from(atob(secretPart), c => c.charCodeAt(0));
+  
   const messageData = encoder.encode(signedContent);
   
   const cryptoKey = await crypto.subtle.importKey(
