@@ -130,31 +130,35 @@ export function AIAgentTestPanel() {
 
     setSendingEmail(true);
     try {
-      const { data, error } = await supabase.functions.invoke("send-ai-email", {
-        body: {
-          email_type: "followup_question",
-          recipient_email: testEmail,
-          recipient_name: testName,
-          subject: generatedEmail.subject,
-          html_content: generatedEmail.htmlContent,
-          plain_content: generatedEmail.plainTextContent,
-          organization: "citozorg",
-          metadata: {
-            test_panel: true,
-            fields_asked: generatedEmail.fieldsAsked,
-          },
+      const requestBody = {
+        email_type: "followup_question",
+        recipient_email: testEmail,
+        recipient_name: testName,
+        subject: generatedEmail.subject,
+        html_content: generatedEmail.htmlContent,
+        plain_text: generatedEmail.plainTextContent, // Fixed: was plain_content
+        org_id: "650e8400-e29b-41d4-a716-446655440001", // Fixed: CitoZorg UUID
+        metadata: {
+          test_panel: true,
+          fields_asked: generatedEmail.fieldsAsked,
         },
+      };
+
+      console.log("📧 Sending email with body:", requestBody);
+
+      const { data, error } = await supabase.functions.invoke("send-ai-email", {
+        body: requestBody,
       });
+
+      console.log("📧 Edge function response:", { data, error });
 
       if (error) throw error;
 
       toast.success("✅ Email verzonden via Resend!", {
         description: `Verstuurd naar ${testEmail}`,
       });
-
-      console.log("Email sent:", data);
     } catch (error: any) {
-      console.error("Send email error:", error);
+      console.error("❌ Send email error:", error);
       toast.error("Fout bij versturen email", {
         description: error.message,
       });
