@@ -198,23 +198,63 @@ export function AIAgentTestPanel() {
 
   const handleTriggerOrchestrator = async () => {
     setSending(true);
+    console.log("🚀 Triggering AI Agent Orchestrator (2-step process)...");
+    
     try {
-      const { data, error } = await supabase.functions.invoke("ai-agent-orchestrator");
+      // STAP 1: Process pending goals (planning fase)
+      console.log("📋 Step 1: Processing pending goals...");
+      toast.info("Stap 1/2: Goals verwerken...");
       
-      if (error) throw error;
+      const { data: planData, error: planError } = await supabase.functions.invoke(
+        "ai-agent-orchestrator",
+        { body: { action: 'process_pending_goals' } }
+      );
+      
+      console.log("📋 Plan result:", planData, planError);
+      
+      if (planError) {
+        console.error("❌ Plan error:", planError);
+        throw planError;
+      }
 
-      toast.success("🤖 Orchestrator getriggerd", {
-        description: `${data.goalsProcessed || 0} goals verwerkt`,
-      });
+      const goalsProcessed = planData?.goalsProcessed || planData?.processed || 0;
+      
+      // STAP 2: Execute queued actions (dit stuurt de emails!)
+      console.log("⚡ Step 2: Executing queued actions...");
+      toast.info("Stap 2/2: Acties uitvoeren (emails versturen)...");
+      
+      const { data: execData, error: execError } = await supabase.functions.invoke(
+        "ai-agent-orchestrator",
+        { body: { action: 'execute_actions' } }
+      );
+      
+      console.log("⚡ Execute result:", execData, execError);
+      
+      if (execError) {
+        console.error("❌ Execute error:", execError);
+        // Don't throw - still show partial success
+        toast.warning("Goals verwerkt, maar acties gefaald", {
+          description: execError.message,
+        });
+      } else {
+        const actionsExecuted = execData?.executed || execData?.actionsExecuted || 0;
+        
+        toast.success("🤖 Orchestrator complete!", {
+          description: `${goalsProcessed} goals gepland, ${actionsExecuted} acties uitgevoerd`,
+        });
+        
+        console.log("✅ Orchestrator complete:", { goalsProcessed, actionsExecuted });
+      }
 
       refetch();
     } catch (error: any) {
-      console.error("Orchestrator error:", error);
+      console.error("❌ Orchestrator error:", error);
       toast.error("Fout bij triggeren orchestrator", {
         description: error.message,
       });
     } finally {
       setSending(false);
+      console.log("🏁 handleTriggerOrchestrator FINISHED");
     }
   };
 
