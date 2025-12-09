@@ -25,6 +25,7 @@ export function AIAgentTestPanel() {
   const [testEmail, setTestEmail] = useState("");
   const [testName, setTestName] = useState("Test Kandidaat");
   const [sending, setSending] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
   const [generatedEmail, setGeneratedEmail] = useState<GeneratedEmail | null>(null);
 
   // Fetch recent AI agent activity
@@ -118,6 +119,47 @@ export function AIAgentTestPanel() {
       });
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleActuallySendEmail = async () => {
+    if (!generatedEmail || !testEmail) {
+      toast.error("Genereer eerst een email");
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-ai-email", {
+        body: {
+          email_type: "followup_question",
+          recipient_email: testEmail,
+          recipient_name: testName,
+          subject: generatedEmail.subject,
+          html_content: generatedEmail.htmlContent,
+          plain_content: generatedEmail.plainTextContent,
+          organization: "citozorg",
+          metadata: {
+            test_panel: true,
+            fields_asked: generatedEmail.fieldsAsked,
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      toast.success("✅ Email verzonden via Resend!", {
+        description: `Verstuurd naar ${testEmail}`,
+      });
+
+      console.log("Email sent:", data);
+    } catch (error: any) {
+      console.error("Send email error:", error);
+      toast.error("Fout bij versturen email", {
+        description: error.message,
+      });
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -242,18 +284,34 @@ export function AIAgentTestPanel() {
                   <Mail className="h-4 w-4 text-primary" />
                   Gegenereerde Email Preview
                 </h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 text-xs"
-                  onClick={() => {
-                    navigator.clipboard.writeText(generatedEmail.plainTextContent);
-                    toast.success("Gekopieerd naar klembord");
-                  }}
-                >
-                  <Copy className="h-3 w-3" />
-                  Kopiëren
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="gap-1 text-xs"
+                    onClick={handleActuallySendEmail}
+                    disabled={sendingEmail}
+                  >
+                    {sendingEmail ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Send className="h-3 w-3" />
+                    )}
+                    Verstuur naar {testEmail || "..."}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1 text-xs"
+                    onClick={() => {
+                      navigator.clipboard.writeText(generatedEmail.plainTextContent);
+                      toast.success("Gekopieerd naar klembord");
+                    }}
+                  >
+                    <Copy className="h-3 w-3" />
+                    Kopiëren
+                  </Button>
+                </div>
               </div>
 
               {/* Subject */}
