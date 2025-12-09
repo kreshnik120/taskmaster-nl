@@ -197,3 +197,6 @@ verify_jwt = false
 
 [functions.send-ai-email]
 verify_jwt = false
+
+[functions.setup-resend-inbound]
+verify_jwt = false
