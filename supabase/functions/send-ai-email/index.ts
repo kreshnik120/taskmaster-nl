@@ -64,6 +64,7 @@ interface SendEmailRequest {
 }
 
 // Organization email configuration
+// NOTE: ABCzorg uses citozorg.nl domain because abczorg.nl is not yet verified in Resend
 const ORG_EMAIL_CONFIG: Record<string, { from: string; name: string; replyTo: string }> = {
   'citozorg': {
     from: 'personeel@citozorg.nl',
@@ -71,9 +72,9 @@ const ORG_EMAIL_CONFIG: Record<string, { from: string; name: string; replyTo: st
     replyTo: 'personeel@citozorg.nl'
   },
   'abczorg': {
-    from: 'personeel@abczorg.nl', // TODO: Configure when domain is added
+    from: 'personeel@citozorg.nl', // Using citozorg.nl (verified) until abczorg.nl is added to Resend
     name: 'ABCzorg Recruitment',
-    replyTo: 'personeel@abczorg.nl'
+    replyTo: 'personeel@citozorg.nl'
   }
 };
 
