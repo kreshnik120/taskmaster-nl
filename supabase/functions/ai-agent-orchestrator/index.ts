@@ -884,6 +884,7 @@ async function executeFollowupQuestion(supabase: any, action: any) {
     const { data: emailData, error: genError } = await supabase.functions.invoke('generate-followup-email', {
       body: {
         application_id: action.input_data.application_id,
+        candidate_email: action.input_data.candidate_email, // ← CRITICAL: Was missing!
         fields_to_ask: action.input_data.fields_to_ask,
         candidate_name: action.input_data.candidate_name,
         current_completeness: action.input_data.current_completeness
