@@ -8,6 +8,9 @@ const corsHeaders = {
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 
+// Helper function for delay to avoid rate limiting
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 interface ResendDomainResponse {
   id: string;
   name: string;
@@ -66,6 +69,9 @@ serve(async (req: Request): Promise<Response> => {
       const domainsData = await domainsResponse.json();
       console.log(`[setup-resend-inbound] Found ${domainsData.data?.length || 0} existing domains`);
 
+      // Delay to avoid rate limiting (2 req/sec limit)
+      await delay(1000);
+
       // Check if inbound domain already exists
       const existingDomain = domainsData.data?.find((d: any) => d.name === inboundDomain);
       
@@ -112,7 +118,10 @@ serve(async (req: Request): Promise<Response> => {
         console.log(`[setup-resend-inbound] Domain created with ID: ${domainInfo.id}`);
       }
 
-      // Step 3: Check/Create webhook
+      // Delay before webhook operations
+      await delay(1000);
+
+      // Step 3: Check/Create webhook with retry logic
       console.log("[setup-resend-inbound] Checking existing webhooks...");
       const webhooksResponse = await fetch("https://api.resend.com/webhooks", {
         method: "GET",
@@ -126,6 +135,8 @@ serve(async (req: Request): Promise<Response> => {
 
       if (webhooksResponse.ok) {
         const webhooksData = await webhooksResponse.json();
+        console.log(`[setup-resend-inbound] Found ${webhooksData.data?.length || 0} existing webhooks`);
+        
         const existingWebhook = webhooksData.data?.find((w: any) => 
           w.endpoint_url === webhookUrl && w.events?.includes("email.received")
         );
@@ -136,31 +147,61 @@ serve(async (req: Request): Promise<Response> => {
           // Note: Resend doesn't return secret for existing webhooks, need to use stored one
           webhookSecret = Deno.env.get("RESEND_WEBHOOK_SIGNING_SECRET") || null;
         }
+      } else {
+        console.log(`[setup-resend-inbound] Failed to list webhooks: ${await webhooksResponse.text()}`);
       }
 
-      if (!webhookInfo) {
-        // Create webhook for inbound emails
-        console.log(`[setup-resend-inbound] Creating webhook to ${webhookUrl}...`);
-        const createWebhookResponse = await fetch("https://api.resend.com/webhooks", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${RESEND_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            endpoint_url: webhookUrl,
-            events: ["email.received"],
-          }),
-        });
+      // Delay before webhook creation
+      await delay(1000);
 
-        if (!createWebhookResponse.ok) {
-          const errorText = await createWebhookResponse.text();
-          console.error(`[setup-resend-inbound] Webhook creation failed: ${errorText}`);
-          // Continue anyway, webhook might need manual creation
-        } else {
-          webhookInfo = await createWebhookResponse.json();
-          webhookSecret = webhookInfo?.secret || null;
-          console.log(`[setup-resend-inbound] Webhook created with ID: ${webhookInfo?.id}`);
+      if (!webhookInfo) {
+        // Create webhook for inbound emails with retry logic
+        console.log(`[setup-resend-inbound] Creating webhook to ${webhookUrl}...`);
+        
+        let webhookRetries = 3;
+        while (!webhookInfo && webhookRetries > 0) {
+          try {
+            const createWebhookResponse = await fetch("https://api.resend.com/webhooks", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${RESEND_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                endpoint: webhookUrl,  // Resend API expects 'endpoint' not 'endpoint_url'
+                events: ["email.received"],
+              }),
+            });
+
+            if (createWebhookResponse.status === 429) {
+              console.log(`[setup-resend-inbound] Rate limited (429), waiting 2s before retry... (${webhookRetries - 1} retries left)`);
+              await delay(2000);
+              webhookRetries--;
+              continue;
+            }
+
+            if (!createWebhookResponse.ok) {
+              const errorText = await createWebhookResponse.text();
+              console.error(`[setup-resend-inbound] Webhook creation failed: ${createWebhookResponse.status} - ${errorText}`);
+              webhookRetries--;
+              await delay(1500);
+              continue;
+            }
+
+            webhookInfo = await createWebhookResponse.json();
+            webhookSecret = webhookInfo?.secret || null;
+            console.log(`[setup-resend-inbound] ✅ Webhook created successfully with ID: ${webhookInfo?.id}`);
+            console.log(`[setup-resend-inbound] 🔐 Webhook secret: ${webhookSecret ? 'RECEIVED' : 'NOT RECEIVED'}`);
+            break;
+          } catch (e) {
+            console.error(`[setup-resend-inbound] Webhook creation error:`, e);
+            webhookRetries--;
+            await delay(2000);
+          }
+        }
+
+        if (!webhookInfo) {
+          console.error("[setup-resend-inbound] ❌ Failed to create webhook after all retries");
         }
       }
 
@@ -188,11 +229,16 @@ serve(async (req: Request): Promise<Response> => {
           events: webhookInfo.events,
         } : null,
         webhook_secret: webhookSecret,
-        next_steps: [
-          "1. Voeg het MX record toe aan je DNS voor inbound.citozorg.nl",
-          "2. Wacht tot DNS is gepropageerd (kan tot 24 uur duren)",
-          "3. Check de domain status in Resend dashboard",
-          "4. Test door een email te sturen naar recruitment@inbound.citozorg.nl",
+        webhook_created: !!webhookInfo,
+        next_steps: webhookInfo ? [
+          "✅ Webhook is geconfigureerd!",
+          "1. Sla de webhook secret op als RESEND_WEBHOOK_SIGNING_SECRET",
+          "2. Test door een email te sturen naar recruitment@inbound.citozorg.nl",
+        ] : [
+          "❌ Webhook kon niet worden aangemaakt",
+          "1. Maak de webhook handmatig aan in Resend Dashboard",
+          `2. URL: ${webhookUrl}`,
+          "3. Event: email.received",
         ],
         reply_to_address: "recruitment@inbound.citozorg.nl",
       }), {
@@ -227,6 +273,8 @@ serve(async (req: Request): Promise<Response> => {
         });
       }
 
+      await delay(1000);
+
       // Get full domain details
       const domainDetailResponse = await fetch(`https://api.resend.com/domains/${domain.id}`, {
         method: "GET",
@@ -236,6 +284,31 @@ serve(async (req: Request): Promise<Response> => {
       });
 
       const domainDetails = await domainDetailResponse.json();
+
+      await delay(1000);
+
+      // Also check webhooks
+      const webhooksResponse = await fetch("https://api.resend.com/webhooks", {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${RESEND_API_KEY}`,
+        },
+      });
+
+      let webhookStatus = null;
+      if (webhooksResponse.ok) {
+        const webhooksData = await webhooksResponse.json();
+        const webhookUrl = `${SUPABASE_URL}/functions/v1/handle-application-reply`;
+        const existingWebhook = webhooksData.data?.find((w: any) => 
+          w.endpoint_url === webhookUrl && w.events?.includes("email.received")
+        );
+        webhookStatus = existingWebhook ? {
+          id: existingWebhook.id,
+          endpoint_url: existingWebhook.endpoint_url,
+          events: existingWebhook.events,
+          status: "active"
+        } : null;
+      }
 
       return new Response(JSON.stringify({
         success: true,
@@ -247,6 +320,8 @@ serve(async (req: Request): Promise<Response> => {
         },
         records: domainDetails.records,
         is_verified: domain.status === "verified",
+        webhook: webhookStatus,
+        webhook_configured: !!webhookStatus,
         message: domain.status === "verified" 
           ? "✅ Domain is geverifieerd! Inbound emails worden nu ontvangen."
           : "⏳ Domain is nog niet geverifieerd. Check je DNS records.",
@@ -271,6 +346,8 @@ serve(async (req: Request): Promise<Response> => {
       if (!domain) {
         throw new Error(`Domain ${inboundDomain} not found`);
       }
+
+      await delay(1000);
 
       // Trigger verification
       const verifyResponse = await fetch(`https://api.resend.com/domains/${domain.id}/verify`, {
