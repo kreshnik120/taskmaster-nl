@@ -4851,6 +4851,44 @@ export type Database = {
       match_knowledge:
         | {
             Args: {
+              filter_org_id?: string
+              match_count?: number
+              match_threshold?: number
+              query_embedding: string
+            }
+            Returns: {
+              category: string
+              confidence_score: number
+              key: string
+              knowledge_id: string
+              similarity: number
+              value: Json
+            }[]
+          }
+        | {
+            Args: {
+              filter_customer_id?: string
+              filter_jurisdiction?: string
+              filter_org_id?: string
+              filter_role_tags?: string[]
+              match_count?: number
+              match_threshold?: number
+              query_embedding: string
+            }
+            Returns: {
+              category: string
+              confidence_score: number
+              key: string
+              knowledge_id: string
+              role_tags: string[]
+              similarity: number
+              valid_from: string
+              valid_to: string
+              value: Json
+            }[]
+          }
+        | {
+            Args: {
               filter_customer_id?: string
               filter_jurisdiction?: string
               filter_org_id?: string
@@ -4870,44 +4908,6 @@ export type Database = {
               valid_from: string
               valid_to: string
               validation_status: string
-              value: Json
-            }[]
-          }
-        | {
-            Args: {
-              filter_customer_id?: string
-              filter_jurisdiction?: string
-              filter_org_id?: string
-              filter_role_tags?: string[]
-              match_count?: number
-              match_threshold?: number
-              query_embedding: string
-            }
-            Returns: {
-              category: string
-              confidence_score: number
-              key: string
-              knowledge_id: string
-              role_tags: string[]
-              similarity: number
-              valid_from: string
-              valid_to: string
-              value: Json
-            }[]
-          }
-        | {
-            Args: {
-              filter_org_id?: string
-              match_count?: number
-              match_threshold?: number
-              query_embedding: string
-            }
-            Returns: {
-              category: string
-              confidence_score: number
-              key: string
-              knowledge_id: string
-              similarity: number
               value: Json
             }[]
           }
