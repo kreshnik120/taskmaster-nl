@@ -649,12 +649,9 @@ function generateSmartMissingInfo(extractedData: Record<string, unknown>): strin
   }
   
   // 💼 ZZP-specific required fields (kritiek voor facturatie)
+  // NOTE: uurtarief is OPTIONEEL - niet als missing markeren
   const werkvorm = extractedData.werkvorm as string;
   if (werkvorm === 'ZZP') {
-    if (!extractedData.gewenst_uurloon && !extractedData.uurtarief) {
-      missing.push('uurtarief');
-      console.log('🔍 HR Smart: ZZP profile missing uurtarief');
-    }
     if (!extractedData.kvk_nummer) {
       missing.push('kvk_nummer');
       console.log('🔍 HR Smart: ZZP profile missing KvK-nummer');
