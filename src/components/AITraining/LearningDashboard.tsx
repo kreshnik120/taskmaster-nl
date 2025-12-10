@@ -12,7 +12,9 @@ import { useState } from "react";
 import { AdminOnly } from "@/components/auth/AdminOnly";
 import { LearningProgressCharts } from "./LearningProgressCharts";
 import { TopValidatorsLeaderboard } from "./TopValidatorsLeaderboard";
+import { GroupedCategoryDisplay } from "./GroupedCategoryDisplay";
 import { useNavigate } from "react-router-dom";
+import { CATEGORY_TO_GROUP, getCoverageIcon } from "@/lib/constants/knowledgeCategoryHierarchy";
 
 export const LearningDashboard = () => {
   const { toast } = useToast();
@@ -36,53 +38,66 @@ export const LearningDashboard = () => {
   });
 
 
-  // Fetch knowledge base stats - ONLY items with embeddings (AI-usable)
+  // Fetch knowledge base stats with FULL coverage data (embedded + total per category)
   const { data: knowledgeStats, refetch: refetchKnowledgeStats } = useQuery({
-    queryKey: ['ai-knowledge-stats-embedded'],
+    queryKey: ['ai-knowledge-stats-grouped'],
     queryFn: async () => {
-      // Haal alleen items op die een embedding hebben (AI kan deze gebruiken)
-      const { data: embeddedItems, error } = await supabase
+      // Fetch ALL knowledge items (for total counts)
+      const { data: allItems, error: allError } = await supabase
+        .from('ai_knowledge_base')
+        .select('id, category, confidence_score, usage_count, created_at, key')
+        .is('deleted_at', null);
+      
+      if (allError) throw allError;
+
+      // Fetch embedded knowledge IDs
+      const { data: embeddedData, error: embError } = await supabase
         .from('knowledge_embeddings')
-        .select(`
-          knowledge_id,
-          ai_knowledge_base!inner (
-            id, category, confidence_score, usage_count, created_at, key
-          )
-        `);
+        .select('knowledge_id');
       
-      if (error) throw error;
+      if (embError) throw embError;
       
-      // Extract knowledge base items from the join result
-      const items = embeddedItems?.map(e => e.ai_knowledge_base).filter(Boolean) || [];
+      const embeddedIds = new Set(embeddedData?.map(e => e.knowledge_id) || []);
       
-      // Tel per categorie met usage
-      const categoryStats: Record<string, { count: number; usage: number }> = {};
-      items.forEach((item: any) => {
-        if (!categoryStats[item.category]) {
-          categoryStats[item.category] = { count: 0, usage: 0 };
+      // Build category stats with total + embedded counts
+      const categoryData: Record<string, { total: number; embedded: number; usage: number }> = {};
+      
+      allItems?.forEach((item: any) => {
+        const cat = item.category;
+        if (!categoryData[cat]) {
+          categoryData[cat] = { total: 0, embedded: 0, usage: 0 };
         }
-        categoryStats[item.category].count += 1;
-        categoryStats[item.category].usage += item.usage_count || 0;
+        categoryData[cat].total += 1;
+        categoryData[cat].usage += item.usage_count || 0;
+        if (embeddedIds.has(item.id)) {
+          categoryData[cat].embedded += 1;
+        }
       });
       
-      // Sorteer op count (meeste eerst)
-      const sortedCategories = Object.entries(categoryStats)
-        .sort(([, a], [, b]) => b.count - a.count)
-        .reduce((acc, [key, value]) => {
-          acc[key] = value;
-          return acc;
-        }, {} as Record<string, { count: number; usage: number }>);
+      // Calculate totals
+      const totalItems = allItems?.length || 0;
+      const totalEmbedded = embeddedIds.size;
+      const avgConfidence = allItems?.reduce((sum: number, item: any) => sum + (item.confidence_score || 0), 0) / (totalItems || 1);
+      const totalUsage = allItems?.reduce((sum: number, item: any) => sum + (item.usage_count || 0), 0) || 0;
       
-      const avgConfidence = items.reduce((sum: number, item: any) => sum + (item.confidence_score || 0), 0) / (items.length || 1);
-      const totalUsage = items.reduce((sum: number, item: any) => sum + (item.usage_count || 0), 0);
+      // Recent embedded items for display
+      const embeddedItems = allItems?.filter((item: any) => embeddedIds.has(item.id)) || [];
+      const recentItems = embeddedItems
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 5);
+      
+      // Calculate overall coverage
+      const overallCoverage = totalItems > 0 ? Math.round((totalEmbedded / totalItems) * 100) : 0;
       
       return {
-        total: items.length,
-        categoryCount: Object.keys(sortedCategories).length,
-        categories: sortedCategories,
+        total: totalItems,
+        totalEmbedded,
+        overallCoverage,
+        categoryCount: Object.keys(categoryData).length,
+        categoryData, // Full stats per category
         avgConfidence: avgConfidence.toFixed(2),
         totalUsage,
-        recentItems: items.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5)
+        recentItems
       };
     }
   });
@@ -373,9 +388,15 @@ export const LearningDashboard = () => {
                 <Database className="h-5 w-5" />
                 Kennis Categorieën
               </h3>
-              <p className="text-sm text-muted-foreground">
-                {knowledgeStats?.categoryCount || 0} categorieën • {knowledgeStats?.total?.toLocaleString() || 0} items bruikbaar door AI
-              </p>
+              <div className="flex items-center gap-4 text-sm">
+                <Badge variant="outline" className="gap-1">
+                  {getCoverageIcon(knowledgeStats?.overallCoverage || 0)}
+                  {knowledgeStats?.overallCoverage || 0}% AI Coverage
+                </Badge>
+                <span className="text-muted-foreground">
+                  {knowledgeStats?.totalEmbedded?.toLocaleString() || 0} / {knowledgeStats?.total?.toLocaleString() || 0} items bruikbaar
+                </span>
+              </div>
             </div>
             
             {knowledgeStats?.total === 0 ? (
@@ -385,30 +406,15 @@ export const LearningDashboard = () => {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {Object.entries(knowledgeStats?.categories || {}).map(([category, stats]) => {
-                    const categoryData = stats as { count: number; usage: number };
-                    return (
-                      <div key={`category-${category}`} className="p-4 bg-muted rounded-lg">
-                        <div className="flex items-center gap-2 mb-1">
-                          {getCategoryIcon(category)}
-                          <span className="text-xs font-medium capitalize">
-                            {category.replace(/_/g, ' ')}
-                          </span>
-                        </div>
-                        <p className="text-2xl font-bold">{categoryData.count}</p>
-                        <p className="text-xs text-muted-foreground">{categoryData.usage}x gebruikt</p>
-                      </div>
-                    );
-                  })}
-                </div>
+                {/* Grouped Category Display */}
+                <GroupedCategoryDisplay categoryData={knowledgeStats?.categoryData || {}} />
 
                 <div>
-                  <h4 className="text-sm font-medium mb-2">Recent Toegevoegd</h4>
+                  <h4 className="text-sm font-medium mb-2">Recent Toegevoegd (met embedding)</h4>
                   <ScrollArea className="h-[200px]">
                     <div className="space-y-2">
-                {knowledgeStats?.recentItems?.map((item: any, index: number) => (
-                  <div key={item.id || `recent-${index}`} className="p-3 bg-muted/50 rounded-lg text-sm">
+                      {knowledgeStats?.recentItems?.map((item: any, index: number) => (
+                        <div key={item.id || `recent-${index}`} className="p-3 bg-muted/50 rounded-lg text-sm">
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
@@ -416,8 +422,8 @@ export const LearningDashboard = () => {
                                 <span className="font-medium">{item.key}</span>
                               </div>
                               <p className="text-xs text-muted-foreground">
-                                Betrouwbaarheid: {(item.confidence_score * 100).toFixed(0)}% • 
-                                Gebruikt: {item.usage_count}x
+                                Betrouwbaarheid: {((item.confidence_score || 0) * 100).toFixed(0)}% • 
+                                Gebruikt: {item.usage_count || 0}x
                               </p>
                             </div>
                             <Badge variant="outline" className="text-xs">
