@@ -36,31 +36,53 @@ export const LearningDashboard = () => {
   });
 
 
-  // Fetch knowledge base stats
+  // Fetch knowledge base stats - ONLY items with embeddings (AI-usable)
   const { data: knowledgeStats, refetch: refetchKnowledgeStats } = useQuery({
-    queryKey: ['ai-knowledge-stats'],
+    queryKey: ['ai-knowledge-stats-embedded'],
     queryFn: async () => {
-    const { data, error } = await supabase
-      .from('ai_knowledge_base')
-      .select('category, confidence_score, usage_count, created_at')
-      .is('deleted_at', null);
+      // Haal alleen items op die een embedding hebben (AI kan deze gebruiken)
+      const { data: embeddedItems, error } = await supabase
+        .from('knowledge_embeddings')
+        .select(`
+          knowledge_id,
+          ai_knowledge_base!inner (
+            id, category, confidence_score, usage_count, created_at, key
+          )
+        `);
       
       if (error) throw error;
       
-      const categories = data?.reduce((acc: any, item: any) => {
-        acc[item.category] = (acc[item.category] || 0) + 1;
-        return acc;
-      }, {});
+      // Extract knowledge base items from the join result
+      const items = embeddedItems?.map(e => e.ai_knowledge_base).filter(Boolean) || [];
       
-      const avgConfidence = data?.reduce((sum: number, item: any) => sum + (item.confidence_score || 0), 0) / (data?.length || 1);
-      const totalUsage = data?.reduce((sum: number, item: any) => sum + (item.usage_count || 0), 0);
+      // Tel per categorie met usage
+      const categoryStats: Record<string, { count: number; usage: number }> = {};
+      items.forEach((item: any) => {
+        if (!categoryStats[item.category]) {
+          categoryStats[item.category] = { count: 0, usage: 0 };
+        }
+        categoryStats[item.category].count += 1;
+        categoryStats[item.category].usage += item.usage_count || 0;
+      });
+      
+      // Sorteer op count (meeste eerst)
+      const sortedCategories = Object.entries(categoryStats)
+        .sort(([, a], [, b]) => b.count - a.count)
+        .reduce((acc, [key, value]) => {
+          acc[key] = value;
+          return acc;
+        }, {} as Record<string, { count: number; usage: number }>);
+      
+      const avgConfidence = items.reduce((sum: number, item: any) => sum + (item.confidence_score || 0), 0) / (items.length || 1);
+      const totalUsage = items.reduce((sum: number, item: any) => sum + (item.usage_count || 0), 0);
       
       return {
-        total: data?.length || 0,
-        categories,
+        total: items.length,
+        categoryCount: Object.keys(sortedCategories).length,
+        categories: sortedCategories,
         avgConfidence: avgConfidence.toFixed(2),
         totalUsage,
-        recentItems: data?.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5)
+        recentItems: items.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5)
       };
     }
   });
@@ -346,10 +368,15 @@ export const LearningDashboard = () => {
 
         <TabsContent value="knowledge" className="mt-4">
           <Card className="p-6">
-            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Database className="h-5 w-5" />
-              Kennis Categorieën
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Database className="h-5 w-5" />
+                Kennis Categorieën
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {knowledgeStats?.categoryCount || 0} categorieën • {knowledgeStats?.total?.toLocaleString() || 0} items bruikbaar door AI
+              </p>
+            </div>
             
             {knowledgeStats?.total === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
@@ -359,17 +386,21 @@ export const LearningDashboard = () => {
             ) : (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {Object.entries(knowledgeStats?.categories || {}).map(([category, count]) => (
-                    <div key={`category-${category}`} className="p-4 bg-muted rounded-lg">
-                      <div className="flex items-center gap-2 mb-1">
-                        {getCategoryIcon(category)}
-                        <span className="text-xs font-medium capitalize">
-                          {category.replace(/_/g, ' ')}
-                        </span>
+                  {Object.entries(knowledgeStats?.categories || {}).map(([category, stats]) => {
+                    const categoryData = stats as { count: number; usage: number };
+                    return (
+                      <div key={`category-${category}`} className="p-4 bg-muted rounded-lg">
+                        <div className="flex items-center gap-2 mb-1">
+                          {getCategoryIcon(category)}
+                          <span className="text-xs font-medium capitalize">
+                            {category.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                        <p className="text-2xl font-bold">{categoryData.count}</p>
+                        <p className="text-xs text-muted-foreground">{categoryData.usage}x gebruikt</p>
                       </div>
-                      <p className="text-2xl font-bold">{count as number}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <div>
