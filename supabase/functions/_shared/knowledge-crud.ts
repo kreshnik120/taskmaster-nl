@@ -2,6 +2,8 @@
  * Knowledge CRUD - Unified Learning Module
  * Uniforme database operaties voor AI Knowledge Base
  * 
+ * FASE 2: Nu met atomische RPC's voor race condition prevention
+ * 
  * @module _shared/knowledge-crud
  */
 
@@ -13,6 +15,7 @@ import {
   shouldPrune,
   type ConfidenceRuleKey 
 } from './confidence-calculator.ts';
+import { anonymizePII } from './telemetry.ts';
 
 // ============================================================================
 // TYPES
@@ -79,47 +82,15 @@ export interface KnowledgeItem {
 }
 
 // ============================================================================
-// PII REDACTION
+// PII REDACTION - Uses telemetry.ts as single source of truth
 // ============================================================================
-
-const PII_PATTERNS = [
-  { pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, replacement: '[EMAIL]' },
-  { pattern: /\b06[-\s]?\d{8}\b/g, replacement: '[TELEFOON]' },
-  { pattern: /\b0\d{1,3}[-\s]?\d{6,8}\b/g, replacement: '[TELEFOON]' },
-  { pattern: /\+31[-\s]?\d{9,10}/g, replacement: '[TELEFOON]' },
-  { pattern: /\b\d{4}\s?[A-Z]{2}\b/gi, replacement: '[POSTCODE]' },
-  { pattern: /\b\d{9}\b/g, replacement: '[BSN]' },
-  { pattern: /\bNL\d{2}[A-Z]{4}\d{10}\b/gi, replacement: '[IBAN]' },
-];
-
-/**
- * Redact PII from text
- */
-export function redactPII(text: string): string {
-  let result = text;
-  for (const { pattern, replacement } of PII_PATTERNS) {
-    result = result.replace(pattern, replacement);
-  }
-  return result;
-}
 
 /**
  * Redact PII from knowledge value object
+ * Uses anonymizePII from telemetry.ts for consistency
  */
 export function redactValuePII(value: Record<string, unknown>): Record<string, unknown> {
-  const redacted: Record<string, unknown> = {};
-  
-  for (const [key, val] of Object.entries(value)) {
-    if (typeof val === 'string') {
-      redacted[key] = redactPII(val);
-    } else if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
-      redacted[key] = redactValuePII(val as Record<string, unknown>);
-    } else {
-      redacted[key] = val;
-    }
-  }
-  
-  return redacted;
+  return anonymizePII(value) as Record<string, unknown>;
 }
 
 // ============================================================================
@@ -176,7 +147,7 @@ export async function checkForConflicts(
 }
 
 // ============================================================================
-// CRUD OPERATIONS
+// CRUD OPERATIONS - Now using atomic RPCs
 // ============================================================================
 
 /**
@@ -189,7 +160,7 @@ export async function createKnowledge(
   options?: { skipConflictCheck?: boolean; skipPIIRedaction?: boolean }
 ): Promise<{ id: string; wasReinforced?: boolean; existingId?: string }> {
   
-  // Redact PII unless skipped
+  // Redact PII unless skipped - uses telemetry.ts
   const safeValue = options?.skipPIIRedaction 
     ? payload.value 
     : redactValuePII(payload.value);
@@ -276,157 +247,102 @@ export async function createKnowledge(
 }
 
 /**
- * Reinforce existing knowledge (increase stability/usage)
+ * Reinforce existing knowledge using ATOMIC RPC
+ * Prevents race conditions with concurrent reinforcements
  */
 export async function reinforceKnowledge(
   supabase: SupabaseClient,
   id: string,
   options: ReinforceOptions = {}
-): Promise<void> {
-  const updates: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
-  };
-  
-  if (options.stabilityBoost) {
-    // Use RPC or raw SQL for atomic increment
-    const { data: current } = await supabase
-      .from('ai_knowledge_base')
-      .select('stability_score')
-      .eq('id', id)
-      .single();
-    
-    const currentStability = current?.stability_score ?? 0.5;
-    updates.stability_score = Math.min(
-      CONFIDENCE_RULES.max_stability,
-      currentStability + options.stabilityBoost
-    );
-  }
-  
-  if (options.incrementUsage) {
-    // Atomic increment for usage_count
-    const { data: current } = await supabase
-      .from('ai_knowledge_base')
-      .select('usage_count')
-      .eq('id', id)
-      .single();
-    
-    updates.usage_count = (current?.usage_count ?? 0) + 1;
-    updates.last_used_at = new Date().toISOString();
-  }
-  
-  const { error } = await supabase
-    .from('ai_knowledge_base')
-    .update(updates)
-    .eq('id', id);
+): Promise<{ newStability: number; newUsageCount: number }> {
+  const { data, error } = await supabase.rpc('atomic_reinforce_knowledge', {
+    p_knowledge_id: id,
+    p_stability_boost: options.stabilityBoost ?? 0.05,
+    p_increment_usage: options.incrementUsage ?? true,
+    p_max_stability: CONFIDENCE_RULES.max_stability,
+  });
   
   if (error) {
     console.error('[knowledge-crud] Reinforce error:', error);
     throw new Error(`Failed to reinforce knowledge: ${error.message}`);
   }
   
-  console.log(`[knowledge-crud] Reinforced knowledge: ${id}`);
+  const result = data?.[0] ?? { new_stability: 0.5, new_usage_count: 0 };
+  console.log(`[knowledge-crud] Reinforced: ${id} -> stability=${result.new_stability}`);
+  
+  return { 
+    newStability: result.new_stability, 
+    newUsageCount: result.new_usage_count 
+  };
 }
 
 /**
- * Update confidence score based on a rule
+ * Update confidence score using ATOMIC RPC
+ * Prevents race conditions with concurrent confidence updates
  */
 export async function updateConfidence(
   supabase: SupabaseClient,
   id: string,
   options: UpdateConfidenceOptions
-): Promise<{ newConfidence: number; wasPruned: boolean }> {
-  // Get current confidence
-  const { data: current, error: fetchError } = await supabase
-    .from('ai_knowledge_base')
-    .select('confidence_score, helpful_count, harmful_count')
-    .eq('id', id)
-    .single();
+): Promise<{ newConfidence: number; wasPruned: boolean; oldConfidence: number }> {
+  // Get delta from rule
+  const delta = CONFIDENCE_RULES[options.ruleKey] ?? 0;
   
-  if (fetchError || !current) {
-    throw new Error(`Failed to fetch knowledge for confidence update: ${fetchError?.message}`);
+  const { data, error } = await supabase.rpc('atomic_update_confidence', {
+    p_knowledge_id: id,
+    p_delta: delta,
+    p_min_confidence: CONFIDENCE_RULES.min_confidence,
+    p_max_confidence: CONFIDENCE_RULES.max_confidence,
+    p_prune_threshold: CONFIDENCE_RULES.prune_threshold,
+    p_reason: options.reason ?? `Rule applied: ${options.ruleKey}`,
+  });
+  
+  if (error) {
+    console.error('[knowledge-crud] updateConfidence error:', error);
+    throw new Error(`Failed to update confidence: ${error.message}`);
   }
   
-  const newConfidence = applyConfidenceDelta(
-    current.confidence_score ?? CONFIDENCE_RULES.default_confidence,
-    options.ruleKey
-  );
+  const result = data?.[0] ?? { new_confidence: 0.7, was_pruned: false, old_confidence: 0.7 };
   
-  // Check if should be pruned
-  const wasPruned = shouldPrune(
-    current.helpful_count ?? 0,
-    current.harmful_count ?? 0
-  ) || newConfidence < CONFIDENCE_RULES.prune_threshold;
+  console.log(`[knowledge-crud] Confidence updated: ${id} ${result.old_confidence} -> ${result.new_confidence} (${options.ruleKey})`);
   
-  if (wasPruned) {
-    // Soft delete instead of hard delete
-    await softDeleteKnowledge(supabase, id, {
-      reason: `Auto-pruned: confidence=${newConfidence.toFixed(2)}, rule=${options.ruleKey}`,
-    });
-    return { newConfidence, wasPruned: true };
-  }
-  
-  // Update confidence
-  const { error: updateError } = await supabase
-    .from('ai_knowledge_base')
-    .update({
-      confidence_score: newConfidence,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', id);
-  
-  if (updateError) {
-    throw new Error(`Failed to update confidence: ${updateError.message}`);
-  }
-  
-  console.log(`[knowledge-crud] Updated confidence: ${id} -> ${newConfidence.toFixed(2)} (${options.ruleKey})`);
-  return { newConfidence, wasPruned: false };
+  return { 
+    newConfidence: result.new_confidence, 
+    wasPruned: result.was_pruned,
+    oldConfidence: result.old_confidence,
+  };
 }
 
 /**
- * Increment feedback count (helpful or harmful)
+ * Increment feedback count using ATOMIC RPC
+ * Prevents race conditions with concurrent feedback
  */
 export async function incrementFeedbackCount(
   supabase: SupabaseClient,
   id: string,
   type: 'helpful' | 'harmful'
-): Promise<{ shouldPrune: boolean }> {
-  const column = type === 'helpful' ? 'helpful_count' : 'harmful_count';
+): Promise<{ shouldPrune: boolean; helpfulCount: number; harmfulCount: number }> {
+  const { data, error } = await supabase.rpc('atomic_increment_feedback', {
+    p_knowledge_id: id,
+    p_feedback_type: type,
+    p_harmful_prune_min_votes: CONFIDENCE_RULES.harmful_prune_min_votes,
+    p_harmful_prune_ratio: CONFIDENCE_RULES.harmful_prune_ratio,
+  });
   
-  // Get current counts
-  const { data: current, error: fetchError } = await supabase
-    .from('ai_knowledge_base')
-    .select('helpful_count, harmful_count')
-    .eq('id', id)
-    .single();
-  
-  if (fetchError || !current) {
-    throw new Error(`Failed to fetch knowledge for feedback: ${fetchError?.message}`);
+  if (error) {
+    console.error('[knowledge-crud] incrementFeedbackCount error:', error);
+    throw new Error(`Failed to increment feedback: ${error.message}`);
   }
   
-  const newHelpful = type === 'helpful' 
-    ? (current.helpful_count ?? 0) + 1 
-    : (current.helpful_count ?? 0);
-  const newHarmful = type === 'harmful' 
-    ? (current.harmful_count ?? 0) + 1 
-    : (current.harmful_count ?? 0);
+  const result = data?.[0] ?? { new_helpful_count: 0, new_harmful_count: 0, should_prune: false };
   
-  // Update count
-  const { error: updateError } = await supabase
-    .from('ai_knowledge_base')
-    .update({
-      [column]: type === 'helpful' ? newHelpful : newHarmful,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', id);
+  console.log(`[knowledge-crud] Feedback ${type}: helpful=${result.new_helpful_count}, harmful=${result.new_harmful_count}`);
   
-  if (updateError) {
-    throw new Error(`Failed to increment feedback: ${updateError.message}`);
-  }
-  
-  const shouldPruneNow = shouldPrune(newHelpful, newHarmful);
-  
-  console.log(`[knowledge-crud] Feedback ${type} for ${id}: helpful=${newHelpful}, harmful=${newHarmful}`);
-  return { shouldPrune: shouldPruneNow };
+  return { 
+    shouldPrune: result.should_prune,
+    helpfulCount: result.new_helpful_count,
+    harmfulCount: result.new_harmful_count,
+  };
 }
 
 /**
@@ -483,6 +399,7 @@ export async function restoreKnowledge(
 
 /**
  * Batch update confidence for multiple items
+ * Uses individual atomic calls to prevent race conditions
  */
 export async function batchUpdateConfidence(
   supabase: SupabaseClient,
@@ -499,8 +416,8 @@ export async function batchUpdateConfidence(
       } else {
         updated++;
       }
-    } catch (error) {
-      console.error(`[knowledge-crud] Batch update failed for ${id}:`, error);
+    } catch (e) {
+      console.error(`[knowledge-crud] Batch update failed for ${id}:`, e);
     }
   }
   
@@ -522,9 +439,9 @@ export async function getKnowledgeByIds(
     .in('id', ids);
   
   if (error) {
-    console.error('[knowledge-crud] Get by IDs error:', error);
+    console.error('[knowledge-crud] getKnowledgeByIds error:', error);
     return [];
   }
   
-  return data ?? [];
+  return (data ?? []) as KnowledgeItem[];
 }

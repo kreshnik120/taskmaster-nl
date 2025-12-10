@@ -21,10 +21,10 @@ import {
   incrementFeedbackCount,
   softDeleteKnowledge,
   getKnowledgeByIds,
-  redactPII,
   redactValuePII,
   type KnowledgePayload,
 } from './knowledge-crud.ts';
+import { anonymizePII } from './telemetry.ts';
 
 // ============================================================================
 // TYPES
@@ -105,9 +105,9 @@ export async function analyzeChatLearning(
       return { ...result, success: false, errors: ['Missing user_question or ai_response'] };
     }
 
-    // Redact PII from question and response
-    const safeQuestion = redactPII(user_question);
-    const safeResponse = redactPII(ai_response);
+    // Redact PII from question and response using telemetry module
+    const safeQuestion = anonymizePII(user_question) as string;
+    const safeResponse = anonymizePII(ai_response) as string;
 
     // Process user feedback if provided
     if (user_feedback && knowledge_used && knowledge_used.length > 0) {
