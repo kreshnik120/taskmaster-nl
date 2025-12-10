@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { softDeleteKnowledge, updateConfidence } from '../_shared/knowledge-crud.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,7 +43,7 @@ serve(async (req) => {
     }
 
     const orgId = orgs[0].id;
-    console.log('🔍 Data Quality Auditor scanning org:', orgId);
+    console.log('[data-quality-auditor] Scanning org:', orgId);
 
     const twelveMonthsAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
     const issues: string[] = [];
@@ -78,7 +79,7 @@ serve(async (req) => {
       .limit(100);
 
     if (outdated && outdated.length > 0) {
-      console.log(`⚠️ Found ${outdated.length} outdated items - checking usage...`);
+      console.log(`[data-quality-auditor] Found ${outdated.length} outdated items - checking usage...`);
       
       for (const item of outdated) {
         const lastUsed = item.last_used_at ? new Date(item.last_used_at) : null;
@@ -91,31 +92,36 @@ serve(async (req) => {
           continue; // Don't flag as needs_review
         }
         
-        // AUTO-ARCHIVE: If >12 months old AND >3 months unused
+        // AUTO-ARCHIVE: If >12 months old AND >3 months unused - use unified softDeleteKnowledge
         if (monthsUnused > 3) {
-          await supabase
-            .from('ai_knowledge_base')
-            .update({
-              deleted_at: new Date().toISOString(),
-              deleted_by: 'data-quality-auditor',
-              deletion_reason: {
-                reason: 'auto_archived_outdated',
-                age_months: Math.floor(monthsUnused),
-                last_updated: item.updated_at,
-                last_used: item.last_used_at || 'never'
-              },
-              needs_review: false
-            })
-            .eq('id', item.id);
-          
-          archivedCount++;
-          console.log(`📦 Auto-archived: ${item.key} (unused for ${Math.floor(monthsUnused)} months)`);
+          try {
+            // Verify item belongs to org before deletion (security check)
+            const { data: verifyItem } = await supabase
+              .from('ai_knowledge_base')
+              .select('id')
+              .eq('id', item.id)
+              .eq('org_id', orgId)
+              .single();
+            
+            if (verifyItem) {
+              await softDeleteKnowledge(supabase as any, item.id, {
+                deletedBy: 'data-quality-auditor',
+                reason: `Auto-archived: outdated (${Math.floor(monthsUnused)} months unused)`,
+                metadata: { org_id: orgId, usage_count: item.usage_count }
+              });
+              archivedCount++;
+              console.log(`[data-quality-auditor] Auto-archived: ${item.key} (unused for ${Math.floor(monthsUnused)} months)`);
+            }
+          } catch (err) {
+            console.error(`[data-quality-auditor] Failed to archive ${item.id}:`, err);
+          }
         } else {
-          // Old but recently used - flag for review
+          // Old but recently used - flag for review with org_id check
           await supabase
             .from('ai_knowledge_base')
             .update({ needs_review: true })
-            .eq('id', item.id);
+            .eq('id', item.id)
+            .eq('org_id', orgId);
         }
       }
       
@@ -129,7 +135,7 @@ serve(async (req) => {
       }
     }
 
-    // SCAN 2: Low confidence items (< 0.7)
+    // SCAN 2: Low confidence items (< 0.7) - with org_id check
     const { data: lowConfidence } = await supabase
       .from('ai_knowledge_base')
       .select('id, key, category, confidence_score')
@@ -139,17 +145,19 @@ serve(async (req) => {
       .limit(100);
 
     if (lowConfidence && lowConfidence.length > 0) {
-      console.log(`⚠️ Found ${lowConfidence.length} low confidence items`);
+      console.log(`[data-quality-auditor] Found ${lowConfidence.length} low confidence items`);
       
+      // Batch update with org_id check
       await supabase
         .from('ai_knowledge_base')
         .update({ needs_review: true })
-        .in('id', lowConfidence.map(i => i.id));
+        .in('id', lowConfidence.map(i => i.id))
+        .eq('org_id', orgId);
       
       issues.push(`${lowConfidence.length} low confidence items (<0.7)`);
     }
 
-    // SCAN 3: Items without cross-validation
+    // SCAN 3: Items without cross-validation - with org_id check
     const { data: unvalidated } = await supabase
       .from('ai_knowledge_base')
       .select('id, key, category, value')
@@ -163,17 +171,19 @@ serve(async (req) => {
     }) || [];
 
     if (unvalidatedItems.length > 0) {
-      console.log(`⚠️ Found ${unvalidatedItems.length} unvalidated TIER 2 items`);
+      console.log(`[data-quality-auditor] Found ${unvalidatedItems.length} unvalidated TIER 2 items`);
       
+      // Batch update with org_id check
       await supabase
         .from('ai_knowledge_base')
         .update({ needs_review: true })
-        .in('id', unvalidatedItems.map(i => i.id));
+        .in('id', unvalidatedItems.map(i => i.id))
+        .eq('org_id', orgId);
       
       issues.push(`${unvalidatedItems.length} unvalidated TIER 2 items`);
     }
 
-    // SCAN 4: Items with validation failures + AUTO-FIX
+    // SCAN 4: Items with validation failures + AUTO-FIX - with org_id check
     const { data: failed } = await supabase
       .from('ai_knowledge_base')
       .select('id, key, category, validation_failures, last_validation_error, value')
@@ -183,7 +193,7 @@ serve(async (req) => {
       .limit(100);
 
     if (failed && failed.length > 0) {
-      console.log(`⚠️ Found ${failed.length} items with validation failures - attempting auto-fix...`);
+      console.log(`[data-quality-auditor] Found ${failed.length} items with validation failures - attempting auto-fix...`);
       
       // Try to auto-fix client mismatch errors
       for (const item of failed) {
@@ -195,7 +205,7 @@ serve(async (req) => {
             const correctClientId = clientLookup.get(normalizedClientName);
             
             if (correctClientId) {
-              // Update the knowledge base item with correct client_id
+              // Update the knowledge base item with correct client_id - with org_id check
               const updatedValue = {
                 ...(item.value as any),
                 client_id: correctClientId
@@ -210,16 +220,17 @@ serve(async (req) => {
                   needs_review: false,
                   updated_at: new Date().toISOString()
                 })
-                .eq('id', item.id);
+                .eq('id', item.id)
+                .eq('org_id', orgId);
               
               if (!fixError) {
                 fixedItemsCount++;
-                console.log(`✅ Fixed client mismatch: ${item.key} → updated to client "${correctClientName}" (${correctClientId})`);
+                console.log(`[data-quality-auditor] Fixed client mismatch: ${item.key} → updated to client "${correctClientName}" (${correctClientId})`);
               } else {
-                console.error(`❌ Failed to fix ${item.key}:`, fixError.message);
+                console.error(`[data-quality-auditor] Failed to fix ${item.key}:`, fixError.message);
               }
             } else {
-              console.log(`⚠️ Could not find client_id for "${correctClientName}" - skipping ${item.key}`);
+              console.log(`[data-quality-auditor] Could not find client_id for "${correctClientName}" - skipping ${item.key}`);
             }
           }
         }
@@ -231,7 +242,7 @@ serve(async (req) => {
       }
     }
 
-    // SCAN 5: Smart Confidence Boost
+    // SCAN 5: Smart Confidence Boost - use unified updateConfidence
     const { data: mediumConfidence } = await supabase
       .from('ai_knowledge_base')
       .select('id, key, category, confidence_score, usage_count, created_at, last_used_at')
@@ -243,7 +254,7 @@ serve(async (req) => {
       .limit(50);
 
     if (mediumConfidence && mediumConfidence.length > 0) {
-      console.log(`🔍 Analyzing ${mediumConfidence.length} medium-confidence items for boost...`);
+      console.log(`[data-quality-auditor] Analyzing ${mediumConfidence.length} medium-confidence items for boost...`);
       
       for (const item of mediumConfidence) {
         const daysSinceCreation = (Date.now() - new Date(item.created_at).getTime()) / (1000 * 60 * 60 * 24);
@@ -251,28 +262,27 @@ serve(async (req) => {
         
         // BOOST CRITERIA: ≥3x gebruikt + usage rate ≥ 0.1 per day
         if (usageRate >= 0.1) {
-          const newConfidence = Math.min(0.9, item.confidence_score + 0.1);
-          
-          await supabase
-            .from('ai_knowledge_base')
-            .update({
-              confidence_score: newConfidence,
-              needs_review: false,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', item.id);
-          
-          boostedCount++;
-          console.log(`📈 Confidence boost: ${item.key} (${item.confidence_score} → ${newConfidence}) - ${item.usage_count} uses in ${Math.floor(daysSinceCreation)} days`);
+          try {
+            // Use unified updateConfidence with atomic RPC - use stability_boost rule with custom delta
+            const result = await updateConfidence(supabase as any, item.id, orgId, {
+              ruleKey: 'stability_boost',
+              customDelta: 0.1
+            });
+            
+            boostedCount++;
+            console.log(`[data-quality-auditor] Confidence boost: ${item.key} (${item.confidence_score} → ${result.newConfidence}) - ${item.usage_count} uses in ${Math.floor(daysSinceCreation)} days`);
+          } catch (err) {
+            console.error(`[data-quality-auditor] Failed to boost ${item.id}:`, err);
+          }
         }
       }
       
       if (boostedCount > 0) {
-        console.log(`✅ Boosted confidence for ${boostedCount} well-performing items`);
+        console.log(`[data-quality-auditor] Boosted confidence for ${boostedCount} well-performing items`);
       }
     }
 
-    // SCAN 6: Incomplete Data Detection
+    // SCAN 6: Incomplete Data Detection - use unified updateConfidence for penalty
     const { data: allItems } = await supabase
       .from('ai_knowledge_base')
       .select('id, key, value, confidence_score, category')
@@ -283,7 +293,7 @@ serve(async (req) => {
     let incompleteCount = 0;
     
     if (allItems && allItems.length > 0) {
-      console.log(`🔍 Scanning ${allItems.length} items for incomplete data...`);
+      console.log(`[data-quality-auditor] Scanning ${allItems.length} items for incomplete data...`);
       
       const hasPlaceholderText = (value: any): boolean => {
         if (!value) return false;
@@ -313,23 +323,31 @@ serve(async (req) => {
                             JSON.stringify(item.value).length < 20;
         
         if (isIncomplete) {
-          await supabase
-            .from('ai_knowledge_base')
-            .update({
-              needs_review: true,
-              confidence_score: Math.max(0.3, (item.confidence_score || 0.5) - 0.2),
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', item.id);
-          
-          incompleteCount++;
-          console.log(`⚠️ Incomplete data detected: ${item.key} in ${item.category}`);
+          try {
+            // Use unified updateConfidence for penalty with atomic RPC - use negative_feedback rule with custom delta
+            await updateConfidence(supabase as any, item.id, orgId, {
+              ruleKey: 'negative_feedback',
+              customDelta: -0.2
+            });
+            
+            // Separate update for needs_review with org_id check
+            await supabase
+              .from('ai_knowledge_base')
+              .update({ needs_review: true })
+              .eq('id', item.id)
+              .eq('org_id', orgId);
+            
+            incompleteCount++;
+            console.log(`[data-quality-auditor] Incomplete data detected: ${item.key} in ${item.category}`);
+          } catch (err) {
+            console.error(`[data-quality-auditor] Failed to penalize ${item.id}:`, err);
+          }
         }
       }
       
       if (incompleteCount > 0) {
         issues.push(`${incompleteCount} incomplete items (placeholder text or excessive nulls)`);
-        console.log(`⚠️ Flagged ${incompleteCount} items with incomplete data for review`);
+        console.log(`[data-quality-auditor] Flagged ${incompleteCount} items with incomplete data for review`);
       }
     }
 
@@ -435,7 +453,7 @@ serve(async (req) => {
       model_used: 'autonomous'
     });
 
-    console.log(`✅ Quality audit complete: ${issues.length} issues, ${fixedItemsCount} fixed, ${archivedCount} archived, ${boostedCount} boosted, ${incompleteCount} incomplete`);
+    console.log(`[data-quality-auditor] Complete: ${issues.length} issues, ${fixedItemsCount} fixed, ${archivedCount} archived, ${boostedCount} boosted, ${incompleteCount} incomplete`);
 
     return new Response(JSON.stringify({
       success: true,
@@ -451,7 +469,7 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('❌ Data Quality Auditor error:', error);
+    console.error('[data-quality-auditor] Error:', error);
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
