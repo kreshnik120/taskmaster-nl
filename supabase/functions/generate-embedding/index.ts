@@ -60,34 +60,66 @@ Deno.serve(async (req) => {
 
     // AUTO MODE: automatisch items zonder embedding ophalen
     if (batch_mode === 'auto') {
-      console.log('🤖 Auto-mode: fetching items without embeddings...');
+      console.log('🤖 Auto-mode: fetching items without embeddings using FIXED query...');
       
-      // Get all knowledge items without embeddings, prioritizing high confidence + gemini items
-      const { data: allKnowledge } = await supabase
+      // Count totals first for accurate remaining calculation
+      const { count: totalKnowledge } = await supabase
         .from('ai_knowledge_base')
-        .select('id, confidence_score, source_type')
-        .is('deleted_at', null)
-        .order('confidence_score', { ascending: false })
-        .limit(batch_size * 3); // Get more to filter
-
-      if (!allKnowledge || allKnowledge.length === 0) {
+        .select('*', { count: 'exact', head: true })
+        .is('deleted_at', null);
+      
+      const { count: totalEmbeddings } = await supabase
+        .from('knowledge_embeddings')
+        .select('*', { count: 'exact', head: true });
+      
+      const remainingCount = Math.max(0, (totalKnowledge || 0) - (totalEmbeddings || 0));
+      console.log(`📊 Database status: ${totalKnowledge} items, ${totalEmbeddings} embeddings, ${remainingCount} remaining`);
+      
+      if (remainingCount === 0) {
         return new Response(
-          JSON.stringify({ success: true, processed: 0, remaining: 0, message: 'No knowledge items found' }),
+          JSON.stringify({ 
+            success: true, 
+            processed: 0, 
+            remaining: 0,
+            message: '✅ All knowledge items have embeddings!' 
+          }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Check which already have embeddings
-      const { data: existingEmbeddings } = await supabase
+      // FIXED QUERY: Get ALL existing embedding IDs first, then find items NOT in that set
+      // This fixes the bug where LEFT JOIN on top 150 by confidence returned 0 items
+      // because all high-confidence items already had embeddings
+      const { data: allEmbeddingIds } = await supabase
         .from('knowledge_embeddings')
-        .select('knowledge_id')
-        .in('knowledge_id', allKnowledge.map(k => k.id));
-
-      const existingIds = new Set(existingEmbeddings?.map(e => e.knowledge_id) || []);
+        .select('knowledge_id');
       
-      // Filter and prioritize: gemini items first, then by confidence
+      const embeddingIdSet = new Set((allEmbeddingIds || []).map(e => e.knowledge_id));
+      console.log(`📋 Found ${embeddingIdSet.size} existing embeddings`);
+      
+      // Get knowledge items, we'll filter client-side for those without embeddings
+      const { data: allKnowledge, error: queryError } = await supabase
+        .from('ai_knowledge_base')
+        .select('id, confidence_score, source_type')
+        .is('deleted_at', null)
+        .order('confidence_score', { ascending: false, nullsFirst: false })
+        .limit(batch_size * 10); // Get enough to find items without embeddings
+
+      if (queryError) {
+        console.error('❌ Query error:', queryError);
+        throw new Error(`Failed to fetch items: ${queryError.message}`);
+      }
+
+      if (!allKnowledge || allKnowledge.length === 0) {
+        return new Response(
+          JSON.stringify({ success: true, processed: 0, remaining: remainingCount, message: 'No knowledge items found' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Filter out items that already have embeddings
       const needsEmbedding = allKnowledge
-        .filter(k => !existingIds.has(k.id))
+        .filter(k => !embeddingIdSet.has(k.id))
         .sort((a, b) => {
           // Prioritize gemini_deep_research items
           if (a.source_type === 'gemini_deep_research' && b.source_type !== 'gemini_deep_research') return -1;
@@ -96,30 +128,53 @@ Deno.serve(async (req) => {
         })
         .slice(0, batch_size);
 
+      console.log(`🔍 Query returned ${allKnowledge.length} items, ${needsEmbedding.length} need embeddings`);
+
       if (needsEmbedding.length === 0) {
-        // Count remaining total
-        const { count: totalKnowledge } = await supabase
-          .from('ai_knowledge_base')
-          .select('*', { count: 'exact', head: true })
-          .is('deleted_at', null);
-        
-        const { count: totalEmbeddings } = await supabase
-          .from('knowledge_embeddings')
-          .select('*', { count: 'exact', head: true });
-
-        return new Response(
-          JSON.stringify({ 
-            success: true, 
-            processed: 0, 
-            remaining: Math.max(0, (totalKnowledge || 0) - (totalEmbeddings || 0)),
-            message: 'All items in current batch already have embeddings' 
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        // If still 0 but remainingCount > 0, there might be items beyond our query limit
+        if (remainingCount > 0) {
+          console.log(`⚠️ No items found in top ${batch_size * 10}, but ${remainingCount} still need embeddings. Trying random selection...`);
+          
+          // Get a random sample of items and check if they need embeddings
+          const { data: randomItems } = await supabase
+            .from('ai_knowledge_base')
+            .select('id, confidence_score, source_type')
+            .is('deleted_at', null)
+            .limit(batch_size * 20);
+          
+          const randomNeeds = (randomItems || [])
+            .filter(k => !embeddingIdSet.has(k.id))
+            .slice(0, batch_size);
+          
+          if (randomNeeds.length > 0) {
+            ids = randomNeeds.map(k => k.id);
+            console.log(`✅ Random selection found ${ids.length} items to process`);
+          } else {
+            return new Response(
+              JSON.stringify({ 
+                success: true, 
+                processed: 0, 
+                remaining: remainingCount,
+                message: 'Unable to find items without embeddings - may need manual check' 
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        } else {
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              processed: 0, 
+              remaining: 0,
+              message: '✅ All items have embeddings!' 
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } else {
+        ids = needsEmbedding.map(k => k.id);
+        console.log(`✅ Auto-mode found ${ids.length} items to process (${remainingCount} remaining total)`);
       }
-
-      ids = needsEmbedding.map(k => k.id);
-      console.log(`🔍 Auto-mode found ${ids.length} items to process`);
     } else {
       // MANUAL MODE: use provided IDs
       ids = knowledge_ids || (knowledge_id ? [knowledge_id] : []);
