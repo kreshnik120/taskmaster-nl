@@ -66,11 +66,11 @@ async function getKnowledgeIdsWithoutEmbeddings(
   // Step 2: USAGE-BASED query - fetch items without embeddings
   // Primary sort: usage_count DESC (highest-used items first)
   // Secondary sort: created_at ASC (oldest items next)
+  // NOTE: We now include ALL items regardless of original_text - generate-embedding uses value JSON
   const { data: kbItems } = await supabase
     .from('ai_knowledge_base')
-    .select('id, category, usage_count, source_type, original_text, confidence_score')
+    .select('id, category, usage_count, source_type, original_text, value, confidence_score')
     .is('deleted_at', null)
-    .not('original_text', 'is', null)
     .order('usage_count', { ascending: false, nullsFirst: false }) // High-usage FIRST
     .order('confidence_score', { ascending: false, nullsFirst: false }) // Then high-confidence
     .order('created_at', { ascending: true })   // Then oldest
@@ -78,11 +78,19 @@ async function getKnowledgeIdsWithoutEmbeddings(
   
   if (!kbItems || kbItems.length === 0) return [];
   
-  // Step 3: Filter out already embedded items AND items with insufficient text
+  // Step 3: Filter out already embedded items AND items with insufficient content
+  // Accept items with either original_text OR value content (generate-embedding uses JSON.stringify(value))
   const candidateItems = kbItems.filter((k: any) => {
     if (embeddedSet.has(k.id)) return false;
-    const textLength = (k.original_text || '').trim().length;
-    return textLength >= 15; // Skip items with very short text
+    
+    // Check original_text first, then fall back to value JSON
+    const originalTextLength = (k.original_text || '').trim().length;
+    if (originalTextLength >= 15) return true;
+    
+    // If no original_text, check if value has content
+    const valueContent = k.value ? JSON.stringify(k.value) : '';
+    const valueLength = valueContent.trim().length;
+    return valueLength >= 15; // Accept if value has sufficient content
   });
   
   // Step 4: Sort by USAGE_COUNT first (already sorted from query), then by category priority
