@@ -110,9 +110,9 @@ Output ALLEEN valid JSON object met deze keys:
             role: 'user',
             content: `Analyseer deze chat interactie:
 
-VRAAG: ${user_question}
+VRAAG: ${anonymizePII(user_question)}
 
-AI ANTWOORD: ${ai_response}
+AI ANTWOORD: ${anonymizePII(ai_response)}
 
 GEBRUIKTE KENNIS: ${JSON.stringify(knowledge_used || [])}
 
