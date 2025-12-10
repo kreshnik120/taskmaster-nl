@@ -79,34 +79,54 @@ async function getAllEmbeddedIds(supabase: any): Promise<Set<string>> {
   return embeddedSet;
 }
 
+// CRITICAL CATEGORIES die voorrang krijgen bij gelijke usage_count
+const CRITICAL_CATEGORIES = ['zzp', 'klanten', 'tarieven', 'wetgeving', 'procedures'];
+
 // Helper functie: Haal knowledge IDs op met USAGE-BASED prioriteit
+// FIX Fase 18: Vervangt offset-based met directe NOT IN filtering
 async function getKnowledgeIdsWithoutEmbeddings(
   supabase: any, 
-  batchSize: number, 
-  offset: number
+  batchSize: number
 ): Promise<string[]> {
   // Step 1: Get ALL knowledge IDs that already have embeddings (paginated to avoid 1000-row limit)
   const embeddedSet = await getAllEmbeddedIds(supabase);
+  const embeddedArray = Array.from(embeddedSet);
   
-  // Step 2: USAGE-BASED query - fetch items without embeddings
-  // Primary sort: usage_count DESC (highest-used items first)
-  // Secondary sort: created_at ASC (oldest items next)
-  // NOTE: We now include ALL items regardless of original_text - generate-embedding uses value JSON
-  const { data: kbItems } = await supabase
+  console.log(`📊 Total embedded: ${embeddedArray.length}, looking for unembedded items...`);
+  
+  // Step 2: DIRECT NOT IN QUERY - Haal alleen items op die GEEN embedding hebben
+  // Dit voorkomt dat high-usage items worden overgeslagen door offset pagination
+  let query = supabase
     .from('ai_knowledge_base')
     .select('id, category, usage_count, source_type, original_text, value, confidence_score')
-    .is('deleted_at', null)
-    .order('usage_count', { ascending: false, nullsFirst: false }) // High-usage FIRST
-    .order('confidence_score', { ascending: false, nullsFirst: false }) // Then high-confidence
-    .order('created_at', { ascending: true })   // Then oldest
-    .limit(batchSize * 50); // Larger window for filtering
+    .is('deleted_at', null);
   
-  if (!kbItems || kbItems.length === 0) return [];
+  // Use NOT IN filter als er embedded items zijn (max 10k voor performance)
+  if (embeddedArray.length > 0 && embeddedArray.length <= 10000) {
+    query = query.not('id', 'in', `(${embeddedArray.join(',')})`);
+  }
   
-  // Step 3: Filter out already embedded items AND items with insufficient content
-  // Accept items with either original_text OR value content (generate-embedding uses JSON.stringify(value))
+  // Order by usage_count DESC (high-usage FIRST) - dit is de key fix!
+  const { data: kbItems, error: queryError } = await query
+    .order('usage_count', { ascending: false, nullsFirst: false })
+    .order('confidence_score', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: true })
+    .limit(batchSize * 5); // Smaller window nu we direct filteren
+  
+  if (queryError) {
+    console.error('❌ Query error:', queryError);
+    return [];
+  }
+  
+  if (!kbItems || kbItems.length === 0) {
+    console.log('✅ No unembedded items found - all items have embeddings');
+    return [];
+  }
+  
+  // Step 3: Filter items met insufficient content + fallback voor grote embeddedArray
   const candidateItems = kbItems.filter((k: any) => {
-    if (embeddedSet.has(k.id)) return false;
+    // Extra check als NOT IN niet werd toegepast (>10k items)
+    if (embeddedArray.length > 10000 && embeddedSet.has(k.id)) return false;
     
     // Check original_text first, then fall back to value JSON
     const originalTextLength = (k.original_text || '').trim().length;
@@ -115,20 +135,25 @@ async function getKnowledgeIdsWithoutEmbeddings(
     // If no original_text, check if value has content
     const valueContent = k.value ? JSON.stringify(k.value) : '';
     const valueLength = valueContent.trim().length;
-    return valueLength >= 15; // Accept if value has sufficient content
+    return valueLength >= 15;
   });
   
-  // Step 4: Sort by USAGE_COUNT first (already sorted from query), then by category priority
+  // Step 4: Sort with CRITICAL CATEGORY boost bij gelijke usage
   const sortedItems = candidateItems.sort((a: any, b: any) => {
-    // Primary: usage_count (descending)
+    // Primary: usage_count (descending) - HIGH USAGE FIRST
     const usageDiff = (b.usage_count || 0) - (a.usage_count || 0);
     if (usageDiff !== 0) return usageDiff;
     
-    // Secondary: confidence_score (descending)
+    // Secondary: CRITICAL CATEGORY boost (zzp, klanten first)
+    const aCritical = CRITICAL_CATEGORIES.includes(a.category) ? 0 : 1;
+    const bCritical = CRITICAL_CATEGORIES.includes(b.category) ? 0 : 1;
+    if (aCritical !== bCritical) return aCritical - bCritical;
+    
+    // Tertiary: confidence_score (descending)
     const confDiff = (b.confidence_score || 0) - (a.confidence_score || 0);
     if (confDiff !== 0) return confDiff;
     
-    // Tertiary: fallback category priority
+    // Quaternary: fallback category priority
     const aPriority = FALLBACK_PRIORITY_CATEGORIES.indexOf(a.category);
     const bPriority = FALLBACK_PRIORITY_CATEGORIES.indexOf(b.category);
     const aIdx = aPriority === -1 ? 999 : aPriority;
@@ -140,17 +165,19 @@ async function getKnowledgeIdsWithoutEmbeddings(
   const selectedIds = sortedItems.slice(0, batchSize).map((k: any) => k.id);
   
   // Enhanced logging with usage stats
-  console.log(`📊 USAGE-BASED selection: ${selectedIds.length} items from ${candidateItems.length} candidates`);
+  console.log(`📊 USAGE-BASED selection: ${selectedIds.length} items from ${candidateItems.length} candidates (direct NOT IN filter)`);
   if (selectedIds.length > 0) {
     const topItems = sortedItems.slice(0, Math.min(5, batchSize));
     const categories = [...new Set(topItems.map((k: any) => k.category))];
-    const avgUsage = Math.round(topItems.reduce((sum: number, k: any) => sum + (k.usage_count || 0), 0) / topItems.length);
-    console.log(`📁 Categories: ${categories.join(', ')} | Avg usage: ${avgUsage}x`);
+    const usageValues = topItems.map((k: any) => k.usage_count || 0);
+    const avgUsage = Math.round(usageValues.reduce((sum: number, u: number) => sum + u, 0) / topItems.length);
+    const maxUsage = Math.max(...usageValues);
+    console.log(`📁 Categories: ${categories.join(', ')} | Usage: avg=${avgUsage}x, max=${maxUsage}x`);
     
     // Log critical categories if present
-    const criticalCategories = topItems.filter((k: any) => ['zzp', 'klanten', 'tarieven', 'wetgeving'].includes(k.category));
-    if (criticalCategories.length > 0) {
-      console.log(`🎯 HIGH-PRIORITY items in batch: ${criticalCategories.map((k: any) => `${k.category}(${k.usage_count}x)`).join(', ')}`);
+    const criticalItems = topItems.filter((k: any) => CRITICAL_CATEGORIES.includes(k.category));
+    if (criticalItems.length > 0) {
+      console.log(`🎯 CRITICAL items in batch: ${criticalItems.map((k: any) => `${k.category}(${k.usage_count}x)`).join(', ')}`);
     }
   }
   
@@ -437,11 +464,10 @@ Deno.serve(async (req) => {
               })
               .eq('id', stateId);
 
-            // Haal knowledge IDs zonder embeddings op
+            // Haal knowledge IDs zonder embeddings op (direct NOT IN filtering, geen offset meer nodig)
             const knowledgeIds = await getKnowledgeIdsWithoutEmbeddings(
               supabase,
-              currentBatchSize,
-              currentOffset
+              currentBatchSize
             );
 
             if (knowledgeIds.length === 0) {
