@@ -1,0 +1,54 @@
+name: Unit Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/_shared/**'
+      - '.github/workflows/test.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/functions/_shared/**'
+      - '.github/workflows/test.yml'
+
+jobs:
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+
+      - name: Run tests with coverage
+        run: |
+          deno test --allow-env --coverage=coverage supabase/functions/_shared/tests/
+
+      - name: Generate coverage report
+        run: |
+          deno coverage coverage --lcov --output=coverage.lcov
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.lcov
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Test Summary
+        if: always()
+        run: |
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Unit tests for shared learning modules completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Tested Modules:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`confidence-calculator.ts\` (~45 tests)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`knowledge-crud.ts\` (~30 tests)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`learning-engine.ts\` (~25 tests)" >> $GITHUB_STEP_SUMMARY

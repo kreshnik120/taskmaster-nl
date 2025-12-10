@@ -1,4 +1,8 @@
-# Welcome to your Lovable project
+# ABCzorg / CitoZorg Recruitment System
+
+![Unit Tests](https://github.com/YOUR_USERNAME/YOUR_REPO/actions/workflows/test.yml/badge.svg)
+
+> Healthcare staffing recruitment platform with AI-powered matching and organic learning.
 
 ## Project info
 
