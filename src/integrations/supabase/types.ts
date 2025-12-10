@@ -4882,6 +4882,7 @@ export type Database = {
         }[]
       }
       cleanup_old_logs: { Args: never; Returns: undefined }
+      get_ai_health_summary: { Args: never; Returns: Json }
       get_knowledge_without_embeddings: {
         Args: { batch_limit?: number }
         Returns: {
