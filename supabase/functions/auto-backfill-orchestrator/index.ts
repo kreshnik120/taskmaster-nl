@@ -31,35 +31,76 @@ async function verifyHMAC(orgId: string, signature: string): Promise<boolean> {
   return expectedSignature === signature;
 }
 
-// Helper functie: Haal knowledge IDs op die nog geen embeddings hebben
+// Priority categories for embedding generation (high-usage first)
+const PRIORITY_CATEGORIES = [
+  'compliance',      // Highest priority - regulatory compliance
+  'wetgeving',       // Legal requirements
+  'cao',             // Collective labor agreements
+  'tarieven',        // Pricing/rates
+  'recruitment',     // Core business
+  'processen',       // Business processes
+  'contracten',      // Contracts
+  'bedrijfsgegevens',// Company data
+  'hr_arbeidsvoorwaarden', // HR terms
+  'success_patterns', // AI learning patterns
+  'zzp_vereisten',   // ZZP requirements
+  'zzp_leveranciers' // ZZP suppliers (lowest priority)
+];
+
+// Helper functie: Haal knowledge IDs op met priority-based selectie
 async function getKnowledgeIdsWithoutEmbeddings(
   supabase: any, 
   batchSize: number, 
   offset: number
 ): Promise<string[]> {
-  // Fetch knowledge items zonder embeddings (prioriteer OUDSTE items)
+  // Step 1: Get all knowledge IDs that DON'T have embeddings yet
+  const { data: existingEmb } = await supabase
+    .from('knowledge_embeddings')
+    .select('knowledge_id');
+  
+  const embeddedSet = new Set(existingEmb?.map((e: any) => e.knowledge_id) || []);
+  
+  // Step 2: Priority-based query - fetch items without embeddings
+  // Prioritize by: 1) category priority, 2) usage_count, 3) source_type
   const { data: kbItems } = await supabase
     .from('ai_knowledge_base')
-    .select('id')
+    .select('id, category, usage_count, source_type, original_text')
     .is('deleted_at', null)
-    .order('created_at', { ascending: true }) // 🔧 FIX: Oudste items eerst (voorkomt infinite loop)
-    .range(offset, offset + batchSize * 20 - 1); // Window voor filtering
+    .not('original_text', 'is', null)
+    .order('usage_count', { ascending: false }) // High-usage first
+    .order('created_at', { ascending: true })   // Then oldest
+    .limit(batchSize * 50); // Larger window for filtering
   
   if (!kbItems || kbItems.length === 0) return [];
   
-  // Filter items die al embeddings hebben
-  const { data: existingEmb } = await supabase
-    .from('knowledge_embeddings')
-    .select('knowledge_id')
-    .in('knowledge_id', kbItems.map((k: any) => k.id));
+  // Step 3: Filter out already embedded items AND items with insufficient text
+  const candidateItems = kbItems.filter((k: any) => {
+    if (embeddedSet.has(k.id)) return false;
+    const textLength = (k.original_text || '').trim().length;
+    return textLength >= 15; // Skip items with very short text
+  });
   
-  const existingSet = new Set(existingEmb?.map((e: any) => e.knowledge_id) || []);
-  const missingIds = kbItems
-    .filter((k: any) => !existingSet.has(k.id))
-    .map((k: any) => k.id)
-    .slice(0, batchSize); // Neem alleen batch_size items
+  // Step 4: Sort by priority category, then usage_count
+  const sortedItems = candidateItems.sort((a: any, b: any) => {
+    const aPriority = PRIORITY_CATEGORIES.indexOf(a.category);
+    const bPriority = PRIORITY_CATEGORIES.indexOf(b.category);
+    const aIdx = aPriority === -1 ? 999 : aPriority;
+    const bIdx = bPriority === -1 ? 999 : bPriority;
+    
+    if (aIdx !== bIdx) return aIdx - bIdx; // Priority category first
+    return (b.usage_count || 0) - (a.usage_count || 0); // Then usage_count
+  });
   
-  return missingIds;
+  // Step 5: Take only batchSize items
+  const selectedIds = sortedItems.slice(0, batchSize).map((k: any) => k.id);
+  
+  console.log(`📊 Priority selection: ${selectedIds.length} items from ${candidateItems.length} candidates`);
+  if (selectedIds.length > 0) {
+    const categories = [...new Set(sortedItems.slice(0, batchSize).map((k: any) => k.category))];
+    console.log(`📁 Categories in batch: ${categories.join(', ')}`);
+  }
+  
+  return selectedIds;
 }
 
 Deno.serve(async (req) => {
