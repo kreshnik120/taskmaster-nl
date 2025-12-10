@@ -1,121 +1,30 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getFullInstructions, detectRoleFromCategory } from "../_shared/abczorg-instructions.ts";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { 
+  corsHeaders, 
+  createSmartClient, 
+  fetchWithRetry, 
+  handleCors, 
+  jsonResponse, 
+  errorResponse 
+} from "../_shared/core.ts";
+import { anonymizePII, createLearningEvent, logLearningEvent, logFunctionCall } from "../_shared/telemetry.ts";
 
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
-// ============================================
-// RETRY HELPER FOR TRANSIENT FAILURES
-// ============================================
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  maxRetries: number = 3
-): Promise<Response> {
-  let lastError: Error | null = null;
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch(url, options);
-      
-      // Retry on 503 Service Unavailable or 502 Bad Gateway
-      if (response.status === 503 || response.status === 502) {
-        if (attempt === maxRetries) {
-          throw new Error(`AI service temporarily unavailable (${response.status}) after ${maxRetries} attempts`);
-        }
-        
-        const backoffMs = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
-        console.log(`⚠️ AI service unavailable (${response.status}), retry ${attempt}/${maxRetries} in ${backoffMs}ms...`);
-        await new Promise(resolve => setTimeout(resolve, backoffMs));
-        continue;
-      }
-      
-      // Success or non-retryable error
-      return response;
-    } catch (error) {
-      lastError = error as Error;
-      
-      if (attempt === maxRetries) {
-        throw new Error(`Network error after ${maxRetries} attempts: ${lastError.message}`);
-      }
-      
-      const backoffMs = Math.pow(2, attempt - 1) * 1000;
-      console.log(`⚠️ Network error, retry ${attempt}/${maxRetries} in ${backoffMs}ms...`);
-      await new Promise(resolve => setTimeout(resolve, backoffMs));
-    }
-  }
-  
-  throw lastError || new Error('Unexpected retry failure');
-}
-
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  // Handle CORS preflight
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   const startTime = Date.now();
 
   try {
-    // Detect mode: authenticated vs autonomous with graceful fallback
+    // Use smart client from shared core module (handles auth fallback automatically)
     const authHeader = req.headers.get('Authorization');
-    const isRealUserAuth = authHeader && !authHeader.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9lbG1zbWNncnllb3J5aG9uZXh3');
+    const { client: supabase, userId, orgId, isAuthenticated } = await createSmartClient(authHeader);
     
-    let orgId: string;
-    let userId: string | null;
-    let supabase: any;
-
-    if (isRealUserAuth) {
-      // TRY authenticated mode with real user
-      console.log('🔐 Attempting authenticated mode');
-      supabase = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-        { global: { headers: { Authorization: authHeader } } }
-      );
-      
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !user) {
-        // FALLBACK to autonomous mode
-        console.log('❌ Auth failed, falling back to autonomous mode');
-        supabase = createClient(
-          Deno.env.get('SUPABASE_URL') ?? '',
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-        );
-        const { data: orgs } = await supabase.from('organizations').select('id').limit(1);
-        orgId = orgs![0].id;
-        userId = null;
-      } else {
-        userId = user.id;
-        const { data: userOrg } = await supabase
-          .from('user_organizations')
-          .select('org_id')
-          .eq('user_id', userId)
-          .maybeSingle();
-        
-        if (!userOrg) {
-          const { data: orgs } = await supabase.from('organizations').select('id').limit(1);
-          orgId = orgs![0].id;
-        } else {
-          orgId = userOrg.org_id;
-        }
-      }
-    } else {
-      // AUTONOMOUS MODE
-      console.log('🤖 Running in autonomous mode');
-      supabase = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-      );
-      const { data: orgs } = await supabase.from('organizations').select('id').limit(1);
-      orgId = orgs![0].id;
-      userId = null;
-    }
+    console.log(`🎓 Continuous Learner - Mode: ${isAuthenticated ? 'authenticated' : 'autonomous'}`)
 
     const { 
       user_question, 
@@ -517,10 +426,20 @@ USER FEEDBACK: ${user_feedback || 'none'}`
       console.log(`📊 Processing ${user_feedback} feedback for ${knowledge_used?.length || 0} knowledge items`);
       
       for (const knowledgeId of (knowledge_used || [])) {
+        // First get current value, then increment
+        const { data: currentItem } = await supabase
+          .from('ai_knowledge_base')
+          .select(feedbackColumn)
+          .eq('id', knowledgeId)
+          .eq('org_id', orgId)
+          .maybeSingle();
+        
+        const currentValue = currentItem?.[feedbackColumn] || 0;
+        
         const { error: feedbackError } = await supabase
           .from('ai_knowledge_base')
           .update({ 
-            [feedbackColumn]: supabase.raw(`${feedbackColumn} + 1`),
+            [feedbackColumn]: currentValue + 1,
             last_used_at: new Date().toISOString()
           })
           .eq('id', knowledgeId)
