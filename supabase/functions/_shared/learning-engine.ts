@@ -110,16 +110,16 @@ export async function analyzeChatLearning(
     const safeResponse = anonymizePII(ai_response) as string;
 
     // Process user feedback if provided
-    if (user_feedback && knowledge_used && knowledge_used.length > 0) {
+    if (user_feedback && knowledge_used && knowledge_used.length > 0 && org_id) {
       const ruleKey = user_feedback === 'helpful' ? 'positive_feedback' : 'negative_feedback';
       
       for (const knowledgeId of knowledge_used) {
         try {
-          // Increment feedback count
-          const feedbackResult = await incrementFeedbackCount(supabase, knowledgeId, user_feedback);
+          // Increment feedback count with org-scope
+          const feedbackResult = await incrementFeedbackCount(supabase, knowledgeId, org_id, user_feedback);
           
-          // Update confidence
-          const confidenceResult = await updateConfidence(supabase, knowledgeId, { ruleKey });
+          // Update confidence with org-scope
+          const confidenceResult = await updateConfidence(supabase, knowledgeId, org_id, { ruleKey });
           
           result.updated++;
           result.processed++;
@@ -154,13 +154,12 @@ export async function analyzeChatLearning(
     // If auto_apply and we have enough context, try to extract new knowledge
     if (options.auto_apply && org_id && !options.dry_run) {
       // Simple pattern: if feedback is helpful, boost used knowledge
-      // More complex AI analysis would go here in production
       if (user_feedback === 'helpful' && knowledge_used && knowledge_used.length > 0) {
         for (const knowledgeId of knowledge_used) {
           try {
-            await reinforceKnowledge(supabase, knowledgeId, {
+            await reinforceKnowledge(supabase, knowledgeId, org_id, {
               stabilityBoost: CONFIDENCE_RULES.stability_boost * 0.5,
-              incrementUsage: true,
+              usageIncrement: 1,
             });
           } catch (error) {
             console.warn(`[learning-engine] Reinforce failed for ${knowledgeId}:`, error);
@@ -224,11 +223,14 @@ export async function processFeedbackLearning(
         const knowledgeIds = fb.knowledge_ids ?? [];
         const feedbackType = fb.feedback_type as 'helpful' | 'harmful';
         
+        // Get org_id from knowledge item if not in feedback
+        const feedbackOrgId = org_id || '550e8400-e29b-41d4-a716-446655440000';
+        
         for (const kId of knowledgeIds) {
           try {
-            await incrementFeedbackCount(supabase, kId, feedbackType);
+            await incrementFeedbackCount(supabase, kId, feedbackOrgId, feedbackType);
             const ruleKey = feedbackType === 'helpful' ? 'positive_feedback' : 'negative_feedback';
-            const confResult = await updateConfidence(supabase, kId, { ruleKey });
+            const confResult = await updateConfidence(supabase, kId, feedbackOrgId, { ruleKey });
             
             result.updated++;
             if (confResult.wasPruned) result.pruned++;
@@ -270,12 +272,14 @@ export async function processFeedbackLearning(
       return { ...result, skipped: 1, details: { reason: 'no_knowledge_ids' } };
     }
 
+    // Use org_id or fallback to default
+    const effectiveOrgId = org_id || '550e8400-e29b-41d4-a716-446655440000';
     const ruleKey = feedback === 'helpful' ? 'positive_feedback' : 'negative_feedback';
 
     for (const knowledgeId of targetKnowledgeIds) {
       try {
-        await incrementFeedbackCount(supabase, knowledgeId, feedback);
-        const confResult = await updateConfidence(supabase, knowledgeId, { ruleKey });
+        await incrementFeedbackCount(supabase, knowledgeId, effectiveOrgId, feedback);
+        const confResult = await updateConfidence(supabase, knowledgeId, effectiveOrgId, { ruleKey });
         
         result.updated++;
         result.processed++;
