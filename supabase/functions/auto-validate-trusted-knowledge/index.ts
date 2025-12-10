@@ -1,10 +1,5 @@
 import "https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts";
-import { createClient } from 'npm:@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 // Trusted sources (configureerbaar uitbreiden)
 const TRUSTED_DOMAINS = [
@@ -18,22 +13,17 @@ const TRUSTED_DOMAINS = [
 ];
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
     console.log('🤖 Auto-validate trusted knowledge starting...');
     
-    // Parse request body for batch parameters
     const { batch_size = 1000, offset = 0 } = await req.json().catch(() => ({}));
     
     console.log(`📊 Processing batch: size=${batch_size}, offset=${offset}`);
     
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabase = createAdminClient();
 
     // Fetch unverified items with OFFSET for chunked processing
     const { data: candidates, error: fetchError } = await supabase
@@ -50,10 +40,7 @@ Deno.serve(async (req) => {
 
     if (!candidates || candidates.length === 0) {
       console.log('✅ No unverified items found');
-      return new Response(
-        JSON.stringify({ success: true, validated: 0, message: 'No items to validate' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ success: true, validated: 0, message: 'No items to validate' });
     }
 
     console.log(`📊 Found ${candidates.length} candidates`);
@@ -81,23 +68,19 @@ Deno.serve(async (req) => {
 
     // Filter op trust criteria
     const trustedItems = candidates.filter(item => {
-      // BLOCKER: Reject items with placeholder text immediately
       if (hasPlaceholderText(item)) {
         console.log(`❌ Skipping ${item.key}: contains placeholder text`);
         return false;
       }
       
-      // Criterium 1: Trusted domain
       const isTrustedSource = item.source && TRUSTED_DOMAINS.some(domain => 
         item.source.toLowerCase().includes(domain)
       );
 
-      // Criterium 2: High confidence + geen negatieve feedback (VERLAAGD: 0.8 → 0.7)
       const isHighConfidence = 
         item.confidence_score >= 0.7 && 
         (item.harmful_count || 0) === 0;
 
-      // Criterium 3: Positieve feedback van gebruikers (VERLAAGD: 5 → 2)
       const hasPositiveFeedback = (item.helpful_count || 0) >= 2;
 
       return isTrustedSource || isHighConfidence || hasPositiveFeedback;
@@ -105,20 +88,17 @@ Deno.serve(async (req) => {
 
     if (trustedItems.length === 0) {
       console.log('⚠️ No items meet trust criteria');
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          validated: 0, 
-          message: 'No items meet trust criteria',
-          candidates_checked: candidates.length 
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ 
+        success: true, 
+        validated: 0, 
+        message: 'No items meet trust criteria',
+        candidates_checked: candidates.length 
+      });
     }
 
     console.log(`✅ ${trustedItems.length} items meet trust criteria`);
 
-    // Update validation status IN BATCHES (prevent URL length issues)
+    // Update validation status IN BATCHES
     const itemIds = trustedItems.map(i => i.id);
     const UPDATE_BATCH_SIZE = 200;
     
@@ -135,19 +115,14 @@ Deno.serve(async (req) => {
         .in('id', batch);
 
       if (updateError) {
-        console.error(`❌ Update batch ${i}-${i + batch.length} failed:`, {
-          code: updateError.code,
-          message: updateError.message,
-          details: updateError.details,
-          hint: updateError.hint
-        });
+        console.error(`❌ Update batch ${i}-${i + batch.length} failed:`, updateError);
         throw updateError;
       }
       
       console.log(`✅ Updated batch ${Math.floor(i / UPDATE_BATCH_SIZE) + 1}/${Math.ceil(itemIds.length / UPDATE_BATCH_SIZE)}: ${batch.length} items`);
     }
 
-    // Log validation events - use NULL user_id for system events (service_role)
+    // Log validation events
     const events = trustedItems.map(item => {
       const validationReason = 
         TRUSTED_DOMAINS.some(d => item.source?.toLowerCase().includes(d)) ? 'trusted_source' :
@@ -156,7 +131,7 @@ Deno.serve(async (req) => {
       
       return {
         org_id: '550e8400-e29b-41d4-a716-446655440000',
-        user_id: null, // NULL for system events - allowed by RLS for service_role
+        user_id: null,
         event_type: 'auto_validation',
         context: {
           validation_reason: validationReason,
@@ -171,7 +146,6 @@ Deno.serve(async (req) => {
       };
     });
 
-    // Insert learning events IN BATCHES (prevent payload size issues)
     const INSERT_BATCH_SIZE = 200;
     
     console.log(`📦 Inserting ${events.length} learning events in batches of ${INSERT_BATCH_SIZE}...`);
@@ -183,13 +157,7 @@ Deno.serve(async (req) => {
         .insert(batch);
       
       if (logError) {
-        console.error(`⚠️ Failed to log events batch ${i}-${i + batch.length}:`, {
-          code: logError.code,
-          message: logError.message,
-          details: logError.details,
-          hint: logError.hint
-        });
-        // Don't crash - validation already succeeded
+        console.error(`⚠️ Failed to log events batch ${i}-${i + batch.length}:`, logError);
       } else {
         console.log(`✅ Logged events batch ${Math.floor(i / INSERT_BATCH_SIZE) + 1}/${Math.ceil(events.length / INSERT_BATCH_SIZE)}`);
       }
@@ -197,32 +165,22 @@ Deno.serve(async (req) => {
 
     console.log(`✅ Auto-validated ${trustedItems.length} items`);
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        validated: trustedItems.length,
-        candidates_checked: candidates.length,
-        items: trustedItems.map(i => ({ id: i.id, category: i.category, key: i.key }))
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ 
+      success: true, 
+      validated: trustedItems.length,
+      candidates_checked: candidates.length,
+      items: trustedItems.map(i => ({ id: i.id, category: i.category, key: i.key }))
+    });
 
   } catch (error) {
-    console.error('❌ Error in auto-validate-trusted-knowledge:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      code: (error as any)?.code,
-      details: (error as any)?.details,
-      hint: (error as any)?.hint,
-      stack: error instanceof Error ? error.stack : undefined
-    });
-    return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error',
+    console.error('❌ Error in auto-validate-trusted-knowledge:', error);
+    return errorResponse(
+      error instanceof Error ? error.message : 'Unknown error',
+      500,
+      {
         code: (error as any)?.code,
         details: (error as any)?.details
-      }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      }
     );
   }
 });

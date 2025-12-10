@@ -1,25 +1,16 @@
 import "https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts";
-import { createClient } from 'npm:@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
     console.warn('⚠️ DEPRECATED: backfill-embeddings is replaced by generate-embedding. Use generate-embedding instead.');
     
     const { batch_size = 10, offset = 0, direction = 'desc' } = await req.json();
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabase = createAdminClient();
 
     // Step 1: Fetch a window of knowledge items (with offset support)
     const windowSize = Math.max(batch_size * 20, 1000);
@@ -35,28 +26,18 @@ Deno.serve(async (req) => {
 
     if (fetchError) {
       console.error('❌ Error fetching knowledge items:', fetchError);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Failed to fetch knowledge items',
-          stage: 'fetch_candidates',
-          details: fetchError
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('Failed to fetch knowledge items', 500, { stage: 'fetch_candidates', details: fetchError });
     }
 
     if (!recentItems || recentItems.length === 0) {
       console.log('✅ No items in knowledge base');
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          processed: 0,
-          total_missing: 0,
-          message: 'No items in knowledge base',
-          reason: 'no_missing_embeddings'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ 
+        success: true, 
+        processed: 0,
+        total_missing: 0,
+        message: 'No items in knowledge base',
+        reason: 'no_missing_embeddings'
+      });
     }
 
     // Step 2: Filter out items that already have embeddings
@@ -84,39 +65,29 @@ Deno.serve(async (req) => {
     if (knowledgeItems.length === 0) {
       if (total_missing > 0) {
         console.log('⚠️ No candidates in current window, but items still missing embeddings');
-        return new Response(
-          JSON.stringify({ 
-            success: true, 
-            processed: 0,
-            total_missing,
-            total_in_batch: 0,
-            message: 'No candidates in this window',
-            reason: 'window_empty_but_missing' // Signal orchestrator to move offset
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return jsonResponse({ 
+          success: true, 
+          processed: 0,
+          total_missing,
+          total_in_batch: 0,
+          message: 'No candidates in this window',
+          reason: 'window_empty_but_missing'
+        });
       } else {
         console.log('✅ All items have embeddings');
-        return new Response(
-          JSON.stringify({ 
-            success: true, 
-            processed: 0,
-            total_missing: 0,
-            message: 'All items have embeddings',
-            reason: 'no_missing_embeddings'
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return jsonResponse({ 
+          success: true, 
+          processed: 0,
+          total_missing: 0,
+          message: 'All items have embeddings',
+          reason: 'no_missing_embeddings'
+        });
       }
     }
 
     console.log(`✅ Found ${knowledgeItems.length} candidates without embeddings`);
-
     console.log(`📦 Processing batch of ${knowledgeItems.length} items`);
 
-    // Note: Status tracking is handled by auto-backfill-orchestrator
-
-    // Genereer embeddings voor elk item
     const results = {
       processed: 0,
       errors: [] as string[]
@@ -130,12 +101,10 @@ Deno.serve(async (req) => {
           console.log(`📊 Progress: ${processedCount}/${knowledgeItems.length} items`);
         }
 
-        // Creëer embedding text
         const embeddingText = `${item.category}: ${item.key}\n${JSON.stringify(item.value)}`;
 
-        // Generate embedding via OpenAI text-embedding-3-small (768-dim)
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
 
         try {
           console.log(`🔄 Requesting OpenAI embedding for ${item.id}...`);
@@ -152,7 +121,7 @@ Deno.serve(async (req) => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              model: 'text-embedding-3-small', // 1536-dim (native OpenAI), cost-efficient
+              model: 'text-embedding-3-small',
               input: embeddingText
             }),
             signal: controller.signal
@@ -162,24 +131,19 @@ Deno.serve(async (req) => {
           if (!geminiResponse.ok) {
             const errorText = await geminiResponse.text();
             
-            // Handle 402 AI credits exhausted error
             if (geminiResponse.status === 402) {
               console.error(`💳 AI credits exhausted - stopping backfill`);
               results.errors.push(`${item.id}: AI credits exhausted (402)`);
               
-              // Return early with special error to signal orchestrator
-              return new Response(
-                JSON.stringify({
-                  success: false,
-                  error: 'AI credits exhausted. Please add funds to continue.',
-                  error_code: 402,
-                  processed: results.processed,
-                  total_missing,
-                  total_in_batch: knowledgeItems.length,
-                  errors: results.errors
-                }),
-                { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-              );
+              return jsonResponse({
+                success: false,
+                error: 'AI credits exhausted. Please add funds to continue.',
+                error_code: 402,
+                processed: results.processed,
+                total_missing,
+                total_in_batch: knowledgeItems.length,
+                errors: results.errors
+              }, 402);
             }
             
             console.error(`❌ OpenAI API error for ${item.id}:`, errorText);
@@ -190,7 +154,6 @@ Deno.serve(async (req) => {
           const geminiData = await geminiResponse.json();
           const embedding = geminiData.data[0].embedding;
 
-          // Validate and log embedding dimensions
           console.log(`✅ Processed ${item.id}: ${embedding.length} dimensions`);
           if (embedding.length !== 1536) {
             const error = `Invalid embedding size: ${embedding.length}, expected 1536`;
@@ -199,7 +162,6 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          // Insert embedding (use upsert to handle race conditions)
           const { error: insertError } = await supabase
             .from('knowledge_embeddings')
             .upsert(
@@ -216,7 +178,6 @@ Deno.serve(async (req) => {
           results.processed++;
           console.log(`✅ Successfully processed ${item.id} (${results.processed}/${knowledgeItems.length})`);
 
-          // Rate limiting: wacht 150ms tussen requests (verhoogd voor stabiliteit)
           await new Promise(resolve => setTimeout(resolve, 150));
 
         } catch (error) {
@@ -224,7 +185,7 @@ Deno.serve(async (req) => {
           if (error instanceof Error && error.name === 'AbortError') {
             console.error(`⏱️ Timeout (10s) for item ${item.id} - skipping`);
             results.errors.push(`${item.id}: API timeout`);
-            continue; // Skip dit item
+            continue;
           }
           console.error(`Error processing item ${item.id}:`, error);
           results.errors.push(`${item.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -237,22 +198,16 @@ Deno.serve(async (req) => {
 
     console.log(`✅ Batch complete: ${results.processed}/${knowledgeItems.length} processed`);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        processed: results.processed,
-        total_missing,
-        total_in_batch: knowledgeItems.length,
-        errors: results.errors
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({
+      success: true,
+      processed: results.processed,
+      total_missing,
+      total_in_batch: knowledgeItems.length,
+      errors: results.errors
+    });
 
   } catch (error) {
     console.error('Error in backfill-embeddings function:', error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Unknown error', 500);
   }
 });

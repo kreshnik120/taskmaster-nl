@@ -1,21 +1,12 @@
 import "https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts";
-import { createClient } from 'npm:@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabase = createAdminClient();
 
     console.log('🔍 [AUTONOMOUS-AI] Checking for paused backfill runs AND missing embeddings...');
 
@@ -24,7 +15,7 @@ Deno.serve(async (req) => {
       .from('ai_knowledge_base')
       .select('id')
       .is('deleted_at', null)
-      .order('created_at', { ascending: false }) // Nieuwe items eerst
+      .order('created_at', { ascending: false })
       .limit(100);
     
     if (kbItems && kbItems.length > 0) {
@@ -66,7 +57,6 @@ Deno.serve(async (req) => {
     const pausedRuns = allRuns?.filter(run => {
       if (run.status === 'paused') return true;
       
-      // Check for stale heartbeat (>5 min)
       const lastHeartbeat = run.metadata?.last_heartbeat;
       if (run.status === 'running' && lastHeartbeat) {
         const isStale = (Date.now() - new Date(lastHeartbeat).getTime()) > 5 * 60 * 1000;
@@ -80,14 +70,11 @@ Deno.serve(async (req) => {
 
     if (pausedRuns.length === 0) {
       console.log('✅ No paused runs found');
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'No paused runs to restart',
-          checked_at: new Date().toISOString()
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ 
+        success: true, 
+        message: 'No paused runs to restart',
+        checked_at: new Date().toISOString()
+      });
     }
 
     console.log(`📊 Found ${pausedRuns.length} run(s) needing restart`);
@@ -101,7 +88,6 @@ Deno.serve(async (req) => {
         const metadata = run.metadata || {};
         const isStaleHeartbeat = run.status === 'running';
         
-        // If stale heartbeat: force reset to error first
         if (isStaleHeartbeat) {
           console.log(`⚠️ Stale heartbeat detected, forcing reset for run ${run.id}`);
           await supabase
@@ -141,13 +127,12 @@ Deno.serve(async (req) => {
 
         console.log(`🔐 Generated HMAC signature for org ${org_id}`);
 
-        // Call the auto-backfill-orchestrator to resume with HMAC authentication
         const { data: restartData, error: restartError } = await supabase.functions.invoke(
           'auto-backfill-orchestrator',
           {
             body: { 
               batch_size: metadata.batch_size || 25,
-              force_restart: false // Resume from checkpoint, don't force restart
+              force_restart: false
             },
             headers: {
               'x-org-id': org_id,
@@ -188,7 +173,7 @@ Deno.serve(async (req) => {
         function_name: 'auto-restart-backfill',
         success: true,
         org_id: '550e8400-e29b-41d4-a716-446655440000',
-        user_id: '00000000-0000-0000-0000-000000000000', // system
+        user_id: '00000000-0000-0000-0000-000000000000',
         execution_time_ms: executionTime,
         input_tokens: 0,
         output_tokens: 0,
@@ -200,24 +185,19 @@ Deno.serve(async (req) => {
       console.error('Failed to log to function_call_logs:', logError);
     }
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: `Processed ${results.length} paused run(s)`,
-        results,
-        checked_at: new Date().toISOString()
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ 
+      success: true, 
+      message: `Processed ${results.length} paused run(s)`,
+      results,
+      checked_at: new Date().toISOString()
+    });
 
   } catch (error) {
     console.error('❌ Auto-restart error:', error);
-    return new Response(
-      JSON.stringify({ 
-        error: error instanceof Error ? error.message : 'Unknown error',
-        checked_at: new Date().toISOString()
-      }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    return errorResponse(
+      error instanceof Error ? error.message : 'Unknown error',
+      500,
+      { checked_at: new Date().toISOString() }
     );
   }
 });

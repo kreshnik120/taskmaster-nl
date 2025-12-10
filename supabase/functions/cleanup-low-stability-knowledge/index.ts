@@ -1,20 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createAdminClient();
 
     console.log('🧹 Starting cleanup of low-stability knowledge items...');
 
@@ -34,21 +26,15 @@ serve(async (req) => {
 
     if (selectError) {
       console.error('❌ Error selecting items:', selectError);
-      return new Response(
-        JSON.stringify({ error: selectError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse(selectError.message, 500);
     }
 
     if (!itemsToDelete || itemsToDelete.length === 0) {
       console.log('✅ No low-stability items found for cleanup');
-      return new Response(
-        JSON.stringify({ 
-          message: 'No items to clean up',
-          deleted_count: 0 
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ 
+        message: 'No items to clean up',
+        deleted_count: 0 
+      });
     }
 
     console.log(`📊 Found ${itemsToDelete.length} items to cleanup`);
@@ -64,7 +50,7 @@ serve(async (req) => {
       .from('ai_knowledge_base')
       .update({
         deleted_at: new Date().toISOString(),
-        deleted_by: null, // System cleanup
+        deleted_by: null,
         deletion_reason: {
           reason: 'Automatic cleanup: low stability score',
           criteria: {
@@ -80,10 +66,7 @@ serve(async (req) => {
 
     if (deleteError) {
       console.error('❌ Error soft-deleting items:', deleteError);
-      return new Response(
-        JSON.stringify({ error: deleteError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse(deleteError.message, 500);
     }
 
     console.log(`✅ Successfully soft-deleted ${itemsToDelete.length} items`);
@@ -127,22 +110,15 @@ serve(async (req) => {
       }
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        deleted_count: itemsToDelete.length,
-        category_breakdown: categoryBreakdown,
-        message: `Successfully cleaned up ${itemsToDelete.length} low-stability knowledge items`
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({
+      success: true,
+      deleted_count: itemsToDelete.length,
+      category_breakdown: categoryBreakdown,
+      message: `Successfully cleaned up ${itemsToDelete.length} low-stability knowledge items`
+    });
 
   } catch (error) {
     console.error('❌ Unexpected error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Unknown error occurred', 500);
   }
 });

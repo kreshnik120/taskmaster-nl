@@ -1,10 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'npm:@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, handleCors, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 // Complete category hierarchy with all 25 categories grouped
 const CATEGORY_HIERARCHY = {
@@ -47,9 +42,8 @@ Object.entries(CATEGORY_HIERARCHY).forEach(([groupId, group]) => {
 });
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
     const { item } = await req.json();
@@ -156,16 +150,10 @@ BELANGRIJK: Gebruik ALLEEN categorieën uit de bovenstaande lijst!`
 
     if (!aiResponse.ok) {
       if (aiResponse.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limits exceeded, please try again later." }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return errorResponse("Rate limits exceeded, please try again later.", 429);
       }
       if (aiResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Payment required, please add funds to your Lovable AI workspace." }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return errorResponse("Payment required, please add funds to your Lovable AI workspace.", 402);
       }
       const errorText = await aiResponse.text();
       console.error('AI gateway error:', aiResponse.status, errorText);
@@ -198,27 +186,18 @@ BELANGRIJK: Gebruik ALLEEN categorieën uit de bovenstaande lijst!`
     console.log('✅ AI categorization complete:', validatedItems.length, 'items');
     console.log('📁 Categories used:', [...new Set(validatedItems.map((i: any) => i.category))].join(', '));
 
-    return new Response(
-      JSON.stringify({ 
-        suggestions: validatedItems,
-        valid_categories: ALL_VALID_CATEGORIES,
-        category_groups: Object.keys(CATEGORY_HIERARCHY)
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ 
+      suggestions: validatedItems,
+      valid_categories: ALL_VALID_CATEGORIES,
+      category_groups: Object.keys(CATEGORY_HIERARCHY)
+    });
 
   } catch (error) {
     console.error('❌ Error in ai-categorize-knowledge:', error);
-    return new Response(
-      JSON.stringify({ 
-        error: error instanceof Error ? error.message : 'Unknown error',
-        suggestions: [],
-        valid_categories: ALL_VALID_CATEGORIES
-      }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+    return errorResponse(
+      error instanceof Error ? error.message : 'Unknown error',
+      500,
+      { suggestions: [], valid_categories: ALL_VALID_CATEGORIES }
     );
   }
 });

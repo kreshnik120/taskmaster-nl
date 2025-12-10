@@ -1,33 +1,23 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createAdminClient();
 
     console.log("🤖 Starting Auto-Resolution Engine...");
 
     // Fetch all active critical alerts
-    // FIXED: Removed .eq("intelligence_type", "alert") - that value doesn't exist in DB
-    // We want ALL intelligence types with critical/high severity
     const { data: alerts, error: fetchError } = await supabase
       .from("business_intelligence")
       .select("*")
       .in("severity", ["critical", "high"])
       .eq("status", "active")
       .order("detected_at", { ascending: false })
-      .limit(1000); // Process max 1000 alerts per run
+      .limit(1000);
 
     if (fetchError) {
       console.error("❌ Error fetching alerts:", fetchError);
@@ -51,7 +41,6 @@ serve(async (req) => {
 
     for (const [key, group] of duplicateGroups.entries()) {
       if (group.length > 1) {
-        // Keep most recent, mark others as resolved
         const sortedGroup = group.sort((a, b) => 
           new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime()
         );
@@ -98,7 +87,6 @@ serve(async (req) => {
       );
 
       if (tier1Sources.length === 1 && sources.length > 1) {
-        // Clear winner: Tier 1 source
         await supabase
           .from("business_intelligence")
           .update({
@@ -134,14 +122,12 @@ serve(async (req) => {
       const conflictingItems = alert.data.conflicting_items || [];
       const aiReasoning = alert.data.ai_reasoning || '';
       
-      // Check if AI says items are complementary (not conflicting)
       const isComplementary = 
         aiReasoning.toLowerCase().includes('complement') ||
         aiReasoning.toLowerCase().includes('aanvullend') ||
         aiReasoning.toLowerCase().includes('niet in conflict');
       
       if (isComplementary) {
-        // Auto-resolve: mark as no conflict
         await supabase
           .from("business_intelligence")
           .update({
@@ -154,7 +140,6 @@ serve(async (req) => {
           })
           .eq("id", alert.id);
         
-        // Mark all items as validated
         const itemIds = conflictingItems.map((item: any) => item.id);
         if (itemIds.length > 0) {
           await supabase
@@ -178,7 +163,6 @@ serve(async (req) => {
         continue;
       }
       
-      // Check if all items are already validated
       const itemIds = conflictingItems.map((item: any) => item.id).filter(Boolean);
       if (itemIds.length > 0) {
         const { data: kbItems } = await supabase
@@ -217,26 +201,14 @@ serve(async (req) => {
 
     console.log(`✅ Auto-resolved ${resolvedCount} alerts`);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        total_alerts_scanned: alerts?.length || 0,
-        resolved_count: resolvedCount,
-        resolution_log: resolutionLog,
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      }
-    );
+    return jsonResponse({
+      success: true,
+      total_alerts_scanned: alerts?.length || 0,
+      resolved_count: resolvedCount,
+      resolution_log: resolutionLog,
+    });
   } catch (error: any) {
     console.error("❌ Auto-resolution error:", error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
-      }
-    );
+    return errorResponse(error.message, 500);
   }
 });
