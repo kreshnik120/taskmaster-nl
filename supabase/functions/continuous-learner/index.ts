@@ -426,15 +426,17 @@ USER FEEDBACK: ${user_feedback || 'none'}`
       console.log(`📊 Processing ${user_feedback} feedback for ${knowledge_used?.length || 0} knowledge items`);
       
       for (const knowledgeId of (knowledge_used || [])) {
-        // First get current value, then increment
+        // First get current value, then increment - select both columns to satisfy TypeScript
         const { data: currentItem } = await supabase
           .from('ai_knowledge_base')
-          .select(feedbackColumn)
+          .select('helpful_count, harmful_count')
           .eq('id', knowledgeId)
           .eq('org_id', orgId)
           .maybeSingle();
         
-        const currentValue = currentItem?.[feedbackColumn] || 0;
+        const currentValue = feedbackColumn === 'helpful_count' 
+          ? (currentItem?.helpful_count || 0)
+          : (currentItem?.harmful_count || 0);
         
         const { error: feedbackError } = await supabase
           .from('ai_knowledge_base')
