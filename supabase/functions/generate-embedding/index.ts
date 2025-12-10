@@ -87,15 +87,32 @@ Deno.serve(async (req) => {
         );
       }
 
-      // FIXED QUERY: Get ALL existing embedding IDs first, then find items NOT in that set
-      // This fixes the bug where LEFT JOIN on top 150 by confidence returned 0 items
-      // because all high-confidence items already had embeddings
-      const { data: allEmbeddingIds } = await supabase
-        .from('knowledge_embeddings')
-        .select('knowledge_id');
+      // FIXED QUERY: Get ALL existing embedding IDs with PAGINATED fetch (fix for 1000-row limit)
+      // This fixes the bug where Supabase's default 1000 limit caused infinite loop
+      const embeddingIdSet = new Set<string>();
+      let embOffset = 0;
+      const embPageSize = 1000;
       
-      const embeddingIdSet = new Set((allEmbeddingIds || []).map(e => e.knowledge_id));
-      console.log(`📋 Found ${embeddingIdSet.size} existing embeddings`);
+      while (true) {
+        const { data: embPage, error: embError } = await supabase
+          .from('knowledge_embeddings')
+          .select('knowledge_id')
+          .range(embOffset, embOffset + embPageSize - 1);
+        
+        if (embError) {
+          console.error(`❌ Error fetching embeddings page at offset ${embOffset}:`, embError);
+          break;
+        }
+        
+        if (!embPage || embPage.length === 0) break;
+        
+        embPage.forEach((e: any) => embeddingIdSet.add(e.knowledge_id));
+        
+        if (embPage.length < embPageSize) break; // Laatste pagina
+        embOffset += embPageSize;
+      }
+      
+      console.log(`📋 Loaded ${embeddingIdSet.size} existing embeddings (paginated, ${Math.ceil(embOffset / embPageSize) + 1} pages)`);
       
       // Get knowledge items, we'll filter client-side for those without embeddings
       const { data: allKnowledge, error: queryError } = await supabase

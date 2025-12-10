@@ -50,18 +50,43 @@ const FALLBACK_PRIORITY_CATEGORIES = [
   'zzp_leveranciers'
 ];
 
+// Helper functie: Haal ALLE embedded IDs op met paginatie (fix voor 1000-row limit)
+async function getAllEmbeddedIds(supabase: any): Promise<Set<string>> {
+  const embeddedSet = new Set<string>();
+  let offset = 0;
+  const pageSize = 1000;
+  
+  while (true) {
+    const { data, error } = await supabase
+      .from('knowledge_embeddings')
+      .select('knowledge_id')
+      .range(offset, offset + pageSize - 1);
+    
+    if (error) {
+      console.error(`❌ Error fetching embeddings page at offset ${offset}:`, error);
+      break;
+    }
+    
+    if (!data || data.length === 0) break;
+    
+    data.forEach((e: any) => embeddedSet.add(e.knowledge_id));
+    
+    if (data.length < pageSize) break; // Laatste pagina
+    offset += pageSize;
+  }
+  
+  console.log(`📋 Loaded ${embeddedSet.size} existing embeddings (paginated fetch, ${Math.ceil(offset / pageSize) + 1} pages)`);
+  return embeddedSet;
+}
+
 // Helper functie: Haal knowledge IDs op met USAGE-BASED prioriteit
 async function getKnowledgeIdsWithoutEmbeddings(
   supabase: any, 
   batchSize: number, 
   offset: number
 ): Promise<string[]> {
-  // Step 1: Get all knowledge IDs that DON'T have embeddings yet
-  const { data: existingEmb } = await supabase
-    .from('knowledge_embeddings')
-    .select('knowledge_id');
-  
-  const embeddedSet = new Set(existingEmb?.map((e: any) => e.knowledge_id) || []);
+  // Step 1: Get ALL knowledge IDs that already have embeddings (paginated to avoid 1000-row limit)
+  const embeddedSet = await getAllEmbeddedIds(supabase);
   
   // Step 2: USAGE-BASED query - fetch items without embeddings
   // Primary sort: usage_count DESC (highest-used items first)
