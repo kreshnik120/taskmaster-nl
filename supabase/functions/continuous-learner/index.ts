@@ -125,6 +125,19 @@ serve(async (req) => {
       auto_apply = true  // ✅ NIEUW: backward compatible, default TRUE
     } = await req.json();
 
+    // ✅ Early validation: require both user_question and ai_response
+    if (!user_question || !ai_response) {
+      console.log('⚠️ Missing required fields - skipping analysis');
+      return new Response(JSON.stringify({ 
+        success: false,
+        error: 'Missing required fields: user_question and ai_response are required',
+        processed: 0 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400
+      });
+    }
+
     console.log('🎓 Continuous Learner analyzing interaction...');
 
     // Analyze the chat interaction with AI (with retry for transient failures)
@@ -573,8 +586,9 @@ USER FEEDBACK: ${user_feedback || 'none'}`
 
     // Log function call with enhanced metrics (after all processing)
     const executionTime = Date.now() - startTime;
-    const inputTokens = Math.ceil((user_question.length + ai_response.length) / 4);
-    const outputTokens = Math.ceil(analysisContent.length / 4);
+    // ✅ Safe null-checks for token calculation
+    const inputTokens = Math.ceil(((user_question || '').length + (ai_response || '').length) / 4);
+    const outputTokens = Math.ceil((analysisContent || '').length / 4);
 
     await supabase.from('function_call_logs').insert({
       user_id: userId,

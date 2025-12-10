@@ -108,28 +108,37 @@ export function TriggerLearningButton() {
         }
       }
 
-      // Process first complete conversation pair
-      let processed = 0;
-      for (const [, conv] of conversations) {
-        if (conv.question && conv.response) {
-          const { data, error } = await supabase.functions.invoke('continuous-learner', {
-            body: { 
-              user_question: conv.question,
-              ai_response: conv.response,
-              knowledge_used: conv.knowledge || [],
-              auto_apply: true
-            }
-          });
+      // Count complete conversation pairs first
+      const completePairs = Array.from(conversations.values()).filter(c => c.question && c.response);
+      
+      if (completePairs.length === 0) {
+        toast.info('Geen complete chat conversaties gevonden om te analyseren', {
+          description: 'Er moeten zowel user vragen als AI antwoorden aanwezig zijn'
+        });
+        setIsLearning(false);
+        return;
+      }
 
-          if (error) {
-            console.error('Continuous learner error for conversation:', error);
-          } else {
-            processed++;
+      // Process complete conversation pairs
+      let processed = 0;
+      for (const conv of completePairs) {
+        const { error } = await supabase.functions.invoke('continuous-learner', {
+          body: { 
+            user_question: conv.question,
+            ai_response: conv.response,
+            knowledge_used: conv.knowledge || [],
+            auto_apply: true
           }
-          
-          // Process max 3 conversations per manual trigger
-          if (processed >= 3) break;
+        });
+
+        if (error) {
+          console.error('Continuous learner error for conversation:', error);
+        } else {
+          processed++;
         }
+        
+        // Process max 3 conversations per manual trigger
+        if (processed >= 3) break;
       }
 
       if (processed > 0) {
