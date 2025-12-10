@@ -51,23 +51,48 @@ serve(async (req) => {
     let archivedCount = 0;
     let boostedCount = 0;
 
-    // Get all clients for lookup during auto-fix
-    const { data: allClients } = await supabase
-      .from('clients')
-      .select('id, name, company')
-      .eq('org_id', orgId);
+    // Get all clients for lookup during auto-fix (use clients table for FK compliance)
+    // Also get client_organizations for better name matching
+    const [{ data: allClients }, { data: clientOrgs }] = await Promise.all([
+      supabase.from('clients').select('id, name, company, client_org_id').eq('org_id', orgId),
+      supabase.from('client_organizations').select('id, name').eq('org_id', orgId)
+    ]);
     
+    // Build comprehensive lookup: name variants → clients.id (FK-compliant)
     const clientLookup = new Map<string, string>();
+    
+    // Map client_organizations names to their linked clients.id
+    const orgToClientId = new Map<string, string>();
+    allClients?.forEach(client => {
+      if (client.client_org_id) {
+        orgToClientId.set(client.client_org_id, client.id);
+      }
+    });
+    
+    // Add client_organizations names pointing to correct clients.id
+    clientOrgs?.forEach(org => {
+      const clientId = orgToClientId.get(org.id);
+      if (clientId) {
+        const normalizedName = org.name.toLowerCase().replace(/\s+/g, '');
+        clientLookup.set(normalizedName, clientId);
+        // Add partial matches for organization names
+        org.name.toLowerCase().split(/[\s-]+/).forEach((word: string) => {
+          if (word.length > 2) clientLookup.set(word, clientId);
+        });
+      }
+    });
+    
+    // Add legacy clients table names
     allClients?.forEach(client => {
       const normalizedName = client.name.toLowerCase().replace(/\s+/g, '');
       clientLookup.set(normalizedName, client.id);
-      
-      // Also try company name
       if (client.company) {
         const normalizedCompany = client.company.toLowerCase().replace(/\s+/g, '');
         clientLookup.set(normalizedCompany, client.id);
       }
     });
+    
+    console.log(`[data-quality-auditor] Client lookup built with ${clientLookup.size} name variants`);
 
     // SCAN 1: Outdated information (> 12 months) + AUTO-ARCHIVE
     const { data: outdated } = await supabase
@@ -205,7 +230,7 @@ serve(async (req) => {
             const correctClientId = clientLookup.get(normalizedClientName);
             
             if (correctClientId) {
-              // Update the knowledge base item with correct client_id - with org_id check
+              // Update BOTH the client_id column AND value.client_id JSONB field
               const updatedValue = {
                 ...(item.value as any),
                 client_id: correctClientId
@@ -214,6 +239,7 @@ serve(async (req) => {
               const { error: fixError } = await supabase
                 .from('ai_knowledge_base')
                 .update({
+                  client_id: correctClientId,  // UPDATE THE ACTUAL FK COLUMN!
                   value: updatedValue,
                   validation_failures: 0,
                   last_validation_error: null,
