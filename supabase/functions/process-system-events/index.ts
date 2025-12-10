@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { createKnowledge, reinforceKnowledge } from "../_shared/knowledge-crud.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -99,95 +100,64 @@ serve(async (req) => {
             console.warn(`⚠️ Skipping knowledge creation for event ${event.id}: org_id not available`);
             errors.push(`Event ${event.id}: Cannot create knowledge without org_id`);
           } else {
-            // Redact PII eerst
-            const { data: redactedValue } = await supabase
-              .rpc('redact_pii', { input_text: JSON.stringify(analysis.value) });
-            
-            const finalValue = redactedValue ? JSON.parse(redactedValue) : analysis.value;
-            
-            // Check for existing pattern to increment occurrence_count
-            const { data: existingPattern } = await supabase
-              .from('ai_knowledge_base')
-              .select('id, occurrence_count, confidence_score')
-              .eq('org_id', orgId)
-              .eq('category', analysis.category)
-              .eq('key', analysis.key)
-              .is('deleted_at', null)
-              .single();
-            
-            if (existingPattern) {
-              // Increment occurrence count and boost confidence for repeated patterns
-              const newOccurrenceCount = (existingPattern.occurrence_count || 1) + 1;
-              const confidenceBoost = newOccurrenceCount > 5 ? 0.05 : (newOccurrenceCount > 3 ? 0.02 : 0);
-              const newConfidence = Math.min(1.0, (existingPattern.confidence_score || 0.7) + confidenceBoost);
+            try {
+              // Use unified createKnowledge which handles:
+              // - PII redaction automatically
+              // - Conflict detection
+              // - Reinforcement of existing items (exact matches)
+              // - org_id validation
+              // Cast to any to avoid SupabaseClient version mismatch between npm: and esm.sh imports
+              const result = await createKnowledge(supabase as any, {
+                org_id: orgId,
+                user_id: event.user_id,
+                category: analysis.category,
+                key: analysis.key,
+                value: analysis.value,
+                confidence_score: analysis.confidence,
+                source: `system_event:${event.event_type}`,
+                source_reference: event.id,
+                role_tags: analysis.role_tags || [],
+                validation_status: 'pending',
+                needs_review: true,
+              }, { skipPIIRedaction: false });
               
-              const { error: updateError } = await supabase
-                .from('ai_knowledge_base')
-                .update({
-                  occurrence_count: newOccurrenceCount,
-                  confidence_score: newConfidence,
-                  value: finalValue, // Update with latest data
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', existingPattern.id);
-              
-              if (!updateError) {
+              if (result.wasReinforced) {
                 knowledgeCreatedCount++;
-                console.log(`🔄 Pattern updated: ${analysis.key} (occurrence #${newOccurrenceCount}, confidence: ${newConfidence})`);
+                console.log(`🔄 Knowledge reinforced via unified CRUD: ${result.existingId}`);
               } else {
-                console.error(`❌ Failed to update pattern for event ${event.id}:`, updateError);
-                errors.push(`Event ${event.id}: ${updateError.message}`);
-              }
-            } else {
-              // Insert new knowledge
-              const { error: kbError } = await supabase
-                .from('ai_knowledge_base')
-                .insert({
-                  org_id: orgId,
-                  user_id: event.user_id,
-                  category: analysis.category,
-                  key: analysis.key,
-                  value: finalValue,
-                  confidence_score: analysis.confidence,
-                  source: `system_event:${event.event_type}`,
-                  source_reference: event.id,
-                  role_tags: analysis.role_tags || [],
-                  stability_score: analysis.stability_score || 0.8,
-                  occurrence_count: 1
-                });
-              
-              if (!kbError) {
                 knowledgeCreatedCount++;
-                console.log(`✅ Knowledge created from event ${event.id}`);
-              } else {
-                console.error(`❌ Failed to create knowledge for event ${event.id}:`, kbError);
-                errors.push(`Event ${event.id}: ${kbError.message}`);
+                console.log(`✅ Knowledge created via unified CRUD: ${result.id}`);
               }
-            }
-            
-            // For evaluation events, also create correlation knowledge
-            if (event.event_type === 'assignment_evaluation_created' && analysis.correlationKnowledge) {
-              for (const corrKnowledge of analysis.correlationKnowledge) {
-                const { error: corrError } = await supabase
-                  .from('ai_knowledge_base')
-                  .insert({
-                    org_id: orgId,
-                    user_id: event.user_id,
-                    category: corrKnowledge.category,
-                    key: corrKnowledge.key,
-                    value: corrKnowledge.value,
-                    confidence_score: corrKnowledge.confidence,
-                    source: `system_event:${event.event_type}:correlation`,
-                    source_reference: event.id,
-                    role_tags: corrKnowledge.role_tags || ['admin', 'manager'],
-                    stability_score: corrKnowledge.stability_score || 0.7
-                  });
-                
-                if (!corrError) {
-                  knowledgeCreatedCount++;
-                  console.log(`✅ Correlation knowledge created: ${corrKnowledge.key}`);
+              
+              // For evaluation events, also create correlation knowledge
+              if (event.event_type === 'assignment_evaluation_created' && analysis.correlationKnowledge) {
+                for (const corrKnowledge of analysis.correlationKnowledge) {
+                  try {
+                    const corrResult = await createKnowledge(supabase as any, {
+                      org_id: orgId,
+                      user_id: event.user_id,
+                      category: corrKnowledge.category,
+                      key: corrKnowledge.key,
+                      value: corrKnowledge.value,
+                      confidence_score: corrKnowledge.confidence,
+                      source: `system_event:${event.event_type}:correlation`,
+                      source_reference: event.id,
+                      role_tags: corrKnowledge.role_tags || ['admin', 'manager'],
+                      validation_status: 'pending',
+                      needs_review: true,
+                    });
+                    
+                    knowledgeCreatedCount++;
+                    console.log(`✅ Correlation knowledge created: ${corrKnowledge.key} (${corrResult.id})`);
+                  } catch (corrError) {
+                    console.error(`❌ Failed to create correlation knowledge:`, corrError);
+                    errors.push(`Correlation ${corrKnowledge.key}: ${corrError instanceof Error ? corrError.message : 'Unknown error'}`);
+                  }
                 }
               }
+            } catch (knowledgeError) {
+              console.error(`❌ Failed to create knowledge for event ${event.id}:`, knowledgeError);
+              errors.push(`Event ${event.id}: ${knowledgeError instanceof Error ? knowledgeError.message : 'Unknown error'}`);
             }
           }
         }

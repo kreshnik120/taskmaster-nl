@@ -6,6 +6,7 @@ import { preflightCompletenessCheck, executePreflightActions } from "../_shared/
 import { semanticKnowledgeRetrieval, calculateSemanticConfidence, mergeSemanticAndCategoryResults } from "../_shared/semantic-retrieval.ts";
 import { validateResponse, addValidationContext } from "../_shared/response-validator.ts";
 import { disambiguateEntities, applyTemporalFilter, expandViaRelationships } from "../_shared/entity-resolver.ts";
+import { softDeleteKnowledge, reinforceKnowledge, updateConfidence } from "../_shared/knowledge-crud.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -580,29 +581,27 @@ async function detectKnowledgeConflicts(
         if (aiRecommendation.tier === 'auto_resolve' && aiRecommendation.recommended_id) {
           console.log(`🤖 AUTO-RESOLVE (Tier 1): ${groupKey} (${(aiRecommendation.confidence * 100).toFixed(0)}%)`);
           
+          // Use unified softDeleteKnowledge for org-scoped deletion with audit trail
           const losers = items.filter(kb => kb.id !== aiRecommendation.recommended_id);
-          const loserIds = losers.map(kb => kb.id);
-          
-          await supabase
-            .from('ai_knowledge_base')
-            .update({
-              deleted_at: new Date().toISOString(),
-              deleted_by: 'AI_AUTO_RESOLVE',
-              deletion_reason: {
-                conflict_group: groupKey,
+          for (const loser of losers) {
+            try {
+              await softDeleteKnowledge(supabase as any, loser.id, {
                 reason: aiRecommendation.reason,
-                winner_id: aiRecommendation.recommended_id,
-                confidence: aiRecommendation.confidence,
-                tier: 'auto_resolve',
-                deleted_items: losers.map(kb => ({
-                  id: kb.id,
-                  key: kb.key,
-                  value: kb.value,
-                  confidence_score: kb.confidence_score
-                }))
-              }
-            })
-            .in('id', loserIds);
+                deletedBy: 'AI_AUTO_RESOLVE',
+                metadata: {
+                  conflict_group: groupKey,
+                  winner_id: aiRecommendation.recommended_id,
+                  confidence: aiRecommendation.confidence,
+                  tier: 'auto_resolve',
+                  original_key: loser.key,
+                  original_value: loser.value,
+                  original_confidence: loser.confidence_score
+                }
+              });
+            } catch (deleteError) {
+              console.error(`Failed to soft-delete knowledge ${loser.id}:`, deleteError);
+            }
+          }
           
           await supabase.from('business_intelligence').insert({
             org_id: orgId,
@@ -614,7 +613,7 @@ async function detectKnowledgeConflicts(
             description: `AI heeft ${losers.length} item(s) verwijderd (${(aiRecommendation.confidence * 100).toFixed(0)}% zekerheid)`,
             data: {
               winner_id: aiRecommendation.recommended_id,
-              deleted_ids: loserIds,
+              deleted_ids: losers.map(kb => kb.id),
               reason: aiRecommendation.reason,
               restore_available_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
             },
@@ -661,11 +660,12 @@ async function detectKnowledgeConflicts(
         if (aiRecommendation.tier === 'preserve_all') {
           console.log(`⚠️ PRESERVE ALL (Tier 3): ${groupKey} (${(aiRecommendation.confidence * 100).toFixed(0)}%)`);
           
-          // Mark all items as needing review
+          // Mark all items as needing review - include org_id filter for security
           await supabase
             .from('ai_knowledge_base')
             .update({ needs_review: true })
-            .in('id', items.map(kb => kb.id));
+            .in('id', items.map(kb => kb.id))
+            .eq('org_id', orgId); // Added org_id filter for security
           
           await supabase.from('business_intelligence').insert({
             org_id: orgId,
@@ -763,16 +763,25 @@ async function trackKnowledgeUsage(
       if (questionClient && kbClient && kbClient !== questionClient) {
         console.warn(`⚠️ Explicit client mismatch: KB="${kbClient}", Question="${questionClient}"`);
         
-        // Lower confidence and flag for review
-        await supabase
-          .from('ai_knowledge_base')
-          .update({
-            confidence_score: Math.max(0.3, (kb.confidence_score || 0.5) - 0.3),
-            needs_review: true,
-            validation_failures: (kb.validation_failures || 0) + 1,
-            last_validation_error: `Client mismatch: KB claims ${kbClient}, but used for ${questionClient} query`
-          })
-          .eq('id', kb.id);
+        // Use unified updateConfidence with atomic operation
+        try {
+          await updateConfidence(supabase as any, kb.id, kb.org_id, {
+            ruleKey: 'negative_feedback', // Use negative_feedback rule
+            customDelta: -0.30, // Override with -0.30 penalty for client mismatch
+          });
+          // Mark for review separately since updateConfidence doesn't handle this
+          await supabase
+            .from('ai_knowledge_base')
+            .update({
+              needs_review: true,
+              validation_failures: (kb.validation_failures || 0) + 1,
+              last_validation_error: `Client mismatch: KB claims ${kbClient}, but used for ${questionClient} query`
+            })
+            .eq('id', kb.id)
+            .eq('org_id', kb.org_id);
+        } catch (updateError) {
+          console.error(`Failed to update confidence for ${kb.id}:`, updateError);
+        }
         
         // Create business intelligence alert
         await supabase.from('business_intelligence').insert({
@@ -802,16 +811,14 @@ async function trackKnowledgeUsage(
       // - Knowledge used in non-client-specific questions
       usedKnowledgeIds.push(kb.id);
       
-      const { error } = await supabase
-        .from('ai_knowledge_base')
-        .update({
-          usage_count: (kb.usage_count || 0) + 1,
-          last_used_at: new Date().toISOString()
-        })
-        .eq('id', kb.id);
-      
-      if (error) {
-        console.error(`Failed to update knowledge ${kb.id}:`, error);
+      // Use unified reinforceKnowledge for atomic usage tracking
+      try {
+        await reinforceKnowledge(supabase as any, kb.id, kb.org_id, {
+          usageIncrement: 1,
+          stabilityBoost: 0.01 // Small boost for validated usage
+        });
+      } catch (reinforceError) {
+        console.error(`Failed to reinforce knowledge ${kb.id}:`, reinforceError);
       }
     }
   }
@@ -5598,29 +5605,17 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
           if (declaredKnowledgeIds.length > 0) {
             console.log(`✅ Using DECLARED knowledge IDs for tracking: ${declaredKnowledgeIds.length} items`);
             
-            // Direct tracking using declared IDs
+            // Direct tracking using declared IDs with unified reinforceKnowledge
             for (const knowledgeId of declaredKnowledgeIds) {
-              // Fetch current usage_count
-              const { data: currentKb } = await supabaseClient
-                .from('ai_knowledge_base')
-                .select('usage_count')
-                .eq('id', knowledgeId)
-                .single();
-              
-              if (currentKb) {
-                const { error: updateError } = await supabaseClient
-                  .from('ai_knowledge_base')
-                  .update({
-                    usage_count: (currentKb.usage_count || 0) + 1,
-                    last_used_at: new Date().toISOString()
-                  })
-                  .eq('id', knowledgeId);
-                
-                if (!updateError) {
-                  usedKnowledgeIds.push(knowledgeId);
-                } else {
-                  console.error(`Failed to track knowledge ${knowledgeId}:`, updateError);
-                }
+              try {
+                // Use atomic reinforceKnowledge for concurrent-safe usage tracking
+                await reinforceKnowledge(supabaseClient as any, knowledgeId, userOrgId, {
+                  usageIncrement: 1,
+                  stabilityBoost: 0.01 // Small boost for validated usage
+                });
+                usedKnowledgeIds.push(knowledgeId);
+              } catch (reinforceError) {
+                console.error(`Failed to track knowledge ${knowledgeId}:`, reinforceError);
               }
             }
             
