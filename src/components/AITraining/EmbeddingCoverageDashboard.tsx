@@ -5,18 +5,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle2, Clock, AlertCircle, TrendingUp, Database, Zap, Activity } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { CheckCircle2, Clock, AlertCircle, TrendingUp, Database, Zap, Activity, Play, RefreshCw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
+import { CATEGORY_GROUPS, getCoverageColor, getCoverageIcon } from "@/lib/constants/knowledgeCategoryHierarchy";
+
+interface CategoryCoverage {
+  category: string;
+  total: number;
+  embedded: number;
+  usage: number;
+  coverage: number;
+}
 
 export const EmbeddingCoverageDashboard = () => {
   const [realtimeCount, setRealtimeCount] = useState<number | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [isTriggering, setIsTriggering] = useState(false);
 
-  // Fetch coverage stats
-  const { data: stats, isLoading } = useQuery({
-    queryKey: ["embedding-coverage"],
+  // Fetch coverage stats with per-category breakdown
+  const { data: stats, isLoading, refetch } = useQuery({
+    queryKey: ["embedding-coverage-enhanced"],
     queryFn: async () => {
-      // ✅ STAP 3: Haal org_id dynamisch op
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
@@ -28,18 +39,45 @@ export const EmbeddingCoverageDashboard = () => {
 
       if (!userOrg?.org_id) throw new Error('No organization found');
 
-      // ✅ STAP 3: Gebruik HEAD counts (efficiënt, geen 400 errors)
-      const { count: totalItems } = await supabase
+      // Get all knowledge items
+      const { data: allItems } = await supabase
         .from("ai_knowledge_base")
-        .select("*", { count: "exact", head: true })
+        .select("id, category, usage_count")
         .eq("org_id", userOrg.org_id)
         .is("deleted_at", null);
 
-      const { count: embeddedCount } = await supabase
+      // Get all embeddings
+      const { data: embeddings } = await supabase
         .from("knowledge_embeddings")
-        .select("*", { count: "exact", head: true });
+        .select("knowledge_id");
 
-      // 🔧 FIX: Gebruik COUNT queries voor accurate validation percentages
+      const embeddedSet = new Set(embeddings?.map(e => e.knowledge_id) || []);
+
+      // Calculate per-category stats
+      const categoryStats: Record<string, CategoryCoverage> = {};
+      (allItems || []).forEach(item => {
+        const cat = item.category || 'unknown';
+        if (!categoryStats[cat]) {
+          categoryStats[cat] = { category: cat, total: 0, embedded: 0, usage: 0, coverage: 0 };
+        }
+        categoryStats[cat].total++;
+        categoryStats[cat].usage += item.usage_count || 0;
+        if (embeddedSet.has(item.id)) {
+          categoryStats[cat].embedded++;
+        }
+      });
+
+      // Calculate coverage percentages
+      Object.values(categoryStats).forEach(stat => {
+        stat.coverage = stat.total > 0 ? (stat.embedded / stat.total) * 100 : 0;
+      });
+
+      // Find critical categories (high usage, low coverage)
+      const criticalCategories = Object.values(categoryStats)
+        .filter(s => s.coverage < 50 && s.usage > 50)
+        .sort((a, b) => b.usage - a.usage);
+
+      // Get counts
       const { count: verifiedCount } = await supabase
         .from("ai_knowledge_base")
         .select("*", { count: "exact", head: true })
@@ -54,30 +92,30 @@ export const EmbeddingCoverageDashboard = () => {
         .eq("validation_status", "unverified")
         .is("deleted_at", null);
 
-      const verifiedItems = verifiedCount || 0;
-      const unverifiedItems = unverifiedCount || 0;
-
-      const embeddingCoverage = (totalItems || 0) > 0 ? ((embeddedCount || 0) / (totalItems || 0)) * 100 : 0;
-      const validationCoverage = (totalItems || 0) > 0 ? (verifiedItems / (totalItems || 0)) * 100 : 0;
+      const totalItems = allItems?.length || 0;
+      const embeddedItems = embeddings?.length || 0;
+      const embeddingCoverage = totalItems > 0 ? (embeddedItems / totalItems) * 100 : 0;
+      const validationCoverage = totalItems > 0 ? ((verifiedCount || 0) / totalItems) * 100 : 0;
 
       return {
-        totalItems: totalItems || 0,
-        embeddedItems: embeddedCount || 0,
-        missingEmbeddings: (totalItems || 0) - (embeddedCount || 0),
+        totalItems,
+        embeddedItems,
+        missingEmbeddings: totalItems - embeddedItems,
         embeddingCoverage,
-        verifiedItems,
-        unverifiedItems,
-        validationCoverage
+        verifiedItems: verifiedCount || 0,
+        unverifiedItems: unverifiedCount || 0,
+        validationCoverage,
+        categoryStats: Object.values(categoryStats).sort((a, b) => b.usage - a.usage),
+        criticalCategories
       };
     },
-    refetchInterval: 10000 // Refetch elke 10s
+    refetchInterval: 10000
   });
 
   // Check orchestrator status
   const { data: orchestratorStatus } = useQuery({
     queryKey: ['orchestrator-status'],
     queryFn: async () => {
-      // ✅ STAP 3: Haal org_id dynamisch op
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
 
@@ -124,11 +162,27 @@ export const EmbeddingCoverageDashboard = () => {
     };
   }, []);
 
+  // Trigger high-priority embedding
+  const triggerHighPriorityEmbedding = async () => {
+    setIsTriggering(true);
+    try {
+      const { error } = await supabase.functions.invoke('auto-backfill-orchestrator', {
+        body: { batch_size: 25, force_restart: true }
+      });
+      if (error) throw error;
+      toast.success('High-priority embedding gestart');
+      refetch();
+    } catch (error) {
+      console.error('Error triggering embedding:', error);
+      toast.error('Kon embedding niet starten');
+    } finally {
+      setIsTriggering(false);
+    }
+  };
+
   // Calculate ETA based on current processing speed
   const calculateETA = () => {
     if (!stats || stats.missingEmbeddings === 0) return null;
-    
-    // Average: 50 items per batch, ~28s per batch = ~6,500 items/hour
     const itemsPerHour = 6500;
     const hoursRemaining = stats.missingEmbeddings / itemsPerHour;
     
@@ -179,6 +233,20 @@ export const EmbeddingCoverageDashboard = () => {
             </CardDescription>
           </div>
           <div className="flex gap-2">
+            {!isBackfillActive && stats && stats.missingEmbeddings > 0 && (
+              <Button 
+                size="sm" 
+                onClick={triggerHighPriorityEmbedding}
+                disabled={isTriggering}
+              >
+                {isTriggering ? (
+                  <RefreshCw className="h-4 w-4 animate-spin mr-1" />
+                ) : (
+                  <Play className="h-4 w-4 mr-1" />
+                )}
+                Verwerk Nu
+              </Button>
+            )}
             {isBackfillActive && !isStale && (
               <Badge variant="default" className="animate-pulse gap-1">
                 <Zap className="h-3 w-3" />
@@ -194,6 +262,28 @@ export const EmbeddingCoverageDashboard = () => {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Critical Categories Alert */}
+        {stats?.criticalCategories && stats.criticalCategories.length > 0 && (
+          <Alert className="border-red-500 bg-red-50 dark:bg-red-950">
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <AlertDescription>
+              <div className="font-semibold text-red-700 dark:text-red-300 mb-2">
+                🎯 Kritieke categorieën (hoge usage, lage coverage)
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {stats.criticalCategories.slice(0, 4).map(cat => (
+                  <div key={cat.category} className="text-sm bg-red-100 dark:bg-red-900 rounded px-2 py-1">
+                    <span className="font-medium">{cat.category}</span>
+                    <span className="text-xs ml-1">
+                      {cat.coverage.toFixed(0)}% | {cat.usage}x
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Orchestrator Status */}
         {orchestratorStatus && (
           <Alert className={
@@ -218,7 +308,6 @@ export const EmbeddingCoverageDashboard = () => {
                   </>
                 )}
               </div>
-              {/* ✅ STAP 3: Toon laatste error_message */}
               {orchestratorStatus.status === 'paused' && orchestratorStatus.metadata && typeof orchestratorStatus.metadata === 'object' && 'pause_reason' in orchestratorStatus.metadata && (
                 <div className="mt-2 text-sm text-yellow-600 font-medium">
                   ⚠️ Reden: {String(orchestratorStatus.metadata.pause_reason)}
@@ -298,12 +387,38 @@ export const EmbeddingCoverageDashboard = () => {
               </span>
             )}
           </div>
-          {isBackfillActive && orchestratorStatus?.current_batch && (
-            <div className="text-xs text-muted-foreground mt-1">
-              Huidige batch: {orchestratorStatus.current_batch} ({orchestratorStatus.total_items_processed} verwerkt)
-            </div>
-          )}
         </div>
+
+        {/* Category Coverage Breakdown */}
+        {stats?.categoryStats && stats.categoryStats.length > 0 && (
+          <div className="space-y-3">
+            <div className="font-semibold text-sm flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Coverage per Categorie (gesorteerd op usage)
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+              {stats.categoryStats.slice(0, 10).map(cat => (
+                <div key={cat.category} className="flex items-center justify-between text-sm bg-muted/50 rounded px-2 py-1">
+                  <div className="flex items-center gap-2">
+                    <span>{getCoverageIcon(cat.coverage)}</span>
+                    <span className="font-medium truncate max-w-24">{cat.category}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs ${getCoverageColor(cat.coverage)}`}>
+                      {cat.coverage.toFixed(0)}%
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {cat.embedded}/{cat.total}
+                    </span>
+                    <Badge variant="outline" className="text-xs h-5">
+                      {cat.usage}x
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Validation Coverage */}
         <div className="space-y-2">

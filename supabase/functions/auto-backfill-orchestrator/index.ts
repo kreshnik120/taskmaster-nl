@@ -31,23 +31,26 @@ async function verifyHMAC(orgId: string, signature: string): Promise<boolean> {
   return expectedSignature === signature;
 }
 
-// Priority categories for embedding generation (high-usage first)
-const PRIORITY_CATEGORIES = [
-  'compliance',      // Highest priority - regulatory compliance
-  'wetgeving',       // Legal requirements
-  'cao',             // Collective labor agreements
-  'tarieven',        // Pricing/rates
-  'recruitment',     // Core business
-  'processen',       // Business processes
-  'contracten',      // Contracts
-  'bedrijfsgegevens',// Company data
-  'hr_arbeidsvoorwaarden', // HR terms
-  'success_patterns', // AI learning patterns
-  'zzp_vereisten',   // ZZP requirements
-  'zzp_leveranciers' // ZZP suppliers (lowest priority)
+// Priority categories for embedding generation - NOW SORTED BY USAGE_COUNT DYNAMICALLY
+// Fallback static list only used if usage_count is equal
+const FALLBACK_PRIORITY_CATEGORIES = [
+  'zzp',             // 0% coverage, 185x usage - CRITICAL
+  'klanten',         // 0% coverage, 69x usage - CRITICAL
+  'wetgeving',       // 47% coverage, 658x usage - HIGH PRIORITY
+  'tarieven',        // 56% coverage, 492x usage - HIGH PRIORITY
+  'compliance',
+  'cao',
+  'recruitment',
+  'processen',
+  'contracten',
+  'bedrijfsgegevens',
+  'hr_arbeidsvoorwaarden',
+  'success_patterns',
+  'zzp_vereisten',
+  'zzp_leveranciers'
 ];
 
-// Helper functie: Haal knowledge IDs op met priority-based selectie
+// Helper functie: Haal knowledge IDs op met USAGE-BASED prioriteit
 async function getKnowledgeIdsWithoutEmbeddings(
   supabase: any, 
   batchSize: number, 
@@ -60,14 +63,16 @@ async function getKnowledgeIdsWithoutEmbeddings(
   
   const embeddedSet = new Set(existingEmb?.map((e: any) => e.knowledge_id) || []);
   
-  // Step 2: Priority-based query - fetch items without embeddings
-  // Prioritize by: 1) category priority, 2) usage_count, 3) source_type
+  // Step 2: USAGE-BASED query - fetch items without embeddings
+  // Primary sort: usage_count DESC (highest-used items first)
+  // Secondary sort: created_at ASC (oldest items next)
   const { data: kbItems } = await supabase
     .from('ai_knowledge_base')
-    .select('id, category, usage_count, source_type, original_text')
+    .select('id, category, usage_count, source_type, original_text, confidence_score')
     .is('deleted_at', null)
     .not('original_text', 'is', null)
-    .order('usage_count', { ascending: false }) // High-usage first
+    .order('usage_count', { ascending: false, nullsFirst: false }) // High-usage FIRST
+    .order('confidence_score', { ascending: false, nullsFirst: false }) // Then high-confidence
     .order('created_at', { ascending: true })   // Then oldest
     .limit(batchSize * 50); // Larger window for filtering
   
@@ -80,24 +85,40 @@ async function getKnowledgeIdsWithoutEmbeddings(
     return textLength >= 15; // Skip items with very short text
   });
   
-  // Step 4: Sort by priority category, then usage_count
+  // Step 4: Sort by USAGE_COUNT first (already sorted from query), then by category priority
   const sortedItems = candidateItems.sort((a: any, b: any) => {
-    const aPriority = PRIORITY_CATEGORIES.indexOf(a.category);
-    const bPriority = PRIORITY_CATEGORIES.indexOf(b.category);
+    // Primary: usage_count (descending)
+    const usageDiff = (b.usage_count || 0) - (a.usage_count || 0);
+    if (usageDiff !== 0) return usageDiff;
+    
+    // Secondary: confidence_score (descending)
+    const confDiff = (b.confidence_score || 0) - (a.confidence_score || 0);
+    if (confDiff !== 0) return confDiff;
+    
+    // Tertiary: fallback category priority
+    const aPriority = FALLBACK_PRIORITY_CATEGORIES.indexOf(a.category);
+    const bPriority = FALLBACK_PRIORITY_CATEGORIES.indexOf(b.category);
     const aIdx = aPriority === -1 ? 999 : aPriority;
     const bIdx = bPriority === -1 ? 999 : bPriority;
-    
-    if (aIdx !== bIdx) return aIdx - bIdx; // Priority category first
-    return (b.usage_count || 0) - (a.usage_count || 0); // Then usage_count
+    return aIdx - bIdx;
   });
   
   // Step 5: Take only batchSize items
   const selectedIds = sortedItems.slice(0, batchSize).map((k: any) => k.id);
   
-  console.log(`📊 Priority selection: ${selectedIds.length} items from ${candidateItems.length} candidates`);
+  // Enhanced logging with usage stats
+  console.log(`📊 USAGE-BASED selection: ${selectedIds.length} items from ${candidateItems.length} candidates`);
   if (selectedIds.length > 0) {
-    const categories = [...new Set(sortedItems.slice(0, batchSize).map((k: any) => k.category))];
-    console.log(`📁 Categories in batch: ${categories.join(', ')}`);
+    const topItems = sortedItems.slice(0, Math.min(5, batchSize));
+    const categories = [...new Set(topItems.map((k: any) => k.category))];
+    const avgUsage = Math.round(topItems.reduce((sum: number, k: any) => sum + (k.usage_count || 0), 0) / topItems.length);
+    console.log(`📁 Categories: ${categories.join(', ')} | Avg usage: ${avgUsage}x`);
+    
+    // Log critical categories if present
+    const criticalCategories = topItems.filter((k: any) => ['zzp', 'klanten', 'tarieven', 'wetgeving'].includes(k.category));
+    if (criticalCategories.length > 0) {
+      console.log(`🎯 HIGH-PRIORITY items in batch: ${criticalCategories.map((k: any) => `${k.category}(${k.usage_count}x)`).join(', ')}`);
+    }
   }
   
   return selectedIds;
