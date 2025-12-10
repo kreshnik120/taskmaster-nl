@@ -1,6 +1,13 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
+/**
+ * FEEDBACK PROCESSOR - Shim
+ * 
+ * This function is now a shim that routes to unified-learner.
+ * Maintains backward compatibility with cron schedule.
+ * Processes feedback in batch mode.
+ */
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,18 +19,15 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startTime = Date.now();
+
   try {
-    const startTime = Date.now();
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      { auth: { persistSession: false } }
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    console.log('🔄 Feedback Processor starting...');
-
-    // Fetch first organization
-    const { data: orgs } = await supabaseClient
+    // Get first organization (legacy behavior)
+    const { data: orgs } = await supabase
       .from('organizations')
       .select('id')
       .limit(1)
@@ -34,214 +38,58 @@ serve(async (req) => {
     }
 
     const orgId = orgs.id;
-    console.log(`🏢 Processing org: ${orgId}`);
+    console.log(`🔄 [feedback-processor shim] Routing to unified-learner (batch mode, org: ${orgId})`);
 
-    // Fetch unapplied feedback events
-    const { data: feedbackEvents, error: fetchError } = await supabaseClient
-      .from('ai_learning_events')
-      .select('*')
-      .eq('org_id', orgId)
-      .in('event_type', ['feedback_negative', 'feedback_positive'])
-      .eq('applied_to_knowledge_base', false)
-      .order('created_at', { ascending: true })
-      .limit(100);
+    // Route to unified-learner in batch mode
+    const { data, error } = await supabase.functions.invoke('unified-learner', {
+      body: {
+        action: 'process_feedback',
+        batch_mode: true,
+        org_id: orgId,
+      },
+    });
 
-    if (fetchError) throw fetchError;
-
-    console.log(`📊 Found ${feedbackEvents?.length || 0} unapplied feedback events`);
-
-    let negativeProcessed = 0;
-    let positiveProcessed = 0;
-    let errors = 0;
-
-    for (const event of feedbackEvents || []) {
-      try {
-        const knowledgeIds = event.context?.usedKnowledge || [];
-        
-        if (knowledgeIds.length === 0) {
-          console.log(`⚠️ No knowledge IDs in event ${event.id}, skipping`);
-          continue;
-        }
-
-        if (event.event_type === 'feedback_negative') {
-          // Downgrade confidence to 50%, flag for review
-          console.log(`👎 Processing negative feedback for ${knowledgeIds.length} items`);
-          
-          const { error: updateError } = await supabaseClient
-            .from('ai_knowledge_base')
-            .update({
-              confidence_score: 0.50,
-              needs_review: true,
-              last_validation_error: `Negative feedback: ${event.context?.message || 'User reported incorrect answer'}`,
-              updated_at: new Date().toISOString()
-            })
-            .in('id', knowledgeIds)
-            .is('deleted_at', null);
-
-          if (updateError) {
-            console.error(`Failed to update knowledge items:`, updateError);
-            errors++;
-            continue;
-          }
-
-          negativeProcessed++;
-
-        } else if (event.event_type === 'feedback_positive') {
-          // Boost confidence +10% (max 100%)
-          console.log(`👍 Processing positive feedback for ${knowledgeIds.length} items`);
-          
-          // Fetch current scores
-          const { data: currentItems } = await supabaseClient
-            .from('ai_knowledge_base')
-            .select('id, confidence_score, usage_count')
-            .in('id', knowledgeIds)
-            .is('deleted_at', null);
-
-          if (currentItems) {
-            for (const item of currentItems) {
-              const newScore = Math.min(1.0, (item.confidence_score || 0.5) + 0.10);
-              
-              const { error: boostError } = await supabaseClient
-                .from('ai_knowledge_base')
-                .update({
-                  confidence_score: newScore,
-                  usage_count: (item.usage_count || 0) + 1,
-                  last_used_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', item.id);
-
-              if (boostError) {
-                console.error(`Failed to boost item ${item.id}:`, boostError);
-                errors++;
-              }
-            }
-          }
-
-          positiveProcessed++;
-        }
-
-        // Mark event as applied
-        const { error: markError } = await supabaseClient
-          .from('ai_learning_events')
-          .update({
-            applied_to_knowledge_base: true,
-            outcome: 'applied'
-          })
-          .eq('id', event.id);
-
-        if (markError) {
-          console.error(`Failed to mark event ${event.id} as applied:`, markError);
-        }
-
-      } catch (eventError) {
-        console.error(`Error processing event ${event.id}:`, eventError);
-        errors++;
-      }
+    if (error) {
+      console.error('❌ [feedback-processor shim] unified-learner error:', error);
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    console.log(`✅ Processed: ${negativeProcessed} negative, ${positiveProcessed} positive, ${errors} errors`);
-
-    // Only create/update alert if there's actual activity to report
-    const totalProcessed = negativeProcessed + positiveProcessed;
-    
-    if (totalProcessed > 0 || errors > 0) {
-      const impactScore = totalProcessed / 10;
-      
-      // Determine severity based on errors and volume
-      let severity: string;
-      if (errors > 5 || (negativeProcessed > 10 && totalProcessed > 0)) {
-        severity = 'high';
-      } else if (errors > 0 || negativeProcessed > 5) {
-        severity = 'medium';
-      } else {
-        severity = 'low';
-      }
-      
-      // Conditional insert/update to handle partial unique constraint
-      const { data: existingAlert } = await supabaseClient
-        .from('business_intelligence')
-        .select('id')
-        .eq('intelligence_type', 'feedback_processing')
-        .eq('org_id', orgId)
-        .eq('status', 'active')
-        .maybeSingle();
-
-      if (existingAlert) {
-        // Update existing alert
-        const { error: biError } = await supabaseClient
-          .from('business_intelligence')
-          .update({
-            title: 'Feedback Loop Results',
-            description: `Processed ${negativeProcessed} negative and ${positiveProcessed} positive feedback events`,
-            severity: severity,
-            priority: errors > 5 ? 'high' : (errors > 0 ? 'medium' : 'low'),
-            impact_score: impactScore,
-            last_updated_at: new Date().toISOString(),
-            data: {
-              negative_processed: negativeProcessed,
-              positive_processed: positiveProcessed,
-              errors: errors,
-              total_events: feedbackEvents?.length || 0
-            }
-          })
-          .eq('id', existingAlert.id);
-
-        if (biError) {
-          console.error('Failed to update business intelligence:', biError);
-        }
-      } else {
-        // Insert new alert
-        const { error: biError } = await supabaseClient
-          .from('business_intelligence')
-          .insert({
-            org_id: orgId,
-            intelligence_type: 'feedback_processing',
-            type: 'knowledge',
-            severity: severity,
-            title: 'Feedback Loop Results',
-            description: `Processed ${negativeProcessed} negative and ${positiveProcessed} positive feedback events`,
-            priority: errors > 5 ? 'high' : (errors > 0 ? 'medium' : 'low'),
-            status: 'active',
-            impact_score: impactScore,
-            detected_at: new Date().toISOString(),
-            last_updated_at: new Date().toISOString(),
-            data: {
-              negative_processed: negativeProcessed,
-              positive_processed: positiveProcessed,
-              errors: errors,
-              total_events: feedbackEvents?.length || 0
-            }
-          });
-
-        if (biError) {
-          console.error('Failed to log to business intelligence:', biError);
-        }
-      }
+    // Check for success: false in response
+    if (data && data.success === false) {
+      console.error('❌ [feedback-processor shim] unified-learner returned failure:', data);
+      return new Response(
+        JSON.stringify({ error: data.error || 'unified-learner returned failure' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    // Log function call
-    await supabaseClient.from('function_call_logs').insert({
+    const executionTime = Date.now() - startTime;
+    console.log(`✅ [feedback-processor shim] Completed in ${executionTime}ms`);
+
+    // Log function call (legacy behavior)
+    await supabase.from('function_call_logs').insert({
       function_name: 'feedback-processor',
       user_id: orgId,
       org_id: orgId,
       success: true,
-      execution_time_ms: Math.floor(Date.now() - startTime)
+      execution_time_ms: executionTime,
     });
 
     return new Response(
       JSON.stringify({
         success: true,
-        negative_processed: negativeProcessed,
-        positive_processed: positiveProcessed,
-        errors: errors,
-        total_events: feedbackEvents?.length || 0
+        ...data,
+        _shim: 'feedback-processor -> unified-learner',
+        _execution_time_ms: executionTime,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('❌ Feedback Processor error:', error);
+    console.error('❌ [feedback-processor shim] Error:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -1,5 +1,13 @@
+/**
+ * RETROACTIVE TRAINING EVALUATOR - Shim
+ * 
+ * This function is now a shim that routes to unified-learner.
+ * Maintains backward compatibility with cron schedule.
+ * Re-evaluates previously rejected learning events.
+ */
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,96 +19,78 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startTime = Date.now();
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    console.log("🔄 Starting retroactive self-training evaluation...");
-
-    // Get rejected self_training events with score between 0.80-0.85
-    // FIXED: Removed created_at filter that was blocking all results
-    const { data: rejectedEvents, error: fetchError } = await supabase
-      .from("ai_learning_events")
-      .select("*")
-      .eq("event_type", "self_training")
-      .eq("applied_to_knowledge_base", false)
-      .gte("confidence_score", 0.80)
-      .lt("confidence_score", 0.85)
-      .order("created_at", { ascending: false })
-      .limit(100);
-
-    if (fetchError) {
-      console.error("❌ Error fetching events:", fetchError);
-      throw fetchError;
+    // Parse optional body parameters
+    let minConfidence = 0.80;
+    let maxConfidence = 0.85;
+    let limit = 100;
+    
+    try {
+      const body = await req.json();
+      minConfidence = body.min_confidence ?? 0.80;
+      maxConfidence = body.max_confidence ?? 0.85;
+      limit = body.limit ?? 100;
+    } catch {
+      // No body or invalid JSON, use defaults
     }
 
-    console.log(`📊 Found ${rejectedEvents?.length || 0} eligible events for re-evaluation`);
+    // Get default org_id (ABCzorg)
+    const orgId = '550e8400-e29b-41d4-a716-446655440000';
 
-    let reappliedCount = 0;
-    const reappliedItems: any[] = [];
+    console.log(`🔄 [retroactive-training-evaluator shim] Routing to unified-learner (confidence: ${minConfidence}-${maxConfidence})`);
 
-    for (const event of rejectedEvents || []) {
-      // Extract knowledge suggestions from context
-      const suggestions = event.context?.new_knowledge_suggestions || [];
-      
-      for (const suggestion of suggestions) {
-        // Re-apply with new threshold
-        const { error: insertError } = await supabase
-          .from("ai_knowledge_base")
-          .insert({
-            category: suggestion.category,
-            key: suggestion.key,
-            value: suggestion.value,
-            confidence_score: suggestion.confidence || event.confidence_score,
-            org_id: event.org_id,
-            user_id: event.user_id,
-            source: `retroactive_training_${event.id}`,
-            validation_status: "unverified",
-          });
+    // Route to unified-learner
+    const { data, error } = await supabase.functions.invoke('unified-learner', {
+      body: {
+        action: 'retroactive_scan',
+        min_confidence: minConfidence,
+        max_confidence: maxConfidence,
+        limit: limit,
+        org_id: orgId,
+      },
+    });
 
-        if (!insertError) {
-          reappliedCount++;
-          reappliedItems.push({
-            category: suggestion.category,
-            key: suggestion.key,
-            original_event_id: event.id,
-          });
-          
-          // Update original event status
-          await supabase
-            .from("ai_learning_events")
-            .update({ 
-              applied_to_knowledge_base: true,
-              outcome: "reapplied_retroactively"
-            })
-            .eq("id", event.id);
-        }
-      }
+    if (error) {
+      console.error('❌ [retroactive-training-evaluator shim] unified-learner error:', error);
+      return new Response(
+        JSON.stringify({ error: error.message }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    console.log(`✅ Successfully re-applied ${reappliedCount} knowledge items`);
+    // Check for success: false in response
+    if (data && data.success === false) {
+      console.error('❌ [retroactive-training-evaluator shim] unified-learner returned failure:', data);
+      return new Response(
+        JSON.stringify({ error: data.error || 'unified-learner returned failure' }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const executionTime = Date.now() - startTime;
+    console.log(`✅ [retroactive-training-evaluator shim] Completed in ${executionTime}ms`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        evaluated_events: rejectedEvents?.length || 0,
-        reapplied_items: reappliedCount,
-        items: reappliedItems,
+        ...data,
+        _shim: 'retroactive-training-evaluator -> unified-learner',
+        _execution_time_ms: executionTime,
       }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error: any) {
-    console.error("❌ Retroactive evaluation error:", error);
+
+  } catch (error) {
+    console.error("❌ [retroactive-training-evaluator shim] Error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
-      }
+      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
