@@ -81,15 +81,64 @@ export function TriggerLearningButton() {
   const triggerContinuousLearner = async () => {
     setIsLearning(true);
     try {
-      const { data, error } = await supabase.functions.invoke('continuous-learner', {
-        body: { manual_trigger: true }
-      });
+      // Fetch recent unprocessed chat interactions from ai_chat_messages
+      const { data: recentChats, error: chatError } = await supabase
+        .from('ai_chat_messages')
+        .select('content, role, used_knowledge, confidence_score, conversation_id')
+        .order('created_at', { ascending: false })
+        .limit(20);
 
-      if (error) throw error;
+      if (chatError) throw chatError;
 
-      toast.success(`Learning voltooid`, {
-        description: `${data?.processed || 0} events verwerkt`
-      });
+      // Group by conversation_id and process pairs
+      const conversations = new Map<string, { question?: string; response?: string; knowledge?: unknown[] }>();
+      
+      for (const msg of recentChats || []) {
+        const convId = msg.conversation_id || 'default';
+        if (!conversations.has(convId)) {
+          conversations.set(convId, {});
+        }
+        const conv = conversations.get(convId)!;
+        
+        if (msg.role === 'user' && !conv.question) {
+          conv.question = msg.content;
+        } else if (msg.role === 'assistant' && !conv.response) {
+          conv.response = msg.content;
+          conv.knowledge = msg.used_knowledge as unknown[] || [];
+        }
+      }
+
+      // Process first complete conversation pair
+      let processed = 0;
+      for (const [, conv] of conversations) {
+        if (conv.question && conv.response) {
+          const { data, error } = await supabase.functions.invoke('continuous-learner', {
+            body: { 
+              user_question: conv.question,
+              ai_response: conv.response,
+              knowledge_used: conv.knowledge || [],
+              auto_apply: true
+            }
+          });
+
+          if (error) {
+            console.error('Continuous learner error for conversation:', error);
+          } else {
+            processed++;
+          }
+          
+          // Process max 3 conversations per manual trigger
+          if (processed >= 3) break;
+        }
+      }
+
+      if (processed > 0) {
+        toast.success(`Learning voltooid`, {
+          description: `${processed} chat conversaties geanalyseerd`
+        });
+      } else {
+        toast.info('Geen recente chats gevonden om te analyseren');
+      }
       
       refetchStats();
     } catch (err) {
