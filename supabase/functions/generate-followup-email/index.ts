@@ -84,11 +84,11 @@ Deno.serve(async (req) => {
     // Create natural field descriptions for the prompt
     const fieldDescriptions = fields_to_ask
       .map((field: string) => FIELD_DESCRIPTIONS[field] || field)
-      .slice(0, 3); // Max 3 questions per email
+      .slice(0, 10); // Max 10 questions per email
 
     // Build the AI prompt
     const prompt = `Je bent een vriendelijke recruitment assistent voor CitoZorg, een thuiszorg bemiddelingsbureau.
-Schrijf een korte, warme email om ontbrekende informatie te vragen aan een sollicitant.
+Schrijf een overzichtelijke email om ontbrekende informatie te vragen aan een sollicitant.
 
 **Kandidaat info:**
 - Naam: ${candidate_name || 'Beste sollicitant'}
@@ -96,13 +96,15 @@ Schrijf een korte, warme email om ontbrekende informatie te vragen aan een solli
 - Huidige completeness: ${current_completeness || 0}%
 - Dit is follow-up nummer: ${follow_up_count + 1}
 
-**Vragen die we moeten stellen (max 3):**
+**Vragen die we moeten stellen (max 10):**
 ${fieldDescriptions.map((desc: string, i: number) => `${i + 1}. ${desc}`).join('\n')}
 
 **Instructies:**
 - Schrijf in het Nederlands
-- Houd het kort en vriendelijk (max 150 woorden)
+- Houd het overzichtelijk maar compleet (max 300 woorden)
 - Gebruik een warme, professionele toon
+- Groepeer gerelateerde vragen logisch (bijv. contactgegevens, beschikbaarheid, ervaring)
+- Gebruik nummering voor duidelijkheid
 - Maak duidelijk dat ze gewoon kunnen antwoorden op de email
 - Noem specifiek welke informatie je nodig hebt
 - Voeg een motiverende opmerking toe over hoe dichtbij ze zijn
@@ -113,7 +115,7 @@ Return een JSON object met:
 {
   "subject": "Kort onderwerp (max 60 chars)",
   "greeting": "Persoonlijke begroeting",
-  "body": "Hoofdtekst van de email",
+  "body": "Hoofdtekst van de email met genummerde vragen",
   "closing": "Afsluitende groet"
 }`;
 
