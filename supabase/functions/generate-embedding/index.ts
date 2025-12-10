@@ -48,27 +48,95 @@ Deno.serve(async (req) => {
 
   try {
     const startTime = Date.now();
-    const { knowledge_id, knowledge_ids } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { knowledge_id, knowledge_ids, batch_mode, batch_size = 50 } = body;
     
-    // Support voor batch processing
-    const ids = knowledge_ids || (knowledge_id ? [knowledge_id] : []);
-    
-    if (ids.length === 0) {
-      return new Response(
-        JSON.stringify({ error: 'knowledge_id or knowledge_ids is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log('🔍 generate-embedding invoked', {
-      batch_size: ids.length,
-      timestamp: new Date().toISOString()
-    });
-
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    let ids: string[] = [];
+
+    // AUTO MODE: automatisch items zonder embedding ophalen
+    if (batch_mode === 'auto') {
+      console.log('🤖 Auto-mode: fetching items without embeddings...');
+      
+      // Get all knowledge items without embeddings, prioritizing high confidence + gemini items
+      const { data: allKnowledge } = await supabase
+        .from('ai_knowledge_base')
+        .select('id, confidence_score, source_type')
+        .is('deleted_at', null)
+        .order('confidence_score', { ascending: false })
+        .limit(batch_size * 3); // Get more to filter
+
+      if (!allKnowledge || allKnowledge.length === 0) {
+        return new Response(
+          JSON.stringify({ success: true, processed: 0, remaining: 0, message: 'No knowledge items found' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Check which already have embeddings
+      const { data: existingEmbeddings } = await supabase
+        .from('knowledge_embeddings')
+        .select('knowledge_id')
+        .in('knowledge_id', allKnowledge.map(k => k.id));
+
+      const existingIds = new Set(existingEmbeddings?.map(e => e.knowledge_id) || []);
+      
+      // Filter and prioritize: gemini items first, then by confidence
+      const needsEmbedding = allKnowledge
+        .filter(k => !existingIds.has(k.id))
+        .sort((a, b) => {
+          // Prioritize gemini_deep_research items
+          if (a.source_type === 'gemini_deep_research' && b.source_type !== 'gemini_deep_research') return -1;
+          if (b.source_type === 'gemini_deep_research' && a.source_type !== 'gemini_deep_research') return 1;
+          return (b.confidence_score || 0) - (a.confidence_score || 0);
+        })
+        .slice(0, batch_size);
+
+      if (needsEmbedding.length === 0) {
+        // Count remaining total
+        const { count: totalKnowledge } = await supabase
+          .from('ai_knowledge_base')
+          .select('*', { count: 'exact', head: true })
+          .is('deleted_at', null);
+        
+        const { count: totalEmbeddings } = await supabase
+          .from('knowledge_embeddings')
+          .select('*', { count: 'exact', head: true });
+
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            processed: 0, 
+            remaining: Math.max(0, (totalKnowledge || 0) - (totalEmbeddings || 0)),
+            message: 'All items in current batch already have embeddings' 
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      ids = needsEmbedding.map(k => k.id);
+      console.log(`🔍 Auto-mode found ${ids.length} items to process`);
+    } else {
+      // MANUAL MODE: use provided IDs
+      ids = knowledge_ids || (knowledge_id ? [knowledge_id] : []);
+      
+      if (ids.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'knowledge_id, knowledge_ids, or batch_mode:auto is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    console.log('🔍 generate-embedding invoked', {
+      mode: batch_mode || 'manual',
+      batch_size: ids.length,
+      timestamp: new Date().toISOString()
+    });
 
     // Haal alle knowledge items op in 1 query
     const { data: knowledgeItems, error: fetchError } = await supabase
@@ -326,10 +394,26 @@ Deno.serve(async (req) => {
       execution_time_ms: Date.now() - startTime
     });
 
+    // Get remaining count for auto-mode feedback
+    let remaining = 0;
+    if (body.batch_mode === 'auto') {
+      const { count: totalKnowledge } = await supabase
+        .from('ai_knowledge_base')
+        .select('*', { count: 'exact', head: true })
+        .is('deleted_at', null);
+      
+      const { count: totalEmbeddings } = await supabase
+        .from('knowledge_embeddings')
+        .select('*', { count: 'exact', head: true });
+      
+      remaining = Math.max(0, (totalKnowledge || 0) - (totalEmbeddings || 0));
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
         processed: processedCount,
+        remaining,
         results 
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
