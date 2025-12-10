@@ -8,6 +8,9 @@ const corsHeaders = {
 
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
+// Minimum usage threshold - NEVER delete items with usage >= this value
+const MIN_USAGE_PROTECTION = 3;
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -57,6 +60,8 @@ serve(async (req) => {
     }
 
     let totalMerged = 0;
+    let skippedHighUsage = 0;
+    let skippedSelfMerge = 0;
     const mergeLog: any[] = [];
 
     // Process each category
@@ -109,6 +114,7 @@ Als er GEEN duplicates zijn, return: []`
                   id: b.id,
                   key: b.key,
                   confidence: b.confidence_score,
+                  usage_count: b.usage_count || 0,
                   value: typeof b.value === 'object' ? b.value.content : b.value,
                   created_at: b.created_at
                 })), null, 2)}`
@@ -136,13 +142,57 @@ Als er GEEN duplicates zijn, return: []`
         // Process detected duplicates
         for (const dup of duplicates) {
           if (dup.similarity_score >= 0.8) {
-            // Find winner and loser items to check confidence
+            // Find winner and loser items
             const winner = batch.find(b => b.id === dup.winner_id);
             const loser = batch.find(b => b.id === dup.loser_id);
             
+            if (!winner || !loser) {
+              console.log(`⚠️ Skipping: winner or loser not found`);
+              continue;
+            }
+
+            // 🛡️ BUG FIX 1: Self-merge detection - NEVER merge item into itself
+            if (dup.winner_id === dup.loser_id) {
+              console.log(`🚫 Self-merge detected! Skipping: ${dup.winner_id}`);
+              skippedSelfMerge++;
+              continue;
+            }
+
+            // 🛡️ BUG FIX 2: Usage protection - NEVER delete high-usage items
+            const loserUsage = loser.usage_count || 0;
+            const winnerUsage = winner.usage_count || 0;
+            
+            if (loserUsage >= MIN_USAGE_PROTECTION) {
+              // If loser has higher usage than winner, SWAP them
+              if (loserUsage > winnerUsage) {
+                console.log(`🔄 Swapping winner/loser: loser has higher usage (${loserUsage} > ${winnerUsage})`);
+                const temp = dup.winner_id;
+                dup.winner_id = dup.loser_id;
+                dup.loser_id = temp;
+                // Re-check - now the new loser might also have high usage
+                const newLoser = batch.find(b => b.id === dup.loser_id);
+                if (newLoser && (newLoser.usage_count || 0) >= MIN_USAGE_PROTECTION) {
+                  console.log(`⚠️ Both items have high usage (≥${MIN_USAGE_PROTECTION}), skipping merge`);
+                  skippedHighUsage++;
+                  continue;
+                }
+              } else {
+                console.log(`⚠️ Skipping: loser has high usage (${loserUsage} >= ${MIN_USAGE_PROTECTION})`);
+                skippedHighUsage++;
+                continue;
+              }
+            }
+            
+            // 🛡️ BUG FIX 3: Verified item protection
+            if (loser.validation_status === 'verified') {
+              console.log(`⚠️ Skipping: loser is verified`);
+              skippedHighUsage++;
+              continue;
+            }
+
             // If BOTH items have high confidence (≥0.95), mark as complementary instead of merging
-            if (winner && loser && winner.confidence >= 0.95 && loser.confidence >= 0.95) {
-              console.log(`🤝 Skipping merge: both items have high confidence (${winner.confidence}, ${loser.confidence})`);
+            if (winner.confidence_score >= 0.95 && loser.confidence_score >= 0.95) {
+              console.log(`🤝 Skipping merge: both items have high confidence (${winner.confidence_score}, ${loser.confidence_score})`);
               
               // Create complementary relationship instead
               await supabase
@@ -153,10 +203,10 @@ Als er GEEN duplicates zijn, return: []`
                   relationship_type: 'complementary',
                   confidence_score: dup.similarity_score,
                   detected_by: 'smart-deduplicator',
-                  context: `High confidence items (${winner.confidence}, ${loser.confidence}) with ${Math.round(dup.similarity_score * 100)}% similarity`
+                  context: `High confidence items (${winner.confidence_score}, ${loser.confidence_score}) with ${Math.round(dup.similarity_score * 100)}% similarity`
                 });
               
-              continue; // Skip merge
+              continue;
             }
 
             console.log(`🔄 Merging duplicate: ${dup.loser_id} -> ${dup.winner_id}`);
@@ -172,7 +222,9 @@ Als er GEEN duplicates zijn, return: []`
                   merged_into: dup.winner_id,
                   similarity: dup.similarity_score,
                   ai_reason: dup.reason,
-                  auto_deduplicated: true
+                  auto_deduplicated: true,
+                  loser_usage: loserUsage,
+                  winner_usage: winnerUsage
                 }
               })
               .eq('id', dup.loser_id);
@@ -183,20 +235,24 @@ Als er GEEN duplicates zijn, return: []`
                 category,
                 winner: dup.winner_id,
                 loser: dup.loser_id,
+                loser_usage: loserUsage,
+                winner_usage: winnerUsage,
                 reason: dup.reason
               });
 
-              // Log learning event (system user for automated deduplication)
+              // Log learning event
               await supabase
                 .from('ai_learning_events')
                 .insert({
-                  user_id: '00000000-0000-0000-0000-000000000000', // System user for automated processes
+                  user_id: '00000000-0000-0000-0000-000000000000',
                   org_id: orgId,
                   event_type: 'deduplication',
                   context: {
                     category,
                     duplicate_pair: [dup.item1_id, dup.item2_id],
                     winner: dup.winner_id,
+                    loser_usage: loserUsage,
+                    winner_usage: winnerUsage,
                     similarity: dup.similarity_score
                   },
                   outcome: 'success',
@@ -222,13 +278,15 @@ Als er GEEN duplicates zijn, return: []`
       model_used: 'google/gemini-2.5-flash'
     });
 
-    console.log(`✅ Deduplication complete: ${totalMerged} duplicates merged`);
+    console.log(`✅ Deduplication complete: ${totalMerged} merged, ${skippedHighUsage} skipped (high-usage/verified), ${skippedSelfMerge} skipped (self-merge)`);
 
     return new Response(JSON.stringify({
       success: true,
       items_scanned: allItems.length,
       categories_processed: Object.keys(itemsByCategory).length,
       duplicates_merged: totalMerged,
+      skipped_high_usage: skippedHighUsage,
+      skipped_self_merge: skippedSelfMerge,
       merge_log: mergeLog
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
