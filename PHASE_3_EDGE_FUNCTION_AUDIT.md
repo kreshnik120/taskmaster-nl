@@ -2,7 +2,7 @@
 
 **Datum:** 2025-12-10  
 **Doel:** Identificeer edge functions die `knowledge-crud` of directe `ai_knowledge_base` mutations gebruiken  
-**Status:** ✅ Phase 3A+3B Compleet
+**Status:** ✅ Phase 3A+3B+3D Compleet | Unit Tests ✅
 
 ---
 
@@ -15,6 +15,8 @@
 | Directe DB mutations | **2** |
 | Org-scoped compliant | **7/7** |
 | Actie vereist | 0 HIGH, 0 MEDIUM, 2 LOW |
+| **Unit Tests** | **~100 tests** ✅ |
+| **Test Coverage** | **100% functions** |
 
 ### Phase 3A Completed (2025-12-10)
 - ✅ `process-system-events` refactored → `createKnowledge()`
@@ -23,6 +25,18 @@
 ### Phase 3B Completed (2025-12-10)
 - ✅ `data-quality-auditor` refactored → `softDeleteKnowledge()`, `updateConfidence()`
 - ✅ Org-id validation toegevoegd aan alle 7 mutation points
+
+### Phase 3D Completed (2025-12-10) - Unit Tests
+- ✅ `confidence-calculator.test.ts` - 45 tests (all functions covered)
+- ✅ `knowledge-crud.test.ts` - 30 tests (all CRUD operations)
+- ✅ `learning-engine.test.ts` - 25 tests (all learning functions)
+- ✅ Supabase mock infrastructure (`supabase-mock.ts`)
+- ✅ Test runner script with documentation
+
+**Run Tests:**
+```bash
+deno test --allow-env supabase/functions/_shared/tests/
+```
 
 ---
 
