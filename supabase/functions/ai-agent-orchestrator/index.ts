@@ -83,8 +83,8 @@ const GOAL_CONFIGS: Record<string, {
         return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
       });
       
-      // Neem max 3 items per email (niet overweldigend)
-      const fieldsToAsk = sortedMissing.slice(0, 3);
+      // Neem max 10 items per email (volledig overzicht voor kandidaat)
+      const fieldsToAsk = sortedMissing.slice(0, 10);
       
       console.log('📧 [Orchestrator] Fields to ask:', fieldsToAsk, 'from missing:', missingInfo);
       
