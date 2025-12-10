@@ -50,124 +50,49 @@ const FALLBACK_PRIORITY_CATEGORIES = [
   'zzp_leveranciers'
 ];
 
-// Helper functie: Haal ALLE embedded IDs op met paginatie (fix voor 1000-row limit)
-async function getAllEmbeddedIds(supabase: any): Promise<Set<string>> {
-  const embeddedSet = new Set<string>();
-  let offset = 0;
-  const pageSize = 1000;
-  
-  while (true) {
-    const { data, error } = await supabase
-      .from('knowledge_embeddings')
-      .select('knowledge_id')
-      .range(offset, offset + pageSize - 1);
-    
-    if (error) {
-      console.error(`❌ Error fetching embeddings page at offset ${offset}:`, error);
-      break;
-    }
-    
-    if (!data || data.length === 0) break;
-    
-    data.forEach((e: any) => embeddedSet.add(e.knowledge_id));
-    
-    if (data.length < pageSize) break; // Laatste pagina
-    offset += pageSize;
-  }
-  
-  console.log(`📋 Loaded ${embeddedSet.size} existing embeddings (paginated fetch, ${Math.ceil(offset / pageSize) + 1} pages)`);
-  return embeddedSet;
-}
-
-// CRITICAL CATEGORIES die voorrang krijgen bij gelijke usage_count
+// CRITICAL CATEGORIES die voorrang krijgen (ingebouwd in RPC functie)
 const CRITICAL_CATEGORIES = ['zzp', 'klanten', 'tarieven', 'wetgeving', 'procedures'];
 
-// Helper functie: Haal knowledge IDs op met USAGE-BASED prioriteit
-// FIX Fase 18: Vervangt offset-based met directe NOT IN filtering
+// Helper functie: Haal knowledge IDs op via RPC functie (FIX Fase 19)
+// Vervangt broken NOT IN query die URL-lengte limiet overschreed
 async function getKnowledgeIdsWithoutEmbeddings(
   supabase: any, 
   batchSize: number
 ): Promise<string[]> {
-  // Step 1: Get ALL knowledge IDs that already have embeddings (paginated to avoid 1000-row limit)
-  const embeddedSet = await getAllEmbeddedIds(supabase);
-  const embeddedArray = Array.from(embeddedSet);
+  console.log(`📊 Fetching unembedded items via RPC (batch_limit: ${batchSize * 5})...`);
   
-  console.log(`📊 Total embedded: ${embeddedArray.length}, looking for unembedded items...`);
+  // Single RPC call - no URL length limit, database does efficient LEFT JOIN
+  const { data: candidates, error } = await supabase
+    .rpc('get_knowledge_without_embeddings', { batch_limit: batchSize * 5 });
   
-  // Step 2: DIRECT NOT IN QUERY - Haal alleen items op die GEEN embedding hebben
-  // Dit voorkomt dat high-usage items worden overgeslagen door offset pagination
-  let query = supabase
-    .from('ai_knowledge_base')
-    .select('id, category, usage_count, source_type, original_text, value, confidence_score')
-    .is('deleted_at', null);
-  
-  // Use NOT IN filter als er embedded items zijn (max 10k voor performance)
-  if (embeddedArray.length > 0 && embeddedArray.length <= 10000) {
-    query = query.not('id', 'in', `(${embeddedArray.join(',')})`);
-  }
-  
-  // Order by usage_count DESC (high-usage FIRST) - dit is de key fix!
-  const { data: kbItems, error: queryError } = await query
-    .order('usage_count', { ascending: false, nullsFirst: false })
-    .order('confidence_score', { ascending: false, nullsFirst: false })
-    .order('created_at', { ascending: true })
-    .limit(batchSize * 5); // Smaller window nu we direct filteren
-  
-  if (queryError) {
-    console.error('❌ Query error:', queryError);
+  if (error) {
+    console.error('❌ RPC error:', error);
     return [];
   }
   
-  if (!kbItems || kbItems.length === 0) {
+  if (!candidates || candidates.length === 0) {
     console.log('✅ No unembedded items found - all items have embeddings');
     return [];
   }
   
-  // Step 3: Filter items met insufficient content + fallback voor grote embeddedArray
-  const candidateItems = kbItems.filter((k: any) => {
-    // Extra check als NOT IN niet werd toegepast (>10k items)
-    if (embeddedArray.length > 10000 && embeddedSet.has(k.id)) return false;
-    
+  // Filter items with insufficient content
+  const validItems = candidates.filter((k: any) => {
     // Check original_text first, then fall back to value JSON
     const originalTextLength = (k.original_text || '').trim().length;
     if (originalTextLength >= 15) return true;
     
     // If no original_text, check if value has content
     const valueContent = k.value ? JSON.stringify(k.value) : '';
-    const valueLength = valueContent.trim().length;
-    return valueLength >= 15;
+    return valueContent.trim().length >= 15;
   });
   
-  // Step 4: Sort with CRITICAL CATEGORY boost bij gelijke usage
-  const sortedItems = candidateItems.sort((a: any, b: any) => {
-    // Primary: usage_count (descending) - HIGH USAGE FIRST
-    const usageDiff = (b.usage_count || 0) - (a.usage_count || 0);
-    if (usageDiff !== 0) return usageDiff;
-    
-    // Secondary: CRITICAL CATEGORY boost (zzp, klanten first)
-    const aCritical = CRITICAL_CATEGORIES.includes(a.category) ? 0 : 1;
-    const bCritical = CRITICAL_CATEGORIES.includes(b.category) ? 0 : 1;
-    if (aCritical !== bCritical) return aCritical - bCritical;
-    
-    // Tertiary: confidence_score (descending)
-    const confDiff = (b.confidence_score || 0) - (a.confidence_score || 0);
-    if (confDiff !== 0) return confDiff;
-    
-    // Quaternary: fallback category priority
-    const aPriority = FALLBACK_PRIORITY_CATEGORIES.indexOf(a.category);
-    const bPriority = FALLBACK_PRIORITY_CATEGORIES.indexOf(b.category);
-    const aIdx = aPriority === -1 ? 999 : aPriority;
-    const bIdx = bPriority === -1 ? 999 : bPriority;
-    return aIdx - bIdx;
-  });
+  // Take only batchSize items (RPC returns more for filtering buffer)
+  const selectedIds = validItems.slice(0, batchSize).map((k: any) => k.id);
   
-  // Step 5: Take only batchSize items
-  const selectedIds = sortedItems.slice(0, batchSize).map((k: any) => k.id);
-  
-  // Enhanced logging with usage stats
-  console.log(`📊 USAGE-BASED selection: ${selectedIds.length} items from ${candidateItems.length} candidates (direct NOT IN filter)`);
+  // Enhanced logging
+  console.log(`📊 RPC returned ${candidates.length} candidates, ${validItems.length} valid, selected ${selectedIds.length}`);
   if (selectedIds.length > 0) {
-    const topItems = sortedItems.slice(0, Math.min(5, batchSize));
+    const topItems = validItems.slice(0, Math.min(5, batchSize));
     const categories = [...new Set(topItems.map((k: any) => k.category))];
     const usageValues = topItems.map((k: any) => k.usage_count || 0);
     const avgUsage = Math.round(usageValues.reduce((sum: number, u: number) => sum + u, 0) / topItems.length);
