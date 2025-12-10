@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { softDeleteKnowledge } from '../_shared/knowledge-crud.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -211,14 +212,12 @@ Als er GEEN duplicates zijn, return: []`
 
             console.log(`🔄 Merging duplicate: ${dup.loser_id} -> ${dup.winner_id}`);
 
-            // Soft delete the loser
-            const { error } = await supabase
-              .from('ai_knowledge_base')
-              .update({
-                deleted_at: new Date().toISOString(),
-                deleted_by: 'smart-deduplicator',
-                deletion_reason: {
-                  reason: 'Merged into better version',
+            // Soft delete the loser using unified knowledge-crud module
+            try {
+              await softDeleteKnowledge(supabase, dup.loser_id, {
+                reason: 'Merged into better version',
+                deletedBy: 'smart-deduplicator',
+                metadata: {
                   merged_into: dup.winner_id,
                   similarity: dup.similarity_score,
                   ai_reason: dup.reason,
@@ -226,8 +225,11 @@ Als er GEEN duplicates zijn, return: []`
                   loser_usage: loserUsage,
                   winner_usage: winnerUsage
                 }
-              })
-              .eq('id', dup.loser_id);
+              });
+              var error: Error | null = null;
+            } catch (e) {
+              var error: Error | null = e instanceof Error ? e : new Error(String(e));
+            }
 
             if (!error) {
               totalMerged++;
