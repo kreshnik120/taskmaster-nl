@@ -1,20 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-  );
+  const supabase = createAdminClient();
 
   try {
     const now = new Date();
@@ -58,7 +49,6 @@ serve(async (req) => {
     let zombieDocs = 0;
 
     if (processingDocs && processingDocs.length > 0) {
-      // For each, check if jobs exist
       for (const doc of processingDocs) {
         const { data: jobsForDoc } = await supabase
           .from('processing_jobs')
@@ -94,7 +84,6 @@ serve(async (req) => {
         .in('status', ['pending', 'processing']);
 
       if (!remaining || remaining.length === 0) {
-        // Sum items and determine final status
         const { data: doneJobs } = await supabase
           .from('processing_jobs')
           .select('items_processed, status')
@@ -119,15 +108,9 @@ serve(async (req) => {
       }
     }
 
-    return new Response(
-      JSON.stringify({ ok: true, failedJobs, zombieDocs, syncedDocs }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ ok: true, failedJobs, zombieDocs, syncedDocs });
   } catch (err: any) {
     console.error('[CLEANUP] Error:', err);
-    return new Response(
-      JSON.stringify({ ok: false, error: err.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse(err.message, 500, { ok: false });
   }
 });

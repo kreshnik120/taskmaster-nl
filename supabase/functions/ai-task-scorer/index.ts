@@ -1,13 +1,8 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { corsHeaders, handleCors, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
 
 interface TaskInput {
   id: string;
@@ -42,18 +37,14 @@ interface AIScoreResult {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
     const { tasks } = await req.json() as { tasks: TaskInput[] };
 
     if (!tasks || tasks.length === 0) {
-      return new Response(
-        JSON.stringify({ error: 'Geen taken opgegeven' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('Geen taken opgegeven', 400);
     }
 
     console.log(`[AI-SCORER] ⚡ START: Analyseren van ${tasks.length} taken`);
@@ -226,23 +217,18 @@ Geef ALLEEN het JSON object terug, geen andere tekst.`;
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(`[AI-SCORER] ✅ KLAAR: ${results.length} taken geanalyseerd in ${duration}s`);
 
-    return new Response(
-      JSON.stringify({
-        generated_at: new Date().toISOString(),
-        results,
-        model: 'google/gemini-2.5-flash',
-        method: 'AI-driven scoring'
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({
+      generated_at: new Date().toISOString(),
+      results,
+      model: 'google/gemini-2.5-flash',
+      method: 'AI-driven scoring'
+    });
 
   } catch (error) {
     console.error('[AI-SCORER] Error:', error);
-    return new Response(
-      JSON.stringify({ 
-        error: error instanceof Error ? error.message : 'Onbekende fout bij AI-scoring'
-      }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    return errorResponse(
+      error instanceof Error ? error.message : 'Onbekende fout bij AI-scoring',
+      500
     );
   }
 });

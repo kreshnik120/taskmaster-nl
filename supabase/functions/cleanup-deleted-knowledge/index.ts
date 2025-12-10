@@ -1,29 +1,20 @@
 // Automatic cleanup of soft-deleted knowledge items older than 30 days
 // 🛡️ PROTECTED: High-usage and verified items are NEVER permanently deleted
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'npm:@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 // Protection thresholds - items meeting these criteria are NEVER permanently deleted
-const MIN_USAGE_PROTECTION = 3;  // Items with usage >= 3 are protected
-const PROTECTED_STATUSES = ['verified'];  // Verified items are protected
+const MIN_USAGE_PROTECTION = 3;
+const PROTECTED_STATUSES = ['verified'];
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   const startTime = Date.now();
 
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabase = createAdminClient();
 
     console.log('🗑️ Starting cleanup of soft-deleted knowledge items...');
 
@@ -40,13 +31,11 @@ serve(async (req) => {
 
     if (!deletedItems || deletedItems.length === 0) {
       console.log('✅ No old soft-deleted items to clean up');
-      return new Response(JSON.stringify({ 
+      return jsonResponse({ 
         success: true,
         cleaned: 0,
         message: 'No items to clean up',
         execution_time_ms: Date.now() - startTime
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -71,7 +60,6 @@ serve(async (req) => {
           protection_reason: isHighUsage ? `high_usage (${usage})` : 'verified_status'
         });
         
-        // 🔄 Auto-restore protected items that were incorrectly deleted
         console.log(`🛡️ Restoring protected item: ${item.key} (usage: ${usage}, status: ${item.validation_status})`);
         await supabase
           .from('ai_knowledge_base')
@@ -92,15 +80,13 @@ serve(async (req) => {
 
     if (itemsToDelete.length === 0) {
       console.log('✅ All items were protected - nothing to permanently delete');
-      return new Response(JSON.stringify({ 
+      return jsonResponse({ 
         success: true,
         cleaned: 0,
         protected: protectedItems.length,
         restored: protectedItems.length,
         message: `Protected and restored ${protectedItems.length} high-value items`,
         execution_time_ms: Date.now() - startTime
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -187,7 +173,6 @@ serve(async (req) => {
         model_used: 'none'
       });
 
-      // Create a business intelligence alert for tracking
       if (itemsToDelete.length > 10 || protectedItems.length > 0) {
         await supabase.from('business_intelligence').insert({
           org_id: orgs[0].id,
@@ -208,7 +193,7 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ 
+    return jsonResponse({ 
       success: true,
       cleaned: itemsToDelete.length,
       protected: protectedItems.length,
@@ -216,18 +201,10 @@ serve(async (req) => {
       category_distribution: categoryDistribution,
       execution_time_ms: Date.now() - startTime,
       message: `Cleaned ${itemsToDelete.length} zero-value items, protected/restored ${protectedItems.length} high-value items`
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
     console.error('❌ Cleanup error:', error);
-    
-    return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return errorResponse(error instanceof Error ? error.message : 'Unknown error', 500);
   }
 });

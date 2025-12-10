@@ -1,21 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    );
+    const supabase = createAdminClient();
 
     const { org_id, force_check = false } = await req.json();
 
@@ -38,10 +29,7 @@ serve(async (req) => {
     }
 
     if (!alertType && !force_check) {
-      return new Response(
-        JSON.stringify({ message: 'No alert needed', status }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ message: 'No alert needed', status });
     }
 
     // Check if alert already sent recently (deduplicate)
@@ -50,14 +38,11 @@ serve(async (req) => {
       .select('id')
       .eq('org_id', org_id)
       .eq('alert_type', alertType)
-      .gte('created_at', new Date(Date.now() - 3600000).toISOString()) // 1 hour
+      .gte('created_at', new Date(Date.now() - 3600000).toISOString())
       .single();
 
     if (recentAlert && !force_check) {
-      return new Response(
-        JSON.stringify({ message: 'Alert already sent recently', status }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ message: 'Alert already sent recently', status });
     }
 
     // Get org admins with their profiles
@@ -194,21 +179,15 @@ serve(async (req) => {
       });
     }
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        alert_sent: true,
-        alert_type: alertType,
-        status 
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ 
+      success: true, 
+      alert_sent: true,
+      alert_type: alertType,
+      status 
+    });
 
   } catch (error) {
     console.error('Budget alert error:', error);
-    return new Response(
-      JSON.stringify({ error: String(error) }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse(String(error), 500);
   }
 });

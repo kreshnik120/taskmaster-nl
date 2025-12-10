@@ -1,9 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 interface ConflictCheckResult {
   hasConflict: boolean;
@@ -14,14 +9,11 @@ interface ConflictCheckResult {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createAdminClient();
 
     const { suggestion, org_id } = await req.json();
 
@@ -48,14 +40,11 @@ Deno.serve(async (req) => {
     // If no existing knowledge, no conflict
     if (!existing) {
       console.log('✅ No existing knowledge found - no conflict');
-      return new Response(
-        JSON.stringify({
-          hasConflict: false,
-          shouldReject: false,
-          canProceed: true
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({
+        hasConflict: false,
+        shouldReject: false,
+        canProceed: true
+      });
     }
 
     // 2. Check for conflicts
@@ -73,20 +62,14 @@ Deno.serve(async (req) => {
 
     console.log('🎯 Conflict check result:', result);
 
-    return new Response(
-      JSON.stringify({
-        ...result,
-        canProceed: !result.shouldReject
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({
+      ...result,
+      canProceed: !result.shouldReject
+    });
 
   } catch (error) {
     console.error('❌ Error in conflict detection:', error);
-    return new Response(
-      JSON.stringify({ error: String(error) }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse(String(error), 500);
   }
 });
 
@@ -99,7 +82,6 @@ async function checkForConflicts(
   const entity = extractEntity(suggestion.key);
   const field = extractField(suggestion.key);
 
-  // Check 1: Value mismatch with high stability data
   const valuesDiffer = JSON.stringify(existing.value) !== JSON.stringify(suggestion.value);
   
   if (!valuesDiffer) {
@@ -110,17 +92,15 @@ async function checkForConflicts(
     };
   }
 
-  // Check 2: Stability score check (addresses/KVK = 0.95+)
   const isHighStability = existing.stability_score >= 0.95;
   
   if (isHighStability) {
     console.log('⚠️ High stability data conflict detected');
     
-    // Check 3: Source type hierarchy (manual > verified > gemini_deep_research > document > ai_generated)
     const sourceHierarchy = {
       'verified_correction': 5,
       'manual': 4,
-      'gemini_deep_research': 3.5,  // High-quality AI research data
+      'gemini_deep_research': 3.5,
       'official_api': 3,
       'document': 2.5,
       'api': 2,
@@ -142,7 +122,6 @@ async function checkForConflicts(
     }
   }
 
-  // Check 4: Correction patterns - is new value in "always_wrong" patterns?
   const { data: wrongPatterns } = await supabase
     .from('correction_patterns')
     .select('*')
@@ -166,7 +145,6 @@ async function checkForConflicts(
     }
   }
 
-  // Check 5: Is existing value in "always_correct" patterns?
   const { data: correctPatterns } = await supabase
     .from('correction_patterns')
     .select('*')
@@ -190,7 +168,6 @@ async function checkForConflicts(
     }
   }
 
-  // Check 6: Historical usage without complaints (high trust)
   const usageCount = existing.usage_count || 0;
   const harmfulCount = existing.harmful_count || 0;
   const helpfulCount = existing.helpful_count || 0;
@@ -205,7 +182,6 @@ async function checkForConflicts(
     };
   }
 
-  // Check 7: Recent corrections (less than 7 days ago)
   if (existing.last_correction && existing.correction_count > 0) {
     const lastCorrectionDate = new Date(existing.last_correction.timestamp);
     const daysSinceCorrection = (Date.now() - lastCorrectionDate.getTime()) / (1000 * 60 * 60 * 24);
@@ -221,7 +197,6 @@ async function checkForConflicts(
     }
   }
 
-  // Default: conflict exists but allow with warning
   return {
     hasConflict: true,
     shouldReject: false,
@@ -271,7 +246,6 @@ async function createAlert(
   const entity = extractEntity(existing.key);
   const field = extractField(existing.key);
   
-  // Generate clear title based on entity and field
   const title = `Conflict: ${entity || 'kennis'} - ${field || existing.key}`;
   
   const { error } = await supabase
@@ -313,13 +287,11 @@ async function createAlert(
 }
 
 function extractEntity(key: string): string {
-  // Extract entity from key like "CitoZorg_adres" -> "CitoZorg"
   const parts = key.split('_');
   return parts[0] || key;
 }
 
 function extractField(key: string): string {
-  // Extract field from key like "CitoZorg_adres" -> "adres"
   const parts = key.split('_');
   return parts.slice(1).join('_') || key;
 }
@@ -338,7 +310,6 @@ function matchesPattern(value: any, pattern: any): boolean {
   }
   
   if (typeof value === 'object' && value !== null) {
-    // For nested values like {bezoekadres: "..."}
     const valueStr = JSON.stringify(value).toLowerCase();
     if (pattern.contains) {
       return valueStr.includes(pattern.contains.toLowerCase());
