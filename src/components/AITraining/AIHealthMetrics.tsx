@@ -92,8 +92,19 @@ export function AIHealthMetrics() {
       const totalActive = activeKnowledge.length;
       const withUsage = activeKnowledge.filter(k => (k.usage_count || 0) > 0).length;
       const totalUsage = activeKnowledge.reduce((sum, k) => sum + (k.usage_count || 0), 0);
-      const unknownSource = activeKnowledge.filter(k => k.source_type === 'unknown').length;
+      
+      // Known valid source types - gemini_deep_research is high-quality AI research data
+      const knownSourceTypes = [
+        'manual', 'document', 'api', 'official_api', 'verified_correction', 
+        'ai_generated', 'gemini_deep_research', 'excel_import', 'cv_extraction'
+      ];
+      const unknownSource = activeKnowledge.filter(k => 
+        k.source_type && !knownSourceTypes.includes(k.source_type)
+      ).length;
       const utilizationRate = totalActive > 0 ? Math.round((withUsage / totalActive) * 100) : 0;
+      
+      // Count Gemini deep research items (high-value)
+      const geminiResearchCount = activeKnowledge.filter(k => k.source_type === 'gemini_deep_research').length;
 
       // Soft-deleted with usage (recovery needed)
       const deletedWithUsage = knowledgeDeletedResult.data || [];
@@ -130,7 +141,8 @@ export function AIHealthMetrics() {
         recoveryNeeded,
         recoveryUsage,
         topCategories,
-        patternUsageRate: totalPatterns > 0 ? Math.round((patternsWithUsage / totalPatterns) * 100) : 0
+        patternUsageRate: totalPatterns > 0 ? Math.round((patternsWithUsage / totalPatterns) * 100) : 0,
+        geminiResearchCount
       };
     },
     staleTime: 60000,
@@ -263,6 +275,22 @@ export function AIHealthMetrics() {
       </CardHeader>
       
       <CardContent className="space-y-4">
+        {/* Gemini Deep Research Success Indicator */}
+        {(metrics?.geminiResearchCount || 0) > 0 && (
+          <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-start gap-3">
+            <Sparkles className="h-5 w-5 text-purple-500 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-purple-600 dark:text-purple-400">
+                🔬 Gemini Deep Research Actief
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {metrics?.geminiResearchCount.toLocaleString()} high-quality kennisitems uit Gemini deep research beschikbaar. 
+                Dekking: wetgeving, CAO, compliance, ZZP-vereisten, markt intelligence.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Test Data Protection Status */}
         <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 flex items-start gap-3">
           <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
