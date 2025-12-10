@@ -1,5 +1,8 @@
 project_id = "oelmsmcgryeoryhonexw"
 
+[functions.unified-learner]
+verify_jwt = false
+
 [functions.view-shared-content]
 verify_jwt = false
 
