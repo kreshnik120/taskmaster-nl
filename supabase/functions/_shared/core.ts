@@ -107,9 +107,14 @@ async function getDefaultOrgId(client: SupabaseClient): Promise<string> {
 // ============================================
 
 export interface LearningContext {
-  org_id: string;
+  org_id?: string;
   user_id?: string;
   source?: string;
+}
+
+export interface LearningClientOptions {
+  /** If true, throws error when org_id cannot be determined */
+  requireOrgId?: boolean;
 }
 
 /**
@@ -119,14 +124,22 @@ export interface LearningContext {
  * - Learning operations ALWAYS use admin client (service role)
  * - org_id/user_id are derived from request body, NOT from JWT
  * - This enables edge-to-edge calls without auth headers
- * - Security is enforced via org_id scoping in code, not RLS
+ * - Security is enforced via org_id scoping in RPC functions
+ * 
+ * PRIORITY ORDER:
+ * 1. bodyContext (from edge function payload) - for edge-to-edge calls
+ * 2. authHeader (JWT extraction) - for direct frontend calls
+ * 3. Fail fast if requireOrgId is true and no org found
+ * 4. Default org (fallback) - only for single-tenant or system operations
  * 
  * @param bodyContext - org_id/user_id from request body (for edge-to-edge calls)
  * @param authHeader - Optional auth header (for direct frontend calls)
+ * @param options - Options including requireOrgId for fail-fast behavior
  */
 export async function createLearningClient(
   bodyContext?: LearningContext,
-  authHeader?: string | null
+  authHeader?: string | null,
+  options?: LearningClientOptions
 ): Promise<{
   client: SupabaseClient;
   orgId: string;
@@ -138,6 +151,11 @@ export async function createLearningClient(
   
   // Priority 1: Use context from body (edge-to-edge calls)
   if (bodyContext?.org_id) {
+    logInfo('LearningClient', 'Using body context', { 
+      hasOrgId: true, 
+      hasUserId: !!bodyContext.user_id,
+      source: bodyContext.source || 'edge-function'
+    });
     return {
       client,
       orgId: bodyContext.org_id,
@@ -159,22 +177,33 @@ export async function createLearningClient(
           .eq('user_id', user.id)
           .maybeSingle();
         
-        return {
-          client,
-          orgId: userOrg?.org_id || await getDefaultOrgId(client),
-          userId: user.id,
-          source: 'authenticated-user',
-        };
+        if (userOrg?.org_id) {
+          logInfo('LearningClient', 'Using JWT context', { userId: user.id, orgId: userOrg.org_id });
+          return {
+            client,
+            orgId: userOrg.org_id,
+            userId: user.id,
+            source: 'authenticated-user',
+          };
+        }
       }
     } catch (e) {
-      console.log('⚠️ [createLearningClient] Auth extraction failed, using defaults');
+      logWarning('LearningClient', 'Auth extraction failed', { error: String(e) });
     }
   }
   
-  // Fallback: use default org
+  // Fail fast if org_id is required but not found
+  if (options?.requireOrgId) {
+    throw new Error('org_id is required but could not be determined from body context or auth header');
+  }
+  
+  // Fallback: use default org (only for single-tenant setup)
+  const defaultOrgId = await getDefaultOrgId(client);
+  logWarning('LearningClient', '⚠️ Using default org - only valid for single-tenant setup', { defaultOrgId });
+  
   return {
     client,
-    orgId: await getDefaultOrgId(client),
+    orgId: defaultOrgId,
     userId: null,
     source: 'fallback',
   };

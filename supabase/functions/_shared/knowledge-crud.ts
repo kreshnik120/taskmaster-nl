@@ -44,13 +44,15 @@ export interface KnowledgePayload {
 
 export interface ReinforceOptions {
   stabilityBoost?: number;
-  incrementUsage?: boolean;
-  updateTimestamp?: boolean;
+  usageIncrement?: number;
 }
 
 export interface UpdateConfidenceOptions {
   ruleKey: ConfidenceRuleKey;
-  reason?: string;
+  customDelta?: number;
+  minConfidence?: number;
+  maxConfidence?: number;
+  autoPrune?: boolean;
 }
 
 export interface SoftDeleteOptions {
@@ -177,8 +179,9 @@ export async function createKnowledge(
     if (conflict.hasConflict && conflict.existingId) {
       if (conflict.conflictType === 'exact_match') {
         // Reinforce existing instead of creating duplicate
-        await reinforceKnowledge(supabase, conflict.existingId, {
-          incrementUsage: true,
+        // Note: reinforceKnowledge now requires orgId for security
+        await reinforceKnowledge(supabase, conflict.existingId, payload.org_id, {
+          usageIncrement: 1,
           stabilityBoost: 0.05,
         });
         return { 
@@ -247,19 +250,25 @@ export async function createKnowledge(
 }
 
 /**
- * Reinforce existing knowledge using ATOMIC RPC
+ * Reinforce existing knowledge using ATOMIC RPC with org-scope security
  * Prevents race conditions with concurrent reinforcements
+ * 
+ * @param supabase - Supabase client
+ * @param id - Knowledge item ID
+ * @param orgId - Organization ID (required for multi-tenant security)
+ * @param options - Optional stability boost and usage increment
  */
 export async function reinforceKnowledge(
   supabase: SupabaseClient,
   id: string,
+  orgId: string,
   options: ReinforceOptions = {}
 ): Promise<{ newStability: number; newUsageCount: number }> {
   const { data, error } = await supabase.rpc('atomic_reinforce_knowledge', {
     p_knowledge_id: id,
+    p_org_id: orgId,
     p_stability_boost: options.stabilityBoost ?? 0.05,
-    p_increment_usage: options.incrementUsage ?? true,
-    p_max_stability: CONFIDENCE_RULES.max_stability,
+    p_usage_increment: options.usageIncrement ?? 1,
   });
   
   if (error) {
@@ -267,34 +276,44 @@ export async function reinforceKnowledge(
     throw new Error(`Failed to reinforce knowledge: ${error.message}`);
   }
   
-  const result = data?.[0] ?? { new_stability: 0.5, new_usage_count: 0 };
-  console.log(`[knowledge-crud] Reinforced: ${id} -> stability=${result.new_stability}`);
+  if (!data?.success) {
+    throw new Error(data?.error || 'Failed to reinforce knowledge - item not found or access denied');
+  }
+  
+  console.log(`[knowledge-crud] Reinforced: ${id} -> stability=${data.new_stability}`);
   
   return { 
-    newStability: result.new_stability, 
-    newUsageCount: result.new_usage_count 
+    newStability: data.new_stability, 
+    newUsageCount: data.new_usage_count 
   };
 }
 
 /**
- * Update confidence score using ATOMIC RPC
+ * Update confidence score using ATOMIC RPC with org-scope security
  * Prevents race conditions with concurrent confidence updates
+ * Auto-prunes items below 0.15 confidence
+ * 
+ * @param supabase - Supabase client
+ * @param id - Knowledge item ID
+ * @param orgId - Organization ID (required for multi-tenant security)
+ * @param options - Confidence update options including ruleKey
  */
 export async function updateConfidence(
   supabase: SupabaseClient,
   id: string,
+  orgId: string,
   options: UpdateConfidenceOptions
 ): Promise<{ newConfidence: number; wasPruned: boolean; oldConfidence: number }> {
-  // Get delta from rule
-  const delta = CONFIDENCE_RULES[options.ruleKey] ?? 0;
+  // Get delta from rule or use custom
+  const delta = options.customDelta ?? (CONFIDENCE_RULES[options.ruleKey] ?? 0);
   
   const { data, error } = await supabase.rpc('atomic_update_confidence', {
     p_knowledge_id: id,
+    p_org_id: orgId,
     p_delta: delta,
-    p_min_confidence: CONFIDENCE_RULES.min_confidence,
-    p_max_confidence: CONFIDENCE_RULES.max_confidence,
-    p_prune_threshold: CONFIDENCE_RULES.prune_threshold,
-    p_reason: options.reason ?? `Rule applied: ${options.ruleKey}`,
+    p_min_confidence: options.minConfidence ?? CONFIDENCE_RULES.min_confidence ?? 0.0,
+    p_max_confidence: options.maxConfidence ?? CONFIDENCE_RULES.max_confidence ?? 1.0,
+    p_auto_prune: options.autoPrune ?? true,
   });
   
   if (error) {
@@ -302,31 +321,39 @@ export async function updateConfidence(
     throw new Error(`Failed to update confidence: ${error.message}`);
   }
   
-  const result = data?.[0] ?? { new_confidence: 0.7, was_pruned: false, old_confidence: 0.7 };
+  if (!data?.success) {
+    throw new Error(data?.error || 'Failed to update confidence - item not found or access denied');
+  }
   
-  console.log(`[knowledge-crud] Confidence updated: ${id} ${result.old_confidence} -> ${result.new_confidence} (${options.ruleKey})`);
+  console.log(`[knowledge-crud] Confidence updated: ${id} ${data.old_confidence} -> ${data.new_confidence} (${options.ruleKey})`);
   
   return { 
-    newConfidence: result.new_confidence, 
-    wasPruned: result.was_pruned,
-    oldConfidence: result.old_confidence,
+    newConfidence: data.new_confidence, 
+    wasPruned: data.was_pruned,
+    oldConfidence: data.old_confidence,
   };
 }
 
 /**
- * Increment feedback count using ATOMIC RPC
+ * Increment feedback count using ATOMIC RPC with org-scope security
  * Prevents race conditions with concurrent feedback
+ * Returns should_prune flag when harmful > helpful + 5
+ * 
+ * @param supabase - Supabase client
+ * @param id - Knowledge item ID
+ * @param orgId - Organization ID (required for multi-tenant security)
+ * @param type - Feedback type ('helpful' or 'harmful')
  */
 export async function incrementFeedbackCount(
   supabase: SupabaseClient,
   id: string,
+  orgId: string,
   type: 'helpful' | 'harmful'
 ): Promise<{ shouldPrune: boolean; helpfulCount: number; harmfulCount: number }> {
   const { data, error } = await supabase.rpc('atomic_increment_feedback', {
     p_knowledge_id: id,
+    p_org_id: orgId,
     p_feedback_type: type,
-    p_harmful_prune_min_votes: CONFIDENCE_RULES.harmful_prune_min_votes,
-    p_harmful_prune_ratio: CONFIDENCE_RULES.harmful_prune_ratio,
   });
   
   if (error) {
@@ -334,14 +361,16 @@ export async function incrementFeedbackCount(
     throw new Error(`Failed to increment feedback: ${error.message}`);
   }
   
-  const result = data?.[0] ?? { new_helpful_count: 0, new_harmful_count: 0, should_prune: false };
+  if (!data?.success) {
+    throw new Error(data?.error || 'Failed to increment feedback - item not found or access denied');
+  }
   
-  console.log(`[knowledge-crud] Feedback ${type}: helpful=${result.new_helpful_count}, harmful=${result.new_harmful_count}`);
+  console.log(`[knowledge-crud] Feedback ${type}: helpful=${data.helpful_count}, harmful=${data.harmful_count}`);
   
   return { 
-    shouldPrune: result.should_prune,
-    helpfulCount: result.new_helpful_count,
-    harmfulCount: result.new_harmful_count,
+    shouldPrune: data.should_prune,
+    helpfulCount: data.helpful_count,
+    harmfulCount: data.harmful_count,
   };
 }
 
@@ -398,11 +427,16 @@ export async function restoreKnowledge(
 }
 
 /**
- * Batch update confidence for multiple items
+ * Batch update confidence for multiple items with org-scope security
  * Uses individual atomic calls to prevent race conditions
+ * 
+ * @param supabase - Supabase client
+ * @param orgId - Organization ID (required for multi-tenant security)
+ * @param updates - Array of updates with id and ruleKey
  */
 export async function batchUpdateConfidence(
   supabase: SupabaseClient,
+  orgId: string,
   updates: Array<{ id: string; ruleKey: ConfidenceRuleKey }>
 ): Promise<{ updated: number; pruned: number }> {
   let updated = 0;
@@ -410,7 +444,7 @@ export async function batchUpdateConfidence(
   
   for (const { id, ruleKey } of updates) {
     try {
-      const result = await updateConfidence(supabase, id, { ruleKey });
+      const result = await updateConfidence(supabase, id, orgId, { ruleKey });
       if (result.wasPruned) {
         pruned++;
       } else {
