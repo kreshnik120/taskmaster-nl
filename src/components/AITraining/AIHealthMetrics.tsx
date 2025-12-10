@@ -29,10 +29,18 @@ export function AIHealthMetrics() {
   const { data: metrics, isLoading, error } = useQuery({
     queryKey: ["ai-health-metrics"],
     queryFn: async () => {
+      // Use count queries to bypass 1000-row limit
       const [
         patternsResult,
         auditResult,
         feedbackResult,
+        // Count queries for accurate totals
+        totalActiveCount,
+        withUsageCount,
+        unknownSourceCount,
+        recoveryNeededCount,
+        geminiResearchCount,
+        // Aggregation queries (limited but sufficient for top categories)
         knowledgeActiveResult,
         knowledgeDeletedResult,
         categoryResult
@@ -57,24 +65,63 @@ export function AIHealthMetrics() {
           .in("event_type", ["ai_suggestion_accepted", "ai_suggestion_rejected", "feedback"])
           .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
         
-        // Active knowledge stats
+        // COUNT: Total active items (bypasses 1000-row limit)
+        supabase
+          .from("ai_knowledge_base")
+          .select("id", { count: "exact", head: true })
+          .is("deleted_at", null),
+        
+        // COUNT: Items with usage > 0
+        supabase
+          .from("ai_knowledge_base")
+          .select("id", { count: "exact", head: true })
+          .is("deleted_at", null)
+          .gt("usage_count", 0),
+        
+        // COUNT: Unknown source type
+        supabase
+          .from("ai_knowledge_base")
+          .select("id", { count: "exact", head: true })
+          .is("deleted_at", null)
+          .eq("source_type", "unknown"),
+        
+        // COUNT: Soft-deleted with usage (recovery needed)
+        supabase
+          .from("ai_knowledge_base")
+          .select("id", { count: "exact", head: true })
+          .not("deleted_at", "is", null)
+          .gt("usage_count", 0),
+        
+        // COUNT: Gemini deep research items
+        supabase
+          .from("ai_knowledge_base")
+          .select("id", { count: "exact", head: true })
+          .is("deleted_at", null)
+          .eq("source_type", "gemini_deep_research"),
+
+        // Active knowledge stats (limited sample for source_type analysis)
         supabase
           .from("ai_knowledge_base")
           .select("id, usage_count, source_type")
-          .is("deleted_at", null),
+          .is("deleted_at", null)
+          .order("usage_count", { ascending: false })
+          .limit(2000),
         
-        // Soft-deleted knowledge with usage (recovery needed)
+        // Soft-deleted knowledge with usage (recovery needed - details)
         supabase
           .from("ai_knowledge_base")
           .select("id, usage_count")
           .not("deleted_at", "is", null)
-          .gt("usage_count", 0),
+          .gt("usage_count", 0)
+          .limit(500),
         
-        // Category distribution
+        // Category distribution (sample for top categories)
         supabase
           .from("ai_knowledge_base")
           .select("category, usage_count")
           .is("deleted_at", null)
+          .order("usage_count", { ascending: false })
+          .limit(3000)
       ]);
 
       // Calculate pattern metrics
@@ -87,28 +134,25 @@ export function AIHealthMetrics() {
         return value?.boost_factor && (value.boost_factor as number) > 0;
       }).length;
 
-      // Active knowledge stats
+      // Use COUNT queries for accurate totals
+      const totalActive = totalActiveCount.count || 0;
+      const withUsage = withUsageCount.count || 0;
+      const unknownSource = unknownSourceCount.count || 0;
+      const recoveryNeeded = recoveryNeededCount.count || 0;
+      const geminiResearch = geminiResearchCount.count || 0;
+      
+      // Calculate total usage from sample (extrapolate if needed)
       const activeKnowledge = knowledgeActiveResult.data || [];
-      const totalActive = activeKnowledge.length;
-      const withUsage = activeKnowledge.filter(k => (k.usage_count || 0) > 0).length;
-      const totalUsage = activeKnowledge.reduce((sum, k) => sum + (k.usage_count || 0), 0);
+      const sampleUsage = activeKnowledge.reduce((sum, k) => sum + (k.usage_count || 0), 0);
+      // If we hit limit and have more items, estimate total usage
+      const totalUsage = activeKnowledge.length >= 2000 && totalActive > 2000
+        ? Math.round(sampleUsage * (totalActive / activeKnowledge.length))
+        : sampleUsage;
       
-      // Known valid source types - gemini_deep_research is high-quality AI research data
-      const knownSourceTypes = [
-        'manual', 'document', 'api', 'official_api', 'verified_correction', 
-        'ai_generated', 'gemini_deep_research', 'excel_import', 'cv_extraction'
-      ];
-      const unknownSource = activeKnowledge.filter(k => 
-        k.source_type && !knownSourceTypes.includes(k.source_type)
-      ).length;
       const utilizationRate = totalActive > 0 ? Math.round((withUsage / totalActive) * 100) : 0;
-      
-      // Count Gemini deep research items (high-value)
-      const geminiResearchCount = activeKnowledge.filter(k => k.source_type === 'gemini_deep_research').length;
 
-      // Soft-deleted with usage (recovery needed)
+      // Soft-deleted with usage details
       const deletedWithUsage = knowledgeDeletedResult.data || [];
-      const recoveryNeeded = deletedWithUsage.length;
       const recoveryUsage = deletedWithUsage.reduce((sum, k) => sum + (k.usage_count || 0), 0);
 
       // Category distribution
@@ -142,7 +186,7 @@ export function AIHealthMetrics() {
         recoveryUsage,
         topCategories,
         patternUsageRate: totalPatterns > 0 ? Math.round((patternsWithUsage / totalPatterns) * 100) : 0,
-        geminiResearchCount
+        geminiResearchCount: geminiResearch
       };
     },
     staleTime: 60000,
