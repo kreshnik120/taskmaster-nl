@@ -4882,6 +4882,18 @@ export type Database = {
         }[]
       }
       cleanup_old_logs: { Args: never; Returns: undefined }
+      get_knowledge_without_embeddings: {
+        Args: { batch_limit?: number }
+        Returns: {
+          category: string
+          confidence_score: number
+          id: string
+          original_text: string
+          source_type: string
+          usage_count: number
+          value: Json
+        }[]
+      }
       get_relevant_categories: {
         Args: { org_id_param?: string; user_question: string }
         Returns: {
