@@ -4,18 +4,23 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Brain, Loader2, CheckCircle2, Sparkles, RefreshCw } from "lucide-react";
+import { Brain, Loader2, CheckCircle2, Sparkles, RefreshCw, Zap } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { Progress } from "@/components/ui/progress";
 
 interface LearningStats {
   pendingEvents: number;
   byType: Record<string, number>;
   successPatterns: number;
+  embeddingsMissing: number;
+  geminiItems: number;
 }
 
 export function TriggerLearningButton() {
   const [isLearning, setIsLearning] = useState(false);
   const [isPipelineLearning, setIsPipelineLearning] = useState(false);
+  const [isGeneratingEmbeddings, setIsGeneratingEmbeddings] = useState(false);
+  const [embeddingProgress, setEmbeddingProgress] = useState(0);
 
   // Fetch pending learning events stats
   const { data: stats, refetch: refetchStats } = useQuery({
@@ -39,10 +44,33 @@ export function TriggerLearningButton() {
         .eq('category', 'success_patterns')
         .is('deleted_at', null);
 
+      // Get Gemini research items count
+      const { count: geminiItems } = await supabase
+        .from('ai_knowledge_base')
+        .select('*', { count: 'exact', head: true })
+        .eq('source_type', 'gemini_deep_research')
+        .is('deleted_at', null);
+
+      // Get embeddings missing count - alternative direct count query
+
+      // Alternative: direct count query
+      const { count: totalKnowledge } = await supabase
+        .from('ai_knowledge_base')
+        .select('*', { count: 'exact', head: true })
+        .is('deleted_at', null);
+
+      const { count: withEmbeddings } = await supabase
+        .from('knowledge_embeddings')
+        .select('*', { count: 'exact', head: true });
+
+      const embeddingsMissing = (totalKnowledge || 0) - (withEmbeddings || 0);
+
       return {
         pendingEvents: events?.length || 0,
         byType,
-        successPatterns: successPatterns || 0
+        successPatterns: successPatterns || 0,
+        embeddingsMissing: Math.max(0, embeddingsMissing),
+        geminiItems: geminiItems || 0
       };
     },
     refetchInterval: 30000 // Refresh every 30 seconds
@@ -96,6 +124,61 @@ export function TriggerLearningButton() {
     }
   };
 
+  const triggerEmbeddingGeneration = async () => {
+    setIsGeneratingEmbeddings(true);
+    setEmbeddingProgress(0);
+    
+    try {
+      // Get IDs of items without embeddings (batch of 50)
+      const { data: ids, error: fetchError } = await supabase
+        .from('ai_knowledge_base')
+        .select('id')
+        .is('deleted_at', null)
+        .order('confidence_score', { ascending: false })
+        .limit(50);
+
+      if (fetchError) throw fetchError;
+
+      // Filter out items that already have embeddings
+      const { data: existingEmbeddings } = await supabase
+        .from('knowledge_embeddings')
+        .select('knowledge_id')
+        .in('knowledge_id', ids?.map(i => i.id) || []);
+
+      const existingIds = new Set(existingEmbeddings?.map(e => e.knowledge_id) || []);
+      const idsToProcess = ids?.filter(i => !existingIds.has(i.id)).map(i => i.id) || [];
+
+      if (idsToProcess.length === 0) {
+        toast.success('Alle embeddings zijn al gegenereerd!');
+        refetchStats();
+        return;
+      }
+
+      // Process in batch
+      const { data, error } = await supabase.functions.invoke('generate-embedding', {
+        body: { knowledge_ids: idsToProcess }
+      });
+
+      if (error) throw error;
+
+      const successCount = data?.results?.filter((r: any) => r.success).length || 0;
+      
+      toast.success(`Embeddings gegenereerd`, {
+        description: `${successCount}/${idsToProcess.length} embeddings aangemaakt. ${stats?.embeddingsMissing ? stats.embeddingsMissing - successCount : 0} nog te verwerken.`
+      });
+      
+      refetchStats();
+    } catch (err) {
+      console.error('Embedding generation error:', err);
+      toast.error('Embedding generatie mislukt', {
+        description: err instanceof Error ? err.message : 'Onbekende fout'
+      });
+    } finally {
+      setIsGeneratingEmbeddings(false);
+      setEmbeddingProgress(0);
+    }
+  };
+
   return (
     <Card className="border-primary/20">
       <CardHeader className="pb-3">
@@ -144,8 +227,27 @@ export function TriggerLearningButton() {
           </div>
         )}
 
+        {/* Embeddings Missing Alert */}
+        {(stats?.embeddingsMissing || 0) > 0 && (
+          <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-purple-700 dark:text-purple-300">
+                {stats?.embeddingsMissing.toLocaleString()} items zonder embedding
+              </span>
+              {stats?.geminiItems && (
+                <Badge variant="secondary" className="text-[10px] bg-purple-100 text-purple-800">
+                  {stats.geminiItems.toLocaleString()} Gemini items
+                </Badge>
+              )}
+            </div>
+            {isGeneratingEmbeddings && (
+              <Progress value={embeddingProgress} className="h-1 mt-2" />
+            )}
+          </div>
+        )}
+
         {/* Action buttons */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -158,9 +260,9 @@ export function TriggerLearningButton() {
             ) : (
               <Sparkles className="h-4 w-4" />
             )}
-            <span className="text-xs">Continuous Learner</span>
+            <span className="text-xs">Continuous</span>
             <span className="text-[10px] text-muted-foreground">
-              Chat feedback & analyse
+              Chat feedback
             </span>
           </Button>
 
@@ -176,9 +278,27 @@ export function TriggerLearningButton() {
             ) : (
               <RefreshCw className="h-4 w-4" />
             )}
-            <span className="text-xs">Pipeline Learner</span>
+            <span className="text-xs">Pipeline</span>
             <span className="text-[10px] text-muted-foreground">
-              Plaatsingen & evaluaties
+              Plaatsingen
+            </span>
+          </Button>
+
+          <Button
+            variant={(stats?.embeddingsMissing || 0) > 0 ? "default" : "outline"}
+            size="sm"
+            onClick={triggerEmbeddingGeneration}
+            disabled={isGeneratingEmbeddings || (stats?.embeddingsMissing || 0) === 0}
+            className="h-auto py-2 flex-col gap-1"
+          >
+            {isGeneratingEmbeddings ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Zap className="h-4 w-4" />
+            )}
+            <span className="text-xs">Embeddings</span>
+            <span className="text-[10px] text-muted-foreground">
+              {(stats?.embeddingsMissing || 0) > 0 ? `${Math.min(50, stats?.embeddingsMissing || 0)} batch` : 'Klaar'}
             </span>
           </Button>
         </div>

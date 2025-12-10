@@ -116,13 +116,16 @@ async function checkForConflicts(
   if (isHighStability) {
     console.log('⚠️ High stability data conflict detected');
     
-    // Check 3: Source type hierarchy (manual > verified > document > ai_generated)
+    // Check 3: Source type hierarchy (manual > verified > gemini_deep_research > document > ai_generated)
     const sourceHierarchy = {
-      'verified_correction': 4,
-      'manual': 3,
-      'document': 2,
+      'verified_correction': 5,
+      'manual': 4,
+      'gemini_deep_research': 3.5,  // High-quality AI research data
+      'official_api': 3,
+      'document': 2.5,
       'api': 2,
-      'ai_generated': 1
+      'ai_generated': 1,
+      'unknown': 0
     };
 
     const existingPriority = sourceHierarchy[existing.source_type as keyof typeof sourceHierarchy] || 0;
