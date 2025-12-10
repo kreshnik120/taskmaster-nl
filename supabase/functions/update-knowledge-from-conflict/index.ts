@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { redactValuePII } from '../_shared/knowledge-crud.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -123,7 +124,10 @@ serve(async (req) => {
       }
     }
     
-    console.log('[update-knowledge] Validated edited_value:', validatedValue);
+    // Apply PII redaction before storing
+    validatedValue = redactValuePII(validatedValue);
+    console.log('[update-knowledge] Validated and PII-redacted edited_value:', validatedValue);
+
 
     // Update het knowledge item met de gevalideerde waarde
     const { error: updateError } = await supabaseClient
