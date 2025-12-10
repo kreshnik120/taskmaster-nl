@@ -4,9 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Brain, Loader2, CheckCircle2, Sparkles, RefreshCw, Zap, Play, Square } from "lucide-react";
+import { Brain, Loader2, CheckCircle2, Sparkles, RefreshCw, Zap, Play, Square, TrendingUp, Activity, GitBranch } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface LearningStats {
   pendingEvents: number;
@@ -14,6 +15,21 @@ interface LearningStats {
   successPatterns: number;
   embeddingsMissing: number;
   geminiItems: number;
+  // Velocity metrics
+  learningVelocity: {
+    today: number;
+    week: number;
+    trend: 'up' | 'down' | 'stable';
+  };
+  knowledgeGrowth: {
+    today: number;
+    week: number;
+  };
+  relationshipsGrowth: {
+    today: number;
+    week: number;
+  };
+  embeddingCoverage: number;
 }
 
 export function TriggerLearningButton() {
@@ -26,9 +42,9 @@ export function TriggerLearningButton() {
   const [totalToProcess, setTotalToProcess] = useState(0);
   const abortRef = useRef(false);
 
-  // Fetch pending learning events stats
+  // Fetch pending learning events stats with velocity metrics
   const { data: stats, refetch: refetchStats } = useQuery({
-    queryKey: ['learning-stats'],
+    queryKey: ['learning-stats-velocity'],
     queryFn: async (): Promise<LearningStats> => {
       // Get pending events
       const { data: events } = await supabase
@@ -55,7 +71,7 @@ export function TriggerLearningButton() {
         .eq('source_type', 'gemini_deep_research')
         .is('deleted_at', null);
 
-      // Get embeddings missing count
+      // Get embeddings stats
       const { count: totalKnowledge } = await supabase
         .from('ai_knowledge_base')
         .select('*', { count: 'exact', head: true })
@@ -66,13 +82,71 @@ export function TriggerLearningButton() {
         .select('*', { count: 'exact', head: true });
 
       const embeddingsMissing = (totalKnowledge || 0) - (withEmbeddings || 0);
+      const embeddingCoverage = totalKnowledge ? Math.round((withEmbeddings || 0) / totalKnowledge * 100) : 0;
+
+      // Get learning velocity (events per day)
+      const today = new Date().toISOString().split('T')[0];
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      
+      const { data: todayEvents } = await supabase
+        .from('ai_learning_events')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', today);
+
+      const { data: weekEvents } = await supabase
+        .from('ai_learning_events')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', weekAgo);
+
+      // Get knowledge growth
+      const { count: todayKnowledge } = await supabase
+        .from('ai_knowledge_base')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', today)
+        .is('deleted_at', null);
+
+      const { count: weekKnowledge } = await supabase
+        .from('ai_knowledge_base')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', weekAgo)
+        .is('deleted_at', null);
+
+      // Get relationships growth
+      const { count: todayRelations } = await supabase
+        .from('knowledge_relationships')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', today);
+
+      const { count: weekRelations } = await supabase
+        .from('knowledge_relationships')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', weekAgo);
+
+      // Determine trend based on recent vs older activity
+      const recentAvg = (todayEvents?.length || 0);
+      const weekAvg = Math.round((weekEvents?.length || 0) / 7);
+      const trend = recentAvg > weekAvg ? 'up' : recentAvg < weekAvg ? 'down' : 'stable';
 
       return {
         pendingEvents: events?.length || 0,
         byType,
         successPatterns: successPatterns || 0,
         embeddingsMissing: Math.max(0, embeddingsMissing),
-        geminiItems: geminiItems || 0
+        geminiItems: geminiItems || 0,
+        learningVelocity: {
+          today: todayEvents?.length || 0,
+          week: weekEvents?.length || 0,
+          trend
+        },
+        knowledgeGrowth: {
+          today: todayKnowledge || 0,
+          week: weekKnowledge || 0
+        },
+        relationshipsGrowth: {
+          today: todayRelations || 0,
+          week: weekRelations || 0
+        },
+        embeddingCoverage
       };
     },
     refetchInterval: 30000
@@ -319,6 +393,74 @@ export function TriggerLearningButton() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        {/* Learning Velocity Metrics - NEW */}
+        <TooltipProvider>
+          <div className="grid grid-cols-3 gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-center cursor-help">
+                  <div className="flex items-center justify-center gap-1">
+                    <Activity className="h-3 w-3 text-blue-600" />
+                    <span className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                      {stats?.learningVelocity?.today || 0}
+                    </span>
+                    {stats?.learningVelocity?.trend === 'up' && (
+                      <TrendingUp className="h-3 w-3 text-green-500" />
+                    )}
+                  </div>
+                  <span className="text-[10px] text-blue-600 dark:text-blue-400">Events vandaag</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{stats?.learningVelocity?.week || 0} events deze week</p>
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="p-2 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg text-center cursor-help">
+                  <div className="flex items-center justify-center gap-1">
+                    <Sparkles className="h-3 w-3 text-emerald-600" />
+                    <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
+                      {stats?.knowledgeGrowth?.today || 0}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400">Kennis vandaag</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{stats?.knowledgeGrowth?.week || 0} nieuwe items deze week</p>
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="p-2 bg-violet-50 dark:bg-violet-900/20 rounded-lg text-center cursor-help">
+                  <div className="flex items-center justify-center gap-1">
+                    <GitBranch className="h-3 w-3 text-violet-600" />
+                    <span className="text-lg font-bold text-violet-700 dark:text-violet-300">
+                      {stats?.relationshipsGrowth?.today || 0}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-violet-600 dark:text-violet-400">Links vandaag</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{stats?.relationshipsGrowth?.week?.toLocaleString() || 0} relaties deze week</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
+
+        {/* Embedding Coverage Bar - NEW */}
+        <div className="p-2 bg-muted/50 rounded-lg">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium">Embedding Coverage</span>
+            <span className="text-xs font-bold text-primary">{stats?.embeddingCoverage || 0}%</span>
+          </div>
+          <Progress value={stats?.embeddingCoverage || 0} className="h-1.5" />
+        </div>
+
         {/* Pending events summary */}
         {stats && stats.pendingEvents > 0 && (
           <div className="p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
