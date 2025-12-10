@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Brain, Loader2, CheckCircle2, Sparkles, RefreshCw, Zap } from "lucide-react";
+import { Brain, Loader2, CheckCircle2, Sparkles, RefreshCw, Zap, Play, Square } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
 
@@ -20,7 +20,11 @@ export function TriggerLearningButton() {
   const [isLearning, setIsLearning] = useState(false);
   const [isPipelineLearning, setIsPipelineLearning] = useState(false);
   const [isGeneratingEmbeddings, setIsGeneratingEmbeddings] = useState(false);
+  const [isAutoGenerating, setIsAutoGenerating] = useState(false);
   const [embeddingProgress, setEmbeddingProgress] = useState(0);
+  const [processedCount, setProcessedCount] = useState(0);
+  const [totalToProcess, setTotalToProcess] = useState(0);
+  const abortRef = useRef(false);
 
   // Fetch pending learning events stats
   const { data: stats, refetch: refetchStats } = useQuery({
@@ -51,9 +55,7 @@ export function TriggerLearningButton() {
         .eq('source_type', 'gemini_deep_research')
         .is('deleted_at', null);
 
-      // Get embeddings missing count - alternative direct count query
-
-      // Alternative: direct count query
+      // Get embeddings missing count
       const { count: totalKnowledge } = await supabase
         .from('ai_knowledge_base')
         .select('*', { count: 'exact', head: true })
@@ -73,7 +75,7 @@ export function TriggerLearningButton() {
         geminiItems: geminiItems || 0
       };
     },
-    refetchInterval: 30000 // Refresh every 30 seconds
+    refetchInterval: 30000
   });
 
   const triggerContinuousLearner = async () => {
@@ -124,47 +126,21 @@ export function TriggerLearningButton() {
     }
   };
 
-  const triggerEmbeddingGeneration = async () => {
+  const triggerSingleBatch = async () => {
     setIsGeneratingEmbeddings(true);
-    setEmbeddingProgress(0);
     
     try {
-      // Get IDs of items without embeddings (batch of 50)
-      const { data: ids, error: fetchError } = await supabase
-        .from('ai_knowledge_base')
-        .select('id')
-        .is('deleted_at', null)
-        .order('confidence_score', { ascending: false })
-        .limit(50);
-
-      if (fetchError) throw fetchError;
-
-      // Filter out items that already have embeddings
-      const { data: existingEmbeddings } = await supabase
-        .from('knowledge_embeddings')
-        .select('knowledge_id')
-        .in('knowledge_id', ids?.map(i => i.id) || []);
-
-      const existingIds = new Set(existingEmbeddings?.map(e => e.knowledge_id) || []);
-      const idsToProcess = ids?.filter(i => !existingIds.has(i.id)).map(i => i.id) || [];
-
-      if (idsToProcess.length === 0) {
-        toast.success('Alle embeddings zijn al gegenereerd!');
-        refetchStats();
-        return;
-      }
-
-      // Process in batch
       const { data, error } = await supabase.functions.invoke('generate-embedding', {
-        body: { knowledge_ids: idsToProcess }
+        body: { batch_mode: 'auto', batch_size: 50 }
       });
 
       if (error) throw error;
 
-      const successCount = data?.results?.filter((r: any) => r.success).length || 0;
+      const processed = data?.processed || 0;
+      const remaining = data?.remaining || 0;
       
       toast.success(`Embeddings gegenereerd`, {
-        description: `${successCount}/${idsToProcess.length} embeddings aangemaakt. ${stats?.embeddingsMissing ? stats.embeddingsMissing - successCount : 0} nog te verwerken.`
+        description: `${processed} embeddings aangemaakt. ${remaining} nog te verwerken.`
       });
       
       refetchStats();
@@ -175,8 +151,97 @@ export function TriggerLearningButton() {
       });
     } finally {
       setIsGeneratingEmbeddings(false);
-      setEmbeddingProgress(0);
     }
+  };
+
+  const startAutoGeneration = async () => {
+    if (isAutoGenerating) {
+      // Stop
+      abortRef.current = true;
+      setIsAutoGenerating(false);
+      toast.info('Auto-generatie gestopt');
+      return;
+    }
+
+    abortRef.current = false;
+    setIsAutoGenerating(true);
+    setProcessedCount(0);
+    setTotalToProcess(stats?.embeddingsMissing || 0);
+    
+    let totalProcessed = 0;
+    let remaining = stats?.embeddingsMissing || 0;
+    let consecutiveZeros = 0;
+
+    toast.info('Auto-generatie gestart', {
+      description: `${remaining.toLocaleString()} items te verwerken...`
+    });
+
+    while (remaining > 0 && !abortRef.current && consecutiveZeros < 3) {
+      try {
+        const { data, error } = await supabase.functions.invoke('generate-embedding', {
+          body: { batch_mode: 'auto', batch_size: 50 }
+        });
+
+        if (error) {
+          console.error('Batch error:', error);
+          // Wait and retry
+          await new Promise(r => setTimeout(r, 5000));
+          continue;
+        }
+
+        const processed = data?.processed || 0;
+        remaining = data?.remaining || 0;
+        
+        if (processed === 0) {
+          consecutiveZeros++;
+        } else {
+          consecutiveZeros = 0;
+          totalProcessed += processed;
+          setProcessedCount(totalProcessed);
+          setTotalToProcess(Math.max(remaining + totalProcessed, stats?.embeddingsMissing || 0));
+        }
+
+        // Update progress
+        const progress = totalProcessed / (totalProcessed + remaining) * 100;
+        setEmbeddingProgress(Math.min(progress, 100));
+        
+        // Refetch stats periodically
+        if (totalProcessed % 200 === 0) {
+          refetchStats();
+        }
+
+        // Wait 2 seconds between batches to avoid rate limits
+        await new Promise(r => setTimeout(r, 2000));
+
+      } catch (err) {
+        console.error('Auto-generation error:', err);
+        await new Promise(r => setTimeout(r, 5000));
+      }
+    }
+
+    setIsAutoGenerating(false);
+    setEmbeddingProgress(100);
+    refetchStats();
+    
+    if (abortRef.current) {
+      toast.info(`Auto-generatie gepauzeerd`, {
+        description: `${totalProcessed.toLocaleString()} embeddings gegenereerd. ${remaining.toLocaleString()} nog te gaan.`
+      });
+    } else if (remaining === 0) {
+      toast.success(`Alle embeddings gegenereerd!`, {
+        description: `${totalProcessed.toLocaleString()} embeddings totaal aangemaakt.`
+      });
+    }
+  };
+
+  const estimatedTimeRemaining = () => {
+    if (!stats?.embeddingsMissing) return '';
+    // ~50 items per 3 seconds = 1000 items per minute
+    const minutesRemaining = Math.ceil(stats.embeddingsMissing / 1000);
+    if (minutesRemaining > 60) {
+      return `~${Math.ceil(minutesRemaining / 60)}u`;
+    }
+    return `~${minutesRemaining}min`;
   };
 
   return (
@@ -192,7 +257,7 @@ export function TriggerLearningButton() {
           </Badge>
         </div>
         <CardDescription className="text-xs">
-          Trigger AI learning handmatig om wachtende events te verwerken
+          Trigger AI learning handmatig of automatisch
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -227,27 +292,47 @@ export function TriggerLearningButton() {
           </div>
         )}
 
-        {/* Embeddings Missing Alert */}
+        {/* Embeddings Missing Alert with Auto-Generate */}
         {(stats?.embeddingsMissing || 0) > 0 && (
           <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs font-medium text-purple-700 dark:text-purple-300">
-                {stats?.embeddingsMissing.toLocaleString()} items zonder embedding
+                {isAutoGenerating 
+                  ? `${processedCount.toLocaleString()} / ${totalToProcess.toLocaleString()} verwerkt`
+                  : `${stats?.embeddingsMissing.toLocaleString()} items zonder embedding`
+                }
               </span>
-              {stats?.geminiItems && (
-                <Badge variant="secondary" className="text-[10px] bg-purple-100 text-purple-800">
-                  {stats.geminiItems.toLocaleString()} Gemini items
-                </Badge>
-              )}
+              <div className="flex items-center gap-1">
+                {!isAutoGenerating && stats?.embeddingsMissing && (
+                  <Badge variant="secondary" className="text-[10px] bg-purple-100 text-purple-800">
+                    {estimatedTimeRemaining()}
+                  </Badge>
+                )}
+                {stats?.geminiItems && (
+                  <Badge variant="secondary" className="text-[10px] bg-purple-100 text-purple-800">
+                    {stats.geminiItems.toLocaleString()} Gemini
+                  </Badge>
+                )}
+              </div>
             </div>
-            {isGeneratingEmbeddings && (
-              <Progress value={embeddingProgress} className="h-1 mt-2" />
+            {(isAutoGenerating || embeddingProgress > 0) && (
+              <Progress value={embeddingProgress} className="h-1.5 mt-2" />
             )}
           </div>
         )}
 
+        {/* All embeddings complete */}
+        {(stats?.embeddingsMissing || 0) === 0 && (
+          <div className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <span className="text-xs text-green-700 dark:text-green-300">
+              Alle embeddings zijn gegenereerd
+            </span>
+          </div>
+        )}
+
         {/* Action buttons */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -283,12 +368,15 @@ export function TriggerLearningButton() {
               Plaatsingen
             </span>
           </Button>
+        </div>
 
+        {/* Embedding buttons - full width */}
+        <div className="grid grid-cols-2 gap-2">
           <Button
-            variant={(stats?.embeddingsMissing || 0) > 0 ? "default" : "outline"}
+            variant="outline"
             size="sm"
-            onClick={triggerEmbeddingGeneration}
-            disabled={isGeneratingEmbeddings || (stats?.embeddingsMissing || 0) === 0}
+            onClick={triggerSingleBatch}
+            disabled={isGeneratingEmbeddings || isAutoGenerating || (stats?.embeddingsMissing || 0) === 0}
             className="h-auto py-2 flex-col gap-1"
           >
             {isGeneratingEmbeddings ? (
@@ -296,9 +384,27 @@ export function TriggerLearningButton() {
             ) : (
               <Zap className="h-4 w-4" />
             )}
-            <span className="text-xs">Embeddings</span>
+            <span className="text-xs">1 Batch</span>
             <span className="text-[10px] text-muted-foreground">
-              {(stats?.embeddingsMissing || 0) > 0 ? `${Math.min(50, stats?.embeddingsMissing || 0)} batch` : 'Klaar'}
+              50 items
+            </span>
+          </Button>
+
+          <Button
+            variant={isAutoGenerating ? "destructive" : (stats?.embeddingsMissing || 0) > 0 ? "default" : "outline"}
+            size="sm"
+            onClick={startAutoGeneration}
+            disabled={isGeneratingEmbeddings || (stats?.embeddingsMissing || 0) === 0}
+            className="h-auto py-2 flex-col gap-1"
+          >
+            {isAutoGenerating ? (
+              <Square className="h-4 w-4" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+            <span className="text-xs">{isAutoGenerating ? 'Stop' : 'Auto-All'}</span>
+            <span className="text-[10px] text-muted-foreground">
+              {isAutoGenerating ? 'Stoppen' : 'Volledig'}
             </span>
           </Button>
         </div>
