@@ -103,6 +103,84 @@ async function getDefaultOrgId(client: SupabaseClient): Promise<string> {
 }
 
 // ============================================
+// LEARNING CLIENT - Specialized for AI learning operations
+// ============================================
+
+export interface LearningContext {
+  org_id: string;
+  user_id?: string;
+  source?: string;
+}
+
+/**
+ * Create a learning client for AI learning operations
+ * 
+ * ARCHITECTURE DECISION:
+ * - Learning operations ALWAYS use admin client (service role)
+ * - org_id/user_id are derived from request body, NOT from JWT
+ * - This enables edge-to-edge calls without auth headers
+ * - Security is enforced via org_id scoping in code, not RLS
+ * 
+ * @param bodyContext - org_id/user_id from request body (for edge-to-edge calls)
+ * @param authHeader - Optional auth header (for direct frontend calls)
+ */
+export async function createLearningClient(
+  bodyContext?: LearningContext,
+  authHeader?: string | null
+): Promise<{
+  client: SupabaseClient;
+  orgId: string;
+  userId: string | null;
+  source: string;
+}> {
+  // Always use admin client for learning operations
+  const client = createAdminClient();
+  
+  // Priority 1: Use context from body (edge-to-edge calls)
+  if (bodyContext?.org_id) {
+    return {
+      client,
+      orgId: bodyContext.org_id,
+      userId: bodyContext.user_id || null,
+      source: bodyContext.source || 'edge-function',
+    };
+  }
+  
+  // Priority 2: Try to extract from auth header (direct frontend calls)
+  if (authHeader && !authHeader.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9lbG1zbWNncnllb3J5aG9uZXh3')) {
+    try {
+      const anonClient = createAnonClient(authHeader);
+      const { data: { user } } = await anonClient.auth.getUser();
+      
+      if (user) {
+        const { data: userOrg } = await client
+          .from('user_organizations')
+          .select('org_id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        return {
+          client,
+          orgId: userOrg?.org_id || await getDefaultOrgId(client),
+          userId: user.id,
+          source: 'authenticated-user',
+        };
+      }
+    } catch (e) {
+      console.log('⚠️ [createLearningClient] Auth extraction failed, using defaults');
+    }
+  }
+  
+  // Fallback: use default org
+  return {
+    client,
+    orgId: await getDefaultOrgId(client),
+    userId: null,
+    source: 'fallback',
+  };
+}
+
+// ============================================
 // RESPONSE HELPERS
 // ============================================
 

@@ -4869,6 +4869,46 @@ export type Database = {
       }
     }
     Functions: {
+      atomic_increment_feedback: {
+        Args: {
+          p_feedback_type: string
+          p_harmful_prune_min_votes?: number
+          p_harmful_prune_ratio?: number
+          p_knowledge_id: string
+        }
+        Returns: {
+          new_harmful_count: number
+          new_helpful_count: number
+          should_prune: boolean
+        }[]
+      }
+      atomic_reinforce_knowledge: {
+        Args: {
+          p_increment_usage?: boolean
+          p_knowledge_id: string
+          p_max_stability?: number
+          p_stability_boost?: number
+        }
+        Returns: {
+          new_stability: number
+          new_usage_count: number
+        }[]
+      }
+      atomic_update_confidence: {
+        Args: {
+          p_delta: number
+          p_knowledge_id: string
+          p_max_confidence?: number
+          p_min_confidence?: number
+          p_prune_threshold?: number
+          p_reason?: string
+        }
+        Returns: {
+          new_confidence: number
+          old_confidence: number
+          was_pruned: boolean
+        }[]
+      }
       check_budget_status: {
         Args: { _org_id: string; _requested_cost_eur?: number }
         Returns: Json
