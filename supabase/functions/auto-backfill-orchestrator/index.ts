@@ -1,10 +1,5 @@
 import "https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts";
-import { createClient } from 'npm:@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-org-id, x-internal-signature',
-};
+import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
 
 // HMAC verification helper for internal calls
 async function verifyHMAC(orgId: string, signature: string): Promise<boolean> {
@@ -110,17 +105,13 @@ async function getKnowledgeIdsWithoutEmbeddings(
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
     const { batch_size = 25, force_restart = false } = await req.json();
     
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabase = createAdminClient();
 
     // Fixed org_id voor autonomous AI (CRON heeft geen user context)
     const org_id = '550e8400-e29b-41d4-a716-446655440000';
