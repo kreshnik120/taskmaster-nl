@@ -1,202 +1,293 @@
 project_id = "oelmsmcgryeoryhonexw"
 
+# =============================================================================
+# EDGE FUNCTION CONFIGURATION
+# =============================================================================
+# Modernized: All functions use Deno.serve() pattern
+# Last updated: 2025-12-11
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# PUBLIC FUNCTIONS (no JWT verification required)
+# -----------------------------------------------------------------------------
+
 [functions.unified-learner]
 verify_jwt = false
+# Purpose: Central learning entry point for all AI learning operations
 
 [functions.view-shared-content]
 verify_jwt = false
-
-[functions.process-system-events]
-verify_jwt = false
-schedule = "*/5 * * * *"
+# Purpose: Public content sharing endpoint
 
 [functions.public-health]
 verify_jwt = false
+# Purpose: Health check endpoint for monitoring
 
 [functions.seed-org-profile-knowledge]
 verify_jwt = false
-
-[functions.auto-restart-backfill]
-verify_jwt = false
-schedule = "0 * * * *"  # Elk uur - stabiele backfill zonder crashes
-
-[functions.system-health-monitor]
-verify_jwt = false
-schedule = "*/10 * * * *"  # Health check elke 10 minuten
+# Purpose: Seed organization profile knowledge
 
 [functions.parse-pdf-cv]
 verify_jwt = false
-
-[functions.log-conflict-resolution]
-verify_jwt = true
-
-
-[functions.ai-task-scorer]
-verify_jwt = true
-schedule = "0 */12 * * *"
-
-[functions.ai-chat]
-verify_jwt = true
-
-[functions.ai-chat.env]
-ENABLE_SAFE_PERSISTENCE = "true"
-
-# [functions.ai-training-chat] - REMOVED: Deprecated, functionality moved to ai-chat
-# verify_jwt = true
-
-[functions.process-training-document]
-verify_jwt = true
-
-[functions.seed-client-knowledge]
-verify_jwt = true
-
-
-[functions.send-reminder-email]
-verify_jwt = true
-
-[functions.process-feedback]
-verify_jwt = true
-
-[functions.rollback-knowledge]
-verify_jwt = true
-
-
-[functions.continuous-learner]
-verify_jwt = true
-
-[functions.data-quality-auditor]
-verify_jwt = false
-schedule = "0 */6 * * *"  # Elke 6 uur (was 20 min)
-
-[functions.smart-deduplicator]
-verify_jwt = false
-schedule = "0 4 * * *"  # 1x per dag om 04:00 (was 30 min)
-
-[functions.source-validator]
-verify_jwt = false
-schedule = "0 5 * * 0"  # 1x per week op zondag om 05:00 (was dagelijks) - stabiliteit fix
-
-[functions.feedback-processor]
-verify_jwt = false
-schedule = "0 * * * *"  # Elk uur (was elke 5 min)
-
-[functions.master-scheduler]
-verify_jwt = false
-schedule = "0 * * * *"  # Elk uur (was elke minuut)
-
-[functions.knowledge-graph-builder]
-verify_jwt = false
-schedule = "0 3 * * *"  # 1x per dag om 03:00 (was elk uur)
-timeout = 300
-
-[functions.meta-orchestrator]
-verify_jwt = true  # 🔒 Admin-only access
-schedule = "0 2 * * *"
-
-[functions.synapse-pruner]
-verify_jwt = false
-schedule = "0 3 * * *"
-
-[functions.process-application-email]
-verify_jwt = false
-
-[functions.handle-application-reply]
-verify_jwt = false
-
-[functions.auto-resolve-alerts]
-verify_jwt = false
-schedule = "*/30 * * * *"  # Elke 30 minuten - automatische conflict resolutie
-
-[functions.retroactive-training-evaluator]
-verify_jwt = true
-schedule = "0 2 * * *"
-
-[functions.validate-knowledge]
-verify_jwt = true
-
-[functions.auto-validate-trusted-knowledge]
-verify_jwt = false
-schedule = "0 * * * *"  # Elk uur - automatische validatie van trusted sources
+# Purpose: Parse PDF CVs for data extraction
 
 [functions.generate-embedding]
 verify_jwt = false
+# Purpose: Generate embeddings for knowledge items
 
 [functions.backfill-embeddings]
 verify_jwt = false
 timeout = 300
+# Purpose: Batch backfill missing embeddings
 
 [functions.auto-backfill-orchestrator]
 verify_jwt = false
 timeout = 300
-
-[functions.orchestrator-control]
-verify_jwt = true
-
-[functions.queue-document-processing]
-verify_jwt = true
+# Purpose: Orchestrate automatic embedding backfill
 
 [functions.process-job-chunk]
 verify_jwt = false
 timeout = 300
+# Purpose: Process document chunks in parallel
 
 [functions.process-pending-jobs]
 verify_jwt = false
+# Purpose: Process pending job queue items
 
-[functions.cleanup-stale-jobs]
+[functions.process-application-email]
 verify_jwt = false
-schedule = "*/15 * * * *"
+# Purpose: Process incoming application emails (Resend webhook)
 
-[functions.kvk-smart-lookup]
-verify_jwt = true
-
-[functions.detect-and-resolve-conflicts]
+[functions.handle-application-reply]
 verify_jwt = false
-schedule = "0 */6 * * *"  # Elke 6 uur - intelligent conflict detection
+# Purpose: Handle candidate email replies (Resend webhook)
 
-[functions.ai-categorize-knowledge]
-verify_jwt = true
-
-[functions.check-budget-alert]
+[functions.n8n-webhook-bridge]
 verify_jwt = false
+# Purpose: Bridge for n8n workflow integrations
 
-[functions.cleanup-deleted-knowledge]
+[functions.send-ai-email]
 verify_jwt = false
-
-[functions.cleanup-low-stability-knowledge]
-verify_jwt = false
-schedule = "0 6 * * *"  # Dagelijks om 06:00 - automatische cleanup van lage stability items
-
-[functions.scan-outdated-knowledge]
-verify_jwt = true
-
-[functions.extract-cv-data]
-verify_jwt = true
-
-[functions.backfill-cv-knowledge]
-verify_jwt = false
-
-[functions.learn-from-pipeline]
-verify_jwt = false
-schedule = "0 */3 * * *"  # Elke 3 uur - learn from pipeline transitions
+# Purpose: Send AI-generated emails via Resend
 
 [functions.import-abczorg-excel]
 verify_jwt = false
+# Purpose: Import ABCzorg Excel organization data
 
 [functions.import-abczorg-sublocations]
 verify_jwt = false
+# Purpose: Import ABCzorg sublocation data
 
 [functions.fetch-organization-logos]
 verify_jwt = false
+# Purpose: Fetch and cache organization logos
+
+[functions.cleanup-deleted-knowledge]
+verify_jwt = false
+# Purpose: Clean up soft-deleted knowledge items
+
+[functions.backfill-cv-knowledge]
+verify_jwt = false
+# Purpose: Backfill CV knowledge from existing applications
+
+[functions.check-budget-alert]
+verify_jwt = false
+# Purpose: Check AI budget thresholds
+
+# -----------------------------------------------------------------------------
+# AUTHENTICATED FUNCTIONS (JWT verification required)
+# -----------------------------------------------------------------------------
+
+[functions.log-conflict-resolution]
+verify_jwt = true
+# Purpose: Log conflict resolution actions
+
+[functions.ai-task-scorer]
+verify_jwt = true
+schedule = "0 */12 * * *"
+# Purpose: Score tasks using AI (runs every 12 hours)
+
+[functions.ai-chat]
+verify_jwt = true
+# Purpose: Main AI chat endpoint
+
+[functions.ai-chat.env]
+ENABLE_SAFE_PERSISTENCE = "true"
+
+[functions.process-training-document]
+verify_jwt = true
+# Purpose: Process uploaded training documents
+
+[functions.seed-client-knowledge]
+verify_jwt = true
+# Purpose: Seed client-specific knowledge
+
+[functions.send-reminder-email]
+verify_jwt = true
+# Purpose: Send reminder emails
+
+[functions.process-feedback]
+verify_jwt = true
+# Purpose: Process user feedback on AI responses
+
+[functions.rollback-knowledge]
+verify_jwt = true
+# Purpose: Rollback knowledge to previous version
+
+[functions.continuous-learner]
+verify_jwt = true
+# Purpose: Continuous learning from user interactions
+
+[functions.orchestrator-control]
+verify_jwt = true
+# Purpose: Control orchestrator state (pause/resume)
+
+[functions.queue-document-processing]
+verify_jwt = true
+# Purpose: Queue documents for async processing
+
+[functions.kvk-smart-lookup]
+verify_jwt = true
+# Purpose: Smart KVK (Chamber of Commerce) lookup
+
+[functions.ai-categorize-knowledge]
+verify_jwt = true
+# Purpose: AI-powered knowledge categorization
+
+[functions.scan-outdated-knowledge]
+verify_jwt = true
+# Purpose: Scan for outdated knowledge items
+
+[functions.extract-cv-data]
+verify_jwt = true
+# Purpose: Extract structured data from CVs
+
+[functions.validate-knowledge]
+verify_jwt = true
+# Purpose: Validate knowledge items
+
+[functions.meta-orchestrator]
+verify_jwt = true
+schedule = "0 2 * * *"
+# Purpose: Meta-level orchestration (daily at 02:00)
+# Dependencies: Runs after daily cleanup jobs
+
+[functions.retroactive-training-evaluator]
+verify_jwt = true
+schedule = "30 2 * * *"
+# Purpose: Re-evaluate previously rejected learning events (daily at 02:30)
+# Dependencies: Runs after meta-orchestrator
+
+# -----------------------------------------------------------------------------
+# SCHEDULED FUNCTIONS (Cron Jobs)
+# -----------------------------------------------------------------------------
+# Schedule format: minute hour day-of-month month day-of-week
+# Schedules are spread to avoid simultaneous execution
+# -----------------------------------------------------------------------------
+
+# --- Every 5 Minutes ---
+[functions.process-system-events]
+verify_jwt = false
+schedule = "*/5 * * * *"
+# Purpose: Process system events for AI learning
+# Frequency: 288 executions/day
 
 [functions.ai-agent-orchestrator]
 verify_jwt = false
 schedule = "*/5 * * * *"
+# Purpose: Orchestrate AI agent goals and actions
+# Frequency: 288 executions/day
 
-[functions.n8n-webhook-bridge]
+# --- Every 15 Minutes ---
+[functions.cleanup-stale-jobs]
 verify_jwt = false
+schedule = "*/15 * * * *"
+# Purpose: Clean up stale/stuck jobs
+# Frequency: 96 executions/day
 
-[functions.send-ai-email]
+# --- Every 30 Minutes ---
+[functions.auto-resolve-alerts]
 verify_jwt = false
+schedule = "*/30 * * * *"
+# Purpose: Auto-resolve low-priority conflicts
+# Frequency: 48 executions/day
 
-[functions.setup-resend-inbound]
+# --- Hourly (Spread across 0/15/30/45) ---
+[functions.auto-restart-backfill]
 verify_jwt = false
+schedule = "0 * * * *"
+# Purpose: Restart paused/stalled backfill processes
+# Frequency: 24 executions/day (at :00)
+
+[functions.feedback-processor]
+verify_jwt = false
+schedule = "15 * * * *"
+# Purpose: Process pending feedback (shim → unified-learner)
+# Frequency: 24 executions/day (at :15)
+
+[functions.master-scheduler]
+verify_jwt = false
+schedule = "30 * * * *"
+# Purpose: Master scheduler for background tasks
+# Frequency: 24 executions/day (at :30)
+
+[functions.auto-validate-trusted-knowledge]
+verify_jwt = false
+schedule = "45 * * * *"
+# Purpose: Auto-validate knowledge from trusted sources
+# Frequency: 24 executions/day (at :45)
+
+# --- Every 3 Hours ---
+[functions.learn-from-pipeline]
+verify_jwt = false
+schedule = "0 */3 * * *"
+# Purpose: Learn patterns from recruitment pipeline transitions
+# Frequency: 8 executions/day
+
+# --- Every 6 Hours ---
+[functions.data-quality-auditor]
+verify_jwt = false
+schedule = "0 */6 * * *"
+# Purpose: Audit data quality and detect issues
+# Frequency: 4 executions/day
+
+[functions.detect-and-resolve-conflicts]
+verify_jwt = false
+schedule = "0 */6 * * *"
+# Purpose: Detect and resolve knowledge conflicts
+# Frequency: 4 executions/day
+
+# --- Every 10 Minutes ---
+[functions.system-health-monitor]
+verify_jwt = false
+schedule = "*/10 * * * *"
+# Purpose: Monitor system health metrics
+# Frequency: 144 executions/day
+
+# --- Daily (Spread across night hours) ---
+[functions.smart-deduplicator]
+verify_jwt = false
+schedule = "0 4 * * *"
+# Purpose: Deduplicate similar knowledge items (daily at 04:00)
+
+[functions.knowledge-graph-builder]
+verify_jwt = false
+schedule = "0 3 * * *"
+timeout = 300
+# Purpose: Build knowledge relationship graph (daily at 03:00)
+
+[functions.synapse-pruner]
+verify_jwt = false
+schedule = "30 3 * * *"
+# Purpose: Prune unused knowledge relationships (daily at 03:30)
+
+[functions.cleanup-low-stability-knowledge]
+verify_jwt = false
+schedule = "0 6 * * *"
+# Purpose: Clean up low-stability knowledge items (daily at 06:00)
+
+# --- Weekly ---
+[functions.source-validator]
+verify_jwt = false
+schedule = "0 5 * * 0"
+# Purpose: Validate knowledge sources (weekly on Sunday at 05:00)
