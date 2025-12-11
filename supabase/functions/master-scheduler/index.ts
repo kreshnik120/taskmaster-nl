@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// Master Scheduler - central cron job orchestration
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 // Active scheduled functions (8 schedules for 5 learning loops + 3 support)
@@ -61,7 +61,7 @@ function matchesCron(cronExpr: string, now: Date): boolean {
   return true;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 

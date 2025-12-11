@@ -1,9 +1,8 @@
-// **FASE 4: System Health Monitor - Self-Healing System**
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// System Health Monitor - Self-Healing System (Phase 4)
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
-import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
@@ -161,28 +160,16 @@ serve(async (req) => {
         });
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        timestamp: new Date().toISOString(),
-        orgs_checked: orgs.length,
-        actions_taken: actionsTaken,
-        results
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({
+      success: true,
+      timestamp: new Date().toISOString(),
+      orgs_checked: orgs.length,
+      actions_taken: actionsTaken,
+      results
+    });
 
   } catch (error) {
     console.error('❌ Health monitor error:', error);
-    return new Response(
-      JSON.stringify({ 
-        error: error instanceof Error ? error.message : 'Unknown error',
-        success: false 
-      }),
-      { 
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Unknown error', 500);
   }
 });
