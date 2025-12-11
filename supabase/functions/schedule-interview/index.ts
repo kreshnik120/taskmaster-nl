@@ -1,0 +1,346 @@
+import { createAdminClient, corsHeaders, jsonResponse, errorResponse, handleCors, logInfo, logSuccess, logError } from '../_shared/core.ts';
+
+interface ScheduleRequest {
+  application_id: string;
+  action: 'request_availability' | 'confirm_slot' | 'send_confirmation';
+  selected_slot?: {
+    date: string;
+    time: string;
+    duration_minutes?: number;
+  };
+  interview_type?: 'phone' | 'video' | 'in_person';
+  location?: string;
+  interviewer_name?: string;
+  interviewer_email?: string;
+}
+
+// Default interview slots (weekdays, business hours)
+const DEFAULT_SLOTS = [
+  { day_offset: 1, times: ['09:00', '10:30', '14:00', '15:30'] },
+  { day_offset: 2, times: ['09:00', '10:30', '14:00', '15:30'] },
+  { day_offset: 3, times: ['09:00', '10:30', '14:00', '15:30'] },
+];
+
+function generateAvailableSlots(): { date: string; time: string }[] {
+  const slots: { date: string; time: string }[] = [];
+  const today = new Date();
+  
+  for (const dayConfig of DEFAULT_SLOTS) {
+    const slotDate = new Date(today);
+    slotDate.setDate(today.getDate() + dayConfig.day_offset);
+    
+    // Skip weekends
+    while (slotDate.getDay() === 0 || slotDate.getDay() === 6) {
+      slotDate.setDate(slotDate.getDate() + 1);
+    }
+    
+    const dateStr = slotDate.toISOString().split('T')[0];
+    
+    for (const time of dayConfig.times) {
+      slots.push({ date: dateStr, time });
+    }
+  }
+  
+  return slots;
+}
+
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  const options: Intl.DateTimeFormatOptions = { 
+    weekday: 'long', 
+    day: 'numeric', 
+    month: 'long', 
+    year: 'numeric' 
+  };
+  return date.toLocaleDateString('nl-NL', options);
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabase = createAdminClient();
+    const body: ScheduleRequest = await req.json();
+    const { application_id, action, selected_slot, interview_type = 'video', location, interviewer_name, interviewer_email } = body;
+
+    if (!application_id) {
+      return errorResponse('application_id is required', 400);
+    }
+
+    logInfo('ScheduleInterview', `Processing ${action}`, { application_id });
+
+    // Fetch application details
+    const { data: application, error: appError } = await supabase
+      .from('professional_applications')
+      .select('*')
+      .eq('id', application_id)
+      .single();
+
+    if (appError || !application) {
+      return errorResponse(`Application not found: ${appError?.message}`, 404);
+    }
+
+    const extractedData = application.extracted_data as Record<string, unknown> || {};
+    const candidateName = application.name || extractedData.naam as string || 'Kandidaat';
+    const candidateEmail = application.email || extractedData.email as string;
+
+    if (!candidateEmail) {
+      return errorResponse('Candidate email not available', 400);
+    }
+
+    // Determine organization for email sender
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('name')
+      .eq('id', application.assigned_organization)
+      .single();
+    
+    const orgName = org?.name || 'CitoZorg';
+    const isAbczorg = orgName.toLowerCase().includes('abc');
+
+    switch (action) {
+      case 'request_availability': {
+        // Generate available slots
+        const availableSlots = generateAvailableSlots();
+        
+        // Create formatted slot options for email
+        const slotOptions = availableSlots.map((slot, index) => 
+          `${index + 1}. ${formatDate(slot.date)} om ${slot.time}`
+        ).join('\n');
+
+        // Generate email asking for availability
+        const emailSubject = `Interview plannen - ${orgName}`;
+        const emailHtml = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #1a1a1a;">Beste ${candidateName},</h2>
+            
+            <p>Goed nieuws! We willen graag een kennismakingsgesprek met je plannen.</p>
+            
+            <p>Hieronder vind je een aantal mogelijke momenten. Laat ons weten welk moment jou het beste uitkomt door simpelweg het nummer te beantwoorden:</p>
+            
+            <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <pre style="margin: 0; font-family: Arial, sans-serif; white-space: pre-wrap;">${slotOptions}</pre>
+            </div>
+            
+            <p>Het gesprek duurt ongeveer 30 minuten en vindt ${interview_type === 'video' ? 'online via Microsoft Teams' : interview_type === 'phone' ? 'telefonisch' : `plaats op ${location || 'ons kantoor'}`} plaats.</p>
+            
+            <p>Mocht geen van deze momenten schikken, laat het ons dan weten en we zoeken samen naar een alternatief.</p>
+            
+            <p>Met vriendelijke groet,<br>
+            <strong>${orgName} Recruitment</strong></p>
+          </div>
+        `;
+
+        // Send email via send-ai-email function
+        const { error: emailError } = await supabase.functions.invoke('send-ai-email', {
+          body: {
+            to: candidateEmail,
+            subject: emailSubject,
+            html: emailHtml,
+            application_id,
+            email_type: 'interview_availability_request',
+            organization: orgName,
+          }
+        });
+
+        if (emailError) {
+          logError('ScheduleInterview', 'Failed to send availability email', emailError);
+          return errorResponse(`Failed to send email: ${emailError.message}`, 500);
+        }
+
+        // Store available slots in application for later reference
+        await supabase
+          .from('professional_applications')
+          .update({
+            extracted_data: {
+              ...extractedData,
+              interview_slots_offered: availableSlots,
+              interview_status: 'awaiting_response',
+              interview_request_sent_at: new Date().toISOString(),
+            }
+          })
+          .eq('id', application_id);
+
+        // Log to system_events
+        await supabase.from('system_events').insert({
+          event_type: 'interview_availability_requested',
+          entity_type: 'professional_application',
+          entity_id: application_id,
+          event_data: {
+            candidate_name: candidateName,
+            candidate_email: candidateEmail,
+            slots_offered: availableSlots.length,
+            interview_type,
+          },
+          org_id: application.assigned_organization,
+        });
+
+        logSuccess('ScheduleInterview', 'Availability request sent', { 
+          application_id, 
+          slots_count: availableSlots.length 
+        });
+
+        return jsonResponse({
+          success: true,
+          action: 'request_availability',
+          slots_offered: availableSlots.length,
+          email_sent: true,
+        });
+      }
+
+      case 'confirm_slot': {
+        if (!selected_slot) {
+          return errorResponse('selected_slot is required for confirm_slot action', 400);
+        }
+
+        // Update application with confirmed slot
+        await supabase
+          .from('professional_applications')
+          .update({
+            extracted_data: {
+              ...extractedData,
+              interview_confirmed_slot: selected_slot,
+              interview_status: 'scheduled',
+              interview_confirmed_at: new Date().toISOString(),
+            }
+          })
+          .eq('id', application_id);
+
+        // Create calendar event via n8n (if configured)
+        const n8nWebhookUrl = Deno.env.get('N8N_CALENDAR_WEBHOOK_URL');
+        
+        if (n8nWebhookUrl) {
+          try {
+            await fetch(n8nWebhookUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'create_calendar_event',
+                event: {
+                  title: `Interview: ${candidateName}`,
+                  start_date: selected_slot.date,
+                  start_time: selected_slot.time,
+                  duration_minutes: selected_slot.duration_minutes || 30,
+                  attendees: [
+                    { email: candidateEmail, name: candidateName },
+                    ...(interviewer_email ? [{ email: interviewer_email, name: interviewer_name || 'Recruiter' }] : []),
+                  ],
+                  description: `Kennismakingsgesprek met ${candidateName} voor ${orgName}`,
+                  location: interview_type === 'video' ? 'Microsoft Teams' : location || 'Kantoor',
+                  create_teams_meeting: interview_type === 'video',
+                }
+              })
+            });
+          } catch (calError) {
+            logError('ScheduleInterview', 'Failed to create calendar event', calError);
+            // Continue anyway - calendar is optional
+          }
+        }
+
+        // Log to system_events
+        await supabase.from('system_events').insert({
+          event_type: 'interview_scheduled',
+          entity_type: 'professional_application',
+          entity_id: application_id,
+          event_data: {
+            candidate_name: candidateName,
+            selected_slot,
+            interview_type,
+          },
+          org_id: application.assigned_organization,
+        });
+
+        logSuccess('ScheduleInterview', 'Interview slot confirmed', { 
+          application_id, 
+          slot: selected_slot 
+        });
+
+        return jsonResponse({
+          success: true,
+          action: 'confirm_slot',
+          confirmed_slot: selected_slot,
+        });
+      }
+
+      case 'send_confirmation': {
+        const confirmedSlot = selected_slot || (extractedData.interview_confirmed_slot as { date: string; time: string });
+        
+        if (!confirmedSlot) {
+          return errorResponse('No confirmed slot available', 400);
+        }
+
+        // Send confirmation email
+        const confirmSubject = `Bevestiging interview - ${formatDate(confirmedSlot.date)} om ${confirmedSlot.time}`;
+        const confirmHtml = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #1a1a1a;">Beste ${candidateName},</h2>
+            
+            <p>Hierbij bevestigen we je interview:</p>
+            
+            <div style="background: #e8f5e9; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #4caf50;">
+              <p style="margin: 0;"><strong>Datum:</strong> ${formatDate(confirmedSlot.date)}</p>
+              <p style="margin: 8px 0 0 0;"><strong>Tijd:</strong> ${confirmedSlot.time}</p>
+              <p style="margin: 8px 0 0 0;"><strong>Type:</strong> ${interview_type === 'video' ? 'Online via Microsoft Teams' : interview_type === 'phone' ? 'Telefonisch' : `Op locatie: ${location || 'Wordt nog bevestigd'}`}</p>
+            </div>
+            
+            ${interview_type === 'video' ? `
+            <p>Je ontvangt binnenkort een Teams-uitnodiging met de link voor het videogesprek.</p>
+            ` : ''}
+            
+            <p>Mocht je onverhoopt verhinderd zijn, laat het ons dan zo snel mogelijk weten.</p>
+            
+            <p>We kijken ernaar uit je te spreken!</p>
+            
+            <p>Met vriendelijke groet,<br>
+            <strong>${orgName} Recruitment</strong></p>
+          </div>
+        `;
+
+        const { error: confirmError } = await supabase.functions.invoke('send-ai-email', {
+          body: {
+            to: candidateEmail,
+            subject: confirmSubject,
+            html: confirmHtml,
+            application_id,
+            email_type: 'interview_confirmation',
+            organization: orgName,
+          }
+        });
+
+        if (confirmError) {
+          return errorResponse(`Failed to send confirmation: ${confirmError.message}`, 500);
+        }
+
+        // Update status
+        await supabase
+          .from('professional_applications')
+          .update({
+            extracted_data: {
+              ...extractedData,
+              interview_status: 'confirmed',
+              interview_confirmation_sent_at: new Date().toISOString(),
+            }
+          })
+          .eq('id', application_id);
+
+        logSuccess('ScheduleInterview', 'Confirmation sent', { application_id });
+
+        return jsonResponse({
+          success: true,
+          action: 'send_confirmation',
+          confirmation_sent: true,
+        });
+      }
+
+      default:
+        return errorResponse(`Unknown action: ${action}`, 400);
+    }
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logError('ScheduleInterview', 'Unexpected error', error);
+    return errorResponse(`Unexpected error: ${errorMessage}`, 500);
+  }
+});
