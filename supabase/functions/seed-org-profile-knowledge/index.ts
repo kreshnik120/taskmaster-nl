@@ -1,8 +1,7 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { corsHeaders, handleCors } from '../_shared/core.ts';
+import { corsHeaders, handleCors, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
@@ -11,16 +10,7 @@ serve(async (req) => {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       console.error('❌ No Authorization header in request');
-      return new Response(
-        JSON.stringify({ 
-          error: 'No authorization header', 
-          hint: 'Ensure you are logged in and the session is active' 
-        }), 
-        {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      return errorResponse('No authorization header', 401, { hint: 'Ensure you are logged in and the session is active' });
     }
 
     console.log('✅ Authorization header found, creating Supabase client...');
@@ -52,27 +42,12 @@ serve(async (req) => {
     
     if (authError) {
       console.error('❌ Auth verification failed:', authError);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Authentication failed', 
-          details: authError.message || 'Unknown auth error' 
-        }), 
-        {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      return errorResponse('Authentication failed', 401, { details: authError.message || 'Unknown auth error' });
     }
     
     if (!user) {
       console.error('❌ No user found in token');
-      return new Response(
-        JSON.stringify({ error: 'No user found - token may be expired' }), 
-        {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      return errorResponse('No user found - token may be expired', 401);
     }
 
     console.log(`✅ User authenticated: ${user.id}`)
@@ -87,10 +62,7 @@ serve(async (req) => {
       .single();
 
     if (!userOrg?.org_id) {
-      return new Response(JSON.stringify({ error: 'No organization found' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return errorResponse('No organization found', 400);
     }
 
     // Fetch all org_profiles for this org
@@ -101,16 +73,11 @@ serve(async (req) => {
 
     if (profilesError) {
       console.error('Error fetching org_profiles:', profilesError);
-      return new Response(JSON.stringify({ error: 'Failed to fetch org_profiles' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return errorResponse('Failed to fetch org_profiles', 500);
     }
 
     if (!orgProfiles || orgProfiles.length === 0) {
-      return new Response(JSON.stringify({ message: 'No org_profiles found to seed', created: 0 }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ message: 'No org_profiles found to seed', created: 0 });
     }
 
     console.log(`📦 Found ${orgProfiles.length} org_profiles to seed`);
@@ -191,22 +158,17 @@ serve(async (req) => {
 
     console.log(`🎉 Seeding complete: ${createdItems.length} items created, ${errors.length} errors`);
 
-    return new Response(JSON.stringify({
+    return jsonResponse({
       success: true,
       created: createdItems.length,
       errors: errors.length,
       items: createdItems.map(item => ({ id: item.id, key: item.key })),
       errorDetails: errors
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
     console.error('❌ Seed function error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return errorResponse(errorMessage, 500);
   }
 });

@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 import { softDeleteKnowledge } from '../_shared/knowledge-crud.ts';
 
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -7,7 +6,7 @@ const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 // Minimum usage threshold - NEVER delete items with usage >= this value
 const MIN_USAGE_PROTECTION = 3;
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
@@ -37,9 +36,7 @@ serve(async (req) => {
       .limit(500);
 
     if (!allItems || allItems.length === 0) {
-      return new Response(JSON.stringify({ success: true, duplicates_found: 0 }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ success: true, duplicates_found: 0 });
     }
 
     // Group by category for efficient processing
@@ -273,7 +270,7 @@ Als er GEEN duplicates zijn, return: []`
 
     console.log(`✅ Deduplication complete: ${totalMerged} merged, ${skippedHighUsage} skipped (high-usage/verified), ${skippedSelfMerge} skipped (self-merge)`);
 
-    return new Response(JSON.stringify({
+    return jsonResponse({
       success: true,
       items_scanned: allItems.length,
       categories_processed: Object.keys(itemsByCategory).length,
@@ -281,15 +278,10 @@ Als er GEEN duplicates zijn, return: []`
       skipped_high_usage: skippedHighUsage,
       skipped_self_merge: skippedSelfMerge,
       merge_log: mergeLog
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
     console.error('❌ Smart Deduplicator error:', error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return errorResponse(error instanceof Error ? error.message : 'Unknown error', 500);
   }
 });
