@@ -1,17 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
 import { getFullInstructions, detectRoleFromQuestion } from "../_shared/abczorg-instructions.ts";
 import { preflightCompletenessCheck, executePreflightActions } from "../_shared/preflight-completeness.ts";
 import { semanticKnowledgeRetrieval, calculateSemanticConfidence, mergeSemanticAndCategoryResults } from "../_shared/semantic-retrieval.ts";
 import { validateResponse, addValidationContext } from "../_shared/response-validator.ts";
 import { disambiguateEntities, applyTemporalFilter, expandViaRelationships } from "../_shared/entity-resolver.ts";
 import { softDeleteKnowledge, reinforceKnowledge, updateConfidence } from "../_shared/knowledge-crud.ts";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
 
 // ============================================
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
