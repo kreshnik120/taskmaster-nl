@@ -103,6 +103,29 @@ const GOAL_CONFIGS: Record<string, {
     }
   },
 
+  // =====================================================
+  // NEW: Schedule Interview - AI-driven interview scheduling
+  // =====================================================
+  'schedule_interview': {
+    requiredFields: ['application_id', 'candidate_email'],
+    planGenerator: (goal, context) => {
+      return [
+        {
+          action_type: 'request_interview_availability',
+          action_order: 1,
+          action_description: `Vraag beschikbaarheid aan ${goal.input_data.candidate_name || 'kandidaat'}`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            application_id: goal.input_data.application_id,
+            candidate_email: goal.input_data.candidate_email,
+            candidate_name: goal.input_data.candidate_name,
+            current_completeness: goal.input_data.current_completeness,
+          }
+        }
+      ];
+    }
+  },
+
   // Send interview email via n8n
   'send_interview_email': {
     requiredFields: ['candidateEmail', 'candidateName', 'scheduledAt'],
@@ -824,6 +847,10 @@ async function executeTask(supabase: any, task: any) {
       result = await executeFollowupQuestion(supabase, action);
       break;
     
+    case 'request_interview_availability': // Request interview availability via schedule-interview
+      result = await executeRequestInterviewAvailability(supabase, action);
+      break;
+    
     case 'send_interview_email': // Interview email via send-interview-email (Resend)
       result = await executeInterviewEmail(supabase, action);
       break;
@@ -943,6 +970,54 @@ async function executeFollowupQuestion(supabase: any, action: any) {
 
   } catch (err: any) {
     console.error('❌ [Followup] Failed:', err);
+    return { 
+      executed_via: 'failed', 
+      error: err.message,
+      organization
+    };
+  }
+}
+
+// =====================================================
+// Execute Request Interview Availability via schedule-interview
+// =====================================================
+async function executeRequestInterviewAvailability(supabase: any, action: any) {
+  const org_id = action.agent_goals?.org_id;
+  let organization = 'citozorg';
+  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
+    organization = 'abczorg';
+  }
+
+  console.log(`🗓️ [Interview] Requesting availability for ${action.input_data.candidate_name}`);
+
+  try {
+    // Call schedule-interview edge function with action: request_availability
+    const { data, error } = await supabase.functions.invoke('schedule-interview', {
+      body: {
+        action: 'request_availability',
+        application_id: action.input_data.application_id,
+        candidate_email: action.input_data.candidate_email,
+        candidate_name: action.input_data.candidate_name,
+        organization
+      }
+    });
+
+    if (error) {
+      console.error('[Interview] Request availability failed:', error);
+      throw error;
+    }
+
+    console.log('✅ [Interview] Availability request sent');
+    return { 
+      executed_via: 'schedule-interview', 
+      organization, 
+      slots_offered: data?.slots?.length || 0,
+      email_sent: data?.email_sent,
+      ...data 
+    };
+
+  } catch (err: any) {
+    console.error('❌ [Interview] Failed:', err);
     return { 
       executed_via: 'failed', 
       error: err.message,

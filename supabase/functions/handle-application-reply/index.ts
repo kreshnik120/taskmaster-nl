@@ -211,6 +211,10 @@ Deno.serve(async (req) => {
       console.error("Error saving reply:", replyInsertError);
     }
 
+    // Check if this is a response to interview slot selection
+    const offeredSlots = application.extracted_data?.offered_interview_slots as string[] | undefined;
+    const hasOfferedSlots = offeredSlots && offeredSlots.length > 0;
+    
     // Use AI to analyze the reply and extract new information
     console.log("Analyzing reply with AI...");
     const analysisPrompt = `
@@ -218,6 +222,7 @@ Je bent een recruitment assistant voor een thuiszorg organisatie. Analyseer deze
 
 **Huidige missing_info:** ${JSON.stringify(application.missing_info || [])}
 **Huidige extracted_data:** ${JSON.stringify(application.extracted_data || {})}
+${hasOfferedSlots ? `\n**BELANGRIJK - Aangeboden interview tijdsloten:**\n${offeredSlots.map((slot: string, i: number) => `${i + 1}. ${slot}`).join('\n')}\n` : ''}
 
 **Email van sollicitant:**
 ${text}
@@ -227,6 +232,12 @@ ${text}
 2. Extract specifieke data als beschikbaar
 3. Detecteer of de sollicitant vraagt om een gesprek/interview
 4. Bepaal of er nieuwe vragen zijn die beantwoord moeten worden
+${hasOfferedSlots ? `5. **KRITIEK**: Check of de kandidaat een tijdslot kiest! Kijk naar:
+   - Nummers zoals "1", "2", "3" 
+   - Dagen zoals "maandag", "dinsdag", "woensdag"
+   - Tijden zoals "10:00", "14:00"
+   - Zinnen zoals "de eerste optie", "de derde", "maandagochtend"
+   - Als de kandidaat een slot kiest, zet "selected_slot_index" op het nummer (1-${offeredSlots.length})` : ''}
 
 **KRITIEK - functie_niveau moet EXACT een van deze waarden zijn:**
 - "VIG" (Verzorgende IG)
@@ -267,6 +278,7 @@ Return JSON in dit formaat:
   "requests_interview": true,
   "has_questions": false,
   "remaining_missing_info": [],
+  "selected_slot_index": null,
   "confidence": 0.95
 }
 \`\`\`
@@ -598,10 +610,74 @@ Return JSON in dit formaat:
       }
 
       // =====================================================
-      // STAP 7: Continue Follow-up Loop
-      // Als completeness nog < 80%, trigger nieuwe agent_goal
+      // STAP 7a: Check for Interview Slot Selection
       // =====================================================
-      if (newCompletenessScore < 80 && analysis.remaining_missing_info?.length > 0) {
+      if (analysis.selected_slot_index && offeredSlots && offeredSlots.length > 0) {
+        const slotIndex = parseInt(analysis.selected_slot_index) - 1;
+        if (slotIndex >= 0 && slotIndex < offeredSlots.length) {
+          const selectedSlot = offeredSlots[slotIndex];
+          console.log(`🎉 Kandidaat koos interview slot: ${selectedSlot}`);
+          
+          // Call schedule-interview to confirm the slot
+          try {
+            const { data: confirmResult, error: confirmError } = await supabase.functions.invoke('schedule-interview', {
+              body: {
+                action: 'confirm_slot',
+                application_id: applicationId,
+                confirmed_slot: selectedSlot
+              }
+            });
+            
+            if (confirmError) {
+              console.error("Error confirming interview slot:", confirmError);
+            } else {
+              console.log("✅ Interview slot confirmed:", confirmResult);
+              
+              // Send confirmation email
+              await supabase.functions.invoke('schedule-interview', {
+                body: {
+                  action: 'send_confirmation',
+                  application_id: applicationId
+                }
+              });
+            }
+          } catch (scheduleError) {
+            console.error("Error scheduling interview:", scheduleError);
+          }
+        }
+      }
+
+      // =====================================================
+      // STAP 7b: Continue Follow-up Loop OR Trigger Interview
+      // =====================================================
+      if (newCompletenessScore >= 80 && !application.extracted_data?.interview_scheduled && !analysis.selected_slot_index) {
+        // Completeness >= 80% and no interview scheduled yet → trigger interview scheduling
+        console.log("🗓️ Completeness >= 80%, triggering interview scheduling...");
+        
+        const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
+        
+        const { error: interviewGoalError } = await supabase
+          .from("agent_goals")
+          .insert({
+            org_id: application.org_id,
+            goal_type: "schedule_interview",
+            goal_description: `Plan interview met ${professionalName}`,
+            priority: 90,
+            input_data: {
+              application_id: applicationId,
+              candidate_email: from,
+              candidate_name: professionalName,
+              current_completeness: newCompletenessScore,
+            },
+            status: "pending"
+          });
+
+        if (interviewGoalError) {
+          console.error("Error creating interview goal:", interviewGoalError);
+        } else {
+          console.log(`✅ Created interview scheduling goal for application ${applicationId}`);
+        }
+      } else if (newCompletenessScore < 80 && analysis.remaining_missing_info?.length > 0) {
         console.log("Completeness still < 80%, triggering new follow-up goal...");
         
         // Check hoeveel follow-ups er al zijn geweest
