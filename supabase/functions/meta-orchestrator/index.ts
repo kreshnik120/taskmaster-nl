@@ -1,7 +1,7 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// Meta Orchestrator - AI-powered knowledge categorization
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
@@ -28,10 +28,7 @@ serve(async (req) => {
 
         if (!isAdmin) {
           console.error('❌ Non-admin user attempted meta-orchestrator:', user.id);
-          return new Response(
-            JSON.stringify({ error: 'Forbidden: Admin access required' }),
-            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return errorResponse('Forbidden: Admin access required', 403);
         }
         
         console.log(`🔓 Admin access verified: ${user.id}`);
@@ -102,14 +99,11 @@ serve(async (req) => {
         .update({ status: 'idle', total_items_processed: 0 })
         .eq('id', state.id);
       
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'Geen items om te verwerken',
-          items_processed: 0 
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ 
+        success: true, 
+        message: 'Geen items om te verwerken',
+        items_processed: 0 
+      });
     }
 
     // STAP 2: Batch processing
@@ -258,21 +252,15 @@ ${batch.map((item, idx) => `${idx + 1}. [${item.category}] ${item.key}: ${JSON.s
 
     console.log(`✅ Meta-Orchestrator voltooid: ${totalItemsUpdated} items, ${totalCategoriesCreated} categorieën`);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        items_processed: totalItemsUpdated,
-        categories_created: totalCategoriesCreated,
-        batches_processed: batches.length,
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({
+      success: true,
+      items_processed: totalItemsUpdated,
+      categories_created: totalCategoriesCreated,
+      batches_processed: batches.length,
+    });
 
   } catch (error) {
     console.error('❌ Meta-Orchestrator error:', error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Unknown error', 500);
   }
 });
