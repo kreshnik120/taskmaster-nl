@@ -1,10 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 // ABCzorg org_id
 const ABCZORG_ORG_ID = "550e8400-e29b-41d4-a716-446655440000";
@@ -170,22 +165,16 @@ function detectFuncties(beschrijving: string | null): string[] {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createAdminClient();
 
     const { records, batchNumber, totalBatches } = await req.json();
 
     if (!records || !Array.isArray(records)) {
-      return new Response(
-        JSON.stringify({ error: "No records provided" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return errorResponse("No records provided", 400);
     }
 
     console.log(`Processing batch ${batchNumber}/${totalBatches} with ${records.length} records`);
@@ -197,7 +186,7 @@ serve(async (req) => {
       .eq("org_id", ABCZORG_ORG_ID);
 
     const orgMap = new Map<string, string>();
-    existingOrgs?.forEach(org => {
+    existingOrgs?.forEach((org: { id: string; name: string }) => {
       orgMap.set(org.name.toLowerCase(), org.id);
     });
 
@@ -207,7 +196,7 @@ serve(async (req) => {
       .select("id, naam, client_org_id");
 
     const locationMap = new Map<string, string>();
-    existingLocations?.forEach(loc => {
+    existingLocations?.forEach((loc: { id: string; naam: string; client_org_id: string }) => {
       locationMap.set(`${loc.client_org_id}-${loc.naam.toLowerCase()}`, loc.id);
     });
 
