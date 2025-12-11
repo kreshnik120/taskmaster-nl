@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// ABCzorg Sublocations Import - processes sublocation records
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 // ABCzorg org_id
@@ -164,7 +164,7 @@ function detectFuncties(beschrijving: string | null): string[] {
   return functies.length > 0 ? functies : ["Begeleider"];
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
