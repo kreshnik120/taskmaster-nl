@@ -242,6 +242,53 @@ Deno.serve(async (req) => {
             console.log(`⏭️ Skipping goal creation - completeness=${completenessScore}% (>=95%) or no email or no missing info`);
           }
         }
+        
+        // ============================================================
+        // PHASE 3: PROFESSIONAL CREATION ON APPROVAL
+        // ============================================================
+        if (event.event_type === 'application_approved_for_professional_creation') {
+          const eventData = event.event_data || {};
+          const applicationId = eventData.application_id;
+          const candidateName = eventData.candidate_name;
+          
+          console.log(`🎓 [Phase 3] Processing professional creation for ${candidateName} (${applicationId})...`);
+          
+          if (applicationId) {
+            try {
+              // Call the create-professional-from-application edge function
+              const { data: createResult, error: createError } = await supabase.functions.invoke(
+                'create-professional-from-application',
+                {
+                  body: {
+                    application_id: applicationId,
+                    trigger_source: 'database_trigger'
+                  }
+                }
+              );
+              
+              if (createError) {
+                console.error(`❌ [Phase 3] Failed to create professional:`, createError);
+                errors.push(`Professional creation failed for ${applicationId}: ${createError.message}`);
+              } else if (createResult?.success) {
+                console.log(`✅ [Phase 3] Professional created: ${createResult.professional_id} (${createResult.professional_name})`);
+                
+                if (createResult.documents_requested) {
+                  console.log(`📄 [Phase 3] Document request goal created for: ${createResult.missing_documents?.join(', ')}`);
+                }
+              } else if (createResult?.error === 'already_converted') {
+                console.log(`⏭️ [Phase 3] Application already converted to professional: ${createResult.professional_id}`);
+              } else if (createResult?.error === 'duplicate_professional') {
+                console.log(`⏭️ [Phase 3] Linked to existing professional: ${createResult.professional_id}`);
+              } else {
+                console.error(`❌ [Phase 3] Unexpected result:`, createResult);
+                errors.push(`Professional creation returned: ${JSON.stringify(createResult)}`);
+              }
+            } catch (invokeError) {
+              console.error(`❌ [Phase 3] Failed to invoke create-professional:`, invokeError);
+              errors.push(`Invoke error: ${invokeError instanceof Error ? invokeError.message : 'Unknown'}`);
+            }
+          }
+        }
       } catch (eventError) {
         console.error(`❌ Error processing event ${event.id}:`, eventError);
         errors.push(`Event ${event.id}: ${eventError instanceof Error ? eventError.message : 'Unknown error'}`);

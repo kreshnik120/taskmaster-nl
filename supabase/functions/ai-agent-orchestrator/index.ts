@@ -179,6 +179,37 @@ const GOAL_CONFIGS: Record<string, {
     }
   },
 
+  // =====================================================
+  // NEW: Professional Document Collection - Post-approval document gathering
+  // =====================================================
+  'professional_document_collection': {
+    requiredFields: ['professional_id', 'candidate_email', 'candidate_name'],
+    planGenerator: (goal, context) => {
+      const missingDocs = goal.input_data.missing_documents || ['VOG (Verklaring Omtrent Gedrag)', 'Diploma/Certificaten'];
+      const deadline = goal.input_data.deadline || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      
+      return [
+        {
+          action_type: 'send_document_request',
+          action_order: 1,
+          action_description: `Vraag documenten op bij ${goal.input_data.candidate_name}: ${missingDocs.join(', ')}`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            professional_id: goal.input_data.professional_id,
+            application_id: goal.input_data.application_id,
+            candidate_email: goal.input_data.candidate_email,
+            candidate_name: goal.input_data.candidate_name,
+            documents: missingDocs,
+            deadline: deadline,
+            urgent: false,
+            email_type: 'professional_document_request',
+            context: 'Je bent goedgekeurd als professional! Om je profiel compleet te maken hebben we nog enkele documenten nodig.'
+          }
+        }
+      ];
+    }
+  },
+
   // Send general email
   'send_general_email': {
     requiredFields: ['recipient_email', 'recipient_name', 'subject'],

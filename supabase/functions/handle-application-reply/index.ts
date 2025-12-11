@@ -518,6 +518,77 @@ Return JSON in dit formaat:
       }
       
       console.log(`📎 Processed ${processedDocuments.length} documents`);
+      
+      // =====================================================
+      // PHASE 3: Update Professional with Documents (if exists)
+      // =====================================================
+      if (application.professional_id && processedDocuments.length > 0) {
+        console.log(`📄 [Phase 3] Updating professional ${application.professional_id} with documents...`);
+        
+        const updateData: Record<string, any> = {};
+        let hasVog = false;
+        let hasDiploma = false;
+        
+        for (const doc of processedDocuments) {
+          if (doc.document_type === 'vog' && doc.vog_expiry_status === 'valid') {
+            updateData.vog_file_path = doc.file_path;
+            hasVog = true;
+          }
+          if (doc.document_type === 'diploma' || doc.document_type === 'certificate') {
+            hasDiploma = true;
+          }
+        }
+        
+        // Get current professional to check existing documents
+        const { data: currentProfessional } = await supabase
+          .from('professionals')
+          .select('status, vog_file_path')
+          .eq('id', application.professional_id)
+          .single();
+        
+        const existingVog = !!currentProfessional?.vog_file_path || hasVog;
+        
+        // If professional has pending_documents status, check if they're now complete
+        if (currentProfessional?.status === 'beschikbaar_pending_documents') {
+          // For now, just VOG is required - diplomas are nice-to-have
+          if (existingVog) {
+            updateData.status = 'beschikbaar';
+            console.log(`✅ [Phase 3] Professional documents complete! Status → beschikbaar`);
+          }
+        }
+        
+        if (Object.keys(updateData).length > 0) {
+          const { error: profUpdateError } = await supabase
+            .from('professionals')
+            .update({
+              ...updateData,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', application.professional_id);
+          
+          if (profUpdateError) {
+            console.error('❌ [Phase 3] Failed to update professional:', profUpdateError);
+          } else {
+            console.log(`✅ [Phase 3] Professional updated successfully`);
+            
+            // Log system event for AI learning
+            await supabase.from('system_events').insert({
+              event_type: 'professional_documents_received',
+              entity_type: 'professional',
+              entity_id: application.professional_id,
+              org_id: application.org_id,
+              event_data: {
+                documents_received: processedDocuments.map(d => d.document_type),
+                has_vog: existingVog,
+                has_diploma: hasDiploma,
+                new_status: updateData.status || currentProfessional?.status,
+                source: 'email_reply'
+              },
+              metadata: {}
+            });
+          }
+        }
+      }
     }
 
     // Calculate new completeness score

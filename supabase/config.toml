@@ -98,6 +98,10 @@ verify_jwt = false
 verify_jwt = false
 # Purpose: Calculate match scores between applications and sublocations (triggered by DB)
 
+[functions.create-professional-from-application]
+verify_jwt = false
+# Purpose: Automatically create professional profile from approved application
+
 [functions.schedule-interview]
 verify_jwt = false
 # Purpose: AI-driven interview scheduling (request availability, confirm slot, send confirmation)
