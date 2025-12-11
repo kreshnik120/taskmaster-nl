@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// ABCzorg Excel Import - processes organization/location data from Excel files
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 // ABCzorg org_id
@@ -696,7 +696,7 @@ function fuzzyMatchOrg(name: string, existingOrgs: Map<string, string>): string 
   return undefined;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 

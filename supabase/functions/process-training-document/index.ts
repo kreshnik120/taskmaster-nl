@@ -1,5 +1,5 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
+// Training Document Processor - handles PDF, DOCX, Excel file processing
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 // XLSX lazy loaded only for Excel files
 
 const LARGE_FILE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -52,7 +52,7 @@ function smartChunk(text: string, fileName: string): Array<{
   return chunks;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
