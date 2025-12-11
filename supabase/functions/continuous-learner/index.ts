@@ -5,11 +5,9 @@
  * Maintains backward compatibility with existing callers.
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, handleCors, jsonResponse, errorResponse } from "../_shared/core.ts";
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from "../_shared/core.ts";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS preflight
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
@@ -35,10 +33,7 @@ serve(async (req) => {
       return errorResponse('Missing required fields: user_question and ai_response are required', 400);
     }
 
-    // Get org_id from body or fallback to default
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createAdminClient();
 
     let resolvedOrgId = org_id;
     let resolvedUserId = user_id;
