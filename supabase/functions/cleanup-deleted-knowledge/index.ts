@@ -1,13 +1,12 @@
 // Automatic cleanup of soft-deleted knowledge items older than 30 days
 // 🛡️ PROTECTED: High-usage and verified items are NEVER permanently deleted
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 // Protection thresholds - items meeting these criteria are NEVER permanently deleted
 const MIN_USAGE_PROTECTION = 3;
 const PROTECTED_STATUSES = ['verified'];
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 

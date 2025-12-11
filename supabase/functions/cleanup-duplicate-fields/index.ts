@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, handleCors, createAnonClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 interface CleanupResult {
@@ -11,7 +10,7 @@ interface CleanupResult {
   error?: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
