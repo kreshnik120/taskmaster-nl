@@ -1,9 +1,8 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, handleCors } from '../_shared/core.ts';
+import { corsHeaders, handleCors, jsonResponse, errorResponse } from '../_shared/core.ts';
 import { redactValuePII } from '../_shared/knowledge-crud.ts';
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
@@ -20,19 +19,13 @@ serve(async (req) => {
 
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
     if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('Unauthorized', 401);
     }
 
     const { conflict_id, edited_value, resolution_action } = await req.json();
 
     if (!conflict_id || !edited_value) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields: conflict_id and edited_value' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('Missing required fields: conflict_id and edited_value', 400);
     }
 
     console.log('[update-knowledge-from-conflict] Processing conflict:', conflict_id);
@@ -46,17 +39,11 @@ serve(async (req) => {
 
     if (conflictError || !conflict) {
       console.error('[update-knowledge-from-conflict] Conflict not found:', conflictError);
-      return new Response(
-        JSON.stringify({ error: 'Conflict not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('Conflict not found', 404);
     }
 
     if (conflict.resolution_status !== 'pending') {
-      return new Response(
-        JSON.stringify({ error: 'Conflict already resolved' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('Conflict already resolved', 400);
     }
 
     // Haal het bestaande knowledge item op
@@ -68,10 +55,7 @@ serve(async (req) => {
 
     if (knowledgeError || !knowledge) {
       console.error('[update-knowledge-from-conflict] Knowledge item not found:', knowledgeError);
-      return new Response(
-        JSON.stringify({ error: 'Knowledge item not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('Knowledge item not found', 404);
     }
 
     // Server-side validatie van edited_value
@@ -173,21 +157,15 @@ serve(async (req) => {
       outcome: 'success',
     });
 
-    return new Response(
-      JSON.stringify({ 
-        success: true,
-        message: 'Conflict resolved with edited value',
-        knowledge_id: knowledge.id,
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ 
+      success: true,
+      message: 'Conflict resolved with edited value',
+      knowledge_id: knowledge.id,
+    });
 
   } catch (error) {
     console.error('[update-knowledge-from-conflict] Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse(errorMessage, 500);
   }
 });

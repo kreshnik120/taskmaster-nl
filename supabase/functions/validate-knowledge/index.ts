@@ -1,12 +1,11 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 interface ValidateRequest {
   knowledgeIds: string[];
   validationStatus: 'verified' | 'rejected' | 'pending_review';
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
@@ -20,10 +19,7 @@ serve(async (req) => {
 
     if (authError || !user) {
       console.error('❌ Auth error:', authError);
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('Unauthorized', 401);
     }
 
     // Check if user is admin
@@ -35,10 +31,7 @@ serve(async (req) => {
 
     if (roleData?.role !== 'admin') {
       console.error('❌ User is not admin');
-      return new Response(
-        JSON.stringify({ error: 'Forbidden: Admin access required' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('Forbidden: Admin access required', 403);
     }
 
     const body: ValidateRequest = await req.json();
@@ -47,17 +40,11 @@ serve(async (req) => {
     console.log(`📋 Validating ${knowledgeIds.length} knowledge items as: ${validationStatus}`);
 
     if (!knowledgeIds || knowledgeIds.length === 0) {
-      return new Response(
-        JSON.stringify({ error: 'No knowledge IDs provided' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('No knowledge IDs provided', 400);
     }
 
     if (!['verified', 'rejected', 'pending_review'].includes(validationStatus)) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid validation status' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('Invalid validation status', 400);
     }
 
     // Update validation status and timestamp
@@ -120,24 +107,15 @@ serve(async (req) => {
       // Continue - validation succeeded
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        updatedCount: updated.length,
-        status: validationStatus,
-        items: updated,
-      }),
-      { 
-        status: 200, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    );
+    return jsonResponse({
+      success: true,
+      updatedCount: updated.length,
+      status: validationStatus,
+      items: updated,
+    });
 
   } catch (error: any) {
     console.error('❌ Validation error:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse(error.message, 500);
   }
 });
