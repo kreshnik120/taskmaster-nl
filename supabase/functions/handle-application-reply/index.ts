@@ -212,7 +212,7 @@ Deno.serve(async (req) => {
     }
 
     // Check if this is a response to interview slot selection
-    const offeredSlots = application.extracted_data?.offered_interview_slots as string[] | undefined;
+    const offeredSlots = application.extracted_data?.interview_slots_offered as Array<{date: string, time: string}> | undefined;
     const hasOfferedSlots = offeredSlots && offeredSlots.length > 0;
     
     // Use AI to analyze the reply and extract new information
@@ -222,7 +222,7 @@ Je bent een recruitment assistant voor een thuiszorg organisatie. Analyseer deze
 
 **Huidige missing_info:** ${JSON.stringify(application.missing_info || [])}
 **Huidige extracted_data:** ${JSON.stringify(application.extracted_data || {})}
-${hasOfferedSlots ? `\n**BELANGRIJK - Aangeboden interview tijdsloten:**\n${offeredSlots.map((slot: string, i: number) => `${i + 1}. ${slot}`).join('\n')}\n` : ''}
+${hasOfferedSlots ? `\n**BELANGRIJK - Aangeboden interview tijdsloten:**\n${offeredSlots.map((slot: {date: string, time: string}, i: number) => `${i + 1}. ${slot.date} om ${slot.time}`).join('\n')}\n` : ''}
 
 **Email van sollicitant:**
 ${text}
@@ -616,7 +616,7 @@ Return JSON in dit formaat:
         const slotIndex = parseInt(analysis.selected_slot_index) - 1;
         if (slotIndex >= 0 && slotIndex < offeredSlots.length) {
           const selectedSlot = offeredSlots[slotIndex];
-          console.log(`🎉 Kandidaat koos interview slot: ${selectedSlot}`);
+          console.log(`🎉 Kandidaat koos interview slot: ${selectedSlot.date} om ${selectedSlot.time}`);
           
           // Call schedule-interview to confirm the slot
           try {
@@ -624,7 +624,10 @@ Return JSON in dit formaat:
               body: {
                 action: 'confirm_slot',
                 application_id: applicationId,
-                confirmed_slot: selectedSlot
+                selected_slot: {
+                  date: selectedSlot.date,
+                  time: selectedSlot.time
+                }
               }
             });
             
@@ -650,7 +653,7 @@ Return JSON in dit formaat:
       // =====================================================
       // STAP 7b: Continue Follow-up Loop OR Trigger Interview
       // =====================================================
-      if (newCompletenessScore >= 80 && !application.extracted_data?.interview_scheduled && !analysis.selected_slot_index) {
+      if (newCompletenessScore >= 80 && !application.extracted_data?.interview_status && !analysis.selected_slot_index) {
         // Completeness >= 80% and no interview scheduled yet → trigger interview scheduling
         console.log("🗓️ Completeness >= 80%, triggering interview scheduling...");
         
