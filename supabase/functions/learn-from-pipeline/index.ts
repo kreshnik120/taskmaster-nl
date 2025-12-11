@@ -5,10 +5,9 @@
  * Maintains backward compatibility with cron schedule and existing callers.
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
@@ -42,39 +41,26 @@ serve(async (req) => {
 
     if (error) {
       console.error('❌ [learn-from-pipeline shim] unified-learner error:', error);
-      return new Response(
-        JSON.stringify({ success: false, error: error.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return errorResponse(error.message, 500);
     }
 
     // Check for success: false in response
     if (data && data.success === false) {
       console.error('❌ [learn-from-pipeline shim] unified-learner returned failure:', data);
-      return new Response(
-        JSON.stringify({ success: false, error: data.error || 'unified-learner returned failure' }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return errorResponse(data.error || 'unified-learner returned failure', 500);
     }
 
     const executionTime = Date.now() - startTime;
     console.log(`✅ [learn-from-pipeline shim] Completed in ${executionTime}ms`);
 
-    return new Response(
-      JSON.stringify({
-        ...data,
-        _shim: 'learn-from-pipeline -> unified-learner',
-        _execution_time_ms: executionTime,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({
+      ...data,
+      _shim: 'learn-from-pipeline -> unified-learner',
+      _execution_time_ms: executionTime,
+    });
 
   } catch (error) {
     console.error("[learn-from-pipeline shim] Error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return errorResponse(error instanceof Error ? error.message : "Unknown error", 500);
   }
 });

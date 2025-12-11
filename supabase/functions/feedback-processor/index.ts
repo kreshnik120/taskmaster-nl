@@ -6,10 +6,9 @@
  * Processes feedback in batch mode.
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
@@ -26,7 +25,7 @@ serve(async (req) => {
       .single();
 
     if (!orgs) {
-      throw new Error('No organization found');
+      return errorResponse('No organization found', 400);
     }
 
     const orgId = orgs.id;
@@ -43,19 +42,13 @@ serve(async (req) => {
 
     if (error) {
       console.error('❌ [feedback-processor shim] unified-learner error:', error);
-      return new Response(
-        JSON.stringify({ error: error.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse(error.message, 500);
     }
 
     // Check for success: false in response
     if (data && data.success === false) {
       console.error('❌ [feedback-processor shim] unified-learner returned failure:', data);
-      return new Response(
-        JSON.stringify({ error: data.error || 'unified-learner returned failure' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse(data.error || 'unified-learner returned failure', 500);
     }
 
     const executionTime = Date.now() - startTime;
@@ -70,21 +63,15 @@ serve(async (req) => {
       execution_time_ms: executionTime,
     });
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        ...data,
-        _shim: 'feedback-processor -> unified-learner',
-        _execution_time_ms: executionTime,
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({
+      success: true,
+      ...data,
+      _shim: 'feedback-processor -> unified-learner',
+      _execution_time_ms: executionTime,
+    });
 
   } catch (error) {
     console.error('❌ [feedback-processor shim] Error:', error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse(error instanceof Error ? error.message : String(error), 500);
   }
 });
