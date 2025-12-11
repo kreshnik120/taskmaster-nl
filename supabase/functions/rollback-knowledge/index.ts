@@ -1,56 +1,33 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve(async (req) => {
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
     const { knowledgeId, versionNumber } = await req.json();
     
     if (!knowledgeId) {
-      return new Response(JSON.stringify({ error: 'knowledgeId is verplicht' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return errorResponse('knowledgeId is verplicht', 400);
     }
 
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Authenticatie vereist' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return errorResponse('Authenticatie vereist', 401);
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('Server configuration error');
-    }
-
-    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createAdminClient();
 
     // Get user from auth header
     const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(accessToken);
+    const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
     
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Authenticatie gefaald' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return errorResponse('Authenticatie gefaald', 401);
     }
 
     // Verify user has access to this knowledge item
-    const { data: knowledgeItem } = await supabaseClient
+    const { data: knowledgeItem } = await supabase
       .from('ai_knowledge_base')
       .select(`
         *,
@@ -61,17 +38,14 @@ serve(async (req) => {
       .single();
 
     if (!knowledgeItem) {
-      return new Response(JSON.stringify({ error: 'Kennisitem niet gevonden of geen toegang' }), {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return errorResponse('Kennisitem niet gevonden of geen toegang', 404);
     }
 
     // Get the target version to rollback to
     let targetVersion;
     if (versionNumber) {
       // Rollback to specific version
-      const { data } = await supabaseClient
+      const { data } = await supabase
         .from('ai_knowledge_versions')
         .select('*')
         .eq('knowledge_id', knowledgeId)
@@ -81,7 +55,7 @@ serve(async (req) => {
       targetVersion = data;
     } else {
       // Rollback to previous version
-      const { data } = await supabaseClient
+      const { data } = await supabase
         .from('ai_knowledge_versions')
         .select('*')
         .eq('knowledge_id', knowledgeId)
@@ -94,16 +68,13 @@ serve(async (req) => {
     }
 
     if (!targetVersion) {
-      return new Response(JSON.stringify({ error: 'Geen eerdere versie gevonden om naar terug te rollen' }), {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return errorResponse('Geen eerdere versie gevonden om naar terug te rollen', 404);
     }
 
     console.log(`🔄 Rolling back knowledge item ${knowledgeId} to version ${targetVersion.version_number}`);
 
     // Restore the knowledge item to the target version
-    const { error: updateError } = await supabaseClient
+    const { error: updateError } = await supabase
       .from('ai_knowledge_base')
       .update({
         category: targetVersion.category,
@@ -120,7 +91,7 @@ serve(async (req) => {
     }
 
     // Log the rollback in learning events
-    await supabaseClient
+    await supabase
       .from('ai_learning_events')
       .insert({
         user_id: user.id,
@@ -139,23 +110,14 @@ serve(async (req) => {
 
     console.log(`✅ Successfully rolled back to version ${targetVersion.version_number}`);
 
-    return new Response(
-      JSON.stringify({ 
-        success: true,
-        message: `Teruggerold naar versie ${targetVersion.version_number}`,
-        version: targetVersion
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ 
+      success: true,
+      message: `Teruggerold naar versie ${targetVersion.version_number}`,
+      version: targetVersion
+    });
 
   } catch (error: any) {
     console.error('Error in rollback-knowledge:', error);
-    return new Response(
-      JSON.stringify({ error: error?.message || 'Unknown error' }),
-      { 
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    );
+    return errorResponse(error?.message || 'Unknown error', 500);
   }
 });

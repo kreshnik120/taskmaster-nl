@@ -1,20 +1,11 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve(async (req) => {
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createAdminClient();
 
     console.log('🔄 Processing pending jobs...');
 
@@ -33,10 +24,7 @@ serve(async (req) => {
 
     if (!pendingJobs || pendingJobs.length === 0) {
       console.log('✅ No pending jobs');
-      return new Response(
-        JSON.stringify({ message: 'No pending jobs', processed: 0 }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ message: 'No pending jobs', processed: 0 });
     }
 
     console.log(`📋 Found ${pendingJobs.length} pending jobs`);
@@ -70,24 +58,15 @@ serve(async (req) => {
 
     console.log(`✅ Processed: ${successful} successful, ${failed} failed`);
 
-    return new Response(
-      JSON.stringify({
-        processed: pendingJobs.length,
-        successful,
-        failed,
-        results: results.map(r => r.status === 'fulfilled' ? r.value : { error: 'rejected' })
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({
+      processed: pendingJobs.length,
+      successful,
+      failed,
+      results: results.map(r => r.status === 'fulfilled' ? r.value : { error: 'rejected' })
+    });
 
   } catch (error: any) {
     console.error('Error processing pending jobs:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { 
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    );
+    return errorResponse(error.message, 500);
   }
 });

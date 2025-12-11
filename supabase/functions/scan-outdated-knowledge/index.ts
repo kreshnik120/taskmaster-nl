@@ -1,26 +1,17 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve(async (req) => {
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
 
     if (!lovableApiKey) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createAdminClient();
 
     console.log("🔍 Scanning for outdated knowledge items...");
 
@@ -40,10 +31,7 @@ serve(async (req) => {
 
     if (!items || items.length === 0) {
       console.log("✅ No unverified items to scan");
-      return new Response(
-        JSON.stringify({ message: "No items to scan", outdated: [] }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ message: "No items to scan", outdated: [] });
     }
 
     console.log(`📊 Analyzing ${items.length} items with AI...`);
@@ -142,26 +130,13 @@ Als alle items actueel zijn, return een lege array: []
 
     console.log(`✅ Scan complete: ${enrichedOutdated.length} outdated items found`);
 
-    return new Response(
-      JSON.stringify({
-        scanned: items.length,
-        outdated: enrichedOutdated,
-        timestamp: new Date().toISOString(),
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return jsonResponse({
+      scanned: items.length,
+      outdated: enrichedOutdated,
+      timestamp: new Date().toISOString(),
+    });
   } catch (error) {
     console.error("❌ Error in scan-outdated-knowledge:", error);
-    return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : "Unknown error",
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return errorResponse(error instanceof Error ? error.message : "Unknown error", 500);
   }
 });

@@ -6,18 +6,11 @@
  * Maintains backward compatibility with existing callers.
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve(async (req) => {
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   const startTime = Date.now();
 
@@ -26,33 +19,22 @@ serve(async (req) => {
     
     // Validate messageId
     if (!messageId || typeof messageId !== 'string') {
-      return new Response(JSON.stringify({ error: 'Ongeldig bericht ID' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return errorResponse('Ongeldig bericht ID', 400);
     }
     
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Authenticatie vereist' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return errorResponse('Authenticatie vereist', 401);
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createAdminClient();
 
     // Get user from auth header
     const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
     const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
     
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Authenticatie gefaald' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return errorResponse('Authenticatie gefaald', 401);
     }
 
     // Get user's org
@@ -161,25 +143,16 @@ serve(async (req) => {
     const executionTime = Date.now() - startTime;
     console.log(`✅ [process-feedback shim] Completed in ${executionTime}ms`);
 
-    return new Response(
-      JSON.stringify({ 
-        success: true,
-        message: 'Feedback verwerkt en AI systeem verbeterd',
-        _shim: 'process-feedback -> unified-learner',
-        _execution_time_ms: executionTime,
-        ...data,
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ 
+      success: true,
+      message: 'Feedback verwerkt en AI systeem verbeterd',
+      _shim: 'process-feedback -> unified-learner',
+      _execution_time_ms: executionTime,
+      ...data,
+    });
 
   } catch (error) {
     console.error('[process-feedback shim] Error:', error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { 
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Unknown error', 500);
   }
 });

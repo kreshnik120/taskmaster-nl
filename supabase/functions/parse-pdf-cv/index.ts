@@ -1,17 +1,11 @@
-import { serve } from "https://deno.land/std@0.218.0/http/server.ts";
+import { corsHeaders, handleCors, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 // Lightweight PDF text extraction using native Deno APIs
 // This avoids the 2.5MB pdfjs-dist dependency
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve(async (req) => {
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
     const { pdfBase64, filename } = await req.json();
@@ -47,23 +41,14 @@ serve(async (req) => {
     const trimmedText = extractedText.trim() || "Could not extract text from PDF";
     console.log(`✅ Extracted ${trimmedText.length} chars from ${filename || 'PDF'}`);
     
-    return new Response(
-      JSON.stringify({ 
-        text: trimmedText,
-        length: trimmedText.length,
-        filename: filename 
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ 
+      text: trimmedText,
+      length: trimmedText.length,
+      filename: filename 
+    });
     
   } catch (error) {
     console.error("❌ PDF parsing failed:", error);
-    return new Response(
-      JSON.stringify({ 
-        error: error instanceof Error ? error.message : String(error),
-        text: "" // Return empty string as fallback
-      }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return errorResponse(error instanceof Error ? error.message : String(error), 500);
   }
 });

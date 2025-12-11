@@ -1,20 +1,11 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve(async (req) => {
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createAdminClient();
 
     // Get authenticated user
     const authHeader = req.headers.get('Authorization')!;
@@ -100,26 +91,17 @@ serve(async (req) => {
 
     const estimatedMinutes = Math.ceil(totalChunks * 0.5); // ~30 sec per chunk
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        queued: jobs.length,
-        job_ids: jobs.map(j => j.id),
-        estimated_time: `${estimatedMinutes} min`,
-        file_type: fileType,
-        total_chunks: totalChunks
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({
+      success: true,
+      queued: jobs.length,
+      job_ids: jobs.map(j => j.id),
+      estimated_time: `${estimatedMinutes} min`,
+      file_type: fileType,
+      total_chunks: totalChunks
+    });
 
   } catch (error: any) {
     console.error('Error:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { 
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    );
+    return errorResponse(error.message, 400);
   }
 });

@@ -1,16 +1,9 @@
-import "https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts";
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
     // 🔒 SECURITY: Validate input with Zod schema
@@ -27,26 +20,17 @@ Deno.serve(async (req) => {
         .map(e => `${e.path.join('.')}: ${e.message}`)
         .join(', ');
       console.error('❌ Validation failed:', errors);
-      return new Response(
-        JSON.stringify({ error: `Validation failed: ${errors}` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse(`Validation failed: ${errors}`, 400);
     }
     
     const { action, reason } = validation.data;
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabase = createAdminClient();
 
     // Get user from JWT
     const authHeader = req.headers.get('authorization');
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Authorization required' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('Authorization required', 401);
     }
 
     const token = authHeader.replace('Bearer ', '');
@@ -54,10 +38,7 @@ Deno.serve(async (req) => {
     
     if (userError || !user) {
       console.error('❌ User authentication failed:', userError);
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('Unauthorized', 401);
     }
 
     // 🔒 SECURITY: Admin-only access control
@@ -68,10 +49,7 @@ Deno.serve(async (req) => {
 
     if (!isAdmin) {
       console.error('❌ Non-admin user attempted orchestrator control:', user.id);
-      return new Response(
-        JSON.stringify({ error: 'Forbidden: Admin access required' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('Forbidden: Admin access required', 403);
     }
 
     console.log(`🔓 Admin access verified: ${user.id}`);
@@ -84,10 +62,7 @@ Deno.serve(async (req) => {
       .single();
     
     if (!orgData?.org_id) {
-      return new Response(
-        JSON.stringify({ error: 'No organization found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('No organization found', 404);
     }
 
     const org_id = orgData.org_id;
@@ -104,10 +79,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (!currentState) {
-      return new Response(
-        JSON.stringify({ error: 'No orchestrator run found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse('No orchestrator run found', 404);
     }
 
     const metadata = currentState.metadata || {};
@@ -167,21 +139,15 @@ Deno.serve(async (req) => {
 
     console.log(`✅ Action '${action}' completed successfully`);
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        action,
-        status: updatedState.status,
-        metadata: updatedState.metadata
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ 
+      success: true, 
+      action,
+      status: updatedState.status,
+      metadata: updatedState.metadata
+    });
 
   } catch (error) {
     console.error('❌ Error in orchestrator-control:', error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Unknown error', 500);
   }
 });
