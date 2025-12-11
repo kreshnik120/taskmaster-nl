@@ -1,5 +1,4 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, handleCors, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -36,7 +35,7 @@ interface AIScoreResult {
   reasoning: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 

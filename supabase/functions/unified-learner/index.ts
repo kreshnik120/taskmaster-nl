@@ -11,7 +11,7 @@
  * - retroactive_scan: Re-evaluate previously rejected learning events
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// Native Deno.serve - no import needed
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import {
   corsHeaders,
@@ -172,7 +172,7 @@ function validateRequest(body: unknown): { valid: true; request: UnifiedLearnerR
 // MAIN HANDLER
 // ============================================================================
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 

@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// Data Quality Auditor - scans and auto-fixes knowledge base issues
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 import { softDeleteKnowledge, updateConfidence } from '../_shared/knowledge-crud.ts';
 
@@ -15,7 +15,7 @@ function extractCorrectClientFromError(errorMessage: string): string | null {
   return null;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
