@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// Deno.serve() is used at bottom of file
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
@@ -826,7 +826,7 @@ async function trackKnowledgeUsage(
   return usedKnowledgeIds;
 }
 
-serve(async (req) => {
+Deno.serve(async (req: Request) => {
   const startTime = Date.now(); // Track execution time
   
   if (req.method === 'OPTIONS') {
@@ -6066,3 +6066,5 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
     });
   }
 });
+
+// Note: Deno.serve() wraps around serve() - this file uses a complex streaming pattern
