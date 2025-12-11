@@ -94,6 +94,10 @@ verify_jwt = false
 verify_jwt = false
 # Purpose: Check AI budget thresholds
 
+[functions.calculate-application-matches]
+verify_jwt = false
+# Purpose: Calculate match scores between applications and sublocations (triggered by DB)
+
 # -----------------------------------------------------------------------------
 # AUTHENTICATED FUNCTIONS (JWT verification required)
 # -----------------------------------------------------------------------------
