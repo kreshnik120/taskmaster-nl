@@ -1,7 +1,6 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
-import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 // ✅ Zod validation schema
 const BulkDeleteSchema = z.object({
@@ -9,7 +8,7 @@ const BulkDeleteSchema = z.object({
   reason: z.string().min(1).max(500).optional().default("manual_deletion"),
 });
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 

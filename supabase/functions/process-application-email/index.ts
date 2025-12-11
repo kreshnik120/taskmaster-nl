@@ -1,7 +1,6 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { Resend } from "https://esm.sh/resend@4.0.0";
-import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 // PDF parsing moved to separate parse-pdf-cv function
 
 interface ResendWebhookPayload {
@@ -653,4 +652,4 @@ Belangrijk:
   }
 };
 
-serve(handler);
+Deno.serve(handler);
