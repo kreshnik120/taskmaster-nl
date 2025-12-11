@@ -1,4 +1,4 @@
-import { corsHeaders, handleCors, createAdminClient, jsonResponse } from '../_shared/core.ts';
+import { handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -48,23 +48,13 @@ Deno.serve(async (req) => {
     result.overall_status = result.checks.db.status === 'ok' ? 'healthy' : 'degraded';
     result.total_duration_ms = Date.now() - startTime;
 
-    return new Response(JSON.stringify(result, null, 2), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: result.overall_status === 'healthy' ? 200 : 503,
-    });
+    return jsonResponse(result, result.overall_status === 'healthy' ? 200 : 503);
   } catch (error: any) {
     console.error('[PUBLIC-HEALTH] Critical error:', error);
-    return new Response(
-      JSON.stringify({
-        timestamp: new Date().toISOString(),
-        overall_status: 'error',
-        error: error.message,
-        total_duration_ms: Date.now() - startTime,
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      }
-    );
+    return errorResponse(error.message, 500, {
+      timestamp: new Date().toISOString(),
+      overall_status: 'error',
+      total_duration_ms: Date.now() - startTime,
+    });
   }
 });

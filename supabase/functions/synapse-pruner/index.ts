@@ -1,8 +1,7 @@
 // FASE 3: Synapse Pruning - Automatic cleanup of weak/unused relationships
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
+import { handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
@@ -26,13 +25,11 @@ serve(async (req) => {
 
     if (!weakSynapses || weakSynapses.length === 0) {
       console.log('✅ No weak synapses to prune');
-      return new Response(JSON.stringify({ 
+      return jsonResponse({ 
         success: true,
         pruned: 0,
         message: 'No weak synapses found',
         execution_time_ms: Date.now() - startTime
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -72,24 +69,16 @@ serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ 
+    return jsonResponse({ 
       success: true,
       pruned: weakSynapses.length,
       type_distribution: typeDistribution,
       execution_time_ms: Date.now() - startTime,
       message: `Successfully pruned ${weakSynapses.length} weak synapses`
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
     console.error('❌ Synapse Pruner error:', error);
-    
-    return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return errorResponse(error instanceof Error ? error.message : 'Unknown error', 500);
   }
 });

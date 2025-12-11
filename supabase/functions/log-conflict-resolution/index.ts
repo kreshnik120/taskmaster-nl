@@ -1,4 +1,4 @@
-import { corsHeaders, handleCors, createAnonClient, jsonResponse, errorResponse } from '../_shared/core.ts';
+import { handleCors, createAnonClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -255,24 +255,15 @@ Geef JSON output met deze exacte structuur:
 
     console.log(`✅ Conflict resolution logged (${executionTime}ms)`);
 
-    return new Response(
-      JSON.stringify({ 
-        success: true,
-        ai_analysis: aiAnalysis,
-        adjustments_applied: adjustments.length,
-        learning_score: adjustedLearningScore
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ 
+      success: true,
+      ai_analysis: aiAnalysis,
+      adjustments_applied: adjustments.length,
+      learning_score: adjustedLearningScore
+    });
 
   } catch (error) {
     console.error('Error in log-conflict-resolution:', error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { 
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    );
+    return errorResponse(error instanceof Error ? error.message : 'Unknown error', 500);
   }
 });
