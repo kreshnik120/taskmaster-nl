@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// AI Categorization for knowledge items
 import { corsHeaders, handleCors, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 // Complete category hierarchy with all 25 categories grouped
@@ -41,7 +41,7 @@ Object.entries(CATEGORY_HIERARCHY).forEach(([groupId, group]) => {
   });
 });
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
