@@ -1,6 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@4.0.0";
-import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
+import { handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 // Email types supported by this function
 type EmailType = 
@@ -74,7 +73,7 @@ const ORG_EMAIL_CONFIG: Record<string, { from: string; name: string; replyTo: st
   }
 };
 
-const handler = async (req: Request): Promise<Response> => {
+Deno.serve(async (req: Request): Promise<Response> => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
@@ -105,10 +104,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Validate required fields
     if (!recipient_email || !subject) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields: recipient_email, subject" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return errorResponse("Missing required fields: recipient_email, subject", 400);
     }
 
     // Initialize clients
@@ -185,35 +181,26 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (emailResult.error) {
       console.error("[send-ai-email] Resend error:", emailResult.error);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: emailResult.error.message,
-          sent_via: 'resend'
-        }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ 
+        success: false, 
+        error: emailResult.error.message,
+        sent_via: 'resend'
+      }, 500);
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        sent_via: 'resend',
-        organization,
-        email_id: emailResult.data?.id,
-        message: `Email verzonden naar ${recipient_email}`
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({
+      success: true,
+      sent_via: 'resend',
+      organization,
+      email_id: emailResult.data?.id,
+      message: `Email verzonden naar ${recipient_email}`
+    });
 
   } catch (error: any) {
     console.error("[send-ai-email] Error:", error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return errorResponse(error.message, 500);
   }
-};
+});
 
 // Generate email template based on type
 function generateEmailTemplate(
@@ -354,5 +341,3 @@ function generateEmailTemplate(
 
   return baseTemplate(content);
 }
-
-serve(handler);
