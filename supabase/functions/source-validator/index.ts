@@ -1,7 +1,6 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
+import { handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
@@ -30,9 +29,7 @@ serve(async (req) => {
       .limit(50);  // Reduced from 500 to prevent gateway timeouts
 
     if (!items || items.length === 0) {
-      return new Response(JSON.stringify({ success: true, sources_validated: 0 }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return jsonResponse({ success: true, sources_validated: 0 });
     }
 
     // Extract items with source URLs
@@ -240,21 +237,16 @@ serve(async (req) => {
 
     console.log(`✅ Source validation complete: ${validatedCount} valid, ${brokenCount} broken`);
 
-    return new Response(JSON.stringify({
+    return jsonResponse({
       success: true,
       sources_validated: itemsWithSources.length,
       valid_sources: validatedCount,
       broken_sources: brokenCount,
       broken_details: brokenSources
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
     console.error('❌ Source Validator error:', error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return errorResponse(error instanceof Error ? error.message : 'Unknown error', 500);
   }
 });
