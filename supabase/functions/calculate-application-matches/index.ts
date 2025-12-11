@@ -350,7 +350,7 @@ Deno.serve(async (req) => {
 
       if (existing) {
         // Update existing match (but preserve status if already voorgesteld)
-        if (existing.status === 'potentieel') {
+        if (existing.status === 'suggested') {
           await supabase
             .from('application_sublocation_matches')
             .update({
@@ -369,7 +369,7 @@ Deno.serve(async (req) => {
             sublocation_id: match.sublocation_id,
             match_score: match.match_score,
             match_reasoning: match.match_reasoning,
-            status: 'potentieel',
+            status: 'suggested',
           });
       }
     }
@@ -382,7 +382,7 @@ Deno.serve(async (req) => {
         .from('application_sublocation_matches')
         .delete()
         .eq('application_id', application_id)
-        .eq('status', 'potentieel')
+        .eq('status', 'suggested')
         .not('sublocation_id', 'in', `(${topSublocationIds.join(',')})`);
     }
 
