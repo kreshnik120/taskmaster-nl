@@ -1,11 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
 import { softDeleteKnowledge } from '../_shared/knowledge-crud.ts';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
 
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
@@ -13,16 +8,12 @@ const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 const MIN_USAGE_PROTECTION = 3;
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
     const startTime = Date.now();
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabase = createAdminClient();
 
     const { data: orgs } = await supabase
       .from('organizations')
@@ -214,7 +205,7 @@ Als er GEEN duplicates zijn, return: []`
 
             // Soft delete the loser using unified knowledge-crud module
             try {
-              await softDeleteKnowledge(supabase, dup.loser_id, {
+              await softDeleteKnowledge(supabase as any, dup.loser_id, {
                 reason: 'Merged into better version',
                 deletedBy: 'smart-deduplicator',
                 metadata: {
