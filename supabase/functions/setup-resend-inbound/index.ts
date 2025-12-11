@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { corsHeaders, handleCors } from '../_shared/core.ts';
+import { handleCors, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
@@ -31,7 +30,7 @@ interface ResendWebhookResponse {
   secret: string;
 }
 
-serve(async (req: Request): Promise<Response> => {
+Deno.serve(async (req: Request): Promise<Response> => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
@@ -203,7 +202,7 @@ serve(async (req: Request): Promise<Response> => {
       // Find MX record for inbound
       const mxRecord = domainInfo.records?.find(r => r.type === "MX");
 
-      return new Response(JSON.stringify({
+      return jsonResponse({
         success: true,
         domain: {
           id: domainInfo.id,
@@ -236,9 +235,6 @@ serve(async (req: Request): Promise<Response> => {
           "3. Event: email.received",
         ],
         reply_to_address: "recruitment@inbound.citozorg.nl",
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
       });
     }
 
@@ -259,13 +255,10 @@ serve(async (req: Request): Promise<Response> => {
       const domain = domainsData.data?.find((d: any) => d.name === inboundDomain);
 
       if (!domain) {
-        return new Response(JSON.stringify({
+        return jsonResponse({
           success: false,
           error: `Domain ${inboundDomain} not found. Run setup first.`,
-        }), {
-          status: 404,
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        });
+        }, 404);
       }
 
       await delay(1000);
@@ -305,7 +298,7 @@ serve(async (req: Request): Promise<Response> => {
         } : null;
       }
 
-      return new Response(JSON.stringify({
+      return jsonResponse({
         success: true,
         domain: {
           id: domain.id,
@@ -320,9 +313,6 @@ serve(async (req: Request): Promise<Response> => {
         message: domain.status === "verified" 
           ? "✅ Domain is geverifieerd! Inbound emails worden nu ontvangen."
           : "⏳ Domain is nog niet geverifieerd. Check je DNS records.",
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
       });
     }
 
@@ -357,30 +347,16 @@ serve(async (req: Request): Promise<Response> => {
         throw new Error(`Verification failed: ${errorText}`);
       }
 
-      return new Response(JSON.stringify({
+      return jsonResponse({
         success: true,
         message: "Verificatie gestart. Check de status over enkele minuten.",
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
       });
     }
 
-    return new Response(JSON.stringify({
-      error: "Invalid action. Use 'setup', 'check_status', or 'verify'",
-    }), {
-      status: 400,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
+    return errorResponse("Invalid action. Use 'setup', 'check_status', or 'verify'", 400);
 
   } catch (error: any) {
     console.error("[setup-resend-inbound] Error:", error);
-    return new Response(JSON.stringify({
-      success: false,
-      error: error.message,
-    }), {
-      status: 500,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
+    return errorResponse(error.message, 500);
   }
 });

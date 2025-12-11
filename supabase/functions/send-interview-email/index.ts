@@ -1,6 +1,5 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@4.0.0";
-import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
+import { handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 interface InterviewEmailRequest {
   applicationId: string;
@@ -34,7 +33,7 @@ const ORG_EMAIL_CONFIG: Record<string, { from: string; name: string; replyTo: st
   }
 };
 
-const handler = async (req: Request): Promise<Response> => {
+Deno.serve(async (req: Request): Promise<Response> => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
@@ -68,10 +67,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Validate required fields
     if (!candidateEmail || !candidateName || !scheduledAt) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return errorResponse("Missing required fields", 400);
     }
 
     // Get email configuration for organization
@@ -334,31 +330,16 @@ const handler = async (req: Request): Promise<Response> => {
       },
     });
 
-    return new Response(
-      JSON.stringify({
-        success: emailResult.success,
-        sent_via: emailResult.sent_via,
-        message: emailResult.success 
-          ? `Interview email verstuurd via Resend` 
-          : `Email kon niet worden verstuurd: ${emailResult.error}`,
-        ...emailResult
-      }),
-      {
-        status: emailResult.success ? 200 : 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return jsonResponse({
+      success: emailResult.success,
+      sent_via: emailResult.sent_via,
+      message: emailResult.success 
+        ? `Interview email verstuurd via Resend` 
+        : `Email kon niet worden verstuurd: ${emailResult.error}`,
+      ...emailResult
+    }, emailResult.success ? 200 : 500);
   } catch (error: any) {
     console.error("[send-interview-email] Error:", error);
-    
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return errorResponse(error.message, 500);
   }
-};
-
-serve(handler);
+});

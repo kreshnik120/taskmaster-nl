@@ -1,6 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@4.0.0";
-import { corsHeaders, handleCors } from '../_shared/core.ts';
+import { handleCors, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -13,7 +12,7 @@ interface ReminderEmailRequest {
   taskId: string;
 }
 
-const handler = async (req: Request): Promise<Response> => {
+Deno.serve(async (req: Request): Promise<Response> => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
@@ -112,23 +111,9 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Email sent successfully:", emailResponse);
 
-    return new Response(JSON.stringify({ success: true, id: emailResponse.data?.id }), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        ...corsHeaders,
-      },
-    });
+    return jsonResponse({ success: true, id: emailResponse.data?.id });
   } catch (error: any) {
     console.error("Error sending reminder email:", error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      }
-    );
+    return errorResponse(error.message, 500);
   }
-};
-
-serve(handler);
+});
