@@ -1,13 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { Resend } from "https://esm.sh/resend@4.0.0";
+import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
 // PDF parsing moved to separate parse-pdf-cv function
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
 
 interface ResendWebhookPayload {
   type: string;
@@ -30,20 +25,17 @@ interface ResendWebhookPayload {
 }
 
 const handler = async (req: Request): Promise<Response> => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
     console.log("=== Processing Application Email ===");
     
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY")!;
     const resendApiKey = Deno.env.get("RESEND_API_KEY")!;
     const webhookSecret = Deno.env.get("RESEND_WEBHOOK_SIGNING_SECRET");
     
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createAdminClient();
     const resend = new Resend(resendApiKey);
 
     // 🔒 SECURITY: Verify webhook signature (if secret is configured)

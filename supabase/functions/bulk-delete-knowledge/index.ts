@@ -1,11 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
 
 // ✅ Zod validation schema
 const BulkDeleteSchema = z.object({
@@ -14,9 +10,8 @@ const BulkDeleteSchema = z.object({
 });
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
     const authHeader = req.headers.get("Authorization");
@@ -87,10 +82,7 @@ serve(async (req) => {
 
     // ✅ CASCADE CLEANUP: Delete embeddings (we gebruiken service_role ALLEEN voor cascade cleanup)
     // Dit is acceptabel omdat embeddings geen RLS hebben en puur technical data zijn
-    const supabaseServiceClient = createClient(
-      supabaseUrl,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const supabaseServiceClient = createAdminClient();
 
     const { error: embeddingError } = await supabaseServiceClient
       .from("knowledge_embeddings")
