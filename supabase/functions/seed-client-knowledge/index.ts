@@ -1,56 +1,26 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { corsHeaders, handleCors, createAnonClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve(async (req) => {
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       console.error('No authorization header provided');
-      return new Response(JSON.stringify({ error: 'Authenticatie vereist' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return errorResponse('Authenticatie vereist', 401);
     }
 
     const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    
-    if (!supabaseUrl || !supabaseAnonKey) {
-      console.error('Missing Supabase environment variables');
-      throw new Error('Server configuration error');
-    }
-
-    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { 
-        headers: { 
-          Authorization: authHeader 
-        } 
-      },
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      }
-    });
+    // Use anon client with user's auth for RLS
+    const supabaseClient = createAnonClient(authHeader);
 
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser(accessToken);
     
     if (userError || !user) {
       console.error('Auth error:', userError);
-      return new Response(JSON.stringify({ error: 'Authenticatie gefaald' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return errorResponse('Authenticatie gefaald', 401);
     }
 
     console.log('User authenticated:', user.id);
@@ -63,10 +33,7 @@ serve(async (req) => {
       .single();
     
     if (!userOrg) {
-      return new Response(JSON.stringify({ error: 'Geen organisatie gevonden' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return errorResponse('Geen organisatie gevonden', 400);
     }
 
     const userOrgId = userOrg.org_id;
@@ -201,18 +168,10 @@ serve(async (req) => {
 
     console.log('Seeding complete:', response);
 
-    return new Response(JSON.stringify(response), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse(response);
 
   } catch (error) {
     console.error('Seed client knowledge error:', error);
-    return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : 'Unknown error',
-      success: false 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return errorResponse(error instanceof Error ? error.message : 'Unknown error', 500);
   }
 });

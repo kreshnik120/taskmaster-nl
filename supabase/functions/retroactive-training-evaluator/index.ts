@@ -6,25 +6,16 @@
  * Re-evaluates previously rejected learning events.
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve(async (req) => {
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   const startTime = Date.now();
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createAdminClient();
 
     // Parse optional body parameters
     let minConfidence = 0.80;
@@ -58,39 +49,27 @@ serve(async (req) => {
 
     if (error) {
       console.error('❌ [retroactive-training-evaluator shim] unified-learner error:', error);
-      return new Response(
-        JSON.stringify({ error: error.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return errorResponse(error.message, 500);
     }
 
     // Check for success: false in response
     if (data && data.success === false) {
       console.error('❌ [retroactive-training-evaluator shim] unified-learner returned failure:', data);
-      return new Response(
-        JSON.stringify({ error: data.error || 'unified-learner returned failure' }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return errorResponse(data.error || 'unified-learner returned failure', 500);
     }
 
     const executionTime = Date.now() - startTime;
     console.log(`✅ [retroactive-training-evaluator shim] Completed in ${executionTime}ms`);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        ...data,
-        _shim: 'retroactive-training-evaluator -> unified-learner',
-        _execution_time_ms: executionTime,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({
+      success: true,
+      ...data,
+      _shim: 'retroactive-training-evaluator -> unified-learner',
+      _execution_time_ms: executionTime,
+    });
 
   } catch (error) {
     console.error("❌ [retroactive-training-evaluator shim] Error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return errorResponse(error instanceof Error ? error.message : String(error), 500);
   }
 });

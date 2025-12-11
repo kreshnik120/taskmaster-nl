@@ -1,20 +1,11 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve(async (req) => {
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createAdminClient();
 
     const { job_id } = await req.json();
 
@@ -108,17 +99,14 @@ serve(async (req) => {
         console.log(`[SYNC] ✅ Document "${job.file_name}" marked as completed with ${totalItemsExtracted} items`);
       }
 
-      return new Response(
-        JSON.stringify({
-          success: true,
-          job_id: job_id,
-          items_extracted: extractedItems,
-          progress: progressPct,
-          status: isLastChunk ? 'completed' : 'processing',
-          document_completed: isLastChunk
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({
+        success: true,
+        job_id: job_id,
+        items_extracted: extractedItems,
+        progress: progressPct,
+        status: isLastChunk ? 'completed' : 'processing',
+        document_completed: isLastChunk
+      });
 
     } catch (processingError: any) {
       console.error('Processing error:', processingError);
@@ -141,13 +129,7 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error('Error:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { 
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    );
+    return errorResponse(error.message, 400);
   }
 });
 

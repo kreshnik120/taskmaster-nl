@@ -1,9 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 /**
  * n8n Webhook Bridge - Centrale Dispatcher Routing
@@ -21,15 +16,11 @@ const corsHeaders = {
  */
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabase = createAdminClient();
 
     const url = new URL(req.url);
     const path = url.pathname.split('/').pop();
@@ -59,29 +50,23 @@ Deno.serve(async (req) => {
     }
 
     // Default response
-    return new Response(
-      JSON.stringify({
-        message: 'n8n Webhook Bridge - Centrale Dispatcher',
-        available_actions: ['trigger', 'callback', 'list_workflows', 'test'],
-        supported_action_types: [
-          'send_followup_question',
-          'send_interview_email', 
-          'send_document_request',
-          'send_general_email',
-          'create_calendar_event',
-          'send_reminder'
-        ]
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({
+      message: 'n8n Webhook Bridge - Centrale Dispatcher',
+      available_actions: ['trigger', 'callback', 'list_workflows', 'test'],
+      supported_action_types: [
+        'send_followup_question',
+        'send_interview_email', 
+        'send_document_request',
+        'send_general_email',
+        'create_calendar_event',
+        'send_reminder'
+      ]
+    });
 
   } catch (error: unknown) {
     console.error('[n8n Bridge] Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse(errorMessage, 500);
   }
 });
 
@@ -96,14 +81,11 @@ async function triggerN8nWorkflow(supabase: any, body: any) {
   
   if (!n8nBaseUrl) {
     console.log('[n8n Bridge] N8N_WEBHOOK_URL not configured');
-    return new Response(
-      JSON.stringify({ 
-        status: 'not_configured',
-        message: 'n8n webhook URL not configured. Set N8N_WEBHOOK_URL secret.',
-        simulated: true
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ 
+      status: 'not_configured',
+      message: 'n8n webhook URL not configured. Set N8N_WEBHOOK_URL secret.',
+      simulated: true
+    });
   }
 
   // Update action status to executing
@@ -204,15 +186,12 @@ async function triggerN8nWorkflow(supabase: any, body: any) {
           .eq('id', action_id);
       }
 
-      return new Response(
-        JSON.stringify({
-          status: 'triggered',
-          action_type: action_type,
-          dispatcher: 'central',
-          n8n_response: responseData
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({
+        status: 'triggered',
+        action_type: action_type,
+        dispatcher: 'central',
+        n8n_response: responseData
+      });
     } else {
       throw new Error(`n8n returned ${response.status}: ${responseText}`);
     }
@@ -231,14 +210,7 @@ async function triggerN8nWorkflow(supabase: any, body: any) {
         .eq('id', action_id);
     }
 
-    return new Response(
-      JSON.stringify({
-        status: 'error',
-        error: errorMessage,
-        action_type: action_type
-      }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse(errorMessage, 500);
   }
 }
 
@@ -251,10 +223,7 @@ async function handleN8nCallback(supabase: any, body: any) {
   console.log(`[n8n Bridge] Callback received for action ${action_id}: ${status}`);
 
   if (!action_id) {
-    return new Response(
-      JSON.stringify({ error: 'action_id is required' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse('action_id is required', 400);
   }
 
   const { data: action, error: fetchError } = await supabase
@@ -264,10 +233,7 @@ async function handleN8nCallback(supabase: any, body: any) {
     .single();
 
   if (fetchError || !action) {
-    return new Response(
-      JSON.stringify({ error: 'Action not found' }),
-      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse('Action not found', 404);
   }
 
   const updateData: any = {
@@ -312,13 +278,10 @@ async function handleN8nCallback(supabase: any, body: any) {
     outcome: updateData.status === 'completed' ? 'success' : 'failure'
   });
 
-  return new Response(
-    JSON.stringify({
-      status: 'callback_processed',
-      action_status: updateData.status
-    }),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  );
+  return jsonResponse({
+    status: 'callback_processed',
+    action_status: updateData.status
+  });
 }
 
 /**
@@ -352,65 +315,62 @@ async function checkGoalCompletion(supabase: any, goalId: string) {
  * List available action types for n8n central dispatcher
  */
 async function listAvailableActions() {
-  return new Response(
-    JSON.stringify({
-      dispatcher: 'central',
-      description: 'Alle requests gaan naar één n8n webhook. n8n routeert intern op action_type.',
-      action_types: [
-        {
-          type: 'send_followup_question',
-          description: 'Stuur AI-gegenereerde follow-up vragen voor incomplete intake',
-          required_fields: ['to_email', 'candidate_name', 'missing_fields'],
-          optional_fields: ['subject', 'questions']
-        },
-        {
-          type: 'send_interview_email',
-          description: 'Stuur interview uitnodiging naar kandidaat',
-          required_fields: ['to_email', 'candidate_name', 'interview_datetime', 'location'],
-          optional_fields: ['interviewer_name', 'notes', 'meeting_link']
-        },
-        {
-          type: 'send_document_request',
-          description: 'Vraag documenten op (VOG, diploma, CV)',
-          required_fields: ['to_email', 'candidate_name', 'documents'],
-          optional_fields: ['deadline', 'instructions']
-        },
-        {
-          type: 'send_general_email',
-          description: 'Stuur algemene email',
-          required_fields: ['to_email', 'subject', 'body'],
-          optional_fields: ['cc', 'attachments']
-        },
-        {
-          type: 'create_calendar_event',
-          description: 'Maak calendar event aan (met optionele Teams meeting)',
-          required_fields: ['title', 'start_datetime', 'end_datetime'],
-          optional_fields: ['attendees', 'location', 'description', 'create_teams_meeting']
-        },
-        {
-          type: 'send_reminder',
-          description: 'Stuur herinnering via email of WhatsApp',
-          required_fields: ['to', 'message', 'channel'],
-          optional_fields: ['scheduled_at']
-        }
-      ],
-      payload_format: {
-        action_type: 'string (required)',
-        action_id: 'uuid (required)',
-        org_id: 'uuid (optional)',
-        callback_url: 'string (auto-generated)',
-        input_data: 'object with action-specific fields'
+  return jsonResponse({
+    dispatcher: 'central',
+    description: 'Alle requests gaan naar één n8n webhook. n8n routeert intern op action_type.',
+    action_types: [
+      {
+        type: 'send_followup_question',
+        description: 'Stuur AI-gegenereerde follow-up vragen voor incomplete intake',
+        required_fields: ['to_email', 'candidate_name', 'missing_fields'],
+        optional_fields: ['subject', 'questions']
       },
-      callback_format: {
-        action: 'callback',
-        action_id: 'uuid',
-        status: 'success | failed',
-        result: 'object (optional)',
-        error: 'string (if failed)'
+      {
+        type: 'send_interview_email',
+        description: 'Stuur interview uitnodiging naar kandidaat',
+        required_fields: ['to_email', 'candidate_name', 'interview_datetime', 'location'],
+        optional_fields: ['interviewer_name', 'notes', 'meeting_link']
+      },
+      {
+        type: 'send_document_request',
+        description: 'Vraag documenten op (VOG, diploma, CV)',
+        required_fields: ['to_email', 'candidate_name', 'documents'],
+        optional_fields: ['deadline', 'instructions']
+      },
+      {
+        type: 'send_general_email',
+        description: 'Stuur algemene email',
+        required_fields: ['to_email', 'subject', 'body'],
+        optional_fields: ['cc', 'attachments']
+      },
+      {
+        type: 'create_calendar_event',
+        description: 'Maak calendar event aan (met optionele Teams meeting)',
+        required_fields: ['title', 'start_datetime', 'end_datetime'],
+        optional_fields: ['attendees', 'location', 'description', 'create_teams_meeting']
+      },
+      {
+        type: 'send_reminder',
+        description: 'Stuur herinnering via email of WhatsApp',
+        required_fields: ['to', 'message', 'channel'],
+        optional_fields: ['scheduled_at']
       }
-    }),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  );
+    ],
+    payload_format: {
+      action_type: 'string (required)',
+      action_id: 'uuid (required)',
+      org_id: 'uuid (optional)',
+      callback_url: 'string (auto-generated)',
+      input_data: 'object with action-specific fields'
+    },
+    callback_format: {
+      action: 'callback',
+      action_id: 'uuid',
+      status: 'success | failed',
+      result: 'object (optional)',
+      error: 'string (if failed)'
+    }
+  });
 }
 
 /**
@@ -420,19 +380,16 @@ async function testN8nConnection() {
   const n8nWebhookUrl = Deno.env.get('N8N_WEBHOOK_URL');
   
   if (!n8nWebhookUrl) {
-    return new Response(
-      JSON.stringify({
-        status: 'not_configured',
-        message: 'N8N_WEBHOOK_URL secret is not set',
-        instructions: [
-          '1. Ga naar je n8n instance',
-          '2. Kopieer de webhook URL van je centrale "My workflow"',
-          '3. Voeg N8N_WEBHOOK_URL secret toe in Lovable',
-          '4. De URL moet zijn: https://citozorg.app.n8n.cloud/webhook'
-        ]
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({
+      status: 'not_configured',
+      message: 'N8N_WEBHOOK_URL secret is not set',
+      instructions: [
+        '1. Ga naar je n8n instance',
+        '2. Kopieer de webhook URL van je centrale "My workflow"',
+        '3. Voeg N8N_WEBHOOK_URL secret toe in Lovable',
+        '4. De URL moet zijn: https://citozorg.app.n8n.cloud/webhook'
+      ]
+    });
   }
 
   try {
@@ -451,26 +408,20 @@ async function testN8nConnection() {
       })
     });
 
-    return new Response(
-      JSON.stringify({
-        status: 'connected',
-        dispatcher: 'central',
-        webhook_url: n8nWebhookUrl.substring(0, 50) + '...',
-        response_status: response.status,
-        response_ok: response.ok
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({
+      status: 'connected',
+      dispatcher: 'central',
+      webhook_url: n8nWebhookUrl.substring(0, 50) + '...',
+      response_status: response.status,
+      response_ok: response.ok
+    });
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(
-      JSON.stringify({
-        status: 'connection_failed',
-        error: errorMessage,
-        webhook_url: n8nWebhookUrl.substring(0, 50) + '...'
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({
+      status: 'connection_failed',
+      error: errorMessage,
+      webhook_url: n8nWebhookUrl.substring(0, 50) + '...'
+    });
   }
 }
