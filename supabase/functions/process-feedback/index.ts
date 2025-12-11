@@ -99,25 +99,7 @@ Deno.serve(async (req) => {
       // Don't fail the request - feedback was saved
     }
 
-    // Also trigger continuous-learner for deep analysis (legacy behavior)
-    if (chatMessage?.content && context?.message) {
-      try {
-        await supabase.functions.invoke('continuous-learner', {
-          body: {
-            user_question: context.message,
-            ai_response: chatMessage.content,
-            knowledge_used: usedKnowledge,
-            user_feedback: feedbackType,
-            auto_apply: true,
-            org_id: orgId,
-            user_id: user.id,
-          },
-        });
-      } catch (learnerError) {
-        console.error('❌ [process-feedback shim] continuous-learner error:', learnerError);
-        // Don't fail the request
-      }
-    }
+    // NOTE: Removed duplicate continuous-learner call - unified-learner now handles all learning
 
     // Create business intelligence insight on negative feedback (legacy behavior)
     if (!isPositive && context?.message) {
