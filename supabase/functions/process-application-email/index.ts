@@ -14,11 +14,14 @@ interface ResendWebhookPayload {
     to: string[];
     html?: string;
     text?: string;
+    headers?: Record<string, string>;
     attachments?: Array<{
-      content: string; // base64
+      content?: string; // base64 - optional for inline images
       content_type: string;
       filename: string;
-      size: number;
+      size?: number;
+      content_disposition?: string; // "inline" or "attachment"
+      content_id?: string; // for inline images
     }>;
   };
 }
@@ -72,11 +75,14 @@ const handler = async (req: Request): Promise<Response> => {
         to: z.array(z.string().email()).max(100),
         html: z.string().max(1000000).optional(),
         text: z.string().max(1000000).optional(),
+        headers: z.record(z.string()).optional(),
         attachments: z.array(z.object({
-          content: z.string().max(20000000), // ~15MB base64
+          content: z.string().max(20000000).optional(), // Optional for inline images (signatures)
           content_type: z.string().max(100),
           filename: z.string().max(255),
-          size: z.number().int().positive().max(20000000)
+          size: z.number().int().positive().max(20000000).optional(), // Optional for inline
+          content_disposition: z.string().optional(), // "inline" or "attachment"
+          content_id: z.string().optional() // For inline images
         })).max(10).optional()
       })
     });
@@ -104,13 +110,55 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const emailData = payload.data;
+    const emailSubject = emailData.subject || "";
+
+    // 📧 REPLY DETECTION: Check if this is a reply to an existing conversation
+    const isReply = 
+      emailSubject.toLowerCase().startsWith('re:') ||
+      emailSubject.toLowerCase().startsWith('antw:') ||
+      emailSubject.toLowerCase().startsWith('antwoord:') ||
+      emailSubject.toLowerCase().startsWith('fw:') === false && // Not a forward
+      (emailData.headers?.['in-reply-to'] || emailData.headers?.['references']);
+
+    if (isReply) {
+      console.log("📧 Detected REPLY email - forwarding to handle-application-reply");
+      console.log("Subject:", emailSubject);
+      console.log("From:", emailData.from);
+      
+      // Forward to handle-application-reply edge function
+      const { data: replyData, error: replyError } = await supabase.functions.invoke('handle-application-reply', {
+        body: payload
+      });
+      
+      if (replyError) {
+        console.error("❌ handle-application-reply error:", replyError);
+        return errorResponse(`Reply processing failed: ${replyError.message}`, 500);
+      }
+      
+      console.log("✅ Reply forwarded successfully:", replyData);
+      return jsonResponse({ 
+        success: true, 
+        message: "Reply forwarded to handle-application-reply",
+        data: replyData 
+      });
+    }
+
+    // Process as NEW application
+    console.log("📨 Processing as NEW application email");
     const applicantEmail = emailData.from;
-    const emailSubject = emailData.subject || "Sollicitatie";
     const emailBody = emailData.text || emailData.html || "";
 
     console.log("From:", applicantEmail);
     console.log("Subject:", emailSubject);
-    console.log("Attachments:", emailData.attachments?.length || 0);
+    
+    // Filter out inline attachments (email signatures) - only process real attachments with content
+    const realAttachments = emailData.attachments?.filter(att => 
+      att.content && // Has actual content
+      att.content_disposition !== 'inline' // Not an inline image (signature)
+    ) || [];
+    
+    console.log("Total attachments:", emailData.attachments?.length || 0);
+    console.log("Real attachments (excluding inline):", realAttachments.length);
 
     // Get org_id (assume first org for now - in production you'd map email domains to orgs)
     const { data: orgs } = await supabase.from("organizations").select("id").limit(1);
@@ -136,18 +184,19 @@ const handler = async (req: Request): Promise<Response> => {
     let cvFileName: string | null = null;
     let cvContent = "";
 
-    if (emailData.attachments && emailData.attachments.length > 0) {
-      const cvAttachment = emailData.attachments.find(att => 
-        att.filename.toLowerCase().endsWith(".pdf") ||
-        att.filename.toLowerCase().endsWith(".doc") ||
-        att.filename.toLowerCase().endsWith(".docx")
+    if (realAttachments.length > 0) {
+      const cvAttachment = realAttachments.find(att => 
+        att.content && // Must have content
+        (att.filename.toLowerCase().endsWith(".pdf") ||
+         att.filename.toLowerCase().endsWith(".doc") ||
+         att.filename.toLowerCase().endsWith(".docx"))
       );
 
-      if (cvAttachment) {
+      if (cvAttachment && cvAttachment.content) {
         console.log("📎 Processing CV attachment:", {
           filename: cvAttachment.filename,
           contentType: cvAttachment.content_type,
-          size: cvAttachment.content?.length || 0
+          size: cvAttachment.content.length || 0
         });
         
         // Decode base64 content
