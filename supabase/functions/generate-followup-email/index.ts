@@ -283,7 +283,7 @@ Return een JSON object met:
     <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
     
     <p style="font-size: 12px; color: #999; margin: 0; text-align: center;">
-      ${org_name} Recruitment | <a href="mailto:personeel@citozorg.nl" style="color: #0066cc;">personeel@citozorg.nl</a>
+      ${org_name} Recruitment | <a href="mailto:${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}" style="color: #0066cc;">${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}</a>
     </p>
   </div>
 </body>
@@ -321,7 +321,7 @@ Return een JSON object met:
     <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
     
     <p style="font-size: 12px; color: #999; margin: 0;">
-      ${org_name} Recruitment | <a href="mailto:personeel@citozorg.nl" style="color: #0066cc;">personeel@citozorg.nl</a>
+      ${org_name} Recruitment | <a href="mailto:${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}" style="color: #0066cc;">${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}</a>
     </p>
   </div>
 </body>
@@ -347,7 +347,7 @@ ${fieldDescriptions.map((desc: string) => `• ${desc}`).join('\n')}` : '✅ Je 
 ${emailContent.closing || `Met vriendelijke groet,\n${org_name} Recruitment Team`}
 
 ---
-${org_name} Recruitment | personeel@citozorg.nl`;
+${org_name} Recruitment | ${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}`;
     } else {
       emailPlainText = `${emailContent.greeting},
 
@@ -358,7 +358,7 @@ ${emailContent.body || ''}
 ${emailContent.closing || ''}
 
 ---
-${org_name} Recruitment | personeel@citozorg.nl`;
+${org_name} Recruitment | ${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}`;
     }
 
     // Log the generated email for audit
