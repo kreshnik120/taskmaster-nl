@@ -41,9 +41,150 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const { action } = await req.json();
     const inboundDomain = "inbound.citozorg.nl";
-    const webhookUrl = `${SUPABASE_URL}/functions/v1/handle-application-reply`;
+    // CORRECT webhook URL - moet naar process-application-email, NIET handle-application-reply
+    const correctWebhookUrl = `${SUPABASE_URL}/functions/v1/process-application-email`;
+    const oldWebhookUrl = `${SUPABASE_URL}/functions/v1/handle-application-reply`;
 
     console.log(`[setup-resend-inbound] Action: ${action}`);
+
+    // ============ LIST ALL WEBHOOKS ============
+    if (action === "list_webhooks") {
+      console.log("[setup-resend-inbound] Listing all webhooks...");
+      const webhooksResponse = await fetch("https://api.resend.com/webhooks", {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${RESEND_API_KEY}`,
+        },
+      });
+
+      if (!webhooksResponse.ok) {
+        const errorText = await webhooksResponse.text();
+        throw new Error(`Failed to list webhooks: ${errorText}`);
+      }
+
+      const webhooksData = await webhooksResponse.json();
+      console.log(`[setup-resend-inbound] Found ${webhooksData.data?.length || 0} webhooks`);
+
+      return jsonResponse({
+        success: true,
+        total_webhooks: webhooksData.data?.length || 0,
+        webhooks: webhooksData.data || [],
+        correct_endpoint: correctWebhookUrl,
+        old_endpoint: oldWebhookUrl,
+      });
+    }
+
+    // ============ CLEANUP AND SETUP ============
+    if (action === "cleanup_and_setup") {
+      console.log("[setup-resend-inbound] Starting cleanup and setup...");
+      
+      // Step 1: Get all webhooks
+      const webhooksResponse = await fetch("https://api.resend.com/webhooks", {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${RESEND_API_KEY}`,
+        },
+      });
+
+      if (!webhooksResponse.ok) {
+        const errorText = await webhooksResponse.text();
+        throw new Error(`Failed to list webhooks: ${errorText}`);
+      }
+
+      const webhooksData = await webhooksResponse.json();
+      const allWebhooks = webhooksData.data || [];
+      console.log(`[setup-resend-inbound] Found ${allWebhooks.length} webhooks to process`);
+
+      // Step 2: Delete ALL webhooks (clean slate)
+      const deletedWebhooks: string[] = [];
+      const deleteErrors: string[] = [];
+
+      for (const webhook of allWebhooks) {
+        console.log(`[setup-resend-inbound] Deleting webhook ${webhook.id} (${webhook.endpoint})...`);
+        await delay(500); // Rate limiting
+        
+        try {
+          const deleteResponse = await fetch(`https://api.resend.com/webhooks/${webhook.id}`, {
+            method: "DELETE",
+            headers: {
+              "Authorization": `Bearer ${RESEND_API_KEY}`,
+            },
+          });
+
+          if (deleteResponse.ok || deleteResponse.status === 204) {
+            deletedWebhooks.push(webhook.id);
+            console.log(`[setup-resend-inbound] ✅ Deleted webhook ${webhook.id}`);
+          } else {
+            const errorText = await deleteResponse.text();
+            deleteErrors.push(`${webhook.id}: ${errorText}`);
+            console.error(`[setup-resend-inbound] ❌ Failed to delete ${webhook.id}: ${errorText}`);
+          }
+        } catch (e: any) {
+          deleteErrors.push(`${webhook.id}: ${e.message}`);
+          console.error(`[setup-resend-inbound] ❌ Error deleting ${webhook.id}:`, e);
+        }
+      }
+
+      await delay(1000);
+
+      // Step 3: Create NEW webhook to process-application-email
+      console.log(`[setup-resend-inbound] Creating new webhook to ${correctWebhookUrl}...`);
+      
+      let newWebhook: ResendWebhookResponse | null = null;
+      let webhookSecret: string | null = null;
+      let createError: string | null = null;
+
+      try {
+        const createResponse = await fetch("https://api.resend.com/webhooks", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${RESEND_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            endpoint: correctWebhookUrl,
+            events: ["email.received"],
+          }),
+        });
+
+        if (createResponse.ok) {
+          newWebhook = await createResponse.json();
+          webhookSecret = newWebhook?.secret || null;
+          console.log(`[setup-resend-inbound] ✅ Created webhook ${newWebhook?.id}`);
+          console.log(`[setup-resend-inbound] 🔐 Secret received: ${webhookSecret ? 'YES' : 'NO'}`);
+        } else {
+          createError = await createResponse.text();
+          console.error(`[setup-resend-inbound] ❌ Failed to create webhook: ${createError}`);
+        }
+      } catch (e: any) {
+        createError = e.message;
+        console.error(`[setup-resend-inbound] ❌ Error creating webhook:`, e);
+      }
+
+      return jsonResponse({
+        success: !!newWebhook,
+        cleanup: {
+          total_found: allWebhooks.length,
+          deleted: deletedWebhooks.length,
+          errors: deleteErrors,
+        },
+        new_webhook: newWebhook ? {
+          id: newWebhook.id,
+          endpoint: newWebhook.endpoint,
+          events: newWebhook.events,
+        } : null,
+        webhook_secret: webhookSecret,
+        create_error: createError,
+        next_steps: webhookSecret ? [
+          "✅ Cleanup voltooid en nieuwe webhook aangemaakt!",
+          "⚠️ BELANGRIJK: Sla de webhook_secret op als RESEND_WEBHOOK_SIGNING_SECRET",
+          `Secret: ${webhookSecret}`,
+        ] : [
+          "❌ Webhook kon niet worden aangemaakt",
+          `Error: ${createError}`,
+        ],
+      });
+    }
 
     if (action === "setup") {
       // Step 1: Check if domain already exists
@@ -132,7 +273,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         console.log(`[setup-resend-inbound] Found ${webhooksData.data?.length || 0} existing webhooks`);
         
         const existingWebhook = webhooksData.data?.find((w: any) => 
-          w.endpoint === webhookUrl && w.events?.includes("email.received")
+          w.endpoint === correctWebhookUrl && w.events?.includes("email.received")
         );
 
         if (existingWebhook) {
@@ -150,7 +291,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       if (!webhookInfo) {
         // Create webhook for inbound emails with retry logic
-        console.log(`[setup-resend-inbound] Creating webhook to ${webhookUrl}...`);
+        console.log(`[setup-resend-inbound] Creating webhook to ${correctWebhookUrl}...`);
         
         let webhookRetries = 3;
         while (!webhookInfo && webhookRetries > 0) {
@@ -162,7 +303,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                endpoint: webhookUrl,  // Resend API expects 'endpoint' not 'endpoint_url'
+                endpoint: correctWebhookUrl,  // Resend API expects 'endpoint' not 'endpoint_url'
                 events: ["email.received"],
               }),
             });
@@ -231,7 +372,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         ] : [
           "❌ Webhook kon niet worden aangemaakt",
           "1. Maak de webhook handmatig aan in Resend Dashboard",
-          `2. URL: ${webhookUrl}`,
+          `2. URL: ${correctWebhookUrl}`,
           "3. Event: email.received",
         ],
         reply_to_address: "recruitment@inbound.citozorg.nl",
