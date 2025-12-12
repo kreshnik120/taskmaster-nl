@@ -106,6 +106,10 @@ verify_jwt = false
 verify_jwt = false
 # Purpose: AI-driven interview scheduling (request availability, confirm slot, send confirmation)
 
+[functions.setup-resend-inbound]
+verify_jwt = false
+# Purpose: Setup and verify Resend inbound email domain configuration
+
 # -----------------------------------------------------------------------------
 # AUTHENTICATED FUNCTIONS (JWT verification required)
 # -----------------------------------------------------------------------------
