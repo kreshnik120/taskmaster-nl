@@ -31,10 +31,18 @@ Deno.serve(async (req) => {
 
     const supabase = createAdminClient();
 
-    // 🔒 SECURITY: Verify webhook signature (if secret is configured)
+    // 🔒 SECURITY: Check for internal forward from process-application-email
     let payload: ResendWebhookPayload;
+    const isInternalForward = req.headers.get('x-internal-forward') === 'true';
+    const forwardSecret = req.headers.get('x-forward-secret');
+    const expectedSecret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.substring(0, 32);
     
-    if (webhookSecret) {
+    if (isInternalForward && forwardSecret === expectedSecret) {
+      // ✅ Internal forward from process-application-email - already verified
+      console.log("✅ Internal forward detected - skipping signature verification");
+      payload = await req.json();
+    } else if (webhookSecret) {
+      // 🔒 Direct Resend webhook call - verify signature
       const rawBody = await req.text();
       const { verifySvixSignature } = await import("../_shared/webhook-validator.ts");
       
