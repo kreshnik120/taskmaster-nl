@@ -125,9 +125,14 @@ const handler = async (req: Request): Promise<Response> => {
       console.log("Subject:", emailSubject);
       console.log("From:", emailData.from);
       
-      // Forward to handle-application-reply edge function
+      // Forward to handle-application-reply edge function with internal auth headers
+      const forwardSecret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.substring(0, 32) || 'internal';
       const { data: replyData, error: replyError } = await supabase.functions.invoke('handle-application-reply', {
-        body: payload
+        body: payload,
+        headers: {
+          'x-internal-forward': 'true',
+          'x-forward-secret': forwardSecret
+        }
       });
       
       if (replyError) {
