@@ -59,17 +59,17 @@ interface SendEmailRequest {
 
 // Organization email configuration
 // NOTE: ABCzorg uses citozorg.nl domain because abczorg.nl is not yet verified in Resend
-// Reply-To uses Resend inbound address for AI processing of candidate replies
+// Reply-To uses Resend default inbound address (purring-bat.resend.app) which is verified and working
 const ORG_EMAIL_CONFIG: Record<string, { from: string; name: string; replyTo: string }> = {
   'citozorg': {
     from: 'personeel@citozorg.nl',
     name: 'CitoZorg Recruitment',
-    replyTo: 'recruitment@inbound.citozorg.nl' // Resend inbound webhook voor AI verwerking
+    replyTo: 'recruitment@purring-bat.resend.app' // Resend inbound webhook - werkend!
   },
   'abczorg': {
     from: 'personeel@citozorg.nl', // Using citozorg.nl (verified) until abczorg.nl is added to Resend
-    name: 'ABCzorg Recruitment',   // FIX: Correct branding - was incorrectly "CitoZorg Recruitment"
-    replyTo: 'recruitment@inbound.citozorg.nl' // Resend inbound webhook voor AI verwerking
+    name: 'ABCzorg Recruitment',
+    replyTo: 'recruitment@purring-bat.resend.app' // Resend inbound webhook - werkend!
   }
 };
 
