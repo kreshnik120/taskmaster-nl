@@ -1022,12 +1022,42 @@ async function executeTask(supabase: any, task: any) {
 // ENHANCED: Added deduplication check to prevent duplicate emails
 // =====================================================
 async function executeFollowupQuestion(supabase: any, action: any) {
-  const org_id = action.agent_goals?.org_id;
+  const applicationId = action.input_data.application_id;
+  
+  // 🔧 FIX: Get organization from application's assigned_organization OR fallback to org_id
   let organization = 'citozorg';
-  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
+  let org_name = 'CitoZorg';
+  
+  // First try to get from application's extracted_data.assigned_organization
+  if (applicationId) {
+    const { data: appData } = await supabase
+      .from('professional_applications')
+      .select('extracted_data, org_id')
+      .eq('id', applicationId)
+      .single();
+    
+    if (appData?.extracted_data?.assigned_organization) {
+      const assignedOrg = appData.extracted_data.assigned_organization.toLowerCase();
+      if (assignedOrg.includes('abc')) {
+        organization = 'abczorg';
+        org_name = 'ABCzorg';
+      }
+      console.log(`📧 [Followup] Using assigned_organization: ${org_name}`);
+    } else if (appData?.org_id === '550e8400-e29b-41d4-a716-446655440000') {
+      organization = 'abczorg';
+      org_name = 'ABCzorg';
+      console.log(`📧 [Followup] Using org_id fallback: ${org_name}`);
+    }
+  }
+  
+  // Fallback to goal's org_id
+  const goal_org_id = action.agent_goals?.org_id;
+  if (organization === 'citozorg' && goal_org_id === '550e8400-e29b-41d4-a716-446655440000') {
     organization = 'abczorg';
+    org_name = 'ABCzorg';
   }
 
+  console.log(`📧 [Followup] Organization determined: ${org_name}`);
   console.log(`📧 [Followup] Checking for recent emails before sending...`);
 
   // 🔒 DEDUPLICATION CHECK: Skip if email was sent recently (within 1 hour)
@@ -1035,7 +1065,7 @@ async function executeFollowupQuestion(supabase: any, action: any) {
   const { data: recentEmails } = await supabase
     .from('application_conversations')
     .select('id, created_at, content')
-    .eq('application_id', action.input_data.application_id)
+    .eq('application_id', applicationId)
     .eq('role', 'assistant')
     .gte('created_at', oneHourAgo)
     .ilike('content', '%Email verzonden%')
@@ -1048,7 +1078,7 @@ async function executeFollowupQuestion(supabase: any, action: any) {
       executed_via: 'skipped', 
       reason: 'Recent email already sent (within 1 hour)',
       last_email_at: recentEmails[0].created_at,
-      organization
+      organization: org_name
     };
   }
 
@@ -1058,12 +1088,12 @@ async function executeFollowupQuestion(supabase: any, action: any) {
     // Generate followup email using generate-followup-email
     const { data: emailData, error: genError } = await supabase.functions.invoke('generate-followup-email', {
       body: {
-        application_id: action.input_data.application_id,
+        application_id: applicationId,
         candidate_email: action.input_data.candidate_email,
         fields_to_ask: action.input_data.fields_to_ask,
         candidate_name: action.input_data.candidate_name,
         current_completeness: action.input_data.current_completeness,
-        org_name: organization === 'abczorg' ? 'ABCzorg' : 'CitoZorg'
+        org_name: org_name
       }
     });
 
@@ -1084,7 +1114,7 @@ async function executeFollowupQuestion(supabase: any, action: any) {
         html_content: emailData?.emailHtml,
         plain_text: emailData?.emailPlainText,
         application_id: action.input_data.application_id,
-        org_id: org_id
+        org_id: action.agent_goals?.org_id
       }
     });
 
@@ -1117,21 +1147,49 @@ async function executeFollowupQuestion(supabase: any, action: any) {
 // ENHANCED: Added deduplication check to prevent duplicate welcome emails
 // =====================================================
 async function executeWelcomeAndIntake(supabase: any, action: any) {
-  const org_id = action.agent_goals?.org_id;
+  const applicationId = action.input_data.application_id;
+  
+  // 🔧 FIX: Get organization from application's assigned_organization OR fallback to org_id
   let organization = 'citozorg';
   let org_name = 'CitoZorg';
-  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
+  
+  // First try to get from application's extracted_data.assigned_organization
+  if (applicationId) {
+    const { data: appData } = await supabase
+      .from('professional_applications')
+      .select('extracted_data, org_id')
+      .eq('id', applicationId)
+      .single();
+    
+    if (appData?.extracted_data?.assigned_organization) {
+      const assignedOrg = appData.extracted_data.assigned_organization.toLowerCase();
+      if (assignedOrg.includes('abc')) {
+        organization = 'abczorg';
+        org_name = 'ABCzorg';
+      }
+      console.log(`🎉 [Welcome] Using assigned_organization: ${org_name}`);
+    } else if (appData?.org_id === '550e8400-e29b-41d4-a716-446655440000') {
+      organization = 'abczorg';
+      org_name = 'ABCzorg';
+      console.log(`🎉 [Welcome] Using org_id fallback: ${org_name}`);
+    }
+  }
+  
+  // Fallback to goal's org_id
+  const goal_org_id = action.agent_goals?.org_id;
+  if (organization === 'citozorg' && goal_org_id === '550e8400-e29b-41d4-a716-446655440000') {
     organization = 'abczorg';
     org_name = 'ABCzorg';
   }
 
+  console.log(`🎉 [Welcome] Organization determined: ${org_name}`);
   console.log(`🎉 [Welcome] Checking for existing welcome emails...`);
 
   // 🔒 DEDUPLICATION CHECK: Skip if welcome email was already sent (any time)
   const { data: existingWelcome } = await supabase
     .from('application_conversations')
     .select('id, created_at')
-    .eq('application_id', action.input_data.application_id)
+    .eq('application_id', applicationId)
     .eq('role', 'assistant')
     .or('content.ilike.%Welkom bij%,content.ilike.%Welcome%')
     .order('created_at', { ascending: false })
@@ -1143,7 +1201,7 @@ async function executeWelcomeAndIntake(supabase: any, action: any) {
       executed_via: 'skipped', 
       reason: 'Welcome email already sent previously',
       sent_at: existingWelcome[0].created_at,
-      organization
+      organization: org_name
     };
   }
 
@@ -1153,7 +1211,7 @@ async function executeWelcomeAndIntake(supabase: any, action: any) {
     // Generate welcome + intake email using generate-followup-email with welcome type
     const { data: emailData, error: genError } = await supabase.functions.invoke('generate-followup-email', {
       body: {
-        application_id: action.input_data.application_id,
+        application_id: applicationId,
         candidate_email: action.input_data.candidate_email,
         candidate_name: action.input_data.candidate_name,
         fields_to_ask: action.input_data.fields_to_ask || [],
@@ -1181,7 +1239,7 @@ async function executeWelcomeAndIntake(supabase: any, action: any) {
         html_content: emailData?.emailHtml,
         plain_text: emailData?.emailPlainText,
         application_id: action.input_data.application_id,
-        org_id: org_id
+        org_id: action.agent_goals?.org_id
       }
     });
 
