@@ -24,7 +24,7 @@ interface ResendDomainResponse {
 
 interface ResendWebhookResponse {
   id: string;
-  endpoint_url: string;
+  endpoint: string;  // Resend API returns 'endpoint', not 'endpoint_url'
   events: string[];
   created_at: string;
   secret: string;
@@ -132,7 +132,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         console.log(`[setup-resend-inbound] Found ${webhooksData.data?.length || 0} existing webhooks`);
         
         const existingWebhook = webhooksData.data?.find((w: any) => 
-          w.endpoint_url === webhookUrl && w.events?.includes("email.received")
+          w.endpoint === webhookUrl && w.events?.includes("email.received")
         );
 
         if (existingWebhook) {
@@ -219,7 +219,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         } : null,
         webhook: webhookInfo ? {
           id: webhookInfo.id,
-          endpoint_url: webhookInfo.endpoint_url,
+          endpoint: webhookInfo.endpoint,
           events: webhookInfo.events,
         } : null,
         webhook_secret: webhookSecret,
@@ -288,11 +288,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const webhooksData = await webhooksResponse.json();
         const webhookUrl = `${SUPABASE_URL}/functions/v1/handle-application-reply`;
         const existingWebhook = webhooksData.data?.find((w: any) => 
-          w.endpoint_url === webhookUrl && w.events?.includes("email.received")
+          w.endpoint === webhookUrl && w.events?.includes("email.received")
         );
         webhookStatus = existingWebhook ? {
           id: existingWebhook.id,
-          endpoint_url: existingWebhook.endpoint_url,
+          endpoint: existingWebhook.endpoint,
           events: existingWebhook.events,
           status: "active"
         } : null;
