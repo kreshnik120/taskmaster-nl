@@ -59,7 +59,10 @@ Deno.serve(async (req) => {
       candidate_email, 
       fields_to_ask,
       current_completeness,
-      follow_up_count = 0 
+      follow_up_count = 0,
+      email_type = 'followup_question',
+      is_first_contact = false,
+      org_name = 'CitoZorg'
     } = body;
 
     console.log(`[Generate Followup Email] Application: ${application_id}`);
@@ -77,8 +80,50 @@ Deno.serve(async (req) => {
       .map((field: string) => FIELD_DESCRIPTIONS[field] || field)
       .slice(0, 10); // Max 10 questions per email
 
-    // Build the AI prompt
-    const prompt = `Je bent een vriendelijke recruitment assistent voor CitoZorg, een thuiszorg bemiddelingsbureau.
+    // Build the AI prompt based on email type
+    let prompt: string;
+    
+    if (email_type === 'welcome_and_intake' || is_first_contact) {
+      // WELKOMST + INTAKE EMAIL
+      prompt = `Je bent een hartelijke recruitment assistent voor ${org_name}, een professioneel zorgbemiddelingsbureau.
+Schrijf een warme welkomstemail voor een nieuwe sollicitant die ook vraagt naar ontbrekende informatie.
+
+**Kandidaat info:**
+- Naam: ${candidate_name || 'Beste sollicitant'}
+- Email: ${candidate_email}
+- Huidige completeness: ${current_completeness || 0}%
+
+**BELANGRIJKE STRUCTUUR:**
+1. Start met een hartelijke welkomst - maak de kandidaat enthousiast!
+2. Leg kort uit wat ze kunnen verwachten (proces in 3 simpele stappen)
+3. Vraag vriendelijk naar de ontbrekende informatie
+
+**Ontbrekende informatie (indien aanwezig):**
+${fieldDescriptions.length > 0 ? fieldDescriptions.map((desc: string, i: number) => `${i + 1}. ${desc}`).join('\n') : 'Alle basisinformatie is ontvangen!'}
+
+**Instructies:**
+- Schrijf in het Nederlands
+- Warme, enthousiaste maar professionele toon
+- Maak het NIET te lang (max 250 woorden)
+- Noem de 3 stappen: 1) We bekijken je profiel 2) Kennismakingsgesprek 3) Matching met opdrachtgevers
+- Als er ontbrekende info is, vraag dit vriendelijk in een overzichtelijke lijst
+- Maak duidelijk dat ze gewoon kunnen antwoorden op de email
+- Sluit af met ${org_name} Recruitment Team
+- Wees persoonlijk en motiverend!
+
+**Format:**
+Return een JSON object met:
+{
+  "subject": "Welkom bij ${org_name} - Je sollicitatie is ontvangen!",
+  "greeting": "Beste [naam]",
+  "intro": "Hartelijke welkomstboodschap (2-3 zinnen)",
+  "process_steps": "Korte uitleg van het proces in 3 stappen",
+  "info_request": "Vriendelijk verzoek om ontbrekende info (of bevestiging dat alles compleet is)",
+  "closing": "Warme afsluitende groet"
+}`;
+    } else {
+      // STANDAARD FOLLOW-UP EMAIL
+      prompt = `Je bent een vriendelijke recruitment assistent voor ${org_name}, een thuiszorg bemiddelingsbureau.
 Schrijf een overzichtelijke email om ontbrekende informatie te vragen aan een sollicitant.
 
 **Kandidaat info:**
@@ -99,7 +144,7 @@ ${fieldDescriptions.map((desc: string, i: number) => `${i + 1}. ${desc}`).join('
 - Maak duidelijk dat ze gewoon kunnen antwoorden op de email
 - Noem specifiek welke informatie je nodig hebt
 - Voeg een motiverende opmerking toe over hoe dichtbij ze zijn
-- Sluit af met CitoZorg Recruitment Team
+- Sluit af met ${org_name} Recruitment Team
 
 **Format:**
 Return een JSON object met:
@@ -109,6 +154,7 @@ Return een JSON object met:
   "body": "Hoofdtekst van de email met genummerde vragen",
   "closing": "Afsluitende groet"
 }`;
+    }
 
     // Call Lovable AI
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -153,17 +199,98 @@ Return een JSON object met:
       emailContent = JSON.parse(jsonStr);
     } catch (e) {
       console.error('[Generate Followup Email] Failed to parse AI response:', e);
-      // Fallback to generic email
-      emailContent = {
-        subject: `Aanvullende informatie nodig - CitoZorg`,
-        greeting: `Beste ${candidate_name || 'sollicitant'}`,
-        body: `Bedankt voor je sollicitatie! Om je aanmelding compleet te maken, hebben we nog wat informatie nodig:\n\n${fieldDescriptions.map((desc: string) => `• ${desc}`).join('\n')}\n\nJe kunt gewoon op deze email antwoorden.`,
-        closing: 'Met vriendelijke groet,\nCitoZorg Recruitment Team'
-      };
+      // Fallback based on email type
+      if (email_type === 'welcome_and_intake' || is_first_contact) {
+        emailContent = {
+          subject: `Welkom bij ${org_name} - Je sollicitatie is ontvangen!`,
+          greeting: `Beste ${candidate_name || 'sollicitant'}`,
+          intro: `Hartelijk dank voor je interesse in ${org_name}! We zijn blij dat je hebt gesolliciteerd en kijken uit naar een kennismaking.`,
+          process_steps: `📋 Wat kun je verwachten?\n1. We bekijken je profiel binnen 2 werkdagen\n2. Bij een goede match plannen we een kennismakingsgesprek\n3. Na het gesprek matchen we je met passende opdrachtgevers`,
+          info_request: fieldDescriptions.length > 0 
+            ? `Om je aanmelding compleet te maken, hebben we nog wat informatie nodig:\n\n${fieldDescriptions.map((desc: string) => `• ${desc}`).join('\n')}`
+            : `Je aanmelding is compleet ontvangen! We nemen zo snel mogelijk contact met je op.`,
+          closing: `Met vriendelijke groet,\n${org_name} Recruitment Team`
+        };
+      } else {
+        emailContent = {
+          subject: `Aanvullende informatie nodig - ${org_name}`,
+          greeting: `Beste ${candidate_name || 'sollicitant'}`,
+          body: `Bedankt voor je sollicitatie! Om je aanmelding compleet te maken, hebben we nog wat informatie nodig:\n\n${fieldDescriptions.map((desc: string) => `• ${desc}`).join('\n')}\n\nJe kunt gewoon op deze email antwoorden.`,
+          closing: `Met vriendelijke groet,\n${org_name} Recruitment Team`
+        };
+      }
     }
 
-    // Build HTML email
-    const emailHtml = `
+    // Build HTML email based on type
+    let emailHtml: string;
+    
+    if (email_type === 'welcome_and_intake' || is_first_contact) {
+      // WELKOMST EMAIL HTML
+      emailHtml = `
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #0066cc 0%, #004999 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+    <h1 style="color: white; margin: 0; font-size: 28px;">🎉 Welkom bij ${org_name}!</h1>
+    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">Je sollicitatie is ontvangen</p>
+  </div>
+  
+  <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 12px 12px;">
+    <h2 style="color: #0066cc; margin-top: 0; font-size: 20px;">${emailContent.greeting},</h2>
+    
+    <p style="font-size: 16px; color: #333; margin-bottom: 20px;">
+      ${emailContent.intro || 'Hartelijk dank voor je interesse! We zijn blij dat je hebt gesolliciteerd.'}
+    </p>
+    
+    <div style="background: white; padding: 25px; border-radius: 10px; margin: 25px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+      <h3 style="color: #0066cc; margin-top: 0; font-size: 18px;">📋 Wat kun je verwachten?</h3>
+      <div style="padding-left: 10px;">
+        ${(emailContent.process_steps || '').split('\n').map((line: string) => {
+          if (line.match(/^[1-3]\./)) {
+            return `<p style="margin: 12px 0; padding-left: 25px; position: relative;"><span style="position: absolute; left: 0; color: #0066cc; font-weight: bold;">${line.charAt(0)}.</span>${line.substring(2)}</p>`;
+          }
+          return line ? `<p style="margin: 8px 0;">${line}</p>` : '';
+        }).join('')}
+      </div>
+    </div>
+    
+    ${fieldDescriptions.length > 0 ? `
+    <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin: 25px 0; border-left: 4px solid #ffc107;">
+      <h3 style="color: #856404; margin-top: 0; font-size: 16px;">✍️ We missen nog wat informatie</h3>
+      <p style="color: #856404; margin-bottom: 15px;">Om je snel te kunnen helpen, hebben we nog het volgende nodig:</p>
+      <ul style="margin: 0; padding-left: 20px; color: #856404;">
+        ${fieldDescriptions.map((desc: string) => `<li style="margin: 8px 0;">${desc}</li>`).join('')}
+      </ul>
+    </div>
+    ` : `
+    <div style="background: #d4edda; padding: 20px; border-radius: 10px; margin: 25px 0; border-left: 4px solid #28a745;">
+      <p style="color: #155724; margin: 0;"><strong>✅ Je aanmelding is compleet!</strong> We nemen zo snel mogelijk contact met je op.</p>
+    </div>
+    `}
+    
+    <div style="background: #e8f4ff; padding: 20px; border-radius: 10px; margin: 25px 0; text-align: center;">
+      <p style="margin: 0; color: #0066cc; font-size: 15px;"><strong>💡 Tip:</strong> Je kunt gewoon op deze email antwoorden!</p>
+    </div>
+    
+    <p style="color: #666; margin-top: 30px; font-size: 15px;">
+      ${(emailContent.closing || `Met vriendelijke groet,\n${org_name} Recruitment Team`).replace(/\n/g, '<br>')}
+    </p>
+    
+    <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+    
+    <p style="font-size: 12px; color: #999; margin: 0; text-align: center;">
+      ${org_name} Recruitment | <a href="mailto:personeel@citozorg.nl" style="color: #0066cc;">personeel@citozorg.nl</a>
+    </p>
+  </div>
+</body>
+</html>`;
+    } else {
+      // STANDAARD FOLLOW-UP EMAIL HTML
+      emailHtml = `
 <!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -172,7 +299,7 @@ Return een JSON object met:
 </head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
   <div style="background: linear-gradient(135deg, #0066cc 0%, #004999 100%); padding: 20px; border-radius: 8px 8px 0 0;">
-    <h1 style="color: white; margin: 0; font-size: 24px;">CitoZorg</h1>
+    <h1 style="color: white; margin: 0; font-size: 24px;">${org_name}</h1>
     <p style="color: rgba(255,255,255,0.8); margin: 5px 0 0 0; font-size: 14px;">Recruitment Team</p>
   </div>
   
@@ -180,7 +307,7 @@ Return een JSON object met:
     <h2 style="color: #0066cc; margin-top: 0;">${emailContent.greeting},</h2>
     
     <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #0066cc;">
-      ${emailContent.body.split('\n').map((line: string) => `<p style="margin: 10px 0;">${line}</p>`).join('')}
+      ${(emailContent.body || '').split('\n').map((line: string) => `<p style="margin: 10px 0;">${line}</p>`).join('')}
     </div>
     
     <div style="background: #e8f4ff; padding: 15px; border-radius: 8px; margin: 20px 0;">
@@ -188,29 +315,51 @@ Return een JSON object met:
     </div>
     
     <p style="color: #666; margin-top: 30px;">
-      ${emailContent.closing.replace(/\n/g, '<br>')}
+      ${(emailContent.closing || '').replace(/\n/g, '<br>')}
     </p>
     
     <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
     
     <p style="font-size: 12px; color: #999; margin: 0;">
-      CitoZorg Recruitment | <a href="mailto:personeel@citozorg.nl" style="color: #0066cc;">personeel@citozorg.nl</a>
+      ${org_name} Recruitment | <a href="mailto:personeel@citozorg.nl" style="color: #0066cc;">personeel@citozorg.nl</a>
     </p>
   </div>
 </body>
 </html>`;
+    }
 
-    // Build plain text version
-    const emailPlainText = `${emailContent.greeting},
+    // Build plain text version based on type
+    let emailPlainText: string;
+    
+    if (email_type === 'welcome_and_intake' || is_first_contact) {
+      emailPlainText = `${emailContent.greeting},
 
-${emailContent.body}
+${emailContent.intro || 'Hartelijk dank voor je interesse! We zijn blij dat je hebt gesolliciteerd.'}
+
+📋 WAT KUN JE VERWACHTEN?
+${emailContent.process_steps || '1. We bekijken je profiel\n2. Kennismakingsgesprek\n3. Matching met opdrachtgevers'}
+
+${fieldDescriptions.length > 0 ? `✍️ OM JE SNEL TE KUNNEN HELPEN, HEBBEN WE NOG NODIG:
+${fieldDescriptions.map((desc: string) => `• ${desc}`).join('\n')}` : '✅ Je aanmelding is compleet! We nemen zo snel mogelijk contact met je op.'}
 
 💡 Tip: Je kunt gewoon op deze email antwoorden!
 
-${emailContent.closing}
+${emailContent.closing || `Met vriendelijke groet,\n${org_name} Recruitment Team`}
 
 ---
-CitoZorg Recruitment | personeel@citozorg.nl`;
+${org_name} Recruitment | personeel@citozorg.nl`;
+    } else {
+      emailPlainText = `${emailContent.greeting},
+
+${emailContent.body || ''}
+
+💡 Tip: Je kunt gewoon op deze email antwoorden!
+
+${emailContent.closing || ''}
+
+---
+${org_name} Recruitment | personeel@citozorg.nl`;
+    }
 
     // Log the generated email for audit
     await supabase.from('application_conversations').insert({
