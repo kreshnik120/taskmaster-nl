@@ -5,17 +5,21 @@ interface ResendWebhookPayload {
   type: string;
   data: {
     from: string;
-    to: string;
+    to?: string | string[];
     subject: string;
-    text: string;
+    text?: string;
     html?: string;
     in_reply_to?: string;
     references?: string;
     message_id?: string;
+    headers?: Record<string, string>;
     attachments?: Array<{
       filename: string;
-      content: string;
+      content?: string;
       content_type: string;
+      content_disposition?: string;
+      content_id?: string;
+      size?: number;
     }>;
   };
 }
@@ -67,17 +71,21 @@ Deno.serve(async (req) => {
       type: z.string(),
       data: z.object({
         from: z.string().email().max(255),
-        to: z.string().max(255),
+        to: z.union([z.string(), z.array(z.string())]).optional(),
         subject: z.string().max(500),
-        text: z.string().max(500000),
+        text: z.string().max(500000).optional(),
         html: z.string().max(500000).optional(),
         in_reply_to: z.string().max(255).optional(),
         references: z.string().max(1000).optional(),
         message_id: z.string().max(255).optional(),
+        headers: z.record(z.string()).optional(),
         attachments: z.array(z.object({
           filename: z.string().max(255),
-          content: z.string().max(20000000),
-          content_type: z.string().max(100)
+          content: z.string().max(20000000).optional(),
+          content_type: z.string().max(100),
+          content_disposition: z.string().optional(),
+          content_id: z.string().optional(),
+          size: z.number().optional()
         })).max(10).optional()
       })
     });
@@ -107,10 +115,18 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { from, to, subject, text, in_reply_to, message_id } = payload.data;
+    const { from, to, subject, in_reply_to, message_id } = payload.data;
+    // Handle emails with only HTML content (no plain text)
+    const emailText = payload.data.text || payload.data.html || '';
+    // Filter out inline attachments (Outlook signatures, embedded images)
+    const realAttachments = payload.data.attachments?.filter(att => 
+      att.content && att.content_disposition !== 'inline'
+    ) || [];
+    
     console.log("From:", from);
     console.log("Subject:", subject);
     console.log("In-Reply-To:", in_reply_to);
+    console.log("Real attachments (excluding inline):", realAttachments.length);
 
     // Find the original conversation by matching in_reply_to with the email_id in metadata
     let applicationId: string | null = null;
@@ -208,7 +224,7 @@ Deno.serve(async (req) => {
       .insert({
         application_id: applicationId,
         role: "user",
-        content: text,
+        content: emailText,
         metadata: {
           email_id: message_id,
           subject: subject,
@@ -233,7 +249,7 @@ Je bent een recruitment assistant voor een thuiszorg organisatie. Analyseer deze
 ${hasOfferedSlots ? `\n**BELANGRIJK - Aangeboden interview tijdsloten:**\n${offeredSlots.map((slot: {date: string, time: string}, i: number) => `${i + 1}. ${slot.date} om ${slot.time}`).join('\n')}\n` : ''}
 
 **Email van sollicitant:**
-${text}
+${emailText}
 
 **Instructies:**
 1. Identificeer welke missing_info items nu zijn ingevuld
@@ -334,9 +350,9 @@ Return JSON in dit formaat:
       analysis = {
         filled_info: [],
         new_data: {},
-        requests_interview: text.toLowerCase().includes("gesprek") || 
-                           text.toLowerCase().includes("interview") ||
-                           text.toLowerCase().includes("afspraak"),
+        requests_interview: emailText.toLowerCase().includes("gesprek") || 
+                           emailText.toLowerCase().includes("interview") ||
+                           emailText.toLowerCase().includes("afspraak"),
         has_questions: false,
         remaining_missing_info: application.missing_info || [],
         confidence: 0.5,
@@ -380,12 +396,18 @@ Return JSON in dit formaat:
       vog_expiry_status?: string;
     }> = [];
 
-    if (payload.data.attachments && payload.data.attachments.length > 0) {
-      console.log(`📎 Processing ${payload.data.attachments.length} attachments...`);
+    if (realAttachments.length > 0) {
+      console.log(`📎 Processing ${realAttachments.length} real attachments (excluding inline images)...`);
       
-      for (const attachment of payload.data.attachments) {
+      for (const attachment of realAttachments) {
         try {
           console.log(`📄 Attachment: ${attachment.filename} (${attachment.content_type})`);
+          
+          // Skip if no content
+          if (!attachment.content) {
+            console.log(`⚠️ Skipping attachment without content: ${attachment.filename}`);
+            continue;
+          }
           
           // Detect document type from filename
           const detectDocType = (filename: string): 'vog' | 'diploma' | 'certificate' | 'cv' | 'id' | 'other' => {
