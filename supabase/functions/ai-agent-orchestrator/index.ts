@@ -1019,6 +1019,7 @@ async function executeTask(supabase: any, task: any) {
 
 // =====================================================
 // Execute Follow-up Question via send-ai-email
+// ENHANCED: Added deduplication check to prevent duplicate emails
 // =====================================================
 async function executeFollowupQuestion(supabase: any, action: any) {
   const org_id = action.agent_goals?.org_id;
@@ -1027,17 +1028,42 @@ async function executeFollowupQuestion(supabase: any, action: any) {
     organization = 'abczorg';
   }
 
-  console.log(`📧 [Followup] Sending follow-up email for ${organization}`);
+  console.log(`📧 [Followup] Checking for recent emails before sending...`);
+
+  // 🔒 DEDUPLICATION CHECK: Skip if email was sent recently (within 1 hour)
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { data: recentEmails } = await supabase
+    .from('application_conversations')
+    .select('id, created_at, content')
+    .eq('application_id', action.input_data.application_id)
+    .eq('role', 'assistant')
+    .gte('created_at', oneHourAgo)
+    .ilike('content', '%Email verzonden%')
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (recentEmails && recentEmails.length > 0) {
+    console.log(`⚠️ [Followup] SKIPPING - Recent email found at ${recentEmails[0].created_at}`);
+    return { 
+      executed_via: 'skipped', 
+      reason: 'Recent email already sent (within 1 hour)',
+      last_email_at: recentEmails[0].created_at,
+      organization
+    };
+  }
+
+  console.log(`📧 [Followup] No recent email found, proceeding to send...`);
 
   try {
     // Generate followup email using generate-followup-email
     const { data: emailData, error: genError } = await supabase.functions.invoke('generate-followup-email', {
       body: {
         application_id: action.input_data.application_id,
-        candidate_email: action.input_data.candidate_email, // ← CRITICAL: Was missing!
+        candidate_email: action.input_data.candidate_email,
         fields_to_ask: action.input_data.fields_to_ask,
         candidate_name: action.input_data.candidate_name,
-        current_completeness: action.input_data.current_completeness
+        current_completeness: action.input_data.current_completeness,
+        org_name: organization === 'abczorg' ? 'ABCzorg' : 'CitoZorg'
       }
     });
 
@@ -1054,7 +1080,7 @@ async function executeFollowupQuestion(supabase: any, action: any) {
         email_type: 'followup_question',
         recipient_email: action.input_data.candidate_email,
         recipient_name: action.input_data.candidate_name,
-        subject: emailData?.subject || `Aanvullende informatie nodig - ${action.input_data.candidate_name}`,
+        subject: emailData?.emailSubject || `Aanvullende informatie nodig - ${action.input_data.candidate_name}`,
         html_content: emailData?.emailHtml,
         plain_text: emailData?.emailPlainText,
         application_id: action.input_data.application_id,
@@ -1088,6 +1114,7 @@ async function executeFollowupQuestion(supabase: any, action: any) {
 
 // =====================================================
 // Execute Welcome & Intake Email - Gecombineerde welkomst + informatieverzoek
+// ENHANCED: Added deduplication check to prevent duplicate welcome emails
 // =====================================================
 async function executeWelcomeAndIntake(supabase: any, action: any) {
   const org_id = action.agent_goals?.org_id;
@@ -1098,7 +1125,29 @@ async function executeWelcomeAndIntake(supabase: any, action: any) {
     org_name = 'ABCzorg';
   }
 
-  console.log(`🎉 [Welcome] Sending welcome + intake email for ${org_name}`);
+  console.log(`🎉 [Welcome] Checking for existing welcome emails...`);
+
+  // 🔒 DEDUPLICATION CHECK: Skip if welcome email was already sent (any time)
+  const { data: existingWelcome } = await supabase
+    .from('application_conversations')
+    .select('id, created_at')
+    .eq('application_id', action.input_data.application_id)
+    .eq('role', 'assistant')
+    .or('content.ilike.%Welkom bij%,content.ilike.%Welcome%')
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (existingWelcome && existingWelcome.length > 0) {
+    console.log(`⚠️ [Welcome] SKIPPING - Welcome email already sent at ${existingWelcome[0].created_at}`);
+    return { 
+      executed_via: 'skipped', 
+      reason: 'Welcome email already sent previously',
+      sent_at: existingWelcome[0].created_at,
+      organization
+    };
+  }
+
+  console.log(`🎉 [Welcome] No existing welcome email, proceeding to send for ${org_name}...`);
 
   try {
     // Generate welcome + intake email using generate-followup-email with welcome type

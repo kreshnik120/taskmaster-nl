@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Mail, CheckCircle2, AlertCircle, Copy, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { Mail, CheckCircle2, AlertCircle, Copy, ExternalLink, Loader2, RefreshCw, Bug, Zap } from "lucide-react";
 
 interface DnsRecord {
   host: string;
@@ -39,6 +39,7 @@ interface SetupResult {
 export function ResendInboundSetup() {
   const [loading, setLoading] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState(false);
   const [result, setResult] = useState<SetupResult | null>(null);
 
   const runSetup = async () => {
@@ -99,6 +100,39 @@ export function ResendInboundSetup() {
     }
   };
 
+  const testWebhook = async () => {
+    setTestingWebhook(true);
+    try {
+      // Simulate a minimal inbound email to test the webhook handler
+      const testPayload = {
+        type: "email.received",
+        data: {
+          from: "test@example.com",
+          to: "recruitment@inbound.citozorg.nl",
+          subject: "TEST - Webhook Test",
+          text: "Dit is een test bericht om te controleren of de webhook werkt. Mijn telefoonnummer is 0612345678."
+        }
+      };
+
+      const { data, error } = await supabase.functions.invoke('handle-application-reply', {
+        body: testPayload
+      });
+
+      if (error) {
+        console.error("Webhook test error:", error);
+        toast.error(`Webhook test mislukt: ${error.message}`);
+      } else {
+        console.log("Webhook test response:", data);
+        toast.success("Webhook test succesvol! Check de logs voor details.");
+      }
+    } catch (error: any) {
+      console.error("Webhook test error:", error);
+      toast.error(error.message || "Webhook test mislukt");
+    } finally {
+      setTestingWebhook(false);
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success("Gekopieerd naar klembord");
@@ -116,124 +150,119 @@ export function ResendInboundSetup() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* DNS Configuration Instructions - Always Show */}
+        <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg space-y-2">
+          <h4 className="text-sm font-medium text-amber-800 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            Vereiste DNS Configuratie
+          </h4>
+          <p className="text-xs text-amber-700">
+            Voeg het volgende MX record toe aan je DNS bij citozorg.nl:
+          </p>
+          <div className="bg-white p-3 rounded border border-amber-200 space-y-1">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-muted-foreground">Host/Name:</span>
+              <code className="bg-amber-100 px-2 py-0.5 rounded font-mono">inbound</code>
+              <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => copyToClipboard('inbound')}>
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-muted-foreground">Type:</span>
+              <code className="bg-amber-100 px-2 py-0.5 rounded font-mono">MX</code>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-muted-foreground">Value:</span>
+              <code className="bg-amber-100 px-2 py-0.5 rounded font-mono text-[10px]">inbound.resend.com</code>
+              <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => copyToClipboard('inbound.resend.com')}>
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-muted-foreground">Priority:</span>
+              <code className="bg-amber-100 px-2 py-0.5 rounded font-mono">10</code>
+            </div>
+          </div>
+          <p className="text-xs text-amber-600 mt-2">
+            Na het toevoegen duurt het 5-30 minuten voordat DNS propageert.
+          </p>
+        </div>
+
         {!result ? (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Deze setup maakt een inbound email domein aan zodat kandidaten kunnen 
               reageren op emails en de AI agent automatisch hun profiel kan bijwerken.
             </p>
-            <Button onClick={runSetup} disabled={loading}>
-              {loading ? (
-                <>
+            <div className="flex gap-2">
+              <Button onClick={runSetup} disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Setup uitvoeren...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="h-4 w-4 mr-2" />
+                    Start Setup
+                  </>
+                )}
+              </Button>
+              <Button variant="outline" onClick={checkStatus} disabled={checkingStatus}>
+                {checkingStatus ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Setup uitvoeren...
-                </>
-              ) : (
-                <>
-                  <Mail className="h-4 w-4 mr-2" />
-                  Start Resend Inbound Setup
-                </>
-              )}
-            </Button>
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Check Status
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
             {/* Domain Status */}
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">Domain:</span>
-              <Badge variant={result.domain?.status === 'verified' ? 'default' : 'secondary'}>
+              <Badge variant={result.domain?.status === 'verified' || result.is_verified ? 'default' : 'secondary'}>
                 {result.domain?.name || 'inbound.citozorg.nl'}
               </Badge>
-              {result.domain?.status === 'verified' ? (
+              {result.domain?.status === 'verified' || result.is_verified ? (
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
               ) : (
                 <AlertCircle className="h-4 w-4 text-amber-500" />
               )}
               <span className="text-xs text-muted-foreground">
-                ({result.domain?.status || result.is_verified ? 'verified' : 'pending'})
+                ({result.domain?.status || (result.is_verified ? 'verified' : 'pending')})
               </span>
             </div>
 
-            {/* MX Record for DNS */}
-            {result.mx_record && (
-              <div className="bg-muted/50 p-4 rounded-lg space-y-2">
-                <h4 className="text-sm font-medium">📋 DNS Record toe te voegen:</h4>
-                <div className="grid grid-cols-4 gap-2 text-xs">
-                  <div>
-                    <span className="text-muted-foreground">Host:</span>
-                    <div className="font-mono bg-background p-1 rounded flex items-center justify-between">
-                      {result.mx_record.host}
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-5 w-5 p-0"
-                        onClick={() => copyToClipboard(result.mx_record!.host)}
-                      >
-                        <Copy className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Type:</span>
-                    <div className="font-mono bg-background p-1 rounded">{result.mx_record.type}</div>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-muted-foreground">Value:</span>
-                    <div className="font-mono bg-background p-1 rounded flex items-center justify-between text-[10px]">
-                      <span className="truncate">{result.mx_record.value}</span>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-5 w-5 p-0 ml-1"
-                        onClick={() => copyToClipboard(result.mx_record!.value)}
-                      >
-                        <Copy className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex gap-2 text-xs">
-                  <span className="text-muted-foreground">Priority:</span>
-                  <span className="font-mono">{result.mx_record.priority || 10}</span>
-                  <span className="text-muted-foreground ml-4">TTL:</span>
-                  <span className="font-mono">{result.mx_record.ttl || '3600'}</span>
-                </div>
-              </div>
-            )}
-
             {/* Webhook Info */}
             {result.webhook && (
-              <div className="text-sm">
-                <span className="font-medium">Webhook:</span>
-                <span className="ml-2 text-green-600">✓ Geconfigureerd</span>
-              </div>
-            )}
-
-            {/* Webhook Secret Warning */}
-            {result.webhook_secret && (
-              <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg">
-                <p className="text-xs text-amber-800">
-                  ⚠️ Webhook Secret gegenereerd. Deze is al opgeslagen als RESEND_WEBHOOK_SIGNING_SECRET.
-                </p>
+              <div className="text-sm space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">Webhook:</span>
+                  <span className="text-green-600">✓ Geconfigureerd</span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  URL: {result.webhook.endpoint_url}
+                </div>
               </div>
             )}
 
             {/* Reply-To Address */}
-            {result.reply_to_address && (
-              <div className="bg-primary/5 p-3 rounded-lg">
-                <span className="text-sm font-medium">Reply-To adres:</span>
-                <code className="ml-2 bg-background px-2 py-1 rounded text-sm">
-                  {result.reply_to_address}
-                </code>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => copyToClipboard(result.reply_to_address!)}
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
-              </div>
-            )}
+            <div className="bg-primary/5 p-3 rounded-lg">
+              <span className="text-sm font-medium">Reply-To adres:</span>
+              <code className="ml-2 bg-background px-2 py-1 rounded text-sm">
+                recruitment@inbound.citozorg.nl
+              </code>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => copyToClipboard('recruitment@inbound.citozorg.nl')}
+              >
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
 
             {/* Next Steps */}
             {result.next_steps && result.next_steps.length > 0 && (
@@ -248,7 +277,7 @@ export function ResendInboundSetup() {
             )}
 
             {/* Actions */}
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-wrap gap-2 pt-2">
               <Button variant="outline" size="sm" onClick={checkStatus} disabled={checkingStatus}>
                 {checkingStatus ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -259,7 +288,15 @@ export function ResendInboundSetup() {
               </Button>
               <Button variant="outline" size="sm" onClick={triggerVerify}>
                 <CheckCircle2 className="h-4 w-4 mr-2" />
-                Trigger Verificatie
+                Verificatie
+              </Button>
+              <Button variant="outline" size="sm" onClick={testWebhook} disabled={testingWebhook}>
+                {testingWebhook ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Bug className="h-4 w-4 mr-2" />
+                )}
+                Test Webhook
               </Button>
               <Button 
                 variant="outline" 
@@ -274,6 +311,11 @@ export function ResendInboundSetup() {
             {/* Message */}
             {result.message && (
               <p className="text-sm text-muted-foreground">{result.message}</p>
+            )}
+
+            {/* Error */}
+            {result.error && (
+              <p className="text-sm text-red-600">{result.error}</p>
             )}
           </div>
         )}
