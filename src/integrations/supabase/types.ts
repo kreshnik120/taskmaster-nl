@@ -4910,6 +4910,16 @@ export type Database = {
         }[]
       }
       cleanup_old_logs: { Args: never; Returns: undefined }
+      create_interview_task: {
+        Args: {
+          p_application_id: string
+          p_candidate_name: string
+          p_interview_date: string
+          p_notes?: string
+          p_org_id: string
+        }
+        Returns: string
+      }
       get_ai_health_summary: { Args: never; Returns: Json }
       get_knowledge_without_embeddings: {
         Args: { batch_limit?: number }

@@ -195,10 +195,14 @@ Deno.serve(async (req) => {
           return errorResponse('selected_slot is required for confirm_slot action', 400);
         }
 
+        // Parse interview datetime
+        const interviewDateTime = new Date(`${selected_slot.date}T${selected_slot.time}:00`);
+
         // Update application with confirmed slot
         await supabase
           .from('professional_applications')
           .update({
+            pipeline_stage: 'interview', // Move to interview stage
             extracted_data: {
               ...extractedData,
               interview_confirmed_slot: selected_slot,
@@ -207,6 +211,23 @@ Deno.serve(async (req) => {
             }
           })
           .eq('id', application_id);
+
+        // FASE 2: Automatisch interview taak aanmaken
+        let taskId = null;
+        try {
+          const { data: taskResult } = await supabase.rpc('create_interview_task', {
+            p_application_id: application_id,
+            p_candidate_name: candidateName,
+            p_interview_date: interviewDateTime.toISOString(),
+            p_org_id: application.org_id || application.assigned_organization,
+            p_notes: `Interview met ${candidateName} op ${formatDate(selected_slot.date)} om ${selected_slot.time}. Type: ${interview_type === 'video' ? 'Microsoft Teams' : interview_type === 'phone' ? 'Telefonisch' : 'Op locatie'}.`
+          });
+          taskId = taskResult;
+          logSuccess('ScheduleInterview', 'Interview task created', { taskId });
+        } catch (taskError) {
+          logError('ScheduleInterview', 'Failed to create interview task', taskError);
+          // Continue anyway - task creation is optional enhancement
+        }
 
         // Create calendar event via n8n (if configured)
         const n8nWebhookUrl = Deno.env.get('N8N_CALENDAR_WEBHOOK_URL');
@@ -248,19 +269,23 @@ Deno.serve(async (req) => {
             candidate_name: candidateName,
             selected_slot,
             interview_type,
+            task_id: taskId,
           },
           org_id: application.assigned_organization,
         });
 
         logSuccess('ScheduleInterview', 'Interview slot confirmed', { 
           application_id, 
-          slot: selected_slot 
+          slot: selected_slot,
+          task_created: !!taskId
         });
 
         return jsonResponse({
           success: true,
           action: 'confirm_slot',
           confirmed_slot: selected_slot,
+          task_id: taskId,
+          pipeline_stage_updated: 'interview',
         });
       }
 
