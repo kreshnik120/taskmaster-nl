@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { RobotIcon } from './RobotIcon';
+import { SimpleChatIcon } from './SimpleChatIcon';
 import { ChatDatePicker, ChatTimePicker, ChatSelect, ChatButtonGroup } from './InteractiveChatElements';
 import { MessageFeedback } from './MessageFeedback';
 import { format } from 'date-fns';
@@ -1176,19 +1176,11 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
 
   return (
     <>
-      {/* Robot Assistant */}
-      <div className="fixed bottom-6 right-6 z-[2147483647] pointer-events-none">
-        <div className="pointer-events-auto drop-shadow-2xl">
-          <RobotIcon 
-            onClick={() => setIsOpen(!isOpen)} 
-            isActive={isOpen}
-            isUserTyping={isUserTyping}
-            isThinking={isLoading}
-            justOpened={justOpened}
-            lastMessageReceived={lastMessageReceived}
-          />
-        </div>
-      </div>
+      {/* Chat Icon */}
+      <SimpleChatIcon 
+        onClick={() => setIsOpen(!isOpen)} 
+        isActive={isOpen}
+      />
 
       {/* Chat Window */}
       {isOpen && (
