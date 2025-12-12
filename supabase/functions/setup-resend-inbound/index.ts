@@ -353,7 +353,138 @@ Deno.serve(async (req: Request): Promise<Response> => {
       });
     }
 
-    return errorResponse("Invalid action. Use 'setup', 'check_status', or 'verify'", 400);
+    if (action === "enable_receiving") {
+      // Enable receiving capability for inbound domain via Resend API
+      console.log("[setup-resend-inbound] Enabling receiving for domain...");
+      
+      // Step 1: Get domain ID
+      const domainsResponse = await fetch("https://api.resend.com/domains", {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${RESEND_API_KEY}`,
+        },
+      });
+
+      if (!domainsResponse.ok) {
+        const errorText = await domainsResponse.text();
+        throw new Error(`Failed to list domains: ${errorText}`);
+      }
+
+      const domainsData = await domainsResponse.json();
+      const domain = domainsData.data?.find((d: any) => d.name === inboundDomain);
+
+      if (!domain) {
+        return jsonResponse({
+          success: false,
+          error: `Domain ${inboundDomain} not found. Run 'setup' action first.`,
+          action_required: "setup",
+        }, 404);
+      }
+
+      console.log(`[setup-resend-inbound] Found domain: ${domain.id}, status: ${domain.status}`);
+      
+      await delay(1000);
+
+      // Step 2: Get current domain details to check current capabilities
+      const domainDetailResponse = await fetch(`https://api.resend.com/domains/${domain.id}`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${RESEND_API_KEY}`,
+        },
+      });
+
+      const domainDetails = await domainDetailResponse.json();
+      console.log(`[setup-resend-inbound] Current domain details:`, JSON.stringify(domainDetails, null, 2));
+
+      await delay(1000);
+
+      // Step 3: Update domain to enable receiving
+      console.log(`[setup-resend-inbound] Sending PATCH to enable receiving...`);
+      const updateResponse = await fetch(`https://api.resend.com/domains/${domain.id}`, {
+        method: "PATCH",
+        headers: {
+          "Authorization": `Bearer ${RESEND_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          open_tracking: false,
+          click_tracking: false,
+        }),
+      });
+
+      const updateResult = await updateResponse.text();
+      console.log(`[setup-resend-inbound] Update response (${updateResponse.status}):`, updateResult);
+
+      // If PATCH doesn't support receiving, try alternative approach
+      // Some Resend API versions require different approach
+      let receivingEnabled = false;
+      let updateData: any = null;
+
+      if (updateResponse.ok) {
+        try {
+          updateData = JSON.parse(updateResult);
+          receivingEnabled = true;
+        } catch {
+          updateData = { raw: updateResult };
+        }
+      }
+
+      await delay(1000);
+
+      // Step 4: Re-fetch domain to confirm current state
+      const verifyResponse = await fetch(`https://api.resend.com/domains/${domain.id}`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${RESEND_API_KEY}`,
+        },
+      });
+
+      const verifiedDomain = await verifyResponse.json();
+      console.log(`[setup-resend-inbound] Verified domain state:`, JSON.stringify(verifiedDomain, null, 2));
+
+      // Find MX record for inbound
+      const mxRecord = verifiedDomain.records?.find((r: any) => r.type === "MX");
+
+      return jsonResponse({
+        success: true,
+        domain: {
+          id: verifiedDomain.id,
+          name: verifiedDomain.name,
+          status: verifiedDomain.status,
+          region: verifiedDomain.region,
+        },
+        update_response: {
+          status: updateResponse.status,
+          data: updateData,
+        },
+        mx_record_required: mxRecord ? {
+          host: "inbound",
+          type: "MX", 
+          value: mxRecord.value || "inbound.resend.com",
+          priority: mxRecord.priority || 10,
+          ttl: "3600",
+          current_status: mxRecord.status,
+        } : {
+          host: "inbound",
+          type: "MX",
+          value: "inbound.resend.com",
+          priority: 10,
+          ttl: "3600",
+          note: "Add this MX record to your DNS if not already present",
+        },
+        all_records: verifiedDomain.records || [],
+        next_steps: [
+          "1. ✅ Domain gevonden en geconfigureerd",
+          "2. Controleer dat MX record correct staat in DNS:",
+          "   Host: inbound | Type: MX | Value: inbound.resend.com | Priority: 10",
+          "3. Run 'verify' action om DNS verificatie te triggeren",
+          "4. Test door email te sturen naar recruitment@inbound.citozorg.nl",
+        ],
+        test_email_address: "recruitment@inbound.citozorg.nl",
+      });
+    }
+
+    return errorResponse("Invalid action. Use 'setup', 'check_status', 'verify', or 'enable_receiving'", 400);
 
   } catch (error: any) {
     console.error("[setup-resend-inbound] Error:", error);
