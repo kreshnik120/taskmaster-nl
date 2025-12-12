@@ -26,7 +26,80 @@ const GOAL_CONFIGS: Record<string, {
   requiredFields: string[];
 }> = {
   // =====================================================
-  // NEW: Application Intake Completion - Autonome follow-up
+  // NEW: Welcome & Intake - Gecombineerde welkomst + informatieverzoek
+  // =====================================================
+  'send_welcome_and_intake': {
+    requiredFields: ['application_id', 'candidate_email'],
+    planGenerator: async (goal, context) => {
+      // Get missing_info from input_data or fallback to database query
+      let missingInfo = goal.input_data.missing_info || [];
+      
+      // FALLBACK: If missing_info is empty, query the database directly
+      if (missingInfo.length === 0 && goal.input_data.application_id && context?.supabase) {
+        console.log('📋 [Orchestrator] missing_info empty, querying database...');
+        const { data: app } = await context.supabase
+          .from('professional_applications')
+          .select('missing_info, extracted_data')
+          .eq('id', goal.input_data.application_id)
+          .single();
+        
+        if (app?.missing_info && app.missing_info.length > 0) {
+          missingInfo = app.missing_info;
+          console.log('✅ [Orchestrator] Got missing_info from database:', missingInfo);
+        } else if (app?.extracted_data) {
+          const extractedData = app.extracted_data as Record<string, any>;
+          const criticalFields = ['functie_niveau', 'werkvorm', 'regio', 'beschikbaarheid', 'telefoonnummer'];
+          missingInfo = criticalFields.filter(field => !extractedData[field]);
+          console.log('✅ [Orchestrator] Derived missing_info from extracted_data:', missingInfo);
+        }
+      }
+      
+      // Prioriteit volgorde voor vragen (kritieke velden eerst)
+      const priorityFields = [
+        'functie_niveau',    // Kritiek voor matching
+        'werkvorm',          // Kritiek voor matching
+        'regio',             // Kritiek voor matching
+        'beschikbaarheid',   // Belangrijk voor plaatsing
+        'telefoonnummer',    // Belangrijk voor contact
+        'ervaring_sector',   // Belangrijk voor matching
+        'doelgroep_ervaring',// Belangrijk voor matching
+      ];
+      
+      // Filter en sorteer missing info op prioriteit
+      const sortedMissing = [...missingInfo].sort((a: string, b: string) => {
+        const aIndex = priorityFields.indexOf(a);
+        const bIndex = priorityFields.indexOf(b);
+        return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+      });
+      
+      // Neem max 10 items per email
+      const fieldsToAsk = sortedMissing.slice(0, 10);
+      
+      console.log('🎉 [Orchestrator] Welcome + Intake email, fields:', fieldsToAsk);
+      
+      return [
+        {
+          action_type: 'send_welcome_and_intake',
+          action_order: 1,
+          action_description: `Stuur welkomstmail met intake vragen aan ${goal.input_data.candidate_name || 'kandidaat'}`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            application_id: goal.input_data.application_id,
+            candidate_email: goal.input_data.candidate_email,
+            candidate_name: goal.input_data.candidate_name,
+            fields_to_ask: fieldsToAsk,
+            all_missing_info: missingInfo,
+            current_completeness: goal.input_data.current_completeness,
+            email_type: 'welcome_and_intake',
+            is_first_contact: true,
+          }
+        }
+      ];
+    }
+  },
+
+  // =====================================================
+  // Application Intake Completion - Follow-up voor bestaande sollicitaties
   // =====================================================
   'application_intake_completion': {
     requiredFields: ['application_id', 'candidate_email'],
@@ -874,6 +947,10 @@ async function executeTask(supabase: any, task: any) {
 
   // Execute based on action type
   switch (action.action_type) {
+    case 'send_welcome_and_intake': // Welkomstmail + intake vragen voor nieuwe applicaties
+      result = await executeWelcomeAndIntake(supabase, action);
+      break;
+    
     case 'send_followup_question': // Follow-up vragen voor incomplete applicaties
       result = await executeFollowupQuestion(supabase, action);
       break;
@@ -1001,6 +1078,82 @@ async function executeFollowupQuestion(supabase: any, action: any) {
 
   } catch (err: any) {
     console.error('❌ [Followup] Failed:', err);
+    return { 
+      executed_via: 'failed', 
+      error: err.message,
+      organization
+    };
+  }
+}
+
+// =====================================================
+// Execute Welcome & Intake Email - Gecombineerde welkomst + informatieverzoek
+// =====================================================
+async function executeWelcomeAndIntake(supabase: any, action: any) {
+  const org_id = action.agent_goals?.org_id;
+  let organization = 'citozorg';
+  let org_name = 'CitoZorg';
+  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
+    organization = 'abczorg';
+    org_name = 'ABCzorg';
+  }
+
+  console.log(`🎉 [Welcome] Sending welcome + intake email for ${org_name}`);
+
+  try {
+    // Generate welcome + intake email using generate-followup-email with welcome type
+    const { data: emailData, error: genError } = await supabase.functions.invoke('generate-followup-email', {
+      body: {
+        application_id: action.input_data.application_id,
+        candidate_email: action.input_data.candidate_email,
+        candidate_name: action.input_data.candidate_name,
+        fields_to_ask: action.input_data.fields_to_ask || [],
+        current_completeness: action.input_data.current_completeness,
+        email_type: 'welcome_and_intake',
+        is_first_contact: true,
+        org_name: org_name
+      }
+    });
+
+    if (genError) {
+      console.error('[Welcome] Email generation failed:', genError);
+      throw genError;
+    }
+
+    console.log('[Welcome] Email generated, sending via Resend...');
+
+    // Send via send-ai-email
+    const { data: sendData, error: sendError } = await supabase.functions.invoke('send-ai-email', {
+      body: {
+        email_type: 'welcome',
+        recipient_email: action.input_data.candidate_email,
+        recipient_name: action.input_data.candidate_name,
+        subject: emailData?.emailSubject || `Welkom bij ${org_name} - Je sollicitatie is ontvangen!`,
+        html_content: emailData?.emailHtml,
+        plain_text: emailData?.emailPlainText,
+        application_id: action.input_data.application_id,
+        org_id: org_id
+      }
+    });
+
+    if (sendError) {
+      console.error('[Welcome] Email send failed:', sendError);
+      throw sendError;
+    }
+
+    console.log('✅ [Welcome] Welcome email sent successfully');
+    return { 
+      executed_via: 'resend', 
+      organization, 
+      email_type: 'welcome_and_intake',
+      email_generated: !!emailData,
+      email_sent: !!sendData,
+      fields_asked: action.input_data.fields_to_ask?.length || 0,
+      ...sendData 
+    };
+
+  } catch (err: any) {
+    console.error('❌ [Welcome] Failed:', err);
     return { 
       executed_via: 'failed', 
       error: err.message,
