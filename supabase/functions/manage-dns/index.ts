@@ -24,6 +24,9 @@ async function getAccessToken(): Promise<string> {
     throw new Error("TransIP credentials not configured. Please add TRANSIP_ACCOUNT_NAME and TRANSIP_PRIVATE_KEY secrets.");
   }
 
+  console.log("[TransIP] Account name length:", accountName.length);
+  console.log("[TransIP] Private key length:", privateKeyPem.length);
+
   // Create request body for token generation
   const requestBody = JSON.stringify({
     login: accountName,
@@ -35,18 +38,27 @@ async function getAccessToken(): Promise<string> {
   });
 
   // Extract the key content from PEM format
-  // Handle both traditional and PKCS8 formats
+  // Handle escaped newlines and various PEM formats
   let pemContents = privateKeyPem
+    // First, handle literal \n (escaped newlines from JSON/env)
+    .replace(/\\n/g, "\n")
+    // Now remove the headers
     .replace(/-----BEGIN (RSA )?PRIVATE KEY-----/g, "")
     .replace(/-----END (RSA )?PRIVATE KEY-----/g, "")
-    .replace(/\\n/g, "")  // Handle escaped newlines from env vars
+    // Remove all whitespace including newlines
     .replace(/\s/g, "");
+
+  console.log("[TransIP] PEM content length after cleaning:", pemContents.length);
+  console.log("[TransIP] First 20 chars:", pemContents.substring(0, 20));
 
   // Convert base64 to binary
   let binaryKey: Uint8Array;
   try {
     binaryKey = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+    console.log("[TransIP] Binary key length:", binaryKey.length);
   } catch (e) {
+    console.error("[TransIP] Base64 decode failed. PEM may contain invalid characters.");
+    console.error("[TransIP] First 100 chars of cleaned PEM:", pemContents.substring(0, 100));
     throw new Error(`Failed to decode private key. Make sure it's a valid PEM-encoded RSA private key. Error: ${e}`);
   }
 
