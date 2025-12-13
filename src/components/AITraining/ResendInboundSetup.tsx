@@ -114,7 +114,8 @@ export function ResendInboundSetup() {
         }
       };
 
-      const { data, error } = await supabase.functions.invoke('handle-application-reply', {
+      // Test the main webhook entry point (process-application-email routes replies internally)
+      const { data, error } = await supabase.functions.invoke('process-application-email', {
         body: testPayload
       });
 
