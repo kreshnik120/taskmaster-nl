@@ -1,5 +1,3 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -15,100 +13,18 @@ interface TransIPDnsEntry {
   content: string;
 }
 
-// Generate access token for TransIP API authentication
-async function getAccessToken(): Promise<string> {
-  const accountName = Deno.env.get("TRANSIP_ACCOUNT_NAME");
-  const privateKeyPem = Deno.env.get("TRANSIP_PRIVATE_KEY");
-
-  if (!accountName || !privateKeyPem) {
-    throw new Error("TransIP credentials not configured. Please add TRANSIP_ACCOUNT_NAME and TRANSIP_PRIVATE_KEY secrets.");
+// Get pre-generated access token from environment
+function getAccessToken(): string {
+  const token = Deno.env.get("TRANSIP_ACCESS_TOKEN");
+  if (!token) {
+    throw new Error("TRANSIP_ACCESS_TOKEN secret not configured. Please add your TransIP access token.");
   }
-
-  console.log("[TransIP] Account name length:", accountName.length);
-  console.log("[TransIP] Private key length:", privateKeyPem.length);
-
-  // Create request body for token generation
-  const requestBody = JSON.stringify({
-    login: accountName,
-    nonce: crypto.randomUUID(),
-    read_only: false,
-    expiration_time: "30 minutes",
-    label: "lovable-dns-management",
-    global_key: true
-  });
-
-  // Extract the key content from PEM format
-  // Handle escaped newlines and various PEM formats
-  let pemContents = privateKeyPem
-    // First, handle literal \n (escaped newlines from JSON/env)
-    .replace(/\\n/g, "\n")
-    // Now remove the headers
-    .replace(/-----BEGIN (RSA )?PRIVATE KEY-----/g, "")
-    .replace(/-----END (RSA )?PRIVATE KEY-----/g, "")
-    // Remove all whitespace including newlines
-    .replace(/\s/g, "");
-
-  console.log("[TransIP] PEM content length after cleaning:", pemContents.length);
-  console.log("[TransIP] First 20 chars:", pemContents.substring(0, 20));
-
-  // Convert base64 to binary
-  let binaryKey: Uint8Array;
-  try {
-    binaryKey = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
-    console.log("[TransIP] Binary key length:", binaryKey.length);
-  } catch (e) {
-    console.error("[TransIP] Base64 decode failed. PEM may contain invalid characters.");
-    console.error("[TransIP] First 100 chars of cleaned PEM:", pemContents.substring(0, 100));
-    throw new Error(`Failed to decode private key. Make sure it's a valid PEM-encoded RSA private key. Error: ${e}`);
-  }
-
-  // Try to import as PKCS8
-  let cryptoKey: CryptoKey;
-  try {
-    cryptoKey = await crypto.subtle.importKey(
-      "pkcs8",
-      binaryKey.buffer as ArrayBuffer,
-      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-512" },
-      false,
-      ["sign"]
-    );
-  } catch (e) {
-    console.log("PKCS8 import failed, this may be a PKCS1 key. TransIP requires signing with the private key.");
-    throw new Error(`Failed to import private key. TransIP requires a PKCS8 formatted private key. Original error: ${e}`);
-  }
-
-  // Sign the request body
-  const signature = await crypto.subtle.sign(
-    "RSASSA-PKCS1-v1_5",
-    cryptoKey,
-    new TextEncoder().encode(requestBody)
-  );
-
-  const signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
-
-  // Request access token from TransIP
-  const response = await fetch(`${TRANSIP_API_URL}/auth`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Signature": signatureB64,
-    },
-    body: requestBody,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("TransIP auth error:", response.status, errorText);
-    throw new Error(`TransIP authentication failed: ${response.status} - ${errorText}`);
-  }
-
-  const data = await response.json();
-  return data.token;
+  return token;
 }
 
 // List DNS records for a domain
 async function listDnsRecords(domain: string): Promise<TransIPDnsEntry[]> {
-  const token = await getAccessToken();
+  const token = getAccessToken();
   
   const response = await fetch(`${TRANSIP_API_URL}/domains/${domain}/dns`, {
     method: "GET",
@@ -120,7 +36,7 @@ async function listDnsRecords(domain: string): Promise<TransIPDnsEntry[]> {
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("TransIP API error:", response.status, errorText);
+    console.error("[TransIP] API error:", response.status, errorText);
     throw new Error(`Failed to list DNS records: ${response.status} - ${errorText}`);
   }
 
@@ -130,7 +46,7 @@ async function listDnsRecords(domain: string): Promise<TransIPDnsEntry[]> {
 
 // Add a DNS record
 async function addDnsRecord(domain: string, entry: TransIPDnsEntry): Promise<void> {
-  const token = await getAccessToken();
+  const token = getAccessToken();
   
   // First get existing records
   const existingRecords = await listDnsRecords(domain);
@@ -141,7 +57,7 @@ async function addDnsRecord(domain: string, entry: TransIPDnsEntry): Promise<voi
   );
   
   if (exists) {
-    console.log("Record already exists, skipping");
+    console.log("[TransIP] Record already exists, skipping");
     return;
   }
   
@@ -159,14 +75,14 @@ async function addDnsRecord(domain: string, entry: TransIPDnsEntry): Promise<voi
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("TransIP API error:", response.status, errorText);
+    console.error("[TransIP] API error:", response.status, errorText);
     throw new Error(`Failed to add DNS record: ${response.status} - ${errorText}`);
   }
 }
 
 // Delete a DNS record
 async function deleteDnsRecord(domain: string, entry: Partial<TransIPDnsEntry>): Promise<void> {
-  const token = await getAccessToken();
+  const token = getAccessToken();
   
   // Get existing records
   const existingRecords = await listDnsRecords(domain);
@@ -178,7 +94,7 @@ async function deleteDnsRecord(domain: string, entry: Partial<TransIPDnsEntry>):
   );
   
   if (updatedRecords.length === existingRecords.length) {
-    console.log("Record not found, nothing to delete");
+    console.log("[TransIP] Record not found, nothing to delete");
     return;
   }
   
@@ -193,7 +109,7 @@ async function deleteDnsRecord(domain: string, entry: Partial<TransIPDnsEntry>):
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("TransIP API error:", response.status, errorText);
+    console.error("[TransIP] API error:", response.status, errorText);
     throw new Error(`Failed to delete DNS record: ${response.status} - ${errorText}`);
   }
 }
