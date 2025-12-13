@@ -19,7 +19,12 @@ function getAccessToken(): string {
   if (!token) {
     throw new Error("TRANSIP_ACCESS_TOKEN secret not configured. Please add your TransIP access token.");
   }
-  return token;
+  
+  // Debug: log token info (not the full token for security)
+  const cleanToken = token.trim();
+  console.log(`[TransIP] Token length: ${cleanToken.length}, starts with: ${cleanToken.substring(0, 10)}...`);
+  
+  return cleanToken;
 }
 
 // List DNS records for a domain
