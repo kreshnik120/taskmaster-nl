@@ -427,7 +427,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       let webhookStatus = null;
       if (webhooksResponse.ok) {
         const webhooksData = await webhooksResponse.json();
-        const webhookUrl = `${SUPABASE_URL}/functions/v1/handle-application-reply`;
+        // The webhook points to process-application-email (main entry point that routes replies)
+        const webhookUrl = `${SUPABASE_URL}/functions/v1/process-application-email`;
         const existingWebhook = webhooksData.data?.find((w: any) => 
           w.endpoint === webhookUrl && w.events?.includes("email.received")
         );
