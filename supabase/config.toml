@@ -110,6 +110,10 @@ verify_jwt = false
 verify_jwt = false
 # Purpose: Setup and verify Resend inbound email domain configuration
 
+[functions.manage-dns]
+verify_jwt = false
+# Purpose: Manage DNS records via TransIP API
+
 # -----------------------------------------------------------------------------
 # AUTHENTICATED FUNCTIONS (JWT verification required)
 # -----------------------------------------------------------------------------
