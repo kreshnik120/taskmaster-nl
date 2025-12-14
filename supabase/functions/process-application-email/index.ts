@@ -1,8 +1,8 @@
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { Resend } from "https://esm.sh/resend@4.0.0";
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
+import { normalizeFunctieNiveau, normalizeWerkvorm, isPlaceholderPhone, getOrganizationById } from '../_shared/healthcare-mappings.ts';
 // PDF parsing moved to separate parse-pdf-cv function
-
 interface ResendWebhookPayload {
   type: string;
   created_at: string;
@@ -30,8 +30,14 @@ const handler = async (req: Request): Promise<Response> => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
+  const startTime = Date.now();
+  const requestId = crypto.randomUUID().slice(0, 8);
+
   try {
-    console.log("=== Processing Application Email ===");
+    console.log(`\n🔵 [${requestId}] ========================================`);
+    console.log(`🔵 [${requestId}] PROCESS-APPLICATION-EMAIL STARTED`);
+    console.log(`🔵 [${requestId}] Timestamp: ${new Date().toISOString()}`);
+    console.log(`🔵 [${requestId}] ========================================`);
     
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY")!;
     const resendApiKey = Deno.env.get("RESEND_API_KEY")!;
@@ -100,10 +106,14 @@ const handler = async (req: Request): Promise<Response> => {
     }
     
     payload = webhookValidation.data as ResendWebhookPayload;
-    console.log("Webhook type:", payload.type);
+    console.log(`🔵 [${requestId}] Webhook type: ${payload.type}`);
+    console.log(`🔵 [${requestId}] From: ${payload.data?.from}`);
+    console.log(`🔵 [${requestId}] Subject: ${payload.data?.subject}`);
+    console.log(`🔵 [${requestId}] Attachments: ${payload.data?.attachments?.length || 0}`);
 
     if (payload.type !== "email.received") {
-      return new Response(JSON.stringify({ message: "Ignored - not email.received" }), {
+      console.log(`🔵 [${requestId}] Ignoring non-email event: ${payload.type}`);
+      return new Response(JSON.stringify({ message: "Ignored - not email.received", request_id: requestId }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

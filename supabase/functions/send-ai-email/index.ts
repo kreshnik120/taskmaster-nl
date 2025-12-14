@@ -1,5 +1,6 @@
 import { Resend } from "https://esm.sh/resend@4.0.0";
 import { handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
+import { getOrganizationById, getEmailConfig } from '../_shared/healthcare-mappings.ts';
 
 // Email types supported by this function
 type EmailType = 
@@ -57,21 +58,8 @@ interface SendEmailRequest {
   reply_to?: string;
 }
 
-// Organization email configuration
-// NOTE: ABCzorg uses citozorg.nl domain because abczorg.nl is not yet verified in Resend
-// Reply-To uses Resend default inbound address (purring-bat.resend.app) which is verified and working
-const ORG_EMAIL_CONFIG: Record<string, { from: string; name: string; replyTo: string }> = {
-  'citozorg': {
-    from: 'personeel@citozorg.nl',
-    name: 'CitoZorg Recruitment',
-    replyTo: 'recruitment@purring-bat.resend.app' // Resend inbound webhook - werkend!
-  },
-  'abczorg': {
-    from: 'personeel@citozorg.nl', // Using citozorg.nl (verified) until abczorg.nl is added to Resend
-    name: 'ABCzorg Recruitment',
-    replyTo: 'recruitment@purring-bat.resend.app' // Resend inbound webhook - werkend!
-  }
-};
+// Organization email configuration - now uses shared healthcare-mappings
+// NOTE: This constant is kept for backward compatibility but getEmailConfig() is preferred
 
 Deno.serve(async (req: Request): Promise<Response> => {
   const corsResponse = handleCors(req);
@@ -112,19 +100,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const resendApiKey = Deno.env.get("RESEND_API_KEY")!;
     const resend = new Resend(resendApiKey);
 
-    // Determine organization from org_id
-    let organization = 'citozorg'; // default
-    if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
-      organization = 'abczorg';
-    }
-
-    // Get email configuration for organization
-    const emailConfig = ORG_EMAIL_CONFIG[organization] || ORG_EMAIL_CONFIG['citozorg'];
+    // Get organization info using shared healthcare-mappings
+    const orgInfo = getOrganizationById(org_id);
+    const emailConfig = getEmailConfig(org_id);
+    
+    console.log(`[send-ai-email] Using org: ${orgInfo.displayName} (${orgInfo.name})`);
     
     // Build HTML content if not provided
     let finalHtmlContent = html_content;
     if (!finalHtmlContent) {
-      finalHtmlContent = generateEmailTemplate(email_type, recipient_name, subject, template_data, organization);
+      finalHtmlContent = generateEmailTemplate(email_type, recipient_name, subject, template_data, orgInfo.name);
     }
 
     console.log(`[send-ai-email] Sending via Resend as ${emailConfig.name}`);
@@ -154,7 +139,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         recipient_name,
         subject,
         sent_via: 'resend',
-        organization,
+        organization: orgInfo.name,
         success: !emailResult.error
       },
       metadata: {
@@ -173,7 +158,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           email_type,
           resend_email_id: emailResult.data?.id,
           sent_via: 'resend',
-          organization,
+          organization: orgInfo.name,
           template_data
         }
       });
@@ -191,7 +176,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return jsonResponse({
       success: true,
       sent_via: 'resend',
-      organization,
+      organization: orgInfo.name,
       email_id: emailResult.data?.id,
       message: `Email verzonden naar ${recipient_email}`
     });

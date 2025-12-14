@@ -1,5 +1,6 @@
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
+import { normalizeFunctieNiveau, normalizeWerkvorm } from '../_shared/healthcare-mappings.ts';
 
 interface ResendWebhookPayload {
   type: string;
@@ -359,30 +360,20 @@ Return JSON in dit formaat:
       };
     }
 
-    // 🔧 POST-PROCESSING: Map functie_niveau variations to exact DB values
+    // 🔧 POST-PROCESSING: Use shared healthcare-mappings for normalization
     if (analysis.new_data?.functie_niveau) {
-      const functieNiveauMapping: Record<string, string> = {
-        "verzorgende ig": "VIG",
-        "verzorgende IG": "VIG",
-        "vig": "VIG",
-        "verzorgende niveau 3": "VP3",
-        "verzorgende 3": "VP3",
-        "vp3": "VP3",
-        "verzorgende niveau 4": "VP4",
-        "verzorgende 4": "VP4",
-        "vp4": "VP4",
-        "hbo verpleegkundige": "HBO-V",
-        "hbo-v": "HBO-V",
-        "hbov": "HBO-V",
-        "helpende": "Helpende 2",
-        "helpende 2": "Helpende 2",
-        "helpende niveau 2": "Helpende 2",
-      };
-
-      const normalized = analysis.new_data.functie_niveau.toLowerCase().trim();
-      if (functieNiveauMapping[normalized]) {
-      console.log(`Mapped functie_niveau: "${analysis.new_data.functie_niveau}" → "${functieNiveauMapping[normalized]}"`);
-        analysis.new_data.functie_niveau = functieNiveauMapping[normalized];
+      const normalized = normalizeFunctieNiveau(analysis.new_data.functie_niveau);
+      if (normalized !== analysis.new_data.functie_niveau) {
+        console.log(`Mapped functie_niveau: "${analysis.new_data.functie_niveau}" → "${normalized}"`);
+        analysis.new_data.functie_niveau = normalized;
+      }
+    }
+    
+    if (analysis.new_data?.werkvorm) {
+      const normalized = normalizeWerkvorm(analysis.new_data.werkvorm);
+      if (normalized !== analysis.new_data.werkvorm) {
+        console.log(`Mapped werkvorm: "${analysis.new_data.werkvorm}" → "${normalized}"`);
+        analysis.new_data.werkvorm = normalized;
       }
     }
 
