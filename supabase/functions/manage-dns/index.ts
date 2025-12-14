@@ -3,7 +3,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// TransIP API v6 endpoint
 const TRANSIP_API_URL = "https://api.transip.nl/v6";
 
 interface TransIPDnsEntry {
@@ -13,24 +12,165 @@ interface TransIPDnsEntry {
   content: string;
 }
 
-// Get pre-generated access token from environment
-function getAccessToken(): string {
-  const token = Deno.env.get("TRANSIP_ACCESS_TOKEN");
-  if (!token) {
-    throw new Error("TRANSIP_ACCESS_TOKEN secret not configured. Please add your TransIP access token.");
-  }
-  
-  // Debug: log token info (not the full token for security)
-  const cleanToken = token.trim();
-  console.log(`[TransIP] Token length: ${cleanToken.length}, starts with: ${cleanToken.substring(0, 10)}...`);
-  
-  return cleanToken;
+// Base64URL encode
+function base64UrlEncode(data: Uint8Array): string {
+  const base64 = btoa(String.fromCharCode(...data));
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-// List DNS records for a domain
-async function listDnsRecords(domain: string): Promise<TransIPDnsEntry[]> {
-  const token = getAccessToken();
+// Generate JWT and get access token from TransIP
+async function getAccessToken(): Promise<string> {
+  const privateKeyPem = Deno.env.get("TRANSIP_PRIVATE_KEY");
+  const accountName = Deno.env.get("TRANSIP_ACCOUNT_NAME");
   
+  if (!privateKeyPem) {
+    throw new Error("TRANSIP_PRIVATE_KEY secret not configured");
+  }
+  if (!accountName) {
+    throw new Error("TRANSIP_ACCOUNT_NAME secret not configured");
+  }
+
+  console.log(`[TransIP] Generating JWT for account: ${accountName}`);
+  
+  // Convert PEM to binary - handle both PKCS#1 and PKCS#8 formats
+  let pemContent = privateKeyPem.trim();
+  
+  // Remove headers/footers and newlines
+  pemContent = pemContent
+    .replace(/-----BEGIN RSA PRIVATE KEY-----/g, '')
+    .replace(/-----END RSA PRIVATE KEY-----/g, '')
+    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+    .replace(/-----END PRIVATE KEY-----/g, '')
+    .replace(/\s/g, '');
+  
+  // Decode base64
+  const binaryString = atob(pemContent);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  
+  // Import the key - try PKCS#8 first, then PKCS#1
+  let privateKey: CryptoKey;
+  try {
+    privateKey = await crypto.subtle.importKey(
+      "pkcs8",
+      bytes,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-512" },
+      false,
+      ["sign"]
+    );
+  } catch {
+    // Try wrapping PKCS#1 in PKCS#8 structure
+    console.log("[TransIP] PKCS#8 import failed, trying PKCS#1 wrapper...");
+    
+    // PKCS#8 wrapper for RSA PKCS#1 key
+    const pkcs8Header = new Uint8Array([
+      0x30, 0x82, // SEQUENCE
+      0x00, 0x00, // length placeholder (will be filled)
+      0x02, 0x01, 0x00, // INTEGER version = 0
+      0x30, 0x0d, // SEQUENCE (AlgorithmIdentifier)
+      0x06, 0x09, // OID
+      0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, // rsaEncryption
+      0x05, 0x00, // NULL
+      0x04, 0x82, // OCTET STRING
+      0x00, 0x00, // length placeholder (will be filled)
+    ]);
+    
+    // Calculate lengths
+    const innerLength = bytes.length;
+    const outerLength = innerLength + 22;
+    
+    // Create wrapped key
+    const wrappedKey = new Uint8Array(outerLength + 4);
+    wrappedKey.set(pkcs8Header);
+    
+    // Fill in lengths
+    wrappedKey[2] = (outerLength >> 8) & 0xff;
+    wrappedKey[3] = outerLength & 0xff;
+    wrappedKey[24] = (innerLength >> 8) & 0xff;
+    wrappedKey[25] = innerLength & 0xff;
+    
+    // Add the key data
+    wrappedKey.set(bytes, 26);
+    
+    try {
+      privateKey = await crypto.subtle.importKey(
+        "pkcs8",
+        wrappedKey,
+        { name: "RSASSA-PKCS1-v1_5", hash: "SHA-512" },
+        false,
+        ["sign"]
+      );
+    } catch (e2) {
+      console.error("[TransIP] Key import failed:", e2);
+      throw new Error("Failed to import private key. Ensure it's a valid RSA key.");
+    }
+  }
+  
+  console.log("[TransIP] Private key imported successfully");
+  
+  // Create JWT header and payload
+  const header = { alg: "RS512", typ: "JWT" };
+  const now = Math.floor(Date.now() / 1000);
+  const nonce = crypto.randomUUID();
+  
+  const payload = {
+    iss: accountName,
+    sub: accountName,
+    aud: "api.transip.nl",
+    jti: nonce,
+    iat: now,
+    exp: now + 300, // 5 minutes
+  };
+  
+  const headerB64 = base64UrlEncode(new TextEncoder().encode(JSON.stringify(header)));
+  const payloadB64 = base64UrlEncode(new TextEncoder().encode(JSON.stringify(payload)));
+  const signingInput = `${headerB64}.${payloadB64}`;
+  
+  // Sign the JWT
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    privateKey,
+    new TextEncoder().encode(signingInput)
+  );
+  
+  const signatureB64 = base64UrlEncode(new Uint8Array(signature));
+  const jwt = `${signingInput}.${signatureB64}`;
+  
+  console.log("[TransIP] JWT generated, requesting access token...");
+
+  // Exchange JWT for access token
+  const authResponse = await fetch(`${TRANSIP_API_URL}/auth`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Signature": jwt,
+    },
+    body: JSON.stringify({
+      login: accountName,
+      nonce: nonce,
+      read_only: false,
+      expiration_time: "1 hour",
+      label: "lovable-dns-" + Date.now(),
+      global_key: true,
+    }),
+  });
+
+  if (!authResponse.ok) {
+    const errorText = await authResponse.text();
+    console.error("[TransIP] Auth error:", authResponse.status, errorText);
+    throw new Error(`TransIP auth failed: ${authResponse.status} - ${errorText}`);
+  }
+
+  const authData = await authResponse.json();
+  console.log("[TransIP] Access token obtained successfully");
+  
+  return authData.token;
+}
+
+// Helper to list records with existing token
+async function listDnsRecordsWithToken(domain: string, token: string): Promise<TransIPDnsEntry[]> {
   const response = await fetch(`${TRANSIP_API_URL}/domains/${domain}/dns`, {
     method: "GET",
     headers: {
@@ -41,7 +181,6 @@ async function listDnsRecords(domain: string): Promise<TransIPDnsEntry[]> {
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("[TransIP] API error:", response.status, errorText);
     throw new Error(`Failed to list DNS records: ${response.status} - ${errorText}`);
   }
 
@@ -49,12 +188,18 @@ async function listDnsRecords(domain: string): Promise<TransIPDnsEntry[]> {
   return data.dnsEntries || [];
 }
 
+// List DNS records for a domain
+async function listDnsRecords(domain: string): Promise<TransIPDnsEntry[]> {
+  const token = await getAccessToken();
+  return listDnsRecordsWithToken(domain, token);
+}
+
 // Add a DNS record
 async function addDnsRecord(domain: string, entry: TransIPDnsEntry): Promise<void> {
-  const token = getAccessToken();
+  const token = await getAccessToken();
   
   // First get existing records
-  const existingRecords = await listDnsRecords(domain);
+  const existingRecords = await listDnsRecordsWithToken(domain, token);
   
   // Check if record already exists
   const exists = existingRecords.some(
@@ -87,10 +232,10 @@ async function addDnsRecord(domain: string, entry: TransIPDnsEntry): Promise<voi
 
 // Delete a DNS record
 async function deleteDnsRecord(domain: string, entry: Partial<TransIPDnsEntry>): Promise<void> {
-  const token = getAccessToken();
+  const token = await getAccessToken();
   
   // Get existing records
-  const existingRecords = await listDnsRecords(domain);
+  const existingRecords = await listDnsRecordsWithToken(domain, token);
   
   // Filter out the record to delete
   const updatedRecords = existingRecords.filter(
@@ -162,7 +307,6 @@ async function fixMxRecord(domain: string): Promise<{ success: boolean; message:
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
