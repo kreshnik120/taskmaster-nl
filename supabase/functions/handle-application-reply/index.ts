@@ -157,10 +157,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fallback: match by email address and subject
+    // Fallback 1: match by exact email address and subject
     if (!applicationId) {
-      console.log("Trying fallback: matching by email and subject");
-      const cleanSubject = subject.replace(/^Re:\s*/i, "").trim();
+      console.log("Trying fallback 1: matching by exact email and subject");
+      const cleanSubject = subject.replace(/^(Re:|Antw:|Antwoord:)\s*/i, "").trim();
       
       const { data: application, error: appError } = await supabase
         .from("professional_applications")
@@ -177,14 +177,86 @@ Deno.serve(async (req) => {
 
       if (application) {
         applicationId = application.id;
-        console.log("Found application_id via fallback:", applicationId);
+        console.log("Found application_id via exact email match:", applicationId);
+      }
+    }
+
+    // Fallback 2: Fuzzy match on email local-part (before @) to handle domain variations
+    // e.g., k.atashi@citozorg.nl vs k.atashi@exactzorg.nl
+    if (!applicationId) {
+      const emailLocalPart = from.split('@')[0]; // Extract "k.atashi" from "k.atashi@exactzorg.nl"
+      console.log(`Trying fallback 2: fuzzy matching on local-part "${emailLocalPart}"`);
+      
+      const { data: fuzzyMatches, error: fuzzyError } = await supabase
+        .from("professional_applications")
+        .select("id, email_from, email_subject, created_at")
+        .ilike("email_from", `${emailLocalPart}@%`)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (fuzzyError) {
+        console.error("Error in fuzzy email search:", fuzzyError);
+      }
+
+      if (fuzzyMatches && fuzzyMatches.length > 0) {
+        // Take most recent application matching the local-part
+        const matchedApp = fuzzyMatches[0];
+        applicationId = matchedApp.id;
+        console.log(`Fuzzy match found! Email discrepancy detected:`);
+        console.log(`  - Incoming email: ${from}`);
+        console.log(`  - Stored email: ${matchedApp.email_from}`);
+        console.log(`  - Application ID: ${applicationId}`);
+        
+        // Log this discrepancy for future reference
+        if (matchedApp.email_from !== from) {
+          console.log(`[EMAIL_DISCREPANCY] Local-part "${emailLocalPart}" matched across different domains`);
+        }
+      }
+    }
+
+    // Fallback 3: Match by extracted name in recent applications
+    if (!applicationId) {
+      console.log("Trying fallback 3: matching by recent applications with similar sender name");
+      const senderName = from.split('@')[0].replace(/[._]/g, ' ').toLowerCase();
+      
+      const { data: recentApps, error: recentError } = await supabase
+        .from("professional_applications")
+        .select("id, email_from, extracted_data, created_at")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (!recentError && recentApps) {
+        for (const app of recentApps) {
+          const extractedName = (app.extracted_data as any)?.naam?.toLowerCase() || '';
+          const storedLocalPart = app.email_from?.split('@')[0].replace(/[._]/g, ' ').toLowerCase() || '';
+          
+          if (extractedName.includes(senderName) || storedLocalPart.includes(senderName)) {
+            applicationId = app.id;
+            console.log(`Found application via name matching: ${applicationId}`);
+            console.log(`  - Sender: ${from} → matched to: ${app.email_from}`);
+            break;
+          }
+        }
       }
     }
 
     if (!applicationId) {
-      console.error("Could not find application for this reply");
+      console.error("Could not find application for this reply after all fallback attempts");
+      console.error(`  - From: ${from}`);
+      console.error(`  - Subject: ${subject}`);
+      console.error(`  - In-Reply-To: ${in_reply_to || 'none'}`);
       return new Response(
-        JSON.stringify({ error: "Application not found for this reply" }),
+        JSON.stringify({ 
+          error: "Application not found for this reply",
+          details: {
+            from,
+            subject,
+            in_reply_to,
+            hint: "Email address may not match any known application"
+          }
+        }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 404,
