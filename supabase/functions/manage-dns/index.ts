@@ -172,51 +172,44 @@ async function getAccessToken(): Promise<string> {
     }
   }
   
-  // Create JWT header and payload
-  const header = { alg: "RS512", typ: "JWT" };
-  const now = Math.floor(Date.now() / 1000);
-  const nonce = crypto.randomUUID();
+  // Create request body for auth
+  const nonce = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
   
-  const payload = {
-    iss: accountName,
-    sub: accountName,
-    aud: "api.transip.nl",
-    jti: nonce,
-    iat: now,
-    exp: now + 300, // 5 minutes
+  const authRequestBody = {
+    login: accountName,
+    nonce: nonce,
+    read_only: false,
+    expiration_time: "1 hour",
+    label: "lovable-dns-" + Date.now(),
+    global_key: true,
   };
   
-  const headerB64 = base64UrlEncode(new TextEncoder().encode(JSON.stringify(header)));
-  const payloadB64 = base64UrlEncode(new TextEncoder().encode(JSON.stringify(payload)));
-  const signingInput = `${headerB64}.${payloadB64}`;
+  // JSON encode the body
+  const bodyJson = JSON.stringify(authRequestBody);
   
-  // Sign the JWT
+  console.log(`[TransIP] Request body: ${bodyJson}`);
+  
+  // Sign the body with SHA-512 using the private key
+  const bodyBytes = new TextEncoder().encode(bodyJson);
   const signature = await crypto.subtle.sign(
     "RSASSA-PKCS1-v1_5",
     privateKey,
-    new TextEncoder().encode(signingInput)
+    bodyBytes
   );
   
-  const signatureB64 = base64UrlEncode(new Uint8Array(signature));
-  const jwt = `${signingInput}.${signatureB64}`;
+  // Base64 encode the signature (standard base64, not URL-safe)
+  const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
   
-  console.log("[TransIP] JWT generated, requesting access token...");
+  console.log(`[TransIP] Signature generated, length: ${signatureBase64.length}`);
 
-  // Exchange JWT for access token
+  // Exchange for access token
   const authResponse = await fetch(`${TRANSIP_API_URL}/auth`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Signature": jwt,
+      "Signature": signatureBase64,
     },
-    body: JSON.stringify({
-      login: accountName,
-      nonce: nonce,
-      read_only: false,
-      expiration_time: "1 hour",
-      label: "lovable-dns-" + Date.now(),
-      global_key: true,
-    }),
+    body: bodyJson,
   });
 
   if (!authResponse.ok) {
