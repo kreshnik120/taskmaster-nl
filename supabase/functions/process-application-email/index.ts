@@ -8,13 +8,16 @@ interface ResendWebhookPayload {
   created_at: string;
   data: {
     created_at: string;
-    email_id: string;
+    email_id?: string; // Resend inbound email ID - CRITICAL for fetching body
+    id?: string; // Alternative ID field
     from: string;
     subject: string;
     to: string[];
     html?: string;
     text?: string;
     headers?: Record<string, string>;
+    in_reply_to?: string;
+    message_id?: string;
     attachments?: Array<{
       content?: string; // base64 - optional for inline images
       content_type: string;
@@ -135,10 +138,25 @@ const handler = async (req: Request): Promise<Response> => {
       console.log("Subject:", emailSubject);
       console.log("From:", emailData.from);
       
+      // 🔑 CRITICAL: Preserve email_id for Resend Receiving API body fetch
+      const emailId = emailData.email_id || emailData.id;
+      console.log("📧 email_id being forwarded:", emailId);
+      console.log("📧 Full payload.data keys:", Object.keys(emailData).join(', '));
+      
       // Forward to handle-application-reply edge function with internal auth headers
+      // Include full payload with all fields including email_id
       const forwardSecret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.substring(0, 32) || 'internal';
       const { data: replyData, error: replyError } = await supabase.functions.invoke('handle-application-reply', {
-        body: payload,
+        body: {
+          ...payload,
+          // Ensure email_id is at top level for easier access
+          _forwarded_email_id: emailId,
+          data: {
+            ...emailData,
+            // Ensure email_id is preserved in data
+            email_id: emailId
+          }
+        },
         headers: {
           'x-internal-forward': 'true',
           'x-forward-secret': forwardSecret

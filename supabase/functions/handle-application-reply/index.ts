@@ -4,7 +4,10 @@ import { normalizeFunctieNiveau, normalizeWerkvorm } from '../_shared/healthcare
 
 interface ResendWebhookPayload {
   type: string;
+  _forwarded_email_id?: string; // Email ID from process-application-email forward
   data: {
+    email_id?: string; // Resend inbound email ID - CRITICAL for fetching body via Receiving API
+    id?: string; // Alternative ID field
     from: string;
     to?: string | string[];
     subject: string;
@@ -199,9 +202,21 @@ Deno.serve(async (req) => {
     // 📧 CRITICAL FIX: Resend webhook doesn't include email body!
     // Must use resend.emails.receiving.get(email_id) to fetch content
     let emailText = '';
-    const emailId = (payload.data as any).email_id || (payload.data as any).id || message_id;
     
-    console.log("📧 Email ID candidates: email_id=" + (payload.data as any).email_id + ", id=" + (payload.data as any).id + ", message_id=" + message_id);
+    // 🔑 PRIORITY: Check forwarded email_id from process-application-email first
+    const forwardedEmailId = (payload as any)._forwarded_email_id;
+    const dataEmailId = payload.data.email_id;
+    const dataId = payload.data.id;
+    const emailId = forwardedEmailId || dataEmailId || dataId || message_id;
+    
+    console.log("========================================");
+    console.log("📧 EMAIL ID RESOLUTION:");
+    console.log("   _forwarded_email_id:", forwardedEmailId);
+    console.log("   payload.data.email_id:", dataEmailId);
+    console.log("   payload.data.id:", dataId);
+    console.log("   message_id:", message_id);
+    console.log("   → RESOLVED email_id:", emailId);
+    console.log("========================================");
     
     // First check if body is in webhook payload (sometimes Resend includes it)
     if (payload.data.text?.trim() || payload.data.html?.trim()) {
