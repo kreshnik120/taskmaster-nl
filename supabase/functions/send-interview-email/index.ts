@@ -1,5 +1,6 @@
 import { Resend } from "https://esm.sh/resend@4.0.0";
 import { handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
+import { getOrganizationById, getEmailConfig } from '../_shared/healthcare-mappings.ts';
 
 interface InterviewEmailRequest {
   applicationId: string;
@@ -16,22 +17,10 @@ interface InterviewEmailRequest {
   recruiterName?: string;
   createCalendarEvent?: boolean;
   organization?: string; // 'citozorg' or 'abczorg'
+  orgId?: string; // UUID of organization (preferred)
 }
 
-// Organization email configuration
-// Reply-To uses Resend default inbound domain (purring-bat.resend.app) which is verified and working
-const ORG_EMAIL_CONFIG: Record<string, { from: string; name: string; replyTo: string }> = {
-  'citozorg': {
-    from: 'personeel@citozorg.nl',
-    name: 'CitoZorg Recruitment',
-    replyTo: 'recruitment@purring-bat.resend.app' // Werkende Resend default inbound
-  },
-  'abczorg': {
-    from: 'personeel@citozorg.nl', // Using citozorg.nl (verified) until abczorg.nl is added to Resend
-    name: 'ABCzorg Recruitment',
-    replyTo: 'recruitment@purring-bat.resend.app' // Werkende Resend default inbound
-  }
-};
+// Email configuration now comes from central healthcare-mappings.ts (single source of truth)
 
 Deno.serve(async (req: Request): Promise<Response> => {
   const corsResponse = handleCors(req);
@@ -45,7 +34,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       candidateEmail: body.candidateEmail,
       candidateName: body.candidateName,
       scheduledAt: body.scheduledAt,
-      organization: body.organization
+      organization: body.organization,
+      orgId: body.orgId
     });
 
     const {
@@ -62,7 +52,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       notes,
       recruiterName = "Het recruitmentteam",
       createCalendarEvent = false,
-      organization = 'citozorg'
+      organization = 'citozorg',
+      orgId
     } = body;
 
     // Validate required fields
@@ -70,9 +61,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return errorResponse("Missing required fields", 400);
     }
 
-    // Get email configuration for organization
-    const emailConfig = ORG_EMAIL_CONFIG[organization] || ORG_EMAIL_CONFIG['citozorg'];
-    const orgName = organization === 'abczorg' ? 'ABCzorg' : 'CitoZorg';
+    // Get email configuration from central healthcare-mappings (single source of truth)
+    const emailConfig = getEmailConfig(orgId || null);
+    const orgInfo = getOrganizationById(orgId || null);
+    const orgName = orgInfo.displayName;
 
     // Format date and time
     const date = new Date(scheduledAt);
