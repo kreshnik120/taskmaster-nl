@@ -118,17 +118,114 @@ Deno.serve(async (req) => {
 
     const { from, to, subject, in_reply_to, message_id } = payload.data;
     
+    // 🔍 ENHANCED DEBUG LOGGING: Full webhook payload analysis
+    console.log("========================================");
+    console.log("🔍 FULL WEBHOOK PAYLOAD ANALYSIS");
+    console.log("========================================");
+    console.log("📋 Top-level payload keys:", Object.keys(payload).join(', '));
+    console.log("📋 payload.data keys:", Object.keys(payload.data).join(', '));
+    
+    // Log all payload.data fields (except large content)
+    for (const [key, value] of Object.entries(payload.data)) {
+      if (key === 'attachments') continue; // Handle separately
+      if (key === 'html' || key === 'text') {
+        const strVal = String(value || '');
+        console.log(`📧 ${key}: ${strVal.length} chars - "${strVal.substring(0, 100)}..."`);
+      } else if (typeof value === 'object') {
+        console.log(`📧 ${key}:`, JSON.stringify(value).substring(0, 200));
+      } else {
+        console.log(`📧 ${key}: ${value}`);
+      }
+    }
+    
+    // 🔍 DETAILED ATTACHMENT ANALYSIS
+    const attachments = payload.data.attachments || [];
+    console.log("========================================");
+    console.log(`📎 ATTACHMENTS ANALYSIS: ${attachments.length} attachments`);
+    console.log("========================================");
+    
+    for (let i = 0; i < attachments.length; i++) {
+      const att = attachments[i];
+      console.log(`📎 Attachment ${i + 1}:`);
+      console.log(`   - filename: ${att.filename}`);
+      console.log(`   - content_type: ${att.content_type}`);
+      console.log(`   - content_disposition: ${att.content_disposition || 'N/A'}`);
+      console.log(`   - size: ${att.size || 'N/A'} bytes`);
+      console.log(`   - content_id: ${att.content_id || 'N/A'}`);
+      console.log(`   - has content: ${att.content ? 'YES' : 'NO'}`);
+      if (att.content) {
+        console.log(`   - content length: ${att.content.length} chars`);
+        console.log(`   - content preview (first 200): ${att.content.substring(0, 200)}...`);
+        
+        // If it's a text file or .eml, try to decode
+        if (att.content_type.includes('text') || att.filename.endsWith('.eml') || att.content_type.includes('message')) {
+          try {
+            // Try base64 decode
+            const decoded = atob(att.content);
+            console.log(`   - DECODED content (first 500): ${decoded.substring(0, 500)}...`);
+          } catch (e) {
+            console.log(`   - Content appears to be raw text, not base64`);
+            console.log(`   - Raw content (first 500): ${att.content.substring(0, 500)}...`);
+          }
+        }
+      }
+    }
+    
+    // Check for any additional fields that might contain body
+    const dataAny = payload.data as any;
+    const potentialBodyFields = ['body', 'content', 'raw', 'message', 'email_body', 'plain_text', 'html_content'];
+    console.log("========================================");
+    console.log("🔍 CHECKING ALTERNATIVE BODY FIELDS");
+    console.log("========================================");
+    for (const field of potentialBodyFields) {
+      if (dataAny[field]) {
+        const val = String(dataAny[field]);
+        console.log(`✅ Found '${field}': ${val.length} chars - "${val.substring(0, 100)}..."`);
+      }
+    }
+    
+    // Check for nested structures
+    if (dataAny.email) {
+      console.log("📧 Found nested 'email' object:", JSON.stringify(dataAny.email).substring(0, 500));
+    }
+    if (dataAny.payload) {
+      console.log("📧 Found nested 'payload' object:", JSON.stringify(dataAny.payload).substring(0, 500));
+    }
+    
+    console.log("========================================");
+    console.log("🔍 END PAYLOAD ANALYSIS");
+    console.log("========================================");
+    
     // 📧 CRITICAL FIX: Resend webhook doesn't include email body!
     // Must use resend.emails.receiving.get(email_id) to fetch content
     let emailText = '';
-    const emailId = (payload.data as any).email_id || message_id;
+    const emailId = (payload.data as any).email_id || (payload.data as any).id || message_id;
     
-    console.log("📧 Email ID for content retrieval:", emailId);
+    console.log("📧 Email ID candidates: email_id=" + (payload.data as any).email_id + ", id=" + (payload.data as any).id + ", message_id=" + message_id);
     
     // First check if body is in webhook payload (sometimes Resend includes it)
     if (payload.data.text?.trim() || payload.data.html?.trim()) {
       emailText = payload.data.text || payload.data.html || '';
       console.log(`✅ Email body found in webhook payload (${emailText.length} chars)`);
+    }
+    
+    // Check if body might be in an attachment (some email systems send body as attachment)
+    if (!emailText.trim() && attachments.length > 0) {
+      console.log("📎 Checking attachments for email body...");
+      for (const att of attachments) {
+        // Check for .eml files or text content that might contain the email body
+        if (att.content && (att.content_type.includes('text/plain') || att.content_type.includes('text/html'))) {
+          try {
+            emailText = atob(att.content);
+            console.log(`✅ Found email body in attachment ${att.filename}: ${emailText.length} chars`);
+            break;
+          } catch {
+            emailText = att.content;
+            console.log(`✅ Found raw email body in attachment ${att.filename}: ${emailText.length} chars`);
+            break;
+          }
+        }
+      }
     }
     
     // If body is empty, fetch via Resend Receiving API (the correct endpoint!)
