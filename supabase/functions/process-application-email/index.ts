@@ -138,10 +138,18 @@ const handler = async (req: Request): Promise<Response> => {
       console.log("Subject:", emailSubject);
       console.log("From:", emailData.from);
       
-      // 🔑 CRITICAL: Preserve email_id for Resend Receiving API body fetch
-      const emailId = emailData.email_id || emailData.id;
-      console.log("📧 email_id being forwarded:", emailId);
-      console.log("📧 Full payload.data keys:", Object.keys(emailData).join(', '));
+      // 🔑 CRITICAL FIX: svix-id header IS the email ID for Resend Receiving API!
+      // Format: "msg_xxxxx" - this is what we need to fetch email body
+      const svixId = req.headers.get("svix-id");
+      const emailId = svixId || emailData.email_id || emailData.id;
+      
+      console.log("========================================");
+      console.log("📧 EMAIL ID RESOLUTION (FORWARD):");
+      console.log("   svix-id header:", svixId);
+      console.log("   emailData.email_id:", emailData.email_id);
+      console.log("   emailData.id:", emailData.id);
+      console.log("   → RESOLVED email_id:", emailId);
+      console.log("========================================");
       
       // Forward to handle-application-reply edge function with internal auth headers
       // Include full payload with all fields including email_id
@@ -149,11 +157,10 @@ const handler = async (req: Request): Promise<Response> => {
       const { data: replyData, error: replyError } = await supabase.functions.invoke('handle-application-reply', {
         body: {
           ...payload,
-          // Ensure email_id is at top level for easier access
+          // 🔑 CRITICAL: Forward svix-id as the email ID for Resend Receiving API
           _forwarded_email_id: emailId,
           data: {
             ...emailData,
-            // Ensure email_id is preserved in data
             email_id: emailId
           }
         },
