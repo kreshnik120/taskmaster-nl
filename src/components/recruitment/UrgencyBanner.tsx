@@ -2,6 +2,7 @@ import { AlertCircle, Phone, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
+import { resolveApplicationName } from "@/lib/utils";
 
 interface Application {
   id: string;
@@ -45,7 +46,7 @@ export function UrgencyBanner({ applications, onViewDetails, onApplicationClick 
 
   // Get first urgent application for avatar
   const firstUrgentApp = interviewApps[0] || screeningApps[0] || staleApps[0];
-  const candidateName = firstUrgentApp?.extracted_data?.naam || 'Onbekend';
+  const candidateName = firstUrgentApp ? resolveApplicationName({ extracted_data: firstUrgentApp.extracted_data, email_from: '' }) : 'Onbekend';
   
   const getInitials = (name: string) => {
     return name

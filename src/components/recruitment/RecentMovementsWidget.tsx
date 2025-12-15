@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { resolveApplicationName } from "@/lib/utils";
 
 interface Application {
   id: string;
@@ -100,7 +101,7 @@ export function RecentMovementsWidget({ applications, isLoading, onViewAll }: Re
       <h3 className="text-sm font-medium text-foreground mb-4">Recente activiteit</h3>
       <div className="space-y-0">
         {recentMoves.map((app, index) => {
-          const candidateName = app.extracted_data?.naam || app.email_from.split('@')[0];
+          const candidateName = resolveApplicationName(app);
           const stage = app.pipeline_stage || 'nieuw';
           const timeAgo = formatDistanceToNow(new Date(app.updated_at), {
             addSuffix: true,

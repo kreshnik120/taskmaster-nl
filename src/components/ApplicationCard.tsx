@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { calculateSublocationMatchScore } from "@/lib/calculateSublocationMatchScore";
+import { resolveApplicationName } from "@/lib/utils";
 
 interface Application {
   id: string;
@@ -120,7 +121,7 @@ export function ApplicationCard({ application, onClick, searchQuery = "", isSele
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const candidateName = application.extracted_data?.naam || 'Onbekende kandidaat';
+  const candidateName = resolveApplicationName(application);
   const werkvorm = application.extracted_data?.werkvorm;
   const functieNiveau = application.extracted_data?.functie_niveau || application.professionals?.functie_niveau;
   const assignedOrg = application.extracted_data?.assigned_organization;
