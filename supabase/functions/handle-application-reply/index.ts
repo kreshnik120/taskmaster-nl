@@ -881,9 +881,12 @@ Return JSON in dit formaat:
     }
 
     // Calculate new completeness score
+    // Ensure score is always between 0-100, even if remaining_missing_info has more items than totalFields
     const totalFields = 13; // Match with process-application-email
-    const filledFields = totalFields - (analysis.remaining_missing_info?.length || 0);
-    const newCompletenessScore = Math.round((filledFields / totalFields) * 100);
+    const remainingCount = analysis.remaining_missing_info?.length || 0;
+    const filledFields = Math.max(0, totalFields - remainingCount);
+    const rawScore = Math.round((filledFields / totalFields) * 100);
+    const newCompletenessScore = Math.max(0, Math.min(100, rawScore));
 
     console.log("Analysis result:", analysis);
     console.log("New completeness score:", newCompletenessScore);
