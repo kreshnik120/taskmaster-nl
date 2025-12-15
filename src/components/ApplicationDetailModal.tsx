@@ -30,6 +30,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState, useEffect, useRef } from "react";
 import { convertApplicationToProfessional } from "@/lib/convertApplicationToProfessional";
+import { resolveApplicationName } from "@/lib/utils";
 import { ApplicationActivityTimeline } from "@/components/recruitment/ApplicationActivityTimeline";
 import { EmailTemplateSuggestions } from "@/components/recruitment/EmailTemplateSuggestions";
 import { ApplicationNotes } from "@/components/recruitment/ApplicationNotes";
@@ -187,8 +188,8 @@ export function ApplicationDetailModal({
   onOpenChange,
   onApplicationUpdated,
 }: ApplicationDetailModalProps) {
-  // Support both old and new extracted_data formats for candidateName
-  const candidateName = getFieldValue(application.extracted_data?.naam) || application.extracted_data?.naam || 'Kandidaat';
+  // Smart candidate name resolution with fallbacks
+  const candidateName = resolveApplicationName(application);
   
   const [updating, setUpdating] = useState(false);
   const [linkedTasks, setLinkedTasks] = useState<LinkedTask[]>([]);
