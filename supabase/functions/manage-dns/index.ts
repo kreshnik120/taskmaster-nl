@@ -49,11 +49,34 @@ async function getAccessToken(): Promise<string> {
   console.log(`[TransIP DEBUG] Actual newlines: ${newlineCount}`);
   console.log(`[TransIP DEBUG] Literal \\n strings: ${literalNewlineCount}`);
   
-  // Normalize the key - handle escaped newlines
+  // Normalize the key - handle escaped newlines OR missing newlines
   let normalizedKey = privateKeyPem;
+  
+  // Case 1: Literal \n strings need to be converted to actual newlines
   if (literalNewlineCount > 0 && newlineCount === 0) {
     console.log("[TransIP DEBUG] Converting literal \\n to actual newlines");
     normalizedKey = privateKeyPem.replace(/\\n/g, '\n');
+  }
+  // Case 2: Key was pasted as single line without any newlines - reconstruct PEM format
+  else if (newlineCount === 0 && hasBeginMarker && hasEndMarker) {
+    console.log("[TransIP DEBUG] Key has no newlines - reconstructing PEM format");
+    
+    // Extract the parts: -----BEGIN PRIVATE KEY-----base64content-----END PRIVATE KEY-----
+    const pkcs8Match = normalizedKey.match(/(-----BEGIN PRIVATE KEY-----)(.*?)(-----END PRIVATE KEY-----)/);
+    const pkcs1Match = normalizedKey.match(/(-----BEGIN RSA PRIVATE KEY-----)(.*?)(-----END RSA PRIVATE KEY-----)/);
+    
+    const match = pkcs8Match || pkcs1Match;
+    if (match) {
+      const [_, header, content, footer] = match;
+      // Split base64 content into 64-character lines (PEM standard)
+      const cleanContent = content.replace(/\s/g, '');
+      const lines: string[] = [];
+      for (let i = 0; i < cleanContent.length; i += 64) {
+        lines.push(cleanContent.substring(i, i + 64));
+      }
+      normalizedKey = `${header}\n${lines.join('\n')}\n${footer}`;
+      console.log(`[TransIP DEBUG] Reconstructed PEM with ${lines.length} lines`);
+    }
   }
   
   // Convert PEM to binary - handle both PKCS#1 and PKCS#8 formats
