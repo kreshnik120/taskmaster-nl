@@ -117,8 +117,54 @@ Deno.serve(async (req) => {
     }
 
     const { from, to, subject, in_reply_to, message_id } = payload.data;
+    
     // Handle emails with only HTML content (no plain text)
-    const emailText = payload.data.text || payload.data.html || '';
+    let emailText = payload.data.text || payload.data.html || '';
+    
+    // 📧 FALLBACK: If webhook body is empty, try to fetch via Resend API
+    if (!emailText.trim() && message_id) {
+      console.log("📧 Email body empty in webhook, attempting to fetch via Resend API...");
+      console.log("   Message ID:", message_id);
+      
+      try {
+        // Resend API call to get email details
+        const emailResponse = await fetch(`https://api.resend.com/emails/${message_id}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (emailResponse.ok) {
+          const emailData = await emailResponse.json();
+          console.log("✅ Successfully fetched email via Resend API");
+          emailText = emailData.text || emailData.html || '';
+          
+          if (emailText) {
+            console.log(`📄 Retrieved email body (${emailText.length} chars)`);
+          } else {
+            console.log("⚠️ Email fetched but body still empty");
+          }
+        } else {
+          const errorText = await emailResponse.text();
+          console.log(`⚠️ Resend API returned ${emailResponse.status}: ${errorText}`);
+        }
+      } catch (apiError) {
+        console.error("❌ Error fetching email via Resend API:", apiError);
+      }
+    }
+    
+    // Secondary fallback: try to extract from payload headers or other sources
+    if (!emailText.trim()) {
+      console.log("⚠️ Email body still empty after API fallback");
+      console.log("   Available payload fields:", Object.keys(payload.data).join(', '));
+      
+      // Log full payload for debugging (without attachments to reduce noise)
+      const debugPayload = { ...payload.data, attachments: `[${payload.data.attachments?.length || 0} items]` };
+      console.log("   Full payload (debug):", JSON.stringify(debugPayload));
+    }
+    
     // Filter out inline attachments (Outlook signatures, embedded images)
     const realAttachments = payload.data.attachments?.filter(att => 
       att.content && att.content_disposition !== 'inline'
@@ -127,6 +173,7 @@ Deno.serve(async (req) => {
     console.log("From:", from);
     console.log("Subject:", subject);
     console.log("In-Reply-To:", in_reply_to);
+    console.log("Email body length:", emailText.length, "chars");
     console.log("Real attachments (excluding inline):", realAttachments.length);
 
     // Find the original conversation by matching in_reply_to with the email_id in metadata
