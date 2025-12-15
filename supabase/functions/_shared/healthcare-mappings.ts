@@ -169,7 +169,7 @@ const ORGANIZATION_CONFIG: Record<string, OrganizationInfo> = {
     name: 'abczorg',
     displayName: 'ABCzorg',
     domain: 'abczorg.nl',
-    emailFrom: 'personeel@citozorg.nl', // Using citozorg.nl until abczorg.nl verified
+    emailFrom: 'recruitment@purring-bat.resend.app', // Tijdelijke fix: Resend default inbound voor gegarandeerde reply routing
     replyTo: 'recruitment@purring-bat.resend.app', // Werkende Resend default inbound
     color: '#0070f3',
   },
@@ -178,7 +178,7 @@ const ORGANIZATION_CONFIG: Record<string, OrganizationInfo> = {
     name: 'citozorg',
     displayName: 'CitoZorg',
     domain: 'citozorg.nl',
-    emailFrom: 'personeel@citozorg.nl',
+    emailFrom: 'recruitment@purring-bat.resend.app', // Tijdelijke fix: Resend default inbound voor gegarandeerde reply routing
     replyTo: 'recruitment@purring-bat.resend.app', // Werkende Resend default inbound
     color: '#667eea',
   },
