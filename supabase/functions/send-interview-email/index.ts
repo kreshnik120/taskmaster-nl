@@ -19,17 +19,17 @@ interface InterviewEmailRequest {
 }
 
 // Organization email configuration
-// Reply-To uses custom Resend inbound domain for candidate replies
+// Reply-To uses Resend default inbound domain (purring-bat.resend.app) which is verified and working
 const ORG_EMAIL_CONFIG: Record<string, { from: string; name: string; replyTo: string }> = {
   'citozorg': {
     from: 'personeel@citozorg.nl',
     name: 'CitoZorg Recruitment',
-    replyTo: 'recruitment@inbound.citozorg.nl' // Custom domain voor Resend inbound
+    replyTo: 'recruitment@purring-bat.resend.app' // Werkende Resend default inbound
   },
   'abczorg': {
     from: 'personeel@citozorg.nl', // Using citozorg.nl (verified) until abczorg.nl is added to Resend
     name: 'ABCzorg Recruitment',
-    replyTo: 'recruitment@inbound.citozorg.nl' // Custom domain voor Resend inbound
+    replyTo: 'recruitment@purring-bat.resend.app' // Werkende Resend default inbound
   }
 };
 
