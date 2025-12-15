@@ -118,17 +118,27 @@ Deno.serve(async (req) => {
 
     const { from, to, subject, in_reply_to, message_id } = payload.data;
     
-    // Handle emails with only HTML content (no plain text)
-    let emailText = payload.data.text || payload.data.html || '';
+    // 📧 CRITICAL FIX: Resend webhook doesn't include email body!
+    // Must use resend.emails.receiving.get(email_id) to fetch content
+    let emailText = '';
+    const emailId = (payload.data as any).email_id || message_id;
     
-    // 📧 FALLBACK: If webhook body is empty, try to fetch via Resend API
-    if (!emailText.trim() && message_id) {
-      console.log("📧 Email body empty in webhook, attempting to fetch via Resend API...");
-      console.log("   Message ID:", message_id);
+    console.log("📧 Email ID for content retrieval:", emailId);
+    
+    // First check if body is in webhook payload (sometimes Resend includes it)
+    if (payload.data.text?.trim() || payload.data.html?.trim()) {
+      emailText = payload.data.text || payload.data.html || '';
+      console.log(`✅ Email body found in webhook payload (${emailText.length} chars)`);
+    }
+    
+    // If body is empty, fetch via Resend Receiving API (the correct endpoint!)
+    if (!emailText.trim() && emailId) {
+      console.log("📧 Email body empty in webhook, fetching via Resend Receiving API...");
+      console.log("   Email ID:", emailId);
       
       try {
-        // Resend API call to get email details
-        const emailResponse = await fetch(`https://api.resend.com/emails/${message_id}`, {
+        // 🔑 CORRECT API: Use /emails/receiving/{email_id} endpoint for inbound emails
+        const emailResponse = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${resendApiKey}`,
@@ -138,29 +148,50 @@ Deno.serve(async (req) => {
         
         if (emailResponse.ok) {
           const emailData = await emailResponse.json();
-          console.log("✅ Successfully fetched email via Resend API");
+          console.log("✅ Successfully fetched email via Resend Receiving API");
+          console.log("   Response fields:", Object.keys(emailData).join(', '));
+          
+          // Extract text or html content
           emailText = emailData.text || emailData.html || '';
           
           if (emailText) {
             console.log(`📄 Retrieved email body (${emailText.length} chars)`);
+            console.log(`   First 200 chars: ${emailText.substring(0, 200)}...`);
           } else {
-            console.log("⚠️ Email fetched but body still empty");
+            console.log("⚠️ Email fetched but body fields empty");
+            console.log("   Full response:", JSON.stringify(emailData).substring(0, 500));
           }
         } else {
           const errorText = await emailResponse.text();
-          console.log(`⚠️ Resend API returned ${emailResponse.status}: ${errorText}`);
+          console.log(`⚠️ Resend Receiving API returned ${emailResponse.status}: ${errorText}`);
+          
+          // Fallback: Try the regular emails endpoint
+          console.log("📧 Trying fallback: regular emails endpoint...");
+          const fallbackResponse = await fetch(`https://api.resend.com/emails/${emailId}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${resendApiKey}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (fallbackResponse.ok) {
+            const fallbackData = await fallbackResponse.json();
+            emailText = fallbackData.text || fallbackData.html || '';
+            if (emailText) {
+              console.log(`✅ Fallback worked! Retrieved ${emailText.length} chars`);
+            }
+          }
         }
       } catch (apiError) {
         console.error("❌ Error fetching email via Resend API:", apiError);
       }
     }
     
-    // Secondary fallback: try to extract from payload headers or other sources
+    // Final check - if still empty, log debug info
     if (!emailText.trim()) {
-      console.log("⚠️ Email body still empty after API fallback");
+      console.log("⚠️ Email body still empty after all attempts");
       console.log("   Available payload fields:", Object.keys(payload.data).join(', '));
-      
-      // Log full payload for debugging (without attachments to reduce noise)
       const debugPayload = { ...payload.data, attachments: `[${payload.data.attachments?.length || 0} items]` };
       console.log("   Full payload (debug):", JSON.stringify(debugPayload));
     }
