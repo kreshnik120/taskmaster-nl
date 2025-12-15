@@ -1,6 +1,6 @@
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
-import { normalizeFunctieNiveau, normalizeWerkvorm } from '../_shared/healthcare-mappings.ts';
+import { normalizeFunctieNiveau, normalizeWerkvorm, getOrganizationById, getEmailConfig } from '../_shared/healthcare-mappings.ts';
 
 interface ResendWebhookPayload {
   type: string;
@@ -479,6 +479,12 @@ Deno.serve(async (req) => {
     console.log("Application found:", application.id);
     console.log("Current completeness:", application.completeness_score);
     console.log("Current missing_info:", application.missing_info);
+
+    // 🏢 Get organization info for dynamic branding
+    const orgInfo = getOrganizationById(application.org_id);
+    const emailConfig = getEmailConfig(application.org_id);
+    console.log(`🏢 Organization branding: ${orgInfo.displayName} (org_id: ${application.org_id})`);
+    console.log(`📧 Email config: from=${emailConfig.from}, replyTo=${emailConfig.replyTo}`);
 
     // Save the applicant's reply to conversations
     console.log("Saving applicant reply to conversations...");
@@ -1100,14 +1106,14 @@ Return JSON in dit formaat:
         <ul>
           <li>Reageer met je beschikbaarheid voor deze week</li>
           <li>Of bel ons op: 020-1234567</li>
-          <li>Of plan direct in via: <a href="https://calendly.com/citozorg">onze agenda</a></li>
+          <li>Of plan direct in via onze agenda</li>
         </ul>
         
         <p>We kijken ernaar uit!</p>
         
         <p>Met vriendelijke groet,<br>
-        Het CitoZorg Recruitment Team<br>
-        <a href="mailto:personeel@citozorg.nl">personeel@citozorg.nl</a></p>
+        Het ${orgInfo.displayName} Recruitment Team<br>
+        <a href="mailto:${emailConfig.from}">${emailConfig.from}</a></p>
       `;
     } else if (analysis.remaining_missing_info && analysis.remaining_missing_info.length > 0) {
       // Still missing some information
@@ -1125,8 +1131,8 @@ Return JSON in dit formaat:
         <p>Zou je deze informatie kunnen aanvullen? Dan kunnen we snel verder met je sollicitatie.</p>
         
         <p>Met vriendelijke groet,<br>
-        Het CitoZorg Recruitment Team<br>
-        <a href="mailto:personeel@citozorg.nl">personeel@citozorg.nl</a></p>
+        Het ${orgInfo.displayName} Recruitment Team<br>
+        <a href="mailto:${emailConfig.from}">${emailConfig.from}</a></p>
       `;
     } else {
       // Standard acknowledgment
@@ -1141,13 +1147,13 @@ Return JSON in dit formaat:
         <p>Heb je nog vragen? Laat het gerust weten!</p>
         
         <p>Met vriendelijke groet,<br>
-        Het CitoZorg Recruitment Team<br>
-        <a href="mailto:personeel@citozorg.nl">personeel@citozorg.nl</a></p>
+        Het ${orgInfo.displayName} Recruitment Team<br>
+        <a href="mailto:${emailConfig.from}">${emailConfig.from}</a></p>
       `;
     }
 
     // Send response email via Resend API
-    console.log("Sending response email...");
+    console.log(`Sending response email from ${orgInfo.displayName}...`);
     const emailResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -1155,11 +1161,11 @@ Return JSON in dit formaat:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "CitoZorg Recruitment <personeel@citozorg.nl>",
+        from: `${orgInfo.displayName} Recruitment <${emailConfig.from}>`,
         to: from,
         subject: responseSubject,
         html: responseBody,
-        reply_to: "personeel@citozorg.nl",
+        reply_to: emailConfig.replyTo,
       }),
     });
 
