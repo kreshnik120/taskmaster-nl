@@ -32,8 +32,36 @@ async function getAccessToken(): Promise<string> {
 
   console.log(`[TransIP] Generating JWT for account: ${accountName}`);
   
+  // Debug: Log key characteristics (safe - no sensitive data)
+  const keyLength = privateKeyPem.length;
+  const hasBeginMarker = privateKeyPem.includes("-----BEGIN");
+  const hasEndMarker = privateKeyPem.includes("-----END");
+  const isPKCS8 = privateKeyPem.includes("PRIVATE KEY-----") && !privateKeyPem.includes("RSA PRIVATE KEY");
+  const isPKCS1 = privateKeyPem.includes("RSA PRIVATE KEY-----");
+  const newlineCount = (privateKeyPem.match(/\n/g) || []).length;
+  const literalNewlineCount = (privateKeyPem.match(/\\n/g) || []).length;
+  
+  console.log(`[TransIP DEBUG] Key length: ${keyLength}`);
+  console.log(`[TransIP DEBUG] Has BEGIN marker: ${hasBeginMarker}`);
+  console.log(`[TransIP DEBUG] Has END marker: ${hasEndMarker}`);
+  console.log(`[TransIP DEBUG] Is PKCS#8: ${isPKCS8}`);
+  console.log(`[TransIP DEBUG] Is PKCS#1 (RSA): ${isPKCS1}`);
+  console.log(`[TransIP DEBUG] Actual newlines: ${newlineCount}`);
+  console.log(`[TransIP DEBUG] Literal \\n strings: ${literalNewlineCount}`);
+  
+  // Normalize the key - handle escaped newlines
+  let normalizedKey = privateKeyPem;
+  if (literalNewlineCount > 0 && newlineCount === 0) {
+    console.log("[TransIP DEBUG] Converting literal \\n to actual newlines");
+    normalizedKey = privateKeyPem.replace(/\\n/g, '\n');
+  }
+  
   // Convert PEM to binary - handle both PKCS#1 and PKCS#8 formats
-  let pemContent = privateKeyPem.trim();
+  let pemContent = normalizedKey.trim();
+  
+  // Log the first line to verify format
+  const firstLine = pemContent.split('\n')[0];
+  console.log(`[TransIP DEBUG] First line: ${firstLine}`);
   
   // Remove headers/footers and newlines
   pemContent = pemContent
@@ -43,26 +71,37 @@ async function getAccessToken(): Promise<string> {
     .replace(/-----END PRIVATE KEY-----/g, '')
     .replace(/\s/g, '');
   
+  console.log(`[TransIP DEBUG] Base64 content length: ${pemContent.length}`);
+  
   // Decode base64
-  const binaryString = atob(pemContent);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+  let bytes: Uint8Array;
+  try {
+    const binaryString = atob(pemContent);
+    bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    console.log(`[TransIP DEBUG] Decoded key bytes: ${bytes.length}`);
+  } catch (e) {
+    console.error("[TransIP DEBUG] Base64 decode failed:", e);
+    throw new Error("Failed to decode private key - invalid base64");
   }
   
   // Import the key - try PKCS#8 first, then PKCS#1
   let privateKey: CryptoKey;
+  const keyBuffer = bytes.buffer as ArrayBuffer;
+  
   try {
     privateKey = await crypto.subtle.importKey(
       "pkcs8",
-      bytes,
+      keyBuffer,
       { name: "RSASSA-PKCS1-v1_5", hash: "SHA-512" },
       false,
       ["sign"]
     );
-  } catch {
-    // Try wrapping PKCS#1 in PKCS#8 structure
-    console.log("[TransIP] PKCS#8 import failed, trying PKCS#1 wrapper...");
+    console.log("[TransIP] Private key imported successfully as PKCS#8");
+  } catch (e1) {
+    console.log("[TransIP] PKCS#8 import failed, trying PKCS#1 wrapper...", e1);
     
     // PKCS#8 wrapper for RSA PKCS#1 key
     const pkcs8Header = new Uint8Array([
@@ -95,20 +134,20 @@ async function getAccessToken(): Promise<string> {
     wrappedKey.set(bytes, 26);
     
     try {
+      const wrappedKeyBuffer = wrappedKey.buffer as ArrayBuffer;
       privateKey = await crypto.subtle.importKey(
         "pkcs8",
-        wrappedKey,
+        wrappedKeyBuffer,
         { name: "RSASSA-PKCS1-v1_5", hash: "SHA-512" },
         false,
         ["sign"]
       );
+      console.log("[TransIP] Private key imported successfully with PKCS#1 wrapper");
     } catch (e2) {
       console.error("[TransIP] Key import failed:", e2);
       throw new Error("Failed to import private key. Ensure it's a valid RSA key.");
     }
   }
-  
-  console.log("[TransIP] Private key imported successfully");
   
   // Create JWT header and payload
   const header = { alg: "RS512", typ: "JWT" };
