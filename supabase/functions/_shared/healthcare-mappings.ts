@@ -169,8 +169,8 @@ const ORGANIZATION_CONFIG: Record<string, OrganizationInfo> = {
     name: 'abczorg',
     displayName: 'ABCzorg',
     domain: 'abczorg.nl',
-    emailFrom: 'recruitment@purring-bat.resend.app', // Tijdelijke fix: Resend default inbound voor gegarandeerde reply routing
-    replyTo: 'recruitment@purring-bat.resend.app', // Werkende Resend default inbound
+    emailFrom: 'personeel@citozorg.nl', // Verified sending domain (citozorg.nl tot abczorg.nl verified is)
+    replyTo: 'recruitment@purring-bat.resend.app', // Inbound routing naar Resend webhook
     color: '#0070f3',
   },
   citozorg: {
@@ -178,8 +178,8 @@ const ORGANIZATION_CONFIG: Record<string, OrganizationInfo> = {
     name: 'citozorg',
     displayName: 'CitoZorg',
     domain: 'citozorg.nl',
-    emailFrom: 'recruitment@purring-bat.resend.app', // Tijdelijke fix: Resend default inbound voor gegarandeerde reply routing
-    replyTo: 'recruitment@purring-bat.resend.app', // Werkende Resend default inbound
+    emailFrom: 'personeel@citozorg.nl', // Verified sending domain
+    replyTo: 'recruitment@purring-bat.resend.app', // Inbound routing naar Resend webhook
     color: '#667eea',
   },
 };
