@@ -138,27 +138,52 @@ const handler = async (req: Request): Promise<Response> => {
       console.log("Subject:", emailSubject);
       console.log("From:", emailData.from);
       
-      // 🔑 CRITICAL FIX: svix-id header IS the email ID for Resend Receiving API!
-      // Format: "msg_xxxxx" - this is what we need to fetch email body
+      // 🔍 ENHANCED DEBUG: Log FULL payload.data for email ID discovery
+      console.log("========================================");
+      console.log("🔍 FULL PAYLOAD.DATA STRUCTURE:");
+      console.log(JSON.stringify(emailData, null, 2));
+      console.log("========================================");
+      
+      // 🔍 Log all available headers
       const svixId = req.headers.get("svix-id");
-      const emailId = svixId || emailData.email_id || emailData.id;
+      const svixTimestamp = req.headers.get("svix-timestamp");
+      const svixSignature = req.headers.get("svix-signature");
+      
+      console.log("🔍 WEBHOOK HEADERS:");
+      console.log("   svix-id:", svixId);
+      console.log("   svix-timestamp:", svixTimestamp);
+      console.log("   svix-signature:", svixSignature ? "[present]" : "[missing]");
+      
+      // 🔑 EMAIL ID RESOLUTION: Try multiple sources
+      // NOTE: svix-id is for webhook verification, NOT for Resend API!
+      // The actual email_id should come from payload.data
+      const emailId = (emailData as any).email_id 
+                   || (emailData as any).id 
+                   || (emailData as any).message_id
+                   || null;
       
       console.log("========================================");
       console.log("📧 EMAIL ID RESOLUTION (FORWARD):");
-      console.log("   svix-id header:", svixId);
-      console.log("   emailData.email_id:", emailData.email_id);
-      console.log("   emailData.id:", emailData.id);
+      console.log("   emailData.email_id:", (emailData as any).email_id);
+      console.log("   emailData.id:", (emailData as any).id);
+      console.log("   emailData.message_id:", (emailData as any).message_id);
+      console.log("   svix-id (NOT for API!):", svixId);
       console.log("   → RESOLVED email_id:", emailId);
+      console.log("   → email_id type:", typeof emailId);
       console.log("========================================");
       
       // Forward to handle-application-reply edge function with internal auth headers
       // Include full payload with all fields including email_id
       const forwardSecret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.substring(0, 32) || 'internal';
+      
+      console.log("📤 Forwarding to handle-application-reply with email_id:", emailId);
+      
       const { data: replyData, error: replyError } = await supabase.functions.invoke('handle-application-reply', {
         body: {
           ...payload,
-          // 🔑 CRITICAL: Forward svix-id as the email ID for Resend Receiving API
+          // 🔑 Forward the resolved email_id (from payload.data, NOT svix-id)
           _forwarded_email_id: emailId,
+          _debug_svix_id: svixId, // Keep svix-id for debugging only
           data: {
             ...emailData,
             email_id: emailId
