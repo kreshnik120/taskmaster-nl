@@ -95,9 +95,9 @@ export function RecruitmentAnalytics({ applications }: RecruitmentAnalyticsProps
         <h3 className="text-sm font-medium mb-3">Conversie Funnel</h3>
         <div className="space-y-3">
           {[
-            { from: "nieuw", to: "screening", label: "Nieuw → Screening" },
-            { from: "screening", to: "interview", label: "Screening → Interview" },
-            { from: "interview", to: "goedgekeurd", label: "Interview → Goedgekeurd" },
+            { from: "nieuw", to: "interview", label: "Nieuw → Interview" },
+            { from: "interview", to: "screening", label: "Interview → Screening" },
+            { from: "screening", to: "goedgekeurd", label: "Screening → Goedgekeurd" },
             { from: "goedgekeurd", to: "geplaatst", label: "Goedgekeurd → Geplaatst" },
           ].map(({ from, to, label }) => {
             const rate = getConversionRate(from, to);
