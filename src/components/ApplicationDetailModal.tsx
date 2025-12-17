@@ -37,6 +37,8 @@ import { ApplicationNotes } from "@/components/recruitment/ApplicationNotes";
 import { InterviewSchedulingModal } from "@/components/recruitment/InterviewSchedulingModal";
 import { ApplicationMatchesTab } from "@/components/recruitment/ApplicationMatchesTab";
 import { AIFollowupButton } from "@/components/recruitment/AIFollowupButton";
+import { DocumentVerificationStatus } from "@/components/recruitment/DocumentVerificationStatus";
+import { StageTransitionButton } from "@/components/recruitment/StageTransitionButton";
 
 interface Application {
   id: string;
@@ -53,6 +55,16 @@ interface Application {
   cv_file_name: string | null;
   created_at: string;
   updated_at: string | null;
+  // Document verification fields
+  vog_validation_status?: string | null;
+  vog_validation_source?: string | null;
+  vog_issue_date?: string | null;
+  vog_valid_until?: string | null;
+  vog_verification_response?: any;
+  diploma_validation_status?: string | null;
+  diploma_validation_source?: string | null;
+  documents_verified_by?: string | null;
+  documents_verified_at?: string | null;
   professionals?: {
     full_name: string;
     functie_niveau: string;
@@ -1066,10 +1078,12 @@ export function ApplicationDetailModal({
         {(() => {
           const werkvormBevestigd = !!application.extracted_data?.werkvorm_bevestigd;
           const hasMatches = werkvormBevestigd;
+          const vogStatus = application.vog_validation_status || 'missing';
+          const diplomaStatus = application.diploma_validation_status || 'missing';
           
           return (
             <Tabs defaultValue="overview" className="w-full">
-              <TabsList className={`grid w-full ${hasMatches ? 'grid-cols-4' : 'grid-cols-3'}`}>
+              <TabsList className={`grid w-full ${hasMatches ? 'grid-cols-5' : 'grid-cols-4'}`}>
                 <TabsTrigger value="overview">Overzicht</TabsTrigger>
                 {hasMatches && (
                   <TabsTrigger value="matches" className="flex items-center gap-1">
@@ -1077,9 +1091,75 @@ export function ApplicationDetailModal({
                     Matches
                   </TabsTrigger>
                 )}
+                <TabsTrigger value="documents" className="flex items-center gap-1">
+                  <FileText className="h-3 w-3" />
+                  Documenten
+                </TabsTrigger>
                 <TabsTrigger value="actions">Acties</TabsTrigger>
                 <TabsTrigger value="activity">Activiteit</TabsTrigger>
               </TabsList>
+
+              {/* TAB: Documents - Document Verification Status */}
+              <TabsContent value="documents" className="space-y-4">
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold">Document Verificatie</h3>
+                  <DocumentVerificationStatus
+                    applicationId={application.id}
+                    vogStatus={vogStatus as any}
+                    vogSource={application.vog_validation_source}
+                    vogIssueDate={application.vog_issue_date}
+                    vogValidUntil={application.vog_valid_until}
+                    vogVerificationResponse={application.vog_verification_response}
+                    diplomaStatus={diplomaStatus as any}
+                    diplomaSource={application.diploma_validation_source}
+                    vogFilePath={application.extracted_data?.vog_file_path || null}
+                    onStatusUpdate={onApplicationUpdated}
+                  />
+
+                  {/* Stage Transition Buttons */}
+                  <div className="pt-4 border-t">
+                    <h4 className="text-sm font-medium mb-3">Pipeline Stappen</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {application.pipeline_stage === 'nieuw' && (
+                        <StageTransitionButton
+                          applicationId={application.id}
+                          currentStage="nieuw"
+                          targetStage="interview"
+                          vogStatus={vogStatus}
+                          diplomaStatus={diplomaStatus}
+                          onSuccess={onApplicationUpdated}
+                          variant="outline"
+                          size="sm"
+                        />
+                      )}
+                      {application.pipeline_stage === 'interview' && (
+                        <StageTransitionButton
+                          applicationId={application.id}
+                          currentStage="interview"
+                          targetStage="screening"
+                          vogStatus={vogStatus}
+                          diplomaStatus={diplomaStatus}
+                          onSuccess={onApplicationUpdated}
+                          variant="outline"
+                          size="sm"
+                        />
+                      )}
+                      {application.pipeline_stage === 'screening' && (
+                        <StageTransitionButton
+                          applicationId={application.id}
+                          currentStage="screening"
+                          targetStage="goedgekeurd"
+                          vogStatus={vogStatus}
+                          diplomaStatus={diplomaStatus}
+                          onSuccess={onApplicationUpdated}
+                          variant="outline"
+                          size="sm"
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
 
               {/* TAB: Matches - Only shown when werkvorm is known */}
               {hasMatches && (
