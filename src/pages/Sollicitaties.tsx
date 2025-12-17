@@ -51,6 +51,14 @@ interface Application {
   cv_file_name: string | null;
   created_at: string;
   updated_at: string | null;
+  // Document verification fields
+  vog_validation_status?: string | null;
+  vog_validation_source?: string | null;
+  vog_issue_date?: string | null;
+  vog_valid_until?: string | null;
+  vog_verification_response?: any;
+  diploma_validation_status?: string | null;
+  diploma_validation_source?: string | null;
   professionals?: {
     full_name: string;
     functie_niveau: string;
@@ -187,6 +195,10 @@ const Sollicitaties = () => {
         .from("professional_applications")
         .select(`
           *,
+          vog_validation_status,
+          vog_validation_source,
+          diploma_validation_status,
+          diploma_validation_source,
           professionals(full_name, functie_niveau)
         `)
         .is("deleted_at", null)
@@ -292,16 +304,29 @@ const Sollicitaties = () => {
     const newStatus = stageToStatus[newStage] || application.status;
 
     try {
-      const { error } = await supabase
-        .from("professional_applications")
-        .update({ 
-          pipeline_stage: newStage,
-          status: newStatus,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", applicationId);
+      // Use central transition function with document validation
+      const { data, error } = await supabase.rpc('transition_application_stage', {
+        p_application_id: applicationId,
+        p_to_stage: newStage,
+        p_reason: `Kanban drag: ${previousStage} → ${newStage}`,
+        p_metadata: {
+          source: 'kanban_drag',
+          timestamp: new Date().toISOString()
+        }
+      });
 
       if (error) throw error;
+
+      const result = data as { success: boolean; error?: string; from?: string; to?: string };
+
+      if (!result.success) {
+        // Transition was blocked (likely by document requirements)
+        toast.error(result.error || 'Transitie niet toegestaan', {
+          description: 'Open de sollicitatie om documenten te uploaden of verifiëren.',
+          duration: 5000,
+        });
+        return;
+      }
 
       setApplications((prev) =>
         prev.map((a) => (a.id === applicationId ? { ...a, pipeline_stage: newStage, status: newStatus } : a))
