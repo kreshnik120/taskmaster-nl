@@ -38,6 +38,7 @@ import { InterviewSchedulingModal } from "@/components/recruitment/InterviewSche
 import { ApplicationMatchesTab } from "@/components/recruitment/ApplicationMatchesTab";
 import { AIFollowupButton } from "@/components/recruitment/AIFollowupButton";
 import { DocumentVerificationStatus } from "@/components/recruitment/DocumentVerificationStatus";
+import { DocumentUploadSection } from "@/components/recruitment/DocumentUploadSection";
 import { StageTransitionButton } from "@/components/recruitment/StageTransitionButton";
 
 interface Application {
@@ -1099,22 +1100,35 @@ export function ApplicationDetailModal({
                 <TabsTrigger value="activity">Activiteit</TabsTrigger>
               </TabsList>
 
-              {/* TAB: Documents - Document Verification Status */}
+              {/* TAB: Documents - Document Upload & Verification Status */}
               <TabsContent value="documents" className="space-y-4">
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold">Document Verificatie</h3>
-                  <DocumentVerificationStatus
+                  {/* Document Upload Section */}
+                  <DocumentUploadSection
                     applicationId={application.id}
-                    vogStatus={vogStatus as any}
-                    vogSource={application.vog_validation_source}
-                    vogIssueDate={application.vog_issue_date}
-                    vogValidUntil={application.vog_valid_until}
-                    vogVerificationResponse={application.vog_verification_response}
-                    diplomaStatus={diplomaStatus as any}
-                    diplomaSource={application.diploma_validation_source}
                     vogFilePath={application.extracted_data?.vog_file_path || null}
-                    onStatusUpdate={onApplicationUpdated}
+                    diplomaFilePath={application.extracted_data?.diploma_file_path || null}
+                    vogStatus={vogStatus}
+                    diplomaStatus={diplomaStatus}
+                    onUploadComplete={onApplicationUpdated}
                   />
+
+                  {/* Document Verification Status */}
+                  <div className="pt-2">
+                    <h3 className="text-sm font-semibold mb-3">Verificatie Status</h3>
+                    <DocumentVerificationStatus
+                      applicationId={application.id}
+                      vogStatus={vogStatus as any}
+                      vogSource={application.vog_validation_source}
+                      vogIssueDate={application.vog_issue_date}
+                      vogValidUntil={application.vog_valid_until}
+                      vogVerificationResponse={application.vog_verification_response}
+                      diplomaStatus={diplomaStatus as any}
+                      diplomaSource={application.diploma_validation_source}
+                      vogFilePath={application.extracted_data?.vog_file_path || null}
+                      onStatusUpdate={onApplicationUpdated}
+                    />
+                  </div>
 
                   {/* Stage Transition Buttons */}
                   <div className="pt-4 border-t">
