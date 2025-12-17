@@ -1540,7 +1540,10 @@ async function executeSendAiEmail(supabase: any, action: any) {
     'send_document_request': 'document_request',
     'send_general_email': 'general',
     'send_reminder': 'followup_question',
-    'send_welcome': 'welcome'
+    'send_welcome': 'welcome',
+    'send_vog_rejection_email': 'vog_rejection',
+    'send_emrex_invitation': 'emrex_invitation',
+    'send_emrex_reminder': 'emrex_reminder'
   };
 
   const emailType = emailTypeMap[action.action_type] || 'general';
