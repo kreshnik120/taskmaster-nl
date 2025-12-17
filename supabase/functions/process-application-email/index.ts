@@ -91,7 +91,7 @@ const handler = async (req: Request): Promise<Response> => {
           filename: z.string().max(255),
           size: z.number().int().positive().max(20000000).optional(), // Optional for inline
           content_disposition: z.string().optional(), // "inline" or "attachment"
-          content_id: z.string().optional() // For inline images
+          content_id: z.string().nullable().optional() // For inline images
         })).max(10).optional()
       })
     });
