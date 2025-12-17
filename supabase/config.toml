@@ -117,6 +117,10 @@ verify_jwt = false
 verify_jwt = false
 # Purpose: Manage DNS records via TransIP API
 
+[functions.verify-vog-gaav]
+verify_jwt = false
+# Purpose: Verify VOG documents via GAAV/validatie.nl API
+
 # -----------------------------------------------------------------------------
 # AUTHENTICATED FUNCTIONS (JWT verification required)
 # -----------------------------------------------------------------------------
