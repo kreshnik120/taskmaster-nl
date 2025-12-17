@@ -10,7 +10,8 @@ type EmailType =
   | 'appointment_confirmation' // Algemene afspraak bevestiging
   | 'general'               // Algemene communicatie
   | 'welcome'               // Welkomstmail nieuwe kandidaat
-  | 'status_update';        // Status update (goedgekeurd, afgewezen, etc.)
+  | 'status_update'         // Status update (goedgekeurd, afgewezen, etc.)
+  | 'vog_rejection';        // VOG verificatie mislukt, vraag nieuw VOG
 
 interface SendEmailRequest {
   email_type: EmailType;
@@ -306,6 +307,45 @@ function generateEmailTemplate(
             Zodra we een passende opdracht hebben, nemen we contact met je op.
           </p>
         </div>
+        <p style="margin: 25px 0 0 0; color: #4a5568;">
+          Met vriendelijke groet,<br>
+          <strong>Het ${orgName} Recruitment Team</strong>
+        </p>`;
+      break;
+
+    case 'vog_rejection':
+      const rejectionReason = data.rejection_reason || 'unknown';
+      const rejectionMessage = data.rejection_message || 'niet gevalideerd kunnen worden';
+      const reasonExplanations: Record<string, string> = {
+        'authentic_fail': 'Het document is niet als authentiek herkend door de GAAV verificatiedienst. Dit kan betekenen dat het document is aangepast of niet van de officiële instantie komt.',
+        'expired': 'Een VOG mag maximaal 3 maanden oud zijn. Het door jou aangeleverde VOG is ouder dan deze termijn.',
+        'format_error': 'Het bestand kon niet worden gelezen. Dit kan komen door een beschadigd bestand of een verkeerd bestandsformaat.',
+        'unknown': 'Het document kon niet worden geverifieerd.'
+      };
+      const explanation = reasonExplanations[rejectionReason] || reasonExplanations['unknown'];
+      
+      content = `
+        <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName},</h2>
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
+          Helaas kon je Verklaring Omtrent het Gedrag (VOG) niet worden gevalideerd. Het document is ${rejectionMessage}.
+        </p>
+        <div style="background-color: #fef2f2; padding: 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #dc2626;">
+          <p style="margin: 0; color: #991b1b; font-weight: 600;">⚠️ VOG Verificatie Mislukt</p>
+          <p style="margin: 8px 0 0 0; color: #b91c1c; font-size: 14px;">
+            ${explanation}
+          </p>
+        </div>
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 15px;">
+          <strong>Wat moet je doen?</strong>
+        </p>
+        <ol style="color: #4a5568; font-size: 15px; line-height: 1.8; padding-left: 20px;">
+          <li>Vraag een nieuwe VOG aan via <a href="https://www.justis.nl/producten/vog" style="color: ${orgColor};">justis.nl/producten/vog</a></li>
+          <li>Zorg dat de VOG niet ouder is dan 3 maanden</li>
+          <li>Stuur het nieuwe VOG als bijlage naar deze email</li>
+        </ol>
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-top: 20px;">
+          Zodra we je nieuwe VOG hebben ontvangen, wordt deze automatisch geverifieerd en kun je verder in het sollicitatieproces.
+        </p>
         <p style="margin: 25px 0 0 0; color: #4a5568;">
           Met vriendelijke groet,<br>
           <strong>Het ${orgName} Recruitment Team</strong>
