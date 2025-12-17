@@ -240,7 +240,7 @@ Return een JSON object met:
   </div>
   
   <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 12px 12px;">
-    <h2 style="color: #0066cc; margin-top: 0; font-size: 20px;">${emailContent.greeting},</h2>
+    <h2 style="color: #0066cc; margin-top: 0; font-size: 20px;">${emailContent.greeting.replace(/,+$/, '')},</h2>
     
     <p style="font-size: 16px; color: #333; margin-bottom: 20px;">
       ${emailContent.intro || 'Hartelijk dank voor je interesse! We zijn blij dat je hebt gesolliciteerd.'}
