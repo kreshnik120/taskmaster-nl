@@ -245,12 +245,21 @@ Deno.serve(async (req) => {
     
     // If body is empty, fetch via Resend Receiving API (the correct endpoint!)
     if (!emailText.trim() && emailId) {
-      console.log("📧 Email body empty in webhook, fetching via Resend Receiving API...");
-      console.log("   Email ID:", emailId);
+      console.log("========================================");
+      console.log("📧 RESEND API CALL DEBUG:");
+      console.log("   Email ID value:", emailId);
+      console.log("   Email ID type:", typeof emailId);
+      console.log("   Email ID length:", emailId?.length);
+      console.log("   Looks like UUID?:", /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(emailId || ''));
+      console.log("   Looks like msg_xxx?:", /^msg_/.test(emailId || ''));
+      console.log("========================================");
+      
+      const apiUrl = `https://api.resend.com/emails/receiving/${emailId}`;
+      console.log("📧 Fetching email body from:", apiUrl);
       
       try {
         // 🔑 CORRECT API: Use /emails/receiving/{email_id} endpoint for inbound emails
-        const emailResponse = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
+        const emailResponse = await fetch(apiUrl, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${resendApiKey}`,
@@ -487,21 +496,34 @@ Deno.serve(async (req) => {
     console.log(`📧 Email config: from=${emailConfig.from}, replyTo=${emailConfig.replyTo}`);
 
     // Save the applicant's reply to conversations
-    console.log("Saving applicant reply to conversations...");
+    // 🔑 FIX: Store the correct emailId (Resend UUID) for API retrieval, not message_id
+    console.log("========================================");
+    console.log("💾 SAVING USER CONVERSATION:");
+    console.log("   application_id:", applicationId);
+    console.log("   emailText length:", emailText?.length || 0);
+    console.log("   emailId (Resend UUID):", emailId);
+    console.log("   message_id (Email header):", message_id);
+    console.log("   subject:", subject);
+    console.log("========================================");
+    
     const { error: replyInsertError } = await supabase
       .from("application_conversations")
       .insert({
         application_id: applicationId,
         role: "user",
-        content: emailText,
+        content: emailText || '', // Ensure content is never null
         metadata: {
-          email_id: message_id,
+          email_id: emailId,        // 🔑 CORRECT: Resend UUID for API calls
+          message_id: message_id,   // Original email header for audit
           subject: subject,
+          fetched_body: emailText?.length > 0, // Track if body was successfully fetched
         },
       });
 
     if (replyInsertError) {
-      console.error("Error saving reply:", replyInsertError);
+      console.error("❌ Error saving reply:", replyInsertError);
+    } else {
+      console.log("✅ User conversation saved successfully");
     }
 
     // Check if this is a response to interview slot selection
