@@ -11,12 +11,32 @@ import {
   Trash2, 
   CheckCircle2,
   AlertCircle,
-  FileWarning,
+  AlertTriangle,
   GraduationCap,
-  Shield
+  Shield,
+  Info
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+
+interface VogVerificationResponse {
+  gaav_code?: number;
+  gaav_description?: string;
+  requires_manual_review?: boolean;
+  issue_date?: string | null;
+  valid_until?: string | null;
+  days_remaining?: number | null;
+  screening_profile?: {
+    extracted_code?: string | null;
+    extracted_aspecten?: string[];
+    extracted_functie?: string | null;
+    required_code?: string | null;
+    required_aspecten?: string[];
+    missing_aspecten?: string[];
+    profile_valid?: boolean | null;
+    profile_reason?: string | null;
+  };
+}
 
 interface DocumentUploadSectionProps {
   applicationId: string;
@@ -24,10 +44,18 @@ interface DocumentUploadSectionProps {
   diplomaFilePath?: string | null;
   vogStatus?: string | null;
   diplomaStatus?: string | null;
+  vogVerificationResponse?: VogVerificationResponse | null;
   onUploadComplete: () => void;
 }
 
 type DocumentType = 'vog' | 'diploma';
+
+// Screening profile descriptions
+const SCREENING_PROFILES: Record<string, string> = {
+  '45': 'Gezondheidszorg en welzijn',
+  '84': 'Zorg voor minderjarigen',
+  '85': 'Zorg voor hulpbehoevenden',
+};
 
 export function DocumentUploadSection({
   applicationId,
@@ -35,6 +63,7 @@ export function DocumentUploadSection({
   diplomaFilePath,
   vogStatus,
   diplomaStatus,
+  vogVerificationResponse,
   onUploadComplete
 }: DocumentUploadSectionProps) {
   const [uploadingVog, setUploadingVog] = useState(false);
@@ -86,7 +115,6 @@ export function DocumentUploadSection({
       }
 
       // Update extracted_data with file path
-      // This will trigger the auto_verify_vog_on_upload trigger for VOG documents
       const fieldName = docType === 'vog' ? 'vog_file_path' : 'diploma_file_path';
       
       const { data: currentApp, error: fetchError } = await supabase
@@ -107,7 +135,6 @@ export function DocumentUploadSection({
         .from('professional_applications')
         .update({ 
           extracted_data: updatedExtractedData as any,
-          // Set diploma status to received if uploading diploma
           ...(docType === 'diploma' ? { diploma_validation_status: 'received' as const } : {})
         })
         .eq('id', applicationId);
@@ -136,11 +163,9 @@ export function DocumentUploadSection({
     try {
       const { data, error } = await supabase.storage
         .from('application-documents')
-        .createSignedUrl(filePath, 60); // 60 seconds validity
+        .createSignedUrl(filePath, 60);
 
       if (error) throw error;
-
-      // Open in new tab
       window.open(data.signedUrl, '_blank');
     } catch (error) {
       console.error('Download error:', error);
@@ -155,17 +180,14 @@ export function DocumentUploadSection({
     if (!filePath) return;
 
     try {
-      // Delete from storage
       const { error: deleteError } = await supabase.storage
         .from('application-documents')
         .remove([filePath]);
 
       if (deleteError) {
         console.error('Delete error:', deleteError);
-        // Continue anyway to remove reference
       }
 
-      // Update extracted_data to remove file path
       const fieldName = docType === 'vog' ? 'vog_file_path' : 'diploma_file_path';
       
       const { data: currentApp, error: fetchError } = await supabase
@@ -184,7 +206,6 @@ export function DocumentUploadSection({
         extracted_data: updatedExtractedData 
       };
       
-      // Reset status when deleting
       if (docType === 'vog') {
         updateData.vog_validation_status = 'missing';
         updateData.vog_verification_response = null;
@@ -223,10 +244,98 @@ export function DocumentUploadSection({
     if (status === 'authentic_fail' || status === 'expired') {
       return <Badge variant="outline" className="text-destructive border-destructive/30">Afgekeurd</Badge>;
     }
+    if (status === 'wrong_profile') {
+      return <Badge variant="outline" className="text-amber-600 border-amber-300">Verkeerd profiel</Badge>;
+    }
     if (status === 'manual_review') {
       return <Badge variant="outline" className="text-amber-600 border-amber-300">Handmatig controleren</Badge>;
     }
     return <Badge variant="outline">{status}</Badge>;
+  };
+
+  // Render screening profile info
+  const renderScreeningProfileInfo = () => {
+    const profile = vogVerificationResponse?.screening_profile;
+    if (!profile) return null;
+
+    const hasExtractedData = profile.extracted_code || (profile.extracted_aspecten && profile.extracted_aspecten.length > 0);
+    
+    return (
+      <div className="mt-3 p-3 rounded-lg bg-muted/50 space-y-2">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Info className="h-4 w-4 text-muted-foreground" />
+          <span>Screeningsprofiel Analyse</span>
+        </div>
+        
+        {hasExtractedData ? (
+          <>
+            {/* Extracted profile */}
+            <div className="text-xs space-y-1">
+              {profile.extracted_code && (
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">Profiel:</span>
+                  <span className="font-medium">
+                    {profile.extracted_code} - {SCREENING_PROFILES[profile.extracted_code] || 'Onbekend'}
+                  </span>
+                </div>
+              )}
+              {profile.extracted_aspecten && profile.extracted_aspecten.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">Functieaspecten:</span>
+                  <span className="font-medium">
+                    {profile.extracted_aspecten.map(a => `${a} (${SCREENING_PROFILES[a] || 'Onbekend'})`).join(', ')}
+                  </span>
+                </div>
+              )}
+              {profile.extracted_functie && (
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">Functie:</span>
+                  <span className="font-medium">{profile.extracted_functie}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Validation result */}
+            {profile.profile_valid !== null && (
+              <div className={`flex items-start gap-2 p-2 rounded text-xs ${
+                profile.profile_valid 
+                  ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400' 
+                  : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
+              }`}>
+                {profile.profile_valid ? (
+                  <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                )}
+                <div className="space-y-1">
+                  <span className="font-medium">{profile.profile_reason}</span>
+                  {!profile.profile_valid && profile.required_code && (
+                    <div className="text-xs opacity-80">
+                      Vereist: Profiel {profile.required_code} 
+                      {profile.required_aspecten && profile.required_aspecten.length > 0 && (
+                        <> met aspecten {profile.required_aspecten.join(', ')}</>
+                      )}
+                    </div>
+                  )}
+                  {profile.missing_aspecten && profile.missing_aspecten.length > 0 && (
+                    <div className="text-xs opacity-80">
+                      Ontbrekende aspecten: {profile.missing_aspecten.map(a => 
+                        `${a} (${SCREENING_PROFILES[a] || 'Onbekend'})`
+                      ).join(', ')}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex items-center gap-2 p-2 rounded bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 text-xs">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            <span>Kon screeningsprofiel niet automatisch extraheren - handmatige controle vereist</span>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -259,6 +368,9 @@ export function DocumentUploadSection({
                   )}
                   {(vogStatus === 'expired' || vogStatus === 'authentic_fail') && (
                     <AlertCircle className="h-4 w-4 text-destructive" />
+                  )}
+                  {vogStatus === 'wrong_profile' && (
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
                   )}
                 </div>
                 <div className="flex items-center gap-1">
@@ -328,6 +440,8 @@ export function DocumentUploadSection({
                 e.target.value = '';
               }}
             />
+            
+            {/* Status messages */}
             {vogStatus === 'authentic_ok' && (
               <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
                 <CheckCircle2 className="h-3 w-3" />
@@ -340,6 +454,21 @@ export function DocumentUploadSection({
                 Handmatige verificatie vereist
               </p>
             )}
+            {vogStatus === 'wrong_profile' && (
+              <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                VOG heeft verkeerd screeningsprofiel voor deze functie
+              </p>
+            )}
+            {vogStatus === 'expired' && (
+              <p className="text-xs text-destructive mt-2 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                VOG is verlopen (ouder dan 3 maanden)
+              </p>
+            )}
+
+            {/* Screening profile details */}
+            {vogFilePath && vogVerificationResponse && renderScreeningProfileInfo()}
           </CardContent>
         </Card>
 
