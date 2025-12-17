@@ -217,18 +217,21 @@ const handler = async (req: Request): Promise<Response> => {
     console.log("Subject:", emailSubject);
     console.log("Initial email body length:", emailBody.length);
     
-    // 📧 FETCH EMAIL BODY via Resend API if empty (common for inbound webhooks)
+    // 📧 FETCH EMAIL BODY via Resend Receiving API if empty (common for inbound webhooks)
     if (!emailBody || emailBody.trim().length === 0) {
       console.log("⚠️ Email body is empty - fetching via Resend Receiving API...");
       
-      // Get svix-id from headers - this is the email identifier for Resend
-      const svixId = req.headers.get("svix-id");
-      console.log("📧 svix-id for email fetch:", svixId);
+      // 🔑 CORRECT: Use email_id from payload.data, NOT svix-id (which is for webhook verification)
+      // According to Resend docs: resend.emails.receiving.get(event.data.email_id)
+      const emailId = (emailData as any).email_id || (emailData as any).id;
+      console.log("📧 email_id for Resend Receiving API:", emailId);
+      console.log("📧 Full emailData keys:", Object.keys(emailData));
       
-      if (svixId) {
+      if (emailId) {
         try {
-          // Resend Receiving API to get full email content
-          const emailFetchResponse = await fetch(`https://api.resend.com/emails/${svixId}`, {
+          // Resend Receiving API endpoint: /emails/receiving/{email_id}
+          // NOT /emails/{svix-id} - that's the wrong endpoint!
+          const emailFetchResponse = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
             method: "GET",
             headers: {
               "Authorization": `Bearer ${resendApiKey}`,
@@ -236,9 +239,11 @@ const handler = async (req: Request): Promise<Response> => {
             }
           });
           
+          console.log("📧 Resend Receiving API response status:", emailFetchResponse.status);
+          
           if (emailFetchResponse.ok) {
             const fullEmail = await emailFetchResponse.json();
-            console.log("✅ Email fetched via Resend API:", {
+            console.log("✅ Email fetched via Resend Receiving API:", {
               hasText: !!fullEmail.text,
               hasHtml: !!fullEmail.html,
               textLength: fullEmail.text?.length || 0,
@@ -246,28 +251,18 @@ const handler = async (req: Request): Promise<Response> => {
             });
             emailBody = fullEmail.text || fullEmail.html || "";
           } else {
-            console.warn("⚠️ Could not fetch email via Resend API:", emailFetchResponse.status);
-            // Try alternative: use email_id from payload.data
-            const emailId = (emailData as any).email_id || (emailData as any).id;
-            if (emailId && emailId !== svixId) {
-              console.log("🔄 Trying alternative email_id:", emailId);
-              const altResponse = await fetch(`https://api.resend.com/emails/${emailId}`, {
-                method: "GET",
-                headers: {
-                  "Authorization": `Bearer ${resendApiKey}`,
-                  "Content-Type": "application/json"
-                }
-              });
-              if (altResponse.ok) {
-                const altEmail = await altResponse.json();
-                emailBody = altEmail.text || altEmail.html || "";
-                console.log("✅ Email fetched via alternative ID");
-              }
-            }
+            const errorBody = await emailFetchResponse.text();
+            console.warn("⚠️ Could not fetch email via Resend Receiving API:", {
+              status: emailFetchResponse.status,
+              error: errorBody
+            });
           }
         } catch (fetchError) {
           console.error("❌ Error fetching email body:", fetchError);
         }
+      } else {
+        console.warn("⚠️ No email_id available in webhook payload to fetch email body");
+        console.log("📧 Available payload.data fields:", JSON.stringify(emailData, null, 2).substring(0, 500));
       }
       
       console.log("📧 Final email body length after fetch:", emailBody.length);

@@ -88,9 +88,11 @@ Deno.serve(async (req) => {
           content: z.string().max(20000000).optional(),
           content_type: z.string().max(100),
           content_disposition: z.string().optional(),
-          content_id: z.string().optional(),
+          content_id: z.string().nullable().optional(),
           size: z.number().optional()
-        })).max(10).optional()
+        })).max(10).optional(),
+        email_id: z.string().optional(),
+        id: z.string().optional()
       })
     });
     
