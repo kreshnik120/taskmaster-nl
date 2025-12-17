@@ -1093,7 +1093,7 @@ Return JSON in dit formaat:
                 application_id: applicationId,
                 candidate_email: from,
                 candidate_name: professionalName,
-                missing_documents: missingDocs,
+                documents: missingDocs,
               },
               status: "pending"
             });

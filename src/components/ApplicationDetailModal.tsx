@@ -2108,7 +2108,7 @@ export function ApplicationDetailModal({
             <div className="space-y-3">
               <span className="text-sm font-medium">Verplaats naar:</span>
               <div className="flex flex-wrap gap-2">
-                {["nieuw", "screening", "interview", "goedgekeurd", "geplaatst", "afgewezen"].map((stage) => (
+                {["nieuw", "interview", "screening", "goedgekeurd", "geplaatst", "afgewezen"].map((stage) => (
                   <Button
                     key={stage}
                     variant={application.pipeline_stage === stage ? "default" : "outline"}
