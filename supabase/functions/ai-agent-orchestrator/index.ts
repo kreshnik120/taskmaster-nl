@@ -441,6 +441,44 @@ const GOAL_CONFIGS: Record<string, {
         }
       ];
     }
+  },
+
+  // =====================================================
+  // NEW: Request New VOG - Auto-triggered when VOG verification fails
+  // =====================================================
+  'request_new_vog': {
+    requiredFields: ['application_id', 'candidate_email'],
+    planGenerator: (goal, context) => {
+      const rejectionReason = goal.input_data.rejection_reason || 'unknown';
+      const reasonMessages: Record<string, string> = {
+        'authentic_fail': 'niet authentiek bevonden door de GAAV verificatie',
+        'expired': 'verlopen (ouder dan 3 maanden)',
+        'format_error': 'niet leesbaar of beschadigd',
+        'unknown': 'niet gevalideerd kunnen worden'
+      };
+      
+      const reasonMessage = reasonMessages[rejectionReason] || reasonMessages['unknown'];
+      
+      return [
+        {
+          action_type: 'send_vog_rejection_email',
+          action_order: 1,
+          action_description: `Vraag nieuwe VOG aan bij ${goal.input_data.candidate_name || 'kandidaat'} - ${reasonMessage}`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            application_id: goal.input_data.application_id,
+            candidate_email: goal.input_data.candidate_email,
+            candidate_name: goal.input_data.candidate_name,
+            rejection_reason: rejectionReason,
+            rejection_message: reasonMessage,
+            vog_validation_details: goal.input_data.vog_validation_details,
+            email_type: 'vog_rejection',
+            subject: 'Je VOG document kon niet worden gevalideerd',
+            urgent: rejectionReason === 'expired' // Expired is less urgent than fraud
+          }
+        }
+      ];
+    }
   }
 };
 
@@ -967,6 +1005,7 @@ async function executeTask(supabase: any, task: any) {
     case 'send_general_email': // General email via send-ai-email
     case 'send_reminder': // Reminders via send-ai-email
     case 'send_welcome': // Welcome email via send-ai-email
+    case 'send_vog_rejection_email': // VOG rejection notification via send-ai-email
       result = await executeSendAiEmail(supabase, action);
       break;
     
