@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { PDFDocument } from 'https://esm.sh/pdf-lib@1.17.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -106,6 +107,108 @@ interface VogScreeningInfo {
   functieaspecten: string[];
   functieOmschrijving: string | null;
   rawText: string | null;
+  extractionMethod: string;
+}
+
+// Extract readable text from PDF binary using multiple methods
+async function extractTextFromPdf(pdfBytes: ArrayBuffer): Promise<string> {
+  const uint8Array = new Uint8Array(pdfBytes);
+  let extractedText = '';
+  
+  // Method 1: Try pdf-lib for metadata and form fields
+  try {
+    const pdfDoc = await PDFDocument.load(uint8Array, { ignoreEncryption: true });
+    
+    // Get metadata which may contain profile info
+    const title = pdfDoc.getTitle() || '';
+    const subject = pdfDoc.getSubject() || '';
+    const keywords = pdfDoc.getKeywords() || '';
+    const author = pdfDoc.getAuthor() || '';
+    
+    extractedText += `METADATA: ${title} ${subject} ${keywords} ${author}\n`;
+    console.log(`[PDF-EXTRACT] Metadata: title="${title}", subject="${subject}", keywords="${keywords}"`);
+    
+    // Get form field values if present (digital VOGs often use forms)
+    const form = pdfDoc.getForm();
+    const fields = form.getFields();
+    
+    for (const field of fields) {
+      const name = field.getName();
+      try {
+        // @ts-ignore - accessing raw value
+        const value = field.acroField?.V?.toString() || '';
+        if (value) {
+          extractedText += `FIELD[${name}]: ${value}\n`;
+          console.log(`[PDF-EXTRACT] Form field "${name}": ${value}`);
+        }
+      } catch {
+        // Field value extraction failed, skip
+      }
+    }
+  } catch (pdfLibError) {
+    console.log(`[PDF-EXTRACT] pdf-lib extraction failed: ${pdfLibError}`);
+  }
+  
+  // Method 2: Extract text streams from raw PDF content
+  // PDFs store text in streams between "BT" (begin text) and "ET" (end text) markers
+  try {
+    // Convert to string, handling binary carefully
+    let rawContent = '';
+    for (let i = 0; i < uint8Array.length; i++) {
+      const byte = uint8Array[i];
+      // Only include printable ASCII and common extended chars
+      if ((byte >= 32 && byte < 127) || byte === 10 || byte === 13) {
+        rawContent += String.fromCharCode(byte);
+      } else if (byte >= 128) {
+        // Try to preserve extended characters
+        rawContent += String.fromCharCode(byte);
+      }
+    }
+    
+    // Extract text between parentheses in text streams (PDF text objects)
+    const textMatches = rawContent.match(/\(([^)]{2,200})\)/g) || [];
+    for (const match of textMatches) {
+      const text = match.slice(1, -1); // Remove parentheses
+      // Filter out binary/control sequences
+      if (text.length > 2 && /[a-zA-Z]{2,}/.test(text)) {
+        extractedText += text + ' ';
+      }
+    }
+    
+    // Also look for hex-encoded text strings
+    const hexMatches = rawContent.match(/<([0-9A-Fa-f]{4,})>/g) || [];
+    for (const hexMatch of hexMatches) {
+      const hex = hexMatch.slice(1, -1);
+      let decoded = '';
+      for (let i = 0; i < hex.length; i += 2) {
+        const charCode = parseInt(hex.substr(i, 2), 16);
+        if (charCode >= 32 && charCode < 127) {
+          decoded += String.fromCharCode(charCode);
+        }
+      }
+      if (decoded.length > 2 && /[a-zA-Z]{2,}/.test(decoded)) {
+        extractedText += decoded + ' ';
+      }
+    }
+    
+    // Look for specific VOG patterns in raw content
+    const profilePattern = /(?:screeningsprofiel|profiel)[:\s]*(\d{2})/gi;
+    const profileMatches = rawContent.match(profilePattern);
+    if (profileMatches) {
+      extractedText += '\nPROFILE_MATCH: ' + profileMatches.join(' ');
+    }
+    
+    const aspectPattern = /(?:functieaspect|aspect)[:\s]*([0-9,\s]+)/gi;
+    const aspectMatches = rawContent.match(aspectPattern);
+    if (aspectMatches) {
+      extractedText += '\nASPECT_MATCH: ' + aspectMatches.join(' ');
+    }
+    
+  } catch (rawError) {
+    console.log(`[PDF-EXTRACT] Raw extraction failed: ${rawError}`);
+  }
+  
+  return extractedText;
 }
 
 async function extractScreeningProfile(pdfBytes: ArrayBuffer): Promise<VogScreeningInfo> {
@@ -113,26 +216,31 @@ async function extractScreeningProfile(pdfBytes: ArrayBuffer): Promise<VogScreen
     profileCode: null,
     functieaspecten: [],
     functieOmschrijving: null,
-    rawText: null
+    rawText: null,
+    extractionMethod: 'none'
   };
 
   try {
-    // Convert ArrayBuffer to string for text extraction
-    const decoder = new TextDecoder('utf-8', { fatal: false });
-    const textContent = decoder.decode(pdfBytes);
+    // Extract text using multiple methods
+    const textContent = await extractTextFromPdf(pdfBytes);
     result.rawText = textContent.slice(0, 5000); // Store first 5000 chars for debugging
+    
+    console.log(`[VERIFY-VOG-GAAV] Extracted ${textContent.length} chars from PDF`);
+    console.log(`[VERIFY-VOG-GAAV] Sample text: ${textContent.slice(0, 500)}`);
 
     // Extract screening profile code (format: "Screeningsprofiel: 45" or "Profiel 45")
     const profilePatterns = [
       /Screeningsprofiel[:\s]+(\d{2})/i,
       /Profiel[:\s]+(\d{2})/i,
       /screening\s*profiel[:\s]+(\d{2})/i,
+      /PROFILE_MATCH[:\s]*[^\d]*(\d{2})/i,
     ];
 
     for (const pattern of profilePatterns) {
       const match = textContent.match(pattern);
       if (match) {
         result.profileCode = match[1];
+        result.extractionMethod = 'pattern_match';
         console.log(`[VERIFY-VOG-GAAV] Extracted profile code: ${result.profileCode}`);
         break;
       }
@@ -140,9 +248,10 @@ async function extractScreeningProfile(pdfBytes: ArrayBuffer): Promise<VogScreen
 
     // Extract functieaspecten (format: "Functieaspect: 84, 85" or "aspecten 84 en 85")
     const aspectPatterns = [
-      /Functieaspect[en]*[:\s]+([0-9,\s]+)/i,
-      /aspect[en]*[:\s]+([0-9,\s]+)/i,
-      /functie-aspect[en]*[:\s]+([0-9,\s]+)/i,
+      /Functieaspect[en]*[:\s]+([0-9,\sen]+)/i,
+      /aspect[en]*[:\s]+([0-9,\sen]+)/i,
+      /functie-aspect[en]*[:\s]+([0-9,\sen]+)/i,
+      /ASPECT_MATCH[:\s]*([0-9,\s]+)/i,
     ];
 
     for (const pattern of aspectPatterns) {
@@ -150,7 +259,8 @@ async function extractScreeningProfile(pdfBytes: ArrayBuffer): Promise<VogScreen
       if (match) {
         const aspectStr = match[1];
         const aspects = aspectStr.match(/\d{2}/g) || [];
-        result.functieaspecten = aspects;
+        result.functieaspecten = [...new Set(aspects)]; // Deduplicate
+        result.extractionMethod = result.extractionMethod === 'none' ? 'pattern_match' : result.extractionMethod;
         console.log(`[VERIFY-VOG-GAAV] Extracted functieaspecten: ${aspects.join(', ')}`);
         break;
       }
@@ -158,9 +268,9 @@ async function extractScreeningProfile(pdfBytes: ArrayBuffer): Promise<VogScreen
 
     // Extract functie omschrijving (format: "Functie: Begeleider gehandicaptenzorg")
     const functiePatterns = [
-      /Functie[:\s]+([^\n\r]+)/i,
-      /Beroep[:\s]+([^\n\r]+)/i,
-      /Werkzaamheden[:\s]+([^\n\r]+)/i,
+      /Functie[:\s]+([A-Za-z\s]{5,100})/i,
+      /Beroep[:\s]+([A-Za-z\s]{5,100})/i,
+      /Werkzaamheden[:\s]+([A-Za-z\s]{5,100})/i,
     ];
 
     for (const pattern of functiePatterns) {
@@ -180,6 +290,7 @@ async function extractScreeningProfile(pdfBytes: ArrayBuffer): Promise<VogScreen
       
       if (hasZorgTerms) {
         result.profileCode = '45'; // Assume profile 45 for healthcare
+        result.extractionMethod = 'keyword_inference';
         console.log(`[VERIFY-VOG-GAAV] Inferred profile 45 from healthcare keywords`);
       }
 
@@ -201,6 +312,7 @@ async function extractScreeningProfile(pdfBytes: ArrayBuffer): Promise<VogScreen
     }
   } catch (error) {
     console.error('[VERIFY-VOG-GAAV] Error extracting screening profile:', error);
+    result.extractionMethod = 'error';
   }
 
   return result;
