@@ -949,8 +949,19 @@ Return JSON in dit formaat:
       ...(analysis.new_data || {}),
     };
     
+    // Normalize naam/full_name: ensure naam is set if full_name exists
+    if (!mergedData.naam && mergedData.full_name) {
+      mergedData.naam = mergedData.full_name;
+      console.log("📝 Normalized naam from full_name:", mergedData.naam);
+    }
+    
     // Calculate completeness based on CRITICAL intake fields
     const criticalFieldsFilled = CRITICAL_INTAKE_FIELDS.filter(field => {
+      // Handle naam/full_name as aliases (same field, different names)
+      if (field === 'naam') {
+        const nameValue = mergedData.naam || mergedData.full_name;
+        return nameValue !== null && nameValue !== undefined && nameValue !== '';
+      }
       const value = mergedData[field];
       return value !== null && value !== undefined && value !== '';
     });
@@ -960,6 +971,11 @@ Return JSON in dit formaat:
     
     // Smart remaining_missing_info: filter out filled fields and irrelevant fields
     const smartRemainingMissing = smartMissingFields.filter(field => {
+      // Handle naam/full_name as aliases
+      if (field === 'naam') {
+        const nameValue = mergedData.naam || mergedData.full_name;
+        return nameValue === null || nameValue === undefined || nameValue === '';
+      }
       const value = mergedData[field];
       return value === null || value === undefined || value === '';
     });
