@@ -532,69 +532,103 @@ Deno.serve(async (req) => {
     const offeredSlots = application.extracted_data?.interview_slots_offered as Array<{date: string, time: string}> | undefined;
     const hasOfferedSlots = offeredSlots && offeredSlots.length > 0;
     
+    // =====================================================
+    // SMART MISSING INFO: Define critical fields for intake
+    // =====================================================
+    const CRITICAL_INTAKE_FIELDS = ['naam', 'email', 'telefoonnummer', 'functie_niveau', 'werkvorm', 'regio', 'beschikbaarheid'];
+    
+    // Determine which conditional fields are needed based on current data
+    const currentData = application.extracted_data || {};
+    const conditionalFields: string[] = [];
+    
+    // BIG-nummer only needed for HBO-V or VIG
+    if (currentData.functie_niveau === 'HBO-V' || currentData.functie_niveau === 'VIG') {
+      conditionalFields.push('big_nummer');
+    }
+    
+    // KVK/BTW only needed for ZZP
+    if (currentData.werkvorm === 'ZZP') {
+      conditionalFields.push('kvk_nummer');
+      // BTW is optional for ZZP, don't require it
+    }
+    
+    // VOG is only required AFTER interview is scheduled (not in intake phase)
+    const hasInterviewScheduled = currentData.interview_status === 'scheduled' || currentData.interview_confirmed;
+    if (hasInterviewScheduled) {
+      conditionalFields.push('vog');
+    }
+    
+    // Calculate which critical fields are already filled
+    const filledCriticalFields = CRITICAL_INTAKE_FIELDS.filter(field => {
+      const value = currentData[field];
+      return value !== null && value !== undefined && value !== '';
+    });
+    
+    // Smart missing info for AI prompt (only ask for relevant fields)
+    const smartMissingFields = [
+      ...CRITICAL_INTAKE_FIELDS.filter(f => !filledCriticalFields.includes(f)),
+      ...conditionalFields.filter(f => !currentData[f])
+    ];
+    
+    console.log("🧠 Smart Missing Info Analysis:");
+    console.log("   Critical fields:", CRITICAL_INTAKE_FIELDS);
+    console.log("   Filled critical:", filledCriticalFields);
+    console.log("   Conditional fields:", conditionalFields);
+    console.log("   Smart missing:", smartMissingFields);
+
     // Use AI to analyze the reply and extract new information
     console.log("Analyzing reply with AI...");
     const analysisPrompt = `
 Je bent een recruitment assistant voor een thuiszorg organisatie. Analyseer deze email van een sollicitant en extract de volgende informatie:
 
-**Huidige missing_info:** ${JSON.stringify(application.missing_info || [])}
-**Huidige extracted_data:** ${JSON.stringify(application.extracted_data || {})}
+**KRITIEKE VELDEN DIE NOG NODIG ZIJN:** ${JSON.stringify(smartMissingFields)}
+**Huidige extracted_data:** ${JSON.stringify(currentData)}
 ${hasOfferedSlots ? `\n**BELANGRIJK - Aangeboden interview tijdsloten:**\n${offeredSlots.map((slot: {date: string, time: string}, i: number) => `${i + 1}. ${slot.date} om ${slot.time}`).join('\n')}\n` : ''}
 
 **Email van sollicitant:**
 ${emailText}
 
 **Instructies:**
-1. Identificeer welke missing_info items nu zijn ingevuld
-2. Extract specifieke data als beschikbaar
+1. Extract ALLEEN informatie die in de email staat - verzin niets
+2. Focus op de KRITIEKE VELDEN die nog nodig zijn
 3. Detecteer of de sollicitant vraagt om een gesprek/interview
-4. Bepaal of er nieuwe vragen zijn die beantwoord moeten worden
-${hasOfferedSlots ? `5. **KRITIEK**: Check of de kandidaat een tijdslot kiest! Kijk naar:
-   - Nummers zoals "1", "2", "3" 
-   - Dagen zoals "maandag", "dinsdag", "woensdag"
-   - Tijden zoals "10:00", "14:00"
-   - Zinnen zoals "de eerste optie", "de derde", "maandagochtend"
-   - Als de kandidaat een slot kiest, zet "selected_slot_index" op het nummer (1-${offeredSlots.length})` : ''}
+${hasOfferedSlots ? `4. **KRITIEK**: Check of de kandidaat een tijdslot kiest! Kijk naar nummers, dagen, tijden` : ''}
 
 **KRITIEK - functie_niveau moet EXACT een van deze waarden zijn:**
 - "VIG" (Verzorgende IG)
-- "VP3" (Verzorgende Niveau 3)
+- "VP3" (Verzorgende Niveau 3)  
 - "VP4" (Verzorgende Niveau 4)
 - "HBO-V" (HBO Verpleegkundige)
 - "Helpende 2"
-
-Als de sollicitant schrijft "Verzorgende IG" → gebruik "VIG"
-Als de sollicitant schrijft "Verzorgende niveau 3" → gebruik "VP3"
-Als de sollicitant schrijft "HBO Verpleegkundige" → gebruik "HBO-V"
+- "Begeleider"
+- "Persoonlijk begeleider"
+- "GGZ-agoog"
+- "Verpleegkundige MBO"
 
 **KRITIEK - werkvorm moet EXACT een van deze waarden zijn:**
 - "ZZP"
 - "Uitzendkracht"
+- "ABCito constructie"
+
+**KRITIEK - remaining_missing_info:**
+Return ALLEEN velden uit deze lijst die NIET in new_data zitten EN nog steeds nodig zijn:
+${JSON.stringify(smartMissingFields)}
+
+NIET opnemen (irrelevant voor intake): VOG, diploma, certificaten, ID-bewijs (pas na interview)
 
 Return JSON in dit formaat:
 \`\`\`json
 {
-  "filled_info": ["VOG", "Auto", "Adres"],
+  "filled_info": ["telefoonnummer"],
   "new_data": {
     "telefoonnummer": "06-12345678",
-    "adres": "Hoofdstraat 123",
-    "postcode": "1234AB",
-    "woonplaats": "Amsterdam",
     "functie_niveau": "VIG",
-    "werkvorm": "ZZP",
-    "regio": "Amsterdam",
-    "skills": ["Medicatie toedienen", "Wondverzorging"],
-    "vog_date": "2025-01-15",
-    "big_nummer": "123456789",
-    "heeft_auto": true,
-    "heeft_rijbewijs": true,
-    "kvk_nummer": "12345678",
-    "btw_nummer": "NL123456789B01",
-    "gewenst_uurloon": 45
+    "werkvorm": "Uitzendkracht",
+    "regio": "Eindhoven",
+    "beschikbaarheid": "32-40 uur"
   },
-  "requests_interview": true,
-  "has_questions": false,
-  "remaining_missing_info": [],
+  "requests_interview": false,
+  "remaining_missing_info": ["naam", "email"],
   "selected_slot_index": null,
   "confidence": 0.95
 }
@@ -904,22 +938,44 @@ Return JSON in dit formaat:
       }
     }
 
-    // Calculate new completeness score
-    // Ensure score is always between 0-100, even if remaining_missing_info has more items than totalFields
-    const totalFields = 13; // Match with process-application-email
-    const remainingCount = analysis.remaining_missing_info?.length || 0;
-    const filledFields = Math.max(0, totalFields - remainingCount);
-    const rawScore = Math.round((filledFields / totalFields) * 100);
-    const newCompletenessScore = Math.max(0, Math.min(100, rawScore));
-
-    console.log("Analysis result:", analysis);
-    console.log("New completeness score:", newCompletenessScore);
-
-    // Merge new data with existing extracted_data
+    // =====================================================
+    // SMART COMPLETENESS CALCULATION
+    // Based on CRITICAL fields filled, not arbitrary totalFields count
+    // =====================================================
+    
+    // Merge new data with existing extracted_data FIRST
     const mergedData = {
       ...(application.extracted_data || {}),
       ...(analysis.new_data || {}),
     };
+    
+    // Calculate completeness based on CRITICAL intake fields
+    const criticalFieldsFilled = CRITICAL_INTAKE_FIELDS.filter(field => {
+      const value = mergedData[field];
+      return value !== null && value !== undefined && value !== '';
+    });
+    
+    // Base score from critical fields (0-100)
+    const baseScore = Math.round((criticalFieldsFilled.length / CRITICAL_INTAKE_FIELDS.length) * 100);
+    
+    // Smart remaining_missing_info: filter out filled fields and irrelevant fields
+    const smartRemainingMissing = smartMissingFields.filter(field => {
+      const value = mergedData[field];
+      return value === null || value === undefined || value === '';
+    });
+    
+    // Override AI's remaining_missing_info with our smart calculation
+    const finalRemainingMissing = smartRemainingMissing;
+    
+    const newCompletenessScore = Math.max(0, Math.min(100, baseScore));
+
+    console.log("🧮 Smart Completeness Calculation:");
+    console.log("   Critical fields:", CRITICAL_INTAKE_FIELDS);
+    console.log("   Critical filled:", criticalFieldsFilled);
+    console.log("   Base score:", baseScore);
+    console.log("   Final remaining missing:", finalRemainingMissing);
+    console.log("   New completeness score:", newCompletenessScore);
+
 
     // 🎉 CHECK: Is completeness 100% AND no professional created yet?
     let professionalId = application.professional_id;
@@ -985,7 +1041,7 @@ Return JSON in dit formaat:
       const { error: appUpdateError } = await supabase
         .from("professional_applications")
         .update({
-          missing_info: analysis.remaining_missing_info || [],
+          missing_info: finalRemainingMissing,
           completeness_score: newCompletenessScore,
           extracted_data: mergedData,
           updated_at: new Date().toISOString(),
@@ -1080,7 +1136,7 @@ Return JSON in dit formaat:
             console.log(`✅ Created interview scheduling goal for application ${applicationId}`);
           }
         }
-      } else if (newCompletenessScore < 80 && analysis.remaining_missing_info?.length > 0) {
+      } else if (newCompletenessScore < 80 && finalRemainingMissing.length > 0) {
         console.log("Completeness still < 80%, checking for existing follow-up goal...");
         
         // 🔒 FASE 2 FIX: Check for existing ACTIVE follow-up goals (not just count all)
@@ -1119,7 +1175,7 @@ Return JSON in dit formaat:
                   application_id: applicationId,
                   candidate_email: from,
                   candidate_name: professionalName,
-                  missing_info: analysis.remaining_missing_info,
+                  missing_info: finalRemainingMissing,
                   current_completeness: newCompletenessScore,
                   follow_up_count: followUpCount,
                 },
@@ -1168,7 +1224,7 @@ Return JSON in dit formaat:
         Het ${orgInfo.displayName} Recruitment Team<br>
         <a href="mailto:${emailConfig.from}">${emailConfig.from}</a></p>
       `;
-    } else if (analysis.remaining_missing_info && analysis.remaining_missing_info.length > 0) {
+    } else if (finalRemainingMissing.length > 0) {
       // Still missing some information
       responseSubject = `Re: ${subject} - Aanvullende informatie nodig`;
       responseBody = `
@@ -1178,7 +1234,7 @@ Return JSON in dit formaat:
         
         <p>We hebben nog de volgende informatie nodig om je sollicitatie compleet te maken:</p>
         <ul>
-          ${analysis.remaining_missing_info.map((item: string) => `<li>${item}</li>`).join("")}
+          ${finalRemainingMissing.map((item: string) => `<li>${item}</li>`).join("")}
         </ul>
         
         <p>Zou je deze informatie kunnen aanvullen? Dan kunnen we snel verder met je sollicitatie.</p>
@@ -1258,7 +1314,7 @@ Return JSON in dit formaat:
         success: true,
         application_id: applicationId,
         completeness_score: newCompletenessScore,
-        remaining_missing_info: analysis.remaining_missing_info,
+        remaining_missing_info: finalRemainingMissing,
         email_sent: !!emailData,
       }),
       {
