@@ -560,6 +560,11 @@ Deno.serve(async (req) => {
     
     // Calculate which critical fields are already filled
     const filledCriticalFields = CRITICAL_INTAKE_FIELDS.filter(field => {
+      // Handle naam/full_name as aliases (same field, different names)
+      if (field === 'naam') {
+        const nameValue = currentData.naam || currentData.full_name;
+        return nameValue !== null && nameValue !== undefined && nameValue !== '';
+      }
       const value = currentData[field];
       return value !== null && value !== undefined && value !== '';
     });
