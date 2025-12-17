@@ -4980,6 +4980,7 @@ export type Database = {
           naam: string
         }[]
       }
+      check_emrex_reminders: { Args: never; Returns: undefined }
       cleanup_old_logs: { Args: never; Returns: undefined }
       create_interview_task:
         | {

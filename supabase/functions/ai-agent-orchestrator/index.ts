@@ -479,6 +479,97 @@ const GOAL_CONFIGS: Record<string, {
         }
       ];
     }
+  },
+
+  // =====================================================
+  // NEW: EMREX Diploma Verification - Send invitation
+  // =====================================================
+  'send_emrex_invitation': {
+    requiredFields: ['application_id', 'candidate_email'],
+    planGenerator: async (goal, context) => {
+      console.log('📜 [Orchestrator] EMREX invitation for:', goal.input_data.candidate_name);
+      
+      return [
+        {
+          action_type: 'send_emrex_invitation_email',
+          action_order: 1,
+          action_description: `Stuur EMREX diploma verificatie uitnodiging naar ${goal.input_data.candidate_name || 'kandidaat'}`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            application_id: goal.input_data.application_id,
+            candidate_email: goal.input_data.candidate_email,
+            candidate_name: goal.input_data.candidate_name,
+            functie_niveau: goal.input_data.functie_niveau,
+            email_type: 'emrex_invitation'
+          }
+        }
+      ];
+    }
+  },
+
+  // =====================================================
+  // NEW: EMREX Reminder - 48 hours after initial invitation
+  // =====================================================
+  'send_emrex_reminder': {
+    requiredFields: ['application_id', 'candidate_email'],
+    planGenerator: (goal, context) => {
+      console.log('⏰ [Orchestrator] EMREX reminder for:', goal.input_data.candidate_name);
+      
+      return [
+        {
+          action_type: 'send_emrex_reminder_email',
+          action_order: 1,
+          action_description: `Stuur herinnering diploma verificatie naar ${goal.input_data.candidate_name || 'kandidaat'}`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            application_id: goal.input_data.application_id,
+            candidate_email: goal.input_data.candidate_email,
+            candidate_name: goal.input_data.candidate_name,
+            original_invitation_at: goal.input_data.original_invitation_at,
+            email_type: 'emrex_reminder'
+          }
+        }
+      ];
+    }
+  },
+
+  // =====================================================
+  // NEW: EMREX Timeout Escalation - After 7 days no response
+  // =====================================================
+  'escalate_emrex_timeout': {
+    requiredFields: ['application_id'],
+    planGenerator: (goal, context) => {
+      console.log('🚨 [Orchestrator] EMREX escalation for:', goal.input_data.candidate_name);
+      
+      return [
+        {
+          action_type: 'create_manual_review_task',
+          action_order: 1,
+          action_description: `Maak handmatige review taak voor diploma verificatie - ${goal.input_data.candidate_name || 'kandidaat'}`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            application_id: goal.input_data.application_id,
+            candidate_email: goal.input_data.candidate_email,
+            candidate_name: goal.input_data.candidate_name,
+            escalation_reason: 'emrex_timeout',
+            days_waiting: goal.input_data.days_waiting || 7,
+            task_type: 'diploma_manual_review'
+          }
+        },
+        {
+          action_type: 'send_internal_notification',
+          action_order: 2,
+          action_description: 'Notificeer recruiter over handmatige diploma check',
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            notification_type: 'emrex_escalation',
+            application_id: goal.input_data.application_id,
+            candidate_name: goal.input_data.candidate_name,
+            message: `EMREX diploma verificatie timeout na ${goal.input_data.days_waiting || 7} dagen - handmatige check vereist`
+          }
+        }
+      ];
+    }
   }
 };
 
@@ -1007,6 +1098,25 @@ async function executeTask(supabase: any, task: any) {
     case 'send_welcome': // Welcome email via send-ai-email
     case 'send_vog_rejection_email': // VOG rejection notification via send-ai-email
       result = await executeSendAiEmail(supabase, action);
+      break;
+    
+    // =====================================================
+    // EMREX Diploma Verification Actions
+    // =====================================================
+    case 'send_emrex_invitation_email': // EMREX diploma verificatie uitnodiging
+      result = await executeEmrexInvitation(supabase, action);
+      break;
+    
+    case 'send_emrex_reminder_email': // EMREX herinnering
+      result = await executeEmrexReminder(supabase, action);
+      break;
+    
+    case 'create_manual_review_task': // Maak handmatige review taak
+      result = await createManualReviewTask(supabase, action);
+      break;
+    
+    case 'send_internal_notification': // Interne notificatie
+      result = await sendInternalNotification(supabase, action);
       break;
     
     case 'create_calendar_event': // Calendar event via n8n/Microsoft Graph
@@ -1578,6 +1688,222 @@ async function createOnboardingTasks(supabase: any, action: any) {
   }
 
   return { status: 'completed', tasks_created: onboardingTasks.length };
+}
+
+// =====================================================
+// EMREX Diploma Verification Functions
+// =====================================================
+
+// Execute EMREX invitation - generates link and sends email
+async function executeEmrexInvitation(supabase: any, action: any) {
+  console.log(`📜 [EMREX Invitation] Sending to ${action.input_data.candidate_email}`);
+  
+  const org_id = action.agent_goals?.org_id;
+  let organization = 'citozorg';
+  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
+    organization = 'abczorg';
+  }
+
+  try {
+    // Step 1: Generate EMREX link via verify-diploma-emrex
+    const { data: emrexData, error: emrexError } = await supabase.functions.invoke('verify-diploma-emrex', {
+      body: {
+        action: 'generate_link',
+        application_id: action.input_data.application_id
+      }
+    });
+
+    if (emrexError) {
+      console.error('[EMREX Invitation] Link generation failed:', emrexError);
+      throw emrexError;
+    }
+
+    console.log('[EMREX Invitation] Link generated:', emrexData?.emrex_link?.substring(0, 50) + '...');
+
+    // Step 2: Send email with EMREX link via send-ai-email
+    const { data: emailData, error: emailError } = await supabase.functions.invoke('send-ai-email', {
+      body: {
+        email_type: 'emrex_invitation',
+        recipient_email: action.input_data.candidate_email,
+        recipient_name: action.input_data.candidate_name,
+        subject: 'Diploma verificatie - Bevestig je opleiding',
+        template_data: {
+          candidate_name: action.input_data.candidate_name,
+          emrex_link: emrexData?.emrex_link,
+          functie_niveau: action.input_data.functie_niveau,
+          expires_at: emrexData?.expires_at
+        },
+        application_id: action.input_data.application_id,
+        org_id: org_id
+      }
+    });
+
+    if (emailError) {
+      console.error('[EMREX Invitation] Email send failed:', emailError);
+      throw emailError;
+    }
+
+    console.log('✅ [EMREX Invitation] Email sent successfully');
+    return { 
+      executed_via: 'emrex', 
+      organization,
+      emrex_session_id: emrexData?.session_id,
+      email_sent: true,
+      ...emailData 
+    };
+
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    console.error('❌ [EMREX Invitation] Failed:', errorMessage);
+    return { 
+      executed_via: 'failed', 
+      error: errorMessage,
+      organization
+    };
+  }
+}
+
+// Execute EMREX reminder - sends reminder email
+async function executeEmrexReminder(supabase: any, action: any) {
+  console.log(`⏰ [EMREX Reminder] Sending reminder to ${action.input_data.candidate_email}`);
+  
+  const org_id = action.agent_goals?.org_id;
+  let organization = 'citozorg';
+  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
+    organization = 'abczorg';
+  }
+
+  try {
+    // Get fresh EMREX link
+    const { data: emrexData, error: emrexError } = await supabase.functions.invoke('verify-diploma-emrex', {
+      body: {
+        action: 'generate_link',
+        application_id: action.input_data.application_id
+      }
+    });
+
+    // Send reminder email
+    const { data: emailData, error: emailError } = await supabase.functions.invoke('send-ai-email', {
+      body: {
+        email_type: 'emrex_reminder',
+        recipient_email: action.input_data.candidate_email,
+        recipient_name: action.input_data.candidate_name,
+        subject: 'Herinnering: Diploma verificatie nog niet afgerond',
+        template_data: {
+          candidate_name: action.input_data.candidate_name,
+          emrex_link: emrexData?.emrex_link,
+          original_invitation_at: action.input_data.original_invitation_at,
+          days_since_invitation: 2
+        },
+        application_id: action.input_data.application_id,
+        org_id: org_id
+      }
+    });
+
+    if (emailError) {
+      console.error('[EMREX Reminder] Email send failed:', emailError);
+      throw emailError;
+    }
+
+    console.log('✅ [EMREX Reminder] Reminder sent successfully');
+    return { 
+      executed_via: 'emrex_reminder', 
+      organization,
+      email_sent: true,
+      ...emailData 
+    };
+
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    console.error('❌ [EMREX Reminder] Failed:', errorMessage);
+    return { 
+      executed_via: 'failed', 
+      error: errorMessage,
+      organization
+    };
+  }
+}
+
+// Create manual review task when EMREX times out
+async function createManualReviewTask(supabase: any, action: any) {
+  console.log(`📋 [Manual Review] Creating task for ${action.input_data.candidate_name}`);
+  
+  const org_id = action.agent_goals?.org_id || '550e8400-e29b-41d4-a716-446655440000';
+
+  try {
+    // Create a task for manual diploma review
+    const { data: task, error: taskError } = await supabase.from('tasks').insert({
+      org_id: org_id,
+      title: `Handmatige diploma verificatie: ${action.input_data.candidate_name || 'Kandidaat'}`,
+      category: 'Recruitment',
+      priority: 'high',
+      status: 'pending',
+      description: `EMREX diploma verificatie timeout na ${action.input_data.days_waiting || 7} dagen.
+      
+Kandidaat: ${action.input_data.candidate_name}
+Email: ${action.input_data.candidate_email}
+Application ID: ${action.input_data.application_id}
+
+Actie vereist: Vraag handmatig diploma bewijs op en verifieer.`
+    }).select().single();
+
+    if (taskError) {
+      console.error('[Manual Review] Task creation failed:', taskError);
+      throw taskError;
+    }
+
+    console.log('✅ [Manual Review] Task created:', task?.id);
+    return { 
+      executed_via: 'task_created', 
+      task_id: task?.id,
+      task_title: task?.title
+    };
+
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    console.error('❌ [Manual Review] Failed:', errorMessage);
+    return { 
+      executed_via: 'failed', 
+      error: errorMessage
+    };
+  }
+}
+
+// Send internal notification to recruitment team
+async function sendInternalNotification(supabase: any, action: any) {
+  console.log(`🔔 [Internal Notification] ${action.input_data.notification_type}`);
+  
+  const org_id = action.agent_goals?.org_id || '550e8400-e29b-41d4-a716-446655440000';
+
+  try {
+    // Create business intelligence alert
+    await supabase.from('business_intelligence').insert({
+      org_id: org_id,
+      intelligence_type: action.input_data.notification_type || 'internal_alert',
+      title: `EMREX Escalatie: ${action.input_data.candidate_name || 'Kandidaat'}`,
+      description: action.input_data.message,
+      data: {
+        application_id: action.input_data.application_id,
+        candidate_name: action.input_data.candidate_name,
+        escalation_reason: 'emrex_timeout'
+      },
+      severity: 'warning'
+    });
+
+    console.log('✅ [Internal Notification] Alert created');
+    return { 
+      executed_via: 'alert_created', 
+      notification_type: action.input_data.notification_type
+    };
+
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    console.error('❌ [Internal Notification] Failed:', errorMessage);
+    return { 
+      executed_via: 'failed', 
+      error: errorMessage
+    };
+  }
 }
 
 // Check if all actions for a goal are complete

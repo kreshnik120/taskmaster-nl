@@ -121,6 +121,10 @@ verify_jwt = false
 verify_jwt = false
 # Purpose: Verify VOG documents via GAAV/validatie.nl API
 
+[functions.verify-diploma-emrex]
+verify_jwt = false
+# Purpose: EMREX diploma verification via DUO (generate link, callback, reminders)
+
 # -----------------------------------------------------------------------------
 # AUTHENTICATED FUNCTIONS (JWT verification required)
 # -----------------------------------------------------------------------------
