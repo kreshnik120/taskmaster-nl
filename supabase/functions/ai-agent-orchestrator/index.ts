@@ -1058,6 +1058,27 @@ async function executeFollowupQuestion(supabase: any, action: any) {
   }
 
   console.log(`📧 [Followup] Organization determined: ${org_name}`);
+  
+  // 🔧 FIX: Get candidate_name from extracted_data if not provided (fixes "Beste null" bug)
+  let candidateName = action.input_data.candidate_name;
+  if (!candidateName && applicationId) {
+    const { data: nameData } = await supabase
+      .from('professional_applications')
+      .select('extracted_data, email')
+      .eq('id', applicationId)
+      .single();
+    
+    if (nameData) {
+      // Fallback chain: naam → full_name → email prefix → 'sollicitant'
+      candidateName = nameData.extracted_data?.naam 
+        || nameData.extracted_data?.full_name
+        || (nameData.email ? nameData.email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : null)
+        || 'sollicitant';
+      console.log(`📧 [Followup] Resolved candidate name: ${candidateName}`);
+    }
+  }
+  candidateName = candidateName || 'sollicitant';
+  
   console.log(`📧 [Followup] Checking for recent emails before sending...`);
 
   // 🔒 DEDUPLICATION CHECK: Skip if email was sent recently (within 1 hour)
@@ -1091,7 +1112,7 @@ async function executeFollowupQuestion(supabase: any, action: any) {
         application_id: applicationId,
         candidate_email: action.input_data.candidate_email,
         fields_to_ask: action.input_data.fields_to_ask,
-        candidate_name: action.input_data.candidate_name,
+        candidate_name: candidateName,
         current_completeness: action.input_data.current_completeness,
         org_name: org_name
       }

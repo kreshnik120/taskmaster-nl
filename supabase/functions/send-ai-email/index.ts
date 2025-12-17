@@ -244,7 +244,7 @@ function generateEmailTemplate(
       const fields = data.fields_to_ask || [];
       const fieldsList = fields.map((f: string) => `<li style="margin: 8px 0;">${f}</li>`).join('');
       content = `
-        <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName},</h2>
+        <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName || 'sollicitant'},</h2>
         <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
           Bedankt voor je interesse in ${orgName}! Om je sollicitatie compleet te maken, hebben we nog enkele gegevens nodig:
         </p>
