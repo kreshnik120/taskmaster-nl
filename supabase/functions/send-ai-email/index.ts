@@ -11,7 +11,9 @@ type EmailType =
   | 'general'               // Algemene communicatie
   | 'welcome'               // Welkomstmail nieuwe kandidaat
   | 'status_update'         // Status update (goedgekeurd, afgewezen, etc.)
-  | 'vog_rejection';        // VOG verificatie mislukt, vraag nieuw VOG
+  | 'vog_rejection'         // VOG verificatie mislukt, vraag nieuw VOG
+  | 'emrex_invitation'      // EMREX diploma verificatie uitnodiging
+  | 'emrex_reminder';       // EMREX herinnering na 48 uur
 
 interface SendEmailRequest {
   email_type: EmailType;
@@ -345,6 +347,71 @@ function generateEmailTemplate(
         </ol>
         <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-top: 20px;">
           Zodra we je nieuwe VOG hebben ontvangen, wordt deze automatisch geverifieerd en kun je verder in het sollicitatieproces.
+        </p>
+        <p style="margin: 25px 0 0 0; color: #4a5568;">
+          Met vriendelijke groet,<br>
+          <strong>Het ${orgName} Recruitment Team</strong>
+        </p>`;
+      break;
+
+    case 'emrex_invitation':
+      const emrexLink = data.emrex_link || '#';
+      const expiresAt = data.expires_at ? new Date(data.expires_at).toLocaleDateString('nl-NL') : '7 dagen';
+      content = `
+        <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName},</h2>
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
+          Om je sollicitatie bij ${orgName} compleet te maken, vragen we je om je diploma te verifiëren via EMREX (DUO).
+        </p>
+        <div style="background-color: #e0f2fe; padding: 25px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #0284c7; text-align: center;">
+          <p style="margin: 0 0 15px 0; color: #0369a1; font-size: 14px;">
+            🎓 <strong>Diploma Verificatie via EMREX</strong>
+          </p>
+          <a href="${emrexLink}" style="display: inline-block; background: linear-gradient(135deg, ${orgColor} 0%, #764ba2 100%); color: #ffffff; padding: 14px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">
+            ➡️ Start Verificatie
+          </a>
+          <p style="margin: 15px 0 0 0; color: #0369a1; font-size: 12px;">
+            Link geldig tot ${expiresAt}
+          </p>
+        </div>
+        <div style="background-color: #f8fafc; padding: 20px; border-radius: 6px; margin: 20px 0;">
+          <p style="margin: 0 0 10px 0; color: #1a1a1a; font-weight: 600;">📋 Hoe werkt het?</p>
+          <ol style="color: #4a5568; font-size: 14px; line-height: 1.8; padding-left: 20px; margin: 0;">
+            <li>Klik op de knop hierboven</li>
+            <li>Log in met je DigiD bij DUO</li>
+            <li>Geef toestemming om je diplomagegevens te delen</li>
+            <li>Klaar! Wij ontvangen automatisch een bevestiging</li>
+          </ol>
+        </div>
+        <p style="color: #4a5568; font-size: 14px; line-height: 1.6;">
+          <strong>Waarom EMREX?</strong> EMREX is een veilige Europese dienst waarmee je jouw diplomagegevens rechtstreeks vanuit DUO kunt delen. Zo weten we zeker dat je diploma authentiek is.
+        </p>
+        <p style="margin: 25px 0 0 0; color: #4a5568;">
+          Met vriendelijke groet,<br>
+          <strong>Het ${orgName} Recruitment Team</strong>
+        </p>`;
+      break;
+
+    case 'emrex_reminder':
+      const reminderEmrexLink = data.emrex_link || '#';
+      const daysSinceInvitation = data.days_since_invitation || 2;
+      content = `
+        <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName},</h2>
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
+          ${daysSinceInvitation} dagen geleden hebben we je gevraagd je diploma te verifiëren. We hebben nog geen bevestiging ontvangen.
+        </p>
+        <div style="background-color: #fef3c7; padding: 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+          <p style="margin: 0; color: #92400e; font-weight: 600;">⏰ Actie vereist</p>
+          <p style="margin: 8px 0 0 0; color: #b45309; font-size: 14px;">
+            Zonder geverifieerd diploma kunnen we je sollicitatie niet verder behandelen.
+          </p>
+        </div>
+        <div style="text-align: center; margin: 25px 0;">
+          <a href="${reminderEmrexLink}" style="display: inline-block; background: linear-gradient(135deg, ${orgColor} 0%, #764ba2 100%); color: #ffffff; padding: 14px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">
+            ➡️ Verifieer Nu via DigiD
+          </a>
+        </div>
+        <p style="color: #4a5568; font-size: 14px; line-height: 1.6;">
+          Heb je vragen of lukt het inloggen niet? Beantwoord deze email dan en we helpen je graag verder.
         </p>
         <p style="margin: 25px 0 0 0; color: #4a5568;">
           Met vriendelijke groet,<br>
