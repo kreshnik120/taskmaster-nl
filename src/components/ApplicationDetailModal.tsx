@@ -1110,6 +1110,7 @@ export function ApplicationDetailModal({
                     diplomaFilePath={application.extracted_data?.diploma_file_path || null}
                     vogStatus={vogStatus}
                     diplomaStatus={diplomaStatus}
+                    vogVerificationResponse={application.vog_verification_response as any}
                     onUploadComplete={onApplicationUpdated}
                   />
 

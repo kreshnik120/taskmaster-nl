@@ -4477,6 +4477,36 @@ export type Database = {
           },
         ]
       }
+      vog_screening_requirements: {
+        Row: {
+          created_at: string
+          doelgroep: string[] | null
+          functie_niveau: string
+          id: string
+          profile_description: string
+          required_functieaspecten: string[] | null
+          required_profile_code: string
+        }
+        Insert: {
+          created_at?: string
+          doelgroep?: string[] | null
+          functie_niveau: string
+          id?: string
+          profile_description: string
+          required_functieaspecten?: string[] | null
+          required_profile_code: string
+        }
+        Update: {
+          created_at?: string
+          doelgroep?: string[] | null
+          functie_niveau?: string
+          id?: string
+          profile_description?: string
+          required_functieaspecten?: string[] | null
+          required_profile_code?: string
+        }
+        Relationships: []
+      }
       watches: {
         Row: {
           created_at: string
