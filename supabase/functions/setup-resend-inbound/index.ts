@@ -39,11 +39,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
       throw new Error("RESEND_API_KEY is not configured");
     }
 
-    const { action } = await req.json();
+    const { action, webhook_url } = await req.json();
     const inboundDomain = "inbound.citozorg.nl";
-    // CORRECT webhook URL - moet naar process-application-email, NIET handle-application-reply
-    const correctWebhookUrl = `${SUPABASE_URL}/functions/v1/process-application-email`;
+    // CORRECT webhook URL - kan overschreven worden met webhook_url parameter voor testing
+    const defaultWebhookUrl = `${SUPABASE_URL}/functions/v1/process-application-email`;
+    const correctWebhookUrl = webhook_url || defaultWebhookUrl;
     const oldWebhookUrl = `${SUPABASE_URL}/functions/v1/handle-application-reply`;
+    
+    console.log(`[setup-resend-inbound] Using webhook URL: ${correctWebhookUrl}`);
 
     console.log(`[setup-resend-inbound] Action: ${action}`);
 
