@@ -998,246 +998,312 @@ Return JSON in dit formaat:
     console.log("   New completeness score:", newCompletenessScore);
 
 
-    // 🎉 CHECK: Is completeness 100% AND no professional created yet?
-    let professionalId = application.professional_id;
+    // =====================================================
+    // EXPERT PANEL FLOW: Interview-first, geen automatische professional creation
+    // Flow: NIEUW → INTERVIEW → SCREENING → GOEDGEKEURD → Professional
+    // =====================================================
     
-    if (newCompletenessScore === 100 && !application.professional_id) {
-      console.log("🎉 Application is 100% compleet! Creating professional record...");
-      
-      // Create professional with all collected data
-      const { data: newProfessional, error: profError } = await supabase
-        .from("professionals")
-        .insert({
-          org_id: application.org_id,
-          full_name: mergedData.full_name,
-          telefoonnummer: mergedData.telefoonnummer,
-          email: mergedData.email || application.email_from,
-          adres: mergedData.adres,
-          postcode: mergedData.postcode,
-          woonplaats: mergedData.woonplaats,
-          functie_niveau: mergedData.functie_niveau,
-          werkvorm: mergedData.werkvorm,
-          skills: mergedData.skills || [],
-          regio: mergedData.regio,
-          gewenst_uurloon: mergedData.gewenst_uurloon,
-          vog_date: mergedData.vog_date,
-          big_nummer: mergedData.big_nummer,
-          heeft_auto: mergedData.heeft_auto || false,
-          heeft_rijbewijs: mergedData.heeft_rijbewijs || false,
-          kvk_nummer: mergedData.kvk_nummer,
-          btw_nummer: mergedData.btw_nummer,
-          status: "actief",
-          tags: ["sollicitant", "compleet"],
-        })
-        .select()
-        .single();
+    const pipelineStage = application.pipeline_stage || 'nieuw';
+    const interviewStatus = mergedData.interview_status;
+    
+    console.log(`📊 Current pipeline stage: ${pipelineStage}, Interview status: ${interviewStatus}`);
+    
+    // =====================================================
+    // STAP 1: ALTIJD update application record EERST
+    // =====================================================
+    console.log("Updating application record...");
+    const { error: appUpdateError } = await supabase
+      .from("professional_applications")
+      .update({
+        missing_info: finalRemainingMissing,
+        completeness_score: newCompletenessScore,
+        extracted_data: mergedData,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", applicationId);
 
-      if (profError) {
-        console.error("Error creating professional:", profError);
-      } else {
-        console.log("✅ Professional created:", newProfessional.id);
-        professionalId = newProfessional.id;
+    if (appUpdateError) {
+      console.error("Error updating application:", appUpdateError);
+    }
+
+    // =====================================================
+    // STAP 2: SCREENING Stage - Document Validation
+    // Als stage = SCREENING, check documenten en transition naar GOEDGEKEURD
+    // =====================================================
+    if (pipelineStage === 'screening') {
+      console.log("📋 SCREENING stage - checking document completeness...");
+      
+      const missingDocs: string[] = [];
+      
+      // VOG check met 3-maanden validatie
+      if (!mergedData.vog_file_path) {
+        missingDocs.push('VOG (Verklaring Omtrent Gedrag) - max 3 maanden oud');
+      } else if (mergedData.vog_date) {
+        const vogDate = new Date(mergedData.vog_date);
+        const threeMonthsAgo = new Date();
+        threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+        if (vogDate < threeMonthsAgo) {
+          missingDocs.push('VOG (je huidige VOG is helaas ouder dan 3 maanden, kun je een nieuwe aanvragen?)');
+        }
+      }
+      
+      // Diploma check
+      if (!mergedData.diploma_file_path) {
+        missingDocs.push('Diploma of certificaat van je opleiding');
+      }
+      
+      console.log(`📋 Missing documents: ${missingDocs.length > 0 ? missingDocs.join(', ') : 'NONE'}`);
+      
+      if (missingDocs.length === 0) {
+        // ✅ Documenten compleet → stage naar GOEDGEKEURD
+        console.log("✅ All documents complete! Transitioning to GOEDGEKEURD...");
         
-        // ✅ ATOMIC UPDATE: Update application with ALL fields at once
-        console.log("Updating application record with professional_id...");
-        const { error: appUpdateError } = await supabase
+        await supabase
           .from("professional_applications")
           .update({ 
-            professional_id: newProfessional.id,
-            status: "geaccepteerd",
-            missing_info: [],
-            completeness_score: 100,
-            extracted_data: mergedData,
+            pipeline_stage: 'goedgekeurd',
             updated_at: new Date().toISOString(),
           })
           .eq("id", applicationId);
-
-        if (appUpdateError) {
-          console.error("Error updating application:", appUpdateError);
-        }
-      }
-    } else {
-      // Update application without professional_id (not 100% complete yet)
-      console.log("Updating application record...");
-      const { error: appUpdateError } = await supabase
-        .from("professional_applications")
-        .update({
-          missing_info: finalRemainingMissing,
-          completeness_score: newCompletenessScore,
-          extracted_data: mergedData,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", applicationId);
-
-      if (appUpdateError) {
-        console.error("Error updating application:", appUpdateError);
-      }
-
-      // =====================================================
-      // STAP 7a: Check for Interview Slot Selection
-      // =====================================================
-      if (analysis.selected_slot_index && offeredSlots && offeredSlots.length > 0) {
-        const slotIndex = parseInt(analysis.selected_slot_index) - 1;
-        if (slotIndex >= 0 && slotIndex < offeredSlots.length) {
-          const selectedSlot = offeredSlots[slotIndex];
-          console.log(`🎉 Kandidaat koos interview slot: ${selectedSlot.date} om ${selectedSlot.time}`);
           
-          // Call schedule-interview to confirm the slot
-          try {
-            const { data: confirmResult, error: confirmError } = await supabase.functions.invoke('schedule-interview', {
-              body: {
-                action: 'confirm_slot',
-                application_id: applicationId,
-                selected_slot: {
-                  date: selectedSlot.date,
-                  time: selectedSlot.time
-                }
-              }
-            });
-            
-            if (confirmError) {
-              console.error("Error confirming interview slot:", confirmError);
-            } else {
-              console.log("✅ Interview slot confirmed:", confirmResult);
-              
-              // Send confirmation email
-              await supabase.functions.invoke('schedule-interview', {
-                body: {
-                  action: 'send_confirmation',
-                  application_id: applicationId
-                }
-              });
-            }
-          } catch (scheduleError) {
-            console.error("Error scheduling interview:", scheduleError);
-          }
-        }
-      }
-
-      // =====================================================
-      // STAP 7b: Continue Follow-up Loop OR Trigger Interview
-      // =====================================================
-      if (newCompletenessScore >= 80 && !application.extracted_data?.interview_status && !analysis.selected_slot_index) {
-        // Completeness >= 80% and no interview scheduled yet → trigger interview scheduling
-        console.log("🗓️ Completeness >= 80%, checking for existing interview goal...");
+        console.log("✅ Stage transitioned to GOEDGEKEURD - Professional creation will be triggered by database");
+      } else {
+        // 📧 Stuur document request email via goal
+        console.log("📧 Creating document request goal...");
         
-        const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
-        
-        // 🔒 FASE 2 FIX: Check for existing active interview goal to prevent duplicates
-        const { data: existingInterviewGoal } = await supabase
+        const { data: existingDocGoal } = await supabase
           .from("agent_goals")
-          .select("id, status")
-          .eq("goal_type", "schedule_interview")
+          .select("id")
+          .eq("goal_type", "request_documents")
           .in("status", ["pending", "planning", "executing", "in_progress"])
           .filter("input_data->application_id", "eq", applicationId)
           .maybeSingle();
         
-        if (existingInterviewGoal) {
-          console.log(`⏭️ Skipping interview goal - existing active goal found: ${existingInterviewGoal.id} (${existingInterviewGoal.status})`);
-        } else {
-          const { error: interviewGoalError } = await supabase
+        if (!existingDocGoal) {
+          const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
+          
+          await supabase
             .from("agent_goals")
             .insert({
               org_id: application.org_id,
-              goal_type: "schedule_interview",
-              goal_description: `Plan interview met ${professionalName}`,
-              priority: 90,
+              goal_type: "request_documents",
+              goal_description: `Documenten opvragen voor ${professionalName}`,
+              priority: 95,
               input_data: {
                 application_id: applicationId,
                 candidate_email: from,
                 candidate_name: professionalName,
-                current_completeness: newCompletenessScore,
+                missing_documents: missingDocs,
               },
               status: "pending"
             });
-
-          if (interviewGoalError) {
-            console.error("Error creating interview goal:", interviewGoalError);
-          } else {
-            console.log(`✅ Created interview scheduling goal for application ${applicationId}`);
-          }
-        }
-      } else if (newCompletenessScore < 80 && finalRemainingMissing.length > 0) {
-        console.log("Completeness still < 80%, checking for existing follow-up goal...");
-        
-        // 🔒 FASE 2 FIX: Check for existing ACTIVE follow-up goals (not just count all)
-        const { data: existingActiveFollowup } = await supabase
-          .from("agent_goals")
-          .select("id, status")
-          .eq("goal_type", "application_intake_completion")
-          .in("status", ["pending", "planning", "executing", "in_progress"])
-          .filter("input_data->application_id", "eq", applicationId)
-          .maybeSingle();
-        
-        if (existingActiveFollowup) {
-          console.log(`⏭️ Skipping follow-up goal - existing active goal found: ${existingActiveFollowup.id} (${existingActiveFollowup.status})`);
-        } else {
-          // Count total follow-ups (completed or not) for rate limiting
-          const { count: totalFollowups } = await supabase
-            .from("agent_goals")
-            .select("*", { count: "exact", head: true })
-            .eq("goal_type", "application_intake_completion")
-            .filter("input_data->application_id", "eq", applicationId);
-
-          const followUpCount = totalFollowups || 0;
-
-          // Max 3 follow-ups per applicatie
-          if (followUpCount < 3) {
-            const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
             
-            const { error: goalError } = await supabase
-              .from("agent_goals")
-              .insert({
-                org_id: application.org_id,
-                goal_type: "application_intake_completion",
-                goal_description: `Vervolg follow-up voor ${professionalName} (${followUpCount + 1}/3)`,
-                priority: 100 - newCompletenessScore,
-                input_data: {
-                  application_id: applicationId,
-                  candidate_email: from,
-                  candidate_name: professionalName,
-                  missing_info: finalRemainingMissing,
-                  current_completeness: newCompletenessScore,
-                  follow_up_count: followUpCount,
-                },
-                status: "pending"
-              });
-
-            if (goalError) {
-              console.error("Error creating follow-up goal:", goalError);
-            } else {
-              console.log(`✅ Created follow-up goal #${followUpCount + 1} for application ${applicationId}`);
-            }
-          } else {
-            console.log(`⚠️ Max follow-ups (3) reached for application ${applicationId}`);
-          }
+          console.log("✅ Document request goal created");
         }
       }
     }
 
-    // Generate intelligent response
+    // =====================================================
+    // STAP 3: Check for Interview Slot Selection (any stage)
+    // =====================================================
+    if (analysis.selected_slot_index && offeredSlots && offeredSlots.length > 0) {
+      const slotIndex = parseInt(analysis.selected_slot_index) - 1;
+      if (slotIndex >= 0 && slotIndex < offeredSlots.length) {
+        const selectedSlot = offeredSlots[slotIndex];
+        console.log(`🎉 Kandidaat koos interview slot: ${selectedSlot.date} om ${selectedSlot.time}`);
+        
+        // Call schedule-interview to confirm the slot
+        try {
+          const { data: confirmResult, error: confirmError } = await supabase.functions.invoke('schedule-interview', {
+            body: {
+              action: 'confirm_slot',
+              application_id: applicationId,
+              selected_slot: {
+                date: selectedSlot.date,
+                time: selectedSlot.time
+              }
+            }
+          });
+          
+          if (confirmError) {
+            console.error("Error confirming interview slot:", confirmError);
+          } else {
+            console.log("✅ Interview slot confirmed:", confirmResult);
+            
+            // Send confirmation email
+            await supabase.functions.invoke('schedule-interview', {
+              body: {
+                action: 'send_confirmation',
+                application_id: applicationId
+              }
+            });
+          }
+        } catch (scheduleError) {
+          console.error("Error scheduling interview:", scheduleError);
+        }
+      }
+    }
+
+    // =====================================================
+    // STAP 4: NIEUW Stage - Trigger Interview when ready (≥80%)
+    // ALLEEN als stage = NIEUW en completeness ≥ 80%
+    // =====================================================
+    if (pipelineStage === 'nieuw' && newCompletenessScore >= 80 && interviewStatus !== 'scheduled' && !analysis.selected_slot_index) {
+      console.log("🗓️ NIEUW stage + Completeness >= 80%, checking for existing interview goal...");
+      
+      const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
+      
+      // Check for existing active interview goal to prevent duplicates
+      const { data: existingInterviewGoal } = await supabase
+        .from("agent_goals")
+        .select("id, status")
+        .eq("goal_type", "schedule_interview")
+        .in("status", ["pending", "planning", "executing", "in_progress"])
+        .filter("input_data->application_id", "eq", applicationId)
+        .maybeSingle();
+      
+      if (existingInterviewGoal) {
+        console.log(`⏭️ Skipping interview goal - existing active goal found: ${existingInterviewGoal.id} (${existingInterviewGoal.status})`);
+      } else {
+        const { error: interviewGoalError } = await supabase
+          .from("agent_goals")
+          .insert({
+            org_id: application.org_id,
+            goal_type: "schedule_interview",
+            goal_description: `Plan interview met ${professionalName}`,
+            priority: 90,
+            input_data: {
+              application_id: applicationId,
+              candidate_email: from,
+              candidate_name: professionalName,
+              current_completeness: newCompletenessScore,
+            },
+            status: "pending"
+          });
+
+        if (interviewGoalError) {
+          console.error("Error creating interview goal:", interviewGoalError);
+        } else {
+          console.log(`✅ Created interview scheduling goal for application ${applicationId}`);
+        }
+      }
+    }
+    
+    // =====================================================
+    // STAP 5: NIEUW Stage - Follow-up if < 80%
+    // =====================================================
+    if (pipelineStage === 'nieuw' && newCompletenessScore < 80 && finalRemainingMissing.length > 0) {
+      console.log("Completeness still < 80%, checking for existing follow-up goal...");
+      
+      // Check for existing ACTIVE follow-up goals
+      const { data: existingActiveFollowup } = await supabase
+        .from("agent_goals")
+        .select("id, status")
+        .eq("goal_type", "application_intake_completion")
+        .in("status", ["pending", "planning", "executing", "in_progress"])
+        .filter("input_data->application_id", "eq", applicationId)
+        .maybeSingle();
+      
+      if (existingActiveFollowup) {
+        console.log(`⏭️ Skipping follow-up goal - existing active goal found: ${existingActiveFollowup.id} (${existingActiveFollowup.status})`);
+      } else {
+        // Count total follow-ups for rate limiting
+        const { count: totalFollowups } = await supabase
+          .from("agent_goals")
+          .select("*", { count: "exact", head: true })
+          .eq("goal_type", "application_intake_completion")
+          .filter("input_data->application_id", "eq", applicationId);
+
+        const followUpCount = totalFollowups || 0;
+
+        // Max 3 follow-ups per applicatie
+        if (followUpCount < 3) {
+          const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
+          
+          const { error: goalError } = await supabase
+            .from("agent_goals")
+            .insert({
+              org_id: application.org_id,
+              goal_type: "application_intake_completion",
+              goal_description: `Vervolg follow-up voor ${professionalName} (${followUpCount + 1}/3)`,
+              priority: 100 - newCompletenessScore,
+              input_data: {
+                application_id: applicationId,
+                candidate_email: from,
+                candidate_name: professionalName,
+                missing_info: finalRemainingMissing,
+                current_completeness: newCompletenessScore,
+                follow_up_count: followUpCount,
+              },
+              status: "pending"
+            });
+
+          if (goalError) {
+            console.error("Error creating follow-up goal:", goalError);
+          } else {
+            console.log(`✅ Created follow-up goal #${followUpCount + 1} for application ${applicationId}`);
+          }
+        } else {
+          console.log(`⚠️ Max follow-ups (3) reached for application ${applicationId}`);
+        }
+      }
+    }
+
+    // =====================================================
+    // STAP 6: Generate intelligent response based on stage
+    // =====================================================
     console.log("Generating response email...");
     let responseSubject = `Re: ${subject}`;
     let responseBody = "";
 
-    const professionalName = mergedData.full_name || application.email_from.split("@")[0];
+    const professionalName = mergedData.naam || mergedData.full_name || application.email_from.split("@")[0];
 
-    if (newCompletenessScore === 100) {
-      // Application is 100% complete!
-      responseSubject = `Re: ${subject} - Sollicitatie Compleet! 🎉`;
+    // Response templates based on STAGE (not completeness)
+    if (pipelineStage === 'screening') {
+      // SCREENING: bedanken voor interview, documenten gevraagd
+      responseSubject = `Re: ${subject} - Documenten nodig`;
       responseBody = `
         <h2>Beste ${professionalName},</h2>
         
-        <p><strong>Geweldig nieuws!</strong> Je sollicitatie is nu compleet. 🎉</p>
+        <p>Bedankt voor je reactie!</p>
         
-        <p>We zouden graag kennismaken om te kijken of er een match is. Wanneer zou het jou uitkomen voor een (video)gesprek?</p>
-        
-        <p><strong>Volgende stappen:</strong></p>
+        <p>Om je profiel compleet te maken hebben we nog enkele documenten nodig:</p>
         <ul>
-          <li>Reageer met je beschikbaarheid voor deze week</li>
-          <li>Of bel ons op: 020-1234567</li>
-          <li>Of plan direct in via onze agenda</li>
+          <li>VOG (Verklaring Omtrent Gedrag) - mag maximaal 3 maanden oud zijn</li>
+          <li>Diploma of certificaat van je opleiding</li>
         </ul>
+        
+        <p>Je kunt deze documenten als bijlage naar deze email sturen.</p>
+        
+        <p>Met vriendelijke groet,<br>
+        Het ${orgInfo.displayName} Recruitment Team<br>
+        <a href="mailto:${emailConfig.from}">${emailConfig.from}</a></p>
+      `;
+    } else if (pipelineStage === 'interview' || interviewStatus === 'scheduled') {
+      // INTERVIEW: interview staat gepland
+      responseSubject = `Re: ${subject}`;
+      responseBody = `
+        <h2>Beste ${professionalName},</h2>
+        
+        <p>Bedankt voor je bericht!</p>
+        
+        <p>Je interview staat gepland. We kijken ernaar uit om je te ontmoeten!</p>
+        
+        <p>Heb je nog vragen? Laat het gerust weten.</p>
+        
+        <p>Met vriendelijke groet,<br>
+        Het ${orgInfo.displayName} Recruitment Team<br>
+        <a href="mailto:${emailConfig.from}">${emailConfig.from}</a></p>
+      `;
+    } else if (newCompletenessScore >= 80) {
+      // NIEUW + ≥80%: interview gaat gepland worden
+      responseSubject = `Re: ${subject} - Tijd voor een gesprek!`;
+      responseBody = `
+        <h2>Beste ${professionalName},</h2>
+        
+        <p>Super, we hebben genoeg informatie om verder te gaan! 🎉</p>
+        
+        <p>We sturen je binnenkort een uitnodiging voor een (video)gesprek zodat we elkaar kunnen leren kennen.</p>
         
         <p>We kijken ernaar uit!</p>
         
@@ -1246,7 +1312,7 @@ Return JSON in dit formaat:
         <a href="mailto:${emailConfig.from}">${emailConfig.from}</a></p>
       `;
     } else if (finalRemainingMissing.length > 0) {
-      // Still missing some information
+      // NIEUW + <80%: meer info nodig
       responseSubject = `Re: ${subject} - Aanvullende informatie nodig`;
       responseBody = `
         <h2>Beste ${professionalName},</h2>
@@ -1270,9 +1336,7 @@ Return JSON in dit formaat:
       responseBody = `
         <h2>Beste ${professionalName},</h2>
         
-        <p>Super, bedankt voor de aanvullende informatie! Je sollicitatie is nu compleet.</p>
-        
-        <p>We gaan je gegevens nu beoordelen en nemen binnen 2 werkdagen contact met je op voor de volgende stappen.</p>
+        <p>Bedankt voor je bericht! We hebben je reactie ontvangen.</p>
         
         <p>Heb je nog vragen? Laat het gerust weten!</p>
         
