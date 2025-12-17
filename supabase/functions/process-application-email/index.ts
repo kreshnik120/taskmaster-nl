@@ -211,10 +211,67 @@ const handler = async (req: Request): Promise<Response> => {
     // Process as NEW application
     console.log("📨 Processing as NEW application email");
     const applicantEmail = emailData.from;
-    const emailBody = emailData.text || emailData.html || "";
+    let emailBody = emailData.text || emailData.html || "";
 
     console.log("From:", applicantEmail);
     console.log("Subject:", emailSubject);
+    console.log("Initial email body length:", emailBody.length);
+    
+    // 📧 FETCH EMAIL BODY via Resend API if empty (common for inbound webhooks)
+    if (!emailBody || emailBody.trim().length === 0) {
+      console.log("⚠️ Email body is empty - fetching via Resend Receiving API...");
+      
+      // Get svix-id from headers - this is the email identifier for Resend
+      const svixId = req.headers.get("svix-id");
+      console.log("📧 svix-id for email fetch:", svixId);
+      
+      if (svixId) {
+        try {
+          // Resend Receiving API to get full email content
+          const emailFetchResponse = await fetch(`https://api.resend.com/emails/${svixId}`, {
+            method: "GET",
+            headers: {
+              "Authorization": `Bearer ${resendApiKey}`,
+              "Content-Type": "application/json"
+            }
+          });
+          
+          if (emailFetchResponse.ok) {
+            const fullEmail = await emailFetchResponse.json();
+            console.log("✅ Email fetched via Resend API:", {
+              hasText: !!fullEmail.text,
+              hasHtml: !!fullEmail.html,
+              textLength: fullEmail.text?.length || 0,
+              htmlLength: fullEmail.html?.length || 0
+            });
+            emailBody = fullEmail.text || fullEmail.html || "";
+          } else {
+            console.warn("⚠️ Could not fetch email via Resend API:", emailFetchResponse.status);
+            // Try alternative: use email_id from payload.data
+            const emailId = (emailData as any).email_id || (emailData as any).id;
+            if (emailId && emailId !== svixId) {
+              console.log("🔄 Trying alternative email_id:", emailId);
+              const altResponse = await fetch(`https://api.resend.com/emails/${emailId}`, {
+                method: "GET",
+                headers: {
+                  "Authorization": `Bearer ${resendApiKey}`,
+                  "Content-Type": "application/json"
+                }
+              });
+              if (altResponse.ok) {
+                const altEmail = await altResponse.json();
+                emailBody = altEmail.text || altEmail.html || "";
+                console.log("✅ Email fetched via alternative ID");
+              }
+            }
+          }
+        } catch (fetchError) {
+          console.error("❌ Error fetching email body:", fetchError);
+        }
+      }
+      
+      console.log("📧 Final email body length after fetch:", emailBody.length);
+    }
     
     // Filter out inline attachments (email signatures) - only process real attachments with content
     const realAttachments = emailData.attachments?.filter(att => 
