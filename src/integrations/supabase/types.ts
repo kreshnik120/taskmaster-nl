@@ -1019,6 +1019,47 @@ export type Database = {
           },
         ]
       }
+      application_stage_audit: {
+        Row: {
+          application_id: string
+          from_stage: string | null
+          id: string
+          metadata: Json | null
+          performed_at: string | null
+          performed_by: string | null
+          reason: string | null
+          to_stage: string
+        }
+        Insert: {
+          application_id: string
+          from_stage?: string | null
+          id?: string
+          metadata?: Json | null
+          performed_at?: string | null
+          performed_by?: string | null
+          reason?: string | null
+          to_stage: string
+        }
+        Update: {
+          application_id?: string
+          from_stage?: string | null
+          id?: string
+          metadata?: Json | null
+          performed_at?: string | null
+          performed_by?: string | null
+          reason?: string | null
+          to_stage?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "application_stage_audit_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       application_sublocation_matches: {
         Row: {
           application_id: string
@@ -2749,6 +2790,11 @@ export type Database = {
           cv_file_path: string | null
           deleted_at: string | null
           deleted_by: string | null
+          diploma_validation_source: string | null
+          diploma_validation_status: string | null
+          diploma_verification_response: Json | null
+          documents_verified_at: string | null
+          documents_verified_by: string | null
           email_body: string | null
           email_from: string
           email_subject: string | null
@@ -2764,6 +2810,11 @@ export type Database = {
           rejection_reason: string | null
           status: string
           updated_at: string | null
+          vog_issue_date: string | null
+          vog_valid_until: string | null
+          vog_validation_source: string | null
+          vog_validation_status: string | null
+          vog_verification_response: Json | null
         }
         Insert: {
           completeness_score?: number | null
@@ -2772,6 +2823,11 @@ export type Database = {
           cv_file_path?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
+          diploma_validation_source?: string | null
+          diploma_validation_status?: string | null
+          diploma_verification_response?: Json | null
+          documents_verified_at?: string | null
+          documents_verified_by?: string | null
           email_body?: string | null
           email_from: string
           email_subject?: string | null
@@ -2787,6 +2843,11 @@ export type Database = {
           rejection_reason?: string | null
           status?: string
           updated_at?: string | null
+          vog_issue_date?: string | null
+          vog_valid_until?: string | null
+          vog_validation_source?: string | null
+          vog_validation_status?: string | null
+          vog_verification_response?: Json | null
         }
         Update: {
           completeness_score?: number | null
@@ -2795,6 +2856,11 @@ export type Database = {
           cv_file_path?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
+          diploma_validation_source?: string | null
+          diploma_validation_status?: string | null
+          diploma_verification_response?: Json | null
+          documents_verified_at?: string | null
+          documents_verified_by?: string | null
           email_body?: string | null
           email_from?: string
           email_subject?: string | null
@@ -2810,6 +2876,11 @@ export type Database = {
           rejection_reason?: string | null
           status?: string
           updated_at?: string | null
+          vog_issue_date?: string | null
+          vog_valid_until?: string | null
+          vog_validation_source?: string | null
+          vog_validation_status?: string | null
+          vog_verification_response?: Json | null
         }
         Relationships: [
           {
@@ -5029,9 +5100,27 @@ export type Database = {
             }[]
           }
       redact_pii: { Args: { input_text: string }; Returns: string }
+      transition_application_stage: {
+        Args: {
+          p_application_id: string
+          p_metadata?: Json
+          p_reason?: string
+          p_to_stage: string
+        }
+        Returns: Json
+      }
       user_is_org_member: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
+      }
+      verify_document_manual: {
+        Args: {
+          p_application_id: string
+          p_document_type: string
+          p_notes?: string
+          p_verified: boolean
+        }
+        Returns: Json
       }
     }
     Enums: {
