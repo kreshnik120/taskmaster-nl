@@ -1,5 +1,6 @@
 import { Resend } from "https://esm.sh/resend@4.0.0";
 import { handleCors, jsonResponse, errorResponse } from '../_shared/core.ts';
+import { getEmailConfig } from '../_shared/healthcare-mappings.ts';
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
@@ -10,6 +11,7 @@ interface ReminderEmailRequest {
   subtaskTitle?: string;
   reminderTime: string;
   taskId: string;
+  orgId?: string; // Optional org_id for dynamic branding
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -17,16 +19,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (corsResponse) return corsResponse;
 
   try {
-    const { to, reminderTitle, taskTitle, subtaskTitle, reminderTime, taskId }: ReminderEmailRequest = await req.json();
+    const { to, reminderTitle, taskTitle, subtaskTitle, reminderTime, taskId, orgId }: ReminderEmailRequest = await req.json();
 
-    console.log("Sending reminder email to:", to);
+    console.log("📧 Sending reminder email to:", to);
+
+    // 🔧 FASE 4 FIX: Gebruik healthcare-mappings voor correcte email configuratie
+    const emailConfig = getEmailConfig(orgId || null);
+    console.log("📧 Using email config:", { from: emailConfig.from, replyTo: emailConfig.replyTo, name: emailConfig.name });
 
     const appUrl = "https://taskmaster-nl.lovable.app";
     const taskUrl = `${appUrl}/kanban/${taskId}`;
 
     const emailResponse = await resend.emails.send({
-      from: "CitoZorg TaskMaster <noreply@citozorg.nl>",
+      from: `${emailConfig.name} <${emailConfig.from}>`,
       to: [to],
+      replyTo: emailConfig.replyTo, // 🔧 FASE 4 FIX: Reply-To toegevoegd
       subject: `Herinnering: ${reminderTitle || taskTitle || "Taak"}`,
       html: `
         <!DOCTYPE html>
@@ -93,7 +100,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
                     <tr>
                       <td style="background-color: #f8f9fa; padding: 25px 30px; text-align: center; border-radius: 0 0 8px 8px; border-top: 1px solid #e5e7eb;">
                         <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 14px;">
-                          Deze email is verstuurd door <strong>CitoZorg TaskMaster</strong>
+                          Deze email is verstuurd door <strong>${emailConfig.name}</strong>
                         </p>
                         <p style="margin: 0; color: #9ca3af; font-size: 12px;">
                           <a href="${appUrl}" style="color: #667eea; text-decoration: none;">Ga naar TaskMaster</a>
@@ -109,11 +116,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
       `,
     });
 
-    console.log("Email sent successfully:", emailResponse);
+    console.log("✅ Email sent successfully:", emailResponse);
 
     return jsonResponse({ success: true, id: emailResponse.data?.id });
   } catch (error: any) {
-    console.error("Error sending reminder email:", error);
+    console.error("❌ Error sending reminder email:", error);
     return errorResponse(error.message, 500);
   }
 });

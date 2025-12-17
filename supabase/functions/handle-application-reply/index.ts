@@ -1040,72 +1040,98 @@ Return JSON in dit formaat:
       // =====================================================
       if (newCompletenessScore >= 80 && !application.extracted_data?.interview_status && !analysis.selected_slot_index) {
         // Completeness >= 80% and no interview scheduled yet → trigger interview scheduling
-        console.log("🗓️ Completeness >= 80%, triggering interview scheduling...");
+        console.log("🗓️ Completeness >= 80%, checking for existing interview goal...");
         
         const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
         
-        const { error: interviewGoalError } = await supabase
+        // 🔒 FASE 2 FIX: Check for existing active interview goal to prevent duplicates
+        const { data: existingInterviewGoal } = await supabase
           .from("agent_goals")
-          .insert({
-            org_id: application.org_id,
-            goal_type: "schedule_interview",
-            goal_description: `Plan interview met ${professionalName}`,
-            priority: 90,
-            input_data: {
-              application_id: applicationId,
-              candidate_email: from,
-              candidate_name: professionalName,
-              current_completeness: newCompletenessScore,
-            },
-            status: "pending"
-          });
-
-        if (interviewGoalError) {
-          console.error("Error creating interview goal:", interviewGoalError);
-        } else {
-          console.log(`✅ Created interview scheduling goal for application ${applicationId}`);
-        }
-      } else if (newCompletenessScore < 80 && analysis.remaining_missing_info?.length > 0) {
-        console.log("Completeness still < 80%, triggering new follow-up goal...");
+          .select("id, status")
+          .eq("goal_type", "schedule_interview")
+          .in("status", ["pending", "planning", "executing", "in_progress"])
+          .filter("input_data->application_id", "eq", applicationId)
+          .maybeSingle();
         
-        // Check hoeveel follow-ups er al zijn geweest
-        const { count: existingFollowups } = await supabase
-          .from("agent_goals")
-          .select("*", { count: "exact", head: true })
-          .eq("goal_type", "application_intake_completion")
-          .contains("input_data", { application_id: applicationId });
-
-        const followUpCount = existingFollowups || 0;
-
-        // Max 3 follow-ups per applicatie
-        if (followUpCount < 3) {
-          const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
-          
-          const { error: goalError } = await supabase
+        if (existingInterviewGoal) {
+          console.log(`⏭️ Skipping interview goal - existing active goal found: ${existingInterviewGoal.id} (${existingInterviewGoal.status})`);
+        } else {
+          const { error: interviewGoalError } = await supabase
             .from("agent_goals")
             .insert({
               org_id: application.org_id,
-              goal_type: "application_intake_completion",
-              goal_description: `Vervolg follow-up voor ${professionalName} (${followUpCount + 1}/3)`,
-              priority: 100 - newCompletenessScore,
+              goal_type: "schedule_interview",
+              goal_description: `Plan interview met ${professionalName}`,
+              priority: 90,
               input_data: {
                 application_id: applicationId,
                 candidate_email: from,
                 candidate_name: professionalName,
-                missing_info: analysis.remaining_missing_info,
                 current_completeness: newCompletenessScore,
-                follow_up_count: followUpCount,
               },
               status: "pending"
             });
 
-          if (goalError) {
-            console.error("Error creating follow-up goal:", goalError);
+          if (interviewGoalError) {
+            console.error("Error creating interview goal:", interviewGoalError);
           } else {
-            console.log(`Created follow-up goal #${followUpCount + 1} for application ${applicationId}`);
+            console.log(`✅ Created interview scheduling goal for application ${applicationId}`);
           }
+        }
+      } else if (newCompletenessScore < 80 && analysis.remaining_missing_info?.length > 0) {
+        console.log("Completeness still < 80%, checking for existing follow-up goal...");
+        
+        // 🔒 FASE 2 FIX: Check for existing ACTIVE follow-up goals (not just count all)
+        const { data: existingActiveFollowup } = await supabase
+          .from("agent_goals")
+          .select("id, status")
+          .eq("goal_type", "application_intake_completion")
+          .in("status", ["pending", "planning", "executing", "in_progress"])
+          .filter("input_data->application_id", "eq", applicationId)
+          .maybeSingle();
+        
+        if (existingActiveFollowup) {
+          console.log(`⏭️ Skipping follow-up goal - existing active goal found: ${existingActiveFollowup.id} (${existingActiveFollowup.status})`);
         } else {
-          console.log(`Max follow-ups (3) reached for application ${applicationId}`);
+          // Count total follow-ups (completed or not) for rate limiting
+          const { count: totalFollowups } = await supabase
+            .from("agent_goals")
+            .select("*", { count: "exact", head: true })
+            .eq("goal_type", "application_intake_completion")
+            .filter("input_data->application_id", "eq", applicationId);
+
+          const followUpCount = totalFollowups || 0;
+
+          // Max 3 follow-ups per applicatie
+          if (followUpCount < 3) {
+            const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
+            
+            const { error: goalError } = await supabase
+              .from("agent_goals")
+              .insert({
+                org_id: application.org_id,
+                goal_type: "application_intake_completion",
+                goal_description: `Vervolg follow-up voor ${professionalName} (${followUpCount + 1}/3)`,
+                priority: 100 - newCompletenessScore,
+                input_data: {
+                  application_id: applicationId,
+                  candidate_email: from,
+                  candidate_name: professionalName,
+                  missing_info: analysis.remaining_missing_info,
+                  current_completeness: newCompletenessScore,
+                  follow_up_count: followUpCount,
+                },
+                status: "pending"
+              });
+
+            if (goalError) {
+              console.error("Error creating follow-up goal:", goalError);
+            } else {
+              console.log(`✅ Created follow-up goal #${followUpCount + 1} for application ${applicationId}`);
+            }
+          } else {
+            console.log(`⚠️ Max follow-ups (3) reached for application ${applicationId}`);
+          }
         }
       }
     }
