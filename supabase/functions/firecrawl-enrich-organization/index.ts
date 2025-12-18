@@ -160,7 +160,8 @@ Deno.serve(async (req) => {
         url: formattedUrl,
         formats: ['markdown', 'html'],
         onlyMainContent: false, // Get full page for contact info
-        waitFor: 2000,
+        waitFor: 3000,
+        timeout: 60000, // 60 second timeout for slow healthcare websites
       }),
     });
 
@@ -218,35 +219,62 @@ Deno.serve(async (req) => {
         }
       }
       
-      // Store enrichment in knowledge base
-      const { error: kbError } = await supabase
-        .from('ai_knowledge_base')
-        .upsert({
-          org_id: organization.org_id,
-          category: 'org_profile',
-          key: `org_enrichment_${organization.id}`,
-          value: {
-            organization_id: organization.id,
-            organization_name: organization.name,
-            website: formattedUrl,
-            extracted_emails: extractedData.emails,
-            extracted_phones: extractedData.phones,
-            extracted_addresses: extractedData.addresses,
-            detected_sectors: extractedData.sectors,
-            logo_url: extractedData.logoUrl,
-            description: extractedData.description,
-            enriched_at: new Date().toISOString(),
-          },
-          source: 'firecrawl',
-          source_url: formattedUrl,
-          confidence_score: 0.8,
-          validation_status: 'auto_validated',
-        }, {
-          onConflict: 'org_id,category,key',
-        });
+      // Store enrichment in knowledge base (select-then-upsert pattern)
+      const knowledgeKey = `org_enrichment_${organization.id}`;
+      const knowledgeValue = {
+        organization_id: organization.id,
+        organization_name: organization.name,
+        website: formattedUrl,
+        extracted_emails: extractedData.emails,
+        extracted_phones: extractedData.phones,
+        extracted_addresses: extractedData.addresses,
+        detected_sectors: extractedData.sectors,
+        logo_url: extractedData.logoUrl,
+        description: extractedData.description,
+        enriched_at: new Date().toISOString(),
+      };
       
-      if (kbError) {
-        console.error('❌ Failed to store in knowledge base:', kbError);
+      // Check if knowledge item exists
+      const { data: existingKb } = await supabase
+        .from('ai_knowledge_base')
+        .select('id')
+        .eq('org_id', organization.org_id)
+        .eq('category', 'org_profile')
+        .eq('key', knowledgeKey)
+        .maybeSingle();
+      
+      if (existingKb) {
+        // Update existing
+        const { error: updateKbError } = await supabase
+          .from('ai_knowledge_base')
+          .update({
+            value: knowledgeValue,
+            source_url: formattedUrl,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingKb.id);
+        
+        if (updateKbError) {
+          console.error('❌ Failed to update knowledge base:', updateKbError);
+        }
+      } else {
+        // Insert new
+        const { error: insertKbError } = await supabase
+          .from('ai_knowledge_base')
+          .insert({
+            org_id: organization.org_id,
+            category: 'org_profile',
+            key: knowledgeKey,
+            value: knowledgeValue,
+            source: 'firecrawl',
+            source_url: formattedUrl,
+            confidence_score: 0.8,
+            validation_status: 'auto_validated',
+          });
+        
+        if (insertKbError) {
+          console.error('❌ Failed to insert to knowledge base:', insertKbError);
+        }
       }
     }
 
