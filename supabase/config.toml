@@ -85,6 +85,14 @@ verify_jwt = false
 verify_jwt = false
 # Purpose: Fetch and cache organization logos
 
+[functions.firecrawl-scrape]
+verify_jwt = false
+# Purpose: Generic URL scraping via Firecrawl API
+
+[functions.firecrawl-enrich-organization]
+verify_jwt = false
+# Purpose: Enrich organization data by scraping website
+
 [functions.cleanup-deleted-knowledge]
 verify_jwt = false
 # Purpose: Clean up soft-deleted knowledge items
@@ -176,10 +184,6 @@ verify_jwt = true
 [functions.queue-document-processing]
 verify_jwt = true
 # Purpose: Queue documents for async processing
-
-[functions.kvk-smart-lookup]
-verify_jwt = true
-# Purpose: Smart KVK (Chamber of Commerce) lookup
 
 [functions.ai-categorize-knowledge]
 verify_jwt = true

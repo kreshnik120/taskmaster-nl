@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Plus, Search, X, Users, Building2, Target, LayoutGrid, Network, FileSpreadsheet, Image, Loader2 } from "lucide-react";
+import { Plus, Search, X, Users, Building2, Target, LayoutGrid, Network, FileSpreadsheet, Image, Loader2, Flame } from "lucide-react";
 import { toast } from "sonner";
 import NewClientDialog from "@/components/NewClientDialog";
 import { KPICard } from "@/components/ui/kpi-card";
@@ -20,6 +20,7 @@ import { LocationDetailModal } from "@/components/organization/LocationDetailMod
 import { SublocationDetailModal } from "@/components/organization/SublocationDetailModal";
 import { ABCzorgExcelImport } from "@/components/AITraining/ABCzorgExcelImport";
 import { AdminOnly } from "@/components/auth/AdminOnly";
+import { firecrawlApi } from "@/lib/api/firecrawl";
 
 // Unified Organization type used in both views
 interface Sublocation {
@@ -73,6 +74,7 @@ export default function Klanten() {
   const [selectedSublocation, setSelectedSublocation] = useState<Sublocation | null>(null);
   const [isSublocationModalOpen, setIsSublocationModalOpen] = useState(false);
   const [isFetchingLogos, setIsFetchingLogos] = useState(false);
+  const [isEnrichingOrgs, setIsEnrichingOrgs] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "hierarchy">(() => {
     const saved = localStorage.getItem("klanten-view-mode");
     return (saved as any) || "cards";
@@ -112,6 +114,44 @@ export default function Klanten() {
       toast.error(`Fout bij ophalen logo's: ${error.message}`);
     } finally {
       setIsFetchingLogos(false);
+    }
+  };
+  
+  // Firecrawl enrich handler
+  const handleFirecrawlEnrich = async () => {
+    // Get organizations with websites but missing data
+    const orgsToEnrich = organizations.filter(org => 
+      org.website && (!org.centrale_facturatie_email || !org.logo_url)
+    );
+    
+    if (orgsToEnrich.length === 0) {
+      toast.info("Alle organisaties met websites zijn al verrijkt");
+      return;
+    }
+    
+    setIsEnrichingOrgs(true);
+    toast.info(`Verrijken van ${orgsToEnrich.length} organisaties gestart...`);
+    
+    try {
+      const result = await firecrawlApi.batchEnrich(
+        orgsToEnrich.map(o => o.id),
+        {
+          updateDatabase: true,
+          onProgress: (current, total) => {
+            if (current % 5 === 0 || current === total) {
+              console.log(`Firecrawl progress: ${current}/${total}`);
+            }
+          }
+        }
+      );
+      
+      toast.success(`Verrijking voltooid: ${result.success} geslaagd, ${result.failed} mislukt`);
+      loadOrganizations(); // Refresh data
+    } catch (error: any) {
+      console.error("Error enriching organizations:", error);
+      toast.error(`Fout bij verrijken: ${error.message}`);
+    } finally {
+      setIsEnrichingOrgs(false);
     }
   };
   
@@ -557,6 +597,19 @@ export default function Klanten() {
               <Image className="h-4 w-4 mr-2" />
             )}
             {isFetchingLogos ? "Ophalen..." : "Logo's ophalen"}
+          </Button>
+          <Button 
+            variant="outline" 
+            className="shrink-0"
+            onClick={handleFirecrawlEnrich}
+            disabled={isEnrichingOrgs}
+          >
+            {isEnrichingOrgs ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Flame className="h-4 w-4 mr-2" />
+            )}
+            {isEnrichingOrgs ? "Verrijken..." : "Verrijk met Firecrawl"}
           </Button>
           <Sheet>
             <SheetTrigger asChild>
