@@ -94,43 +94,55 @@ export default function Klanten() {
   
   // Logo fetch handler
   const handleFetchLogos = async () => {
+    console.log("[handleFetchLogos] Button clicked");
+    console.log("[handleFetchLogos] Organizations loaded:", organizations.length);
+    
     // Check how many orgs actually need logos
     const orgsWithoutLogos = organizations.filter(org => !org.logo_url);
+    console.log("[handleFetchLogos] Organizations without logos:", orgsWithoutLogos.length);
     
     if (orgsWithoutLogos.length === 0) {
-      toast.info("Alle organisaties hebben al een logo", {
-        description: "Er zijn geen organisaties zonder logo om te verwerken."
+      console.log("[handleFetchLogos] All organizations have logos - showing info toast");
+      toast.info("✅ Alle organisaties hebben al een logo", {
+        description: `${organizations.length} organisaties gecontroleerd.`
       });
       return;
     }
     
     setIsFetchingLogos(true);
-    toast.info(`Logo's ophalen voor ${orgsWithoutLogos.length} organisaties...`);
+    const toastId = toast.loading(`Logo's ophalen voor ${orgsWithoutLogos.length} organisaties...`, {
+      description: "Even geduld..."
+    });
     
     try {
+      console.log("[handleFetchLogos] Invoking edge function...");
       const { data, error } = await supabase.functions.invoke("fetch-organization-logos", {
         body: { fetchAll: false, includeNameLookup: true }
       });
+      
+      console.log("[handleFetchLogos] Response:", { data, error });
       
       if (error) throw error;
       
       if (data) {
         if (data.success === 0 && data.processed === 0) {
-          toast.info("Alle organisaties hebben al een logo");
+          toast.info("✅ Alle organisaties hebben al een logo", { id: toastId });
         } else if (data.success > 0) {
           toast.success(`${data.success} logo's opgehaald`, {
-            description: data.failed > 0 ? `${data.failed} mislukt` : undefined
+            id: toastId,
+            description: data.failed > 0 ? `${data.failed} mislukt` : "Klaar!"
           });
           loadOrganizations();
         } else {
           toast.warning(`Geen nieuwe logo's gevonden`, {
+            id: toastId,
             description: `${data.failed} mislukt, ${data.skipped} overgeslagen`
           });
         }
       }
     } catch (error: any) {
-      console.error("Error fetching logos:", error);
-      toast.error(`Fout bij ophalen logo's: ${error.message}`);
+      console.error("[handleFetchLogos] Error:", error);
+      toast.error(`Fout bij ophalen logo's: ${error.message}`, { id: toastId });
     } finally {
       setIsFetchingLogos(false);
     }
@@ -138,34 +150,53 @@ export default function Klanten() {
   
   // Firecrawl enrich handler with auto website detection
   const handleFirecrawlEnrich = async () => {
+    console.log("[handleFirecrawlEnrich] Button clicked");
+    console.log("[handleFirecrawlEnrich] Organizations loaded:", organizations.length);
+    
+    if (organizations.length === 0) {
+      console.log("[handleFirecrawlEnrich] No organizations loaded yet!");
+      toast.error("Geen organisaties geladen", {
+        description: "Wacht tot de pagina volledig is geladen."
+      });
+      return;
+    }
+    
     // Now include ALL organizations - we can auto-detect websites
     const orgsToEnrich = organizations.filter(org => 
       !org.centrale_facturatie_email || !org.logo_url || !org.website
     );
     
+    console.log("[handleFirecrawlEnrich] Organizations to enrich:", orgsToEnrich.length);
+    console.log("[handleFirecrawlEnrich] Sample org:", orgsToEnrich[0]);
+    
     if (orgsToEnrich.length === 0) {
-      toast.info("Alle organisaties zijn al volledig verrijkt", {
-        description: "Alle organisaties hebben website, email en logo."
+      console.log("[handleFirecrawlEnrich] All organizations fully enriched");
+      toast.info("✅ Alle organisaties zijn al volledig verrijkt", {
+        description: `${organizations.length} organisaties hebben website, email en logo.`
       });
       return;
     }
     
     const orgsWithoutWebsite = organizations.filter(org => !org.website).length;
+    const orgsWithoutEmail = organizations.filter(org => !org.centrale_facturatie_email).length;
+    
+    console.log("[handleFirecrawlEnrich] Without website:", orgsWithoutWebsite);
+    console.log("[handleFirecrawlEnrich] Without email:", orgsWithoutEmail);
     
     setIsEnrichingOrgs(true);
-    const toastId = toast.loading(`Verrijken van ${orgsToEnrich.length} organisaties...`, {
-      description: orgsWithoutWebsite > 0 
-        ? `${orgsWithoutWebsite} zonder website - detectie actief` 
-        : "Dit kan enkele minuten duren"
+    const toastId = toast.loading(`🔥 Verrijken van ${orgsToEnrich.length} organisaties...`, {
+      description: `${orgsWithoutWebsite} zonder website • ${orgsWithoutEmail} zonder email`
     });
     
     try {
+      console.log("[handleFirecrawlEnrich] Starting batch enrich...");
       const result = await firecrawlApi.batchEnrich(
         orgsToEnrich.map(o => o.id),
         {
           updateDatabase: true,
-          autoDetectWebsite: true, // Enable auto-detection
+          autoDetectWebsite: true,
           onProgress: (current, total, currentOrg) => {
+            console.log(`[handleFirecrawlEnrich] Progress: ${current}/${total} - ${currentOrg}`);
             toast.loading(`Verrijken ${current}/${total}`, {
               id: toastId,
               description: currentOrg ? `Bezig met: ${currentOrg}` : undefined
@@ -173,6 +204,8 @@ export default function Klanten() {
           }
         }
       );
+      
+      console.log("[handleFirecrawlEnrich] Result:", result);
       
       // Build detailed feedback message
       const parts: string[] = [];
@@ -185,9 +218,9 @@ export default function Klanten() {
       
       // Success/failure message with website detection info
       if (result.success > 0 && result.failed === 0) {
-        toast.success(`${result.success} organisaties verrijkt`, { 
+        toast.success(`✅ ${result.success} organisaties verrijkt`, { 
           id: toastId,
-          description: parts.length > 0 ? parts.join(' • ') : undefined
+          description: parts.length > 0 ? parts.join(' • ') : "Klaar!"
         });
       } else if (result.success > 0) {
         toast.success(`${result.success} verrijkt, ${result.failed} mislukt`, {
@@ -205,7 +238,7 @@ export default function Klanten() {
       
       loadOrganizations();
     } catch (error: any) {
-      console.error("Error enriching organizations:", error);
+      console.error("[handleFirecrawlEnrich] Error:", error);
       toast.error(`Fout bij verrijken: ${error.message}`, { id: toastId });
     } finally {
       setIsEnrichingOrgs(false);
