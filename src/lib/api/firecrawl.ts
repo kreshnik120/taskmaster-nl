@@ -28,6 +28,7 @@ export interface EnrichResponse {
   organizationId?: string;
   organizationName?: string;
   websiteUrl?: string;
+  detectedWebsite?: string; // Auto-detected website URL
   extracted?: {
     emails: string[];
     phones: string[];
@@ -45,6 +46,7 @@ export interface BatchEnrichResult {
   success: number;
   failed: number;
   timedOut: number;
+  websitesDetected: number; // NEW: count of auto-detected websites
   results: EnrichResponse[];
   failedOrganizations: { id: string; name: string; error: string }[];
 }
@@ -87,13 +89,14 @@ export const firecrawlApi = {
    */
   async enrichOrganization(
     organizationId: string, 
-    options?: { updateDatabase?: boolean }
+    options?: { updateDatabase?: boolean; autoDetectWebsite?: boolean }
   ): Promise<EnrichResponse> {
     try {
       const { data, error } = await supabase.functions.invoke('firecrawl-enrich-organization', {
         body: { 
           organizationId,
           updateDatabase: options?.updateDatabase ?? true,
+          autoDetectWebsite: options?.autoDetectWebsite ?? true,
         },
       });
 
@@ -149,7 +152,8 @@ export const firecrawlApi = {
   async batchEnrich(
     organizationIds: string[],
     options?: { 
-      updateDatabase?: boolean; 
+      updateDatabase?: boolean;
+      autoDetectWebsite?: boolean;
       onProgress?: (current: number, total: number, currentOrg?: string) => void;
       onResult?: (result: EnrichResponse) => void;
     }
@@ -159,13 +163,15 @@ export const firecrawlApi = {
     let success = 0;
     let failed = 0;
     let timedOut = 0;
+    let websitesDetected = 0;
 
     for (let i = 0; i < organizationIds.length; i++) {
       const orgId = organizationIds[i];
       
       try {
         const result = await this.enrichOrganization(orgId, { 
-          updateDatabase: options?.updateDatabase ?? true 
+          updateDatabase: options?.updateDatabase ?? true,
+          autoDetectWebsite: options?.autoDetectWebsite ?? true,
         });
         
         results.push(result);
@@ -173,6 +179,10 @@ export const firecrawlApi = {
         
         if (result.success) {
           success++;
+          // Track auto-detected websites
+          if (result.detectedWebsite) {
+            websitesDetected++;
+          }
         } else {
           failed++;
           
@@ -212,6 +222,6 @@ export const firecrawlApi = {
       }
     }
 
-    return { success, failed, timedOut, results, failedOrganizations };
+    return { success, failed, timedOut, websitesDetected, results, failedOrganizations };
   },
 };

@@ -136,22 +136,27 @@ export default function Klanten() {
     }
   };
   
-  // Firecrawl enrich handler with detailed feedback
+  // Firecrawl enrich handler with auto website detection
   const handleFirecrawlEnrich = async () => {
+    // Now include ALL organizations - we can auto-detect websites
     const orgsToEnrich = organizations.filter(org => 
-      org.website && (!org.centrale_facturatie_email || !org.logo_url)
+      !org.centrale_facturatie_email || !org.logo_url || !org.website
     );
     
     if (orgsToEnrich.length === 0) {
-      toast.info("Alle organisaties met websites zijn al verrijkt", {
-        description: "Er zijn geen organisaties die verrijkt moeten worden."
+      toast.info("Alle organisaties zijn al volledig verrijkt", {
+        description: "Alle organisaties hebben website, email en logo."
       });
       return;
     }
     
+    const orgsWithoutWebsite = organizations.filter(org => !org.website).length;
+    
     setIsEnrichingOrgs(true);
     const toastId = toast.loading(`Verrijken van ${orgsToEnrich.length} organisaties...`, {
-      description: "Dit kan enkele minuten duren"
+      description: orgsWithoutWebsite > 0 
+        ? `${orgsWithoutWebsite} zonder website - detectie actief` 
+        : "Dit kan enkele minuten duren"
     });
     
     try {
@@ -159,6 +164,7 @@ export default function Klanten() {
         orgsToEnrich.map(o => o.id),
         {
           updateDatabase: true,
+          autoDetectWebsite: true, // Enable auto-detection
           onProgress: (current, total, currentOrg) => {
             toast.loading(`Verrijken ${current}/${total}`, {
               id: toastId,
@@ -168,14 +174,26 @@ export default function Klanten() {
         }
       );
       
-      // Detailed success/failure message
+      // Build detailed feedback message
+      const parts: string[] = [];
+      if (result.websitesDetected > 0) {
+        parts.push(`${result.websitesDetected} websites gedetecteerd`);
+      }
+      if (result.timedOut > 0) {
+        parts.push(`${result.timedOut} timeouts`);
+      }
+      
+      // Success/failure message with website detection info
       if (result.success > 0 && result.failed === 0) {
-        toast.success(`${result.success} organisaties verrijkt`, { id: toastId });
+        toast.success(`${result.success} organisaties verrijkt`, { 
+          id: toastId,
+          description: parts.length > 0 ? parts.join(' • ') : undefined
+        });
       } else if (result.success > 0) {
         toast.success(`${result.success} verrijkt, ${result.failed} mislukt`, {
           id: toastId,
-          description: result.timedOut > 0 
-            ? `${result.timedOut} websites te traag` 
+          description: parts.length > 0 
+            ? parts.join(' • ')
             : result.failedOrganizations.slice(0, 3).map(f => f.name).join(', ')
         });
       } else {
