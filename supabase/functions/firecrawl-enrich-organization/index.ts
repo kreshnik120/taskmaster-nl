@@ -4,6 +4,7 @@ interface EnrichRequest {
   organizationId?: string;
   websiteUrl?: string;
   updateDatabase?: boolean;
+  autoDetectWebsite?: boolean; // New: auto-detect website if missing
 }
 
 interface ExtractedData {
@@ -22,6 +23,7 @@ interface EnrichResult {
   error?: string;
   extracted?: ExtractedData;
   updatedFields?: string[];
+  detectedWebsite?: string;
 }
 
 // Regex patterns for data extraction
@@ -37,6 +39,97 @@ const SECTOR_KEYWORDS: Record<string, string[]> = {
   'Jeugdzorg': ['jeugdzorg', 'jeugdhulp', 'jongeren', 'kinderen', 'gezinnen'],
   'Ziekenhuis': ['ziekenhuis', 'kliniek', 'medisch centrum', 'academisch'],
 };
+
+// Known organization name to website mappings
+const KNOWN_WEBSITES: Record<string, string> = {
+  'amarant': 'https://www.amarant.nl',
+  's heeren loo': 'https://www.sheerenloo.nl',
+  'sheeren loo': 'https://www.sheerenloo.nl',
+  'heerenloo': 'https://www.sheerenloo.nl',
+  'pluryn': 'https://www.pluryn.nl',
+  'pro persona': 'https://www.propersona.nl',
+  'propersona': 'https://www.propersona.nl',
+  'leger des heils': 'https://www.legerdesheils.nl',
+  'humanitas': 'https://www.humanitas.nl',
+  'lunet': 'https://www.lunetzorg.nl',
+  'prisma': 'https://www.prismanet.nl',
+  'swz': 'https://www.swzzorg.nl',
+  'fokus': 'https://www.fokuswonen.nl',
+  'siza': 'https://www.siza.nl',
+  'driestroom': 'https://www.dedriestroom.nl',
+  'cello': 'https://www.cello.nl',
+  'dichterbij': 'https://www.dichterbij.nl',
+  'philadelphia': 'https://www.philadelphia.nl',
+  'cordaan': 'https://www.cordaan.nl',
+  'ons tweede thuis': 'https://www.onstweedethuis.nl',
+  'gemiva': 'https://www.gemiva-svg.nl',
+  'esdege reigersdaal': 'https://www.esdege-reigersdaal.nl',
+  'abrona': 'https://www.abrona.nl',
+  'middin': 'https://www.middin.nl',
+  'reinaerde': 'https://www.reinaerde.nl',
+  'trajectum': 'https://www.trajectum.nl',
+};
+
+/**
+ * Try to detect/validate a website URL for an organization
+ */
+async function detectWebsiteUrl(orgName: string): Promise<string | null> {
+  // Clean up organization name
+  const cleanName = orgName
+    .toLowerCase()
+    .replace(/stichting\s+/gi, '')
+    .replace(/zorg\s*b\.?v\.?/gi, '')
+    .replace(/b\.?v\.?/gi, '')
+    .replace(/[^a-z0-9\s]/gi, '')
+    .trim();
+  
+  console.log(`🔍 Detecting website for: "${orgName}" (cleaned: "${cleanName}")`);
+  
+  // 1. Check known mappings first
+  for (const [key, url] of Object.entries(KNOWN_WEBSITES)) {
+    if (cleanName.includes(key) || key.includes(cleanName.split(' ')[0])) {
+      console.log(`✅ Found known website: ${url}`);
+      return url;
+    }
+  }
+  
+  // 2. Generate potential URLs to try
+  const nameParts = cleanName.split(/\s+/).filter(p => p.length > 2);
+  const primaryName = nameParts[0] || cleanName.replace(/\s+/g, '');
+  
+  const potentialUrls = [
+    `https://www.${primaryName}.nl`,
+    `https://${primaryName}.nl`,
+    `https://www.${primaryName}zorg.nl`,
+    `https://www.${cleanName.replace(/\s+/g, '')}.nl`,
+  ];
+  
+  // 3. Try each URL with a HEAD request
+  for (const url of potentialUrls) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const response = await fetch(url, {
+        method: 'HEAD',
+        signal: controller.signal,
+        redirect: 'follow',
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (response.ok || response.status === 301 || response.status === 302) {
+        console.log(`✅ Validated website: ${url} (status: ${response.status})`);
+        return url;
+      }
+    } catch (e) {
+      // URL doesn't work, try next
+    }
+  }
+  
+  console.log(`❌ No website found for: ${orgName}`);
+  return null;
+}
 
 function extractDataFromContent(markdown: string, html?: string): ExtractedData {
   const content = markdown || '';
@@ -113,7 +206,8 @@ async function enrichSingleOrganization(
   apiKey: string,
   organization: any,
   formattedUrl: string,
-  updateDatabase: boolean
+  updateDatabase: boolean,
+  autoDetectWebsite: boolean = true
 ): Promise<EnrichResult> {
   const result: EnrichResult = {
     organizationId: organization.id,
@@ -122,8 +216,42 @@ async function enrichSingleOrganization(
     updatedFields: [],
   };
 
+  // Auto-detect website if none provided
+  let urlToScrape = formattedUrl;
+  if (!urlToScrape && autoDetectWebsite) {
+    const detectedUrl = await detectWebsiteUrl(organization.name);
+    if (detectedUrl) {
+      urlToScrape = detectedUrl;
+      result.detectedWebsite = detectedUrl;
+      
+      // Update organization with detected website
+      if (updateDatabase) {
+        const { error: websiteUpdateError } = await supabase
+          .from('client_organizations')
+          .update({ 
+            website: detectedUrl,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', organization.id);
+        
+        if (!websiteUpdateError) {
+          result.updatedFields!.push('website');
+          console.log(`✅ Updated website for ${organization.name}: ${detectedUrl}`);
+        }
+      }
+    } else {
+      result.error = 'Geen website gevonden';
+      return result;
+    }
+  }
+
+  if (!urlToScrape) {
+    result.error = 'Geen website URL beschikbaar';
+    return result;
+  }
+
   try {
-    console.log(`🔥 Enriching ${organization.name} from: ${formattedUrl}`);
+    console.log(`🔥 Enriching ${organization.name} from: ${urlToScrape}`);
     
     // Scrape with timeout using AbortController
     const controller = new AbortController();
@@ -136,7 +264,7 @@ async function enrichSingleOrganization(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        url: formattedUrl,
+        url: urlToScrape,
         formats: ['markdown', 'html'],
         onlyMainContent: false,
         waitFor: 3000,
@@ -172,7 +300,7 @@ async function enrichSingleOrganization(
 
     // Update database if requested
     if (updateDatabase) {
-      // 1. Update client_organizations (email, logo)
+      // 1. Update client_organizations (email, logo, website)
       const orgUpdates: Record<string, any> = {};
       
       if (extractedData.emails.length > 0 && !organization.centrale_facturatie_email) {
@@ -185,6 +313,11 @@ async function enrichSingleOrganization(
         result.updatedFields!.push('logo');
       }
       
+      // Store website if we detected it
+      if (result.detectedWebsite && !organization.website) {
+        orgUpdates.website = result.detectedWebsite;
+      }
+      
       if (Object.keys(orgUpdates).length > 0) {
         orgUpdates.updated_at = new Date().toISOString();
         
@@ -195,6 +328,8 @@ async function enrichSingleOrganization(
         
         if (updateError) {
           console.error(`❌ Failed to update ${organization.name}:`, updateError);
+        } else {
+          console.log(`✅ Updated org fields: ${Object.keys(orgUpdates).join(', ')}`);
         }
       }
       
@@ -223,12 +358,12 @@ async function enrichSingleOrganization(
         }
       }
       
-      // 3. Store enrichment in knowledge base
+      // 3. Store enrichment in ai_knowledge_base (FIXED: use correct org_id)
       const knowledgeKey = `org_enrichment_${organization.id}`;
       const knowledgeValue = {
         organization_id: organization.id,
         organization_name: organization.name,
-        website: formattedUrl,
+        website: urlToScrape,
         extracted_emails: extractedData.emails,
         extracted_phones: extractedData.phones,
         extracted_addresses: extractedData.addresses,
@@ -238,41 +373,64 @@ async function enrichSingleOrganization(
         enriched_at: new Date().toISOString(),
       };
       
-      const { data: existingKb } = await supabase
+      // FIXED: Use the bureau org_id (ABCzorg/CitoZorg), not the client org's own id
+      const bureauOrgId = organization.org_id;
+      
+      console.log(`💾 Saving to ai_knowledge_base with org_id: ${bureauOrgId}, key: ${knowledgeKey}`);
+      
+      const { data: existingKb, error: kbSelectError } = await supabase
         .from('ai_knowledge_base')
         .select('id')
-        .eq('org_id', organization.org_id)
+        .eq('org_id', bureauOrgId)
         .eq('category', 'org_profile')
         .eq('key', knowledgeKey)
         .maybeSingle();
       
+      if (kbSelectError) {
+        console.error(`❌ KB select error:`, kbSelectError);
+      }
+      
       if (existingKb) {
-        await supabase
+        const { error: kbUpdateError } = await supabase
           .from('ai_knowledge_base')
           .update({
             value: knowledgeValue,
-            source_url: formattedUrl,
+            source_url: urlToScrape,
             updated_at: new Date().toISOString(),
           })
           .eq('id', existingKb.id);
+        
+        if (kbUpdateError) {
+          console.error(`❌ KB update error:`, kbUpdateError);
+        } else {
+          result.updatedFields!.push('knowledge_base');
+          console.log(`✅ Updated ai_knowledge_base for ${organization.name}`);
+        }
       } else {
-        await supabase
+        const { error: kbInsertError } = await supabase
           .from('ai_knowledge_base')
           .insert({
-            org_id: organization.org_id,
+            org_id: bureauOrgId,
             category: 'org_profile',
             key: knowledgeKey,
             value: knowledgeValue,
             source: 'firecrawl',
-            source_url: formattedUrl,
+            source_url: urlToScrape,
             confidence_score: 0.8,
             validation_status: 'auto_validated',
           });
+        
+        if (kbInsertError) {
+          console.error(`❌ KB insert error:`, kbInsertError);
+        } else {
+          result.updatedFields!.push('knowledge_base');
+          console.log(`✅ Inserted ai_knowledge_base for ${organization.name}`);
+        }
       }
     }
 
     result.success = true;
-    console.log(`✅ ${organization.name} enriched successfully`);
+    console.log(`✅ ${organization.name} enriched successfully. Updated: ${result.updatedFields?.join(', ') || 'none'}`);
     return result;
     
   } catch (error) {
@@ -291,7 +449,7 @@ Deno.serve(async (req) => {
   if (corsResponse) return corsResponse;
 
   try {
-    const { organizationId, websiteUrl, updateDatabase = true } = await req.json() as EnrichRequest;
+    const { organizationId, websiteUrl, updateDatabase = true, autoDetectWebsite = true } = await req.json() as EnrichRequest;
 
     if (!organizationId && !websiteUrl) {
       return errorResponse('Either organizationId or websiteUrl is required', 400);
@@ -318,23 +476,31 @@ Deno.serve(async (req) => {
       }
       
       let urlToScrape = org.website || websiteUrl;
-      if (!urlToScrape) {
-        return errorResponse('Organization has no website URL', 400);
-      }
       
-      // Format URL
-      let formattedUrl = urlToScrape.trim();
-      if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
-        formattedUrl = `https://${formattedUrl}`;
+      // Format URL if provided
+      if (urlToScrape) {
+        urlToScrape = urlToScrape.trim();
+        if (!urlToScrape.startsWith('http://') && !urlToScrape.startsWith('https://')) {
+          urlToScrape = `https://${urlToScrape}`;
+        }
       }
 
-      const result = await enrichSingleOrganization(supabase, apiKey, org, formattedUrl, updateDatabase);
+      // Pass autoDetectWebsite flag - function will auto-detect if no URL
+      const result = await enrichSingleOrganization(
+        supabase, 
+        apiKey, 
+        org, 
+        urlToScrape || '', 
+        updateDatabase,
+        autoDetectWebsite
+      );
       
       return jsonResponse({
         success: result.success,
         organizationId: result.organizationId,
         organizationName: result.organizationName,
-        websiteUrl: formattedUrl,
+        websiteUrl: urlToScrape || result.detectedWebsite,
+        detectedWebsite: result.detectedWebsite,
         extracted: result.extracted,
         updatedFields: result.updatedFields,
         error: result.error,
