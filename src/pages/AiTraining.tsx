@@ -37,7 +37,6 @@ import { AIHealthMetrics } from "@/components/AITraining/AIHealthMetrics";
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { SystemHealthDashboard } from "@/components/AITraining/SystemHealthDashboard";
 import { EmbeddingCoverageDashboard } from "@/components/AITraining/EmbeddingCoverageDashboard";
-import { KvKCostDashboard } from "@/components/AITraining/KvKCostDashboard";
 import { CleanupDuplicateFields } from "@/components/AITraining/CleanupDuplicateFields";
 import { SystemLearningDashboard } from "@/components/AITraining/SystemLearningDashboard";
 import { EvaluationLearningWidget } from "@/components/AITraining/EvaluationLearningWidget";
@@ -242,10 +241,9 @@ const AiTraining = () => {
                   </Card>
                 }>
                   <Tabs defaultValue="validation" className="w-full">
-                    <TabsList className="grid w-full grid-cols-5">
+                    <TabsList className="grid w-full grid-cols-4">
                       <TabsTrigger value="validation">Validation</TabsTrigger>
                       <TabsTrigger value="alerts">Alerts</TabsTrigger>
-                      <TabsTrigger value="kvk">KVK API</TabsTrigger>
                       <TabsTrigger value="week1-2">Week 1-2 Test</TabsTrigger>
                       <TabsTrigger value="cleanup">Cleanup</TabsTrigger>
                     </TabsList>
@@ -298,20 +296,6 @@ const AiTraining = () => {
                           <AlertPriorityRanker />
                         </TabsContent>
                       </Tabs>
-                    </TabsContent>
-                    
-                    <TabsContent value="kvk" className="mt-4">
-                      <Card className="mb-6">
-                        <CardHeader>
-                          <CardTitle className="flex items-center gap-2">
-                            💼 KVK API Cost Optimization
-                          </CardTitle>
-                          <CardDescription>
-                            Smart caching strategie: Database First → KVK Cache → KVK API (€0.30)
-                          </CardDescription>
-                        </CardHeader>
-                      </Card>
-                      <KvKCostDashboard />
                     </TabsContent>
                     
                     <TabsContent value="week1-2" className="mt-4">
