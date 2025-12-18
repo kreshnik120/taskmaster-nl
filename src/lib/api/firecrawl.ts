@@ -26,6 +26,7 @@ export interface ScrapeResponse {
 export interface EnrichResponse {
   success: boolean;
   organizationId?: string;
+  organizationName?: string;
   websiteUrl?: string;
   extracted?: {
     emails: string[];
@@ -35,8 +36,17 @@ export interface EnrichResponse {
     sectors: string[];
     description: string | null;
   };
+  updatedFields?: string[];
   updated?: any;
   error?: string;
+}
+
+export interface BatchEnrichResult {
+  success: number;
+  failed: number;
+  timedOut: number;
+  results: EnrichResponse[];
+  failedOrganizations: { id: string; name: string; error: string }[];
 }
 
 /**
@@ -89,7 +99,7 @@ export const firecrawlApi = {
 
       if (error) {
         console.error('Firecrawl enrich error:', error);
-        return { success: false, error: error.message };
+        return { success: false, organizationId, error: error.message };
       }
 
       return data;
@@ -97,6 +107,7 @@ export const firecrawlApi = {
       console.error('Firecrawl enrich exception:', err);
       return { 
         success: false, 
+        organizationId,
         error: err instanceof Error ? err.message : 'Unknown error' 
       };
     }
@@ -133,15 +144,21 @@ export const firecrawlApi = {
   },
 
   /**
-   * Batch enrich multiple organizations
+   * Batch enrich multiple organizations with detailed tracking
    */
   async batchEnrich(
     organizationIds: string[],
-    options?: { updateDatabase?: boolean; onProgress?: (current: number, total: number) => void }
-  ): Promise<{ success: number; failed: number; results: EnrichResponse[] }> {
+    options?: { 
+      updateDatabase?: boolean; 
+      onProgress?: (current: number, total: number, currentOrg?: string) => void;
+      onResult?: (result: EnrichResponse) => void;
+    }
+  ): Promise<BatchEnrichResult> {
     const results: EnrichResponse[] = [];
+    const failedOrganizations: { id: string; name: string; error: string }[] = [];
     let success = 0;
     let failed = 0;
+    let timedOut = 0;
 
     for (let i = 0; i < organizationIds.length; i++) {
       const orgId = organizationIds[i];
@@ -152,14 +169,26 @@ export const firecrawlApi = {
         });
         
         results.push(result);
+        options?.onResult?.(result);
         
         if (result.success) {
           success++;
         } else {
           failed++;
+          
+          // Track timeout separately
+          if (result.error?.toLowerCase().includes('timeout')) {
+            timedOut++;
+          }
+          
+          failedOrganizations.push({
+            id: orgId,
+            name: result.organizationName || 'Onbekend',
+            error: result.error || 'Unknown error',
+          });
         }
         
-        options?.onProgress?.(i + 1, organizationIds.length);
+        options?.onProgress?.(i + 1, organizationIds.length, result.organizationName);
         
         // Small delay to avoid rate limiting
         if (i < organizationIds.length - 1) {
@@ -167,14 +196,22 @@ export const firecrawlApi = {
         }
       } catch (err) {
         failed++;
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        
         results.push({ 
           success: false, 
           organizationId: orgId,
-          error: err instanceof Error ? err.message : 'Unknown error' 
+          error: errorMsg,
+        });
+        
+        failedOrganizations.push({
+          id: orgId,
+          name: 'Onbekend',
+          error: errorMsg,
         });
       }
     }
 
-    return { success, failed, results };
+    return { success, failed, timedOut, results, failedOrganizations };
   },
 };

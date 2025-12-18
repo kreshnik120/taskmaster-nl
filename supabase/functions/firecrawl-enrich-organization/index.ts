@@ -15,6 +15,15 @@ interface ExtractedData {
   description: string | null;
 }
 
+interface EnrichResult {
+  organizationId: string;
+  organizationName: string;
+  success: boolean;
+  error?: string;
+  extracted?: ExtractedData;
+  updatedFields?: string[];
+}
+
 // Regex patterns for data extraction
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 const PHONE_REGEX = /(?:\+31|0031|0)[\s.-]?(?:[1-9][0-9]|[1-9])[\s.-]?(?:[0-9][\s.-]?){6,8}/g;
@@ -99,8 +108,185 @@ function extractDataFromContent(markdown: string, html?: string): ExtractedData 
   };
 }
 
+async function enrichSingleOrganization(
+  supabase: any,
+  apiKey: string,
+  organization: any,
+  formattedUrl: string,
+  updateDatabase: boolean
+): Promise<EnrichResult> {
+  const result: EnrichResult = {
+    organizationId: organization.id,
+    organizationName: organization.name,
+    success: false,
+    updatedFields: [],
+  };
+
+  try {
+    console.log(`🔥 Enriching ${organization.name} from: ${formattedUrl}`);
+    
+    // Scrape with timeout using AbortController
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+    
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: formattedUrl,
+        formats: ['markdown', 'html'],
+        onlyMainContent: false,
+        waitFor: 3000,
+        timeout: 40000,
+      }),
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      result.error = errorData.error || `HTTP ${response.status}`;
+      console.error(`❌ Firecrawl failed for ${organization.name}:`, result.error);
+      return result;
+    }
+
+    const scrapeResult = await response.json();
+    const content = scrapeResult.data || scrapeResult;
+    const markdown = content.markdown || '';
+    const html = content.html || '';
+    
+    if (!markdown && !html) {
+      result.error = 'Empty scrape result';
+      return result;
+    }
+    
+    // Extract data
+    const extractedData = extractDataFromContent(markdown, html);
+    result.extracted = extractedData;
+    
+    console.log(`📊 ${organization.name}: ${extractedData.emails.length} emails, ${extractedData.phones.length} phones, sectors: ${extractedData.sectors.join(', ') || 'none'}`);
+
+    // Update database if requested
+    if (updateDatabase) {
+      // 1. Update client_organizations (email, logo)
+      const orgUpdates: Record<string, any> = {};
+      
+      if (extractedData.emails.length > 0 && !organization.centrale_facturatie_email) {
+        orgUpdates.centrale_facturatie_email = extractedData.emails[0];
+        result.updatedFields!.push('email');
+      }
+      
+      if (extractedData.logoUrl && !organization.logo_url) {
+        orgUpdates.logo_url = extractedData.logoUrl;
+        result.updatedFields!.push('logo');
+      }
+      
+      if (Object.keys(orgUpdates).length > 0) {
+        orgUpdates.updated_at = new Date().toISOString();
+        
+        const { error: updateError } = await supabase
+          .from('client_organizations')
+          .update(orgUpdates)
+          .eq('id', organization.id);
+        
+        if (updateError) {
+          console.error(`❌ Failed to update ${organization.name}:`, updateError);
+        }
+      }
+      
+      // 2. Update first location's telefoon if missing
+      if (extractedData.phones.length > 0) {
+        const { data: locations } = await supabase
+          .from('client_locations')
+          .select('id, telefoon')
+          .eq('client_org_id', organization.id)
+          .is('telefoon', null)
+          .limit(1);
+        
+        if (locations && locations.length > 0) {
+          const { error: locUpdateError } = await supabase
+            .from('client_locations')
+            .update({ 
+              telefoon: extractedData.phones[0],
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', locations[0].id);
+          
+          if (!locUpdateError) {
+            result.updatedFields!.push('telefoon');
+            console.log(`✅ Updated location telefoon for ${organization.name}`);
+          }
+        }
+      }
+      
+      // 3. Store enrichment in knowledge base
+      const knowledgeKey = `org_enrichment_${organization.id}`;
+      const knowledgeValue = {
+        organization_id: organization.id,
+        organization_name: organization.name,
+        website: formattedUrl,
+        extracted_emails: extractedData.emails,
+        extracted_phones: extractedData.phones,
+        extracted_addresses: extractedData.addresses,
+        detected_sectors: extractedData.sectors,
+        logo_url: extractedData.logoUrl,
+        description: extractedData.description,
+        enriched_at: new Date().toISOString(),
+      };
+      
+      const { data: existingKb } = await supabase
+        .from('ai_knowledge_base')
+        .select('id')
+        .eq('org_id', organization.org_id)
+        .eq('category', 'org_profile')
+        .eq('key', knowledgeKey)
+        .maybeSingle();
+      
+      if (existingKb) {
+        await supabase
+          .from('ai_knowledge_base')
+          .update({
+            value: knowledgeValue,
+            source_url: formattedUrl,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingKb.id);
+      } else {
+        await supabase
+          .from('ai_knowledge_base')
+          .insert({
+            org_id: organization.org_id,
+            category: 'org_profile',
+            key: knowledgeKey,
+            value: knowledgeValue,
+            source: 'firecrawl',
+            source_url: formattedUrl,
+            confidence_score: 0.8,
+            validation_status: 'auto_validated',
+          });
+      }
+    }
+
+    result.success = true;
+    console.log(`✅ ${organization.name} enriched successfully`);
+    return result;
+    
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      result.error = 'Timeout - website te traag';
+    } else {
+      result.error = error instanceof Error ? error.message : 'Unknown error';
+    }
+    console.error(`❌ ${organization.name} failed:`, result.error);
+    return result;
+  }
+}
+
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
@@ -118,10 +304,8 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createAdminClient();
-    let organization: any = null;
-    let urlToScrape = websiteUrl;
-
-    // If organizationId provided, fetch organization and its website
+    
+    // Single organization enrichment
     if (organizationId) {
       const { data: org, error: orgError } = await supabase
         .from('client_organizations')
@@ -133,159 +317,72 @@ Deno.serve(async (req) => {
         return errorResponse(`Organization not found: ${organizationId}`, 404);
       }
       
-      organization = org;
-      urlToScrape = org.website || websiteUrl;
-      
+      let urlToScrape = org.website || websiteUrl;
       if (!urlToScrape) {
         return errorResponse('Organization has no website URL', 400);
       }
+      
+      // Format URL
+      let formattedUrl = urlToScrape.trim();
+      if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+        formattedUrl = `https://${formattedUrl}`;
+      }
+
+      const result = await enrichSingleOrganization(supabase, apiKey, org, formattedUrl, updateDatabase);
+      
+      return jsonResponse({
+        success: result.success,
+        organizationId: result.organizationId,
+        organizationName: result.organizationName,
+        websiteUrl: formattedUrl,
+        extracted: result.extracted,
+        updatedFields: result.updatedFields,
+        error: result.error,
+      });
     }
-
-    // Format URL
-    let formattedUrl = urlToScrape!.trim();
-    if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
-      formattedUrl = `https://${formattedUrl}`;
-    }
-
-    console.log('🔥 Firecrawl enriching organization from:', formattedUrl);
-
-    // Scrape website with multiple formats
-    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: formattedUrl,
-        formats: ['markdown', 'html'],
-        onlyMainContent: false, // Get full page for contact info
-        waitFor: 3000,
-        timeout: 60000, // 60 second timeout for slow healthcare websites
-      }),
-    });
-
-    const scrapeResult = await response.json();
-
-    if (!response.ok) {
-      console.error('❌ Firecrawl API error:', scrapeResult);
-      return errorResponse(scrapeResult.error || `Scrape failed with status ${response.status}`, response.status);
-    }
-
-    const content = scrapeResult.data || scrapeResult;
-    const markdown = content.markdown || '';
-    const html = content.html || '';
     
-    // Extract data from scraped content
-    const extractedData = extractDataFromContent(markdown, html);
-    
-    console.log('📊 Extracted data:', {
-      emails: extractedData.emails.length,
-      phones: extractedData.phones.length,
-      addresses: extractedData.addresses.length,
-      logoUrl: !!extractedData.logoUrl,
-      sectors: extractedData.sectors,
-    });
+    // URL-only enrichment (no organization)
+    if (websiteUrl) {
+      let formattedUrl = websiteUrl.trim();
+      if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+        formattedUrl = `https://${formattedUrl}`;
+      }
+      
+      console.log('🔥 Firecrawl enriching URL:', formattedUrl);
+      
+      const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: formattedUrl,
+          formats: ['markdown', 'html'],
+          onlyMainContent: false,
+          waitFor: 3000,
+          timeout: 40000,
+        }),
+      });
 
-    // Update database if requested and organization exists
-    let updatedOrganization = organization;
-    if (updateDatabase && organization) {
-      const updates: Record<string, any> = {};
+      const scrapeResult = await response.json();
       
-      // Only update if we found better data
-      if (extractedData.emails.length > 0 && !organization.centrale_facturatie_email) {
-        updates.centrale_facturatie_email = extractedData.emails[0];
+      if (!response.ok) {
+        return errorResponse(scrapeResult.error || `Scrape failed`, response.status);
       }
-      
-      if (extractedData.logoUrl && !organization.logo_url) {
-        updates.logo_url = extractedData.logoUrl;
-      }
-      
-      if (Object.keys(updates).length > 0) {
-        updates.updated_at = new Date().toISOString();
-        
-        const { data: updated, error: updateError } = await supabase
-          .from('client_organizations')
-          .update(updates)
-          .eq('id', organization.id)
-          .select()
-          .single();
-        
-        if (updateError) {
-          console.error('❌ Failed to update organization:', updateError);
-        } else {
-          updatedOrganization = updated;
-          console.log('✅ Updated organization with:', Object.keys(updates));
-        }
-      }
-      
-      // Store enrichment in knowledge base (select-then-upsert pattern)
-      const knowledgeKey = `org_enrichment_${organization.id}`;
-      const knowledgeValue = {
-        organization_id: organization.id,
-        organization_name: organization.name,
-        website: formattedUrl,
-        extracted_emails: extractedData.emails,
-        extracted_phones: extractedData.phones,
-        extracted_addresses: extractedData.addresses,
-        detected_sectors: extractedData.sectors,
-        logo_url: extractedData.logoUrl,
-        description: extractedData.description,
-        enriched_at: new Date().toISOString(),
-      };
-      
-      // Check if knowledge item exists
-      const { data: existingKb } = await supabase
-        .from('ai_knowledge_base')
-        .select('id')
-        .eq('org_id', organization.org_id)
-        .eq('category', 'org_profile')
-        .eq('key', knowledgeKey)
-        .maybeSingle();
-      
-      if (existingKb) {
-        // Update existing
-        const { error: updateKbError } = await supabase
-          .from('ai_knowledge_base')
-          .update({
-            value: knowledgeValue,
-            source_url: formattedUrl,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', existingKb.id);
-        
-        if (updateKbError) {
-          console.error('❌ Failed to update knowledge base:', updateKbError);
-        }
-      } else {
-        // Insert new
-        const { error: insertKbError } = await supabase
-          .from('ai_knowledge_base')
-          .insert({
-            org_id: organization.org_id,
-            category: 'org_profile',
-            key: knowledgeKey,
-            value: knowledgeValue,
-            source: 'firecrawl',
-            source_url: formattedUrl,
-            confidence_score: 0.8,
-            validation_status: 'auto_validated',
-          });
-        
-        if (insertKbError) {
-          console.error('❌ Failed to insert to knowledge base:', insertKbError);
-        }
-      }
+
+      const content = scrapeResult.data || scrapeResult;
+      const extractedData = extractDataFromContent(content.markdown || '', content.html || '');
+
+      return jsonResponse({
+        success: true,
+        websiteUrl: formattedUrl,
+        extracted: extractedData,
+        metadata: content.metadata,
+      });
     }
 
-    return jsonResponse({
-      success: true,
-      organizationId: organization?.id,
-      websiteUrl: formattedUrl,
-      extracted: extractedData,
-      updated: updatedOrganization,
-      metadata: content.metadata,
-    });
+    return errorResponse('Invalid request', 400);
   } catch (error) {
     console.error('❌ Error in firecrawl-enrich-organization:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to enrich organization';
