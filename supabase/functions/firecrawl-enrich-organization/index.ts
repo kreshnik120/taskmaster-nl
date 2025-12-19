@@ -180,18 +180,34 @@ const DESCRIPTION_BLACKLIST = [
   /partners.*do.*not.*ask/i,
   /we.*use.*cookies/i,
   /consent.*preferences/i,
+  /personal\s*data.*process/i,
+  /ip\s*address.*unique/i,
+  /accept.*cookies/i,
+  /cookie.*policy/i,
+  /privacy.*policy/i,
+  /gegevens.*verwerken/i,
   // NEW: Domain sale patterns
   /te\s*koop/i,
   /domain\s*available/i,
   /buy\s*this\s*domain/i,
+  /domeinnamen/i,
+  // NEW: Real estate / wrong site patterns
+  /vastgoed/i,
+  /portfolio.*beheer/i,
+  /brengt.*koper.*verkoper/i,
+  /makelaardij/i,
+  /woningen.*te.*koop/i,
   // NEW: Login / registration patterns
   /wachtwoord\s*vergeten/i,
   /registreer\s*nu/i,
   /maak.*account/i,
+  /inloggen.*account/i,
   // NEW: Empty/placeholder content
   /lorem\s*ipsum/i,
   /placeholder/i,
   /coming\s*soon/i,
+  /under\s*construction/i,
+  /binnenkort.*beschikbaar/i,
 ];
 
 // Keywords that indicate good "about us" content

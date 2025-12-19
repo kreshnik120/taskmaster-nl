@@ -12,6 +12,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { 
   Building, 
   MapPin, 
@@ -28,7 +33,8 @@ import {
   FileText,
   Target,
   Activity,
-  Sparkles
+  Sparkles,
+  HelpCircle
 } from "lucide-react";
 import { LocationCard } from "./LocationCard";
 import { SublocationCard } from "./SublocationCard";
@@ -162,10 +168,19 @@ export function OrganizationDetailModal({
       /tijdschrift/i,
       /legitim.*interest/i,                 // GDPR consent
       /your.*consent/i,
+      /personal\s*data.*process/i,
+      /ip\s*address.*unique/i,
+      /gegevens.*verwerken/i,
       /domain.*for.*sale/i,                 // Domain sale
       /te\s*koop/i,
+      /domeinnamen/i,
+      /vastgoed/i,                          // Real estate (wrong site)
+      /makelaardij/i,
+      /portfolio.*beheer/i,
       /wachtwoord.*vergeten/i,              // Login forms
       /lorem\s*ipsum/i,                     // Placeholder text
+      /coming\s*soon/i,
+      /binnenkort.*beschikbaar/i,
     ];
     
     return garbagePatterns.some(p => p.test(desc));
@@ -424,7 +439,17 @@ export function OrganizationDetailModal({
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
                       <Target className="h-4 w-4 text-cyan-600" />
-                      Doelgroepen
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="flex items-center gap-1 cursor-help">
+                            Doelgroepen
+                            <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p className="text-sm">Type cliënten dat geholpen wordt, bijv. LVB, Autisme, GGZ-problematiek, Ouderen</p>
+                        </TooltipContent>
+                      </Tooltip>
                       {aggregatedData.hasDoelgroepen && (
                         <Badge variant="secondary" className="ml-auto text-xs">
                           {Object.keys(aggregatedData.doelgroepen).length} types
@@ -466,7 +491,17 @@ export function OrganizationDetailModal({
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
                       <Activity className="h-4 w-4 text-emerald-600" />
-                      Sectoren
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="flex items-center gap-1 cursor-help">
+                            Sectoren
+                            <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p className="text-sm">Type zorginstelling, bijv. GGZ, GHZ, VVT, Jeugdzorg, Forensische zorg</p>
+                        </TooltipContent>
+                      </Tooltip>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
