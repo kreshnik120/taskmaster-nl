@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -24,7 +24,11 @@ import {
   TrendingUp,
   Phone,
   User,
-  ImagePlus
+  ImagePlus,
+  FileText,
+  Target,
+  Activity,
+  Sparkles
 } from "lucide-react";
 import { LocationCard } from "./LocationCard";
 import { SublocationCard } from "./SublocationCard";
@@ -138,6 +142,75 @@ export function OrganizationDetailModal({
     enabled: !!organization?.id && open,
   });
 
+  // Query AI knowledge base voor organisatie beschrijving
+  const { data: orgKnowledge, isLoading: knowledgeLoading } = useQuery({
+    queryKey: ["organization-knowledge", organization?.name],
+    queryFn: async () => {
+      if (!organization?.name) return null;
+      
+      const { data, error } = await supabase
+        .from("ai_knowledge_base")
+        .select("key, value, category, confidence_score")
+        .or(`key.ilike.%${organization.name}%,value->>name.ilike.%${organization.name}%`)
+        .is("deleted_at", null)
+        .order("confidence_score", { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      
+      // Zoek naar beschrijving of profiel data
+      const description = data?.find(k => 
+        k.category === 'client_profile' || 
+        k.key?.toLowerCase().includes('description') ||
+        k.key?.toLowerCase().includes('beschrijving')
+      );
+      
+      const sectors = data?.find(k => 
+        k.key?.toLowerCase().includes('sector') ||
+        k.category === 'sector'
+      );
+
+      return { description, sectors, all: data };
+    },
+    enabled: !!organization?.name && open,
+  });
+
+  // Aggregeer doelgroepen en sectoren uit sublocaties
+  const aggregatedData = useMemo(() => {
+    if (!organization?.locations) return { doelgroepen: {}, sectoren: {}, totalLocations: 0 };
+    
+    const doelgroepen: Record<string, number> = {};
+    const sectoren: Record<string, number> = {};
+    let totalWithDoelgroep = 0;
+    
+    organization.locations.forEach(location => {
+      location.sublocations?.forEach(sub => {
+        // Aggregeer doelgroepen
+        sub.doelgroep?.forEach(dg => {
+          if (dg) {
+            doelgroepen[dg] = (doelgroepen[dg] || 0) + 1;
+            totalWithDoelgroep++;
+          }
+        });
+        
+        // Aggregeer sectoren
+        sub.sector?.forEach(s => {
+          if (s) {
+            sectoren[s] = (sectoren[s] || 0) + 1;
+          }
+        });
+      });
+    });
+    
+    return { 
+      doelgroepen, 
+      sectoren, 
+      totalWithDoelgroep,
+      hasDoelgroepen: Object.keys(doelgroepen).length > 0,
+      hasSectoren: Object.keys(sectoren).length > 0
+    };
+  }, [organization?.locations]);
+
   // Bereken statistieken
   const stats = {
     totalLocations: organization?.locations?.length || 0,
@@ -160,6 +233,34 @@ export function OrganizationDetailModal({
 
   // Bureau bepalen op basis van organization.org_id (niet gekoppelde_bv_org_id)
   const bureauName = getOrganizationName(organization?.org_id || null);
+
+  // Kleuren voor doelgroep badges
+  const getDoelgroepColor = (doelgroep: string) => {
+    const colors: Record<string, string> = {
+      'LVB': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+      'MVB': 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300',
+      'EVB': 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
+      'NAH': 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+      'GGZ': 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300',
+      'Autisme': 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300',
+      'Psychiatrie': 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300',
+      'Gedragsproblematiek': 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+      'Ouderen': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
+      'Jeugd': 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300',
+    };
+    return colors[doelgroep] || 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+  };
+
+  const getSectorColor = (sector: string) => {
+    const colors: Record<string, string> = {
+      'GHZ': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+      'GGZ': 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300',
+      'VVT': 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
+      'Jeugdzorg': 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300',
+      'Ziekenhuis': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+    };
+    return colors[sector] || 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+  };
 
   if (!organization) return null;
 
@@ -280,6 +381,119 @@ export function OrganizationDetailModal({
                   />
                 </CardContent>
               </Card>
+
+              {/* Organisatie Profiel Sectie */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Doelgroepen Samenvatting */}
+                <Card className="border-l-4 border-l-cyan-400">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Target className="h-4 w-4 text-cyan-600" />
+                      Doelgroepen
+                      {aggregatedData.hasDoelgroepen && (
+                        <Badge variant="secondary" className="ml-auto text-xs">
+                          {Object.keys(aggregatedData.doelgroepen).length} types
+                        </Badge>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {aggregatedData.hasDoelgroepen ? (
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(aggregatedData.doelgroepen)
+                          .sort(([, a], [, b]) => b - a)
+                          .slice(0, 10)
+                          .map(([doelgroep, count]) => (
+                            <Badge 
+                              key={doelgroep} 
+                              className={`${getDoelgroepColor(doelgroep)} font-medium`}
+                            >
+                              {doelgroep}
+                              <span className="ml-1 opacity-70">({count})</span>
+                            </Badge>
+                          ))}
+                        {Object.keys(aggregatedData.doelgroepen).length > 10 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{Object.keys(aggregatedData.doelgroepen).length - 10} meer
+                          </Badge>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Geen doelgroepen geconfigureerd in sublocaties
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Sectoren */}
+                <Card className="border-l-4 border-l-emerald-400">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Activity className="h-4 w-4 text-emerald-600" />
+                      Sectoren
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {aggregatedData.hasSectoren ? (
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(aggregatedData.sectoren)
+                          .sort(([, a], [, b]) => b - a)
+                          .map(([sector, count]) => (
+                            <Badge 
+                              key={sector} 
+                              className={`${getSectorColor(sector)} font-medium`}
+                            >
+                              {sector}
+                              <span className="ml-1 opacity-70">({count})</span>
+                            </Badge>
+                          ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Geen sectoren geconfigureerd in sublocaties
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* AI Beschrijving (indien beschikbaar) */}
+              {knowledgeLoading ? (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Over deze organisatie
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Skeleton className="h-16 w-full" />
+                  </CardContent>
+                </Card>
+              ) : orgKnowledge?.description ? (
+                <Card className="border-l-4 border-l-violet-400">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-violet-600" />
+                      Over deze organisatie
+                      <Badge variant="outline" className="ml-auto text-xs bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+                        AI verrijkt
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {typeof orgKnowledge.description.value === 'object' 
+                        ? (orgKnowledge.description.value as any)?.description || 
+                          (orgKnowledge.description.value as any)?.summary ||
+                          JSON.stringify(orgKnowledge.description.value)
+                        : String(orgKnowledge.description.value)
+                      }
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : null}
 
               {/* Organisatie details - alleen tonen als er data is */}
               {organization.centrale_facturatie_email && (
