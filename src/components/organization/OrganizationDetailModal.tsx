@@ -142,6 +142,21 @@ export function OrganizationDetailModal({
     enabled: !!organization?.id && open,
   });
 
+  // Helper: check if description contains garbage patterns
+  const isGarbageDescription = (desc: string | undefined | null): boolean => {
+    if (!desc) return true;
+    if (desc.includes('](http')) return true;  // Markdown links
+    if (desc.includes('](https')) return true;
+    if (/naar.*navigatie/i.test(desc)) return true;
+    if (/naar.*inhoud/i.test(desc)) return true;
+    if (/naar.*menu/i.test(desc)) return true;
+    if (/cookie/i.test(desc)) return true;
+    if (/\]\s*\[/.test(desc)) return true;  // Multiple markdown patterns
+    if (/\]\s*\(/.test(desc)) return true;  // Broken markdown
+    if (desc.length < 50) return true;
+    return false;
+  };
+
   // Query AI knowledge base voor organisatie beschrijving (zoek op org_enrichment_{id})
   const { data: orgKnowledge, isLoading: knowledgeLoading } = useQuery({
     queryKey: ["organization-knowledge", organization?.id],
@@ -173,6 +188,13 @@ export function OrganizationDetailModal({
     },
     enabled: !!organization?.id && open,
   });
+
+  // Clean description - return null if garbage
+  const cleanDescription = useMemo(() => {
+    const desc = orgKnowledge?.enrichment?.description;
+    if (isGarbageDescription(desc)) return null;
+    return desc;
+  }, [orgKnowledge?.enrichment?.description]);
 
   // Aggregeer doelgroepen en sectoren uit sublocaties
   const aggregatedData = useMemo(() => {
@@ -470,7 +492,7 @@ export function OrganizationDetailModal({
                     <Skeleton className="h-16 w-full" />
                   </CardContent>
                 </Card>
-              ) : orgKnowledge?.enrichment?.description ? (
+              ) : cleanDescription ? (
                 <Card className="border-l-4 border-l-violet-400">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
@@ -483,9 +505,9 @@ export function OrganizationDetailModal({
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      {orgKnowledge.enrichment.description}
+                      {cleanDescription}
                     </p>
-                    {orgKnowledge.enrichment.enriched_at && (
+                    {orgKnowledge?.enrichment?.enriched_at && (
                       <p className="text-xs text-muted-foreground/60 mt-2">
                         Laatst verrijkt: {new Date(orgKnowledge.enrichment.enriched_at).toLocaleDateString('nl-NL')}
                       </p>
