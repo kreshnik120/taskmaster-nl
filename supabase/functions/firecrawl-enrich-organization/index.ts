@@ -131,6 +131,34 @@ async function detectWebsiteUrl(orgName: string): Promise<string | null> {
   return null;
 }
 
+// Blacklist patterns for bad descriptions (cookies, navigation, etc.)
+const DESCRIPTION_BLACKLIST = [
+  /cookie/i,
+  /accepteren/i,
+  /privacy.*beleid/i,
+  /alle rechten voorbehouden/i,
+  /copyright/i,
+  /navigatie/i,
+  /menu/i,
+  /inloggen/i,
+  /zoeken/i,
+  /home\s*\|/i,
+  /^\s*[\|\-•]\s*/,
+  /skip to/i,
+  /ga naar/i,
+  /javascript/i,
+  /404/i,
+  /pagina niet gevonden/i,
+];
+
+// Keywords that indicate good "about us" content
+const ABOUT_KEYWORDS = [
+  'over ons', 'wie zijn wij', 'onze missie', 'onze visie', 
+  'wij bieden', 'wij ondersteunen', 'onze organisatie',
+  'specialiseren', 'zorgorganisatie', 'hulpverlening',
+  'cliënten', 'bewoners', 'medewerkers',
+];
+
 function extractDataFromContent(markdown: string, html?: string): ExtractedData {
   const content = markdown || '';
   
@@ -187,9 +215,8 @@ function extractDataFromContent(markdown: string, html?: string): ExtractedData 
     }
   }
   
-  // Extract description (first meaningful paragraph)
-  const paragraphs = content.split(/\n\n+/).filter(p => p.length > 50 && p.length < 500);
-  const description = paragraphs[0]?.trim() || null;
+  // IMPROVED: Extract description with quality filtering
+  const description = extractQualityDescription(content);
   
   return {
     emails: emails.slice(0, 5), // Limit to 5
@@ -199,6 +226,79 @@ function extractDataFromContent(markdown: string, html?: string): ExtractedData 
     sectors: detectedSectors,
     description,
   };
+}
+
+/**
+ * Extract a quality description by filtering out cookie banners, navigation, etc.
+ */
+function extractQualityDescription(content: string): string | null {
+  // Clean markdown: remove links, images, headers symbols
+  const cleanContent = content
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // [text](url) -> text
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, '')     // Remove images
+    .replace(/^#+\s*/gm, '')                  // Remove header markers
+    .replace(/\*\*([^*]+)\*\*/g, '$1')        // Remove bold
+    .replace(/\*([^*]+)\*/g, '$1')            // Remove italic
+    .replace(/`[^`]+`/g, '')                  // Remove code
+    .trim();
+  
+  // Split into paragraphs
+  const paragraphs = cleanContent.split(/\n\n+/);
+  
+  // Score and filter paragraphs
+  const scoredParagraphs = paragraphs
+    .map(p => p.trim())
+    .filter(p => {
+      // Minimum length
+      if (p.length < 80) return false;
+      // Maximum length  
+      if (p.length > 600) return false;
+      // Must have at least 3 words
+      if (p.split(/\s+/).length < 10) return false;
+      // Check blacklist
+      if (DESCRIPTION_BLACKLIST.some(pattern => pattern.test(p))) return false;
+      // Should not be just a list of links/items
+      if ((p.match(/\|/g) || []).length > 3) return false;
+      if ((p.match(/•/g) || []).length > 3) return false;
+      return true;
+    })
+    .map(p => {
+      let score = 0;
+      const pLower = p.toLowerCase();
+      
+      // Boost for "about us" keywords
+      ABOUT_KEYWORDS.forEach(kw => {
+        if (pLower.includes(kw)) score += 10;
+      });
+      
+      // Boost for sector keywords
+      Object.values(SECTOR_KEYWORDS).flat().forEach(kw => {
+        if (pLower.includes(kw)) score += 5;
+      });
+      
+      // Penalize short paragraphs
+      if (p.length < 120) score -= 5;
+      
+      // Boost medium-length paragraphs (ideal for descriptions)
+      if (p.length >= 150 && p.length <= 400) score += 10;
+      
+      // Penalize paragraphs with too many special characters
+      const specialChars = (p.match(/[|•→←↑↓]/g) || []).length;
+      score -= specialChars * 2;
+      
+      return { text: p, score };
+    })
+    .sort((a, b) => b.score - a.score);
+  
+  // Return best paragraph if it has a positive score
+  const best = scoredParagraphs[0];
+  if (best && best.score > 0) {
+    console.log(`📝 Best description (score ${best.score}): "${best.text.substring(0, 60)}..."`);
+    return best.text;
+  }
+  
+  console.log(`⚠️ No quality description found (${scoredParagraphs.length} candidates)`);
+  return null;
 }
 
 async function enrichSingleOrganization(
