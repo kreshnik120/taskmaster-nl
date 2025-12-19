@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import { SublocationDetailModal } from "@/components/organization/SublocationDet
 import { ABCzorgExcelImport } from "@/components/AITraining/ABCzorgExcelImport";
 import { AdminOnly } from "@/components/auth/AdminOnly";
 import { firecrawlApi } from "@/lib/api/firecrawl";
+import { FirecrawlProgressDialog, EnrichmentLogEntry } from "@/components/organization/FirecrawlProgressDialog";
 
 // Unified Organization type used in both views
 interface Sublocation {
@@ -75,6 +76,10 @@ export default function Klanten() {
   const [isSublocationModalOpen, setIsSublocationModalOpen] = useState(false);
   const [isFetchingLogos, setIsFetchingLogos] = useState(false);
   const [isEnrichingOrgs, setIsEnrichingOrgs] = useState(false);
+  const [enrichDialogOpen, setEnrichDialogOpen] = useState(false);
+  const [enrichProgress, setEnrichProgress] = useState({ current: 0, total: 0 });
+  const [enrichLogs, setEnrichLogs] = useState<EnrichmentLogEntry[]>([]);
+  const [enrichComplete, setEnrichComplete] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "hierarchy">(() => {
     const saved = localStorage.getItem("klanten-view-mode");
     return (saved as any) || "cards";
@@ -148,98 +153,97 @@ export default function Klanten() {
     }
   };
   
-  // Firecrawl enrich handler with auto website detection
+  // Firecrawl enrich handler with progress dialog
   const handleFirecrawlEnrich = async () => {
     console.log("[handleFirecrawlEnrich] Button clicked");
-    console.log("[handleFirecrawlEnrich] Organizations loaded:", organizations.length);
     
     if (organizations.length === 0) {
-      console.log("[handleFirecrawlEnrich] No organizations loaded yet!");
       toast.error("Geen organisaties geladen", {
         description: "Wacht tot de pagina volledig is geladen."
       });
       return;
     }
     
-    // Now include ALL organizations - we can auto-detect websites
+    // Include organizations that need enrichment
     const orgsToEnrich = organizations.filter(org => 
       !org.centrale_facturatie_email || !org.logo_url || !org.website
     );
     
-    console.log("[handleFirecrawlEnrich] Organizations to enrich:", orgsToEnrich.length);
-    console.log("[handleFirecrawlEnrich] Sample org:", orgsToEnrich[0]);
-    
     if (orgsToEnrich.length === 0) {
-      console.log("[handleFirecrawlEnrich] All organizations fully enriched");
       toast.info("✅ Alle organisaties zijn al volledig verrijkt", {
         description: `${organizations.length} organisaties hebben website, email en logo.`
       });
       return;
     }
     
-    const orgsWithoutWebsite = organizations.filter(org => !org.website).length;
-    const orgsWithoutEmail = organizations.filter(org => !org.centrale_facturatie_email).length;
-    
-    console.log("[handleFirecrawlEnrich] Without website:", orgsWithoutWebsite);
-    console.log("[handleFirecrawlEnrich] Without email:", orgsWithoutEmail);
-    
+    // Reset and open dialog
+    setEnrichLogs([]);
+    setEnrichProgress({ current: 0, total: orgsToEnrich.length });
+    setEnrichComplete(false);
+    setEnrichDialogOpen(true);
     setIsEnrichingOrgs(true);
-    const toastId = toast.loading(`🔥 Verrijken van ${orgsToEnrich.length} organisaties...`, {
-      description: `${orgsWithoutWebsite} zonder website • ${orgsWithoutEmail} zonder email`
-    });
+    
+    // Create initial pending logs
+    const initialLogs: EnrichmentLogEntry[] = orgsToEnrich.map(org => ({
+      orgName: org.name,
+      status: "pending"
+    }));
+    setEnrichLogs(initialLogs);
     
     try {
       console.log("[handleFirecrawlEnrich] Starting batch enrich...");
+      
       const result = await firecrawlApi.batchEnrich(
         orgsToEnrich.map(o => o.id),
         {
           updateDatabase: true,
           autoDetectWebsite: true,
           onProgress: (current, total, currentOrg) => {
-            console.log(`[handleFirecrawlEnrich] Progress: ${current}/${total} - ${currentOrg}`);
-            toast.loading(`Verrijken ${current}/${total}`, {
-              id: toastId,
-              description: currentOrg ? `Bezig met: ${currentOrg}` : undefined
-            });
+            setEnrichProgress({ current, total });
+            
+            // Update current org to processing
+            if (currentOrg) {
+              setEnrichLogs(prev => prev.map(log => 
+                log.orgName === currentOrg 
+                  ? { ...log, status: "processing" as const }
+                  : log
+              ));
+            }
+          },
+          onResult: (result) => {
+            const orgName = result.organizationName || "Onbekend";
+            
+            setEnrichLogs(prev => prev.map(log => 
+              log.orgName === orgName ? {
+                ...log,
+                status: result.success 
+                  ? "success" as const 
+                  : result.error?.toLowerCase().includes("timeout") 
+                    ? "timeout" as const 
+                    : "error" as const,
+                emailFound: result.extracted?.emails?.[0],
+                websiteDetected: result.detectedWebsite,
+                sectorsFound: result.extracted?.sectors,
+                error: result.error
+              } : log
+            ));
           }
         }
       );
       
       console.log("[handleFirecrawlEnrich] Result:", result);
+      setEnrichComplete(true);
       
-      // Build detailed feedback message
-      const parts: string[] = [];
-      if (result.websitesDetected > 0) {
-        parts.push(`${result.websitesDetected} websites gedetecteerd`);
-      }
-      if (result.timedOut > 0) {
-        parts.push(`${result.timedOut} timeouts`);
-      }
-      
-      // Success/failure message with website detection info
-      if (result.success > 0 && result.failed === 0) {
-        toast.success(`✅ ${result.success} organisaties verrijkt`, { 
-          id: toastId,
-          description: parts.length > 0 ? parts.join(' • ') : "Klaar!"
-        });
-      } else if (result.success > 0) {
-        toast.success(`${result.success} verrijkt, ${result.failed} mislukt`, {
-          id: toastId,
-          description: parts.length > 0 
-            ? parts.join(' • ')
-            : result.failedOrganizations.slice(0, 3).map(f => f.name).join(', ')
-        });
-      } else {
-        toast.error(`Verrijking mislukt`, {
-          id: toastId,
-          description: result.failedOrganizations.slice(0, 3).map(f => `${f.name}: ${f.error}`).join('; ')
-        });
+      // Show summary toast
+      if (result.success > 0) {
+        toast.success(`${result.success} organisaties verrijkt`);
       }
       
       loadOrganizations();
     } catch (error: any) {
       console.error("[handleFirecrawlEnrich] Error:", error);
-      toast.error(`Fout bij verrijken: ${error.message}`, { id: toastId });
+      toast.error(`Fout bij verrijken: ${error.message}`);
+      setEnrichComplete(true);
     } finally {
       setIsEnrichingOrgs(false);
     }
@@ -861,6 +865,17 @@ export default function Klanten() {
           )
         )}
       </div>
+
+      {/* Firecrawl Progress Dialog */}
+      <FirecrawlProgressDialog
+        open={enrichDialogOpen}
+        onOpenChange={setEnrichDialogOpen}
+        current={enrichProgress.current}
+        total={enrichProgress.total}
+        logs={enrichLogs}
+        isComplete={enrichComplete}
+        onClose={() => setEnrichDialogOpen(false)}
+      />
 
       <NewClientDialog
         open={newClientOpen}
