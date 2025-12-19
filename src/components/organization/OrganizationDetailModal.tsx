@@ -142,37 +142,36 @@ export function OrganizationDetailModal({
     enabled: !!organization?.id && open,
   });
 
-  // Query AI knowledge base voor organisatie beschrijving
+  // Query AI knowledge base voor organisatie beschrijving (zoek op org_enrichment_{id})
   const { data: orgKnowledge, isLoading: knowledgeLoading } = useQuery({
-    queryKey: ["organization-knowledge", organization?.name],
+    queryKey: ["organization-knowledge", organization?.id],
     queryFn: async () => {
-      if (!organization?.name) return null;
+      if (!organization?.id) return null;
       
       const { data, error } = await supabase
         .from("ai_knowledge_base")
         .select("key, value, category, confidence_score")
-        .or(`key.ilike.%${organization.name}%,value->>name.ilike.%${organization.name}%`)
+        .eq("key", `org_enrichment_${organization.id}`)
         .is("deleted_at", null)
-        .order("confidence_score", { ascending: false })
-        .limit(10);
+        .maybeSingle();
 
       if (error) throw error;
       
-      // Zoek naar beschrijving of profiel data
-      const description = data?.find(k => 
-        k.category === 'client_profile' || 
-        k.key?.toLowerCase().includes('description') ||
-        k.key?.toLowerCase().includes('beschrijving')
-      );
-      
-      const sectors = data?.find(k => 
-        k.key?.toLowerCase().includes('sector') ||
-        k.category === 'sector'
-      );
+      // Data zit direct in value als JSON object
+      const enrichmentData = data?.value as {
+        description?: string;
+        detected_sectors?: string[];
+        extracted_emails?: string[];
+        extracted_phones?: string[];
+        enriched_at?: string;
+      } | null;
 
-      return { description, sectors, all: data };
+      return { 
+        enrichment: enrichmentData,
+        raw: data,
+      };
     },
-    enabled: !!organization?.name && open,
+    enabled: !!organization?.id && open,
   });
 
   // Aggregeer doelgroepen en sectoren uit sublocaties
@@ -471,7 +470,7 @@ export function OrganizationDetailModal({
                     <Skeleton className="h-16 w-full" />
                   </CardContent>
                 </Card>
-              ) : orgKnowledge?.description ? (
+              ) : orgKnowledge?.enrichment?.description ? (
                 <Card className="border-l-4 border-l-violet-400">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
@@ -484,13 +483,13 @@ export function OrganizationDetailModal({
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      {typeof orgKnowledge.description.value === 'object' 
-                        ? (orgKnowledge.description.value as any)?.description || 
-                          (orgKnowledge.description.value as any)?.summary ||
-                          JSON.stringify(orgKnowledge.description.value)
-                        : String(orgKnowledge.description.value)
-                      }
+                      {orgKnowledge.enrichment.description}
                     </p>
+                    {orgKnowledge.enrichment.enriched_at && (
+                      <p className="text-xs text-muted-foreground/60 mt-2">
+                        Laatst verrijkt: {new Date(orgKnowledge.enrichment.enriched_at).toLocaleDateString('nl-NL')}
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               ) : null}
