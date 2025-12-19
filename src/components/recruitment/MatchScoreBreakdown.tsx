@@ -18,6 +18,7 @@ interface ServiceMatchBreakdown {
   certificaatVereistMatch?: number;
   trackRecordBonus?: number;
   expertBonus?: number;
+  klantVoorkeurBonus?: number; // NEW: Client expert preferences bonus
   aiBoost: number;
   totalScore: number;
   normalizedScore: number;
@@ -46,6 +47,7 @@ interface ServiceMatchBreakdown {
     certificaatVereist?: { match: boolean; reason: string; matchedCerts?: string[]; missingCerts?: string[] };
     trackRecord?: { score: number; match: boolean; reason: string; wouldRehireRate?: number; avgRating?: number };
     expertAdvies?: { score: number; match: boolean; reason: string; expertCount: number };
+    klantVoorkeur?: { score: number; match: boolean; reason: string; matchedWerkstijlen?: string[]; matchedSpecialismen?: string[] };
     aiBoost?: { score: number; match: boolean; reason: string };
   };
 }
@@ -160,7 +162,8 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
   const bonusTotal = breakdown?.bonusTotal ?? (
     (breakdown?.trackRecordBonus || 0) + 
     (breakdown?.expertBonus || 0) + 
-    (breakdown?.aiBoost || 0)
+    (breakdown?.aiBoost || 0) +
+    (breakdown?.klantVoorkeurBonus || 0)
   );
 
   return (
@@ -248,6 +251,25 @@ export function MatchScoreBreakdown({ breakdown, totalScore }: MatchScoreBreakdo
                     <p className="font-medium">AI Learning</p>
                     {(breakdown?.aiBoostReasons || []).slice(0, 2).map((reason, idx) => (
                       <p key={idx} className="text-muted-foreground">{reason}</p>
+                    ))}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
+            {(breakdown?.klantVoorkeurBonus || 0) > 0 && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Badge variant="secondary" className="gap-1 font-normal text-xs px-2 py-0.5 bg-muted/50">
+                      <GraduationCap className="h-3 w-3 text-emerald-500" />
+                      +{breakdown?.klantVoorkeurBonus}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                    <p className="font-medium">Klant Voorkeur</p>
+                    {breakdown?.details?.klantVoorkeur?.matchedWerkstijlen?.slice(0, 2).map((ws, idx) => (
+                      <p key={idx} className="text-muted-foreground">{ws}</p>
                     ))}
                   </TooltipContent>
                 </Tooltip>

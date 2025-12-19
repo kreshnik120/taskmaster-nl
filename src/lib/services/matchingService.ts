@@ -143,6 +143,7 @@ export interface MatchScoreBreakdown {
   certificatenBonus: number;
   dienstBonus: number;
   aiBoost: number;
+  klantVoorkeurBonus: number; // NEW: Client expert preferences bonus
   totalScore: number;
   normalizedScore: number;
   // NEW: Category contributions for Apple UI
@@ -172,7 +173,8 @@ export interface MatchScoreBreakdown {
     beschrijving?: { match: boolean; reason: string; matchedKeywords: string[] };
     certificaatVereist?: { match: boolean; reason: string; matchedCerts: string[]; missingCerts: string[] };
     trackRecord?: { score: number; match: boolean; reason: string; wouldRehireRate?: number; avgRating?: number };
-    expertAdvies?: { score: number; match: boolean; reason: string; expertCount: number }; // NEW
+    expertAdvies?: { score: number; match: boolean; reason: string; expertCount: number };
+    klantVoorkeur?: { score: number; match: boolean; reason: string; matchedWerkstijlen?: string[]; matchedSpecialismen?: string[] };
     ervaring?: { bonus: number; label: string };
     aiBoost?: { score: number; match: boolean; reason: string };
   };
@@ -1769,6 +1771,7 @@ export function calculateUnifiedMatchScore(
     certificatenBonus,
     dienstBonus,
     aiBoost,
+    klantVoorkeurBonus: 0, // Will be calculated when sublocation preferences are loaded
     totalScore,
     normalizedScore,
     categoryContributions,

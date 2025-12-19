@@ -3,13 +3,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Building, MapPin, Phone, Mail, Users, Briefcase, ChevronRight } from "lucide-react";
+import { Building, MapPin, Phone, Mail, Users, Briefcase, ChevronRight, GraduationCap } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getOrganizationName, getOrganizationBadgeColor } from "@/lib/organizationMapping";
 import { SublocationMatchingPanel } from "./SublocationMatchingPanel";
 import { VacanciesPanel } from "./VacanciesPanel";
+import { ClientExpertPreferences } from "./ClientExpertPreferences";
 
 interface Sublocation {
   id: string;
@@ -108,10 +109,14 @@ export function SublocationDetailModal({
         </DialogHeader>
 
         <Tabs defaultValue="gegevens" className="mt-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="gegevens">Gegevens</TabsTrigger>
             <TabsTrigger value="vacatures">Vacatures</TabsTrigger>
             <TabsTrigger value="werk">Werkbeschrijving</TabsTrigger>
+            <TabsTrigger value="voorkeuren" className="flex items-center gap-1">
+              <GraduationCap className="h-3 w-3" />
+              Expert
+            </TabsTrigger>
             <TabsTrigger value="plaatsingen">Plaatsingen</TabsTrigger>
           </TabsList>
 
@@ -233,6 +238,14 @@ export function SublocationDetailModal({
                 )}
               </div>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="voorkeuren">
+            <ClientExpertPreferences 
+              sublocationId={sublocation.id}
+              sublocationName={sublocation.naam}
+              publicDescription={sublocation.publieke_opmerking}
+            />
           </TabsContent>
 
           <TabsContent value="plaatsingen">

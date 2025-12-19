@@ -1475,6 +1475,63 @@ export type Database = {
         }
         Relationships: []
       }
+      client_expert_preferences: {
+        Row: {
+          created_at: string
+          id: string
+          min_jaren_ervaring: number | null
+          notes: string | null
+          organization_id: string | null
+          preferred_certificaten: string[] | null
+          preferred_werkstijlen: string[] | null
+          required_specialismen: string[] | null
+          sublocation_id: string | null
+          updated_at: string
+          voorkeur_werkvorm: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          min_jaren_ervaring?: number | null
+          notes?: string | null
+          organization_id?: string | null
+          preferred_certificaten?: string[] | null
+          preferred_werkstijlen?: string[] | null
+          required_specialismen?: string[] | null
+          sublocation_id?: string | null
+          updated_at?: string
+          voorkeur_werkvorm?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          min_jaren_ervaring?: number | null
+          notes?: string | null
+          organization_id?: string | null
+          preferred_certificaten?: string[] | null
+          preferred_werkstijlen?: string[] | null
+          required_specialismen?: string[] | null
+          sublocation_id?: string | null
+          updated_at?: string
+          voorkeur_werkvorm?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_expert_preferences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "client_organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_expert_preferences_sublocation_id_fkey"
+            columns: ["sublocation_id"]
+            isOneToOne: false
+            referencedRelation: "client_sublocations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_locations: {
         Row: {
           adres: string | null
