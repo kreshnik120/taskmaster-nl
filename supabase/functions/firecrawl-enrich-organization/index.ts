@@ -4,7 +4,7 @@ interface EnrichRequest {
   organizationId?: string;
   websiteUrl?: string;
   updateDatabase?: boolean;
-  autoDetectWebsite?: boolean; // New: auto-detect website if missing
+  autoDetectWebsite?: boolean;
 }
 
 interface ExtractedData {
@@ -24,12 +24,20 @@ interface EnrichResult {
   extracted?: ExtractedData;
   updatedFields?: string[];
   detectedWebsite?: string;
+  emailSource?: string; // Track where email was found: "homepage" | "/contact" | etc.
 }
 
 // Regex patterns for data extraction
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 const PHONE_REGEX = /(?:\+31|0031|0)[\s.-]?(?:[1-9][0-9]|[1-9])[\s.-]?(?:[0-9][\s.-]?){6,8}/g;
 const POSTCODE_REGEX = /\b[1-9][0-9]{3}\s?[A-Z]{2}\b/gi;
+
+// Email priority prefixes (in order of preference)
+const PRIORITY_EMAIL_PREFIXES = ['info@', 'contact@', 'receptie@', 'secretariaat@', 'algemeen@', 'administratie@'];
+const BLACKLIST_EMAIL_PREFIXES = ['noreply@', 'no-reply@', 'donotreply@', 'support@', 'test@', 'demo@', 'example@', 'webmaster@', 'postmaster@'];
+
+// Contact page paths to try
+const CONTACT_PATHS = ['/contact', '/over-ons/contact', '/contact-us', '/over-ons', '/informatie/contact', '/info', '/contactgegevens'];
 
 // Sector keywords
 const SECTOR_KEYWORDS: Record<string, string[]> = {
@@ -74,7 +82,6 @@ const KNOWN_WEBSITES: Record<string, string> = {
  * Try to detect/validate a website URL for an organization
  */
 async function detectWebsiteUrl(orgName: string): Promise<string | null> {
-  // Clean up organization name
   const cleanName = orgName
     .toLowerCase()
     .replace(/stichting\s+/gi, '')
@@ -131,86 +138,29 @@ async function detectWebsiteUrl(orgName: string): Promise<string | null> {
   return null;
 }
 
-// Blacklist patterns for bad descriptions (cookies, navigation, etc.)
+// Blacklist patterns for bad descriptions
 const DESCRIPTION_BLACKLIST = [
-  /cookie/i,
-  /accepteren/i,
-  /privacy.*beleid/i,
-  /alle rechten voorbehouden/i,
-  /copyright/i,
-  /navigatie/i,
-  /hoofdnavigatie/i,
-  /hoofdinhoud/i,
-  /menu/i,
-  /inloggen/i,
-  /zoeken/i,
-  /home\s*\|/i,
-  /^\s*[\|\-•]\s*/,
-  /skip to/i,
-  /ga naar/i,
-  /naar\s+(hoofd|de|het|een|content)/i,  // "Naar hoofdinhoud", "Naar de website"
-  /naar\s+\w+\s*\]/i,                     // "Naar hoofdnavigatiemenu]"
-  /javascript/i,
-  /404/i,
-  /pagina niet gevonden/i,
-  /close\s*menu/i,
-  /for\s*sale/i,
-  /get\s*this\s*domain/i,
-  /domain.*is.*for.*sale/i,
-  /\]\s*\[/,                               // Multiple markdown links together "][" 
-  /\]\s*\(/,                               // Incomplete markdown link cleanup "](..."
-  /^\s*\[/,                                // Starts with markdown link
-  // NEW: App Store / Play Store patterns
-  /download.*app.*store/i,
-  /google.*play/i,
-  /badge.*svg/i,
-  /app store/i,
-  /play store/i,
-  /download.*app/i,
-  // NEW: Magazine / announcement patterns
-  /doek.*gevallen/i,
-  /niet.*langer.*mogelijk/i,
-  /tijdschrift/i,
-  /geen.*nieuwe.*edities/i,
-  /laatste.*editie/i,
-  /afscheid/i,
-  // NEW: GDPR / consent patterns
-  /legitim.*interest/i,
-  /your.*consent/i,
-  /partners.*do.*not.*ask/i,
-  /we.*use.*cookies/i,
-  /consent.*preferences/i,
-  /personal\s*data.*process/i,
-  /ip\s*address.*unique/i,
-  /accept.*cookies/i,
-  /cookie.*policy/i,
-  /privacy.*policy/i,
-  /gegevens.*verwerken/i,
-  // NEW: Domain sale patterns
-  /te\s*koop/i,
-  /domain\s*available/i,
-  /buy\s*this\s*domain/i,
-  /domeinnamen/i,
-  // NEW: Real estate / wrong site patterns
-  /vastgoed/i,
-  /portfolio.*beheer/i,
-  /brengt.*koper.*verkoper/i,
-  /makelaardij/i,
-  /woningen.*te.*koop/i,
-  // NEW: Login / registration patterns
-  /wachtwoord\s*vergeten/i,
-  /registreer\s*nu/i,
-  /maak.*account/i,
-  /inloggen.*account/i,
-  // NEW: Empty/placeholder content
-  /lorem\s*ipsum/i,
-  /placeholder/i,
-  /coming\s*soon/i,
-  /under\s*construction/i,
-  /binnenkort.*beschikbaar/i,
+  /cookie/i, /accepteren/i, /privacy.*beleid/i, /alle rechten voorbehouden/i,
+  /copyright/i, /navigatie/i, /hoofdnavigatie/i, /hoofdinhoud/i, /menu/i,
+  /inloggen/i, /zoeken/i, /home\s*\|/i, /^\s*[\|\-•]\s*/, /skip to/i,
+  /ga naar/i, /naar\s+(hoofd|de|het|een|content)/i, /naar\s+\w+\s*\]/i,
+  /javascript/i, /404/i, /pagina niet gevonden/i, /close\s*menu/i,
+  /for\s*sale/i, /get\s*this\s*domain/i, /domain.*is.*for.*sale/i,
+  /\]\s*\[/, /\]\s*\(/, /^\s*\[/, /download.*app.*store/i, /google.*play/i,
+  /badge.*svg/i, /app store/i, /play store/i, /download.*app/i,
+  /doek.*gevallen/i, /niet.*langer.*mogelijk/i, /tijdschrift/i,
+  /geen.*nieuwe.*edities/i, /laatste.*editie/i, /afscheid/i,
+  /legitim.*interest/i, /your.*consent/i, /partners.*do.*not.*ask/i,
+  /we.*use.*cookies/i, /consent.*preferences/i, /personal\s*data.*process/i,
+  /ip\s*address.*unique/i, /accept.*cookies/i, /cookie.*policy/i,
+  /privacy.*policy/i, /gegevens.*verwerken/i, /te\s*koop/i, /domain\s*available/i,
+  /buy\s*this\s*domain/i, /domeinnamen/i, /vastgoed/i, /portfolio.*beheer/i,
+  /brengt.*koper.*verkoper/i, /makelaardij/i, /woningen.*te.*koop/i,
+  /wachtwoord\s*vergeten/i, /registreer\s*nu/i, /maak.*account/i,
+  /inloggen.*account/i, /lorem\s*ipsum/i, /placeholder/i, /coming\s*soon/i,
+  /under\s*construction/i, /binnenkort.*beschikbaar/i,
 ];
 
-// Keywords that indicate good "about us" content
 const ABOUT_KEYWORDS = [
   'over ons', 'wie zijn wij', 'onze missie', 'onze visie', 
   'wij bieden', 'wij ondersteunen', 'onze organisatie',
@@ -218,13 +168,62 @@ const ABOUT_KEYWORDS = [
   'cliënten', 'bewoners', 'medewerkers',
 ];
 
+/**
+ * Extract and prioritize emails, filtering blacklisted ones
+ */
+function extractAndPrioritizeEmails(markdown: string, html?: string): string[] {
+  const allEmails: string[] = [];
+  
+  // 1. Extract from markdown
+  const markdownEmails = markdown.match(EMAIL_REGEX) || [];
+  allEmails.push(...markdownEmails);
+  
+  // 2. Extract from mailto: links in HTML (often more reliable)
+  if (html) {
+    const mailtoMatches = html.match(/mailto:([^"'\s?&]+)/gi) || [];
+    const mailtoEmails = mailtoMatches
+      .map(m => m.replace(/^mailto:/i, '').toLowerCase())
+      .filter(e => EMAIL_REGEX.test(e));
+    allEmails.push(...mailtoEmails);
+  }
+  
+  // 3. Deduplicate and lowercase
+  const uniqueEmails = [...new Set(allEmails.map(e => e.toLowerCase()))];
+  
+  // 4. Filter out blacklisted and invalid emails
+  const filteredEmails = uniqueEmails.filter(email => {
+    // Skip blacklisted prefixes
+    if (BLACKLIST_EMAIL_PREFIXES.some(prefix => email.startsWith(prefix))) return false;
+    // Skip example/test emails
+    if (email.includes('example') || email.includes('test@') || email.includes('voorbeeld')) return false;
+    // Skip image/file emails
+    if (email.includes('.png') || email.includes('.jpg') || email.includes('.gif')) return false;
+    return true;
+  });
+  
+  // 5. Sort by priority (info@, contact@, etc. first)
+  filteredEmails.sort((a, b) => {
+    const aPriority = PRIORITY_EMAIL_PREFIXES.findIndex(p => a.startsWith(p));
+    const bPriority = PRIORITY_EMAIL_PREFIXES.findIndex(p => b.startsWith(p));
+    
+    // Both have priority → sort by priority index
+    if (aPriority >= 0 && bPriority >= 0) return aPriority - bPriority;
+    // Only a has priority
+    if (aPriority >= 0) return -1;
+    // Only b has priority
+    if (bPriority >= 0) return 1;
+    // Neither has priority → keep order
+    return 0;
+  });
+  
+  return filteredEmails.slice(0, 5); // Limit to 5
+}
+
 function extractDataFromContent(markdown: string, html?: string): ExtractedData {
   const content = markdown || '';
   
-  // Extract emails
-  const emails = [...new Set(content.match(EMAIL_REGEX) || [])].filter(
-    email => !email.includes('example') && !email.includes('test@')
-  );
+  // Extract emails with priority
+  const emails = extractAndPrioritizeEmails(content, html);
   
   // Extract phone numbers
   const phones = [...new Set(content.match(PHONE_REGEX) || [])].map(
@@ -235,7 +234,6 @@ function extractDataFromContent(markdown: string, html?: string): ExtractedData 
   const postcodes = content.match(POSTCODE_REGEX) || [];
   const addresses: string[] = [];
   postcodes.forEach(pc => {
-    // Try to find context around postcode
     const index = content.indexOf(pc);
     if (index > 0) {
       const contextBefore = content.substring(Math.max(0, index - 100), index);
@@ -250,12 +248,10 @@ function extractDataFromContent(markdown: string, html?: string): ExtractedData 
   // Extract logo URL from HTML
   let logoUrl: string | null = null;
   if (html) {
-    // Look for og:image meta tag
     const ogImageMatch = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i);
     if (ogImageMatch) {
       logoUrl = ogImageMatch[1];
     }
-    // Fallback: look for logo in img tags
     if (!logoUrl) {
       const logoImgMatch = html.match(/<img[^>]+(?:class|id|alt)[^>]*logo[^>]*src="([^"]+)"/i) ||
                           html.match(/<img[^>]+src="([^"]+)"[^>]*(?:class|id|alt)[^>]*logo/i);
@@ -274,12 +270,11 @@ function extractDataFromContent(markdown: string, html?: string): ExtractedData 
     }
   }
   
-  // IMPROVED: Extract description with quality filtering
   const description = extractQualityDescription(content);
   
   return {
-    emails: emails.slice(0, 5), // Limit to 5
-    phones: phones.slice(0, 3), // Limit to 3
+    emails,
+    phones: phones.slice(0, 3),
     addresses: [...new Set(addresses)].slice(0, 2),
     logoUrl,
     sectors: detectedSectors,
@@ -287,62 +282,39 @@ function extractDataFromContent(markdown: string, html?: string): ExtractedData 
   };
 }
 
-/**
- * Check if text still contains garbage patterns after cleaning
- */
 function containsGarbagePatterns(text: string): boolean {
   const garbagePatterns = [
-    /\[[^\]]+\]\([^)]+\)/,           // Markdown links [text](url)
-    /\]\s*\(/,                        // Broken markdown link ](
-    /https?:\/\/[^\s]+/,             // Raw URLs
-    /naar.*navigatie/i,              // Navigation patterns
-    /naar.*inhoud/i,
-    /naar.*menu/i,
-    /cookie/i,
-    /\]\s*\[/,                        // Multiple markdown patterns ][
+    /\[[^\]]+\]\([^)]+\)/, /\]\s*\(/, /https?:\/\/[^\s]+/,
+    /naar.*navigatie/i, /naar.*inhoud/i, /naar.*menu/i, /cookie/i, /\]\s*\[/,
   ];
   return garbagePatterns.some(p => p.test(text));
 }
 
-/**
- * Extract a quality description by filtering out cookie banners, navigation, etc.
- */
 function extractQualityDescription(content: string): string | null {
-  // Clean markdown: remove links, images, headers symbols - multiple passes
   let cleanContent = content
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')   // [text](url) -> text
-    .replace(/!\[[^\]]*\]\([^)]+\)/g, '')       // Remove images
-    .replace(/\[[^\]]*\]\s*\([^)]*\)/g, '')     // More aggressive link removal
-    .replace(/\]\s*\([^)]*\)/g, '')             // Remove orphan ](url) patterns
-    .replace(/\[[^\]]*\]/g, '')                 // Remove remaining [text] 
-    .replace(/^#+\s*/gm, '')                    // Remove header markers
-    .replace(/\*\*([^*]+)\*\*/g, '$1')          // Remove bold
-    .replace(/\*([^*]+)\*/g, '$1')              // Remove italic
-    .replace(/`[^`]+`/g, '')                    // Remove code
-    .replace(/https?:\/\/[^\s]+/g, '')          // Remove raw URLs
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
+    .replace(/\[[^\]]*\]\s*\([^)]*\)/g, '')
+    .replace(/\]\s*\([^)]*\)/g, '')
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/^#+\s*/gm, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`[^`]+`/g, '')
+    .replace(/https?:\/\/[^\s]+/g, '')
     .trim();
   
-  // Split into paragraphs
   const paragraphs = cleanContent.split(/\n\n+/);
   
-  // Score and filter paragraphs
   const scoredParagraphs = paragraphs
     .map(p => p.trim())
     .filter(p => {
-      // Minimum length
-      if (p.length < 80) return false;
-      // Maximum length  
-      if (p.length > 600) return false;
-      // Must have at least 10 words
+      if (p.length < 80 || p.length > 600) return false;
       if (p.split(/\s+/).length < 10) return false;
-      // Check blacklist
       if (DESCRIPTION_BLACKLIST.some(pattern => pattern.test(p))) return false;
-      // Double-check for garbage patterns that survived cleaning
       if (containsGarbagePatterns(p)) return false;
-      // Should not be just a list of links/items
       if ((p.match(/\|/g) || []).length > 3) return false;
       if ((p.match(/•/g) || []).length > 3) return false;
-      // Should not have too many brackets (indicates markdown failures)
       if ((p.match(/[\[\]]/g) || []).length > 2) return false;
       return true;
     })
@@ -350,23 +322,12 @@ function extractQualityDescription(content: string): string | null {
       let score = 0;
       const pLower = p.toLowerCase();
       
-      // Boost for "about us" keywords
-      ABOUT_KEYWORDS.forEach(kw => {
-        if (pLower.includes(kw)) score += 10;
-      });
+      ABOUT_KEYWORDS.forEach(kw => { if (pLower.includes(kw)) score += 10; });
+      Object.values(SECTOR_KEYWORDS).flat().forEach(kw => { if (pLower.includes(kw)) score += 5; });
       
-      // Boost for sector keywords
-      Object.values(SECTOR_KEYWORDS).flat().forEach(kw => {
-        if (pLower.includes(kw)) score += 5;
-      });
-      
-      // Penalize short paragraphs
       if (p.length < 120) score -= 5;
-      
-      // Boost medium-length paragraphs (ideal for descriptions)
       if (p.length >= 150 && p.length <= 400) score += 10;
       
-      // Penalize paragraphs with too many special characters
       const specialChars = (p.match(/[|•→←↑↓\[\]]/g) || []).length;
       score -= specialChars * 2;
       
@@ -374,15 +335,56 @@ function extractQualityDescription(content: string): string | null {
     })
     .sort((a, b) => b.score - a.score);
   
-  // Return best paragraph if it has a positive score
   const best = scoredParagraphs[0];
   if (best && best.score > 0) {
     console.log(`📝 Best description (score ${best.score}): "${best.text.substring(0, 60)}..."`);
     return best.text;
   }
   
-  console.log(`⚠️ No quality description found (${scoredParagraphs.length} candidates)`);
   return null;
+}
+
+/**
+ * Scrape a single URL with timeout
+ */
+async function scrapeUrl(apiKey: string, url: string, timeout = 30000): Promise<{ markdown: string; html: string } | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url,
+        formats: ['markdown', 'html'],
+        onlyMainContent: false,
+        waitFor: 2000,
+        timeout: timeout - 5000,
+      }),
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      return null;
+    }
+    
+    const result = await response.json();
+    const content = result.data || result;
+    
+    return {
+      markdown: content.markdown || '',
+      html: content.html || '',
+    };
+  } catch (e) {
+    console.log(`⚠️ Scrape failed for ${url}:`, e instanceof Error ? e.message : 'Unknown error');
+    return null;
+  }
 }
 
 async function enrichSingleOrganization(
@@ -408,7 +410,6 @@ async function enrichSingleOrganization(
       urlToScrape = detectedUrl;
       result.detectedWebsite = detectedUrl;
       
-      // Update organization with detected website
       if (updateDatabase) {
         const { error: websiteUpdateError } = await supabase
           .from('client_organizations')
@@ -437,50 +438,55 @@ async function enrichSingleOrganization(
   try {
     console.log(`🔥 Enriching ${organization.name} from: ${urlToScrape}`);
     
-    // Scrape with timeout using AbortController
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+    // Get base URL for contact page scraping
+    const baseUrl = new URL(urlToScrape).origin;
     
-    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: urlToScrape,
-        formats: ['markdown', 'html'],
-        onlyMainContent: false,
-        waitFor: 3000,
-        timeout: 40000,
-      }),
-      signal: controller.signal,
-    });
+    // STEP 1: Scrape homepage
+    console.log(`📄 Step 1: Scraping homepage...`);
+    const homepageContent = await scrapeUrl(apiKey, urlToScrape, 30000);
     
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      result.error = errorData.error || `HTTP ${response.status}`;
-      console.error(`❌ Firecrawl failed for ${organization.name}:`, result.error);
-      return result;
-    }
-
-    const scrapeResult = await response.json();
-    const content = scrapeResult.data || scrapeResult;
-    const markdown = content.markdown || '';
-    const html = content.html || '';
-    
-    if (!markdown && !html) {
-      result.error = 'Empty scrape result';
+    if (!homepageContent) {
+      result.error = 'Homepage scrape failed';
       return result;
     }
     
-    // Extract data
-    const extractedData = extractDataFromContent(markdown, html);
+    // Extract data from homepage
+    let extractedData = extractDataFromContent(homepageContent.markdown, homepageContent.html);
+    let emailSource = 'homepage';
+    
+    // STEP 2: If no email found, try contact pages
+    if (extractedData.emails.length === 0) {
+      console.log(`🔍 Step 2: No email on homepage, trying contact pages...`);
+      
+      for (const path of CONTACT_PATHS) {
+        const contactUrl = `${baseUrl}${path}`;
+        console.log(`   Trying: ${contactUrl}`);
+        
+        const contactContent = await scrapeUrl(apiKey, contactUrl, 15000);
+        
+        if (contactContent) {
+          const contactData = extractDataFromContent(contactContent.markdown, contactContent.html);
+          
+          if (contactData.emails.length > 0) {
+            console.log(`✅ Found email on ${path}: ${contactData.emails[0]}`);
+            extractedData.emails = contactData.emails;
+            emailSource = path;
+            
+            // Also merge phone numbers if we found any
+            if (contactData.phones.length > 0 && extractedData.phones.length === 0) {
+              extractedData.phones = contactData.phones;
+            }
+            
+            break;
+          }
+        }
+      }
+    }
+    
     result.extracted = extractedData;
+    result.emailSource = extractedData.emails.length > 0 ? emailSource : undefined;
     
-    console.log(`📊 ${organization.name}: ${extractedData.emails.length} emails, ${extractedData.phones.length} phones, sectors: ${extractedData.sectors.join(', ') || 'none'}`);
+    console.log(`📊 ${organization.name}: ${extractedData.emails.length} emails (from ${emailSource}), ${extractedData.phones.length} phones, sectors: ${extractedData.sectors.join(', ') || 'none'}`);
 
     // Update database if requested
     if (updateDatabase) {
@@ -497,7 +503,6 @@ async function enrichSingleOrganization(
         result.updatedFields!.push('logo');
       }
       
-      // Store website if we detected it
       if (result.detectedWebsite && !organization.website) {
         orgUpdates.website = result.detectedWebsite;
       }
@@ -542,7 +547,7 @@ async function enrichSingleOrganization(
         }
       }
       
-      // 3. Store enrichment in ai_knowledge_base (FIXED: use correct org_id)
+      // 3. Store enrichment in ai_knowledge_base
       const knowledgeKey = `org_enrichment_${organization.id}`;
       const knowledgeValue = {
         organization_id: organization.id,
@@ -554,10 +559,10 @@ async function enrichSingleOrganization(
         detected_sectors: extractedData.sectors,
         logo_url: extractedData.logoUrl,
         description: extractedData.description,
+        email_source: emailSource,
         enriched_at: new Date().toISOString(),
       };
       
-      // FIXED: Use the bureau org_id (ABCzorg/CitoZorg), not the client org's own id
       const bureauOrgId = organization.org_id;
       
       console.log(`💾 Saving to ai_knowledge_base with org_id: ${bureauOrgId}, key: ${knowledgeKey}`);
@@ -588,7 +593,6 @@ async function enrichSingleOrganization(
           console.error(`❌ KB update error:`, kbUpdateError);
         } else {
           result.updatedFields!.push('knowledge_base');
-          console.log(`✅ Updated ai_knowledge_base for ${organization.name}`);
         }
       } else {
         const { error: kbInsertError } = await supabase
@@ -608,7 +612,6 @@ async function enrichSingleOrganization(
           console.error(`❌ KB insert error:`, kbInsertError);
         } else {
           result.updatedFields!.push('knowledge_base');
-          console.log(`✅ Inserted ai_knowledge_base for ${organization.name}`);
         }
       }
     }
@@ -661,7 +664,6 @@ Deno.serve(async (req) => {
       
       let urlToScrape = org.website || websiteUrl;
       
-      // Format URL if provided
       if (urlToScrape) {
         urlToScrape = urlToScrape.trim();
         if (!urlToScrape.startsWith('http://') && !urlToScrape.startsWith('https://')) {
@@ -669,7 +671,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Pass autoDetectWebsite flag - function will auto-detect if no URL
       const result = await enrichSingleOrganization(
         supabase, 
         apiKey, 
@@ -687,6 +688,7 @@ Deno.serve(async (req) => {
         detectedWebsite: result.detectedWebsite,
         extracted: result.extracted,
         updatedFields: result.updatedFields,
+        emailSource: result.emailSource,
         error: result.error,
       });
     }
@@ -700,35 +702,18 @@ Deno.serve(async (req) => {
       
       console.log('🔥 Firecrawl enriching URL:', formattedUrl);
       
-      const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          url: formattedUrl,
-          formats: ['markdown', 'html'],
-          onlyMainContent: false,
-          waitFor: 3000,
-          timeout: 40000,
-        }),
-      });
-
-      const scrapeResult = await response.json();
+      const content = await scrapeUrl(apiKey, formattedUrl, 40000);
       
-      if (!response.ok) {
-        return errorResponse(scrapeResult.error || `Scrape failed`, response.status);
+      if (!content) {
+        return errorResponse('Scrape failed', 500);
       }
 
-      const content = scrapeResult.data || scrapeResult;
-      const extractedData = extractDataFromContent(content.markdown || '', content.html || '');
+      const extractedData = extractDataFromContent(content.markdown, content.html);
 
       return jsonResponse({
         success: true,
         websiteUrl: formattedUrl,
         extracted: extractedData,
-        metadata: content.metadata,
       });
     }
 

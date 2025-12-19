@@ -29,6 +29,7 @@ export interface EnrichResponse {
   organizationName?: string;
   websiteUrl?: string;
   detectedWebsite?: string; // Auto-detected website URL
+  emailSource?: string; // Where email was found: "homepage" | "/contact" | etc.
   extracted?: {
     emails: string[];
     phones: string[];
@@ -167,58 +168,73 @@ export const firecrawlApi = {
 
     for (let i = 0; i < organizationIds.length; i++) {
       const orgId = organizationIds[i];
+      let retryCount = 0;
+      const maxRetries = 1;
       
-      try {
-        const result = await this.enrichOrganization(orgId, { 
-          updateDatabase: options?.updateDatabase ?? true,
-          autoDetectWebsite: options?.autoDetectWebsite ?? true,
-        });
-        
-        results.push(result);
-        options?.onResult?.(result);
-        
-        if (result.success) {
-          success++;
-          // Track auto-detected websites
-          if (result.detectedWebsite) {
-            websitesDetected++;
-          }
-        } else {
-          failed++;
+      while (retryCount <= maxRetries) {
+        try {
+          const result = await this.enrichOrganization(orgId, { 
+            updateDatabase: options?.updateDatabase ?? true,
+            autoDetectWebsite: options?.autoDetectWebsite ?? true,
+          });
           
-          // Track timeout separately
-          if (result.error?.toLowerCase().includes('timeout')) {
-            timedOut++;
+          // Retry on timeout (only once)
+          if (!result.success && result.error?.toLowerCase().includes('timeout') && retryCount < maxRetries) {
+            console.log(`🔄 Retrying ${result.organizationName} after timeout...`);
+            retryCount++;
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
           }
+          
+          results.push(result);
+          options?.onResult?.(result);
+          
+          if (result.success) {
+            success++;
+            if (result.detectedWebsite) {
+              websitesDetected++;
+            }
+          } else {
+            failed++;
+            
+            if (result.error?.toLowerCase().includes('timeout')) {
+              timedOut++;
+            }
+            
+            failedOrganizations.push({
+              id: orgId,
+              name: result.organizationName || 'Onbekend',
+              error: result.error || 'Unknown error',
+            });
+          }
+          
+          // Pass orgId for reliable matching
+          options?.onProgress?.(i + 1, organizationIds.length, orgId);
+          
+          // Small delay to avoid rate limiting
+          if (i < organizationIds.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+          
+          break; // Success, exit retry loop
+        } catch (err) {
+          failed++;
+          const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+          
+          results.push({ 
+            success: false, 
+            organizationId: orgId,
+            error: errorMsg,
+          });
           
           failedOrganizations.push({
             id: orgId,
-            name: result.organizationName || 'Onbekend',
-            error: result.error || 'Unknown error',
+            name: 'Onbekend',
+            error: errorMsg,
           });
+          
+          break; // Exit retry loop on exception
         }
-        
-        options?.onProgress?.(i + 1, organizationIds.length, result.organizationName);
-        
-        // Small delay to avoid rate limiting
-        if (i < organizationIds.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-      } catch (err) {
-        failed++;
-        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-        
-        results.push({ 
-          success: false, 
-          organizationId: orgId,
-          error: errorMsg,
-        });
-        
-        failedOrganizations.push({
-          id: orgId,
-          name: 'Onbekend',
-          error: errorMsg,
-        });
       }
     }
 
