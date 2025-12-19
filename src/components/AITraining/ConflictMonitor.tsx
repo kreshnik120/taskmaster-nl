@@ -3,9 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, CheckCircle, XCircle, Eye, EyeOff, Lightbulb, Edit, Check, X } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, Eye, EyeOff, Lightbulb, Edit, Check, X, Zap } from "lucide-react";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { ConflictDiffView } from "./ConflictDiffView";
 import { ConflictEditDialog } from "./ConflictEditDialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -16,6 +16,7 @@ export const ConflictMonitor = () => {
   const [showResolved, setShowResolved] = useState(false);
   const [editingConflict, setEditingConflict] = useState<any | null>(null);
   const [editedFields, setEditedFields] = useState<Record<string, Record<string, any>>>({});
+  const [isBulkResolving, setIsBulkResolving] = useState(false);
 
   const { data: conflicts, isLoading, refetch } = useQuery({
     queryKey: ['data-conflicts', showResolved],
@@ -149,36 +150,12 @@ export const ConflictMonitor = () => {
     }
   };
 
-  if (isLoading) {
-    return <div className="text-center p-4">Conflicten laden...</div>;
-  }
-
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'critical': return 'destructive';
-      case 'high': return 'destructive';
-      case 'medium': return 'default';
-      default: return 'secondary';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'auto_resolved': return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case 'resolved': return <CheckCircle className="h-4 w-4 text-blue-500" />;
-      case 'ignored': return <XCircle className="h-4 w-4 text-gray-400" />;
-      case 'pending': return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-      case 'merged': return <CheckCircle className="h-4 w-4 text-purple-500" />;
-      default: return <XCircle className="h-4 w-4 text-gray-500" />;
-    }
-  };
-
+  // Helper function to get AI recommendation (moved up for use in useMemo)
   const getAIRecommendation = (conflict: any) => {
     const metadata = conflict.metadata || {};
     const reason = metadata.reason || '';
     const conflictType = conflict.conflict_type || '';
     
-    // Bepaal aanbeveling op basis van conflict type en metadata
     if (reason.includes('KVK API') || metadata.suggested_source_type === 'kvk_api') {
       return {
         action: 'accept_new',
@@ -215,7 +192,6 @@ export const ConflictMonitor = () => {
       };
     }
     
-    // Default: voorzichtig zijn
     return {
       action: 'keep_existing',
       label: 'Behoud Oude Waarde',
@@ -223,6 +199,83 @@ export const ConflictMonitor = () => {
       confidence: 60
     };
   };
+
+  // Calculate eligible conflicts for bulk resolve (80%+ confidence)
+  const eligibleForBulkResolve = useMemo(() => {
+    if (!conflicts) return [];
+    return conflicts
+      .filter(c => c.resolution_status === 'pending')
+      .map(c => ({ conflict: c, recommendation: getAIRecommendation(c) }))
+      .filter(({ recommendation }) => recommendation.confidence >= 80);
+  }, [conflicts]);
+
+  // Bulk resolve handler
+  const handleBulkResolve = async () => {
+    if (eligibleForBulkResolve.length === 0) {
+      toast.info("Geen conflicten met 80%+ AI-vertrouwen gevonden");
+      return;
+    }
+
+    setIsBulkResolving(true);
+    let resolved = 0;
+    let failed = 0;
+
+    for (const { conflict, recommendation } of eligibleForBulkResolve) {
+      try {
+        const resolutionStatus = recommendation.action === 'ignore' ? 'ignored' : 'resolved';
+        
+        const { error } = await supabase
+          .from('data_conflicts' as any)
+          .update({
+            resolution_status: resolutionStatus,
+            resolution_action: recommendation.action,
+            resolved_at: new Date().toISOString(),
+          })
+          .eq('id', conflict.id);
+
+        if (error) throw error;
+        resolved++;
+      } catch (error) {
+        console.error('Error resolving conflict:', conflict.id, error);
+        failed++;
+      }
+    }
+
+    setIsBulkResolving(false);
+    
+    if (resolved > 0) {
+      toast.success(`${resolved} conflict${resolved > 1 ? 'en' : ''} opgelost${failed > 0 ? `, ${failed} mislukt` : ''}`);
+      refetch();
+    } else {
+      toast.error("Geen conflicten konden worden opgelost");
+    }
+  };
+
+  if (isLoading) {
+    return <div className="text-center p-4">Conflicten laden...</div>;
+  }
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'critical': return 'destructive';
+      case 'high': return 'destructive';
+      case 'medium': return 'default';
+      default: return 'secondary';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'auto_resolved': return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case 'resolved': return <CheckCircle className="h-4 w-4 text-blue-500" />;
+      case 'ignored': return <XCircle className="h-4 w-4 text-gray-400" />;
+      case 'pending': return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
+      case 'merged': return <CheckCircle className="h-4 w-4 text-purple-500" />;
+      default: return <XCircle className="h-4 w-4 text-gray-500" />;
+    }
+  };
+
+  // getAIRecommendation is now defined above for use in useMemo
 
   return (
     <div className="space-y-6">
@@ -286,24 +339,51 @@ export const ConflictMonitor = () => {
                   : "AI heeft geprobeerd data te wijzigen maar dit werd geblokkeerd door intelligent conflict detection"}
               </CardDescription>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowResolved(!showResolved)}
-              className="gap-2"
-            >
-              {showResolved ? (
-                <>
-                  <EyeOff className="h-4 w-4" />
-                  Verberg opgeloste
-                </>
-              ) : (
-                <>
-                  <Eye className="h-4 w-4" />
-                  Toon opgeloste
-                </>
-              )}
-            </Button>
+            <div className="flex gap-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleBulkResolve}
+                      disabled={isBulkResolving || eligibleForBulkResolve.length === 0}
+                      className="gap-2"
+                    >
+                      <Zap className="h-4 w-4" />
+                      {isBulkResolving 
+                        ? "Bezig met oplossen..." 
+                        : `Los ${eligibleForBulkResolve.length} op (80%+ AI)`
+                      }
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs text-sm">
+                      Lost automatisch alle pending conflicten op waar de AI 80% of meer vertrouwen heeft in de aanbeveling
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowResolved(!showResolved)}
+                className="gap-2"
+              >
+                {showResolved ? (
+                  <>
+                    <EyeOff className="h-4 w-4" />
+                    Verberg opgeloste
+                  </>
+                ) : (
+                  <>
+                    <Eye className="h-4 w-4" />
+                    Toon opgeloste
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
