@@ -145,16 +145,30 @@ export function OrganizationDetailModal({
   // Helper: check if description contains garbage patterns
   const isGarbageDescription = (desc: string | undefined | null): boolean => {
     if (!desc) return true;
-    if (desc.includes('](http')) return true;  // Markdown links
-    if (desc.includes('](https')) return true;
-    if (/naar.*navigatie/i.test(desc)) return true;
-    if (/naar.*inhoud/i.test(desc)) return true;
-    if (/naar.*menu/i.test(desc)) return true;
-    if (/cookie/i.test(desc)) return true;
-    if (/\]\s*\[/.test(desc)) return true;  // Multiple markdown patterns
-    if (/\]\s*\(/.test(desc)) return true;  // Broken markdown
     if (desc.length < 50) return true;
-    return false;
+    
+    const garbagePatterns = [
+      /\]\(http/i,                          // Markdown links
+      /naar.*navigatie/i,
+      /naar.*inhoud/i,
+      /naar.*menu/i,
+      /cookie/i,
+      /\]\s*\[/,                            // Multiple markdown patterns
+      /\]\s*\(/,                            // Broken markdown
+      /download.*app.*store/i,              // App Store downloads
+      /google.*play/i,
+      /doek.*gevallen/i,                    // Announcements
+      /niet.*langer.*mogelijk/i,
+      /tijdschrift/i,
+      /legitim.*interest/i,                 // GDPR consent
+      /your.*consent/i,
+      /domain.*for.*sale/i,                 // Domain sale
+      /te\s*koop/i,
+      /wachtwoord.*vergeten/i,              // Login forms
+      /lorem\s*ipsum/i,                     // Placeholder text
+    ];
+    
+    return garbagePatterns.some(p => p.test(desc));
   };
 
   // Query AI knowledge base voor organisatie beschrijving (zoek op org_enrichment_{id})
@@ -514,7 +528,21 @@ export function OrganizationDetailModal({
                     )}
                   </CardContent>
                 </Card>
-              ) : null}
+              ) : (
+                <Card className="border-l-4 border-l-muted border-dashed">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2 text-muted-foreground">
+                      <FileText className="h-4 w-4" />
+                      Over deze organisatie
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground">
+                      Geen beschrijving beschikbaar. Klik op <strong>"Verrijk met Firecrawl"</strong> om automatisch informatie op te halen van de website.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Organisatie details - alleen tonen als er data is */}
               {organization.centrale_facturatie_email && (

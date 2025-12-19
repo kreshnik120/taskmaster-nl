@@ -160,6 +160,38 @@ const DESCRIPTION_BLACKLIST = [
   /\]\s*\[/,                               // Multiple markdown links together "][" 
   /\]\s*\(/,                               // Incomplete markdown link cleanup "](..."
   /^\s*\[/,                                // Starts with markdown link
+  // NEW: App Store / Play Store patterns
+  /download.*app.*store/i,
+  /google.*play/i,
+  /badge.*svg/i,
+  /app store/i,
+  /play store/i,
+  /download.*app/i,
+  // NEW: Magazine / announcement patterns
+  /doek.*gevallen/i,
+  /niet.*langer.*mogelijk/i,
+  /tijdschrift/i,
+  /geen.*nieuwe.*edities/i,
+  /laatste.*editie/i,
+  /afscheid/i,
+  // NEW: GDPR / consent patterns
+  /legitim.*interest/i,
+  /your.*consent/i,
+  /partners.*do.*not.*ask/i,
+  /we.*use.*cookies/i,
+  /consent.*preferences/i,
+  // NEW: Domain sale patterns
+  /te\s*koop/i,
+  /domain\s*available/i,
+  /buy\s*this\s*domain/i,
+  // NEW: Login / registration patterns
+  /wachtwoord\s*vergeten/i,
+  /registreer\s*nu/i,
+  /maak.*account/i,
+  // NEW: Empty/placeholder content
+  /lorem\s*ipsum/i,
+  /placeholder/i,
+  /coming\s*soon/i,
 ];
 
 // Keywords that indicate good "about us" content
