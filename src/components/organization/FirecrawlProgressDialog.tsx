@@ -10,14 +10,19 @@ import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Clock, Mail, Globe, Building2, AlertTriangle } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, Mail, Globe, Building2, AlertTriangle, Phone, FileText, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface EnrichmentLogEntry {
+  orgId?: string;
   orgName: string;
   status: "pending" | "processing" | "success" | "error" | "timeout";
+  phase?: "homepage" | "contact_page" | "done";
   emailFound?: string;
+  emailSource?: string; // "homepage" | "/contact" | "/over-ons" etc.
   websiteDetected?: string;
+  phoneFound?: string;
+  descriptionFound?: boolean;
   error?: string;
   sectorsFound?: string[];
 }
@@ -49,8 +54,9 @@ export function FirecrawlProgressDialog({
   const timeoutCount = logs.filter(l => l.status === "timeout").length;
   const emailsFound = logs.filter(l => l.emailFound).length;
   const websitesDetected = logs.filter(l => l.websiteDetected).length;
+  const phonesFound = logs.filter(l => l.phoneFound).length;
 
-  const getStatusIcon = (status: EnrichmentLogEntry["status"]) => {
+  const getStatusIcon = (status: EnrichmentLogEntry["status"], phase?: string) => {
     switch (status) {
       case "success":
         return <CheckCircle2 className="h-4 w-4 text-green-500" />;
@@ -59,10 +65,23 @@ export function FirecrawlProgressDialog({
       case "timeout":
         return <Clock className="h-4 w-4 text-yellow-500" />;
       case "processing":
-        return <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />;
+        return (
+          <div className="relative">
+            <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            {phase === "contact_page" && (
+              <Search className="absolute -top-1 -right-1 h-3 w-3 text-primary" />
+            )}
+          </div>
+        );
       default:
         return <div className="h-4 w-4 rounded-full bg-muted" />;
     }
+  };
+
+  const getPhaseText = (log: EnrichmentLogEntry) => {
+    if (log.status !== "processing") return null;
+    if (log.phase === "contact_page") return "Zoekt contact pagina...";
+    return "Scraping homepage...";
   };
 
   return (
@@ -102,6 +121,12 @@ export function FirecrawlProgressDialog({
               {emailsFound} emails
             </Badge>
           )}
+          {phonesFound > 0 && (
+            <Badge variant="outline" className="gap-1">
+              <Phone className="h-3 w-3 text-green-600" />
+              {phonesFound} telefoons
+            </Badge>
+          )}
           {websitesDetected > 0 && (
             <Badge variant="outline" className="gap-1">
               <Globe className="h-3 w-3 text-purple-500" />
@@ -132,7 +157,7 @@ export function FirecrawlProgressDialog({
             )}
             {logs.map((log, index) => (
               <div
-                key={index}
+                key={log.orgId || index}
                 className={cn(
                   "flex items-start gap-2 p-2 rounded text-sm",
                   log.status === "processing" && "bg-primary/5",
@@ -141,15 +166,31 @@ export function FirecrawlProgressDialog({
                   log.status === "timeout" && "bg-yellow-500/5"
                 )}
               >
-                {getStatusIcon(log.status)}
+                {getStatusIcon(log.status, log.phase)}
                 <div className="flex-1 min-w-0">
                   <span className="font-medium truncate block">{log.orgName}</span>
+                  
+                  {/* Processing phase indicator */}
+                  {log.status === "processing" && (
+                    <span className="text-xs text-muted-foreground">{getPhaseText(log)}</span>
+                  )}
+                  
+                  {/* Success details */}
                   {log.status === "success" && (
                     <div className="flex flex-wrap gap-1 mt-1">
                       {log.emailFound && (
                         <Badge variant="secondary" className="text-xs gap-1">
                           <Mail className="h-3 w-3" />
                           {log.emailFound}
+                          {log.emailSource && log.emailSource !== "homepage" && (
+                            <span className="opacity-60 ml-1">via {log.emailSource}</span>
+                          )}
+                        </Badge>
+                      )}
+                      {log.phoneFound && (
+                        <Badge variant="secondary" className="text-xs gap-1">
+                          <Phone className="h-3 w-3" />
+                          {log.phoneFound}
                         </Badge>
                       )}
                       {log.websiteDetected && (
@@ -158,16 +199,24 @@ export function FirecrawlProgressDialog({
                           Website
                         </Badge>
                       )}
+                      {log.descriptionFound && (
+                        <Badge variant="secondary" className="text-xs gap-1">
+                          <FileText className="h-3 w-3" />
+                          Beschrijving
+                        </Badge>
+                      )}
                       {log.sectorsFound && log.sectorsFound.length > 0 && (
                         <Badge variant="secondary" className="text-xs">
                           {log.sectorsFound.join(", ")}
                         </Badge>
                       )}
-                      {!log.emailFound && !log.websiteDetected && !log.sectorsFound?.length && (
+                      {!log.emailFound && !log.websiteDetected && !log.phoneFound && !log.sectorsFound?.length && (
                         <span className="text-xs text-muted-foreground">Verrijkt</span>
                       )}
                     </div>
                   )}
+                  
+                  {/* Error details */}
                   {log.status === "error" && log.error && (
                     <span className="text-xs text-destructive block mt-0.5">{log.error}</span>
                   )}
@@ -194,6 +243,10 @@ export function FirecrawlProgressDialog({
                 <span>{emailsFound} nieuwe emails</span>
               </div>
               <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-green-600" />
+                <span>{phonesFound} telefoons</span>
+              </div>
+              <div className="flex items-center gap-2">
                 <Globe className="h-4 w-4 text-purple-500" />
                 <span>{websitesDetected} websites gedetecteerd</span>
               </div>
@@ -214,7 +267,7 @@ export function FirecrawlProgressDialog({
                     .filter(l => l.status === "error" || l.status === "timeout")
                     .slice(0, 10)
                     .map((log, i) => (
-                      <Badge key={i} variant="outline" className="text-xs">
+                      <Badge key={log.orgId || i} variant="outline" className="text-xs">
                         {log.orgName}
                       </Badge>
                     ))}

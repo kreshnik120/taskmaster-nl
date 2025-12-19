@@ -183,8 +183,9 @@ export default function Klanten() {
     setEnrichDialogOpen(true);
     setIsEnrichingOrgs(true);
     
-    // Create initial pending logs
+    // Create initial pending logs with org ID for reliable matching
     const initialLogs: EnrichmentLogEntry[] = orgsToEnrich.map(org => ({
+      orgId: org.id,
       orgName: org.name,
       status: "pending"
     }));
@@ -198,23 +199,30 @@ export default function Klanten() {
         {
           updateDatabase: true,
           autoDetectWebsite: true,
-          onProgress: (current, total, currentOrg) => {
+          onProgress: (current, total, currentOrgId) => {
             setEnrichProgress({ current, total });
             
-            // Update current org to processing
-            if (currentOrg) {
+            // Update current org to processing (by ID)
+            if (currentOrgId) {
               setEnrichLogs(prev => prev.map(log => 
-                log.orgName === currentOrg 
+                log.orgId === currentOrgId 
                   ? { ...log, status: "processing" as const }
                   : log
               ));
             }
           },
           onResult: (result) => {
+            const orgId = result.organizationId;
             const orgName = result.organizationName || "Onbekend";
             
-            setEnrichLogs(prev => prev.map(log => 
-              log.orgName === orgName ? {
+            setEnrichLogs(prev => prev.map(log => {
+              // Match by ID first, then by name (fallback)
+              const isMatch = log.orgId === orgId || 
+                              log.orgName.toLowerCase() === orgName.toLowerCase();
+              
+              if (!isMatch) return log;
+              
+              return {
                 ...log,
                 status: result.success 
                   ? "success" as const 
@@ -222,11 +230,14 @@ export default function Klanten() {
                     ? "timeout" as const 
                     : "error" as const,
                 emailFound: result.extracted?.emails?.[0],
+                emailSource: result.emailSource,
                 websiteDetected: result.detectedWebsite,
                 sectorsFound: result.extracted?.sectors,
+                phoneFound: result.extracted?.phones?.[0],
+                descriptionFound: result.extracted?.description ? true : false,
                 error: result.error
-              } : log
-            ));
+              };
+            }));
           }
         }
       );
