@@ -139,6 +139,8 @@ const DESCRIPTION_BLACKLIST = [
   /alle rechten voorbehouden/i,
   /copyright/i,
   /navigatie/i,
+  /hoofdnavigatie/i,
+  /hoofdinhoud/i,
   /menu/i,
   /inloggen/i,
   /zoeken/i,
@@ -146,9 +148,18 @@ const DESCRIPTION_BLACKLIST = [
   /^\s*[\|\-•]\s*/,
   /skip to/i,
   /ga naar/i,
+  /naar\s+(hoofd|de|het|een|content)/i,  // "Naar hoofdinhoud", "Naar de website"
+  /naar\s+\w+\s*\]/i,                     // "Naar hoofdnavigatiemenu]"
   /javascript/i,
   /404/i,
   /pagina niet gevonden/i,
+  /close\s*menu/i,
+  /for\s*sale/i,
+  /get\s*this\s*domain/i,
+  /domain.*is.*for.*sale/i,
+  /\]\s*\[/,                               // Multiple markdown links together "][" 
+  /\]\s*\(/,                               // Incomplete markdown link cleanup "](..."
+  /^\s*\[/,                                // Starts with markdown link
 ];
 
 // Keywords that indicate good "about us" content
@@ -229,17 +240,38 @@ function extractDataFromContent(markdown: string, html?: string): ExtractedData 
 }
 
 /**
+ * Check if text still contains garbage patterns after cleaning
+ */
+function containsGarbagePatterns(text: string): boolean {
+  const garbagePatterns = [
+    /\[[^\]]+\]\([^)]+\)/,           // Markdown links [text](url)
+    /\]\s*\(/,                        // Broken markdown link ](
+    /https?:\/\/[^\s]+/,             // Raw URLs
+    /naar.*navigatie/i,              // Navigation patterns
+    /naar.*inhoud/i,
+    /naar.*menu/i,
+    /cookie/i,
+    /\]\s*\[/,                        // Multiple markdown patterns ][
+  ];
+  return garbagePatterns.some(p => p.test(text));
+}
+
+/**
  * Extract a quality description by filtering out cookie banners, navigation, etc.
  */
 function extractQualityDescription(content: string): string | null {
-  // Clean markdown: remove links, images, headers symbols
-  const cleanContent = content
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // [text](url) -> text
-    .replace(/!\[[^\]]*\]\([^)]+\)/g, '')     // Remove images
-    .replace(/^#+\s*/gm, '')                  // Remove header markers
-    .replace(/\*\*([^*]+)\*\*/g, '$1')        // Remove bold
-    .replace(/\*([^*]+)\*/g, '$1')            // Remove italic
-    .replace(/`[^`]+`/g, '')                  // Remove code
+  // Clean markdown: remove links, images, headers symbols - multiple passes
+  let cleanContent = content
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')   // [text](url) -> text
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, '')       // Remove images
+    .replace(/\[[^\]]*\]\s*\([^)]*\)/g, '')     // More aggressive link removal
+    .replace(/\]\s*\([^)]*\)/g, '')             // Remove orphan ](url) patterns
+    .replace(/\[[^\]]*\]/g, '')                 // Remove remaining [text] 
+    .replace(/^#+\s*/gm, '')                    // Remove header markers
+    .replace(/\*\*([^*]+)\*\*/g, '$1')          // Remove bold
+    .replace(/\*([^*]+)\*/g, '$1')              // Remove italic
+    .replace(/`[^`]+`/g, '')                    // Remove code
+    .replace(/https?:\/\/[^\s]+/g, '')          // Remove raw URLs
     .trim();
   
   // Split into paragraphs
@@ -253,13 +285,17 @@ function extractQualityDescription(content: string): string | null {
       if (p.length < 80) return false;
       // Maximum length  
       if (p.length > 600) return false;
-      // Must have at least 3 words
+      // Must have at least 10 words
       if (p.split(/\s+/).length < 10) return false;
       // Check blacklist
       if (DESCRIPTION_BLACKLIST.some(pattern => pattern.test(p))) return false;
+      // Double-check for garbage patterns that survived cleaning
+      if (containsGarbagePatterns(p)) return false;
       // Should not be just a list of links/items
       if ((p.match(/\|/g) || []).length > 3) return false;
       if ((p.match(/•/g) || []).length > 3) return false;
+      // Should not have too many brackets (indicates markdown failures)
+      if ((p.match(/[\[\]]/g) || []).length > 2) return false;
       return true;
     })
     .map(p => {
@@ -283,7 +319,7 @@ function extractQualityDescription(content: string): string | null {
       if (p.length >= 150 && p.length <= 400) score += 10;
       
       // Penalize paragraphs with too many special characters
-      const specialChars = (p.match(/[|•→←↑↓]/g) || []).length;
+      const specialChars = (p.match(/[|•→←↑↓\[\]]/g) || []).length;
       score -= specialChars * 2;
       
       return { text: p, score };
