@@ -326,3 +326,11 @@ schedule = "0 6 * * *"
 verify_jwt = false
 schedule = "0 5 * * 0"
 # Purpose: Validate knowledge sources (weekly on Sunday at 05:00)
+
+# -----------------------------------------------------------------------------
+# UTILITY FUNCTIONS
+# -----------------------------------------------------------------------------
+
+[functions.cleanup-test-data]
+verify_jwt = false
+# Purpose: Clean up test data for fresh E2E testing
