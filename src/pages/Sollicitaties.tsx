@@ -1085,13 +1085,13 @@ const Sollicitaties = () => {
             />
               <KPICard
                 icon={TrendingUp}
-                title="Compleetheid"
-                value={displayedAvgCompleteness}
-                subtitle="%"
+                title="Intake Gereed"
+                value={filteredApplications.filter(app => (app.completeness_score || 0) >= 80).length}
+                subtitle={`van ${displayedTotal}`}
                 variant="urgent"
                 onClick={() => {
-                  // Sort by completeness via URL param or local state
-                  toast.info("Gesorteerd op compleetheid");
+                  // Filter by high completeness
+                  toast.info(`${filteredApplications.filter(app => (app.completeness_score || 0) >= 80).length} sollicitaties met ≥80% compleetheid`);
                 }}
               />
             </div>
