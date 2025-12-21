@@ -44,6 +44,7 @@ import { TriggerLearningButton } from "@/components/AITraining/TriggerLearningBu
 import { AIAgentTestPanel } from "@/components/AITraining/AIAgentTestPanel";
 import { N8nIntegrationTestPanel } from "@/components/AITraining/N8nIntegrationTestPanel";
 import { ResendInboundSetup } from "@/components/AITraining/ResendInboundSetup";
+import { EmailReplyTestPanel } from "@/components/AITraining/EmailReplyTestPanel";
 import { toast } from "sonner";
 
 const AiTraining = () => {
@@ -209,6 +210,7 @@ const AiTraining = () => {
                   <TabsContent value="ai-agent" className="mt-4">
                     <div className="space-y-6">
                       <ResendInboundSetup />
+                      <EmailReplyTestPanel />
                       <AIAgentTestPanel />
                       <N8nIntegrationTestPanel />
                     </div>
