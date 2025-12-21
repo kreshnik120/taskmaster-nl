@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     // Fetch application details
     const { data: application, error: appError } = await supabase
       .from('professional_applications')
-      .select('id, name, email, completeness_score, interview_status, pipeline_stage, extracted_data, assigned_organization, org_id')
+      .select('id, email_from, completeness_score, interview_status, pipeline_stage, extracted_data, org_id')
       .eq('id', application_id)
       .single();
 
@@ -132,17 +132,20 @@ Deno.serve(async (req) => {
         logWarning('AutoSendInterviewSlots', `Max alternative requests reached: ${effectiveAltAttempt}/${MAX_ALTERNATIVE_REQUESTS}`);
         
         // Create manual intervention goal
+        const candidateName = extractedData.naam || extractedData.full_name || 'Kandidaat';
+        const candidateEmail = application.email_from || extractedData.email;
+        
         await supabase.from('agent_goals').insert({
-          org_id: application.org_id || application.assigned_organization,
+          org_id: application.org_id,
           goal_type: 'manual_interview_scheduling',
-          goal_description: `Handmatige interview planning nodig voor ${application.name || extractedData.naam}`,
+          goal_description: `Handmatige interview planning nodig voor ${candidateName}`,
           priority: 100,
           input_data: {
             application_id: application_id,
             reason: 'max_alternative_requests_exceeded',
             alternative_attempts: effectiveAltAttempt,
-            candidate_name: application.name || extractedData.naam,
-            candidate_email: application.email || extractedData.email,
+            candidate_name: candidateName,
+            candidate_email: candidateEmail,
           },
           status: 'pending'
         });
@@ -226,7 +229,7 @@ Deno.serve(async (req) => {
         alternative_attempt: newAltCount,
         interview_status: newStatus,
       },
-      org_id: application.org_id || application.assigned_organization,
+      org_id: application.org_id,
     });
 
     logSuccess('AutoSendInterviewSlots', 'Interview slots sent successfully', {
