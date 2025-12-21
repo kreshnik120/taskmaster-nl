@@ -615,6 +615,16 @@ ${hasOfferedSlots ? `4. **KRITIEK**: Check of de kandidaat een tijdslot kiest! K
 - "Uitzendkracht"
 - "ABCito constructie"
 
+**NIEUW - Extract ook VOG en BIG informatie als aanwezig:**
+- vog_datum: Datum van VOG afgifte (formaat: YYYY-MM-DD of DD-MM-YYYY)
+- vog_bevestigd: true als sollicitant zegt dat ze een geldige VOG hebben
+- big_nummer: 11-cijferig BIG-registratienummer (voor verpleegkundigen/verzorgenden)
+
+Patronen om te herkennen:
+- "VOG afgiftedatum 15 januari 2025" → vog_datum: "2025-01-15"
+- "Ik heb een geldige VOG" → vog_bevestigd: true
+- "BIG-nummer: 12345678901" → big_nummer: "12345678901"
+
 **KRITIEK - remaining_missing_info:**
 Return ALLEEN velden uit deze lijst die NIET in new_data zitten EN nog steeds nodig zijn:
 ${JSON.stringify(smartMissingFields)}
@@ -630,7 +640,10 @@ Return JSON in dit formaat:
     "functie_niveau": "VIG",
     "werkvorm": "Uitzendkracht",
     "regio": "Eindhoven",
-    "beschikbaarheid": "32-40 uur"
+    "beschikbaarheid": "32-40 uur",
+    "vog_datum": "2025-01-15",
+    "vog_bevestigd": true,
+    "big_nummer": "12345678901"
   },
   "requests_interview": false,
   "remaining_missing_info": ["naam", "email"],
@@ -705,6 +718,88 @@ Return JSON in dit formaat:
       if (normalized !== analysis.new_data.werkvorm) {
         console.log(`Mapped werkvorm: "${analysis.new_data.werkvorm}" → "${normalized}"`);
         analysis.new_data.werkvorm = normalized;
+      }
+    }
+    
+    // 🔧 FASE 2 FIX: Regex fallback voor VOG en BIG extractie
+    if (!analysis.new_data?.vog_datum && emailText) {
+      // VOG datum regex patterns
+      const vogPatterns = [
+        /VOG[:\s]*(?:afgiftedatum|datum|van)?[:\s]*(\d{1,2}[-\/\s]?\w+[-\/\s]?\d{4})/i,
+        /(?:afgiftedatum|afgifte)[:\s]*(\d{1,2}[-\/]\d{1,2}[-\/]\d{4})/i,
+        /VOG[:\s]*(\d{4}[-\/]\d{1,2}[-\/]\d{1,2})/i,
+      ];
+      
+      for (const pattern of vogPatterns) {
+        const match = emailText.match(pattern);
+        if (match) {
+          // Try to parse the date
+          const dateStr = match[1].trim();
+          console.log(`📅 VOG datum regex match: "${dateStr}"`);
+          
+          // Convert to ISO format
+          let isoDate = null;
+          // Try ISO format (2025-01-15)
+          if (/^\d{4}[-\/]\d{1,2}[-\/]\d{1,2}$/.test(dateStr)) {
+            isoDate = dateStr.replace(/\//g, '-');
+          }
+          // Try EU format (15-01-2025)
+          else if (/^\d{1,2}[-\/]\d{1,2}[-\/]\d{4}$/.test(dateStr)) {
+            const parts = dateStr.split(/[-\/]/);
+            isoDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+          }
+          
+          if (isoDate) {
+            analysis.new_data = analysis.new_data || {};
+            analysis.new_data.vog_datum = isoDate;
+            analysis.new_data.vog_bevestigd = true;
+            console.log(`✅ VOG datum extracted via regex: ${isoDate}`);
+            break;
+          }
+        }
+      }
+    }
+    
+    // Check for "ik heb een geldige VOG" type statements
+    if (!analysis.new_data?.vog_bevestigd && emailText) {
+      if (/(?:heb|bezit|beschik)[^.]*(?:geldige?|actuele?)[^.]*VOG/i.test(emailText) ||
+          /VOG[^.]*(?:geldig|actueel|recent)/i.test(emailText)) {
+        analysis.new_data = analysis.new_data || {};
+        analysis.new_data.vog_bevestigd = true;
+        console.log(`✅ VOG bevestigd via tekst patroon`);
+      }
+    }
+    
+    // BIG nummer regex
+    if (!analysis.new_data?.big_nummer && emailText) {
+      const bigMatch = emailText.match(/BIG[-\s]?(?:nummer|nr|registratie)?[:\s]*(\d{11})/i);
+      if (bigMatch) {
+        analysis.new_data = analysis.new_data || {};
+        analysis.new_data.big_nummer = bigMatch[1];
+        console.log(`✅ BIG nummer extracted via regex: ${bigMatch[1]}`);
+      }
+    }
+    
+    // 🔧 FASE 3 FIX: Detecteer placeholder telefoonnummers
+    if (analysis.new_data?.telefoonnummer) {
+      const phone = analysis.new_data.telefoonnummer;
+      const placeholderPatterns = [
+        /^06[-\s]?0{6,}$/,              // 06-00000000
+        /^06[-\s]?1234567[89]?$/,       // 06-12345678
+        /^000/,                          // starts with 000
+        /^06[-\s]?9{6,}$/,              // 06-99999999
+        /^(\d)\1{7,}$/,                  // all same digit
+      ];
+      
+      const isPlaceholder = placeholderPatterns.some(p => p.test(phone.replace(/[\s-]/g, '')));
+      if (isPlaceholder) {
+        console.log(`⚠️ Placeholder telefoonnummer gedetecteerd: ${phone}`);
+        // Remove placeholder and add to missing info
+        delete analysis.new_data.telefoonnummer;
+        if (!analysis.remaining_missing_info?.includes('telefoonnummer')) {
+          analysis.remaining_missing_info = analysis.remaining_missing_info || [];
+          analysis.remaining_missing_info.push('telefoonnummer (echt nummer, geen placeholder)');
+        }
       }
     }
 
@@ -1145,11 +1240,66 @@ Return JSON in dit formaat:
     }
 
     // =====================================================
-    // STAP 4: NIEUW Stage - Trigger Interview when ready (≥80%)
-    // ALLEEN als stage = NIEUW en completeness ≥ 80%
+    // STAP 4: NIEUW Stage - Auto-transition to INTERVIEW when ready (≥100%)
+    // KRITIEK FIX: Bij 100% completeness → stage naar INTERVIEW + direct interview email
     // =====================================================
-    if (pipelineStage === 'nieuw' && newCompletenessScore >= 80 && interviewStatus !== 'scheduled' && !analysis.selected_slot_index) {
-      console.log("🗓️ NIEUW stage + Completeness >= 80%, checking for existing interview goal...");
+    if (pipelineStage === 'nieuw' && newCompletenessScore >= 100 && interviewStatus !== 'scheduled' && !analysis.selected_slot_index) {
+      console.log("🎉 NIEUW stage + Completeness = 100%, transitioning to INTERVIEW stage...");
+      
+      const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
+      
+      // 🔧 FIX: Update pipeline_stage to 'interview' immediately
+      const { error: stageUpdateError } = await supabase
+        .from("professional_applications")
+        .update({
+          pipeline_stage: 'interview',
+          status: 'in_gesprek',
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", applicationId);
+      
+      if (stageUpdateError) {
+        console.error("Error updating stage to interview:", stageUpdateError);
+      } else {
+        console.log("✅ Stage updated to INTERVIEW");
+        
+        // 🔧 FIX: Direct interview email versturen (niet wachten op goal execution)
+        try {
+          console.log("📧 Sending interview availability request immediately...");
+          const { data: scheduleResult, error: scheduleError } = await supabase.functions.invoke('schedule-interview', {
+            body: {
+              action: 'request_availability',
+              application_id: applicationId,
+              interview_type: 'video',
+            }
+          });
+          
+          if (scheduleError) {
+            console.error("Error sending interview request:", scheduleError);
+          } else {
+            console.log("✅ Interview availability request sent:", scheduleResult);
+          }
+        } catch (scheduleErr) {
+          console.error("Exception sending interview request:", scheduleErr);
+        }
+        
+        // Log stage audit event
+        await supabase.from("application_stage_audit").insert({
+          application_id: applicationId,
+          from_stage: 'nieuw',
+          to_stage: 'interview',
+          reason: 'Automatische transitie: 100% completeness bereikt',
+          performed_by: null, // System action
+          metadata: {
+            completeness_score: newCompletenessScore,
+            trigger: 'handle-application-reply',
+          }
+        });
+      }
+    } 
+    // 🔧 FIX: Ook interview goal aanmaken bij 80-99% als backup
+    else if (pipelineStage === 'nieuw' && newCompletenessScore >= 80 && newCompletenessScore < 100 && interviewStatus !== 'scheduled' && !analysis.selected_slot_index) {
+      console.log("🗓️ NIEUW stage + Completeness >= 80%, creating interview goal for manual review...");
       
       const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
       
