@@ -2857,6 +2857,9 @@ export type Database = {
           email_subject: string | null
           extracted_data: Json | null
           id: string
+          interview_confirmed_slot: Json | null
+          interview_scheduled_at: string | null
+          interview_status: string | null
           is_test_data: boolean | null
           missing_info: Json | null
           org_id: string | null
@@ -2890,6 +2893,9 @@ export type Database = {
           email_subject?: string | null
           extracted_data?: Json | null
           id?: string
+          interview_confirmed_slot?: Json | null
+          interview_scheduled_at?: string | null
+          interview_status?: string | null
           is_test_data?: boolean | null
           missing_info?: Json | null
           org_id?: string | null
@@ -2923,6 +2929,9 @@ export type Database = {
           email_subject?: string | null
           extracted_data?: Json | null
           id?: string
+          interview_confirmed_slot?: Json | null
+          interview_scheduled_at?: string | null
+          interview_status?: string | null
           is_test_data?: boolean | null
           missing_info?: Json | null
           org_id?: string | null

@@ -533,37 +533,76 @@ Deno.serve(async (req) => {
     const hasOfferedSlots = offeredSlots && offeredSlots.length > 0;
     
     // =====================================================
-    // SMART MISSING INFO: Define critical fields for intake
+    // FASE 1 FIX: SMART MISSING INFO - Extended critical fields
+    // Inclusief diploma vereisten en placeholder telefoon detectie
     // =====================================================
-    const CRITICAL_INTAKE_FIELDS = ['naam', 'email', 'telefoonnummer', 'functie_niveau', 'werkvorm', 'regio', 'beschikbaarheid'];
+    
+    // Base critical intake fields - ALLE nodig voor Fase 1 compleet
+    const BASE_CRITICAL_FIELDS = ['naam', 'email', 'telefoonnummer', 'functie_niveau', 'werkvorm', 'regio', 'beschikbaarheid'];
+    
+    // Diploma is nu verplicht voor intake (zorg-gerelateerd diploma vereist)
+    const DIPLOMA_FIELDS = ['diploma_type'];
+    
+    // Build dynamic critical fields list
+    const CRITICAL_INTAKE_FIELDS = [...BASE_CRITICAL_FIELDS, ...DIPLOMA_FIELDS];
     
     // Determine which conditional fields are needed based on current data
     const currentData = application.extracted_data || {};
     const conditionalFields: string[] = [];
     
-    // BIG-nummer only needed for HBO-V or VIG
-    if (currentData.functie_niveau === 'HBO-V' || currentData.functie_niveau === 'VIG') {
+    // BIG-nummer verplicht voor verpleegkundige/verzorgende functies
+    const BIG_REQUIRED_FUNCTIES = ['VIG', 'HBO-V', 'Verpleegkundige MBO', 'Verpleegkundige', 'VP3', 'VP4'];
+    if (BIG_REQUIRED_FUNCTIES.includes(currentData.functie_niveau as string)) {
       conditionalFields.push('big_nummer');
     }
     
-    // KVK/BTW only needed for ZZP
+    // KVK verplicht voor ZZP
     if (currentData.werkvorm === 'ZZP') {
       conditionalFields.push('kvk_nummer');
-      // BTW is optional for ZZP, don't require it
     }
     
-    // VOG is only required AFTER interview is scheduled (not in intake phase)
+    // VOG is alleen verplicht NA interview (screening fase)
     const hasInterviewScheduled = currentData.interview_status === 'scheduled' || currentData.interview_confirmed;
     if (hasInterviewScheduled) {
       conditionalFields.push('vog');
     }
     
-    // Calculate which critical fields are already filled
+    // 🔧 FASE 1 FIX: Placeholder telefoon detectie helper
+    const isPlaceholderPhone = (phone: string | null | undefined): boolean => {
+      if (!phone) return false;
+      const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+      const placeholderPatterns = [
+        /^06[0]{6,}$/,              // 06-00000000
+        /^061234567[89]?$/,         // 06-12345678
+        /^000/,                      // starts with 000
+        /^06[9]{6,}$/,              // 06-99999999
+        /^(\d)\1{7,}$/,              // all same digit (e.g., 0666666666)
+        /^0612345/,                  // starts with 0612345
+      ];
+      return placeholderPatterns.some(p => p.test(cleanPhone));
+    };
+    
+    // Calculate which critical fields are already filled (met placeholder telefoon check)
     const filledCriticalFields = CRITICAL_INTAKE_FIELDS.filter(field => {
-      // Handle naam/full_name as aliases (same field, different names)
+      // Handle naam/full_name as aliases
       if (field === 'naam') {
         const nameValue = currentData.naam || currentData.full_name;
         return nameValue !== null && nameValue !== undefined && nameValue !== '';
+      }
+      // 🔧 FASE 1 FIX: Telefoonnummer alleen geldig als NIET placeholder
+      if (field === 'telefoonnummer') {
+        const phoneValue = currentData.telefoonnummer || currentData.phone || currentData.telefoon;
+        if (!phoneValue) return false;
+        if (isPlaceholderPhone(phoneValue as string)) {
+          console.log(`⚠️ Placeholder telefoon gedetecteerd in existing data: ${phoneValue}`);
+          return false;
+        }
+        return true;
+      }
+      // Diploma type check - accepteer verschillende variaties
+      if (field === 'diploma_type') {
+        const diplomaValue = currentData.diploma_type || currentData.opleiding || currentData.diploma;
+        return diplomaValue !== null && diplomaValue !== undefined && diplomaValue !== '';
       }
       const value = currentData[field];
       return value !== null && value !== undefined && value !== '';
@@ -615,38 +654,55 @@ ${hasOfferedSlots ? `4. **KRITIEK**: Check of de kandidaat een tijdslot kiest! K
 - "Uitzendkracht"
 - "ABCito constructie"
 
-**NIEUW - Extract ook VOG en BIG informatie als aanwezig:**
-- vog_datum: Datum van VOG afgifte (formaat: YYYY-MM-DD of DD-MM-YYYY)
-- vog_bevestigd: true als sollicitant zegt dat ze een geldige VOG hebben
-- big_nummer: 11-cijferig BIG-registratienummer (voor verpleegkundigen/verzorgenden)
+**FASE 1 - DIPLOMA TYPE (zorg-gerelateerd vereist):**
+Extract diploma/opleiding informatie. Moet ZORG-GERELATEERD zijn:
+- diploma_type: Exacte naam van diploma (bijv. "MBO Verzorgende IG", "HBO Verpleegkunde", "Helpende Zorg en Welzijn")
+- diploma_is_zorg: true als diploma zorg-gerelateerd is, false als niet
+- diploma_jaar: Jaar van diploma (bijv. "2020")
 
-Patronen om te herkennen:
-- "VOG afgiftedatum 15 januari 2025" → vog_datum: "2025-01-15"
-- "Ik heb een geldige VOG" → vog_bevestigd: true
-- "BIG-nummer: 12345678901" → big_nummer: "12345678901"
+GELDIGE ZORG DIPLOMA'S (diploma_is_zorg = true):
+- MBO Verzorgende IG / VIG
+- MBO Verpleegkunde
+- HBO Verpleegkunde
+- Helpende Zorg en Welzijn
+- Persoonlijk Begeleider (niveau 4)
+- GGZ-agoog
+- SPW / SPH
+- Maatschappelijk Werk
+- Sociaal Pedagogisch Werk
+
+ONGELDIGE DIPLOMA'S (diploma_is_zorg = false):
+- MBO Administratie, Economie, ICT, Techniek, etc.
+- Geen zorg-gerelateerde HBO/WO
+
+**VOG en BIG informatie (optioneel in intake):**
+- vog_datum: Datum van VOG afgifte (formaat: YYYY-MM-DD)
+- vog_bevestigd: true als sollicitant zegt dat ze een geldige VOG hebben
+- big_nummer: 11-cijferig BIG-registratienummer
 
 **KRITIEK - remaining_missing_info:**
 Return ALLEEN velden uit deze lijst die NIET in new_data zitten EN nog steeds nodig zijn:
 ${JSON.stringify(smartMissingFields)}
 
-NIET opnemen (irrelevant voor intake): VOG, diploma, certificaten, ID-bewijs (pas na interview)
-
 Return JSON in dit formaat:
 \`\`\`json
 {
-  "filled_info": ["telefoonnummer"],
+  "filled_info": ["telefoonnummer", "diploma_type"],
   "new_data": {
-    "telefoonnummer": "06-12345678",
+    "telefoonnummer": "06-87654321",
     "functie_niveau": "VIG",
     "werkvorm": "Uitzendkracht",
     "regio": "Eindhoven",
     "beschikbaarheid": "32-40 uur",
+    "diploma_type": "MBO Verzorgende IG",
+    "diploma_is_zorg": true,
+    "diploma_jaar": "2020",
     "vog_datum": "2025-01-15",
     "vog_bevestigd": true,
     "big_nummer": "12345678901"
   },
   "requests_interview": false,
-  "remaining_missing_info": ["naam", "email"],
+  "remaining_missing_info": ["naam"],
   "selected_slot_index": null,
   "confidence": 0.95
 }
@@ -1039,8 +1095,8 @@ Return JSON in dit formaat:
     }
 
     // =====================================================
-    // SMART COMPLETENESS CALCULATION
-    // Based on CRITICAL fields filled, not arbitrary totalFields count
+    // FASE 1 FIX: SMART COMPLETENESS CALCULATION
+    // Met placeholder telefoon detectie en diploma validatie
     // =====================================================
     
     // Merge new data with existing extracted_data FIRST
@@ -1055,33 +1111,79 @@ Return JSON in dit formaat:
       console.log("📝 Normalized naam from full_name:", mergedData.naam);
     }
     
-    // Calculate completeness based on CRITICAL intake fields
-    const criticalFieldsFilled = CRITICAL_INTAKE_FIELDS.filter(field => {
-      // Handle naam/full_name as aliases (same field, different names)
+    // 🔧 FASE 1 FIX: Check placeholder telefoon in merged data en blokkeer
+    const phoneInMergedData = (mergedData.telefoonnummer || mergedData.phone || mergedData.telefoon) as string | undefined;
+    let hasValidPhone = false;
+    let phoneBlocked = false;
+    
+    if (phoneInMergedData) {
+      if (isPlaceholderPhone(phoneInMergedData)) {
+        console.log(`⚠️ FASE 1: Placeholder telefoon geblokkeerd: ${phoneInMergedData}`);
+        // Verwijder placeholder uit merged data
+        delete mergedData.telefoonnummer;
+        delete mergedData.phone;
+        delete mergedData.telefoon;
+        phoneBlocked = true;
+      } else {
+        hasValidPhone = true;
+      }
+    }
+    
+    // Calculate completeness based on CRITICAL intake fields (inclusief conditional)
+    const allRequiredFields = [...CRITICAL_INTAKE_FIELDS, ...conditionalFields];
+    
+    const criticalFieldsFilled = allRequiredFields.filter(field => {
+      // Handle naam/full_name as aliases
       if (field === 'naam') {
         const nameValue = mergedData.naam || mergedData.full_name;
         return nameValue !== null && nameValue !== undefined && nameValue !== '';
+      }
+      // Telefoonnummer: alleen geldig als NIET placeholder
+      if (field === 'telefoonnummer') {
+        return hasValidPhone;
+      }
+      // Diploma type: accepteer variaties
+      if (field === 'diploma_type') {
+        const diplomaValue = mergedData.diploma_type || mergedData.opleiding || mergedData.diploma;
+        return diplomaValue !== null && diplomaValue !== undefined && diplomaValue !== '';
+      }
+      // BIG nummer: 11 cijfers
+      if (field === 'big_nummer') {
+        const bigValue = mergedData.big_nummer as string;
+        return bigValue && /^\d{11}$/.test(bigValue.replace(/\D/g, ''));
       }
       const value = mergedData[field];
       return value !== null && value !== undefined && value !== '';
     });
     
-    // Base score from critical fields (0-100)
-    const baseScore = Math.round((criticalFieldsFilled.length / CRITICAL_INTAKE_FIELDS.length) * 100);
+    // Base score from all required fields (critical + conditional)
+    const baseScore = Math.round((criticalFieldsFilled.length / allRequiredFields.length) * 100);
     
-    // Smart remaining_missing_info: filter out filled fields and irrelevant fields
-    const smartRemainingMissing = smartMissingFields.filter(field => {
-      // Handle naam/full_name as aliases
-      if (field === 'naam') {
+    // Smart remaining_missing_info: filter out filled fields
+    const smartRemainingMissing = [...smartMissingFields];
+    
+    // Add telefoon terug als blocked
+    if (phoneBlocked && !smartRemainingMissing.includes('telefoonnummer')) {
+      smartRemainingMissing.push('telefoonnummer (echt nummer, geen placeholder zoals 06-12345678)');
+    }
+    
+    // Filter wat al ingevuld is
+    const finalRemainingMissing = smartRemainingMissing.filter(field => {
+      const baseField = field.split(' ')[0]; // "telefoonnummer (echt..." → "telefoonnummer"
+      if (baseField === 'naam') {
         const nameValue = mergedData.naam || mergedData.full_name;
         return nameValue === null || nameValue === undefined || nameValue === '';
       }
-      const value = mergedData[field];
+      if (baseField === 'telefoonnummer') {
+        return !hasValidPhone;
+      }
+      if (baseField === 'diploma_type') {
+        const diplomaValue = mergedData.diploma_type || mergedData.opleiding || mergedData.diploma;
+        return diplomaValue === null || diplomaValue === undefined || diplomaValue === '';
+      }
+      const value = mergedData[baseField];
       return value === null || value === undefined || value === '';
     });
-    
-    // Override AI's remaining_missing_info with our smart calculation
-    const finalRemainingMissing = smartRemainingMissing;
     
     const newCompletenessScore = Math.max(0, Math.min(100, baseScore));
 
@@ -1199,13 +1301,19 @@ Return JSON in dit formaat:
     }
 
     // =====================================================
-    // STAP 3: Check for Interview Slot Selection (any stage)
+    // STAP 3: FASE 1 FIX - Interview Slot Selection = Stage Transition
+    // Als kandidaat slot bevestigt → naar 'interview' stage + insert interview_appointments
     // =====================================================
+    let interviewConfirmed = false;
+    
     if (analysis.selected_slot_index && offeredSlots && offeredSlots.length > 0) {
       const slotIndex = parseInt(analysis.selected_slot_index) - 1;
       if (slotIndex >= 0 && slotIndex < offeredSlots.length) {
         const selectedSlot = offeredSlots[slotIndex];
-        console.log(`🎉 Kandidaat koos interview slot: ${selectedSlot.date} om ${selectedSlot.time}`);
+        console.log(`🎉 FASE 1: Kandidaat koos interview slot: ${selectedSlot.date} om ${selectedSlot.time}`);
+        
+        // Parse slot to datetime
+        const slotDateTime = new Date(`${selectedSlot.date}T${selectedSlot.time}:00`);
         
         // Call schedule-interview to confirm the slot
         try {
@@ -1224,6 +1332,59 @@ Return JSON in dit formaat:
             console.error("Error confirming interview slot:", confirmError);
           } else {
             console.log("✅ Interview slot confirmed:", confirmResult);
+            interviewConfirmed = true;
+            
+            // 🔧 FASE 1 FIX: Update application with confirmed slot + transition to interview stage
+            const { error: slotUpdateError } = await supabase
+              .from("professional_applications")
+              .update({
+                interview_confirmed_slot: selectedSlot,
+                interview_scheduled_at: slotDateTime.toISOString(),
+                interview_status: 'scheduled',
+                pipeline_stage: 'interview',  // 🔧 KRITIEK: Alleen nu naar interview stage!
+                status: 'in_gesprek',
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", applicationId);
+            
+            if (slotUpdateError) {
+              console.error("Error updating interview confirmation:", slotUpdateError);
+            } else {
+              console.log("✅ FASE 1: Stage transitioned to INTERVIEW (slot confirmed)");
+              
+              // 🔧 FASE 1 FIX: Insert interview appointment record
+              const { error: appointmentError } = await supabase
+                .from("interview_appointments")
+                .insert({
+                  application_id: applicationId,
+                  professional_id: application.professional_id || '00000000-0000-0000-0000-000000000000', // Placeholder until professional created
+                  org_id: application.org_id,
+                  scheduled_at: slotDateTime.toISOString(),
+                  duration_min: 30,
+                  location: 'Microsoft Teams (video)',
+                  status: 'scheduled',
+                });
+              
+              if (appointmentError) {
+                console.error("Error creating interview appointment:", appointmentError);
+              } else {
+                console.log("✅ Interview appointment record created");
+              }
+              
+              // Log stage audit event
+              await supabase.from("application_stage_audit").insert({
+                application_id: applicationId,
+                from_stage: 'nieuw',
+                to_stage: 'interview',
+                reason: 'Automatische transitie: Interview slot bevestigd door kandidaat',
+                performed_by: null,
+                metadata: {
+                  completeness_score: newCompletenessScore,
+                  confirmed_slot: selectedSlot,
+                  trigger: 'handle-application-reply',
+                }
+              });
+            }
             
             // Send confirmation email
             await supabase.functions.invoke('schedule-interview', {
@@ -1240,32 +1401,20 @@ Return JSON in dit formaat:
     }
 
     // =====================================================
-    // STAP 4: NIEUW Stage - Auto-transition to INTERVIEW when ready (≥100%)
-    // KRITIEK FIX: Bij 100% completeness → stage naar INTERVIEW + direct interview email
+    // STAP 4: FASE 1 FIX - Bij 100% completeness → stuur slots (NIET naar interview stage!)
+    // Interview stage alleen via slot confirmatie (STAP 3)
     // =====================================================
-    if (pipelineStage === 'nieuw' && newCompletenessScore >= 100 && interviewStatus !== 'scheduled' && !analysis.selected_slot_index) {
-      console.log("🎉 NIEUW stage + Completeness = 100%, transitioning to INTERVIEW stage...");
-      
-      const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
-      
-      // 🔧 FIX: Update pipeline_stage to 'interview' immediately
-      const { error: stageUpdateError } = await supabase
-        .from("professional_applications")
-        .update({
-          pipeline_stage: 'interview',
-          status: 'in_gesprek',
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", applicationId);
-      
-      if (stageUpdateError) {
-        console.error("Error updating stage to interview:", stageUpdateError);
-      } else {
-        console.log("✅ Stage updated to INTERVIEW");
+    const currentInterviewStatus = mergedData.interview_status as string || interviewStatus;
+    
+    if (pipelineStage === 'nieuw' && newCompletenessScore >= 100 && !interviewConfirmed) {
+      // Check of slots al gestuurd zijn
+      if (currentInterviewStatus !== 'slots_offered' && currentInterviewStatus !== 'scheduled') {
+        console.log("🎉 FASE 1: Completeness = 100%, sending interview slots (NOT transitioning stage yet!)");
         
-        // 🔧 FIX: Direct interview email versturen (niet wachten op goal execution)
+        const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
+        
         try {
-          console.log("📧 Sending interview availability request immediately...");
+          console.log("📧 Sending interview availability request...");
           const { data: scheduleResult, error: scheduleError } = await supabase.functions.invoke('schedule-interview', {
             body: {
               action: 'request_availability',
@@ -1277,28 +1426,28 @@ Return JSON in dit formaat:
           if (scheduleError) {
             console.error("Error sending interview request:", scheduleError);
           } else {
-            console.log("✅ Interview availability request sent:", scheduleResult);
+            console.log("✅ Interview slots sent:", scheduleResult);
+            
+            // 🔧 FASE 1 FIX: Alleen interview_status updaten, NIET pipeline_stage!
+            await supabase
+              .from("professional_applications")
+              .update({
+                interview_status: 'slots_offered',
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", applicationId);
+            
+            console.log("✅ FASE 1: interview_status = 'slots_offered' (awaiting candidate response)");
           }
         } catch (scheduleErr) {
           console.error("Exception sending interview request:", scheduleErr);
         }
-        
-        // Log stage audit event
-        await supabase.from("application_stage_audit").insert({
-          application_id: applicationId,
-          from_stage: 'nieuw',
-          to_stage: 'interview',
-          reason: 'Automatische transitie: 100% completeness bereikt',
-          performed_by: null, // System action
-          metadata: {
-            completeness_score: newCompletenessScore,
-            trigger: 'handle-application-reply',
-          }
-        });
+      } else {
+        console.log(`⏭️ Interview slots already ${currentInterviewStatus}, waiting for candidate response`);
       }
     } 
-    // 🔧 FIX: Ook interview goal aanmaken bij 80-99% als backup
-    else if (pipelineStage === 'nieuw' && newCompletenessScore >= 80 && newCompletenessScore < 100 && interviewStatus !== 'scheduled' && !analysis.selected_slot_index) {
+    // Bij 80-99%: manual review goal (geen automatische stage transitie)
+    else if (pipelineStage === 'nieuw' && newCompletenessScore >= 80 && newCompletenessScore < 100 && currentInterviewStatus !== 'scheduled' && !interviewConfirmed) {
       console.log("🗓️ NIEUW stage + Completeness >= 80%, creating interview goal for manual review...");
       
       const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
