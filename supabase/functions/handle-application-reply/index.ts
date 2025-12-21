@@ -641,7 +641,10 @@ ${emailText}
 1. Extract ALLEEN informatie die in de email staat - verzin niets
 2. Focus op de KRITIEKE VELDEN die nog nodig zijn
 3. Detecteer of de sollicitant vraagt om een gesprek/interview
-${hasOfferedSlots ? `4. **KRITIEK**: Check of de kandidaat een tijdslot kiest! Kijk naar nummers, dagen, tijden` : ''}
+${hasOfferedSlots ? `4. **KRITIEK**: Check of de kandidaat een tijdslot kiest! Kijk naar nummers, dagen, tijden
+5. **SLOT REJECTION**: Detecteer of de kandidaat GEEN van de aangeboden slots kan!
+   - Zoek naar zinnen als: "kan niet", "lukt niet", "geen van deze", "andere dag", "andere tijd", "allemaal bezet", "verhinderd"
+   - Als de kandidaat vraagt om andere momenten → slot_rejection = true` : ''}
 
 **KRITIEK - functie_niveau moet EXACT een van deze waarden zijn:**
 - "VIG" (Verzorgende IG)
@@ -709,9 +712,17 @@ Return JSON in dit formaat:
   "requests_interview": false,
   "remaining_missing_info": ["naam"],
   "selected_slot_index": null,
+  "slot_rejection": false,
+  "rejection_reason": null,
+  "preferred_times": [],
   "confidence": 0.95
 }
 \`\`\`
+
+**SLOT REJECTION INSTRUCTIES:**
+- slot_rejection: true als kandidaat NIET kan op de aangeboden slots en vraagt om alternatieven
+- rejection_reason: Reden waarom (bijv. "werkt overdag", "vakantie", "andere afspraken")
+- preferred_times: Array van gewenste tijden als de kandidaat die noemt (bijv. ["avond", "na 17:00", "weekend"])
 `;
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -1407,91 +1418,124 @@ Return JSON in dit formaat:
     }
 
     // =====================================================
-    // STAP 4: FASE 1 FIX - Bij 100% completeness → stuur slots (NIET naar interview stage!)
-    // Interview stage alleen via slot confirmatie (STAP 3)
+    // STAP 4: SLOT REJECTION DETECTIE (NIEUW!)
+    // Als kandidaat "kan niet" op aangeboden slots → stuur alternatieven
     // =====================================================
-    const currentInterviewStatus = mergedData.interview_status as string || interviewStatus;
+    const slotRejection = analysis.slot_rejection === true;
+    const rejectionReason = analysis.rejection_reason || null;
+    const preferredTimes = analysis.preferred_times || [];
+    const currentAlternativeCount = (mergedData.interview_alternative_request_count as number) || 0;
+    const MAX_ALTERNATIVE_REQUESTS = parseInt(Deno.env.get('MAX_ALTERNATIVE_REQUESTS') || '2');
     
-    if (pipelineStage === 'nieuw' && newCompletenessScore >= 100 && !interviewConfirmed) {
-      // Check of slots al gestuurd zijn
-      if (currentInterviewStatus !== 'slots_offered' && currentInterviewStatus !== 'scheduled') {
-        console.log("🎉 FASE 1: Completeness = 100%, sending interview slots (NOT transitioning stage yet!)");
-        
-        const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
+    if (slotRejection && hasOfferedSlots && !interviewConfirmed) {
+      console.log("🔄 SLOT REJECTION DETECTED - kandidaat kan niet op aangeboden slots");
+      console.log("   Reden:", rejectionReason);
+      console.log("   Gewenste tijden:", preferredTimes);
+      console.log("   Huidige alternative count:", currentAlternativeCount);
+      
+      if (currentAlternativeCount < MAX_ALTERNATIVE_REQUESTS) {
+        console.log(`📧 Sending alternative slots (attempt ${currentAlternativeCount + 1}/${MAX_ALTERNATIVE_REQUESTS})...`);
         
         try {
-          console.log("📧 Sending interview availability request...");
-          const { data: scheduleResult, error: scheduleError } = await supabase.functions.invoke('schedule-interview', {
+          const { data: altResult, error: altError } = await supabase.functions.invoke('auto-send-interview-slots', {
             body: {
-              action: 'request_availability',
               application_id: applicationId,
-              interview_type: 'video',
+              trigger_source: 'alternative_request',
+              force: true, // Skip threshold check
+              alternative_attempt: currentAlternativeCount
             }
           });
           
-          if (scheduleError) {
-            console.error("Error sending interview request:", scheduleError);
+          if (altError) {
+            console.error("Error sending alternative slots:", altError);
           } else {
-            console.log("✅ Interview slots sent:", scheduleResult);
+            console.log("✅ Alternative slots sent:", altResult);
             
-            // 🔧 FASE 1 FIX: Alleen interview_status updaten, NIET pipeline_stage!
+            // Update extracted_data met rejection info
             await supabase
               .from("professional_applications")
               .update({
-                interview_status: 'slots_offered',
-                updated_at: new Date().toISOString(),
+                extracted_data: {
+                  ...mergedData,
+                  interview_alternative_request_count: currentAlternativeCount + 1,
+                  last_slot_rejection_reason: rejectionReason,
+                  preferred_interview_times: preferredTimes,
+                }
               })
               .eq("id", applicationId);
-            
-            console.log("✅ FASE 1: interview_status = 'slots_offered' (awaiting candidate response)");
           }
-        } catch (scheduleErr) {
-          console.error("Exception sending interview request:", scheduleErr);
+        } catch (altErr) {
+          console.error("Exception sending alternative slots:", altErr);
         }
       } else {
-        console.log(`⏭️ Interview slots already ${currentInterviewStatus}, waiting for candidate response`);
-      }
-    } 
-    // Bij 80-99%: manual review goal (geen automatische stage transitie)
-    else if (pipelineStage === 'nieuw' && newCompletenessScore >= 80 && newCompletenessScore < 100 && currentInterviewStatus !== 'scheduled' && !interviewConfirmed) {
-      console.log("🗓️ NIEUW stage + Completeness >= 80%, creating interview goal for manual review...");
-      
-      const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
-      
-      // Check for existing active interview goal to prevent duplicates
-      const { data: existingInterviewGoal } = await supabase
-        .from("agent_goals")
-        .select("id, status")
-        .eq("goal_type", "schedule_interview")
-        .in("status", ["pending", "planning", "executing", "in_progress"])
-        .filter("input_data->application_id", "eq", applicationId)
-        .maybeSingle();
-      
-      if (existingInterviewGoal) {
-        console.log(`⏭️ Skipping interview goal - existing active goal found: ${existingInterviewGoal.id} (${existingInterviewGoal.status})`);
-      } else {
-        const { error: interviewGoalError } = await supabase
+        console.log(`⚠️ Max alternative requests reached (${currentAlternativeCount}/${MAX_ALTERNATIVE_REQUESTS}), creating manual intervention goal`);
+        
+        // Create manual intervention goal
+        const { error: goalError } = await supabase
           .from("agent_goals")
           .insert({
             org_id: application.org_id,
-            goal_type: "schedule_interview",
-            goal_description: `Plan interview met ${professionalName}`,
-            priority: 90,
+            goal_type: "manual_interview_scheduling",
+            goal_description: `Handmatige interview planning nodig voor ${mergedData.naam || mergedData.full_name || from}`,
+            priority: 100,
             input_data: {
               application_id: applicationId,
-              candidate_email: from,
-              candidate_name: professionalName,
-              current_completeness: newCompletenessScore,
+              reason: 'max_alternative_requests_exceeded',
+              alternative_attempts: currentAlternativeCount,
+              rejection_reason: rejectionReason,
+              preferred_times: preferredTimes,
             },
             status: "pending"
           });
-
-        if (interviewGoalError) {
-          console.error("Error creating interview goal:", interviewGoalError);
-        } else {
-          console.log(`✅ Created interview scheduling goal for application ${applicationId}`);
+        
+        if (!goalError) {
+          await supabase
+            .from("professional_applications")
+            .update({
+              interview_status: 'awaiting_manual_intervention',
+            })
+            .eq("id", applicationId);
         }
       }
+    }
+
+    // =====================================================
+    // STAP 5: AUTOMATISCHE INTERVIEW SLOTS BIJ >= 85% (NIEUW THRESHOLD!)
+    // Interview stage alleen via slot confirmatie (STAP 3)
+    // =====================================================
+    const currentInterviewStatus = mergedData.interview_status as string || interviewStatus;
+    const INTERVIEW_THRESHOLD = parseInt(Deno.env.get('INTERVIEW_THRESHOLD') || '85');
+    
+    // Skip als slot rejection net verwerkt is
+    if (!slotRejection && pipelineStage === 'nieuw' && newCompletenessScore >= INTERVIEW_THRESHOLD && !interviewConfirmed) {
+      // Check of slots al gestuurd zijn
+      const skipStatuses = ['slots_offered', 'alternative_slots_offered', 'scheduled', 'confirmed', 'awaiting_manual_intervention'];
+      if (!skipStatuses.includes(currentInterviewStatus || '')) {
+        console.log(`🎉 Completeness ${newCompletenessScore}% >= threshold ${INTERVIEW_THRESHOLD}%, sending interview slots via auto-send-interview-slots`);
+        
+        try {
+          const { data: autoResult, error: autoError } = await supabase.functions.invoke('auto-send-interview-slots', {
+            body: {
+              application_id: applicationId,
+              trigger_source: 'reply_update',
+            }
+          });
+          
+          if (autoError) {
+            console.error("Error auto-sending interview slots:", autoError);
+          } else {
+            console.log("✅ Auto interview slots result:", autoResult);
+          }
+        } catch (autoErr) {
+          console.error("Exception auto-sending interview slots:", autoErr);
+        }
+      } else {
+        console.log(`⏭️ Interview already in progress: ${currentInterviewStatus}, skipping auto-send`);
+      }
+    } 
+    // Bij 70-84%: log maar geen automatische actie
+    else if (pipelineStage === 'nieuw' && newCompletenessScore >= 70 && newCompletenessScore < INTERVIEW_THRESHOLD) {
+      console.log(`📊 Completeness ${newCompletenessScore}% is close to threshold ${INTERVIEW_THRESHOLD}%, waiting for more info`);
     }
     
     // =====================================================

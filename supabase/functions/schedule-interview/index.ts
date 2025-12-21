@@ -1,8 +1,8 @@
-import { createAdminClient, corsHeaders, jsonResponse, errorResponse, handleCors, logInfo, logSuccess, logError } from '../_shared/core.ts';
+import { createAdminClient, corsHeaders, jsonResponse, errorResponse, handleCors, logInfo, logSuccess, logError, logWarning } from '../_shared/core.ts';
 
 interface ScheduleRequest {
   application_id: string;
-  action: 'request_availability' | 'confirm_slot' | 'send_confirmation';
+  action: 'request_availability' | 'confirm_slot' | 'send_confirmation' | 'request_alternative_availability';
   selected_slot?: {
     date: string;
     time: string;
@@ -12,31 +12,124 @@ interface ScheduleRequest {
   location?: string;
   interviewer_name?: string;
   interviewer_email?: string;
+  alternative_attempt?: number;
 }
 
-// Default interview slots (weekdays, business hours)
-const DEFAULT_SLOTS = [
-  { day_offset: 1, times: ['09:00', '10:30', '14:00', '15:30'] },
-  { day_offset: 2, times: ['09:00', '10:30', '14:00', '15:30'] },
-  { day_offset: 3, times: ['09:00', '10:30', '14:00', '15:30'] },
-];
+interface SlotConfig {
+  day_offset: number;
+  times: string[];
+}
 
-function generateAvailableSlots(): { date: string; time: string }[] {
-  const slots: { date: string; time: string }[] = [];
+// ============================================
+// CONFIGURATIE (via environment variables)
+// ============================================
+const MAX_SLOTS = parseInt(Deno.env.get('INTERVIEW_MAX_SLOTS') || '6');
+const DAYS_AHEAD_MIN = parseInt(Deno.env.get('INTERVIEW_DAYS_MIN') || '2');
+const DAYS_AHEAD_MAX = parseInt(Deno.env.get('INTERVIEW_DAYS_MAX') || '7');
+const ALTERNATIVE_DAYS_MIN = parseInt(Deno.env.get('INTERVIEW_ALT_DAYS_MIN') || '5');
+const ALTERNATIVE_DAYS_MAX = parseInt(Deno.env.get('INTERVIEW_ALT_DAYS_MAX') || '14');
+const N8N_CALENDAR_WEBHOOK_URL = Deno.env.get('N8N_CALENDAR_WEBHOOK_URL');
+
+// Default interview slot tijden (als fallback)
+const DEFAULT_TIMES = ['09:00', '10:30', '14:00', '15:30'];
+
+// ============================================
+// SMART SLOT GENERATION
+// ============================================
+
+interface CalendarSlot {
+  date: string;
+  time: string;
+}
+
+/**
+ * Probeer echte beschikbaarheid op te halen via n8n/kalender integratie.
+ * Fallback naar statische slots als n8n niet geconfigureerd of faalt.
+ */
+async function getAvailableSlots(
+  orgId: string | null, 
+  daysMin: number, 
+  daysMax: number,
+  maxSlots: number = MAX_SLOTS
+): Promise<CalendarSlot[]> {
+  
+  // ================================================================
+  // STAP 1: Probeer n8n kalender webhook (als geconfigureerd)
+  // ================================================================
+  if (N8N_CALENDAR_WEBHOOK_URL) {
+    logInfo('ScheduleInterview', 'Fetching calendar availability via n8n', { 
+      url: N8N_CALENDAR_WEBHOOK_URL.substring(0, 50) + '...',
+      daysMin, 
+      daysMax 
+    });
+    
+    try {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() + daysMin);
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + daysMax);
+      
+      const response = await fetch(N8N_CALENDAR_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'get_available_slots',
+          start_date: startDate.toISOString().split('T')[0],
+          end_date: endDate.toISOString().split('T')[0],
+          org_id: orgId,
+          max_slots: maxSlots
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (data.available_slots && Array.isArray(data.available_slots) && data.available_slots.length > 0) {
+          logSuccess('ScheduleInterview', 'Got calendar slots from n8n', { 
+            count: data.available_slots.length 
+          });
+          return data.available_slots.slice(0, maxSlots);
+        }
+      } else {
+        logWarning('ScheduleInterview', 'n8n calendar webhook returned non-OK status', { 
+          status: response.status 
+        });
+      }
+    } catch (n8nError) {
+      logWarning('ScheduleInterview', 'n8n calendar check failed, falling back to static slots', { 
+        error: n8nError instanceof Error ? n8nError.message : String(n8nError)
+      });
+    }
+  }
+  
+  // ================================================================
+  // STAP 2: Fallback naar statische slot generatie
+  // ================================================================
+  logInfo('ScheduleInterview', 'Generating static slots', { daysMin, daysMax, maxSlots });
+  return generateStaticSlots(daysMin, daysMax, maxSlots);
+}
+
+/**
+ * Genereer statische slots (fallback als n8n niet beschikbaar)
+ */
+function generateStaticSlots(daysMin: number, daysMax: number, maxSlots: number): CalendarSlot[] {
+  const slots: CalendarSlot[] = [];
   const today = new Date();
   
-  for (const dayConfig of DEFAULT_SLOTS) {
+  for (let dayOffset = daysMin; dayOffset <= daysMax && slots.length < maxSlots; dayOffset++) {
     const slotDate = new Date(today);
-    slotDate.setDate(today.getDate() + dayConfig.day_offset);
+    slotDate.setDate(today.getDate() + dayOffset);
     
     // Skip weekends
-    while (slotDate.getDay() === 0 || slotDate.getDay() === 6) {
-      slotDate.setDate(slotDate.getDate() + 1);
+    if (slotDate.getDay() === 0 || slotDate.getDay() === 6) {
+      continue;
     }
     
     const dateStr = slotDate.toISOString().split('T')[0];
     
-    for (const time of dayConfig.times) {
+    // Voeg tijden toe tot max bereikt
+    for (const time of DEFAULT_TIMES) {
+      if (slots.length >= maxSlots) break;
       slots.push({ date: dateStr, time });
     }
   }
@@ -100,10 +193,29 @@ Deno.serve(async (req) => {
     const orgName = org?.name || 'CitoZorg';
     const isAbczorg = orgName.toLowerCase().includes('abc');
 
+    // Get alternative_attempt from request
+    const alternativeAttempt = body.alternative_attempt || 0;
+
     switch (action) {
-      case 'request_availability': {
-        // Generate available slots
-        const availableSlots = generateAvailableSlots();
+      case 'request_availability':
+      case 'request_alternative_availability': {
+        // ================================================================
+        // SMART SLOT GENERATION: n8n calendar check met fallback
+        // ================================================================
+        const isAlternative = action === 'request_alternative_availability';
+        const daysMin = isAlternative ? ALTERNATIVE_DAYS_MIN : DAYS_AHEAD_MIN;
+        const daysMax = isAlternative ? ALTERNATIVE_DAYS_MAX : DAYS_AHEAD_MAX;
+        
+        logInfo('ScheduleInterview', `Generating ${isAlternative ? 'alternative' : 'initial'} slots`, {
+          daysMin, daysMax, maxSlots: MAX_SLOTS, alternativeAttempt
+        });
+        
+        const availableSlots = await getAvailableSlots(
+          application.assigned_organization,
+          daysMin,
+          daysMax,
+          MAX_SLOTS
+        );
         
         // Create formatted slot options for email
         const slotOptions = availableSlots.map((slot, index) => 
@@ -111,16 +223,23 @@ Deno.serve(async (req) => {
         ).join('\n');
 
         // Generate email asking for availability
-        const emailSubject = `Interview plannen - ${orgName}`;
+        const emailSubject = isAlternative 
+          ? `Alternatieve interview momenten - ${orgName}`
+          : `Interview plannen - ${orgName}`;
+        
+        const introText = isAlternative
+          ? `Geen probleem dat de vorige momenten niet uitkwamen! Hier zijn enkele andere opties:`
+          : `Goed nieuws! We willen graag een kennismakingsgesprek met je plannen.`;
+        
         const emailHtml = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #1a1a1a;">Beste ${candidateName},</h2>
             
-            <p>Goed nieuws! We willen graag een kennismakingsgesprek met je plannen.</p>
+            <p>${introText}</p>
             
-            <p>Hieronder vind je een aantal mogelijke momenten. Laat ons weten welk moment jou het beste uitkomt door simpelweg het nummer te beantwoorden:</p>
+            <p>Hieronder vind je ${availableSlots.length} mogelijke momenten. Laat ons weten welk moment jou het beste uitkomt door simpelweg het nummer te beantwoorden:</p>
             
-            <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <div style="background: ${isAlternative ? '#fff3e0' : '#f5f5f5'}; padding: 20px; border-radius: 8px; margin: 20px 0; ${isAlternative ? 'border-left: 4px solid #ff9800;' : ''}">
               <pre style="margin: 0; font-family: Arial, sans-serif; white-space: pre-wrap;">${slotOptions}</pre>
             </div>
             
@@ -152,29 +271,36 @@ Deno.serve(async (req) => {
 
         // Store available slots in application for later reference
         // 🔧 CONSOLIDATIE: Schrijf naar COLUMN (primair) EN extracted_data (backwards compatibility)
+        const newStatus = isAlternative ? 'alternative_slots_offered' : 'awaiting_response';
         await supabase
           .from('professional_applications')
           .update({
-            interview_status: 'awaiting_response', // Column (primair)
+            interview_status: newStatus, // Column (primair)
             extracted_data: {
               ...extractedData,
               interview_slots_offered: availableSlots,
-              interview_status: 'awaiting_response', // JSONB (backup)
+              interview_status: newStatus, // JSONB (backup)
               interview_request_sent_at: new Date().toISOString(),
+              interview_is_alternative: isAlternative,
+              interview_alternative_attempt: alternativeAttempt,
             }
           })
           .eq('id', application_id);
 
         // Log to system_events
         await supabase.from('system_events').insert({
-          event_type: 'interview_availability_requested',
+          event_type: isAlternative ? 'interview_alternative_requested' : 'interview_availability_requested',
           entity_type: 'professional_application',
           entity_id: application_id,
           event_data: {
             candidate_name: candidateName,
             candidate_email: candidateEmail,
             slots_offered: availableSlots.length,
+            max_slots: MAX_SLOTS,
             interview_type,
+            is_alternative: isAlternative,
+            alternative_attempt: alternativeAttempt,
+            n8n_calendar_used: !!N8N_CALENDAR_WEBHOOK_URL,
           },
           org_id: application.assigned_organization,
         });

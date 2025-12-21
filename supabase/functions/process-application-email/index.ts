@@ -721,21 +721,47 @@ Belangrijk:
 
     console.log("Application created:", application.id);
 
-    // ✅ Email verzending is verplaatst naar AI Agent Orchestrator
-    // Dit voorkomt duplicate emails - de orchestrator handelt:
-    // - Dynamische org branding (ABCzorg/CitoZorg)
-    // - Follow-up counting (1/3, 2/3, 3/3)
-    // - Deduplicatie checks
-    // - Intelligente timing
-    // 
-    // De flow is nu:
-    // 1. process-application-email: Creëert sollicitatie + logt system event
-    // 2. process-system-events: Detecteert nieuwe sollicitatie → creëert application_intake_completion goal
-    // 3. ai-agent-orchestrator: Verwerkt goal → stuurt gepersonaliseerde follow-up email
+    // =====================================================
+    // 🎯 AUTOMATISCHE INTERVIEW SLOTS BIJ >= 85% COMPLETENESS
+    // =====================================================
+    const INTERVIEW_THRESHOLD = parseInt(Deno.env.get('INTERVIEW_THRESHOLD') || '85');
     
-    const missingInfo = extractedData.missing_info || [];
-    console.log(`📧 Email verzending overgeslagen - wordt afgehandeld door AI Agent Orchestrator`);
-    console.log(`📋 Missing info voor orchestrator: ${missingInfo.join(', ') || 'geen'}`);
+    if (completenessScore >= INTERVIEW_THRESHOLD) {
+      console.log(`🎉 Completeness ${completenessScore}% >= threshold ${INTERVIEW_THRESHOLD}%, triggering auto-send-interview-slots...`);
+      
+      try {
+        const { data: interviewResult, error: interviewError } = await supabase.functions.invoke('auto-send-interview-slots', {
+          body: {
+            application_id: application.id,
+            trigger_source: 'initial_application',
+          }
+        });
+        
+        if (interviewError) {
+          console.error("Error auto-sending interview slots:", interviewError);
+        } else {
+          console.log("✅ Auto interview slots result:", interviewResult);
+        }
+      } catch (interviewErr) {
+        console.error("Exception auto-sending interview slots:", interviewErr);
+      }
+    } else {
+      // ✅ Email verzending is verplaatst naar AI Agent Orchestrator
+      // Dit voorkomt duplicate emails - de orchestrator handelt:
+      // - Dynamische org branding (ABCzorg/CitoZorg)
+      // - Follow-up counting (1/3, 2/3, 3/3)
+      // - Deduplicatie checks
+      // - Intelligente timing
+      // 
+      // De flow is nu:
+      // 1. process-application-email: Creëert sollicitatie + logt system event
+      // 2. process-system-events: Detecteert nieuwe sollicitatie → creëert application_intake_completion goal
+      // 3. ai-agent-orchestrator: Verwerkt goal → stuurt gepersonaliseerde follow-up email
+      
+      const missingInfo = extractedData.missing_info || [];
+      console.log(`📧 Completeness ${completenessScore}% < threshold ${INTERVIEW_THRESHOLD}% - follow-up via AI Agent Orchestrator`);
+      console.log(`📋 Missing info voor orchestrator: ${missingInfo.join(', ') || 'geen'}`);
+    }
     
     // Note: Auto-learning will happen when professional is created (at 100% completeness)
 
@@ -747,7 +773,7 @@ Belangrijk:
         professional_id: null, // Will be created when completeness reaches 100%
         application_id: application.id,
         completeness_score: completenessScore,
-        missing_info: missingInfo,
+        missing_info: extractedData.missing_info || [],
       }),
       {
         status: 200,

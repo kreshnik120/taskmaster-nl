@@ -115,7 +115,11 @@ verify_jwt = false
 
 [functions.schedule-interview]
 verify_jwt = false
-# Purpose: AI-driven interview scheduling (request availability, confirm slot, send confirmation)
+# Purpose: AI-driven interview scheduling (request availability, confirm slot, send confirmation, alternative slots)
+
+[functions.auto-send-interview-slots]
+verify_jwt = false
+# Purpose: Centralized auto-interview trigger with configurable threshold (default 85%)
 
 [functions.setup-resend-inbound]
 verify_jwt = false
