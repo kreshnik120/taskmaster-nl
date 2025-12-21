@@ -427,9 +427,13 @@ const Sollicitaties = () => {
         colors: ['#22c55e', '#16a34a', '#4ade80'],
       });
 
-      // Automatisch professional aanmaken als nog niet bestaat
+      // Automatisch professional aanmaken of data synchroniseren
       let professionalCreated = false;
+      let dataSynced = false;
+      let syncedFieldsCount = 0;
+
       if (!application.professional_id && (application.completeness_score || 0) >= 80) {
+        // Nieuw profiel aanmaken
         const { convertApplicationToProfessional } = await import("@/lib/convertApplicationToProfessional");
         
         const result = await convertApplicationToProfessional(application, {
@@ -441,14 +445,34 @@ const Sollicitaties = () => {
           professionalCreated = true;
           application.professional_id = result.professionalId;
         }
+      } else if (application.professional_id) {
+        // Sync data naar bestaand profiel
+        const { syncApplicationToProfessional } = await import("@/lib/syncApplicationToProfessional");
+        
+        const syncResult = await syncApplicationToProfessional(
+          application, 
+          application.professional_id
+        );
+        
+        if (syncResult.success && syncResult.fieldsUpdated > 0) {
+          dataSynced = true;
+          syncedFieldsCount = syncResult.fieldsUpdated;
+          console.log(`[Sync] ${syncResult.fieldsUpdated} velden gesynct:`, syncResult.fieldsSynced);
+        }
       }
 
       // Smart toast met acties (taken worden alleen aangemaakt via Acties tab)
       const candidateName = application.extracted_data?.naam || application.email_from;
+      
+      let toastDescription = "Klaar voor matching. Gebruik Acties tab voor vervolgstappen.";
+      if (professionalCreated) {
+        toastDescription = "Professional profiel aangemaakt. Gebruik Acties tab voor vervolgstappen.";
+      } else if (dataSynced) {
+        toastDescription = `${syncedFieldsCount} veld${syncedFieldsCount > 1 ? 'en' : ''} bijgewerkt in professional profiel.`;
+      }
+      
       toast.success(`${candidateName} is goedgekeurd! 🎉`, {
-        description: professionalCreated 
-          ? "Professional profiel aangemaakt. Gebruik Acties tab voor vervolgstappen."
-          : "Klaar voor matching. Gebruik Acties tab voor vervolgstappen.",
+        description: toastDescription,
         action: {
           label: "Bekijk Matching",
           onClick: () => {
