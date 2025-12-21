@@ -358,14 +358,15 @@ const handler = async (req: Request): Promise<Response> => {
           id: uploadData?.id
         });
 
-        // Extract text from PDF using parse-pdf-cv function
+        // 🚀 IMPROVED: Use extract-cv-data with Vision API for better PDF analysis
+        // This bypasses the broken text extraction and uses Gemini Vision directly
         if (cvAttachment.content_type === "application/pdf") {
           try {
-            console.log("📄 Calling parse-pdf-cv function...");
+            console.log("📄 Calling extract-cv-data (Vision API) for PDF analysis...");
             
-            // Call the lightweight PDF parser function
-            const { data: pdfData, error: pdfError } = await supabase.functions.invoke(
-              'parse-pdf-cv',
+            // Call extract-cv-data which uses Gemini Vision for direct PDF analysis
+            const { data: cvExtractionData, error: cvExtractionError } = await supabase.functions.invoke(
+              'extract-cv-data',
               {
                 body: {
                   pdfBase64: cvAttachment.content,
@@ -374,17 +375,22 @@ const handler = async (req: Request): Promise<Response> => {
               }
             );
             
-            if (pdfError) {
-              console.error("❌ PDF parsing failed:", pdfError);
+            if (cvExtractionError) {
+              console.error("❌ CV Vision extraction failed:", cvExtractionError);
               cvContent = emailBody; // Fallback to email body
+            } else if (cvExtractionData?.extractedData) {
+              console.log("✅ CV extracted via Vision API with confidence:", cvExtractionData.extractedData?.global_confidence);
+              // Store the extracted data for later use - skip the second AI call
+              (req as any)._cvExtractionData = cvExtractionData.extractedData;
+              cvContent = "[CV extracted via Vision API - structured data available]";
             } else {
-              cvContent = pdfData.text || emailBody;
-              console.log(`✅ PDF text extracted: ${cvContent.length} characters, first 200: ${cvContent.substring(0, 200)}...`);
+              console.warn("⚠️ CV extraction returned no data, falling back to email body");
+              cvContent = emailBody;
             }
-          } catch (pdfError) {
-            console.error("PDF parsing error:", pdfError);
-            if (pdfError instanceof Error) {
-              console.error("PDF error details:", pdfError.message, pdfError.stack);
+          } catch (cvError) {
+            console.error("CV extraction error:", cvError);
+            if (cvError instanceof Error) {
+              console.error("CV error details:", cvError.message, cvError.stack);
             }
             cvContent = emailBody; // Fallback to email body
           }
@@ -394,111 +400,140 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // AI Analysis with Lovable AI (Gemini 2.5 Flash)
-    console.log("Starting AI analysis...");
-    const aiPrompt = `Analyseer deze sollicitatie en CV en extract de volgende informatie in JSON formaat:
+    // 🚀 IMPROVED: Use pre-extracted CV data if available, otherwise analyze email only
+    let extractedData: any;
+    const preExtractedCvData = (req as any)._cvExtractionData;
+    
+    // Helper to get value from new confidence format
+    const getValue = (field: any) => {
+      if (field === null || field === undefined) return null;
+      if (typeof field === 'object' && 'value' in field) return field.value;
+      return field;
+    };
+    
+    if (preExtractedCvData) {
+      console.log("📊 Using pre-extracted CV data from Vision API");
+      console.log("Global confidence:", preExtractedCvData.global_confidence);
+      
+      // Convert from new per-field confidence format to flat format for compatibility
+      extractedData = {
+        full_name: getValue(preExtractedCvData.naam),
+        telefoonnummer: getValue(preExtractedCvData.telefoon),
+        email: getValue(preExtractedCvData.email) || applicantEmail,
+        adres: null, // Not typically in CV
+        postcode: getValue(preExtractedCvData.postcode),
+        woonplaats: getValue(preExtractedCvData.woonplaats),
+        functie_niveau: getValue(preExtractedCvData.functie_niveau),
+        werkvorm: getValue(preExtractedCvData.werkvorm),
+        skills: getValue(preExtractedCvData.certificaten) || [],
+        regio: getValue(preExtractedCvData.regio),
+        gewenst_uurloon: null, // Not typically in CV
+        vog_date: null, // Requires separate document
+        big_nummer: getValue(preExtractedCvData.BIG_nummer),
+        heeft_auto: getValue(preExtractedCvData.eigen_vervoer),
+        heeft_rijbewijs: getValue(preExtractedCvData.rijbewijs),
+        kvk_nummer: null, // Requires separate lookup
+        btw_nummer: null, // Requires separate lookup
+        // Enhanced fields from Vision extraction
+        jaren_ervaring: getValue(preExtractedCvData.jaren_ervaring),
+        ervaring_sector: getValue(preExtractedCvData.ervaring_sector) || [],
+        doelgroep_ervaring: getValue(preExtractedCvData.doelgroep_ervaring) || [],
+        nachtdienst_bereid: getValue(preExtractedCvData.nachtdienst_bereid),
+        weekenddienst_bereid: getValue(preExtractedCvData.weekenddienst_bereid),
+        beschikbaarheid: getValue(preExtractedCvData.beschikbaarheid),
+        talen: getValue(preExtractedCvData.talen) || [],
+        has_profile_photo: getValue(preExtractedCvData.has_profile_photo),
+        missing_info: [],
+        confidence: preExtractedCvData.global_confidence || 0.7,
+        _source: 'vision_api'
+      };
+      
+      console.log("Converted extraction data:", JSON.stringify(extractedData, null, 2));
+    } else {
+      // Fallback: AI Analysis from email text only (no CV or CV parsing failed)
+      console.log("📧 Analyzing from email text only (no CV data available)");
+      const aiPrompt = `Analyseer deze sollicitatie email en extract de volgende informatie in JSON formaat:
 
 Email: ${applicantEmail}
 Onderwerp: ${emailSubject}
 Bericht: ${emailBody}
-CV inhoud: ${cvContent.substring(0, 2000)}
 
 Geef terug in dit EXACTE JSON formaat (geen extra tekst):
 {
-  "full_name": "Voor- en achternaam",
+  "full_name": "Voor- en achternaam of null",
   "telefoonnummer": "06-12345678 of null",
   "email": "${applicantEmail}",
-  "adres": "Straat + huisnummer of null",
-  "postcode": "1234AB of null",
-  "woonplaats": "Amsterdam of null",
-  "functie_niveau": "VIG, VP3, VP4, HBO-V, of Helpende 2",
-  "werkvorm": "ZZP of Uitzendkracht",
-  "skills": ["skill1", "skill2"],
-  "regio": "Utrecht, Amsterdam, etc",
-  "gewenst_uurloon": 45,
-  "vog_date": "2025-01-15 of null",
-  "big_nummer": "123456789 of null",
-  "heeft_auto": true,
-  "heeft_rijbewijs": true,
-  "kvk_nummer": "12345678 of null",
-  "btw_nummer": "NL123456789B01 of null",
-  "missing_info": ["VOG", "BIG-nummer", "Adres", "Telefoonnummer"],
-  "confidence": 0.8
+  "functie_niveau": "VIG, HBO-V, Verpleegkundige MBO, Helpende, Begeleider of null",
+  "werkvorm": "ZZP of Uitzendkracht of null",
+  "regio": "Utrecht, Amsterdam, etc of null",
+  "skills": [],
+  "confidence": 0.5
 }
 
-**KRITIEK - functie_niveau moet EXACT een van deze waarden zijn:**
-- "VIG" (voor Verzorgende IG)
-- "VP3" (voor Verzorgende Niveau 3)
-- "VP4" (voor Verzorgende Niveau 4)
-- "HBO-V" (voor HBO Verpleegkundige)
-- "Helpende 2"
-
 Belangrijk:
-- functie_niveau: gebruik exact VIG, VP3, VP4, HBO-V, of Helpende 2
-- werkvorm: gebruik exact ZZP of Uitzendkracht
-- Als info ontbreekt, gebruik null
-- missing_info moet een array zijn van ALLE ontbrekende zaken
-- gewenst_uurloon is een getal (euro per uur)
-- vog_date is een datum (YYYY-MM-DD format)
-- heeft_auto en heeft_rijbewijs zijn boolean (true/false)`;
+- Extract alleen info die EXPLICIET in de email staat
+- Als info ontbreekt, gebruik null (niet gokken!)
+- confidence: hoe zeker je bent over de extractie (0.0-1.0)`;
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${lovableApiKey}`,
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: "Je bent een HR assistent die CV's analyseert voor zorgverleners. Geef altijd pure JSON terug zonder markdown code blocks." },
-          { role: "user", content: aiPrompt }
-        ],
-        temperature: 0.3,
-      }),
-    });
+      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${lovableApiKey}`,
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: "Je bent een HR assistent. Geef altijd pure JSON terug zonder markdown code blocks. Wees conservatief: als iets niet expliciet staat, gebruik null." },
+            { role: "user", content: aiPrompt }
+          ],
+          temperature: 0.2,
+        }),
+      });
 
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error("AI API error:", errorText);
-      throw new Error(`AI API error: ${aiResponse.status}`);
-    }
+      if (!aiResponse.ok) {
+        const errorText = await aiResponse.text();
+        console.error("AI API error:", errorText);
+        throw new Error(`AI API error: ${aiResponse.status}`);
+      }
 
-    const aiResult = await aiResponse.json();
-    let extractedData;
-    
-    try {
-      const aiContent = aiResult.choices[0].message.content;
-      console.log("AI raw response:", aiContent);
+      const aiResult = await aiResponse.json();
       
-      // Remove markdown code blocks if present
-      const cleanContent = aiContent.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      extractedData = JSON.parse(cleanContent);
-      console.log("Extracted data:", extractedData);
-    } catch (parseError) {
-      console.error("Failed to parse AI response:", parseError);
-      // Fallback with minimal data
-      extractedData = {
-        full_name: applicantEmail.split("@")[0],
-        telefoonnummer: null,
-        email: applicantEmail,
-        adres: null,
-        postcode: null,
-        woonplaats: null,
-        functie_niveau: "VP4",
-        werkvorm: "Uitzendkracht",
-        skills: [],
-        regio: null,
-        gewenst_uurloon: null,
-        vog_date: null,
-        big_nummer: null,
-        heeft_auto: false,
-        heeft_rijbewijs: false,
-        kvk_nummer: null,
-        btw_nummer: null,
-        missing_info: ["VOG", "BIG-nummer", "Tarief", "Regio", "Adres", "Telefoonnummer", "Auto", "Rijbewijs"],
-        confidence: 0.3,
-      };
+      try {
+        const aiContent = aiResult.choices[0].message.content;
+        console.log("AI raw response:", aiContent);
+        
+        // Remove markdown code blocks if present
+        const cleanContent = aiContent.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        extractedData = JSON.parse(cleanContent);
+        extractedData._source = 'email_only';
+        console.log("Extracted data from email:", extractedData);
+      } catch (parseError) {
+        console.error("Failed to parse AI response:", parseError);
+        // Fallback with minimal data
+        extractedData = {
+          full_name: null,
+          telefoonnummer: null,
+          email: applicantEmail,
+          adres: null,
+          postcode: null,
+          woonplaats: null,
+          functie_niveau: null,
+          werkvorm: null,
+          skills: [],
+          regio: null,
+          gewenst_uurloon: null,
+          vog_date: null,
+          big_nummer: null,
+          heeft_auto: null,
+          heeft_rijbewijs: null,
+          kvk_nummer: null,
+          btw_nummer: null,
+          missing_info: [],
+          confidence: 0.2,
+          _source: 'fallback'
+        };
+      }
     }
 
     // 🔧 POST-PROCESSING: Map functie_niveau variations to exact DB values
@@ -528,6 +563,11 @@ Belangrijk:
       }
     }
 
+    // 🔧 Ensure missing_info array exists
+    if (!extractedData.missing_info || !Array.isArray(extractedData.missing_info)) {
+      extractedData.missing_info = [];
+    }
+
     // 🧠 HR SPECIALIST POST-PROCESSING: Detect placeholder phones and generate smart missing_info
     const PLACEHOLDER_PHONE_PATTERNS = [
       /^06[-\s]?0{6,}$/,              // 06-00000000, 06 000000
@@ -540,7 +580,7 @@ Belangrijk:
     
     // Check for placeholder phone and set to null if detected
     if (extractedData.telefoonnummer) {
-      const phone = extractedData.telefoonnummer;
+      const phone = String(extractedData.telefoonnummer);
       const cleanedPhone = phone.replace(/[\s-]/g, '');
       const isPlaceholder = PLACEHOLDER_PHONE_PATTERNS.some(p => p.test(phone) || p.test(cleanedPhone));
       
@@ -550,6 +590,20 @@ Belangrijk:
         if (!extractedData.missing_info.includes('Telefoonnummer')) {
           extractedData.missing_info.push('Telefoonnummer');
         }
+      }
+    }
+    
+    // 📋 AUTO-GENERATE missing_info based on critical missing fields
+    const criticalFields = [
+      { field: 'full_name', label: 'Naam' },
+      { field: 'telefoonnummer', label: 'Telefoonnummer' },
+      { field: 'functie_niveau', label: 'Functie niveau' },
+      { field: 'regio', label: 'Regio' },
+    ];
+    
+    for (const { field, label } of criticalFields) {
+      if (!extractedData[field] && !extractedData.missing_info.includes(label)) {
+        extractedData.missing_info.push(label);
       }
     }
     
@@ -567,44 +621,52 @@ Belangrijk:
         console.log('🧠 HR Smart: ZZP missing BTW - adding to missing_info');
         extractedData.missing_info.push('BTW-nummer');
       }
-      if (!extractedData.vog_date && !extractedData.missing_info.includes('VOG')) {
-        console.log('🧠 HR Smart: ZZP missing VOG - adding to missing_info');
-        extractedData.missing_info.push('VOG');
-      }
     }
     
-    // 🌙 Night/weekend availability check
-    if (extractedData.nachtdienst_bereid === null || extractedData.nachtdienst_bereid === undefined) {
-      if (!extractedData.missing_info.includes('Nachtdienst bereidheid')) {
-        extractedData.missing_info.push('Nachtdienst bereidheid');
-      }
+    // 📄 Document verification fields (always important but not blocking)
+    if (!extractedData.vog_date && !extractedData.missing_info.includes('VOG')) {
+      extractedData.missing_info.push('VOG');
     }
-    if (extractedData.weekenddienst_bereid === null || extractedData.weekenddienst_bereid === undefined) {
-      if (!extractedData.missing_info.includes('Weekenddienst bereidheid')) {
-        extractedData.missing_info.push('Weekenddienst bereidheid');
-      }
+    if (!extractedData.big_nummer && !extractedData.missing_info.includes('BIG-nummer')) {
+      extractedData.missing_info.push('BIG-nummer');
     }
 
-    // Calculate completeness score (0-100%) - HR Specialist weighted scoring
+    // 🧮 IMPROVED: Calculate completeness score with REALISTIC weights
+    // Velden die typisch WEL in een eerste sollicitatie zitten: hoge weight
+    // Velden die typisch NIET in eerste email zitten: lage weight
     const fieldWeights: Record<string, number> = {
-      full_name: 10,
-      telefoonnummer: 8,
-      email: 10,
-      adres: 3,
-      postcode: 3,
-      woonplaats: 4,
-      functie_niveau: 15,
-      werkvorm: 10,
-      skills: 4,
-      regio: 10,
-      // ZZP-specific weights (only count if ZZP)
-      gewenst_uurloon: extractedData.werkvorm === 'ZZP' ? 8 : 2,
-      kvk_nummer: extractedData.werkvorm === 'ZZP' ? 5 : 0,
-      btw_nummer: extractedData.werkvorm === 'ZZP' ? 3 : 0,
-      vog_date: 5,
-      big_nummer: 3,
-      nachtdienst_bereid: 3,
-      weekenddienst_bereid: 3,
+      // === ESSENTIEEL (altijd beschikbaar via email/CV) ===
+      full_name: 15,          // Naam is kritiek - verhoogd van 10
+      email: 10,              // Altijd beschikbaar
+      telefoonnummer: 12,     // Essentieel voor contact - verhoogd van 8
+      functie_niveau: 20,     // Kritiek voor matching - verhoogd van 15
+      
+      // === BELANGRIJK (vaak in CV) ===
+      regio: 10,              // Belangrijk voor matching
+      werkvorm: 8,            // ZZP vs uitzend - verlaagd van 10
+      skills: 5,              // Certificaten uit CV - verhoogd van 4
+      jaren_ervaring: 5,      // Nieuw: uit CV extractie
+      ervaring_sector: 5,     // Nieuw: VVT/GGZ etc.
+      doelgroep_ervaring: 4,  // Nieuw: ouderen/psychiatrie etc.
+      
+      // === MINDER KRITIEK (vaak niet in eerste email/CV) ===
+      woonplaats: 3,          // Vaak afgeleid uit regio - verlaagd van 4
+      postcode: 1,            // Zelden in eerste email - verlaagd van 3
+      adres: 1,               // Zelden in eerste email - verlaagd van 3
+      heeft_auto: 2,          // Nice to have
+      heeft_rijbewijs: 2,     // Nice to have
+      
+      // === FOLLOW-UP VELDEN (niet verwacht in eerste email) ===
+      vog_date: 2,            // Aparte document upload - verlaagd van 5
+      big_nummer: 2,          // Aparte verificatie - verlaagd van 3
+      nachtdienst_bereid: 1,  // Follow-up vraag - verlaagd van 3
+      weekenddienst_bereid: 1, // Follow-up vraag - verlaagd van 3
+      beschikbaarheid: 2,     // Nieuw: uren per week
+      
+      // === ZZP-SPECIFIEK (alleen relevant voor ZZP) ===
+      gewenst_uurloon: extractedData.werkvorm === 'ZZP' ? 6 : 1,
+      kvk_nummer: extractedData.werkvorm === 'ZZP' ? 3 : 0,
+      btw_nummer: extractedData.werkvorm === 'ZZP' ? 2 : 0,
     };
     
     let earnedPoints = 0;
@@ -626,8 +688,11 @@ Belangrijk:
     
     const completenessScore = Math.round((earnedPoints / totalPoints) * 100);
     
-    console.log(`Completeness (HR-weighted): ${completenessScore}% (${earnedPoints}/${totalPoints} points)`);
-    console.log(`Missing info count: ${extractedData.missing_info?.length || 0}`);
+    // Log detailed breakdown for debugging
+    console.log(`📊 Completeness (IMPROVED weights): ${completenessScore}% (${earnedPoints}/${totalPoints} points)`);
+    console.log(`   Source: ${extractedData._source || 'unknown'}`);
+    console.log(`   Essential fields found: naam=${!!extractedData.full_name}, email=${!!extractedData.email}, telefoon=${!!extractedData.telefoonnummer}, functie=${!!extractedData.functie_niveau}`);
+    console.log(`   Missing info count: ${extractedData.missing_info?.length || 0}`);
 
     // Insert application record (WITHOUT professional_id - will be created at 100% completeness)
     console.log("Creating application record...");
