@@ -176,8 +176,8 @@ Deno.serve(async (req) => {
     }
 
     const extractedData = application.extracted_data as Record<string, unknown> || {};
-    const candidateName = application.name || extractedData.naam as string || 'Kandidaat';
-    const candidateEmail = application.email || extractedData.email as string;
+    const candidateName = extractedData.naam as string || extractedData.full_name as string || 'Kandidaat';
+    const candidateEmail = application.email_from || extractedData.email as string;
 
     if (!candidateEmail) {
       return errorResponse('Candidate email not available', 400);
@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
     const { data: org } = await supabase
       .from('organizations')
       .select('name')
-      .eq('id', application.assigned_organization)
+      .eq('id', application.org_id)
       .single();
     
     const orgName = org?.name || 'CitoZorg';
@@ -211,7 +211,7 @@ Deno.serve(async (req) => {
         });
         
         const availableSlots = await getAvailableSlots(
-          application.assigned_organization,
+          application.org_id,
           daysMin,
           daysMax,
           MAX_SLOTS
@@ -255,12 +255,13 @@ Deno.serve(async (req) => {
         // Send email via send-ai-email function
         const { error: emailError } = await supabase.functions.invoke('send-ai-email', {
           body: {
-            to: candidateEmail,
-            subject: emailSubject,
-            html: emailHtml,
-            application_id,
             email_type: 'interview_availability_request',
-            organization: orgName,
+            recipient_email: candidateEmail,
+            recipient_name: candidateName,
+            subject: emailSubject,
+            html_content: emailHtml,
+            application_id,
+            org_id: application.org_id,
           }
         });
 
