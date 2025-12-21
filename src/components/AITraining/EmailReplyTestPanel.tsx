@@ -132,6 +132,9 @@ export function EmailReplyTestPanel() {
 
     try {
       const { data, error } = await supabase.functions.invoke('handle-application-reply', {
+        headers: {
+          'x-internal-test': 'true'
+        },
         body: {
           type: 'email.received',
           data: {

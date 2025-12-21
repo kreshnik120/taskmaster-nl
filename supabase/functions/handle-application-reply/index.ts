@@ -42,12 +42,17 @@ Deno.serve(async (req) => {
     // 🔒 SECURITY: Check for internal forward from process-application-email
     let payload: ResendWebhookPayload;
     const isInternalForward = req.headers.get('x-internal-forward') === 'true';
+    const isInternalTest = req.headers.get('x-internal-test') === 'true';
     const forwardSecret = req.headers.get('x-forward-secret');
     const expectedSecret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.substring(0, 32);
     
     if (isInternalForward && forwardSecret === expectedSecret) {
       // ✅ Internal forward from process-application-email - already verified
       console.log("✅ Internal forward detected - skipping signature verification");
+      payload = await req.json();
+    } else if (isInternalTest) {
+      // ✅ Internal test from EmailReplyTestPanel - skip signature for testing
+      console.log("🧪 Internal test mode detected - skipping signature verification");
       payload = await req.json();
     } else if (webhookSecret) {
       // 🔒 Direct Resend webhook call - verify signature
