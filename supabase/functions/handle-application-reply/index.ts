@@ -1201,7 +1201,8 @@ Return JSON in dit formaat:
     // =====================================================
     
     const pipelineStage = application.pipeline_stage || 'nieuw';
-    const interviewStatus = mergedData.interview_status;
+    // 🔧 CONSOLIDATIE: Lees van COLUMN eerst, fallback naar JSONB
+    const interviewStatus = application.interview_status || mergedData.interview_status;
     
     console.log(`📊 Current pipeline stage: ${pipelineStage}, Interview status: ${interviewStatus}`);
     

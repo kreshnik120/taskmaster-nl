@@ -151,13 +151,15 @@ Deno.serve(async (req) => {
         }
 
         // Store available slots in application for later reference
+        // 🔧 CONSOLIDATIE: Schrijf naar COLUMN (primair) EN extracted_data (backwards compatibility)
         await supabase
           .from('professional_applications')
           .update({
+            interview_status: 'awaiting_response', // Column (primair)
             extracted_data: {
               ...extractedData,
               interview_slots_offered: availableSlots,
-              interview_status: 'awaiting_response',
+              interview_status: 'awaiting_response', // JSONB (backup)
               interview_request_sent_at: new Date().toISOString(),
             }
           })
@@ -199,14 +201,18 @@ Deno.serve(async (req) => {
         const interviewDateTime = new Date(`${selected_slot.date}T${selected_slot.time}:00`);
 
         // Update application with confirmed slot
+        // 🔧 CONSOLIDATIE: Schrijf naar COLUMNS (primair) EN extracted_data (backwards compatibility)
         await supabase
           .from('professional_applications')
           .update({
             pipeline_stage: 'interview', // Move to interview stage
+            interview_status: 'scheduled', // Column (primair)
+            interview_confirmed_slot: selected_slot, // Column
+            interview_scheduled_at: interviewDateTime.toISOString(), // Column
             extracted_data: {
               ...extractedData,
-              interview_confirmed_slot: selected_slot,
-              interview_status: 'scheduled',
+              interview_confirmed_slot: selected_slot, // JSONB (backup)
+              interview_status: 'scheduled', // JSONB (backup)
               interview_confirmed_at: new Date().toISOString(),
             }
           })
@@ -339,12 +345,14 @@ Deno.serve(async (req) => {
         }
 
         // Update status
+        // 🔧 CONSOLIDATIE: Schrijf naar COLUMN (primair) EN extracted_data (backwards compatibility)
         await supabase
           .from('professional_applications')
           .update({
+            interview_status: 'confirmed', // Column (primair)
             extracted_data: {
               ...extractedData,
-              interview_status: 'confirmed',
+              interview_status: 'confirmed', // JSONB (backup)
               interview_confirmation_sent_at: new Date().toISOString(),
             }
           })
