@@ -315,6 +315,7 @@ Deno.serve(async (req) => {
           success: true,
           action: 'request_availability',
           slots_offered: availableSlots.length,
+          available_slots: availableSlots, // ✅ KRITIEK: Return slots for caller to store
           email_sent: true,
         });
       }
