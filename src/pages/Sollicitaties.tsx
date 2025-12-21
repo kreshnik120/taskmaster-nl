@@ -1274,9 +1274,7 @@ const Sollicitaties = () => {
           />
 
           {/* Goedgekeurd Confirmation Dialog */}
-          <AlertDialog open={confirmGoedgekeurdDialog.open} onOpenChange={(open) => {
-            if (!open) handleCancelGoedgekeurd();
-          }}>
+          <AlertDialog open={confirmGoedgekeurdDialog.open}>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Professional Profiel Aanmaken?</AlertDialogTitle>
@@ -1303,9 +1301,7 @@ const Sollicitaties = () => {
           </AlertDialog>
 
           {/* Werkvorm Selection Dialog */}
-          <AlertDialog open={werkvormDialog.open} onOpenChange={(open) => {
-            if (!open) handleCancelWerkvorm();
-          }}>
+          <AlertDialog open={werkvormDialog.open}>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Welke werkvorm wil de kandidaat?</AlertDialogTitle>
@@ -1356,9 +1352,7 @@ const Sollicitaties = () => {
           </AlertDialog>
 
           {/* Sublocation Selection Dialog */}
-          <AlertDialog open={selectClientDialog.open} onOpenChange={(open) => {
-            if (!open) handleCancelClientSelection();
-          }}>
+          <AlertDialog open={selectClientDialog.open}>
             <AlertDialogContent className="max-w-2xl max-h-[85vh]">
               <AlertDialogHeader>
                 <AlertDialogTitle>Selecteer Werklocatie voor Plaatsing</AlertDialogTitle>
