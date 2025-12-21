@@ -29,8 +29,15 @@ const GOAL_CONFIGS: Record<string, {
   // NEW: Welcome & Intake - Gecombineerde welkomst + informatieverzoek
   // =====================================================
   'send_welcome_and_intake': {
-    requiredFields: ['application_id', 'candidate_email'],
+    // Support both 'email' and 'candidate_email' for backwards compatibility
+    requiredFields: ['application_id'],
     planGenerator: async (goal, context) => {
+      // Support both 'email' and 'candidate_email' field names
+      const candidateEmail = goal.input_data.candidate_email || goal.input_data.email;
+      if (!candidateEmail) {
+        throw new Error('Missing required field: candidate_email (or email)');
+      }
+      
       // Get missing_info from input_data or fallback to database query
       let missingInfo = goal.input_data.missing_info || [];
       
@@ -85,7 +92,7 @@ const GOAL_CONFIGS: Record<string, {
           scheduled_at: new Date().toISOString(),
           input_data: {
             application_id: goal.input_data.application_id,
-            candidate_email: goal.input_data.candidate_email,
+            candidate_email: candidateEmail,
             candidate_name: goal.input_data.candidate_name,
             fields_to_ask: fieldsToAsk,
             all_missing_info: missingInfo,
