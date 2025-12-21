@@ -197,11 +197,19 @@ Deno.serve(async (req) => {
     }
 
     // ================================================================
-    // UPDATE APPLICATION STATUS
+    // UPDATE APPLICATION STATUS - MERGE SLOTS FROM schedule-interview
     // ================================================================
     
     const newStatus = isAlternative ? 'alternative_slots_offered' : 'slots_offered';
     const newAltCount = isAlternative ? effectiveAltAttempt + 1 : 0;
+    
+    // ✅ KRITIEK: Haal slots op uit schedule-interview response
+    const slotsFromSchedule = scheduleResult?.available_slots || [];
+    
+    logInfo('AutoSendInterviewSlots', 'Merging slots into extracted_data', {
+      slots_count: slotsFromSchedule.length,
+      newStatus
+    });
     
     await supabase
       .from('professional_applications')
@@ -210,6 +218,7 @@ Deno.serve(async (req) => {
         updated_at: new Date().toISOString(),
         extracted_data: {
           ...extractedData,
+          interview_slots_offered: slotsFromSchedule, // ✅ KRITIEK: Merge slots!
           interview_alternative_request_count: newAltCount,
           [`interview_${newStatus}_at`]: new Date().toISOString(),
           interview_trigger_source: trigger_source,
