@@ -588,7 +588,14 @@ Deno.serve(async (req) => {
         // FASE 2: Automatisch interview taak aanmaken met verrijkte details
         let taskId = null;
         try {
-          const { data: taskResult } = await supabase.rpc('create_interview_task', {
+          logInfo('ScheduleInterview', 'Creating interview task via RPC', {
+            application_id,
+            candidateName,
+            interviewDateTime: interviewDateTime.toISOString(),
+            org_id: application.org_id || application.assigned_organization
+          });
+
+          const { data: taskResult, error: rpcError } = await supabase.rpc('create_interview_task', {
             p_application_id: application_id,
             p_candidate_name: candidateName,
             p_interview_date: interviewDateTime.toISOString(),
@@ -596,17 +603,34 @@ Deno.serve(async (req) => {
             p_notes: `Interview met ${candidateName} op ${formatDate(selected_slot.date)} om ${selected_slot.time}. Type: ${interview_type === 'video' ? 'Microsoft Teams' : interview_type === 'phone' ? 'Telefonisch' : 'Op locatie'}.`,
             p_candidate_email: candidateEmail,
             p_interview_type: interview_type || 'video',
-            p_teams_link: interview_type === 'video' ? 'https://teams.microsoft.com/l/meetup-join/...' : null, // Placeholder - replaced by actual n8n webhook response
+            p_teams_link: interview_type === 'video' ? 'https://teams.microsoft.com/l/meetup-join/...' : null,
             p_location: location || null,
             p_duration_minutes: selected_slot.duration_minutes || 30,
             p_interviewer_name: interviewer_name || 'Recruiter',
             p_interviewer_email: interviewer_email || null,
             p_organization_name: orgName
           });
-          taskId = taskResult;
-          logSuccess('ScheduleInterview', 'Interview task created with enriched details', { taskId });
+
+          if (rpcError) {
+            logError('ScheduleInterview', 'RPC create_interview_task failed', {
+              error: rpcError.message,
+              details: rpcError.details,
+              hint: rpcError.hint,
+              code: rpcError.code
+            });
+          } else {
+            taskId = taskResult;
+            logSuccess('ScheduleInterview', 'Interview task created successfully', { 
+              taskId,
+              application_id,
+              interview_date: interviewDateTime.toISOString()
+            });
+          }
         } catch (taskError) {
-          logError('ScheduleInterview', 'Failed to create interview task', taskError);
+          logError('ScheduleInterview', 'Exception creating interview task', {
+            error: taskError instanceof Error ? taskError.message : String(taskError),
+            stack: taskError instanceof Error ? taskError.stack : undefined
+          });
           // Continue anyway - task creation is optional enhancement
         }
 
