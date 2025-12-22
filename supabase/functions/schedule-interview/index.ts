@@ -803,12 +803,13 @@ END:VCALENDAR`;
 
         const { error: confirmError } = await supabase.functions.invoke('send-ai-email', {
           body: {
-            to: candidateEmail,
+            recipient_email: candidateEmail,
+            recipient_name: candidateName,
             subject: confirmSubject,
-            html: confirmHtml,
+            html_content: confirmHtml,
             application_id,
             email_type: 'interview_confirmation',
-            organization: orgName,
+            org_id: application.org_id,
             attachments: [
               {
                 filename: `interview-${confirmedSlot.date}.ics`,
