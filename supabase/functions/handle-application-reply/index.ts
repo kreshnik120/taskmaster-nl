@@ -641,7 +641,12 @@ ${emailText}
 1. Extract ALLEEN informatie die in de email staat - verzin niets
 2. Focus op de KRITIEKE VELDEN die nog nodig zijn
 3. Detecteer of de sollicitant vraagt om een gesprek/interview
-${hasOfferedSlots ? `4. **KRITIEK**: Check of de kandidaat een tijdslot kiest! Kijk naar nummers, dagen, tijden
+${hasOfferedSlots ? `4. **KRITIEK - SLOT SELECTIE**: Check of de kandidaat een tijdslot kiest!
+   - Kijk naar: "optie 1", "slot 1", "de eerste", "maandag 9:00", etc.
+   - **RETURN selected_slot_index ALS HET NUMMER DAT DE KANDIDAAT NOEMT (1, 2, of 3)**
+   - Voorbeeld: "optie 1" of "de eerste" → selected_slot_index: 1
+   - Voorbeeld: "optie 2" of "de tweede" → selected_slot_index: 2
+   - Voorbeeld: "dinsdag 10:00" (slot 2) → selected_slot_index: 2
 5. **SLOT REJECTION**: Detecteer of de kandidaat GEEN van de aangeboden slots kan!
    - Zoek naar zinnen als: "kan niet", "lukt niet", "geen van deze", "andere dag", "andere tijd", "allemaal bezet", "verhinderd"
    - Als de kandidaat vraagt om andere momenten → slot_rejection = true` : ''}
@@ -711,6 +716,7 @@ Return JSON in dit formaat:
   },
   "requests_interview": false,
   "remaining_missing_info": ["naam"],
+  // KRITIEK: selected_slot_index moet het nummer zijn dat de kandidaat noemt (1, 2, of 3), NIET 0-indexed!
   "selected_slot_index": null,
   "slot_rejection": false,
   "rejection_reason": null,
@@ -1328,26 +1334,16 @@ Return JSON in dit formaat:
                             (typeof analysis.selected_slot_index === 'string' && analysis.selected_slot_index !== '');
     
     if (hasSelectedSlot && offeredSlots && offeredSlots.length > 0) {
-      // AI kan 0-indexed OF 1-indexed teruggeven - detecteer automatisch
+      // AI geeft 1-indexed slot nummer terug (zoals getoond aan kandidaat: optie 1, 2, 3)
       const rawIndex = typeof analysis.selected_slot_index === 'string' 
         ? parseInt(analysis.selected_slot_index) 
         : analysis.selected_slot_index;
       
-      // Smart index detection: als rawIndex >= offeredSlots.length, is het 1-indexed
-      // Als rawIndex = 0 en er zijn slots, behandel als 0-indexed (eerste slot)
-      let slotIndex: number;
-      if (rawIndex === 0) {
-        // 0 = eerste slot (0-indexed)
-        slotIndex = 0;
-      } else if (rawIndex >= 1 && rawIndex <= offeredSlots.length) {
-        // 1-indexed (user input like "optie 1")
-        slotIndex = rawIndex - 1;
-      } else {
-        // Direct 0-indexed
-        slotIndex = rawIndex;
-      }
+      // DEFINITIEVE FIX: AI is geïnstrueerd om 1-indexed te returnen, dus altijd -1
+      // rawIndex 1 → arrayIndex 0, rawIndex 2 → arrayIndex 1, etc.
+      const slotIndex = rawIndex - 1;
       
-      console.log(`🎯 Slot selection detected: raw=${rawIndex}, arrayIndex=${slotIndex}, totalSlots=${offeredSlots.length}`);
+      console.log(`🎯 SLOT SELECTIE: kandidaat koos optie ${rawIndex}, arrayIndex=${slotIndex}, totalSlots=${offeredSlots.length}`);
       if (slotIndex >= 0 && slotIndex < offeredSlots.length) {
         const selectedSlot = offeredSlots[slotIndex];
         console.log(`🎉 FASE 1: Kandidaat koos interview slot: ${selectedSlot.date} om ${selectedSlot.time}`);
