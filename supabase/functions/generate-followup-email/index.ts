@@ -5,6 +5,8 @@ import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse
  * 
  * Uses Lovable AI to generate personalized follow-up emails for incomplete applications.
  * The generated email is ready to be sent via n8n - no additional AI processing needed.
+ * 
+ * 🆕 SMART CONTEXT: Now accepts rejection_context to explain WHY questions are re-asked.
  */
 
 // Field descriptions for generating natural questions
@@ -33,12 +35,25 @@ const FIELD_DESCRIPTIONS: Record<string, string> = {
   'vog_date': 'de uitgiftedatum van je VOG - deze mag niet ouder dan 3 maanden zijn',
   'vog_verlopen': 'een nieuwe VOG aanvragen - je huidige VOG is helaas ouder dan 3 maanden en daarom niet meer geldig voor zorgwerk',
   'big_registratie': 'je BIG-registratienummer indien van toepassing',
+  'big_nummer': 'je BIG-registratienummer (11 cijfers)',
   
   // Night/weekend availability (belangrijk voor matching)
   'nachtdienst_bereid': 'of je bereid bent om nachtdiensten te draaien (veel opdrachtgevers zoeken hier specifiek naar)',
   'weekenddienst_bereid': 'of je bereid bent om in het weekend te werken (dit vergroot je inzetmogelijkheden)',
   'beschikbare_uren': 'hoeveel uur per week je minimaal en maximaal beschikbaar bent',
+  
+  // Diploma
+  'diploma_type': 'je zorg-gerelateerde diploma of opleiding',
 };
+
+// Type for rejection context from handle-application-reply
+interface RejectionContext {
+  [field: string]: {
+    provided_value: string;
+    rejected_reason: string;
+    suggestion: string;
+  };
+}
 
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -62,11 +77,14 @@ Deno.serve(async (req) => {
       follow_up_count = 0,
       email_type = 'followup_question',
       is_first_contact = false,
-      org_name = 'CitoZorg'
+      org_name = 'CitoZorg',
+      // 🆕 Smart context: rejection reasons for previously provided data
+      rejection_context = {} as RejectionContext,
     } = body;
 
     console.log(`[Generate Followup Email] Application: ${application_id}`);
     console.log(`[Generate Followup Email] Fields to ask: ${fields_to_ask?.join(', ')}`);
+    console.log(`[Generate Followup Email] Rejection context:`, JSON.stringify(rejection_context));
 
     if (!application_id || !candidate_email || !fields_to_ask?.length) {
       return new Response(
@@ -80,11 +98,39 @@ Deno.serve(async (req) => {
       .map((field: string) => FIELD_DESCRIPTIONS[field] || field)
       .slice(0, 10); // Max 10 questions per email
 
+    // 🆕 Build rejection context explanation for the AI prompt
+    const hasRejectionContext = rejection_context && Object.keys(rejection_context).length > 0;
+    let rejectionExplanation = '';
+    
+    if (hasRejectionContext) {
+      const rejectionDetails = Object.entries(rejection_context as RejectionContext)
+        .map(([field, context]) => {
+          return `- **${field}**: De kandidaat stuurde "${context.provided_value}" maar dit werd afgewezen. 
+            Reden: ${context.rejected_reason}
+            Suggestie voor kandidaat: ${context.suggestion}`;
+        })
+        .join('\n');
+      
+      rejectionExplanation = `
+**🔄 CONTEXT VAN EERDERE ANTWOORDEN (KRITIEK!):**
+De kandidaat heeft al informatie gestuurd die niet geaccepteerd kon worden. 
+Je MOET dit vriendelijk uitleggen in de email zodat de kandidaat begrijpt WAAROM we opnieuw vragen:
+
+${rejectionDetails}
+
+**Instructies voor het verwerken van rejection context:**
+1. Erken WAT de kandidaat heeft gestuurd ("Ik zag dat je ... hebt doorgegeven")
+2. Leg vriendelijk uit WAAROM het niet geaccepteerd kon worden
+3. Geef een concreet voorbeeld van wat WEL werkt
+4. Wees NIET beschuldigend of negatief - houd het professioneel en behulpzaam
+`;
+    }
+
     // Build the AI prompt based on email type
     let prompt: string;
     
     if (email_type === 'welcome_and_intake' || is_first_contact) {
-      // WELKOMST + INTAKE EMAIL
+      // WELKOMST + INTAKE EMAIL (usually no rejection context here)
       prompt = `Je bent een hartelijke recruitment assistent voor ${org_name}, een professioneel zorgbemiddelingsbureau.
 Schrijf een warme welkomstemail voor een nieuwe sollicitant die ook vraagt naar ontbrekende informatie.
 
@@ -122,7 +168,7 @@ Return een JSON object met:
   "closing": "Warme afsluitende groet"
 }`;
     } else {
-      // STANDAARD FOLLOW-UP EMAIL
+      // STANDAARD FOLLOW-UP EMAIL (kan rejection context bevatten)
       prompt = `Je bent een vriendelijke recruitment assistent voor ${org_name}, een thuiszorg bemiddelingsbureau.
 Schrijf een overzichtelijke email om ontbrekende informatie te vragen aan een sollicitant.
 
@@ -132,6 +178,8 @@ Schrijf een overzichtelijke email om ontbrekende informatie te vragen aan een so
 - Huidige completeness: ${current_completeness || 0}%
 - Dit is follow-up nummer: ${follow_up_count + 1}
 
+${rejectionExplanation}
+
 **Vragen die we moeten stellen (max 10):**
 ${fieldDescriptions.map((desc: string, i: number) => `${i + 1}. ${desc}`).join('\n')}
 
@@ -139,6 +187,9 @@ ${fieldDescriptions.map((desc: string, i: number) => `${i + 1}. ${desc}`).join('
 - Schrijf in het Nederlands
 - Houd het overzichtelijk maar compleet (max 300 woorden)
 - Gebruik een warme, professionele toon
+${hasRejectionContext ? `- **KRITIEK**: Begin met het uitleggen waarom eerder gestuurde informatie niet geaccepteerd kon worden (zie rejection context hierboven)
+- Wees NIET beschuldigend - leg het vriendelijk uit als een misverstand of technisch vereiste
+- Geef concrete voorbeelden van wat WEL werkt` : ''}
 - Groepeer gerelateerde vragen logisch (bijv. contactgegevens, beschikbaarheid, ervaring)
 - Gebruik nummering voor duidelijkheid
 - Maak duidelijk dat ze gewoon kunnen antwoorden op de email
@@ -151,7 +202,7 @@ Return een JSON object met:
 {
   "subject": "Kort onderwerp (max 60 chars)",
   "greeting": "Persoonlijke begroeting",
-  "body": "Hoofdtekst van de email met genummerde vragen",
+  "body": "Hoofdtekst van de email met genummerde vragen${hasRejectionContext ? ' - BEGIN met uitleg over afgewezen antwoorden' : ''}",
   "closing": "Afsluitende groet"
 }`;
     }
@@ -212,10 +263,29 @@ Return een JSON object met:
           closing: `Met vriendelijke groet,\n${org_name} Recruitment Team`
         };
       } else {
+        // 🆕 Smart fallback with rejection context
+        let bodyText = '';
+        
+        if (hasRejectionContext) {
+          bodyText = `Bedankt voor je reactie!\n\n`;
+          
+          // Add rejection explanations
+          for (const [field, context] of Object.entries(rejection_context as RejectionContext)) {
+            const fieldLabel = FIELD_DESCRIPTIONS[field] || field;
+            bodyText += `Ik zag dat je "${context.provided_value}" hebt doorgegeven voor ${fieldLabel}. Helaas kunnen we dit niet accepteren: ${context.rejected_reason}\n\n${context.suggestion}\n\n`;
+          }
+          
+          bodyText += `Daarnaast hebben we nog de volgende informatie nodig:\n\n`;
+        } else {
+          bodyText = `Bedankt voor je sollicitatie! Om je aanmelding compleet te maken, hebben we nog wat informatie nodig:\n\n`;
+        }
+        
+        bodyText += `${fieldDescriptions.map((desc: string) => `• ${desc}`).join('\n')}\n\nJe kunt gewoon op deze email antwoorden.`;
+        
         emailContent = {
           subject: `Aanvullende informatie nodig - ${org_name}`,
           greeting: `Beste ${candidate_name || 'sollicitant'}`,
-          body: `Bedankt voor je sollicitatie! Om je aanmelding compleet te maken, hebben we nog wat informatie nodig:\n\n${fieldDescriptions.map((desc: string) => `• ${desc}`).join('\n')}\n\nJe kunt gewoon op deze email antwoorden.`,
+          body: bodyText,
           closing: `Met vriendelijke groet,\n${org_name} Recruitment Team`
         };
       }
@@ -289,7 +359,30 @@ Return een JSON object met:
 </body>
 </html>`;
     } else {
-      // STANDAARD FOLLOW-UP EMAIL HTML
+      // STANDAARD FOLLOW-UP EMAIL HTML (met rejection context support)
+      
+      // 🆕 Build rejection context HTML if present
+      let rejectionHtml = '';
+      if (hasRejectionContext) {
+        rejectionHtml = `
+    <div style="background: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
+      <h3 style="color: #856404; margin-top: 0; font-size: 16px;">📝 Over je eerdere antwoord</h3>
+      ${Object.entries(rejection_context as RejectionContext).map(([field, context]) => `
+        <div style="margin-bottom: 15px;">
+          <p style="margin: 5px 0; color: #856404;">
+            <strong>Je stuurde:</strong> "${context.provided_value}"
+          </p>
+          <p style="margin: 5px 0; color: #856404;">
+            ${context.rejected_reason}
+          </p>
+          <p style="margin: 5px 0; color: #155724; background: #d4edda; padding: 10px; border-radius: 5px;">
+            💡 <strong>Tip:</strong> ${context.suggestion}
+          </p>
+        </div>
+      `).join('')}
+    </div>`;
+      }
+      
       emailHtml = `
 <!DOCTYPE html>
 <html lang="nl">
@@ -305,6 +398,8 @@ Return een JSON object met:
   
   <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px;">
     <h2 style="color: #0066cc; margin-top: 0;">${emailContent.greeting},</h2>
+    
+    ${rejectionHtml}
     
     <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #0066cc;">
       ${(emailContent.body || '').split('\n').map((line: string) => `<p style="margin: 10px 0;">${line}</p>`).join('')}
@@ -349,9 +444,20 @@ ${emailContent.closing || `Met vriendelijke groet,\n${org_name} Recruitment Team
 ---
 ${org_name} Recruitment | ${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}`;
     } else {
+      // 🆕 Include rejection context in plain text
+      let rejectionText = '';
+      if (hasRejectionContext) {
+        rejectionText = '📝 OVER JE EERDERE ANTWOORD:\n\n';
+        for (const [field, context] of Object.entries(rejection_context as RejectionContext)) {
+          rejectionText += `Je stuurde: "${context.provided_value}"\n`;
+          rejectionText += `${context.rejected_reason}\n`;
+          rejectionText += `💡 Tip: ${context.suggestion}\n\n`;
+        }
+      }
+      
       emailPlainText = `${emailContent.greeting},
 
-${emailContent.body || ''}
+${rejectionText}${emailContent.body || ''}
 
 💡 Tip: Je kunt gewoon op deze email antwoorden!
 
@@ -372,11 +478,14 @@ ${org_name} Recruitment | ${org_name.toLowerCase().includes('abc') ? 'personeel@
         email_subject: emailContent.subject,
         follow_up_count: follow_up_count + 1,
         generated_at: new Date().toISOString(),
-        generated_by: 'ai-agent'
+        generated_by: 'ai-agent',
+        has_rejection_context: hasRejectionContext,
+        rejection_context_fields: hasRejectionContext ? Object.keys(rejection_context) : [],
       }
     });
 
     console.log('[Generate Followup Email] Email generated successfully');
+    console.log('[Generate Followup Email] Has rejection context:', hasRejectionContext);
 
     return new Response(
       JSON.stringify({
@@ -384,7 +493,8 @@ ${org_name} Recruitment | ${org_name.toLowerCase().includes('abc') ? 'personeel@
         emailSubject: emailContent.subject,
         emailHtml,
         emailPlainText,
-        fields_asked: fields_to_ask
+        fields_asked: fields_to_ask,
+        has_rejection_context: hasRejectionContext,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
