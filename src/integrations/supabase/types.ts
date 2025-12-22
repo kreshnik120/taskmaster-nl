@@ -5100,7 +5100,7 @@ export type Database = {
               p_interviewer_name?: string
               p_location?: string
               p_notes?: string
-              p_org_id: string
+              p_org_id?: string
               p_organization_name?: string
               p_teams_link?: string
             }
