@@ -721,6 +721,21 @@ Belangrijk:
 
     console.log("Application created:", application.id);
 
+    // 🆕 Direct welkomstmail triggeren (geen wachten op cron job)
+    try {
+      console.log("🚀 [process-application-email] Triggering ai-agent-orchestrator for immediate welcome email...");
+      await supabase.functions.invoke('ai-agent-orchestrator', {
+        body: { 
+          action: 'process_pending_goals',
+          filter_application_id: application.id 
+        }
+      });
+      console.log("✅ [process-application-email] Welkomstmail direct getriggerd");
+    } catch (orchestratorErr) {
+      console.warn("⚠️ [process-application-email] Orchestrator trigger failed, will retry via cron:", orchestratorErr);
+      // Non-blocking: als het faalt, pakt de cron job het op
+    }
+
     // =====================================================
     // 🎯 AUTOMATISCHE INTERVIEW SLOTS BIJ >= 85% COMPLETENESS
     // =====================================================
