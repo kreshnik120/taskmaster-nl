@@ -22,7 +22,12 @@ import {
   CheckCircle2,
   Bell,
   ChevronDown,
-  Info
+  Info,
+  Video,
+  Phone,
+  MapPin,
+  Users,
+  FileUser
 } from "lucide-react";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -47,6 +52,21 @@ interface Subtask {
   } | null;
 }
 
+interface InterviewDetails {
+  application_id?: string;
+  candidate_name?: string;
+  candidate_email?: string;
+  type?: string;
+  interview_type?: 'phone' | 'video' | 'in_person';
+  teams_link?: string;
+  location?: string;
+  duration_minutes?: number;
+  interviewer_name?: string;
+  interviewer_email?: string;
+  organization_name?: string;
+  [key: string]: unknown;
+}
+
 interface Task {
   id: string;
   title: string;
@@ -58,6 +78,8 @@ interface Task {
   assignee_id: string | null;
   application_id: string | null;
   recruitment_action_type: string | null;
+  category?: string | null;
+  interview_details?: InterviewDetails | null;
   profiles: {
     name: string | null;
     email: string | null;
@@ -556,8 +578,113 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               </div>
             </div>
 
-            {/* Fase 4: Linked Application Sectie Strakker */}
-            {linkedApplication && (
+            {/* Interview-Specifieke Sectie */}
+            {task.category === 'interview' && task.interview_details && (
+              <div className="p-5 rounded-xl bg-gradient-to-br from-purple-50/60 to-purple-100/30 dark:from-purple-900/20 dark:to-purple-800/10 border border-purple-200/50 dark:border-purple-700/30 space-y-4 animate-fade-in">
+                {/* Header */}
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      {task.interview_details.interview_type === 'video' && <Video className="h-5 w-5 text-purple-600 dark:text-purple-400" />}
+                      {task.interview_details.interview_type === 'phone' && <Phone className="h-5 w-5 text-purple-600 dark:text-purple-400" />}
+                      {task.interview_details.interview_type === 'in_person' && <MapPin className="h-5 w-5 text-purple-600 dark:text-purple-400" />}
+                      {!task.interview_details.interview_type && <Users className="h-5 w-5 text-purple-600 dark:text-purple-400" />}
+                      <span className="text-lg font-semibold text-purple-900 dark:text-purple-100">
+                        Interview met {task.interview_details.candidate_name}
+                      </span>
+                    </div>
+                    {task.start_at && (
+                      <p className="text-sm text-purple-700/80 dark:text-purple-300/80">
+                        {format(parseISO(task.start_at), "EEEE d MMMM yyyy", { locale: nl })} • {format(parseISO(task.start_at), "HH:mm", { locale: nl })} uur
+                        {task.interview_details.duration_minutes && ` (${task.interview_details.duration_minutes} min)`}
+                      </p>
+                    )}
+                  </div>
+                  <Badge 
+                    variant="outline" 
+                    className="bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/50 dark:text-purple-300 dark:border-purple-700"
+                  >
+                    {task.interview_details.interview_type === 'video' ? 'Microsoft Teams' 
+                      : task.interview_details.interview_type === 'phone' ? 'Telefonisch' 
+                      : task.interview_details.interview_type === 'in_person' ? 'Op locatie' 
+                      : 'Interview'}
+                  </Badge>
+                </div>
+
+                {/* Join Meeting Button (for video) */}
+                {task.interview_details.interview_type === 'video' && task.interview_details.teams_link && (
+                  <Button 
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={() => window.open(task.interview_details?.teams_link, '_blank')}
+                  >
+                    <Video className="h-4 w-4 mr-2" />
+                    Join Microsoft Teams Meeting
+                  </Button>
+                )}
+
+                {/* Location (for in_person) */}
+                {task.interview_details.interview_type === 'in_person' && task.interview_details.location && (
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-white/50 dark:bg-black/20">
+                    <MapPin className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-sm text-purple-800 dark:text-purple-200">{task.interview_details.location}</span>
+                  </div>
+                )}
+
+                {/* Participants */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-purple-700 dark:text-purple-300">
+                    <Users className="h-4 w-4" />
+                    Deelnemers
+                  </div>
+                  <div className="grid gap-2 pl-6">
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-white/50 dark:bg-black/20">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{task.interview_details.candidate_name}</span>
+                        <Badge variant="secondary" className="text-[10px]">Kandidaat</Badge>
+                      </div>
+                      {task.interview_details.candidate_email && (
+                        <span className="text-xs text-muted-foreground">{task.interview_details.candidate_email}</span>
+                      )}
+                    </div>
+                    {task.interview_details.interviewer_name && (
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-white/50 dark:bg-black/20">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{task.interview_details.interviewer_name}</span>
+                          <Badge variant="secondary" className="text-[10px]">Interviewer</Badge>
+                        </div>
+                        {task.interview_details.interviewer_email && (
+                          <span className="text-xs text-muted-foreground">{task.interview_details.interviewer_email}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Organization */}
+                {task.interview_details.organization_name && (
+                  <div className="flex items-center gap-2 text-sm text-purple-700/80 dark:text-purple-300/80">
+                    <span className="text-muted-foreground">Organisatie:</span>
+                    <span className="font-medium">{task.interview_details.organization_name}</span>
+                  </div>
+                )}
+
+                {/* Quick link to application */}
+                {task.interview_details.application_id && (
+                  <Button
+                    variant="outline"
+                    className="w-full border-purple-200 dark:border-purple-700 hover:bg-purple-100/50 dark:hover:bg-purple-900/30"
+                    onClick={() => navigate(`/sollicitaties?application=${task.interview_details?.application_id}`)}
+                  >
+                    <FileUser className="h-4 w-4 mr-2" />
+                    Bekijk sollicitatie
+                    <ExternalLink className="h-3 w-3 ml-auto" />
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Fase 4: Linked Application Sectie Strakker - Only show for non-interview tasks */}
+            {linkedApplication && task.category !== 'interview' && (
               <div className="p-4 rounded-xl bg-primary/[0.04] border border-primary/10 space-y-3 animate-fade-in">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">

@@ -5091,10 +5091,18 @@ export type Database = {
         | {
             Args: {
               p_application_id: string
+              p_candidate_email?: string
               p_candidate_name: string
+              p_duration_minutes?: number
               p_interview_date: string
+              p_interview_type?: string
+              p_interviewer_email?: string
+              p_interviewer_name?: string
+              p_location?: string
               p_notes?: string
               p_org_id: string
+              p_organization_name?: string
+              p_teams_link?: string
             }
             Returns: string
           }

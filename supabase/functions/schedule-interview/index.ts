@@ -585,7 +585,7 @@ Deno.serve(async (req) => {
           })
           .eq('id', application_id);
 
-        // FASE 2: Automatisch interview taak aanmaken
+        // FASE 2: Automatisch interview taak aanmaken met verrijkte details
         let taskId = null;
         try {
           const { data: taskResult } = await supabase.rpc('create_interview_task', {
@@ -593,10 +593,18 @@ Deno.serve(async (req) => {
             p_candidate_name: candidateName,
             p_interview_date: interviewDateTime.toISOString(),
             p_org_id: application.org_id || application.assigned_organization,
-            p_notes: `Interview met ${candidateName} op ${formatDate(selected_slot.date)} om ${selected_slot.time}. Type: ${interview_type === 'video' ? 'Microsoft Teams' : interview_type === 'phone' ? 'Telefonisch' : 'Op locatie'}.`
+            p_notes: `Interview met ${candidateName} op ${formatDate(selected_slot.date)} om ${selected_slot.time}. Type: ${interview_type === 'video' ? 'Microsoft Teams' : interview_type === 'phone' ? 'Telefonisch' : 'Op locatie'}.`,
+            p_candidate_email: candidateEmail,
+            p_interview_type: interview_type || 'video',
+            p_teams_link: interview_type === 'video' ? 'https://teams.microsoft.com/l/meetup-join/...' : null, // Placeholder - replaced by actual n8n webhook response
+            p_location: location || null,
+            p_duration_minutes: selected_slot.duration_minutes || 30,
+            p_interviewer_name: interviewer_name || 'Recruiter',
+            p_interviewer_email: interviewer_email || null,
+            p_organization_name: orgName
           });
           taskId = taskResult;
-          logSuccess('ScheduleInterview', 'Interview task created', { taskId });
+          logSuccess('ScheduleInterview', 'Interview task created with enriched details', { taskId });
         } catch (taskError) {
           logError('ScheduleInterview', 'Failed to create interview task', taskError);
           // Continue anyway - task creation is optional enhancement

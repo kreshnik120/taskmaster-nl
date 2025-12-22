@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { format, startOfWeek, endOfDay, startOfDay, addDays, isSameDay, parseISO, getWeek, endOfWeek } from "date-fns";
 import { nl } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle, UserCheck } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle, UserCheck, Video, Phone, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
@@ -17,7 +17,15 @@ import { KPICard } from "@/components/ui/kpi-card";
 interface InterviewDetails {
   application_id?: string;
   candidate_name?: string;
+  candidate_email?: string;
   type?: string;
+  interview_type?: 'phone' | 'video' | 'in_person';
+  teams_link?: string;
+  location?: string;
+  duration_minutes?: number;
+  interviewer_name?: string;
+  interviewer_email?: string;
+  organization_name?: string;
   [key: string]: unknown;
 }
 
@@ -450,6 +458,29 @@ export default function Kalender() {
                     {dayTasks.map((task, taskIndex) => {
                       const isInterview = isInterviewTask(task);
                       const candidateName = task.interview_details?.candidate_name;
+                      const interviewType = task.interview_details?.interview_type;
+                      const durationMinutes = task.interview_details?.duration_minutes;
+                      const organizationName = task.interview_details?.organization_name;
+                      
+                      // Interview type icons
+                      const InterviewTypeIcon = interviewType === 'video' ? Video 
+                        : interviewType === 'phone' ? Phone 
+                        : interviewType === 'in_person' ? MapPin 
+                        : UserCheck;
+                      
+                      const interviewTypeLabel = interviewType === 'video' ? 'Teams' 
+                        : interviewType === 'phone' ? 'Telefoon' 
+                        : interviewType === 'in_person' ? 'Locatie' 
+                        : 'Interview';
+                      
+                      // Calculate end time if duration is available
+                      const startTime = task.start_at ? format(parseISO(task.start_at), 'HH:mm') : task.due_at ? format(parseISO(task.due_at), 'HH:mm') : null;
+                      let timeDisplay = startTime;
+                      if (startTime && durationMinutes && task.start_at) {
+                        const startDate = parseISO(task.start_at);
+                        const endDate = new Date(startDate.getTime() + durationMinutes * 60000);
+                        timeDisplay = `${startTime}-${format(endDate, 'HH:mm')}`;
+                      }
                       
                       return (
                         <div 
@@ -463,42 +494,58 @@ export default function Kalender() {
                           )}
                           {...(taskIndex === 0 && (task.priority === 'high' || task.priority === 'critical') && { 'data-urgent-task': true })}
                         >
+                          {/* Header row: Icon + Title + Time */}
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-1.5 flex-1 min-w-0">
                               {isInterview && (
-                                <UserCheck className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                                <InterviewTypeIcon className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
                               )}
-                              <p className="font-medium text-sm text-foreground/90 leading-tight tracking-tight line-clamp-2">{task.title}</p>
+                              <p className="font-medium text-sm text-foreground/90 leading-tight tracking-tight line-clamp-2">
+                                {isInterview ? (candidateName || task.title) : task.title}
+                              </p>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
-                              {isInterview && (
-                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300">
-                                  Interview
-                                </span>
-                              )}
-                              {(task.start_at || task.due_at) && (
-                                <span className="text-[11px] text-muted-foreground/70 tabular-nums">
-                                  {task.start_at ? format(parseISO(task.start_at), 'HH:mm') : format(parseISO(task.due_at!), 'HH:mm')}
+                              {timeDisplay && (
+                                <span className="text-[11px] text-muted-foreground/70 tabular-nums font-medium">
+                                  {timeDisplay}
                                 </span>
                               )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className={cn(
-                              "h-2 w-2 rounded-full", 
-                              isInterview ? INTERVIEW_STYLES.dot : (PRIORITY_DOTS[task.priority] || PRIORITY_DOTS.medium)
-                            )} />
-                            {/* Show candidate name for interviews, otherwise show assignee */}
-                            {isInterview && candidateName ? (
-                              <span className="text-[11px] font-medium text-purple-600 dark:text-purple-400 truncate max-w-[120px]">
-                                {candidateName}
-                              </span>
-                            ) : task.profiles && (
-                              <span className="text-[11px] text-muted-foreground/70 truncate max-w-[120px]">
-                                {task.profiles.name || task.profiles.email}
-                              </span>
-                            )}
-                          </div>
+                          
+                          {/* Interview-specific: Type badge + Organization */}
+                          {isInterview ? (
+                            <div className="flex items-center justify-between gap-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300">
+                                  {interviewTypeLabel}
+                                </span>
+                                {organizationName && (
+                                  <span className="text-[10px] text-muted-foreground/60 truncate max-w-[80px]">
+                                    {organizationName}
+                                  </span>
+                                )}
+                              </div>
+                              {durationMinutes && (
+                                <span className="text-[10px] text-muted-foreground/50">
+                                  {durationMinutes}min
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            /* Non-interview: Priority dot + assignee */
+                            <div className="flex items-center gap-1.5">
+                              <span className={cn(
+                                "h-2 w-2 rounded-full", 
+                                PRIORITY_DOTS[task.priority] || PRIORITY_DOTS.medium
+                              )} />
+                              {task.profiles && (
+                                <span className="text-[11px] text-muted-foreground/70 truncate max-w-[120px]">
+                                  {task.profiles.name || task.profiles.email}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
