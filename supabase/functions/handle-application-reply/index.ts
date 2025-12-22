@@ -1680,155 +1680,126 @@ Return JSON in dit formaat:
     }
 
     // =====================================================
-    // STAP 6: Generate intelligent response based on stage
+    // STAP 6: UNIFIED AI AGENT FLOW - Alle responses via agent goal
     // =====================================================
-    console.log("Generating response email...");
-    let responseSubject = `Re: ${subject}`;
-    let responseBody = "";
-
     const professionalName = mergedData.naam || mergedData.full_name || application.email_from.split("@")[0];
-
-    // Response templates based on STAGE (not completeness)
-    if (pipelineStage === 'screening') {
-      // SCREENING: bedanken voor interview, documenten gevraagd
-      responseSubject = `Re: ${subject} - Documenten nodig`;
-      responseBody = `
-        <h2>Beste ${professionalName},</h2>
-        
-        <p>Bedankt voor je reactie!</p>
-        
-        <p>Om je profiel compleet te maken hebben we nog enkele documenten nodig:</p>
-        <ul>
-          <li>VOG (Verklaring Omtrent Gedrag) - mag maximaal 3 maanden oud zijn</li>
-          <li>Diploma of certificaat van je opleiding</li>
-        </ul>
-        
-        <p>Je kunt deze documenten als bijlage naar deze email sturen.</p>
-        
-        <p>Met vriendelijke groet,<br>
-        Het ${orgInfo.displayName} Recruitment Team<br>
-        <a href="mailto:${emailConfig.from}">${emailConfig.from}</a></p>
-      `;
-    } else if (pipelineStage === 'interview' || interviewStatus === 'scheduled') {
-      // INTERVIEW: interview staat gepland
-      responseSubject = `Re: ${subject}`;
-      responseBody = `
-        <h2>Beste ${professionalName},</h2>
-        
-        <p>Bedankt voor je bericht!</p>
-        
-        <p>Je interview staat gepland. We kijken ernaar uit om je te ontmoeten!</p>
-        
-        <p>Heb je nog vragen? Laat het gerust weten.</p>
-        
-        <p>Met vriendelijke groet,<br>
-        Het ${orgInfo.displayName} Recruitment Team<br>
-        <a href="mailto:${emailConfig.from}">${emailConfig.from}</a></p>
-      `;
-    } else if (newCompletenessScore >= 80) {
-      // NIEUW + ≥80%: interview gaat gepland worden
-      responseSubject = `Re: ${subject} - Tijd voor een gesprek!`;
-      responseBody = `
-        <h2>Beste ${professionalName},</h2>
-        
-        <p>Super, we hebben genoeg informatie om verder te gaan! 🎉</p>
-        
-        <p>We sturen je binnenkort een uitnodiging voor een (video)gesprek zodat we elkaar kunnen leren kennen.</p>
-        
-        <p>We kijken ernaar uit!</p>
-        
-        <p>Met vriendelijke groet,<br>
-        Het ${orgInfo.displayName} Recruitment Team<br>
-        <a href="mailto:${emailConfig.from}">${emailConfig.from}</a></p>
-      `;
-    } else if (finalRemainingMissing.length > 0) {
-      // NIEUW + <80%: meer info nodig
-      responseSubject = `Re: ${subject} - Aanvullende informatie nodig`;
-      responseBody = `
-        <h2>Beste ${professionalName},</h2>
-        
-        <p>Bedankt voor je snelle reactie!</p>
-        
-        <p>We hebben nog de volgende informatie nodig om je sollicitatie compleet te maken:</p>
-        <ul>
-          ${finalRemainingMissing.map((item: string) => `<li>${item}</li>`).join("")}
-        </ul>
-        
-        <p>Zou je deze informatie kunnen aanvullen? Dan kunnen we snel verder met je sollicitatie.</p>
-        
-        <p>Met vriendelijke groet,<br>
-        Het ${orgInfo.displayName} Recruitment Team<br>
-        <a href="mailto:${emailConfig.from}">${emailConfig.from}</a></p>
-      `;
-    } else {
-      // Standard acknowledgment
-      responseSubject = `Re: ${subject}`;
-      responseBody = `
-        <h2>Beste ${professionalName},</h2>
-        
-        <p>Bedankt voor je bericht! We hebben je reactie ontvangen.</p>
-        
-        <p>Heb je nog vragen? Laat het gerust weten!</p>
-        
-        <p>Met vriendelijke groet,<br>
-        Het ${orgInfo.displayName} Recruitment Team<br>
-        <a href="mailto:${emailConfig.from}">${emailConfig.from}</a></p>
-      `;
-    }
-
-    // 🆕 Skip response email als gecombineerde email al gestuurd is
-    let emailData: any = null;
     
+    // Skip agent response als gecombineerde interview email al gestuurd is
     if (skipResponseEmail) {
-      console.log(`⏭️ Skipping standalone response email - combined interview email already sent`);
+      console.log(`⏭️ Skipping agent response - combined interview email already sent`);
     } else {
-      // Send response email via Resend API
-      console.log(`Sending response email from ${orgInfo.displayName}...`);
-      const emailResponse = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${resendApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: `${orgInfo.displayName} Recruitment <${emailConfig.from}>`,
-          to: from,
-          subject: responseSubject,
-          html: responseBody,
-          reply_to: emailConfig.replyTo,
-        }),
-      });
+      // Bepaal het response type op basis van situatie
+      let responseType = 'standard_reply';
+      let responsePriority = 100;
+      
+      if (pipelineStage === 'screening') {
+        responseType = 'document_request';
+        responsePriority = 120;
+      } else if (pipelineStage === 'interview' || interviewStatus === 'scheduled') {
+        responseType = 'interview_acknowledgment';
+        responsePriority = 80;
+      } else if (newCompletenessScore >= 80) {
+        responseType = 'ready_for_interview';
+        responsePriority = 150;
+      } else if (finalRemainingMissing.length > 0 || Object.keys(rejectionContext).length > 0) {
+        responseType = 'followup_with_context';
+        responsePriority = 130;
+      }
 
-      if (!emailResponse.ok) {
-        const errorText = await emailResponse.text();
-        console.error("Error sending email:", emailResponse.status, errorText);
+      console.log(`🤖 Creating unified agent goal: send_reply_response (type: ${responseType})`);
+
+      // Maak agent goal met ALLE context voor slimme AI response
+      const { error: goalError } = await supabase
+        .from("agent_goals")
+        .insert({
+          org_id: application.org_id,
+          goal_type: "send_reply_response",
+          goal_description: `Reageer slim op reply van ${professionalName} (${responseType})`,
+          priority: responsePriority,
+          input_data: {
+            application_id: applicationId,
+            candidate_email: from,
+            candidate_name: professionalName,
+            // Volledige context voor AI-gestuurde response
+            response_type: responseType,
+            newly_extracted_data: analysis.new_data || {},
+            rejection_context: Object.keys(rejectionContext).length > 0 ? rejectionContext : undefined,
+            accepted_data: Object.keys(analysis.new_data || {}).filter(k => !rejectionContext[k]),
+            remaining_missing_info: finalRemainingMissing,
+            current_completeness: newCompletenessScore,
+            pipeline_stage: pipelineStage,
+            interview_status: interviewStatus,
+            original_message_preview: emailText?.substring(0, 500),
+            subject: subject,
+            org_name: orgInfo.displayName,
+            email_config: emailConfig,
+          },
+          status: "pending"
+        });
+
+      if (goalError) {
+        console.error("Error creating reply response goal:", goalError);
       } else {
-        emailData = await emailResponse.json();
-        console.log("Email sent:", emailData);
+        console.log(`✅ Created send_reply_response goal for application ${applicationId}`);
+        
+        // Direct de agent triggeren (geen wachten op cron)
+        try {
+          console.log("🚀 Triggering ai-agent-orchestrator for immediate response...");
+          
+          // Stap 1: Plan de goal (voegt actie toe aan queue)
+          await supabase.functions.invoke('ai-agent-orchestrator', {
+            body: { 
+              action: 'process_pending_goals',
+              filter_application_id: applicationId 
+            }
+          });
+          
+          // Stap 2: Voer de actie DIRECT uit
+          await supabase.functions.invoke('ai-agent-orchestrator', {
+            body: { 
+              action: 'execute_actions'
+            }
+          });
+          
+          console.log("✅ AI Agent triggered for immediate response");
+        } catch (orchestratorErr) {
+          console.warn("⚠️ Orchestrator trigger failed, will retry via cron:", orchestratorErr);
+          // Non-blocking: als het faalt, pakt de cron job het op
+        }
       }
     }
 
-    // Save assistant response to conversations
-    console.log("Saving assistant response...");
+    // Save processing summary to conversations (voor audit trail)
+    console.log("Saving processing summary...");
+    const summaryContent = [
+      `Reply verwerkt:`,
+      `- Completeness: ${newCompletenessScore}%`,
+      `- Stage: ${pipelineStage}`,
+      Object.keys(rejectionContext).length > 0 ? `- Afgewezen data: ${Object.keys(rejectionContext).join(', ')}` : null,
+      finalRemainingMissing.length > 0 ? `- Nog nodig: ${finalRemainingMissing.join(', ')}` : null,
+      `- Response via AI Agent gepland`
+    ].filter(Boolean).join('\n');
+
     const { error: responseInsertError } = await supabase
       .from("application_conversations")
       .insert({
         application_id: applicationId,
-        role: "assistant",
-        content: responseBody.replace(/<[^>]*>/g, ""), // Strip HTML for text version
+        role: "system",
+        content: summaryContent,
         metadata: {
-          email_id: emailData?.id,
-          subject: responseSubject,
+          processing_type: 'reply_analysis',
           completeness_score: newCompletenessScore,
-          requests_interview: analysis.requests_interview,
+          rejection_context: Object.keys(rejectionContext),
+          remaining_missing: finalRemainingMissing,
+          response_delegated_to: 'ai_agent',
         },
       });
 
     if (responseInsertError) {
-      console.error("Error saving response:", responseInsertError);
+      console.error("Error saving processing summary:", responseInsertError);
     }
 
-    console.log("=== Reply Processing Complete ===");
+    console.log("=== Reply Processing Complete (AI Agent Flow) ===");
 
     return new Response(
       JSON.stringify({
@@ -1836,7 +1807,8 @@ Return JSON in dit formaat:
         application_id: applicationId,
         completeness_score: newCompletenessScore,
         remaining_missing_info: finalRemainingMissing,
-        email_sent: !!emailData,
+        response_flow: 'unified_ai_agent',
+        rejection_context: Object.keys(rejectionContext),
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
