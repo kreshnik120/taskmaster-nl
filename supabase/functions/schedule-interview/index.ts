@@ -16,6 +16,7 @@ interface ScheduleRequest {
   interviewer_name?: string;
   interviewer_email?: string;
   alternative_attempt?: number;
+  include_completion_message?: boolean; // 🆕 Voor gecombineerde bevestiging + slots email
 }
 
 interface SlotConfig {
@@ -309,7 +310,16 @@ Deno.serve(async (req) => {
   try {
     const supabase = createAdminClient();
     const body: ScheduleRequest = await req.json();
-    const { application_id, action, selected_slot, interview_type = 'video', location, interviewer_name, interviewer_email } = body;
+    const { 
+      application_id, 
+      action, 
+      selected_slot, 
+      interview_type = 'video', 
+      location, 
+      interviewer_name, 
+      interviewer_email,
+      include_completion_message = false // 🆕 Gecombineerde email flag
+    } = body;
 
     if (!application_id) {
       return errorResponse('application_id is required', 400);
@@ -379,30 +389,105 @@ Deno.serve(async (req) => {
         // Generate email asking for availability
         const emailSubject = isAlternative 
           ? `Alternatieve interview momenten - ${orgName}`
-          : `Interview plannen - ${orgName}`;
+          : include_completion_message 
+            ? `Geweldig nieuws! Tijd voor een gesprek - ${orgName}`
+            : `Interview plannen - ${orgName}`;
         
-        const introText = isAlternative
-          ? `Geen probleem dat de vorige momenten niet uitkwamen! Hier zijn enkele andere opties:`
-          : `Goed nieuws! We willen graag een kennismakingsgesprek met je plannen.`;
+        // 🆕 Profiel samenvatting uit extracted_data halen
+        const profielItems: string[] = [];
+        if (extractedData.functie_niveau || extractedData.diploma_type) {
+          profielItems.push(`<li><strong>Functie:</strong> ${extractedData.functie_niveau || extractedData.diploma_type}</li>`);
+        }
+        if (extractedData.werkvorm) {
+          profielItems.push(`<li><strong>Werkvorm:</strong> ${extractedData.werkvorm}</li>`);
+        }
+        if (extractedData.beschikbaarheid) {
+          profielItems.push(`<li><strong>Beschikbaarheid:</strong> ${extractedData.beschikbaarheid}</li>`);
+        }
+        if (extractedData.regio) {
+          profielItems.push(`<li><strong>Regio:</strong> ${extractedData.regio}</li>`);
+        }
         
-        const emailHtml = `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #1a1a1a;">Beste ${candidateName},</h2>
-            
-            <p>${introText}</p>
-            
-            <p>Hieronder vind je ${availableSlots.length} mogelijke momenten. Laat ons weten welk moment jou het beste uitkomt door simpelweg het nummer te beantwoorden:</p>
-            
-            <div style="background: ${isAlternative ? '#fff3e0' : '#f5f5f5'}; padding: 20px; border-radius: 8px; margin: 20px 0; ${isAlternative ? 'border-left: 4px solid #ff9800;' : ''}">
-              <pre style="margin: 0; font-family: Arial, sans-serif; white-space: pre-wrap;">${slotOptions}</pre>
+        const profielSection = profielItems.length > 0 ? `
+          <div style="background: #f0f9ff; padding: 16px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #0ea5e9;">
+            <h3 style="margin: 0 0 12px 0; color: #0369a1;">📋 Je Profiel</h3>
+            <ul style="margin: 0; padding-left: 20px;">
+              ${profielItems.join('\n')}
+            </ul>
+          </div>
+        ` : '';
+        
+        // 🆕 Intro tekst gebaseerd op type email
+        let introSection = '';
+        if (include_completion_message) {
+          introSection = `
+            <div style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); padding: 20px; border-radius: 12px; margin-bottom: 24px; text-align: center;">
+              <h2 style="color: #047857; margin: 0 0 8px 0;">🎉 Geweldig nieuws!</h2>
+              <p style="color: #065f46; margin: 0; font-size: 16px;">Je sollicitatie is compleet en we zijn onder de indruk van je profiel!</p>
             </div>
             
-            <p>Het gesprek duurt ongeveer 30 minuten en vindt ${interview_type === 'video' ? 'online via Microsoft Teams' : interview_type === 'phone' ? 'telefonisch' : `plaats op ${location || 'ons kantoor'}`} plaats.</p>
+            ${profielSection}
             
-            <p>Mocht geen van deze momenten schikken, laat het ons dan weten en we zoeken samen naar een alternatief.</p>
+            <p style="font-size: 16px;">We willen je graag beter leren kennen. Hieronder vind je <strong>${availableSlots.length} mogelijke momenten</strong> voor een kennismakingsgesprek:</p>
+          `;
+        } else if (isAlternative) {
+          introSection = `
+            <p>Geen probleem dat de vorige momenten niet uitkwamen! Hier zijn enkele andere opties:</p>
+            <p>Hieronder vind je ${availableSlots.length} nieuwe mogelijke momenten:</p>
+          `;
+        } else {
+          introSection = `
+            <p>Goed nieuws! We willen graag een kennismakingsgesprek met je plannen.</p>
+            <p>Hieronder vind je ${availableSlots.length} mogelijke momenten. Laat ons weten welk moment jou het beste uitkomt:</p>
+          `;
+        }
+        
+        const emailHtml = `
+          <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #1a1a1a;">
+            <h2 style="color: #1a1a1a; margin-bottom: 16px;">Beste ${candidateName},</h2>
             
-            <p>Met vriendelijke groet,<br>
-            <strong>${orgName} Recruitment</strong></p>
+            ${introSection}
+            
+            <div style="background: ${isAlternative ? '#fff7ed' : '#f8fafc'}; padding: 24px; border-radius: 12px; margin: 24px 0; ${isAlternative ? 'border-left: 4px solid #f97316;' : 'border: 1px solid #e2e8f0;'}">
+              <h3 style="margin: 0 0 16px 0; color: ${isAlternative ? '#c2410c' : '#334155'};">📅 Beschikbare momenten</h3>
+              <div style="font-size: 15px; line-height: 2;">
+                ${availableSlots.map((slot, index) => 
+                  `<div style="padding: 8px 12px; background: white; border-radius: 6px; margin-bottom: 8px; border: 1px solid #e2e8f0;">
+                    <strong style="color: #0369a1;">${index + 1}.</strong> ${formatDate(slot.date)} om <strong>${slot.time}</strong>
+                  </div>`
+                ).join('')}
+              </div>
+            </div>
+            
+            <div style="background: #fef3c7; padding: 16px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 0; font-size: 14px;">
+                💬 <strong>Antwoord simpel met het nummer van je voorkeur</strong><br>
+                <span style="color: #92400e;">Bijvoorbeeld: "Ik kies voor optie 2"</span>
+              </p>
+            </div>
+            
+            <div style="display: flex; gap: 12px; margin: 20px 0;">
+              <div style="flex: 1; background: #f1f5f9; padding: 12px; border-radius: 8px; text-align: center;">
+                <span style="font-size: 20px;">💻</span>
+                <p style="margin: 8px 0 0 0; font-size: 13px; color: #475569;">
+                  ${interview_type === 'video' ? 'Via Microsoft Teams' : interview_type === 'phone' ? 'Telefonisch' : `Op ${location || 'locatie'}`}
+                </p>
+              </div>
+              <div style="flex: 1; background: #f1f5f9; padding: 12px; border-radius: 8px; text-align: center;">
+                <span style="font-size: 20px;">⏱️</span>
+                <p style="margin: 8px 0 0 0; font-size: 13px; color: #475569;">~30 minuten</p>
+              </div>
+            </div>
+            
+            <p style="color: #64748b; font-size: 14px;">Mocht geen van deze momenten schikken, laat het ons dan weten en we zoeken samen naar een alternatief.</p>
+            
+            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+            
+            <p style="margin-bottom: 4px;">Met vriendelijke groet,</p>
+            <p style="margin: 0;"><strong>${orgName} Recruitment</strong></p>
+            <p style="margin: 4px 0 0 0; color: #64748b; font-size: 13px;">
+              📧 personeel@${isAbczorg ? 'abczorg' : 'citozorg'}.nl
+            </p>
           </div>
         `;
 
@@ -584,32 +669,137 @@ Deno.serve(async (req) => {
           return errorResponse('No confirmed slot available', 400);
         }
 
-        // Send confirmation email
-        const confirmSubject = `Bevestiging interview - ${formatDate(confirmedSlot.date)} om ${confirmedSlot.time}`;
+        // 🆕 Genereer rijke ICS agenda-uitnodiging
+        const interviewStart = new Date(`${confirmedSlot.date}T${confirmedSlot.time}:00`);
+        const interviewEnd = new Date(interviewStart.getTime() + 30 * 60 * 1000); // +30 min
+        
+        const formatICSDate = (date: Date): string => {
+          return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+        };
+        
+        const uid = `interview-${application_id}@${orgName.toLowerCase().replace(/\s/g, '')}.nl`;
+        const functie = extractedData.functie_niveau || extractedData.diploma_type || 'Zorgprofessional';
+        
+        // 🆕 Rijke ICS met METHOD:REQUEST, VALARM herinneringen
+        const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//${orgName} Recruitment//NL
+METHOD:REQUEST
+X-WR-CALNAME:${orgName} Interview
+BEGIN:VEVENT
+UID:${uid}
+DTSTAMP:${formatICSDate(new Date())}
+DTSTART:${formatICSDate(interviewStart)}
+DTEND:${formatICSDate(interviewEnd)}
+ORGANIZER;CN=${orgName} Recruitment:mailto:personeel@${isAbczorg ? 'abczorg' : 'citozorg'}.nl
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;CN=${candidateName}:mailto:${candidateEmail}
+SUMMARY:🎯 Interview: ${candidateName} - ${functie}
+DESCRIPTION:══════════════════════════════════════════\\n🏥 INTERVIEW DETAILS\\n══════════════════════════════════════════\\n\\n👤 Kandidaat: ${candidateName}\\n📋 Functie: ${functie}\\n🏢 Organisatie: ${orgName}\\n\\n──────────────────────────────────────────\\n📍 LOCATIE\\n──────────────────────────────────────────\\n${interview_type === 'video' ? 'Via Microsoft Teams\\n(link wordt apart verzonden)' : interview_type === 'phone' ? 'Telefonisch' : `Op locatie: ${location || 'Kantoor'}`}\\n\\n──────────────────────────────────────────\\n📝 VOORBEREIDING\\n──────────────────────────────────────────\\n• Zorg voor stabiele internetverbinding\\n• Test camera en microfoon vooraf\\n• Houd je CV bij de hand\\n\\nVragen? Mail naar personeel@${isAbczorg ? 'abczorg' : 'citozorg'}.nl
+LOCATION:${interview_type === 'video' ? 'Microsoft Teams Meeting' : interview_type === 'phone' ? 'Telefonisch' : location || 'Kantoor'}
+CATEGORIES:Interview,Recruitment
+PRIORITY:5
+STATUS:CONFIRMED
+TRANSP:OPAQUE
+X-MICROSOFT-CDO-BUSYSTATUS:BUSY
+X-MICROSOFT-CDO-IMPORTANCE:1
+BEGIN:VALARM
+TRIGGER:-PT1H
+ACTION:DISPLAY
+DESCRIPTION:Interview over 1 uur met ${orgName}!
+END:VALARM
+BEGIN:VALARM
+TRIGGER:-PT15M
+ACTION:DISPLAY
+DESCRIPTION:Interview begint over 15 minuten
+END:VALARM
+END:VEVENT
+END:VCALENDAR`;
+
+        // Google Calendar link
+        const googleCalStart = interviewStart.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+        const googleCalEnd = interviewEnd.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+        const googleCalLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Interview: ${candidateName} - ${orgName}`)}&dates=${googleCalStart}/${googleCalEnd}&details=${encodeURIComponent(`Kennismakingsgesprek voor ${orgName}`)}&location=${encodeURIComponent(interview_type === 'video' ? 'Microsoft Teams' : location || 'Kantoor')}`;
+
+        // 🆕 Mooie bevestigingsmail met ICS bijlage
+        const confirmSubject = `✅ Interview Bevestigd - ${formatDate(confirmedSlot.date)} om ${confirmedSlot.time}`;
         const confirmHtml = `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #1a1a1a;">Beste ${candidateName},</h2>
-            
-            <p>Hierbij bevestigen we je interview:</p>
-            
-            <div style="background: #e8f5e9; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #4caf50;">
-              <p style="margin: 0;"><strong>Datum:</strong> ${formatDate(confirmedSlot.date)}</p>
-              <p style="margin: 8px 0 0 0;"><strong>Tijd:</strong> ${confirmedSlot.time}</p>
-              <p style="margin: 8px 0 0 0;"><strong>Type:</strong> ${interview_type === 'video' ? 'Online via Microsoft Teams' : interview_type === 'phone' ? 'Telefonisch' : `Op locatie: ${location || 'Wordt nog bevestigd'}`}</p>
+          <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #1a1a1a;">
+            <div style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); padding: 24px; border-radius: 12px; margin-bottom: 24px; text-align: center;">
+              <h2 style="color: #047857; margin: 0;">✅ Interview Bevestigd!</h2>
             </div>
             
-            ${interview_type === 'video' ? `
-            <p>Je ontvangt binnenkort een Teams-uitnodiging met de link voor het videogesprek.</p>
-            ` : ''}
+            <p>Beste ${candidateName},</p>
             
-            <p>Mocht je onverhoopt verhinderd zijn, laat het ons dan zo snel mogelijk weten.</p>
+            <p>Super! Je interview is bevestigd. Hieronder vind je alle details:</p>
             
-            <p>We kijken ernaar uit je te spreken!</p>
+            <div style="background: #f8fafc; padding: 24px; border-radius: 12px; margin: 24px 0; border: 1px solid #e2e8f0;">
+              <div style="display: grid; gap: 16px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <span style="font-size: 24px;">📅</span>
+                  <div>
+                    <div style="font-size: 12px; color: #64748b; text-transform: uppercase;">Datum</div>
+                    <div style="font-weight: 600; font-size: 16px;">${formatDate(confirmedSlot.date)}</div>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <span style="font-size: 24px;">🕐</span>
+                  <div>
+                    <div style="font-size: 12px; color: #64748b; text-transform: uppercase;">Tijd</div>
+                    <div style="font-weight: 600; font-size: 16px;">${confirmedSlot.time} uur</div>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <span style="font-size: 24px;">💻</span>
+                  <div>
+                    <div style="font-size: 12px; color: #64748b; text-transform: uppercase;">Locatie</div>
+                    <div style="font-weight: 600; font-size: 16px;">${interview_type === 'video' ? 'Microsoft Teams (video)' : interview_type === 'phone' ? 'Telefonisch' : location || 'Op locatie'}</div>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <span style="font-size: 24px;">⏱️</span>
+                  <div>
+                    <div style="font-size: 12px; color: #64748b; text-transform: uppercase;">Duur</div>
+                    <div style="font-weight: 600; font-size: 16px;">~30 minuten</div>
+                  </div>
+                </div>
+              </div>
+            </div>
             
-            <p>Met vriendelijke groet,<br>
-            <strong>${orgName} Recruitment</strong></p>
+            <div style="background: #eff6ff; padding: 20px; border-radius: 12px; margin: 24px 0; border-left: 4px solid #3b82f6;">
+              <h3 style="margin: 0 0 12px 0; color: #1e40af;">📲 Toevoegen aan je agenda</h3>
+              <p style="margin: 0 0 12px 0; font-size: 14px; color: #1e40af;">Klik op een van de onderstaande links:</p>
+              <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <a href="${googleCalLink}" style="background: #3b82f6; color: white; padding: 10px 16px; border-radius: 6px; text-decoration: none; font-size: 14px; display: inline-block;">📅 Google Agenda</a>
+              </div>
+              <p style="margin: 12px 0 0 0; font-size: 13px; color: #64748b;">💡 Tip: In de bijlage vind je ook een .ics bestand voor Outlook/Apple Calendar</p>
+            </div>
+            
+            <div style="background: #fef3c7; padding: 16px; border-radius: 8px; margin: 24px 0;">
+              <h3 style="margin: 0 0 12px 0; color: #92400e;">📝 Voorbereiding Tips</h3>
+              <ul style="margin: 0; padding-left: 20px; color: #92400e; font-size: 14px;">
+                <li>Zorg voor een rustige omgeving</li>
+                <li>Test je camera en microfoon vooraf</li>
+                ${interview_type === 'video' ? '<li>Je ontvangt de Teams-link kort voor het gesprek</li>' : ''}
+                <li>Houd je CV bij de hand</li>
+              </ul>
+            </div>
+            
+            <p style="color: #64748b; font-size: 14px;">💡 Verhinderd? Laat het ons zo snel mogelijk weten door te reageren op deze email.</p>
+            
+            <p style="margin-top: 24px;">We kijken ernaar uit je te spreken!</p>
+            
+            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+            
+            <p style="margin-bottom: 4px;">Met vriendelijke groet,</p>
+            <p style="margin: 0;"><strong>${orgName} Recruitment</strong></p>
+            <p style="margin: 4px 0 0 0; color: #64748b; font-size: 13px;">
+              📧 personeel@${isAbczorg ? 'abczorg' : 'citozorg'}.nl
+            </p>
           </div>
         `;
+
+        // Encode ICS as base64 for email attachment
+        const icsBase64 = btoa(unescape(encodeURIComponent(icsContent)));
 
         const { error: confirmError } = await supabase.functions.invoke('send-ai-email', {
           body: {
@@ -619,6 +809,13 @@ Deno.serve(async (req) => {
             application_id,
             email_type: 'interview_confirmation',
             organization: orgName,
+            attachments: [
+              {
+                filename: `interview-${confirmedSlot.date}.ics`,
+                content: icsBase64,
+                content_type: 'text/calendar; method=REQUEST',
+              }
+            ]
           }
         });
 
@@ -640,12 +837,13 @@ Deno.serve(async (req) => {
           })
           .eq('id', application_id);
 
-        logSuccess('ScheduleInterview', 'Confirmation sent', { application_id });
+        logSuccess('ScheduleInterview', 'Confirmation sent with ICS', { application_id });
 
         return jsonResponse({
           success: true,
           action: 'send_confirmation',
           confirmation_sent: true,
+          ics_attached: true,
         });
       }
 
