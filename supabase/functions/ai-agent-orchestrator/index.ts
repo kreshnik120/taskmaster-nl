@@ -184,8 +184,63 @@ const GOAL_CONFIGS: Record<string, {
   },
 
   // =====================================================
-  // NEW: Schedule Interview - AI-driven interview scheduling
+  // NEW: Send Reply Response - Unified AI-gestuurde response op email replies
   // =====================================================
+  'send_reply_response': {
+    requiredFields: ['application_id', 'candidate_email'],
+    planGenerator: async (goal, context) => {
+      const responseType = goal.input_data.response_type || 'standard_reply';
+      const candidateName = goal.input_data.candidate_name || 'sollicitant';
+      
+      console.log(`📧 [Orchestrator] send_reply_response: type=${responseType}, candidate=${candidateName}`);
+      
+      // Get fields to ask based on remaining_missing_info
+      const fieldsToAsk = goal.input_data.remaining_missing_info || [];
+      
+      // Determine action type based on response_type
+      let actionType = 'send_followup_question';
+      let actionDescription = `Stuur AI-gestuurde response aan ${candidateName}`;
+      
+      if (responseType === 'ready_for_interview' && fieldsToAsk.length === 0) {
+        actionType = 'request_interview_availability';
+        actionDescription = `Vraag interview beschikbaarheid aan ${candidateName}`;
+      } else if (responseType === 'document_request') {
+        actionDescription = `Vraag documenten aan ${candidateName}`;
+      } else if (responseType === 'interview_acknowledgment') {
+        actionDescription = `Bevestig interview ontvangst aan ${candidateName}`;
+      } else if (responseType === 'followup_with_context') {
+        actionDescription = `Stuur contextuele follow-up aan ${candidateName} (rejection context included)`;
+      }
+      
+      return [
+        {
+          action_type: actionType,
+          action_order: 1,
+          action_description: actionDescription,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            application_id: goal.input_data.application_id,
+            candidate_email: goal.input_data.candidate_email,
+            candidate_name: candidateName,
+            // Passeer alle context voor slimme email generatie
+            response_type: responseType,
+            fields_to_ask: fieldsToAsk,
+            all_missing_info: goal.input_data.remaining_missing_info,
+            current_completeness: goal.input_data.current_completeness,
+            // 🆕 Rejection context voor uitleg waarom data afgewezen is
+            rejection_context: goal.input_data.rejection_context || {},
+            accepted_data: goal.input_data.accepted_data || [],
+            newly_extracted_data: goal.input_data.newly_extracted_data || {},
+            // Extra context
+            pipeline_stage: goal.input_data.pipeline_stage,
+            interview_status: goal.input_data.interview_status,
+            original_message_preview: goal.input_data.original_message_preview,
+            email_type: responseType === 'ready_for_interview' ? 'interview_invitation' : 'followup_question',
+          }
+        }
+      ];
+    }
+  },
   'schedule_interview': {
     requiredFields: ['application_id', 'candidate_email'],
     planGenerator: (goal, context) => {
