@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { format, startOfWeek, endOfDay, startOfDay, addDays, isSameDay, parseISO, getWeek, endOfWeek } from "date-fns";
 import { nl } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
@@ -13,6 +13,13 @@ import { useToast } from "@/hooks/use-toast";
 import { useCountUp } from "@/hooks/useCountUp";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { KPICard } from "@/components/ui/kpi-card";
+
+interface InterviewDetails {
+  application_id?: string;
+  candidate_name?: string;
+  type?: string;
+  [key: string]: unknown;
+}
 
 interface Task {
   id: string;
@@ -25,6 +32,8 @@ interface Task {
   assignee_id: string | null;
   application_id: string | null;
   recruitment_action_type: string | null;
+  category: string | null;
+  interview_details: InterviewDetails | null;
   profiles: {
     name: string | null;
     email: string | null;
@@ -63,6 +72,20 @@ const PRIORITY_BG: Record<string, string> = {
   medium: "bg-blue-50/40 dark:bg-blue-900/20",
   high: "bg-amber-50/40 dark:bg-amber-900/20",
   critical: "bg-red-50/40 dark:bg-red-900/20",
+};
+
+// Interview task styling - distinct purple theme
+const INTERVIEW_STYLES = {
+  border: "border-l-purple-500/70",
+  bg: "bg-purple-50/40 dark:bg-purple-900/20",
+  dot: "bg-purple-500/80",
+};
+
+// Helper function to detect interview tasks
+const isInterviewTask = (task: Task): boolean => {
+  return task.category === 'interview' || 
+         task.recruitment_action_type === 'interview' ||
+         task.interview_details !== null;
 };
 
 export default function Kalender() {
@@ -144,7 +167,7 @@ export default function Kalender() {
       const { data, error } = await supabase
         .from("tasks")
         .select(`
-          id, title, description, priority, start_at, due_at, next_action, assignee_id, application_id, recruitment_action_type,
+          id, title, description, priority, start_at, due_at, next_action, assignee_id, application_id, recruitment_action_type, category, interview_details,
           profiles!tasks_assignee_id_fkey (name, email)
         `)
         .eq("org_id", userOrgs.org_id)
@@ -154,7 +177,7 @@ export default function Kalender() {
         .order("start_at", { ascending: true });
 
       if (error) throw error;
-      setTasks(data || []);
+      setTasks((data || []) as Task[]);
     } catch (error) {
       console.error("Error fetching tasks:", error);
       toast({ title: "Fout bij laden", description: "Kon taken niet laden.", variant: "destructive" });
@@ -424,35 +447,61 @@ export default function Kalender() {
                 ) : (
                   <>
                     {/* Task Cards - Ultra-subtle Apple style with priority border + bg tint */}
-                    {dayTasks.map((task, taskIndex) => (
-                      <div 
-                        key={task.id} 
-                        onClick={() => handleTaskClick(task)} 
-                        className={cn(
-                          "p-3.5 rounded-lg border-l-2 shadow-[0_0.5px_1px_rgba(0,0,0,0.02)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.05)] hover:translate-y-[-0.5px] cursor-pointer transition-all duration-200 space-y-1.5",
-                          PRIORITY_BORDERS[task.priority] || PRIORITY_BORDERS.medium,
-                          PRIORITY_BG[task.priority] || PRIORITY_BG.medium
-                        )}
-                        {...(taskIndex === 0 && (task.priority === 'high' || task.priority === 'critical') && { 'data-urgent-task': true })}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="font-medium text-sm text-foreground/90 leading-tight tracking-tight line-clamp-2 flex-1">{task.title}</p>
-                          {(task.start_at || task.due_at) && (
-                            <span className="text-[11px] text-muted-foreground/70 tabular-nums shrink-0">
-                              {task.start_at ? format(parseISO(task.start_at), 'HH:mm') : format(parseISO(task.due_at!), 'HH:mm')}
-                            </span>
+                    {dayTasks.map((task, taskIndex) => {
+                      const isInterview = isInterviewTask(task);
+                      const candidateName = task.interview_details?.candidate_name;
+                      
+                      return (
+                        <div 
+                          key={task.id} 
+                          onClick={() => handleTaskClick(task)} 
+                          className={cn(
+                            "p-3.5 rounded-lg border-l-2 shadow-[0_0.5px_1px_rgba(0,0,0,0.02)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.05)] hover:translate-y-[-0.5px] cursor-pointer transition-all duration-200 space-y-1.5",
+                            isInterview 
+                              ? [INTERVIEW_STYLES.border, INTERVIEW_STYLES.bg]
+                              : [PRIORITY_BORDERS[task.priority] || PRIORITY_BORDERS.medium, PRIORITY_BG[task.priority] || PRIORITY_BG.medium]
                           )}
+                          {...(taskIndex === 0 && (task.priority === 'high' || task.priority === 'critical') && { 'data-urgent-task': true })}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                              {isInterview && (
+                                <UserCheck className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                              )}
+                              <p className="font-medium text-sm text-foreground/90 leading-tight tracking-tight line-clamp-2">{task.title}</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {isInterview && (
+                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300">
+                                  Interview
+                                </span>
+                              )}
+                              {(task.start_at || task.due_at) && (
+                                <span className="text-[11px] text-muted-foreground/70 tabular-nums">
+                                  {task.start_at ? format(parseISO(task.start_at), 'HH:mm') : format(parseISO(task.due_at!), 'HH:mm')}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className={cn(
+                              "h-2 w-2 rounded-full", 
+                              isInterview ? INTERVIEW_STYLES.dot : (PRIORITY_DOTS[task.priority] || PRIORITY_DOTS.medium)
+                            )} />
+                            {/* Show candidate name for interviews, otherwise show assignee */}
+                            {isInterview && candidateName ? (
+                              <span className="text-[11px] font-medium text-purple-600 dark:text-purple-400 truncate max-w-[120px]">
+                                {candidateName}
+                              </span>
+                            ) : task.profiles && (
+                              <span className="text-[11px] text-muted-foreground/70 truncate max-w-[120px]">
+                                {task.profiles.name || task.profiles.email}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className={cn("h-2 w-2 rounded-full", PRIORITY_DOTS[task.priority] || PRIORITY_DOTS.medium)} />
-                          {task.profiles && (
-                            <span className="text-[11px] text-muted-foreground/70 truncate max-w-[120px]">
-                              {task.profiles.name || task.profiles.email}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {/* Reminder Cards - Amber accent style */}
                     {dayReminders.map((reminder, reminderIndex) => (
                       <div 
