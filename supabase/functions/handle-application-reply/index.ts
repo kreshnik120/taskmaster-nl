@@ -1579,24 +1579,31 @@ Return JSON in dit formaat:
     const INTERVIEW_THRESHOLD = parseInt(Deno.env.get('INTERVIEW_THRESHOLD') || '85');
     
     // Skip als slot rejection net verwerkt is
+    // 🎯 GECOMBINEERDE EMAIL: Bij threshold → stuur include_completion_message: true
+    // zodat de interview slots email ook de bevestigingsboodschap bevat
+    let skipResponseEmail = false;
+    
     if (!slotRejection && pipelineStage === 'nieuw' && newCompletenessScore >= INTERVIEW_THRESHOLD && !interviewConfirmed) {
       // Check of slots al gestuurd zijn
       const skipStatuses = ['slots_offered', 'alternative_slots_offered', 'scheduled', 'confirmed', 'awaiting_manual_intervention'];
       if (!skipStatuses.includes(currentInterviewStatus || '')) {
-        console.log(`🎉 Completeness ${newCompletenessScore}% >= threshold ${INTERVIEW_THRESHOLD}%, sending interview slots via auto-send-interview-slots`);
+        console.log(`🎉 Completeness ${newCompletenessScore}% >= threshold ${INTERVIEW_THRESHOLD}%, sending COMBINED interview slots email`);
         
         try {
           const { data: autoResult, error: autoError } = await supabase.functions.invoke('auto-send-interview-slots', {
             body: {
               application_id: applicationId,
               trigger_source: 'reply_update',
+              include_completion_message: true, // 🆕 Gecombineerde email met bevestiging
             }
           });
           
           if (autoError) {
             console.error("Error auto-sending interview slots:", autoError);
           } else {
-            console.log("✅ Auto interview slots result:", autoResult);
+            console.log("✅ Auto interview slots result (combined email):", autoResult);
+            // 🆕 Skip de losse bevestigingsmail - alles zit in de interview slots email
+            skipResponseEmail = true;
           }
         } catch (autoErr) {
           console.error("Exception auto-sending interview slots:", autoErr);
@@ -1769,30 +1776,36 @@ Return JSON in dit formaat:
       `;
     }
 
-    // Send response email via Resend API
-    console.log(`Sending response email from ${orgInfo.displayName}...`);
-    const emailResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: `${orgInfo.displayName} Recruitment <${emailConfig.from}>`,
-        to: from,
-        subject: responseSubject,
-        html: responseBody,
-        reply_to: emailConfig.replyTo,
-      }),
-    });
-
+    // 🆕 Skip response email als gecombineerde email al gestuurd is
     let emailData: any = null;
-    if (!emailResponse.ok) {
-      const errorText = await emailResponse.text();
-      console.error("Error sending email:", emailResponse.status, errorText);
+    
+    if (skipResponseEmail) {
+      console.log(`⏭️ Skipping standalone response email - combined interview email already sent`);
     } else {
-      emailData = await emailResponse.json();
-      console.log("Email sent:", emailData);
+      // Send response email via Resend API
+      console.log(`Sending response email from ${orgInfo.displayName}...`);
+      const emailResponse = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: `${orgInfo.displayName} Recruitment <${emailConfig.from}>`,
+          to: from,
+          subject: responseSubject,
+          html: responseBody,
+          reply_to: emailConfig.replyTo,
+        }),
+      });
+
+      if (!emailResponse.ok) {
+        const errorText = await emailResponse.text();
+        console.error("Error sending email:", emailResponse.status, errorText);
+      } else {
+        emailData = await emailResponse.json();
+        console.log("Email sent:", emailData);
+      }
     }
 
     // Save assistant response to conversations

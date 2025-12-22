@@ -20,6 +20,7 @@ interface AutoInterviewRequest {
   trigger_source: 'initial_application' | 'reply_update' | 'manual' | 'alternative_request';
   force?: boolean; // Skip status checks (for alternative slots)
   alternative_attempt?: number; // Track alternative slot attempts
+  include_completion_message?: boolean; // 🆕 Gecombineerde email met bevestigingsboodschap
 }
 
 // Configuratie via environment variables
@@ -38,7 +39,8 @@ Deno.serve(async (req) => {
       application_id, 
       trigger_source = 'manual',
       force = false,
-      alternative_attempt = 0
+      alternative_attempt = 0,
+      include_completion_message = false // 🆕 Voor gecombineerde email
     } = body;
 
     if (!application_id) {
@@ -178,7 +180,10 @@ Deno.serve(async (req) => {
     // SEND INTERVIEW SLOTS via schedule-interview
     // ================================================================
     
-    logInfo('AutoSendInterviewSlots', 'Invoking schedule-interview', { application_id });
+    logInfo('AutoSendInterviewSlots', 'Invoking schedule-interview', { 
+      application_id, 
+      include_completion_message 
+    });
 
     const isAlternative = trigger_source === 'alternative_request';
     
@@ -188,6 +193,7 @@ Deno.serve(async (req) => {
         application_id: application_id,
         interview_type: 'video',
         alternative_attempt: isAlternative ? effectiveAltAttempt + 1 : 0,
+        include_completion_message: include_completion_message, // 🆕 Doorsturen naar schedule-interview
       }
     });
 
