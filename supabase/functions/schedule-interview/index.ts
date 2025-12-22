@@ -663,10 +663,46 @@ Deno.serve(async (req) => {
       }
 
       case 'send_confirmation': {
-        const confirmedSlot = selected_slot || (extractedData.interview_confirmed_slot as { date: string; time: string });
+        // 🔧 FIX: Parse confirmed slot - kan ISO string of object zijn
+        let confirmedSlot: { date: string; time: string };
         
-        if (!confirmedSlot) {
+        const rawSlot = selected_slot || 
+          application.interview_confirmed_slot || 
+          extractedData.interview_confirmed_slot;
+        
+        if (!rawSlot) {
           return errorResponse('No confirmed slot available', 400);
+        }
+        
+        console.log('📅 Raw confirmedSlot:', JSON.stringify(rawSlot));
+        
+        if (typeof rawSlot === 'string') {
+          // ISO string format: "2024-12-24T10:30:00+01:00" of "2024-12-24T10:30:00"
+          const dateObj = new Date(rawSlot);
+          if (isNaN(dateObj.getTime())) {
+            return errorResponse(`Invalid slot date format: ${rawSlot}`, 400);
+          }
+          confirmedSlot = {
+            date: dateObj.toISOString().split('T')[0], // "2024-12-24"
+            time: dateObj.toLocaleTimeString('nl-NL', { 
+              hour: '2-digit', 
+              minute: '2-digit', 
+              hour12: false,
+              timeZone: 'Europe/Amsterdam'
+            }) // "10:30"
+          };
+          console.log('📅 Parsed from ISO string:', confirmedSlot);
+        } else if (typeof rawSlot === 'object' && rawSlot !== null) {
+          // Object format: { date: "2024-12-24", time: "10:30" }
+          if (rawSlot.date && rawSlot.time) {
+            confirmedSlot = { date: rawSlot.date, time: rawSlot.time };
+            console.log('📅 Using object format:', confirmedSlot);
+          } else {
+            // Probeer andere velden
+            return errorResponse(`Unrecognized slot object format: ${JSON.stringify(rawSlot)}`, 400);
+          }
+        } else {
+          return errorResponse(`Unrecognized slot format: ${typeof rawSlot}`, 400);
         }
 
         // 🆕 Genereer rijke ICS agenda-uitnodiging
