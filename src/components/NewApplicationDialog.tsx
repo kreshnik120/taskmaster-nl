@@ -415,6 +415,23 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
         }
       }
 
+      // 🆕 Direct welkomstmail triggeren (geen wachten op cron job)
+      if (newApplicationId) {
+        try {
+          console.log("🚀 Triggering ai-agent-orchestrator for immediate welcome email...");
+          await supabase.functions.invoke('ai-agent-orchestrator', {
+            body: { 
+              action: 'process_pending_goals',
+              filter_application_id: newApplicationId 
+            }
+          });
+          console.log("✅ Welkomstmail direct getriggerd");
+        } catch (err) {
+          console.warn("Welkomstmail wordt bij volgende cron run verstuurd:", err);
+          // Non-blocking: als het faalt, pakt de cron job het op
+        }
+      }
+
       // Calculate initial matches (async, non-blocking)
       let matchCount = 0;
       try {

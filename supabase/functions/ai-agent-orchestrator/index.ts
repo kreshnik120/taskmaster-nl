@@ -588,13 +588,13 @@ Deno.serve(async (req) => {
     const supabase = createAdminClient();
 
     const body = await req.json().catch(() => ({}));
-    const { action, goal_id, limit = 10, force_execute_task_id } = body;
+    const { action, goal_id, limit = 10, force_execute_task_id, filter_application_id } = body;
 
-    console.log(`🤖 [AI Agent Orchestrator] Action: ${action}, Goal ID: ${goal_id}`);
+    console.log(`🤖 [AI Agent Orchestrator] Action: ${action}, Goal ID: ${goal_id}, Filter App: ${filter_application_id || 'none'}`);
 
-    // Action: Process pending goals
+    // Action: Process pending goals (with optional application filter for direct triggers)
     if (action === 'process_pending_goals' || !action) {
-      return await processPendingGoals(supabase, limit);
+      return await processPendingGoals(supabase, limit, filter_application_id);
     }
 
     // Action: Plan a specific goal
@@ -698,11 +698,14 @@ async function debugQueueStatus(supabase: any) {
   );
 }
 
-// Process all pending goals
-async function processPendingGoals(supabase: any, limit: number) {
+// Process all pending goals (with optional filter for specific application)
+async function processPendingGoals(supabase: any, limit: number, filterApplicationId?: string) {
   console.log('📋 [Orchestrator] Processing pending goals...');
+  if (filterApplicationId) {
+    console.log(`🎯 [Orchestrator] Filtering for application_id: ${filterApplicationId}`);
+  }
   
-  const { data: goals, error } = await supabase
+  let query = supabase
     .from('agent_goals')
     .select('*')
     .eq('status', 'pending')
@@ -710,9 +713,16 @@ async function processPendingGoals(supabase: any, limit: number) {
     .order('created_at', { ascending: true })
     .limit(limit);
 
+  // 🆕 Filter op specifieke application_id als meegegeven (voor directe triggers)
+  if (filterApplicationId) {
+    query = query.eq('input_data->>application_id', filterApplicationId);
+  }
+
+  const { data: goals, error } = await query;
+
   if (error) throw error;
 
-  console.log(`📋 Found ${goals?.length || 0} pending goals`);
+  console.log(`📋 Found ${goals?.length || 0} pending goals${filterApplicationId ? ` for application ${filterApplicationId}` : ''}`);
 
   const results: Array<{ goal_id: string; success: boolean; error?: string; actions_created?: number }> = [];
   for (const goal of goals || []) {
