@@ -419,13 +419,23 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
       if (newApplicationId) {
         try {
           console.log("🚀 Triggering ai-agent-orchestrator for immediate welcome email...");
+          
+          // Stap 1: Plan de goal (voegt actie toe aan queue)
           await supabase.functions.invoke('ai-agent-orchestrator', {
             body: { 
               action: 'process_pending_goals',
               filter_application_id: newApplicationId 
             }
           });
-          console.log("✅ Welkomstmail direct getriggerd");
+          
+          // Stap 2: Voer de actie DIRECT uit (niet wachten op cron)
+          await supabase.functions.invoke('ai-agent-orchestrator', {
+            body: { 
+              action: 'execute_actions'
+            }
+          });
+          
+          console.log("✅ Welkomstmail direct getriggerd en uitgevoerd");
         } catch (err) {
           console.warn("Welkomstmail wordt bij volgende cron run verstuurd:", err);
           // Non-blocking: als het faalt, pakt de cron job het op
