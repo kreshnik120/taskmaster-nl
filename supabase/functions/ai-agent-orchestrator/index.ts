@@ -1300,31 +1300,41 @@ async function executeFollowupQuestion(supabase: any, action: any) {
   }
   candidateName = candidateName || 'sollicitant';
   
-  console.log(`📧 [Followup] Checking for recent emails before sending...`);
+  // 🆕 Check if rejection context exists - this MUST always be communicated
+  const hasRejectionContext = action.input_data?.rejection_context && 
+    Object.keys(action.input_data.rejection_context).length > 0;
+  
+  if (hasRejectionContext) {
+    console.log(`📧 [Followup] Rejection context present - BYPASSING deduplication`);
+    console.log(`   Rejected fields: ${Object.keys(action.input_data.rejection_context).join(', ')}`);
+  } else {
+    console.log(`📧 [Followup] Checking for recent emails before sending...`);
 
-  // 🔒 DEDUPLICATION CHECK: Skip if email was sent recently (within 1 hour)
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const { data: recentEmails } = await supabase
-    .from('application_conversations')
-    .select('id, created_at, content')
-    .eq('application_id', applicationId)
-    .eq('role', 'assistant')
-    .gte('created_at', oneHourAgo)
-    .ilike('content', '%Email verzonden%')
-    .order('created_at', { ascending: false })
-    .limit(1);
+    // 🔒 DEDUPLICATION CHECK: Skip if email was sent recently (within 1 hour)
+    // Only applies when there's NO rejection context to communicate
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { data: recentEmails } = await supabase
+      .from('application_conversations')
+      .select('id, created_at, content')
+      .eq('application_id', applicationId)
+      .eq('role', 'assistant')
+      .gte('created_at', oneHourAgo)
+      .ilike('content', '%Email verzonden%')
+      .order('created_at', { ascending: false })
+      .limit(1);
 
-  if (recentEmails && recentEmails.length > 0) {
-    console.log(`⚠️ [Followup] SKIPPING - Recent email found at ${recentEmails[0].created_at}`);
-    return { 
-      executed_via: 'skipped', 
-      reason: 'Recent email already sent (within 1 hour)',
-      last_email_at: recentEmails[0].created_at,
-      organization: org_name
-    };
+    if (recentEmails && recentEmails.length > 0) {
+      console.log(`⚠️ [Followup] SKIPPING - Recent email found at ${recentEmails[0].created_at}`);
+      return { 
+        executed_via: 'skipped', 
+        reason: 'Recent email already sent (within 1 hour) and no rejection context to communicate',
+        last_email_at: recentEmails[0].created_at,
+        organization: org_name
+      };
+    }
+
+    console.log(`📧 [Followup] No recent email found, proceeding to send...`);
   }
-
-  console.log(`📧 [Followup] No recent email found, proceeding to send...`);
 
   try {
     // Generate followup email using generate-followup-email
@@ -1368,11 +1378,19 @@ async function executeFollowupQuestion(supabase: any, action: any) {
     }
 
     console.log('✅ [Followup] Email sent successfully');
+    
+    // 🆕 Track rejection context in metadata for future deduplication
+    const rejectionContextKeys = action.input_data?.rejection_context 
+      ? Object.keys(action.input_data.rejection_context) 
+      : [];
+    
     return { 
       executed_via: 'resend', 
       organization, 
       email_generated: !!emailData,
       email_sent: !!sendData,
+      rejection_context_communicated: rejectionContextKeys,
+      had_rejection_context: rejectionContextKeys.length > 0,
       ...sendData 
     };
 

@@ -1618,65 +1618,12 @@ Return JSON in dit formaat:
     }
     
     // =====================================================
-    // STAP 5: NIEUW Stage - Follow-up if < 80%
+    // STAP 5: VERWIJDERD - application_intake_completion goal
+    // Nu volledig afgehandeld door send_reply_response in STAP 6
+    // Dit voorkomt dubbele goals en race conditions
     // =====================================================
-    if (pipelineStage === 'nieuw' && newCompletenessScore < 80 && finalRemainingMissing.length > 0) {
-      console.log("Completeness still < 80%, checking for existing follow-up goal...");
-      
-      // Check for existing ACTIVE follow-up goals
-      const { data: existingActiveFollowup } = await supabase
-        .from("agent_goals")
-        .select("id, status")
-        .eq("goal_type", "application_intake_completion")
-        .in("status", ["pending", "planning", "executing", "in_progress"])
-        .filter("input_data->application_id", "eq", applicationId)
-        .maybeSingle();
-      
-      if (existingActiveFollowup) {
-        console.log(`⏭️ Skipping follow-up goal - existing active goal found: ${existingActiveFollowup.id} (${existingActiveFollowup.status})`);
-      } else {
-        // Count total follow-ups for rate limiting
-        const { count: totalFollowups } = await supabase
-          .from("agent_goals")
-          .select("*", { count: "exact", head: true })
-          .eq("goal_type", "application_intake_completion")
-          .filter("input_data->application_id", "eq", applicationId);
-
-        const followUpCount = totalFollowups || 0;
-
-        // Max 3 follow-ups per applicatie
-        if (followUpCount < 3) {
-          const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
-          
-          const { error: goalError } = await supabase
-            .from("agent_goals")
-            .insert({
-              org_id: application.org_id,
-              goal_type: "application_intake_completion",
-              goal_description: `Vervolg follow-up voor ${professionalName} (${followUpCount + 1}/3)`,
-              priority: 100 - newCompletenessScore,
-              input_data: {
-                application_id: applicationId,
-                candidate_email: from,
-                candidate_name: professionalName,
-                missing_info: finalRemainingMissing,
-                current_completeness: newCompletenessScore,
-                follow_up_count: followUpCount,
-                // 🆕 Context voor slimme follow-up emails
-                rejection_context: Object.keys(rejectionContext).length > 0 ? rejectionContext : undefined,
-              },
-              status: "pending"
-            });
-
-          if (goalError) {
-            console.error("Error creating follow-up goal:", goalError);
-          } else {
-            console.log(`✅ Created follow-up goal #${followUpCount + 1} for application ${applicationId}`);
-          }
-        } else {
-          console.log(`⚠️ Max follow-ups (3) reached for application ${applicationId}`);
-        }
-      }
+    if (pipelineStage === 'nieuw' && newCompletenessScore < 80) {
+      console.log(`📊 Completeness ${newCompletenessScore}% < 80%, follow-up handled via send_reply_response goal`);
     }
 
     // =====================================================
