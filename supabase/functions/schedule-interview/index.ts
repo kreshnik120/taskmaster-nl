@@ -1,5 +1,8 @@
 import { createAdminClient, corsHeaders, jsonResponse, errorResponse, handleCors, logInfo, logSuccess, logError, logWarning } from '../_shared/core.ts';
 
+// Use 'any' type for Supabase client to avoid version mismatches
+type SupabaseClientType = any;
+
 interface ScheduleRequest {
   application_id: string;
   action: 'request_availability' | 'confirm_slot' | 'send_confirmation' | 'request_alternative_availability';
@@ -33,8 +36,11 @@ const N8N_CALENDAR_WEBHOOK_URL = Deno.env.get('N8N_CALENDAR_WEBHOOK_URL');
 // Default interview slot tijden (als fallback)
 const DEFAULT_TIMES = ['09:00', '10:30', '14:00', '15:30'];
 
+// Buffer in minuten rondom bestaande afspraken
+const SLOT_BUFFER_MINUTES = 60;
+
 // ============================================
-// SMART SLOT GENERATION
+// SMART SLOT GENERATION MET AGENDA CHECK
 // ============================================
 
 interface CalendarSlot {
@@ -42,11 +48,154 @@ interface CalendarSlot {
   time: string;
 }
 
+interface BlockedSlot {
+  date: string;
+  time: string;
+  duration_minutes: number;
+}
+
 /**
- * Probeer echte beschikbaarheid op te halen via n8n/kalender integratie.
- * Fallback naar statische slots als n8n niet geconfigureerd of faalt.
+ * Haal bezette tijdslots op uit de interne agenda (tasks tabel)
+ */
+async function getBlockedTimeSlots(
+  supabase: SupabaseClientType,
+  orgId: string | null,
+  startDate: Date,
+  endDate: Date
+): Promise<Map<string, BlockedSlot[]>> {
+  logInfo('ScheduleInterview', 'Fetching blocked slots from internal calendar', {
+    orgId,
+    startDate: startDate.toISOString().split('T')[0],
+    endDate: endDate.toISOString().split('T')[0]
+  });
+
+  // Haal alle taken op in de gegeven periode die niet verwijderd/voltooid zijn
+  let query = supabase
+    .from('tasks')
+    .select('start_at, due_at, estimate_min, category, title')
+    .gte('start_at', startDate.toISOString())
+    .lte('start_at', endDate.toISOString())
+    .is('deleted_at', null)
+    .is('completed_at', null);
+
+  // Filter op organisatie indien beschikbaar
+  if (orgId) {
+    query = query.eq('org_id', orgId);
+  }
+
+  const { data: tasks, error } = await query;
+
+  if (error) {
+    logWarning('ScheduleInterview', 'Failed to fetch tasks from calendar', { error: error.message });
+    return new Map();
+  }
+
+  // Maak een map van datum → bezette tijden met duur
+  const blockedSlots = new Map<string, BlockedSlot[]>();
+
+  for (const task of tasks || []) {
+    if (task.start_at) {
+      const date = task.start_at.split('T')[0];
+      const time = task.start_at.split('T')[1]?.substring(0, 5);
+      const duration = task.estimate_min || 30; // Default 30 minuten
+
+      if (!blockedSlots.has(date)) {
+        blockedSlots.set(date, []);
+      }
+      blockedSlots.get(date)!.push({ date, time, duration_minutes: duration });
+      
+      logInfo('ScheduleInterview', `📅 Bezet slot gevonden: ${date} ${time} (${duration} min) - ${task.title || task.category}`);
+    }
+  }
+
+  logSuccess('ScheduleInterview', 'Blocked slots retrieved', {
+    blockedDates: Array.from(blockedSlots.keys()),
+    totalBlockedSlots: Array.from(blockedSlots.values()).reduce((sum, arr) => sum + arr.length, 0)
+  });
+
+  return blockedSlots;
+}
+
+/**
+ * Check of een tijdslot conflicteert met bestaande afspraken
+ */
+function isSlotBlocked(
+  date: string,
+  time: string,
+  blockedSlots: Map<string, BlockedSlot[]>,
+  bufferMinutes: number = SLOT_BUFFER_MINUTES
+): boolean {
+  const blockedForDate = blockedSlots.get(date);
+  if (!blockedForDate || blockedForDate.length === 0) {
+    return false;
+  }
+
+  const [th, tm] = time.split(':').map(Number);
+  const slotMinutes = th * 60 + tm;
+
+  for (const blocked of blockedForDate) {
+    const [bh, bm] = blocked.time.split(':').map(Number);
+    const blockedStart = bh * 60 + bm;
+    const blockedEnd = blockedStart + blocked.duration_minutes;
+
+    // Check of het slot binnen de buffer valt
+    // Slot is geblokkeerd als: slotStart < blockedEnd + buffer EN slotStart + buffer > blockedStart
+    const slotEnd = slotMinutes + 30; // Interview duurt 30 min
+    
+    if (slotMinutes < blockedEnd + bufferMinutes && slotEnd > blockedStart - bufferMinutes) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Genereer beschikbare slots op basis van de interne agenda
+ */
+function generateAvailableSlotsFromCalendar(
+  daysMin: number,
+  daysMax: number,
+  maxSlots: number,
+  blockedSlots: Map<string, BlockedSlot[]>
+): CalendarSlot[] {
+  const slots: CalendarSlot[] = [];
+  const today = new Date();
+
+  for (let dayOffset = daysMin; dayOffset <= daysMax && slots.length < maxSlots; dayOffset++) {
+    const slotDate = new Date(today);
+    slotDate.setDate(today.getDate() + dayOffset);
+
+    // Skip weekends
+    if (slotDate.getDay() === 0 || slotDate.getDay() === 6) {
+      continue;
+    }
+
+    const dateStr = slotDate.toISOString().split('T')[0];
+
+    // Filter tijden die niet bezet zijn
+    for (const time of DEFAULT_TIMES) {
+      if (slots.length >= maxSlots) break;
+
+      const isBlocked = isSlotBlocked(dateStr, time, blockedSlots);
+
+      if (!isBlocked) {
+        slots.push({ date: dateStr, time });
+        logInfo('ScheduleInterview', `✅ Slot beschikbaar: ${dateStr} ${time}`);
+      } else {
+        logInfo('ScheduleInterview', `❌ Slot bezet: ${dateStr} ${time}`);
+      }
+    }
+  }
+
+  return slots;
+}
+
+/**
+ * Probeer echte beschikbaarheid op te halen via interne agenda + n8n/kalender integratie.
  */
 async function getAvailableSlots(
+  supabase: SupabaseClientType,
   orgId: string | null, 
   daysMin: number, 
   daysMax: number,
@@ -54,21 +203,26 @@ async function getAvailableSlots(
 ): Promise<CalendarSlot[]> {
   
   // ================================================================
-  // STAP 1: Probeer n8n kalender webhook (als geconfigureerd)
+  // STAP 1: Haal bezette tijden op uit interne agenda (tasks tabel)
+  // ================================================================
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() + daysMin);
+  const endDate = new Date();
+  endDate.setDate(endDate.getDate() + daysMax);
+
+  const blockedSlots = await getBlockedTimeSlots(supabase, orgId, startDate, endDate);
+
+  // ================================================================
+  // STAP 2: Probeer n8n kalender webhook (als geconfigureerd) voor extra blocked slots
   // ================================================================
   if (N8N_CALENDAR_WEBHOOK_URL) {
-    logInfo('ScheduleInterview', 'Fetching calendar availability via n8n', { 
+    logInfo('ScheduleInterview', 'Fetching additional calendar availability via n8n', { 
       url: N8N_CALENDAR_WEBHOOK_URL.substring(0, 50) + '...',
       daysMin, 
       daysMax 
     });
     
     try {
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() + daysMin);
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + daysMax);
-      
       const response = await fetch(N8N_CALENDAR_WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -84,11 +238,34 @@ async function getAvailableSlots(
       if (response.ok) {
         const data = await response.json();
         
+        // Als n8n expliciete beschikbare slots teruggeeft, gebruik die direct
         if (data.available_slots && Array.isArray(data.available_slots) && data.available_slots.length > 0) {
           logSuccess('ScheduleInterview', 'Got calendar slots from n8n', { 
             count: data.available_slots.length 
           });
-          return data.available_slots.slice(0, maxSlots);
+          // Filter n8n slots ook door onze interne blocked slots
+          const filteredSlots = data.available_slots.filter((slot: CalendarSlot) => 
+            !isSlotBlocked(slot.date, slot.time, blockedSlots)
+          );
+          return filteredSlots.slice(0, maxSlots);
+        }
+        
+        // Als n8n blocked slots teruggeeft, voeg die toe aan onze map
+        if (data.blocked_slots && Array.isArray(data.blocked_slots)) {
+          for (const blocked of data.blocked_slots) {
+            const date = blocked.date;
+            if (!blockedSlots.has(date)) {
+              blockedSlots.set(date, []);
+            }
+            blockedSlots.get(date)!.push({
+              date,
+              time: blocked.time,
+              duration_minutes: blocked.duration_minutes || 30
+            });
+          }
+          logInfo('ScheduleInterview', 'Added n8n blocked slots', { 
+            count: data.blocked_slots.length 
+          });
         }
       } else {
         logWarning('ScheduleInterview', 'n8n calendar webhook returned non-OK status', { 
@@ -96,45 +273,21 @@ async function getAvailableSlots(
         });
       }
     } catch (n8nError) {
-      logWarning('ScheduleInterview', 'n8n calendar check failed, falling back to static slots', { 
+      logWarning('ScheduleInterview', 'n8n calendar check failed', { 
         error: n8nError instanceof Error ? n8nError.message : String(n8nError)
       });
     }
   }
   
   // ================================================================
-  // STAP 2: Fallback naar statische slot generatie
+  // STAP 3: Genereer beschikbare slots op basis van blocked slots
   // ================================================================
-  logInfo('ScheduleInterview', 'Generating static slots', { daysMin, daysMax, maxSlots });
-  return generateStaticSlots(daysMin, daysMax, maxSlots);
-}
-
-/**
- * Genereer statische slots (fallback als n8n niet beschikbaar)
- */
-function generateStaticSlots(daysMin: number, daysMax: number, maxSlots: number): CalendarSlot[] {
-  const slots: CalendarSlot[] = [];
-  const today = new Date();
+  logInfo('ScheduleInterview', 'Generating available slots based on calendar', { 
+    daysMin, daysMax, maxSlots,
+    blockedDatesCount: blockedSlots.size
+  });
   
-  for (let dayOffset = daysMin; dayOffset <= daysMax && slots.length < maxSlots; dayOffset++) {
-    const slotDate = new Date(today);
-    slotDate.setDate(today.getDate() + dayOffset);
-    
-    // Skip weekends
-    if (slotDate.getDay() === 0 || slotDate.getDay() === 6) {
-      continue;
-    }
-    
-    const dateStr = slotDate.toISOString().split('T')[0];
-    
-    // Voeg tijden toe tot max bereikt
-    for (const time of DEFAULT_TIMES) {
-      if (slots.length >= maxSlots) break;
-      slots.push({ date: dateStr, time });
-    }
-  }
-  
-  return slots;
+  return generateAvailableSlotsFromCalendar(daysMin, daysMax, maxSlots, blockedSlots);
 }
 
 function formatDate(dateStr: string): string {
@@ -211,6 +364,7 @@ Deno.serve(async (req) => {
         });
         
         const availableSlots = await getAvailableSlots(
+          supabase,
           application.org_id,
           daysMin,
           daysMax,
