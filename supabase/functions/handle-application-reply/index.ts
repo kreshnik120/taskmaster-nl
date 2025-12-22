@@ -1323,8 +1323,31 @@ Return JSON in dit formaat:
     // =====================================================
     let interviewConfirmed = false;
     
-    if (analysis.selected_slot_index && offeredSlots && offeredSlots.length > 0) {
-      const slotIndex = parseInt(analysis.selected_slot_index) - 1;
+    // ✅ FIX: Check expliciet op number/string type, niet truthy (0 is valide slot!)
+    const hasSelectedSlot = typeof analysis.selected_slot_index === 'number' || 
+                            (typeof analysis.selected_slot_index === 'string' && analysis.selected_slot_index !== '');
+    
+    if (hasSelectedSlot && offeredSlots && offeredSlots.length > 0) {
+      // AI kan 0-indexed OF 1-indexed teruggeven - detecteer automatisch
+      const rawIndex = typeof analysis.selected_slot_index === 'string' 
+        ? parseInt(analysis.selected_slot_index) 
+        : analysis.selected_slot_index;
+      
+      // Smart index detection: als rawIndex >= offeredSlots.length, is het 1-indexed
+      // Als rawIndex = 0 en er zijn slots, behandel als 0-indexed (eerste slot)
+      let slotIndex: number;
+      if (rawIndex === 0) {
+        // 0 = eerste slot (0-indexed)
+        slotIndex = 0;
+      } else if (rawIndex >= 1 && rawIndex <= offeredSlots.length) {
+        // 1-indexed (user input like "optie 1")
+        slotIndex = rawIndex - 1;
+      } else {
+        // Direct 0-indexed
+        slotIndex = rawIndex;
+      }
+      
+      console.log(`🎯 Slot selection detected: raw=${rawIndex}, arrayIndex=${slotIndex}, totalSlots=${offeredSlots.length}`);
       if (slotIndex >= 0 && slotIndex < offeredSlots.length) {
         const selectedSlot = offeredSlots[slotIndex];
         console.log(`🎉 FASE 1: Kandidaat koos interview slot: ${selectedSlot.date} om ${selectedSlot.time}`);
