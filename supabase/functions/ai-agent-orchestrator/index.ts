@@ -1263,6 +1263,7 @@ async function executeFollowupQuestion(supabase: any, action: any) {
 
   try {
     // Generate followup email using generate-followup-email
+    // 🆕 Pass rejection_context for smart context-aware follow-up emails
     const { data: emailData, error: genError } = await supabase.functions.invoke('generate-followup-email', {
       body: {
         application_id: applicationId,
@@ -1270,7 +1271,8 @@ async function executeFollowupQuestion(supabase: any, action: any) {
         fields_to_ask: action.input_data.fields_to_ask,
         candidate_name: candidateName,
         current_completeness: action.input_data.current_completeness,
-        org_name: org_name
+        org_name: org_name,
+        rejection_context: action.input_data.rejection_context || {},
       }
     });
 

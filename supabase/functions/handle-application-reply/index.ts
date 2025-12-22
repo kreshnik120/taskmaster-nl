@@ -858,7 +858,10 @@ Return JSON in dit formaat:
       }
     }
     
-    // 🔧 FASE 3 FIX: Detecteer placeholder telefoonnummers
+    // 🔧 FASE 3 FIX: Detecteer placeholder telefoonnummers + CONTEXT TRACKING
+    // rejection_context houdt bij WAAROM velden zijn afgewezen voor slimme follow-up emails
+    const rejectionContext: Record<string, { provided_value: string; rejected_reason: string; suggestion: string }> = {};
+    
     if (analysis.new_data?.telefoonnummer) {
       const phone = analysis.new_data.telefoonnummer;
       const placeholderPatterns = [
@@ -872,13 +875,63 @@ Return JSON in dit formaat:
       const isPlaceholder = placeholderPatterns.some(p => p.test(phone.replace(/[\s-]/g, '')));
       if (isPlaceholder) {
         console.log(`⚠️ Placeholder telefoonnummer gedetecteerd: ${phone}`);
+        
+        // 🆕 Track rejection context for smart follow-up emails
+        rejectionContext.telefoonnummer = {
+          provided_value: phone,
+          rejected_reason: 'Dit telefoonnummer lijkt een testwaarde te zijn (bevat opeenvolgende of herhalende cijfers)',
+          suggestion: 'Graag je echte mobiele nummer waarop we je kunnen bereiken, bijvoorbeeld 06-87654321'
+        };
+        
         // Remove placeholder and add to missing info
         delete analysis.new_data.telefoonnummer;
         if (!analysis.remaining_missing_info?.includes('telefoonnummer')) {
           analysis.remaining_missing_info = analysis.remaining_missing_info || [];
-          analysis.remaining_missing_info.push('telefoonnummer (echt nummer, geen placeholder)');
+          analysis.remaining_missing_info.push('telefoonnummer');
         }
       }
+    }
+    
+    // 🆕 Check for other common rejection scenarios
+    // Invalid BIG nummer (moet 11 cijfers zijn)
+    if (analysis.new_data?.big_nummer) {
+      const big = String(analysis.new_data.big_nummer).replace(/\D/g, '');
+      if (big.length !== 11) {
+        console.log(`⚠️ Ongeldig BIG-nummer gedetecteerd: ${analysis.new_data.big_nummer} (${big.length} cijfers)`);
+        rejectionContext.big_nummer = {
+          provided_value: analysis.new_data.big_nummer,
+          rejected_reason: `Je BIG-nummer heeft ${big.length} cijfers, maar een geldig BIG-nummer bestaat uit precies 11 cijfers`,
+          suggestion: 'Je kunt je BIG-nummer opzoeken via https://www.bigregister.nl'
+        };
+        delete analysis.new_data.big_nummer;
+        if (!analysis.remaining_missing_info?.includes('big_nummer')) {
+          analysis.remaining_missing_info = analysis.remaining_missing_info || [];
+          analysis.remaining_missing_info.push('big_nummer');
+        }
+      }
+    }
+    
+    // Invalid KVK nummer (moet 8 cijfers zijn)
+    if (analysis.new_data?.kvk_nummer) {
+      const kvk = String(analysis.new_data.kvk_nummer).replace(/\D/g, '');
+      if (kvk.length !== 8) {
+        console.log(`⚠️ Ongeldig KVK-nummer gedetecteerd: ${analysis.new_data.kvk_nummer} (${kvk.length} cijfers)`);
+        rejectionContext.kvk_nummer = {
+          provided_value: analysis.new_data.kvk_nummer,
+          rejected_reason: `Je KVK-nummer heeft ${kvk.length} cijfers, maar een geldig KVK-nummer bestaat uit precies 8 cijfers`,
+          suggestion: 'Je kunt je KVK-nummer vinden op je inschrijvingsbewijs of via kvk.nl'
+        };
+        delete analysis.new_data.kvk_nummer;
+        if (!analysis.remaining_missing_info?.includes('kvk_nummer')) {
+          analysis.remaining_missing_info = analysis.remaining_missing_info || [];
+          analysis.remaining_missing_info.push('kvk_nummer');
+        }
+      }
+    }
+    
+    // Log rejection context if any rejections occurred
+    if (Object.keys(rejectionContext).length > 0) {
+      console.log("📝 Rejection context voor slimme follow-up:", JSON.stringify(rejectionContext));
     }
 
     // =====================================================
@@ -1602,6 +1655,8 @@ Return JSON in dit formaat:
                 missing_info: finalRemainingMissing,
                 current_completeness: newCompletenessScore,
                 follow_up_count: followUpCount,
+                // 🆕 Context voor slimme follow-up emails
+                rejection_context: Object.keys(rejectionContext).length > 0 ? rejectionContext : undefined,
               },
               status: "pending"
             });
