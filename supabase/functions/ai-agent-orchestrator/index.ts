@@ -1324,11 +1324,42 @@ async function executeFollowupQuestion(supabase: any, action: any) {
       .limit(1);
 
     if (recentEmails && recentEmails.length > 0) {
-      console.log(`⚠️ [Followup] SKIPPING - Recent email found at ${recentEmails[0].created_at}`);
+      console.log(`⏰ [Followup] RESCHEDULING - Recent email found at ${recentEmails[0].created_at}`);
+      
+      // 🆕 FIX: Reschedule instead of skip - ensure email gets sent after cooldown
+      const nextAttemptTime = new Date(Date.now() + 60 * 60 * 1000); // +1 hour
+      
+      // Update the action to be retried later
+      await supabase
+        .from('agent_actions')
+        .update({ 
+          status: 'pending',
+          scheduled_at: nextAttemptTime.toISOString(),
+          retry_count: (action.retry_count || 0) + 1,
+          output_data: {
+            rescheduled_reason: 'Anti-spam cooldown active',
+            last_email_at: recentEmails[0].created_at,
+            next_attempt_at: nextAttemptTime.toISOString()
+          }
+        })
+        .eq('id', action.id);
+      
+      // Also update the task queue entry if exists
+      await supabase
+        .from('agent_task_queue')
+        .update({ 
+          status: 'pending',
+          scheduled_at: nextAttemptTime.toISOString()
+        })
+        .eq('action_id', action.id);
+      
+      console.log(`📅 [Followup] Email rescheduled for ${nextAttemptTime.toISOString()}`);
+      
       return { 
-        executed_via: 'skipped', 
-        reason: 'Recent email already sent (within 1 hour) and no rejection context to communicate',
+        executed_via: 'rescheduled', 
+        reason: 'Email rescheduled due to anti-spam cooldown (1 hour)',
         last_email_at: recentEmails[0].created_at,
+        next_attempt_at: nextAttemptTime.toISOString(),
         organization: org_name
       };
     }
