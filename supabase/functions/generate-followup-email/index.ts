@@ -295,7 +295,7 @@ Return een JSON object met:
     let emailHtml: string;
     
     if (email_type === 'welcome_and_intake' || is_first_contact) {
-      // WELKOMST EMAIL HTML
+      // WELKOMST EMAIL HTML - Professionele, zakelijke stijl
       emailHtml = `
 <!DOCTYPE html>
 <html lang="nl">
@@ -303,80 +303,96 @@ Return een JSON object met:
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #0066cc 0%, #004999 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
-    <h1 style="color: white; margin: 0; font-size: 28px;">🎉 Welkom bij ${org_name}!</h1>
-    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">Je sollicitatie is ontvangen</p>
-  </div>
-  
-  <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 12px 12px;">
-    <h2 style="color: #0066cc; margin-top: 0; font-size: 20px;">${emailContent.greeting.replace(/,+$/, '')},</h2>
+<body style="font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.7; color: #2d3748; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f7fafc;">
+  <div style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     
-    <p style="font-size: 16px; color: #333; margin-bottom: 20px;">
-      ${emailContent.intro || 'Hartelijk dank voor je interesse! We zijn blij dat je hebt gesolliciteerd.'}
-    </p>
+    <!-- Header - Clean en professioneel -->
+    <div style="padding: 24px 30px; border-bottom: 1px solid #e2e8f0;">
+      <h1 style="color: #1a365d; margin: 0; font-size: 22px; font-weight: 600;">${org_name}</h1>
+      <p style="color: #718096; margin: 4px 0 0 0; font-size: 14px;">Recruitment</p>
+    </div>
     
-    <div style="background: white; padding: 25px; border-radius: 10px; margin: 25px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-      <h3 style="color: #0066cc; margin-top: 0; font-size: 18px;">📋 Wat kun je verwachten?</h3>
-      <div style="padding-left: 10px;">
-        ${(emailContent.process_steps || '').split('\n').map((line: string) => {
-          if (line.match(/^[1-3]\./)) {
-            return `<p style="margin: 12px 0; padding-left: 25px; position: relative;"><span style="position: absolute; left: 0; color: #0066cc; font-weight: bold;">${line.charAt(0)}.</span>${line.substring(2)}</p>`;
-          }
-          return line ? `<p style="margin: 8px 0;">${line}</p>` : '';
-        }).join('')}
+    <!-- Content -->
+    <div style="padding: 30px;">
+      <p style="font-size: 16px; color: #2d3748; margin: 0 0 20px 0;">
+        ${emailContent.greeting.replace(/,+$/, '')},
+      </p>
+      
+      <p style="font-size: 15px; color: #4a5568; margin-bottom: 24px;">
+        ${emailContent.intro || 'Bedankt voor je interesse in onze organisatie. We hebben je sollicitatie in goede orde ontvangen en bekijken deze zo snel mogelijk.'}
+      </p>
+      
+      <!-- Proces stappen - Subtiel -->
+      <div style="margin: 24px 0; padding: 20px; background-color: #f7fafc; border-radius: 6px;">
+        <p style="font-weight: 600; color: #2d3748; margin: 0 0 16px 0; font-size: 15px;">Wat kun je verwachten?</p>
+        <div style="color: #4a5568; font-size: 14px;">
+          <p style="margin: 8px 0; padding-left: 20px; position: relative;">
+            <span style="position: absolute; left: 0; color: #4a5568; font-weight: 600;">1.</span>
+            We bekijken je profiel binnen 2 werkdagen
+          </p>
+          <p style="margin: 8px 0; padding-left: 20px; position: relative;">
+            <span style="position: absolute; left: 0; color: #4a5568; font-weight: 600;">2.</span>
+            Bij een goede match plannen we een kennismakingsgesprek
+          </p>
+          <p style="margin: 8px 0; padding-left: 20px; position: relative;">
+            <span style="position: absolute; left: 0; color: #4a5568; font-weight: 600;">3.</span>
+            Na het gesprek matchen we je met passende opdrachtgevers
+          </p>
+        </div>
       </div>
+      
+      ${fieldDescriptions.length > 0 ? `
+      <!-- Ontbrekende informatie - Neutraal grijs -->
+      <div style="margin: 24px 0; padding: 20px; background-color: #f7fafc; border-radius: 6px; border-left: 3px solid #718096;">
+        <p style="font-weight: 600; color: #2d3748; margin: 0 0 12px 0; font-size: 15px;">Om verder te gaan hebben we nog nodig:</p>
+        <ul style="margin: 0; padding-left: 20px; color: #4a5568; font-size: 14px;">
+          ${fieldDescriptions.map((desc: string) => `<li style="margin: 6px 0;">${desc}</li>`).join('')}
+        </ul>
+      </div>
+      ` : `
+      <div style="margin: 24px 0; padding: 16px 20px; background-color: #f0fff4; border-radius: 6px; border-left: 3px solid #48bb78;">
+        <p style="color: #276749; margin: 0; font-size: 14px;">Je aanmelding is compleet. We nemen zo snel mogelijk contact met je op.</p>
+      </div>
+      `}
+      
+      <p style="font-size: 14px; color: #718096; margin: 20px 0 0 0;">
+        Je kunt gewoon op deze email antwoorden als je vragen hebt of de gevraagde informatie wilt doorgeven.
+      </p>
+      
+      <p style="color: #4a5568; margin-top: 30px; font-size: 15px;">
+        Met vriendelijke groet,<br>
+        <strong>${org_name} Recruitment Team</strong>
+      </p>
     </div>
     
-    ${fieldDescriptions.length > 0 ? `
-    <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin: 25px 0; border-left: 4px solid #ffc107;">
-      <h3 style="color: #856404; margin-top: 0; font-size: 16px;">✍️ We missen nog wat informatie</h3>
-      <p style="color: #856404; margin-bottom: 15px;">Om je snel te kunnen helpen, hebben we nog het volgende nodig:</p>
-      <ul style="margin: 0; padding-left: 20px; color: #856404;">
-        ${fieldDescriptions.map((desc: string) => `<li style="margin: 8px 0;">${desc}</li>`).join('')}
-      </ul>
+    <!-- Footer -->
+    <div style="padding: 16px 30px; background-color: #f7fafc; border-top: 1px solid #e2e8f0;">
+      <p style="font-size: 12px; color: #a0aec0; margin: 0; text-align: center;">
+        <a href="mailto:${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}" style="color: #718096; text-decoration: none;">${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}</a>
+      </p>
     </div>
-    ` : `
-    <div style="background: #d4edda; padding: 20px; border-radius: 10px; margin: 25px 0; border-left: 4px solid #28a745;">
-      <p style="color: #155724; margin: 0;"><strong>✅ Je aanmelding is compleet!</strong> We nemen zo snel mogelijk contact met je op.</p>
-    </div>
-    `}
-    
-    <div style="background: #e8f4ff; padding: 20px; border-radius: 10px; margin: 25px 0; text-align: center;">
-      <p style="margin: 0; color: #0066cc; font-size: 15px;"><strong>💡 Tip:</strong> Je kunt gewoon op deze email antwoorden!</p>
-    </div>
-    
-    <p style="color: #666; margin-top: 30px; font-size: 15px;">
-      ${(emailContent.closing || `Met vriendelijke groet,\n${org_name} Recruitment Team`).replace(/\n/g, '<br>')}
-    </p>
-    
-    <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-    
-    <p style="font-size: 12px; color: #999; margin: 0; text-align: center;">
-      ${org_name} Recruitment | <a href="mailto:${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}" style="color: #0066cc;">${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}</a>
-    </p>
   </div>
 </body>
 </html>`;
     } else {
       // STANDAARD FOLLOW-UP EMAIL HTML (met rejection context support)
       
-      // 🆕 Build rejection context HTML if present
+      // Build rejection context HTML if present - Professionele stijl
       let rejectionHtml = '';
       if (hasRejectionContext) {
         rejectionHtml = `
-    <div style="background: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
-      <h3 style="color: #856404; margin-top: 0; font-size: 16px;">📝 Over je eerdere antwoord</h3>
+    <div style="margin: 20px 0; padding: 16px 20px; background-color: #f7fafc; border-radius: 6px; border-left: 3px solid #718096;">
+      <p style="font-weight: 600; color: #2d3748; margin: 0 0 12px 0; font-size: 14px;">Over je eerdere antwoord</p>
       ${Object.entries(rejection_context as RejectionContext).map(([field, context]) => `
-        <div style="margin-bottom: 15px;">
-          <p style="margin: 5px 0; color: #856404;">
-            <strong>Je stuurde:</strong> "${context.provided_value}"
+        <div style="margin-bottom: 12px; font-size: 14px; color: #4a5568;">
+          <p style="margin: 4px 0;">
+            Je stuurde: <em>"${context.provided_value}"</em>
           </p>
-          <p style="margin: 5px 0; color: #856404;">
+          <p style="margin: 4px 0;">
             ${context.rejected_reason}
           </p>
-          <p style="margin: 5px 0; color: #155724; background: #d4edda; padding: 10px; border-radius: 5px;">
-            💡 <strong>Tip:</strong> ${context.suggestion}
+          <p style="margin: 8px 0 0 0; padding: 10px; background-color: #edf2f7; border-radius: 4px; color: #2d3748;">
+            <strong>Tip:</strong> ${context.suggestion}
           </p>
         </div>
       `).join('')}
@@ -390,34 +406,42 @@ Return een JSON object met:
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #0066cc 0%, #004999 100%); padding: 20px; border-radius: 8px 8px 0 0;">
-    <h1 style="color: white; margin: 0; font-size: 24px;">${org_name}</h1>
-    <p style="color: rgba(255,255,255,0.8); margin: 5px 0 0 0; font-size: 14px;">Recruitment Team</p>
-  </div>
-  
-  <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px;">
-    <h2 style="color: #0066cc; margin-top: 0;">${emailContent.greeting},</h2>
+<body style="font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.7; color: #2d3748; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f7fafc;">
+  <div style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
     
-    ${rejectionHtml}
-    
-    <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #0066cc;">
-      ${(emailContent.body || '').split('\n').map((line: string) => `<p style="margin: 10px 0;">${line}</p>`).join('')}
+    <!-- Header -->
+    <div style="padding: 24px 30px; border-bottom: 1px solid #e2e8f0;">
+      <h1 style="color: #1a365d; margin: 0; font-size: 22px; font-weight: 600;">${org_name}</h1>
+      <p style="color: #718096; margin: 4px 0 0 0; font-size: 14px;">Recruitment</p>
     </div>
     
-    <div style="background: #e8f4ff; padding: 15px; border-radius: 8px; margin: 20px 0;">
-      <p style="margin: 0; color: #0066cc;"><strong>💡 Tip:</strong> Je kunt gewoon op deze email antwoorden!</p>
+    <!-- Content -->
+    <div style="padding: 30px;">
+      <p style="font-size: 16px; color: #2d3748; margin: 0 0 20px 0;">
+        ${emailContent.greeting},
+      </p>
+      
+      ${rejectionHtml}
+      
+      <div style="font-size: 15px; color: #4a5568;">
+        ${(emailContent.body || '').split('\n').map((line: string) => `<p style="margin: 8px 0;">${line}</p>`).join('')}
+      </div>
+      
+      <p style="font-size: 14px; color: #718096; margin: 24px 0 0 0;">
+        Je kunt gewoon op deze email antwoorden.
+      </p>
+      
+      <p style="color: #4a5568; margin-top: 30px; font-size: 15px;">
+        ${(emailContent.closing || 'Met vriendelijke groet,').replace(/\n/g, '<br>')}
+      </p>
     </div>
     
-    <p style="color: #666; margin-top: 30px;">
-      ${(emailContent.closing || '').replace(/\n/g, '<br>')}
-    </p>
-    
-    <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-    
-    <p style="font-size: 12px; color: #999; margin: 0;">
-      ${org_name} Recruitment | <a href="mailto:${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}" style="color: #0066cc;">${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}</a>
-    </p>
+    <!-- Footer -->
+    <div style="padding: 16px 30px; background-color: #f7fafc; border-top: 1px solid #e2e8f0;">
+      <p style="font-size: 12px; color: #a0aec0; margin: 0; text-align: center;">
+        <a href="mailto:${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}" style="color: #718096; text-decoration: none;">${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}</a>
+      </p>
+    </div>
   </div>
 </body>
 </html>`;
@@ -429,29 +453,31 @@ Return een JSON object met:
     if (email_type === 'welcome_and_intake' || is_first_contact) {
       emailPlainText = `${emailContent.greeting},
 
-${emailContent.intro || 'Hartelijk dank voor je interesse! We zijn blij dat je hebt gesolliciteerd.'}
+${emailContent.intro || 'Bedankt voor je interesse in onze organisatie. We hebben je sollicitatie in goede orde ontvangen.'}
 
-📋 WAT KUN JE VERWACHTEN?
-${emailContent.process_steps || '1. We bekijken je profiel\n2. Kennismakingsgesprek\n3. Matching met opdrachtgevers'}
+WAT KUN JE VERWACHTEN?
+1. We bekijken je profiel binnen 2 werkdagen
+2. Bij een goede match plannen we een kennismakingsgesprek
+3. Na het gesprek matchen we je met passende opdrachtgevers
 
-${fieldDescriptions.length > 0 ? `✍️ OM JE SNEL TE KUNNEN HELPEN, HEBBEN WE NOG NODIG:
-${fieldDescriptions.map((desc: string) => `• ${desc}`).join('\n')}` : '✅ Je aanmelding is compleet! We nemen zo snel mogelijk contact met je op.'}
+${fieldDescriptions.length > 0 ? `OM VERDER TE GAAN HEBBEN WE NOG NODIG:
+${fieldDescriptions.map((desc: string) => `- ${desc}`).join('\n')}` : 'Je aanmelding is compleet. We nemen zo snel mogelijk contact met je op.'}
 
-💡 Tip: Je kunt gewoon op deze email antwoorden!
+Je kunt gewoon op deze email antwoorden.
 
-${emailContent.closing || `Met vriendelijke groet,\n${org_name} Recruitment Team`}
+Met vriendelijke groet,
+${org_name} Recruitment Team
 
 ---
-${org_name} Recruitment | ${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}`;
+${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}`;
     } else {
-      // 🆕 Include rejection context in plain text
       let rejectionText = '';
       if (hasRejectionContext) {
-        rejectionText = '📝 OVER JE EERDERE ANTWOORD:\n\n';
+        rejectionText = 'OVER JE EERDERE ANTWOORD:\n\n';
         for (const [field, context] of Object.entries(rejection_context as RejectionContext)) {
           rejectionText += `Je stuurde: "${context.provided_value}"\n`;
           rejectionText += `${context.rejected_reason}\n`;
-          rejectionText += `💡 Tip: ${context.suggestion}\n\n`;
+          rejectionText += `Tip: ${context.suggestion}\n\n`;
         }
       }
       
@@ -459,12 +485,12 @@ ${org_name} Recruitment | ${org_name.toLowerCase().includes('abc') ? 'personeel@
 
 ${rejectionText}${emailContent.body || ''}
 
-💡 Tip: Je kunt gewoon op deze email antwoorden!
+Je kunt gewoon op deze email antwoorden.
 
-${emailContent.closing || ''}
+${emailContent.closing || 'Met vriendelijke groet,'}
 
 ---
-${org_name} Recruitment | ${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}`;
+${org_name.toLowerCase().includes('abc') ? 'personeel@abczorg.nl' : 'personeel@citozorg.nl'}`;
     }
 
     // Log the generated email for audit
