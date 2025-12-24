@@ -107,9 +107,10 @@ export function DocumentUploadSection({
       const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
       const filePath = `${applicationId}/${docType}/${timestamp}_${sanitizedName}`;
 
-      // Upload to storage
+      // Upload to storage - CV goes to application-cvs, others to application-documents
+      const bucket = docType === 'cv' ? 'application-cvs' : 'application-documents';
       const { error: uploadError } = await supabase.storage
-        .from('application-documents')
+        .from(bucket)
         .upload(filePath, file, {
           cacheControl: '3600',
           upsert: false
@@ -183,8 +184,8 @@ export function DocumentUploadSection({
     setDownloading(true);
 
     try {
-      // CV files are stored in 'cvs' bucket, others in 'application-documents'
-      const bucket = docType === 'cv' ? 'cvs' : 'application-documents';
+      // CV files are stored in 'application-cvs' bucket, others in 'application-documents'
+      const bucket = docType === 'cv' ? 'application-cvs' : 'application-documents';
       const { data, error } = await supabase.storage
         .from(bucket)
         .createSignedUrl(filePath, 60);
@@ -204,8 +205,8 @@ export function DocumentUploadSection({
     if (!filePath) return;
 
     try {
-      // CV files are stored in 'cvs' bucket, others in 'application-documents'
-      const bucket = docType === 'cv' ? 'cvs' : 'application-documents';
+      // CV files are stored in 'application-cvs' bucket, others in 'application-documents'
+      const bucket = docType === 'cv' ? 'application-cvs' : 'application-documents';
       const { error: deleteError } = await supabase.storage
         .from(bucket)
         .remove([filePath]);
