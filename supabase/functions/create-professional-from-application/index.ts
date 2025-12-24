@@ -229,6 +229,10 @@ Deno.serve(async (req) => {
       // Document tracking
       vog_date: extractedData.vog_date || null,
       vog_file_path: extractedData.vog_file_path || null,
+      // CV fields from application
+      cv_file_path: application.cv_file_path || null,
+      cv_file_name: application.cv_file_name || null,
+      cv_uploaded_at: application.cv_file_path ? new Date().toISOString() : null,
     };
 
     console.log(`📝 [Create Professional] Creating professional: ${professionalData.full_name}`);

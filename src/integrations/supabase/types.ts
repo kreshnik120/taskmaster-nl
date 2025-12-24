@@ -3249,6 +3249,9 @@ export type Database = {
           cao_akkoord: boolean | null
           certificaten: string[] | null
           created_at: string
+          cv_file_name: string | null
+          cv_file_path: string | null
+          cv_uploaded_at: string | null
           deleted_at: string | null
           doelgroep_ervaring: string[] | null
           email: string | null
@@ -3296,6 +3299,9 @@ export type Database = {
           cao_akkoord?: boolean | null
           certificaten?: string[] | null
           created_at?: string
+          cv_file_name?: string | null
+          cv_file_path?: string | null
+          cv_uploaded_at?: string | null
           deleted_at?: string | null
           doelgroep_ervaring?: string[] | null
           email?: string | null
@@ -3343,6 +3349,9 @@ export type Database = {
           cao_akkoord?: boolean | null
           certificaten?: string[] | null
           created_at?: string
+          cv_file_name?: string | null
+          cv_file_path?: string | null
+          cv_uploaded_at?: string | null
           deleted_at?: string | null
           doelgroep_ervaring?: string[] | null
           email?: string | null

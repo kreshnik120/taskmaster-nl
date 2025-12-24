@@ -69,6 +69,10 @@ interface Professional {
   btw_nummer: string | null;
   created_at: string;
   updated_at: string;
+  // CV fields
+  cv_file_path: string | null;
+  cv_file_name: string | null;
+  cv_uploaded_at: string | null;
   // New fields for complete data sync
   ervaring_sector: string[] | null;
   doelgroep_ervaring: string[] | null;
