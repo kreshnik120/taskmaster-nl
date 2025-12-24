@@ -599,6 +599,7 @@ Belangrijk:
       { field: 'telefoonnummer', label: 'Telefoonnummer' },
       { field: 'functie_niveau', label: 'Functie niveau' },
       { field: 'regio', label: 'Regio' },
+      { field: 'werkvorm', label: 'Werkvorm (ZZP of Uitzendkracht)' }, // 🆕 Altijd uitvragen indien onbekend
     ];
     
     for (const { field, label } of criticalFields) {
