@@ -998,6 +998,9 @@ export function ApplicationDetailModal({
                     functieNiveau={getFieldValue(application.extracted_data?.functie_niveau) as string | null}
                     diplomaFilePath={application.extracted_data?.diploma_file_path || null}
                     diplomaStatus={diplomaStatus}
+                    candidateEmail={application.email || application.email_from}
+                    candidateName={resolveApplicationName(application)}
+                    orgId={application.org_id || '550e8400-e29b-41d4-a716-446655440000'}
                     onStatusUpdated={onApplicationUpdated}
                   />
 

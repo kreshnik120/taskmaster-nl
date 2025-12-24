@@ -12,6 +12,9 @@ interface DiplomaVerificationBannerProps {
   functieNiveau: string | null | undefined;
   diplomaFilePath: string | null | undefined;
   diplomaStatus: string | null | undefined;
+  candidateEmail: string;
+  candidateName: string;
+  orgId: string;
   onStatusUpdated: () => void;
 }
 
@@ -20,6 +23,9 @@ export function DiplomaVerificationBanner({
   functieNiveau,
   diplomaFilePath,
   diplomaStatus,
+  candidateEmail,
+  candidateName,
+  orgId,
   onStatusUpdated
 }: DiplomaVerificationBannerProps) {
   const [rejecting, setRejecting] = useState(false);
@@ -73,10 +79,26 @@ export function DiplomaVerificationBanner({
       // Trigger rejection email via AI agent
       await supabase.functions.invoke('ai-agent-orchestrator', {
         body: {
-          action: 'send_rejection_email',
-          application_id: applicationId,
-          reason: 'no_healthcare_diploma'
+          action: 'create_goal',
+          goal_type: 'send_rejection_email',
+          goal_description: `Stuur afwijzingsmail naar ${candidateName} - geen zorgdiploma`,
+          org_id: orgId,
+          input_data: {
+            application_id: applicationId,
+            candidate_email: candidateEmail,
+            candidate_name: candidateName,
+            rejection_reason: 'no_healthcare_diploma',
+            rejection_details: {
+              functie_niveau: functieNiveau,
+              has_diploma_file: !!diplomaFilePath
+            }
+          }
         }
+      });
+
+      // Execute actions immediately
+      await supabase.functions.invoke('ai-agent-orchestrator', {
+        body: { action: 'execute_actions' }
       });
 
       toast.success('Sollicitant afgewezen - afwijzingsmail wordt verzonden');
