@@ -47,7 +47,9 @@ interface DocumentUploadSectionProps {
   vogStatus?: string | null;
   diplomaStatus?: string | null;
   vogVerificationResponse?: VogVerificationResponse | null;
+  pipelineStage?: string | null; // For VOG flow differentiation
   onUploadComplete: () => void;
+  onRequestNewVog?: () => void; // Callback for new VOG request at screening
 }
 
 type DocumentType = 'vog' | 'diploma' | 'cv';
@@ -68,8 +70,13 @@ export function DocumentUploadSection({
   vogStatus,
   diplomaStatus,
   vogVerificationResponse,
-  onUploadComplete
+  pipelineStage = 'nieuw',
+  onUploadComplete,
+  onRequestNewVog
 }: DocumentUploadSectionProps) {
+  // Determine if we're at screening stage for new VOG request
+  const isScreeningStage = pipelineStage === 'screening';
+  const isNieuwStage = pipelineStage === 'nieuw' || !pipelineStage;
   const [uploadingVog, setUploadingVog] = useState(false);
   const [uploadingDiploma, setUploadingDiploma] = useState(false);
   const [uploadingCV, setUploadingCV] = useState(false);
@@ -477,16 +484,29 @@ export function DocumentUploadSection({
           </CardContent>
         </Card>
 
-        {/* VOG Upload */}
+        {/* VOG Upload - differentiated by pipeline stage */}
         <Card>
           <CardHeader className="py-3 px-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Shield className="h-4 w-4 text-muted-foreground" />
-                <CardTitle className="text-sm font-medium">VOG (Verklaring Omtrent Gedrag)</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  {isNieuwStage ? 'Tijdelijke VOG (Huidige/Oude VOG)' : 'VOG (Verklaring Omtrent Gedrag)'}
+                </CardTitle>
               </div>
-              {getStatusBadge(vogStatus, 'vog')}
+              {vogFilePath ? (
+                <Badge variant="outline" className="text-amber-600 border-amber-300">
+                  {isNieuwStage ? 'Tijdelijk ontvangen' : 'Ontvangen'}
+                </Badge>
+              ) : (
+                getStatusBadge(vogStatus, 'vog')
+              )}
             </div>
+            {isNieuwStage && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Upload uw huidige of oude VOG - officiële aanvraag volgt bij Screening
+              </p>
+            )}
           </CardHeader>
           <CardContent className="py-2 px-4">
             {vogFilePath ? (
@@ -605,6 +625,24 @@ export function DocumentUploadSection({
 
             {/* Screening profile details */}
             {vogFilePath && vogVerificationResponse && renderScreeningProfileInfo()}
+            
+            {/* New VOG Request button at Screening stage */}
+            {isScreeningStage && onRequestNewVog && (
+              <div className="mt-3 pt-3 border-t">
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="w-full"
+                  onClick={onRequestNewVog}
+                >
+                  <Shield className="h-4 w-4 mr-2" />
+                  Nieuwe VOG Aanvragen
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  Start het officiële VOG aanvraagproces voor deze kandidaat
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
