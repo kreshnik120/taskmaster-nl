@@ -46,6 +46,8 @@ import { DiplomaVerificationBanner } from "@/components/recruitment/DiplomaVerif
 
 interface Application {
   id: string;
+  org_id?: string; // Added for AI agent orchestration
+  email?: string | null; // Extracted email if different from email_from
   email_from: string;
   email_subject: string | null;
   email_body: string | null;
@@ -1013,9 +1015,51 @@ export function ApplicationDetailModal({
                       vogVerificationResponse={application.vog_verification_response as any}
                       pipelineStage={application.pipeline_stage}
                       onUploadComplete={onApplicationUpdated}
-                      onRequestNewVog={() => {
-                        // TODO: Trigger new VOG request flow
-                        toast.info('Nieuwe VOG aanvraag wordt gestart...');
+                      onRequestNewVog={async () => {
+                        try {
+                          toast.info('VOG aanvraag wordt gestart...');
+                          
+                          // Trigger AI agent voor officiële VOG aanvraag
+                          const { error: goalError } = await supabase.functions.invoke('ai-agent-orchestrator', {
+                            body: {
+                              action: 'create_goal',
+                              goal_type: 'request_new_vog',
+                              goal_description: `Vraag officiële VOG aan voor ${resolveApplicationName(application)}`,
+                              org_id: application.org_id,
+                              input_data: {
+                                application_id: application.id,
+                                candidate_email: application.email || application.email_from,
+                                candidate_name: resolveApplicationName(application),
+                                rejection_reason: 'new_employee', // Nieuwe medewerker heeft VOG nodig
+                                vog_validation_details: { trigger: 'manual_request' }
+                              }
+                            }
+                          });
+                          
+                          if (goalError) throw goalError;
+                          
+                          // Execute immediately
+                          await supabase.functions.invoke('ai-agent-orchestrator', {
+                            body: { action: 'execute_actions' }
+                          });
+                          
+                          // Update pipeline stage naar screening
+                          await supabase
+                            .from('professional_applications')
+                            .update({ pipeline_stage: 'screening' })
+                            .eq('id', application.id);
+                          
+                          toast.success('VOG aanvraag gestart', {
+                            description: 'Kandidaat ontvangt email met instructies voor officiële VOG aanvraag via Justis'
+                          });
+                          
+                          onApplicationUpdated();
+                        } catch (err) {
+                          console.error('VOG request error:', err);
+                          toast.error('Kon VOG aanvraag niet starten', {
+                            description: 'Probeer het later opnieuw'
+                          });
+                        }
                       }}
                     />
                   </div>
