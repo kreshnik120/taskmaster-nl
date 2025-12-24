@@ -39,6 +39,7 @@ import { ApplicationMatchesTab } from "@/components/recruitment/ApplicationMatch
 import { AIFollowupButton } from "@/components/recruitment/AIFollowupButton";
 import { DocumentVerificationStatus } from "@/components/recruitment/DocumentVerificationStatus";
 import { DocumentUploadSection } from "@/components/recruitment/DocumentUploadSection";
+import { ZZPDocumentUploadSection } from "@/components/recruitment/ZZPDocumentUploadSection";
 import { StageTransitionButton } from "@/components/recruitment/StageTransitionButton";
 
 interface Application {
@@ -980,16 +981,36 @@ export function ApplicationDetailModal({
               {/* TAB: Documents - Document Upload & Verification Status */}
               <TabsContent value="documents" className="space-y-4">
                 <div className="space-y-4">
-                  {/* Document Upload Section */}
-                  <DocumentUploadSection
+                  {/* Basis Document Upload Section */}
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-semibold">Basis Documenten</h3>
+                    <DocumentUploadSection
+                      applicationId={application.id}
+                      vogFilePath={application.extracted_data?.vog_file_path || null}
+                      diplomaFilePath={application.extracted_data?.diploma_file_path || null}
+                      cvFilePath={application.cv_file_path}
+                      cvFileName={application.cv_file_name}
+                      vogStatus={vogStatus}
+                      diplomaStatus={diplomaStatus}
+                      vogVerificationResponse={application.vog_verification_response as any}
+                      onUploadComplete={onApplicationUpdated}
+                    />
+                  </div>
+
+                  {/* ZZP Document Upload Section - Only shown for ZZP werkvorm */}
+                  <ZZPDocumentUploadSection
                     applicationId={application.id}
-                    vogFilePath={application.extracted_data?.vog_file_path || null}
-                    diplomaFilePath={application.extracted_data?.diploma_file_path || null}
-                    cvFilePath={application.cv_file_path}
-                    cvFileName={application.cv_file_name}
-                    vogStatus={vogStatus}
-                    diplomaStatus={diplomaStatus}
-                    vogVerificationResponse={application.vog_verification_response as any}
+                    werkvorm={getFieldValue(application.extracted_data?.werkvorm) as string | null}
+                    bedrijfsnaam={(application as any).bedrijfsnaam}
+                    kvkNummer={getFieldValue(application.extracted_data?.kvk_nummer) as string | null}
+                    iban={(application as any).iban}
+                    beroepsaansprakelijkheidPath={(application as any).beroepsaansprakelijkheid_path}
+                    kvkUittrekselPath={(application as any).kvk_uittreksel_path}
+                    klachtenportaalWkkgzPath={(application as any).klachtenportaal_wkkgz_path}
+                    identiteitsbewijsPath={(application as any).identiteitsbewijs_path}
+                    bhvCertificaatPath={(application as any).bhv_certificaat_path}
+                    tilliftCertificaatPath={(application as any).tillift_certificaat_path}
+                    overigeCertificeringenPaths={(application as any).overige_certificeringen_paths}
                     onUploadComplete={onApplicationUpdated}
                   />
 
