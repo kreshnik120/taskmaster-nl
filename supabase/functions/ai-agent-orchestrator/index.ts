@@ -636,6 +636,38 @@ const GOAL_CONFIGS: Record<string, {
         }
       ];
     }
+  },
+
+  // =====================================================
+  // NEW: Send Rejection Email - For diploma/qualification rejections
+  // =====================================================
+  'send_rejection_email': {
+    requiredFields: ['application_id', 'candidate_email'],
+    planGenerator: (goal, context) => {
+      const rejectionReason = goal.input_data.rejection_reason || 'geen_zorgdiploma';
+      const candidateName = goal.input_data.candidate_name || 'sollicitant';
+      
+      console.log(`🚫 [Orchestrator] Rejection email for: ${candidateName}, reason: ${rejectionReason}`);
+      
+      return [
+        {
+          action_type: 'send_rejection_email',
+          action_order: 1,
+          action_description: `Stuur vriendelijke afwijzingsmail naar ${candidateName} - ${rejectionReason}`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            application_id: goal.input_data.application_id,
+            candidate_email: goal.input_data.candidate_email,
+            candidate_name: candidateName,
+            rejection_reason: rejectionReason,
+            rejection_details: goal.input_data.rejection_details || '',
+            functie_niveau: goal.input_data.functie_niveau,
+            email_type: 'rejection',
+            subject: 'Update over je sollicitatie'
+          }
+        }
+      ];
+    }
   }
 };
 
@@ -1209,6 +1241,13 @@ async function executeTask(supabase: any, task: any) {
     
     case 'create_tasks':
       result = await createOnboardingTasks(supabase, action);
+      break;
+    
+    // =====================================================
+    // Rejection Email - For diploma/qualification rejections
+    // =====================================================
+    case 'send_rejection_email':
+      result = await executeRejectionEmail(supabase, action);
       break;
     
     default:
@@ -2063,6 +2102,106 @@ async function checkGoalCompletion(supabase: any, goalId: string) {
       .update({ status: 'partially_failed' })
       .eq('id', goalId);
     console.log(`⚠️ [Goal] ${goalId} partially failed`);
+  }
+}
+
+// =====================================================
+// Execute Rejection Email - For diploma/qualification rejections
+// =====================================================
+async function executeRejectionEmail(supabase: any, action: any) {
+  console.log(`🚫 [Rejection Email] Sending to ${action.input_data.candidate_email}`);
+  
+  const applicationId = action.input_data.application_id;
+  const candidateName = action.input_data.candidate_name || 'sollicitant';
+  const rejectionReason = action.input_data.rejection_reason || 'geen_zorgdiploma';
+  
+  // Determine organization from goal
+  const org_id = action.agent_goals?.org_id;
+  let organization = 'citozorg';
+  let org_name = 'CitoZorg';
+  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
+    organization = 'abczorg';
+    org_name = 'ABCzorg';
+  }
+
+  // Rejection reason mappings for friendly messages
+  const rejectionMessages: Record<string, { subject: string; reason: string }> = {
+    'geen_zorgdiploma': {
+      subject: 'Update over je sollicitatie bij ' + org_name,
+      reason: 'Helaas hebben we vastgesteld dat je niet beschikt over een erkend zorgdiploma dat vereist is voor deze functie.'
+    },
+    'ongeldig_diploma': {
+      subject: 'Update over je sollicitatie bij ' + org_name,
+      reason: 'Het opgegeven diploma voldoet niet aan de vereisten voor deze zorgfunctie.'
+    },
+    'geen_big_registratie': {
+      subject: 'Update over je sollicitatie bij ' + org_name,
+      reason: 'Voor deze functie is een geldige BIG-registratie vereist.'
+    },
+    'onvoldoende_ervaring': {
+      subject: 'Update over je sollicitatie bij ' + org_name,
+      reason: 'Je profiel past helaas niet bij de huidige ervaringsvereisten.'
+    }
+  };
+
+  const messageConfig = rejectionMessages[rejectionReason] || rejectionMessages['geen_zorgdiploma'];
+
+  try {
+    // Send rejection email via send-ai-email
+    const { data: emailData, error: emailError } = await supabase.functions.invoke('send-ai-email', {
+      body: {
+        email_type: 'rejection',
+        recipient_email: action.input_data.candidate_email,
+        recipient_name: candidateName,
+        subject: messageConfig.subject,
+        template_data: {
+          candidate_name: candidateName,
+          rejection_reason: messageConfig.reason,
+          rejection_details: action.input_data.rejection_details || '',
+          functie_niveau: action.input_data.functie_niveau,
+          org_name: org_name,
+          // Encourage future applications
+          encouragement: 'We moedigen je aan om je kwalificaties uit te breiden en in de toekomst opnieuw te solliciteren.'
+        },
+        application_id: applicationId,
+        org_id: org_id
+      }
+    });
+
+    if (emailError) {
+      console.error('[Rejection Email] Send failed:', emailError);
+      throw emailError;
+    }
+
+    // Log conversation entry
+    await supabase.from('application_conversations').insert({
+      application_id: applicationId,
+      role: 'assistant',
+      content: `📧 Afwijzingsemail verzonden naar ${action.input_data.candidate_email}. Reden: ${rejectionReason}`,
+      metadata: {
+        email_type: 'rejection',
+        rejection_reason: rejectionReason,
+        sent_at: new Date().toISOString()
+      }
+    });
+
+    console.log('✅ [Rejection Email] Sent successfully');
+    return { 
+      executed_via: 'send-ai-email', 
+      organization: org_name,
+      rejection_reason: rejectionReason,
+      email_sent: true,
+      ...emailData 
+    };
+
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    console.error('❌ [Rejection Email] Failed:', errorMessage);
+    return { 
+      executed_via: 'failed', 
+      error: errorMessage,
+      organization: org_name
+    };
   }
 }
 
