@@ -42,13 +42,15 @@ interface DocumentUploadSectionProps {
   applicationId: string;
   vogFilePath?: string | null;
   diplomaFilePath?: string | null;
+  cvFilePath?: string | null;
+  cvFileName?: string | null;
   vogStatus?: string | null;
   diplomaStatus?: string | null;
   vogVerificationResponse?: VogVerificationResponse | null;
   onUploadComplete: () => void;
 }
 
-type DocumentType = 'vog' | 'diploma';
+type DocumentType = 'vog' | 'diploma' | 'cv';
 
 // Screening profile descriptions
 const SCREENING_PROFILES: Record<string, string> = {
@@ -61,6 +63,8 @@ export function DocumentUploadSection({
   applicationId,
   vogFilePath,
   diplomaFilePath,
+  cvFilePath,
+  cvFileName,
   vogStatus,
   diplomaStatus,
   vogVerificationResponse,
@@ -68,17 +72,20 @@ export function DocumentUploadSection({
 }: DocumentUploadSectionProps) {
   const [uploadingVog, setUploadingVog] = useState(false);
   const [uploadingDiploma, setUploadingDiploma] = useState(false);
+  const [uploadingCV, setUploadingCV] = useState(false);
   const [downloadingVog, setDownloadingVog] = useState(false);
   const [downloadingDiploma, setDownloadingDiploma] = useState(false);
+  const [downloadingCV, setDownloadingCV] = useState(false);
   
   const vogInputRef = useRef<HTMLInputElement>(null);
   const diplomaInputRef = useRef<HTMLInputElement>(null);
+  const cvInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = async (
     file: File,
     docType: DocumentType
   ) => {
-    const setUploading = docType === 'vog' ? setUploadingVog : setUploadingDiploma;
+    const setUploading = docType === 'vog' ? setUploadingVog : docType === 'diploma' ? setUploadingDiploma : setUploadingCV;
     setUploading(true);
 
     try {
@@ -114,37 +121,52 @@ export function DocumentUploadSection({
         return;
       }
 
-      // Update extracted_data with file path
-      const fieldName = docType === 'vog' ? 'vog_file_path' : 'diploma_file_path';
-      
-      const { data: currentApp, error: fetchError } = await supabase
-        .from('professional_applications')
-        .select('extracted_data')
-        .eq('id', applicationId)
-        .single();
+      // CV is stored differently than VOG/Diploma
+      if (docType === 'cv') {
+        const { error: updateError } = await supabase
+          .from('professional_applications')
+          .update({ 
+            cv_file_path: filePath,
+            cv_file_name: file.name
+          })
+          .eq('id', applicationId);
 
-      if (fetchError) throw fetchError;
+        if (updateError) throw updateError;
+      } else {
+        // Update extracted_data with file path for VOG/Diploma
+        const fieldName = docType === 'vog' ? 'vog_file_path' : 'diploma_file_path';
+        
+        const { data: currentApp, error: fetchError } = await supabase
+          .from('professional_applications')
+          .select('extracted_data')
+          .eq('id', applicationId)
+          .single();
 
-      const currentExtracted = (currentApp?.extracted_data as Record<string, unknown>) || {};
-      const updatedExtractedData = {
-        ...currentExtracted,
-        [fieldName]: filePath
-      };
+        if (fetchError) throw fetchError;
 
-      const { error: updateError } = await supabase
-        .from('professional_applications')
-        .update({ 
-          extracted_data: updatedExtractedData as any,
-          ...(docType === 'diploma' ? { diploma_validation_status: 'received' as const } : {})
-        })
-        .eq('id', applicationId);
+        const currentExtracted = (currentApp?.extracted_data as Record<string, unknown>) || {};
+        const updatedExtractedData = {
+          ...currentExtracted,
+          [fieldName]: filePath
+        };
 
-      if (updateError) throw updateError;
+        const { error: updateError } = await supabase
+          .from('professional_applications')
+          .update({ 
+            extracted_data: updatedExtractedData as any,
+            ...(docType === 'diploma' ? { diploma_validation_status: 'received' as const } : {})
+          })
+          .eq('id', applicationId);
+
+        if (updateError) throw updateError;
+      }
 
       toast.success(
         docType === 'vog' 
           ? 'VOG geüpload - automatische verificatie gestart' 
-          : 'Diploma geüpload'
+          : docType === 'diploma'
+          ? 'Diploma geüpload'
+          : 'CV geüpload'
       );
       
       onUploadComplete();
@@ -157,12 +179,14 @@ export function DocumentUploadSection({
   };
 
   const handleDownload = async (filePath: string, docType: DocumentType) => {
-    const setDownloading = docType === 'vog' ? setDownloadingVog : setDownloadingDiploma;
+    const setDownloading = docType === 'vog' ? setDownloadingVog : docType === 'diploma' ? setDownloadingDiploma : setDownloadingCV;
     setDownloading(true);
 
     try {
+      // CV files are stored in 'cvs' bucket, others in 'application-documents'
+      const bucket = docType === 'cv' ? 'cvs' : 'application-documents';
       const { data, error } = await supabase.storage
-        .from('application-documents')
+        .from(bucket)
         .createSignedUrl(filePath, 60);
 
       if (error) throw error;
@@ -176,49 +200,65 @@ export function DocumentUploadSection({
   };
 
   const handleDelete = async (docType: DocumentType) => {
-    const filePath = docType === 'vog' ? vogFilePath : diplomaFilePath;
+    const filePath = docType === 'vog' ? vogFilePath : docType === 'diploma' ? diplomaFilePath : cvFilePath;
     if (!filePath) return;
 
     try {
+      // CV files are stored in 'cvs' bucket, others in 'application-documents'
+      const bucket = docType === 'cv' ? 'cvs' : 'application-documents';
       const { error: deleteError } = await supabase.storage
-        .from('application-documents')
+        .from(bucket)
         .remove([filePath]);
 
       if (deleteError) {
         console.error('Delete error:', deleteError);
       }
 
-      const fieldName = docType === 'vog' ? 'vog_file_path' : 'diploma_file_path';
-      
-      const { data: currentApp, error: fetchError } = await supabase
-        .from('professional_applications')
-        .select('extracted_data')
-        .eq('id', applicationId)
-        .single();
+      if (docType === 'cv') {
+        // CV is stored in separate columns
+        const { error: updateError } = await supabase
+          .from('professional_applications')
+          .update({ 
+            cv_file_path: null,
+            cv_file_name: null
+          })
+          .eq('id', applicationId);
 
-      if (fetchError) throw fetchError;
-
-      const currentExtracted = (currentApp?.extracted_data as Record<string, unknown>) || {};
-      const updatedExtractedData = { ...currentExtracted };
-      delete updatedExtractedData[fieldName];
-
-      const updateData: any = { 
-        extracted_data: updatedExtractedData 
-      };
-      
-      if (docType === 'vog') {
-        updateData.vog_validation_status = 'missing';
-        updateData.vog_verification_response = null;
+        if (updateError) throw updateError;
       } else {
-        updateData.diploma_validation_status = 'missing';
+        // VOG/Diploma stored in extracted_data
+        const fieldName = docType === 'vog' ? 'vog_file_path' : 'diploma_file_path';
+        
+        const { data: currentApp, error: fetchError } = await supabase
+          .from('professional_applications')
+          .select('extracted_data')
+          .eq('id', applicationId)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        const currentExtracted = (currentApp?.extracted_data as Record<string, unknown>) || {};
+        const updatedExtractedData = { ...currentExtracted };
+        delete updatedExtractedData[fieldName];
+
+        const updateData: any = { 
+          extracted_data: updatedExtractedData 
+        };
+        
+        if (docType === 'vog') {
+          updateData.vog_validation_status = 'missing';
+          updateData.vog_verification_response = null;
+        } else {
+          updateData.diploma_validation_status = 'missing';
+        }
+
+        const { error: updateError } = await supabase
+          .from('professional_applications')
+          .update(updateData)
+          .eq('id', applicationId);
+
+        if (updateError) throw updateError;
       }
-
-      const { error: updateError } = await supabase
-        .from('professional_applications')
-        .update(updateData)
-        .eq('id', applicationId);
-
-      if (updateError) throw updateError;
 
       toast.success(`${docType.toUpperCase()} verwijderd`);
       onUploadComplete();
@@ -341,6 +381,101 @@ export function DocumentUploadSection({
   return (
     <TooltipProvider>
       <div className="space-y-4">
+        {/* CV Upload */}
+        <Card>
+          <CardHeader className="py-3 px-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">CV (Curriculum Vitae)</CardTitle>
+              </div>
+              {cvFilePath ? (
+                <Badge variant="outline" className="text-green-600 border-green-300">Aanwezig</Badge>
+              ) : (
+                <Badge variant="outline" className="text-destructive border-destructive/30">Ontbreekt</Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="py-2 px-4">
+            {cvFilePath ? (
+              <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm truncate max-w-[200px]">
+                    {cvFileName || cvFilePath.split('/').pop()}
+                  </span>
+                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                </div>
+                <div className="flex items-center gap-1">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDownload(cvFilePath, 'cv')}
+                        disabled={downloadingCV}
+                      >
+                        {downloadingCV ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Bekijken</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete('cv')}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Verwijderen</TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
+            ) : (
+              <div
+                className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                onClick={() => cvInputRef.current?.click()}
+              >
+                {uploadingCV ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    <span className="text-sm text-muted-foreground">Uploaden...</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <Upload className="h-6 w-6 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      Klik om CV te uploaden
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      PDF, JPEG of PNG (max 10MB)
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+            <input
+              ref={cvInputRef}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFileUpload(file, 'cv');
+                e.target.value = '';
+              }}
+            />
+          </CardContent>
+        </Card>
+
         {/* VOG Upload */}
         <Card>
           <CardHeader className="py-3 px-4">

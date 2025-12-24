@@ -1108,6 +1108,8 @@ export function ApplicationDetailModal({
                     applicationId={application.id}
                     vogFilePath={application.extracted_data?.vog_file_path || null}
                     diplomaFilePath={application.extracted_data?.diploma_file_path || null}
+                    cvFilePath={application.cv_file_path}
+                    cvFileName={application.cv_file_name}
                     vogStatus={vogStatus}
                     diplomaStatus={diplomaStatus}
                     vogVerificationResponse={application.vog_verification_response as any}
