@@ -2841,6 +2841,9 @@ export type Database = {
       }
       professional_applications: {
         Row: {
+          bedrijfsnaam: string | null
+          beroepsaansprakelijkheid_path: string | null
+          bhv_certificaat_path: string | null
           completeness_score: number | null
           created_at: string | null
           cv_file_name: string | null
@@ -2856,19 +2859,25 @@ export type Database = {
           email_from: string
           email_subject: string | null
           extracted_data: Json | null
+          iban: string | null
           id: string
+          identiteitsbewijs_path: string | null
           interview_confirmed_slot: Json | null
           interview_scheduled_at: string | null
           interview_status: string | null
           is_test_data: boolean | null
+          klachtenportaal_wkkgz_path: string | null
+          kvk_uittreksel_path: string | null
           missing_info: Json | null
           org_id: string | null
+          overige_certificeringen_paths: Json | null
           pipeline_stage: string | null
           professional_id: string | null
           profile_photo_url: string | null
           rejected_at: string | null
           rejection_reason: string | null
           status: string
+          tillift_certificaat_path: string | null
           updated_at: string | null
           vog_issue_date: string | null
           vog_valid_until: string | null
@@ -2877,6 +2886,9 @@ export type Database = {
           vog_verification_response: Json | null
         }
         Insert: {
+          bedrijfsnaam?: string | null
+          beroepsaansprakelijkheid_path?: string | null
+          bhv_certificaat_path?: string | null
           completeness_score?: number | null
           created_at?: string | null
           cv_file_name?: string | null
@@ -2892,19 +2904,25 @@ export type Database = {
           email_from: string
           email_subject?: string | null
           extracted_data?: Json | null
+          iban?: string | null
           id?: string
+          identiteitsbewijs_path?: string | null
           interview_confirmed_slot?: Json | null
           interview_scheduled_at?: string | null
           interview_status?: string | null
           is_test_data?: boolean | null
+          klachtenportaal_wkkgz_path?: string | null
+          kvk_uittreksel_path?: string | null
           missing_info?: Json | null
           org_id?: string | null
+          overige_certificeringen_paths?: Json | null
           pipeline_stage?: string | null
           professional_id?: string | null
           profile_photo_url?: string | null
           rejected_at?: string | null
           rejection_reason?: string | null
           status?: string
+          tillift_certificaat_path?: string | null
           updated_at?: string | null
           vog_issue_date?: string | null
           vog_valid_until?: string | null
@@ -2913,6 +2931,9 @@ export type Database = {
           vog_verification_response?: Json | null
         }
         Update: {
+          bedrijfsnaam?: string | null
+          beroepsaansprakelijkheid_path?: string | null
+          bhv_certificaat_path?: string | null
           completeness_score?: number | null
           created_at?: string | null
           cv_file_name?: string | null
@@ -2928,19 +2949,25 @@ export type Database = {
           email_from?: string
           email_subject?: string | null
           extracted_data?: Json | null
+          iban?: string | null
           id?: string
+          identiteitsbewijs_path?: string | null
           interview_confirmed_slot?: Json | null
           interview_scheduled_at?: string | null
           interview_status?: string | null
           is_test_data?: boolean | null
+          klachtenportaal_wkkgz_path?: string | null
+          kvk_uittreksel_path?: string | null
           missing_info?: Json | null
           org_id?: string | null
+          overige_certificeringen_paths?: Json | null
           pipeline_stage?: string | null
           professional_id?: string | null
           profile_photo_url?: string | null
           rejected_at?: string | null
           rejection_reason?: string | null
           status?: string
+          tillift_certificaat_path?: string | null
           updated_at?: string | null
           vog_issue_date?: string | null
           vog_valid_until?: string | null
@@ -3242,8 +3269,11 @@ export type Database = {
       professionals: {
         Row: {
           adres: string | null
+          bedrijfsnaam: string | null
+          beroepsaansprakelijkheid_path: string | null
           beschikbaarheid_uren: Json | null
           beschikbaarheidsnotities: string | null
+          bhv_certificaat_path: string | null
           big_nummer: string | null
           btw_nummer: string | null
           cao_akkoord: boolean | null
@@ -3262,15 +3292,20 @@ export type Database = {
           gewenst_uurloon: number | null
           heeft_auto: boolean | null
           heeft_rijbewijs: boolean | null
+          iban: string | null
           id: string
+          identiteitsbewijs_path: string | null
           is_test_data: boolean | null
           jaren_ervaring: number | null
+          klachtenportaal_wkkgz_path: string | null
           kvk_nummer: string | null
+          kvk_uittreksel_path: string | null
           leidinggevende_ervaring: boolean | null
           max_reisafstand_km: number | null
           nachtdienst_bereid: boolean | null
           opleidingen: Json | null
           org_id: string
+          overige_certificeringen_paths: Json | null
           postcode: string | null
           profile_photo_url: string | null
           provincie: string | null
@@ -3284,6 +3319,7 @@ export type Database = {
           tags: string[] | null
           talen: string[] | null
           telefoonnummer: string | null
+          tillift_certificaat_path: string | null
           updated_at: string
           vog_date: string | null
           weekenddienst_bereid: boolean | null
@@ -3292,8 +3328,11 @@ export type Database = {
         }
         Insert: {
           adres?: string | null
+          bedrijfsnaam?: string | null
+          beroepsaansprakelijkheid_path?: string | null
           beschikbaarheid_uren?: Json | null
           beschikbaarheidsnotities?: string | null
+          bhv_certificaat_path?: string | null
           big_nummer?: string | null
           btw_nummer?: string | null
           cao_akkoord?: boolean | null
@@ -3312,15 +3351,20 @@ export type Database = {
           gewenst_uurloon?: number | null
           heeft_auto?: boolean | null
           heeft_rijbewijs?: boolean | null
+          iban?: string | null
           id?: string
+          identiteitsbewijs_path?: string | null
           is_test_data?: boolean | null
           jaren_ervaring?: number | null
+          klachtenportaal_wkkgz_path?: string | null
           kvk_nummer?: string | null
+          kvk_uittreksel_path?: string | null
           leidinggevende_ervaring?: boolean | null
           max_reisafstand_km?: number | null
           nachtdienst_bereid?: boolean | null
           opleidingen?: Json | null
           org_id: string
+          overige_certificeringen_paths?: Json | null
           postcode?: string | null
           profile_photo_url?: string | null
           provincie?: string | null
@@ -3334,6 +3378,7 @@ export type Database = {
           tags?: string[] | null
           talen?: string[] | null
           telefoonnummer?: string | null
+          tillift_certificaat_path?: string | null
           updated_at?: string
           vog_date?: string | null
           weekenddienst_bereid?: boolean | null
@@ -3342,8 +3387,11 @@ export type Database = {
         }
         Update: {
           adres?: string | null
+          bedrijfsnaam?: string | null
+          beroepsaansprakelijkheid_path?: string | null
           beschikbaarheid_uren?: Json | null
           beschikbaarheidsnotities?: string | null
+          bhv_certificaat_path?: string | null
           big_nummer?: string | null
           btw_nummer?: string | null
           cao_akkoord?: boolean | null
@@ -3362,15 +3410,20 @@ export type Database = {
           gewenst_uurloon?: number | null
           heeft_auto?: boolean | null
           heeft_rijbewijs?: boolean | null
+          iban?: string | null
           id?: string
+          identiteitsbewijs_path?: string | null
           is_test_data?: boolean | null
           jaren_ervaring?: number | null
+          klachtenportaal_wkkgz_path?: string | null
           kvk_nummer?: string | null
+          kvk_uittreksel_path?: string | null
           leidinggevende_ervaring?: boolean | null
           max_reisafstand_km?: number | null
           nachtdienst_bereid?: boolean | null
           opleidingen?: Json | null
           org_id?: string
+          overige_certificeringen_paths?: Json | null
           postcode?: string | null
           profile_photo_url?: string | null
           provincie?: string | null
@@ -3384,6 +3437,7 @@ export type Database = {
           tags?: string[] | null
           talen?: string[] | null
           telefoonnummer?: string | null
+          tillift_certificaat_path?: string | null
           updated_at?: string
           vog_date?: string | null
           weekenddienst_bereid?: boolean | null
