@@ -12,6 +12,7 @@ type EmailType =
   | 'welcome'               // Welkomstmail nieuwe kandidaat
   | 'status_update'         // Status update (goedgekeurd, afgewezen, etc.)
   | 'vog_rejection'         // VOG verificatie mislukt, vraag nieuw VOG
+  | 'rejection'             // Afwijzing sollicitatie (geen diploma, etc.)
   | 'emrex_invitation'      // EMREX diploma verificatie uitnodiging
   | 'emrex_reminder';       // EMREX herinnering na 48 uur
 
@@ -387,6 +388,56 @@ function generateEmailTemplate(
         </p>
         <p style="margin: 25px 0 0 0; color: #4a5568;">
           Met vriendelijke groet,<br>
+          <strong>Het ${orgName} Recruitment Team</strong>
+        </p>`;
+      break;
+
+    case 'rejection':
+      const rejReason = data.rejection_reason || 'general';
+      const rejDetails = data.rejection_details || {};
+      const rejectionReasons: Record<string, { title: string; message: string; encouragement: string }> = {
+        'no_healthcare_diploma': {
+          title: 'Geen erkend zorgdiploma',
+          message: 'Voor onze opdrachtgevers in de zorg is een erkend zorgdiploma (VIG, HBO-V, MBO-V, Verpleegkundige, Verzorgende, etc.) vereist. Helaas voldoet je huidige opleiding niet aan deze eis.',
+          encouragement: 'Mocht je in de toekomst een erkend zorgdiploma behalen, nodigen we je van harte uit om opnieuw te solliciteren.'
+        },
+        'incomplete_documents': {
+          title: 'Onvolledige documentatie',
+          message: 'Ondanks meerdere verzoeken hebben we niet alle benodigde documenten ontvangen om je sollicitatie te verwerken.',
+          encouragement: 'Je bent altijd welkom om opnieuw te solliciteren met een volledige set documenten.'
+        },
+        'vog_issues': {
+          title: 'VOG niet in orde',
+          message: 'Je Verklaring Omtrent het Gedrag (VOG) kon niet worden geverifieerd of voldoet niet aan onze eisen.',
+          encouragement: 'Wanneer je een geldige VOG kunt overleggen, ben je van harte welkom om opnieuw contact op te nemen.'
+        },
+        'general': {
+          title: 'Sollicitatie niet doorgezet',
+          message: 'Na zorgvuldige overweging hebben we besloten je sollicitatie niet door te zetten.',
+          encouragement: 'We wensen je veel succes met je verdere carrière en hopen je in de toekomst wellicht alsnog te mogen verwelkomen.'
+        }
+      };
+      const rejInfo = rejectionReasons[rejReason] || rejectionReasons['general'];
+      
+      content = `
+        <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName},</h2>
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
+          Allereerst willen we je hartelijk danken voor je interesse in ${orgName} en de tijd die je hebt genomen om te solliciteren.
+        </p>
+        <div style="background-color: #fef2f2; padding: 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #dc2626;">
+          <p style="margin: 0; color: #991b1b; font-weight: 600;">📋 ${rejInfo.title}</p>
+          <p style="margin: 10px 0 0 0; color: #b91c1c; font-size: 14px; line-height: 1.6;">
+            ${rejInfo.message}
+          </p>
+        </div>
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
+          ${rejInfo.encouragement}
+        </p>
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6;">
+          Heb je vragen over deze beslissing? Neem dan gerust contact met ons op.
+        </p>
+        <p style="margin: 25px 0 0 0; color: #4a5568;">
+          Met vriendelijke groet en veel succes gewenst,<br>
           <strong>Het ${orgName} Recruitment Team</strong>
         </p>`;
       break;
