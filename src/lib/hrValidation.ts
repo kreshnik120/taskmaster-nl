@@ -136,13 +136,16 @@ export function getVogDaysUntilExpiry(vogDate: string | Date | null | undefined)
 // =====================================================
 
 /**
- * Fields required for ZZP (freelance) professionals
- * Note: uurtarief is optional (can be discussed later)
+ * Fields required for ZZP (freelance) professionals - VERPLICHT
  */
 export const ZZP_REQUIRED_FIELDS = [
   'kvk_nummer',
-  'btw_nummer',
-  'vog_date',
+  'iban',
+  'bedrijfsnaam',
+  'beroepsaansprakelijkheid_path',    // Document
+  'kvk_uittreksel_path',               // Document
+  'klachtenportaal_wkkgz_path',        // Document
+  'identiteitsbewijs_path',            // Document
 ] as const;
 
 /**
@@ -150,6 +153,9 @@ export const ZZP_REQUIRED_FIELDS = [
  */
 export const ZZP_OPTIONAL_FIELDS = [
   'gewenst_uurloon',
+  'btw_nummer',
+  'bhv_certificaat_path',              // Document - optioneel
+  'tillift_certificaat_path',          // Document - optioneel
 ] as const;
 
 /**
@@ -162,8 +168,30 @@ export const HEALTHCARE_OPTIONAL_FIELDS = [
 ] as const;
 
 /**
+ * Valid healthcare diploma types (for auto-rejection check)
+ */
+export const VALID_HEALTHCARE_DIPLOMAS = [
+  'VIG', 'HBO-V', 'MBO-V', 'VP3', 'VP4',
+  'Verpleegkundige', 'Verzorgende', 'Helpende', 'Helpende 2',
+  'Begeleider', 'GGZ-agoog', 'SPH', 'SPW', 'MZ', 'Maatschappelijk Werk',
+  'Sociaal Werk', 'Agogisch Medewerker', 'Pedagogisch Medewerker'
+] as const;
+
+/**
+ * Check if a diploma/functie_niveau is a valid healthcare diploma
+ */
+export function isValidHealthcareDiploma(diploma: string | null | undefined): boolean {
+  if (!diploma) return false;
+  const normalizedDiploma = diploma.trim().toLowerCase();
+  return VALID_HEALTHCARE_DIPLOMAS.some(valid => 
+    normalizedDiploma.includes(valid.toLowerCase()) || 
+    valid.toLowerCase().includes(normalizedDiploma)
+  );
+}
+
+/**
  * Detect missing info like an HR Specialist would
- * Enhanced with VOG expiration validation
+ * Enhanced with VOG expiration validation and ZZP document checks
  */
 export function detectMissingInfoHR(data: {
   naam?: string | null;
@@ -181,6 +209,15 @@ export function detectMissingInfoHR(data: {
   vog_file_path?: string | null;
   nachtdienst_bereid?: boolean | null;
   weekenddienst_bereid?: boolean | null;
+  // ZZP-specific fields
+  iban?: string | null;
+  bedrijfsnaam?: string | null;
+  beroepsaansprakelijkheid_path?: string | null;
+  kvk_uittreksel_path?: string | null;
+  klachtenportaal_wkkgz_path?: string | null;
+  identiteitsbewijs_path?: string | null;
+  bhv_certificaat_path?: string | null;
+  tillift_certificaat_path?: string | null;
 }): string[] {
   const missing: string[] = [];
   
@@ -197,10 +234,18 @@ export function detectMissingInfoHR(data: {
     missing.push('telefoonnummer');
   }
   
-  // ZZP-specific required fields (uurtarief is now OPTIONAL)
+  // ZZP-specific required fields - UITGEBREID
   if (data.werkvorm === 'ZZP') {
+    // Bedrijfsgegevens
     if (!data.kvk_nummer) missing.push('kvk_nummer');
-    if (!data.btw_nummer) missing.push('btw_nummer');
+    if (!data.iban) missing.push('iban');
+    if (!data.bedrijfsnaam) missing.push('bedrijfsnaam');
+    
+    // Verplichte documenten
+    if (!data.beroepsaansprakelijkheid_path) missing.push('beroepsaansprakelijkheid');
+    if (!data.kvk_uittreksel_path) missing.push('kvk_uittreksel');
+    if (!data.klachtenportaal_wkkgz_path) missing.push('klachtenportaal_wkkgz');
+    if (!data.identiteitsbewijs_path) missing.push('identiteitsbewijs');
   }
   
   // VOG validation with expiration check
@@ -232,7 +277,7 @@ export function getMissingInfoDescription(field: string): string {
     'email': 'E-mailadres',
     'telefoonnummer': 'Geldig telefoonnummer',
     'functie_niveau': 'Functieniveau (VIG, HBO-V, etc.)',
-    'werkvorm': 'Gewenste werkvorm',
+    'werkvorm': 'Gewenste werkvorm (ZZP/Uitzendkracht)',
     'regio': 'Werkgebied/regio',
     'beschikbaarheid': 'Beschikbaarheid (uren/week)',
     'kvk_nummer': 'KvK-nummer (voor ZZP)',
@@ -243,15 +288,26 @@ export function getMissingInfoDescription(field: string): string {
     'weekenddienst_bereid': 'Bereidheid weekenddienst',
     'uurtarief': 'Gewenst uurtarief',
     'gewenst_uurloon': 'Gewenst uurtarief',
+    // ZZP-specific
+    'iban': 'IBAN rekeningnummer',
+    'bedrijfsnaam': 'Bedrijfsnaam',
+    'beroepsaansprakelijkheid': 'Beroepsaansprakelijkheidsverzekering',
+    'kvk_uittreksel': 'Inschrijving KvK (uittreksel)',
+    'klachtenportaal_wkkgz': 'Klachtenportaal / WKKGZ registratie',
+    'identiteitsbewijs': 'Identiteitsbewijs (voor- en achterkant)',
+    'bhv_certificaat': 'BHV Certificaat (optioneel)',
+    'tillift_certificaat': 'Tillift Certificaat (optioneel)',
   };
   return descriptions[field] || field;
 }
 
 /**
  * Calculate HR-level completeness score
- * Enhanced with VOG expiration validation
+ * Enhanced with VOG expiration validation and ZZP document checks
  */
 export function calculateHRCompletenessScore(data: Record<string, unknown>): number {
+  const isZZP = data.werkvorm === 'ZZP';
+  
   const weights: Record<string, number> = {
     naam: 10,
     email: 10,
@@ -262,15 +318,25 @@ export function calculateHRCompletenessScore(data: Record<string, unknown>): num
     beschikbaarheid: 8,
     ervaring_sector: 8,
     doelgroep_ervaring: 5,
-    // ZZP fields (conditional weight) - uurtarief now optional (lower weight)
-    gewenst_uurloon: data.werkvorm === 'ZZP' ? 3 : 1,
-    kvk_nummer: data.werkvorm === 'ZZP' ? 6 : 0,
-    btw_nummer: data.werkvorm === 'ZZP' ? 4 : 0,
-    vog_date: 6, // Increased weight for VOG
+    vog_date: 6,
     // Healthcare matching
     nachtdienst_bereid: 3,
     weekenddienst_bereid: 3,
     eigen_vervoer: 3,
+    // ZZP fields - conditional weights
+    gewenst_uurloon: isZZP ? 3 : 1,
+    kvk_nummer: isZZP ? 8 : 0,
+    btw_nummer: isZZP ? 2 : 0,
+    iban: isZZP ? 6 : 0,
+    bedrijfsnaam: isZZP ? 5 : 0,
+    // ZZP verplichte documenten
+    beroepsaansprakelijkheid_path: isZZP ? 8 : 0,
+    kvk_uittreksel_path: isZZP ? 6 : 0,
+    klachtenportaal_wkkgz_path: isZZP ? 6 : 0,
+    identiteitsbewijs_path: isZZP ? 6 : 0,
+    // ZZP optionele documenten
+    bhv_certificaat_path: isZZP ? 2 : 0,
+    tillift_certificaat_path: isZZP ? 2 : 0,
   };
   
   let earnedPoints = 0;

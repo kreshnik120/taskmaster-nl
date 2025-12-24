@@ -41,6 +41,8 @@ import { DocumentVerificationStatus } from "@/components/recruitment/DocumentVer
 import { DocumentUploadSection } from "@/components/recruitment/DocumentUploadSection";
 import { ZZPDocumentUploadSection } from "@/components/recruitment/ZZPDocumentUploadSection";
 import { StageTransitionButton } from "@/components/recruitment/StageTransitionButton";
+import { WerkvormDetectionBanner } from "@/components/recruitment/WerkvormDetectionBanner";
+import { DiplomaVerificationBanner } from "@/components/recruitment/DiplomaVerificationBanner";
 
 interface Application {
   id: string;
@@ -981,6 +983,22 @@ export function ApplicationDetailModal({
               {/* TAB: Documents - Document Upload & Verification Status */}
               <TabsContent value="documents" className="space-y-4">
                 <div className="space-y-4">
+                  {/* Werkvorm Detection Banner - shown when werkvorm is unknown */}
+                  <WerkvormDetectionBanner
+                    applicationId={application.id}
+                    currentWerkvorm={getFieldValue(application.extracted_data?.werkvorm) as string | null}
+                    onWerkvormUpdated={onApplicationUpdated}
+                  />
+
+                  {/* Diploma Verification Banner - checks for valid healthcare diploma */}
+                  <DiplomaVerificationBanner
+                    applicationId={application.id}
+                    functieNiveau={getFieldValue(application.extracted_data?.functie_niveau) as string | null}
+                    diplomaFilePath={application.extracted_data?.diploma_file_path || null}
+                    diplomaStatus={diplomaStatus}
+                    onStatusUpdated={onApplicationUpdated}
+                  />
+
                   {/* Basis Document Upload Section */}
                   <div className="space-y-2">
                     <h3 className="text-sm font-semibold">Basis Documenten</h3>
@@ -993,7 +1011,12 @@ export function ApplicationDetailModal({
                       vogStatus={vogStatus}
                       diplomaStatus={diplomaStatus}
                       vogVerificationResponse={application.vog_verification_response as any}
+                      pipelineStage={application.pipeline_stage}
                       onUploadComplete={onApplicationUpdated}
+                      onRequestNewVog={() => {
+                        // TODO: Trigger new VOG request flow
+                        toast.info('Nieuwe VOG aanvraag wordt gestart...');
+                      }}
                     />
                   </div>
 
