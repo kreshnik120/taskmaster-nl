@@ -597,23 +597,6 @@ export function DocumentUploadSection({
               }}
             />
 
-            {/* Nieuwe VOG Aanvragen knop bij Screening fase */}
-            {isScreeningStage && onRequestNewVog && (
-              <div className="mt-3 pt-3 border-t">
-                <Button
-                  onClick={onRequestNewVog}
-                  variant="outline"
-                  className="w-full"
-                  size="sm"
-                >
-                  <Shield className="h-4 w-4 mr-2" />
-                  Nieuwe VOG Aanvragen
-                </Button>
-                <p className="text-xs text-muted-foreground mt-1 text-center">
-                  Start officiële VOG-aanvraag via Justis
-                </p>
-              </div>
-            )}
             
             {/* Status messages */}
             {vogStatus === 'authentic_ok' && (
