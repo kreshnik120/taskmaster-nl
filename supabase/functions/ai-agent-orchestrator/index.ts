@@ -99,6 +99,10 @@ const GOAL_CONFIGS: Record<string, {
             current_completeness: goal.input_data.current_completeness,
             email_type: 'welcome_and_intake',
             is_first_contact: true,
+            // 🆕 Functie-informatie voor gepersonaliseerde welkom emails
+            functie_niveau: goal.input_data.functie_niveau,
+            werkvorm: goal.input_data.werkvorm,
+            regio: goal.input_data.regio,
           }
         }
       ];
