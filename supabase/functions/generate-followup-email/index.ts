@@ -80,11 +80,16 @@ Deno.serve(async (req) => {
       org_name = 'CitoZorg',
       // 🆕 Smart context: rejection reasons for previously provided data
       rejection_context = {} as RejectionContext,
+      // 🆕 Functie-informatie voor gepersonaliseerde emails
+      functie_niveau,
+      werkvorm,
+      regio,
     } = body;
 
     console.log(`[Generate Followup Email] Application: ${application_id}`);
     console.log(`[Generate Followup Email] Fields to ask: ${fields_to_ask?.join(', ')}`);
     console.log(`[Generate Followup Email] Rejection context:`, JSON.stringify(rejection_context));
+    console.log(`[Generate Followup Email] Functie info: ${functie_niveau || 'onbekend'}, werkvorm: ${werkvorm || 'onbekend'}, regio: ${regio || 'onbekend'}`);
 
     if (!application_id || !candidate_email || !fields_to_ask?.length) {
       return new Response(
@@ -131,17 +136,26 @@ ${rejectionDetails}
     
     if (email_type === 'welcome_and_intake' || is_first_contact) {
       // WELKOMST + INTAKE EMAIL (usually no rejection context here)
+      // 🆕 Build functie context for personalization
+      const functieContext = functie_niveau 
+        ? `\n- Gesolliciteerd als: ${functie_niveau}${werkvorm ? ` (${werkvorm})` : ''}${regio ? `\n- Werkgebied: ${regio}` : ''}`
+        : '';
+      
+      const personalizedTitle = functie_niveau 
+        ? `Welkom bij ${org_name}, ${functie_niveau}!`
+        : `Welkom bij ${org_name}!`;
+      
       prompt = `Je bent een hartelijke recruitment assistent voor ${org_name}, een professioneel zorgbemiddelingsbureau.
 Schrijf een warme welkomstemail voor een nieuwe sollicitant die ook vraagt naar ontbrekende informatie.
 
 **Kandidaat info:**
 - Naam: ${candidate_name || 'Beste sollicitant'}
 - Email: ${candidate_email}
-- Huidige completeness: ${current_completeness || 0}%
+- Huidige completeness: ${current_completeness || 0}%${functieContext}
 
 **BELANGRIJKE STRUCTUUR:**
-1. Start met een hartelijke welkomst - maak de kandidaat enthousiast!
-2. Leg kort uit wat ze kunnen verwachten (proces in 3 simpele stappen)
+1. Start met een hartelijke welkomst - ${functie_niveau ? `noem specifiek dat je blij bent met hun interesse als ${functie_niveau}` : 'maak de kandidaat enthousiast!'}
+2. ${functie_niveau ? `Benoem dat je ziet dat ze interesse hebben in werken als ${functie_niveau}${werkvorm ? ` via ${werkvorm}` : ''}${regio ? ` in de regio ${regio}` : ''}` : 'Leg kort uit wat ze kunnen verwachten (proces in 3 simpele stappen)'}
 3. Vraag vriendelijk naar de ontbrekende informatie
 
 **Ontbrekende informatie (indien aanwezig):**
@@ -151,7 +165,7 @@ ${fieldDescriptions.length > 0 ? fieldDescriptions.map((desc: string, i: number)
 - Schrijf in het Nederlands
 - Warme, enthousiaste maar professionele toon
 - Maak het NIET te lang (max 250 woorden)
-- Noem de 3 stappen: 1) We bekijken je profiel 2) Kennismakingsgesprek 3) Matching met opdrachtgevers
+- ${functie_niveau ? `Begin je intro met erkenning van hun specifieke functie: "${functie_niveau}"` : 'Noem de 3 stappen: 1) We bekijken je profiel 2) Kennismakingsgesprek 3) Matching met opdrachtgevers'}
 - Als er ontbrekende info is, vraag dit vriendelijk in een overzichtelijke lijst
 - Maak duidelijk dat ze gewoon kunnen antwoorden op de email
 - Sluit af met ${org_name} Recruitment Team
@@ -160,9 +174,9 @@ ${fieldDescriptions.length > 0 ? fieldDescriptions.map((desc: string, i: number)
 **Format:**
 Return een JSON object met:
 {
-  "subject": "Welkom bij ${org_name} - Je sollicitatie is ontvangen!",
+  "subject": "${functie_niveau ? `Welkom ${functie_niveau} - Je sollicitatie bij ${org_name}` : `Welkom bij ${org_name} - Je sollicitatie is ontvangen!`}",
   "greeting": "Beste [naam]",
-  "intro": "Hartelijke welkomstboodschap (2-3 zinnen)",
+  "intro": "Hartelijke welkomstboodschap (2-3 zinnen)${functie_niveau ? ' - noem de specifieke functie!' : ''}",
   "process_steps": "Korte uitleg van het proces in 3 stappen",
   "info_request": "Vriendelijk verzoek om ontbrekende info (of bevestiging dat alles compleet is)",
   "closing": "Warme afsluitende groet"
@@ -295,6 +309,15 @@ Return een JSON object met:
     let emailHtml: string;
     
     if (email_type === 'welcome_and_intake' || is_first_contact) {
+      // 🆕 Gepersonaliseerde titel op basis van functie
+      const personalizedTitle = functie_niveau 
+        ? `Welkom, ${functie_niveau}!`
+        : `Welkom bij ${org_name}!`;
+      
+      const personalizedSubtitle = functie_niveau && werkvorm
+        ? `${werkvorm}${regio ? ` • ${regio}` : ''}`
+        : null;
+      
       // WELKOMST EMAIL HTML - Professionele, zakelijke stijl
       emailHtml = `
 <!DOCTYPE html>
@@ -314,6 +337,10 @@ Return een JSON object met:
     
     <!-- Content -->
     <div style="padding: 30px;">
+      <!-- 🆕 Gepersonaliseerde welkomsttitel -->
+      <h2 style="color: #1a365d; margin: 0 0 8px 0; font-size: 20px; font-weight: 600;">${personalizedTitle}</h2>
+      ${personalizedSubtitle ? `<p style="color: #718096; margin: 0 0 20px 0; font-size: 14px;">${personalizedSubtitle}</p>` : ''}
+      
       <p style="font-size: 16px; color: #2d3748; margin: 0 0 20px 0;">
         ${emailContent.greeting.replace(/,+$/, '')},
       </p>
