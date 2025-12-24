@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { 
   Phone, Mail, MapPin, Briefcase, Car, Calendar, User, Users,
   Star, Edit, Trash2, CheckCircle2, X, Link2, ChevronDown, Award, Clock, 
-  Home, Cake, Upload, MoreHorizontal
+  Home, Cake, Upload, MoreHorizontal, FileText, Download, Eye, XCircle
 } from "lucide-react";
 import { PlacementHistory } from "./PlacementHistory";
 import { format } from "date-fns";
@@ -51,6 +51,10 @@ interface Professional {
   btw_nummer: string | null;
   created_at: string;
   updated_at: string;
+  // CV fields
+  cv_file_path: string | null;
+  cv_file_name: string | null;
+  cv_uploaded_at: string | null;
   // New fields for complete data sync
   ervaring_sector: string[] | null;
   doelgroep_ervaring: string[] | null;
@@ -496,6 +500,135 @@ export function ProfessionalDetailModal({
                     <Label className="text-xs text-muted-foreground">Regio</Label>
                     <p className="text-sm mt-0.5">{professional.regio || "-"}</p>
                   </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+
+            <Separator />
+
+            {/* CV Sectie */}
+            <Collapsible defaultOpen>
+              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-muted/50 rounded-lg transition-colors">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  CV / Curriculum Vitae
+                </h3>
+                <ChevronDown className="h-4 w-4" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-3">
+                <div className="p-3 bg-muted/20 rounded-lg">
+                  {professional.cv_file_path ? (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <FileText className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{professional.cv_file_name || 'CV.pdf'}</p>
+                          {professional.cv_uploaded_at && (
+                            <p className="text-xs text-muted-foreground">
+                              Geüpload op {format(new Date(professional.cv_uploaded_at), "d MMMM yyyy", { locale: nl })}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            try {
+                              const { data } = await supabase.storage
+                                .from('application-cvs')
+                                .createSignedUrl(professional.cv_file_path!, 60);
+                              if (data?.signedUrl) {
+                                window.open(data.signedUrl, '_blank');
+                              }
+                            } catch (error) {
+                              console.error('Error opening CV:', error);
+                              toast.error('Kon CV niet openen');
+                            }
+                          }}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          Bekijken
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            try {
+                              const { data } = await supabase.storage
+                                .from('application-cvs')
+                                .download(professional.cv_file_path!);
+                              if (data) {
+                                const url = URL.createObjectURL(data);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = professional.cv_file_name || 'CV.pdf';
+                                a.click();
+                                URL.revokeObjectURL(url);
+                              }
+                            } catch (error) {
+                              console.error('Error downloading CV:', error);
+                              toast.error('Kon CV niet downloaden');
+                            }
+                          }}
+                        >
+                          <Download className="h-4 w-4 mr-1" />
+                          Download
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-6">
+                      <FileText className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
+                      <p className="text-sm text-muted-foreground mb-3">Nog geen CV geüpload</p>
+                      <label className="cursor-pointer">
+                        <Button size="sm" variant="outline" asChild>
+                          <span>
+                            <Upload className="h-4 w-4 mr-1" />
+                            CV Uploaden
+                          </span>
+                        </Button>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            
+                            try {
+                              const fileExt = file.name.split('.').pop();
+                              const fileName = `${professional.id}/${Date.now()}-cv.${fileExt}`;
+                              
+                              const { error: uploadError } = await supabase.storage
+                                .from('application-cvs')
+                                .upload(fileName, file);
+                              
+                              if (uploadError) throw uploadError;
+                              
+                              await supabase
+                                .from('professionals')
+                                .update({ 
+                                  cv_file_path: fileName,
+                                  cv_file_name: file.name,
+                                  cv_uploaded_at: new Date().toISOString()
+                                })
+                                .eq('id', professional.id);
+                              
+                              toast.success('CV geüpload!');
+                              onSuccess?.();
+                            } catch (error) {
+                              console.error('Upload error:', error);
+                              toast.error('Fout bij uploaden CV');
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
               </CollapsibleContent>
             </Collapsible>
