@@ -538,6 +538,132 @@ Deno.serve(async (req) => {
     const hasOfferedSlots = offeredSlots && offeredSlots.length > 0;
     
     // =====================================================
+    // 🎯 VERBETERDE SLOT-DETECTIE: Strip quoted content + regex pre-processing
+    // =====================================================
+    
+    /**
+     * Strip quoted email content om alleen het antwoord van de kandidaat te krijgen
+     * Verwijdert: quote markers (>), originele email thread, inline images
+     */
+    const stripQuotedContent = (emailBody: string): string => {
+      if (!emailBody) return '';
+      
+      const lines = emailBody.split('\n');
+      const cleanLines: string[] = [];
+      
+      for (const line of lines) {
+        // Stop bij quote markers - dit zijn tekens dat de originele email begint
+        if (line.match(/^(>|_{3,}|─{3,}|Van:|From:|Op \d|On \d|Verzonden:|Sent:|-----Original|Oorspronkelijk bericht)/i)) {
+          break;
+        }
+        // Skip embedded image references [cid:xxx]
+        if (line.match(/^\[cid:/)) continue;
+        // Skip lege Outlook signature blocks
+        if (line.match(/^(\[|\<)?(image\d+|signature)/i)) continue;
+        
+        cleanLines.push(line);
+      }
+      
+      return cleanLines.join('\n').trim();
+    };
+    
+    /**
+     * Regex-based slot detectie VOOR AI call
+     * Detecteert simpele antwoorden zoals "3", "optie 2", "de derde"
+     */
+    const detectSlotFromSimpleReply = (text: string, slotCount: number): number | null => {
+      if (!text) return null;
+      
+      const trimmed = text.trim().toLowerCase();
+      
+      // Pattern 1: Alleen een nummer aan het begin (bijv. "3" of "3.0" of "3:")
+      const simpleNumberMatch = trimmed.match(/^(\d)(?:\.\d+)?[\s:,.!?]*$/);
+      if (simpleNumberMatch) {
+        const num = parseInt(simpleNumberMatch[1]);
+        if (num >= 1 && num <= slotCount) {
+          console.log(`🎯 Regex slot detection: simpel getal "${simpleNumberMatch[1]}" → slot ${num}`);
+          return num;
+        }
+      }
+      
+      // Pattern 1b: Nummer aan het begin van eerste regel (bijv. "3\n\n[rest van quoted email]")
+      const firstLineMatch = trimmed.split('\n')[0].trim().match(/^(\d)(?:\.\d+)?[\s:,.!?]*$/);
+      if (firstLineMatch) {
+        const num = parseInt(firstLineMatch[1]);
+        if (num >= 1 && num <= slotCount) {
+          console.log(`🎯 Regex slot detection: nummer op eerste regel "${firstLineMatch[1]}" → slot ${num}`);
+          return num;
+        }
+      }
+      
+      // Pattern 2: "optie X", "slot X", "nummer X", "keuze X", "moment X"
+      const optionPattern = /(?:optie|slot|nummer|keuze|moment|mogelijkheid)\s*(\d)/i;
+      const optionMatch = trimmed.match(optionPattern);
+      if (optionMatch) {
+        const num = parseInt(optionMatch[1]);
+        if (num >= 1 && num <= slotCount) {
+          console.log(`🎯 Regex slot detection: optie-patroon "${optionMatch[0]}" → slot ${num}`);
+          return num;
+        }
+      }
+      
+      // Pattern 3: Ordinalen ("de eerste", "de tweede", "de derde", etc.)
+      const ordinalMap: Record<string, number> = {
+        'eerste': 1, 'een': 1, '1e': 1, '1ste': 1,
+        'tweede': 2, 'twee': 2, '2e': 2, '2de': 2,
+        'derde': 3, 'drie': 3, '3e': 3, '3de': 3,
+        'vierde': 4, 'vier': 4, '4e': 4, '4de': 4,
+        'vijfde': 5, 'vijf': 5, '5e': 5, '5de': 5,
+        'zesde': 6, 'zes': 6, '6e': 6, '6de': 6,
+      };
+      const ordinalPattern = /(?:de\s+)?(eerste|tweede|derde|vierde|vijfde|zesde|\d+e|\d+ste|\d+de)/i;
+      const ordinalMatch = trimmed.match(ordinalPattern);
+      if (ordinalMatch) {
+        const ordinal = ordinalMatch[1].toLowerCase();
+        const num = ordinalMap[ordinal];
+        if (num && num >= 1 && num <= slotCount) {
+          console.log(`🎯 Regex slot detection: ordinaal "${ordinalMatch[0]}" → slot ${num}`);
+          return num;
+        }
+      }
+      
+      // Pattern 4: "graag X" of "kies X" of "wordt X"
+      const preferencePattern = /(?:graag|kies|wordt|neem|wil)\s+(?:optie\s+)?(\d)/i;
+      const prefMatch = trimmed.match(preferencePattern);
+      if (prefMatch) {
+        const num = parseInt(prefMatch[1]);
+        if (num >= 1 && num <= slotCount) {
+          console.log(`🎯 Regex slot detection: voorkeur-patroon "${prefMatch[0]}" → slot ${num}`);
+          return num;
+        }
+      }
+      
+      return null;
+    };
+    
+    // Strip quoted content en detecteer slot via regex EERST
+    const strippedReply = stripQuotedContent(emailText);
+    let regexDetectedSlot: number | null = null;
+    
+    if (hasOfferedSlots && strippedReply) {
+      console.log("========================================");
+      console.log("🎯 PRE-AI SLOT DETECTION:");
+      console.log("   Original email length:", emailText.length, "chars");
+      console.log("   Stripped reply length:", strippedReply.length, "chars");
+      console.log("   Stripped reply content:", strippedReply.substring(0, 200));
+      console.log("   Number of offered slots:", offeredSlots.length);
+      console.log("========================================");
+      
+      regexDetectedSlot = detectSlotFromSimpleReply(strippedReply, offeredSlots.length);
+      
+      if (regexDetectedSlot !== null) {
+        console.log(`✅ REGEX SLOT DETECTION SUCCESS: Kandidaat koos slot ${regexDetectedSlot}`);
+      } else {
+        console.log("⏭️ Regex detection found no match, falling back to AI analysis");
+      }
+    }
+    
+    // =====================================================
     // FASE 1 FIX: SMART MISSING INFO - Extended critical fields
     // Inclusief diploma vereisten en placeholder telefoon detectie
     // =====================================================
@@ -627,6 +753,9 @@ Deno.serve(async (req) => {
 
     // Use AI to analyze the reply and extract new information
     console.log("Analyzing reply with AI...");
+    // 🎯 VERBETERD: Gebruik stripped reply voor AI analyse (minder noise)
+    const emailForAI = strippedReply || emailText;
+    
     const analysisPrompt = `
 Je bent een recruitment assistant voor een thuiszorg organisatie. Analyseer deze email van een sollicitant en extract de volgende informatie:
 
@@ -634,19 +763,25 @@ Je bent een recruitment assistant voor een thuiszorg organisatie. Analyseer deze
 **Huidige extracted_data:** ${JSON.stringify(currentData)}
 ${hasOfferedSlots ? `\n**BELANGRIJK - Aangeboden interview tijdsloten:**\n${offeredSlots.map((slot: {date: string, time: string}, i: number) => `${i + 1}. ${slot.date} om ${slot.time}`).join('\n')}\n` : ''}
 
-**Email van sollicitant:**
-${emailText}
+**Email van sollicitant (stripped van quotes):**
+${emailForAI}
 
 **Instructies:**
 1. Extract ALLEEN informatie die in de email staat - verzin niets
 2. Focus op de KRITIEKE VELDEN die nog nodig zijn
 3. Detecteer of de sollicitant vraagt om een gesprek/interview
-${hasOfferedSlots ? `4. **KRITIEK - SLOT SELECTIE**: Check of de kandidaat een tijdslot kiest!
-   - Kijk naar: "optie 1", "slot 1", "de eerste", "maandag 9:00", etc.
-   - **RETURN selected_slot_index ALS HET NUMMER DAT DE KANDIDAAT NOEMT (1, 2, of 3)**
-   - Voorbeeld: "optie 1" of "de eerste" → selected_slot_index: 1
-   - Voorbeeld: "optie 2" of "de tweede" → selected_slot_index: 2
-   - Voorbeeld: "dinsdag 10:00" (slot 2) → selected_slot_index: 2
+${hasOfferedSlots ? `4. **KRITIEK - SLOT SELECTIE DETECTIE:**
+   ⚠️ BELANGRIJK: Zoek EERST naar een simpel getal aan het BEGIN van de email!
+   
+   Voorbeelden die slot selectie zijn:
+   - "3" of "3.0" of "3:" → selected_slot_index: 3
+   - "optie 2" of "slot 2" of "nummer 2" → selected_slot_index: 2
+   - "de eerste" of "1e optie" → selected_slot_index: 1
+   - "de derde" of "derde mogelijkheid" → selected_slot_index: 3
+   - "graag optie 1" of "kies 2" → selected_slot_index: 1 of 2
+   
+   **RETURN selected_slot_index ALS HET NUMMER DAT DE KANDIDAAT NOEMT (1, 2, of 3)**
+   
 5. **SLOT REJECTION**: Detecteer of de kandidaat GEEN van de aangeboden slots kan!
    - Zoek naar zinnen als: "kan niet", "lukt niet", "geen van deze", "andere dag", "andere tijd", "allemaal bezet", "verhinderd"
    - Als de kandidaat vraagt om andere momenten → slot_rejection = true` : ''}
@@ -1382,15 +1517,24 @@ Return JSON in dit formaat:
     // =====================================================
     let interviewConfirmed = false;
     
+    // 🎯 VERBETERD: Gebruik regex-detected slot als fallback voor AI
+    // Prioriteit: regexDetectedSlot > analysis.selected_slot_index
+    const finalSelectedSlot = regexDetectedSlot ?? analysis.selected_slot_index;
+    
+    console.log("🎯 SLOT SELECTION RESOLUTION:");
+    console.log("   Regex detected slot:", regexDetectedSlot);
+    console.log("   AI detected slot:", analysis.selected_slot_index);
+    console.log("   Final selected slot:", finalSelectedSlot);
+    
     // ✅ FIX: Check expliciet op number/string type, niet truthy (0 is valide slot!)
-    const hasSelectedSlot = typeof analysis.selected_slot_index === 'number' || 
-                            (typeof analysis.selected_slot_index === 'string' && analysis.selected_slot_index !== '');
+    const hasSelectedSlot = typeof finalSelectedSlot === 'number' || 
+                            (typeof finalSelectedSlot === 'string' && finalSelectedSlot !== '');
     
     if (hasSelectedSlot && offeredSlots && offeredSlots.length > 0) {
-      // AI geeft 1-indexed slot nummer terug (zoals getoond aan kandidaat: optie 1, 2, 3)
-      const rawIndex = typeof analysis.selected_slot_index === 'string' 
-        ? parseInt(analysis.selected_slot_index) 
-        : analysis.selected_slot_index;
+      // Slot nummer is 1-indexed (zoals getoond aan kandidaat: optie 1, 2, 3)
+      const rawIndex = typeof finalSelectedSlot === 'string' 
+        ? parseInt(finalSelectedSlot) 
+        : finalSelectedSlot;
       
       // DEFINITIEVE FIX: AI is geïnstrueerd om 1-indexed te returnen, dus altijd -1
       // rawIndex 1 → arrayIndex 0, rawIndex 2 → arrayIndex 1, etc.
