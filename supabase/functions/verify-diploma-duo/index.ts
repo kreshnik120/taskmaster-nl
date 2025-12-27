@@ -55,11 +55,19 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Puppeteer script that runs on Browserless.io to verify diploma via DUO portal
- * Enhanced with anti-bot detection measures and human-like behavior
+ * Enhanced with ADVANCED anti-bot detection measures and human-like behavior
  */
 function generatePuppeteerScript(pdfBase64: string, userAgent: string): string {
+  // Determine platform from user agent
+  const isWindows = userAgent.includes('Windows');
+  const isMac = userAgent.includes('Macintosh');
+  const platform = isWindows ? 'Win32' : isMac ? 'MacIntel' : 'Win32';
+  const vendor = userAgent.includes('Chrome') ? 'Google Inc.' : 
+                 userAgent.includes('Safari') && !userAgent.includes('Chrome') ? 'Apple Computer, Inc.' : 'Google Inc.';
+  
   return `
-export default async ({ page }) => {
+export default async ({ page, context }) => {
+  const DUO_MAIN_URL = 'https://duo.nl';
   const DUO_PORTAL_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
   
   // Helper function for waiting
@@ -71,21 +79,205 @@ export default async ({ page }) => {
     await wait(delay);
   };
   
-  // Simulate mouse movement (human-like behavior)
+  // Simulate realistic mouse movement with bezier curves
   const randomMouseMove = async () => {
-    const x = Math.floor(Math.random() * 800) + 100;
-    const y = Math.floor(Math.random() * 400) + 100;
-    await page.mouse.move(x, y, { steps: 10 });
+    const startX = Math.floor(Math.random() * 500) + 100;
+    const startY = Math.floor(Math.random() * 300) + 100;
+    const endX = Math.floor(Math.random() * 800) + 200;
+    const endY = Math.floor(Math.random() * 500) + 150;
+    
+    // Move in steps to simulate human mouse movement
+    const steps = Math.floor(Math.random() * 15) + 10;
+    for (let i = 0; i <= steps; i++) {
+      const x = startX + (endX - startX) * (i / steps);
+      const y = startY + (endY - startY) * (i / steps);
+      await page.mouse.move(x, y);
+      await wait(Math.floor(Math.random() * 20) + 5);
+    }
+  };
+  
+  // Simulate natural scrolling behavior
+  const naturalScroll = async () => {
+    const scrollAmount = Math.floor(Math.random() * 300) + 100;
+    await page.evaluate((amount) => {
+      window.scrollBy({ top: amount, behavior: 'smooth' });
+    }, scrollAmount);
+    await humanWait(500, 1500);
   };
   
   try {
-    console.log('🎓 Starting DUO verification with anti-detection...');
+    console.log('🎓 Starting DUO verification with ADVANCED anti-detection...');
     
     // Set user agent before navigation
     await page.setUserAgent('${userAgent}');
     
     // Set viewport to common desktop size
-    await page.setViewport({ width: 1920, height: 1080 });
+    await page.setViewport({ width: 1920, height: 1080, deviceScaleFactor: 1 });
+    
+    // ADVANCED: Comprehensive navigator overrides BEFORE any navigation
+    await page.evaluateOnNewDocument(() => {
+      // ===== HIDE WEBDRIVER =====
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      delete navigator.__proto__.webdriver;
+      
+      // ===== PLATFORM & VENDOR SPOOFING =====
+      Object.defineProperty(navigator, 'platform', { get: () => '${platform}' });
+      Object.defineProperty(navigator, 'vendor', { get: () => '${vendor}' });
+      Object.defineProperty(navigator, 'appVersion', { 
+        get: () => '5.0 (${isWindows ? 'Windows NT 10.0; Win64; x64' : 'Macintosh; Intel Mac OS X 10_15_7'}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      });
+      
+      // ===== HARDWARE CONCURRENCY & DEVICE MEMORY =====
+      Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+      Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
+      Object.defineProperty(navigator, 'maxTouchPoints', { get: () => 0 });
+      
+      // ===== PLUGINS SPOOFING =====
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => {
+          const plugins = [
+            { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+            { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+            { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }
+          ];
+          plugins.length = 3;
+          return plugins;
+        }
+      });
+      
+      // ===== LANGUAGES =====
+      Object.defineProperty(navigator, 'languages', { get: () => ['nl-NL', 'nl', 'en-US', 'en'] });
+      Object.defineProperty(navigator, 'language', { get: () => 'nl-NL' });
+      
+      // ===== CHROME RUNTIME =====
+      window.chrome = {
+        runtime: {
+          connect: () => {},
+          sendMessage: () => {},
+          onMessage: { addListener: () => {} }
+        },
+        loadTimes: () => ({
+          requestTime: Date.now() / 1000 - Math.random() * 100,
+          startLoadTime: Date.now() / 1000 - Math.random() * 50,
+          commitLoadTime: Date.now() / 1000 - Math.random() * 30,
+          finishDocumentLoadTime: Date.now() / 1000 - Math.random() * 10,
+          finishLoadTime: Date.now() / 1000,
+          firstPaintTime: Date.now() / 1000 - Math.random() * 5,
+          firstPaintAfterLoadTime: 0,
+          navigationType: 'Other',
+          wasFetchedViaSpdy: false,
+          wasNpnNegotiated: true,
+          npnNegotiatedProtocol: 'h2',
+          wasAlternateProtocolAvailable: false,
+          connectionInfo: 'h2'
+        }),
+        csi: () => ({ startE: Date.now(), onloadT: Date.now() + 500 })
+      };
+      
+      // ===== PERMISSIONS API =====
+      const originalQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = (parameters) => (
+        parameters.name === 'notifications' 
+          ? Promise.resolve({ state: 'default', onchange: null })
+          : originalQuery(parameters)
+      );
+      
+      // ===== CANVAS FINGERPRINT SPOOFING =====
+      const originalGetContext = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function(type, ...args) {
+        const context = originalGetContext.call(this, type, ...args);
+        if (type === '2d' && context) {
+          const originalGetImageData = context.getImageData;
+          context.getImageData = function(...imgArgs) {
+            const imageData = originalGetImageData.apply(this, imgArgs);
+            // Add subtle noise to prevent fingerprinting
+            for (let i = 0; i < imageData.data.length; i += 4) {
+              imageData.data[i] = imageData.data[i] ^ (Math.random() > 0.99 ? 1 : 0);
+            }
+            return imageData;
+          };
+        }
+        return context;
+      };
+      
+      // ===== WEBGL VENDOR/RENDERER SPOOFING =====
+      const getParameterProxyHandler = {
+        apply: function(target, thisArg, args) {
+          const param = args[0];
+          const gl = thisArg;
+          
+          // UNMASKED_VENDOR_WEBGL
+          if (param === 37445) {
+            return 'Google Inc. (NVIDIA)';
+          }
+          // UNMASKED_RENDERER_WEBGL
+          if (param === 37446) {
+            return 'ANGLE (NVIDIA, NVIDIA GeForce GTX 1080 Direct3D11 vs_5_0 ps_5_0, D3D11)';
+          }
+          
+          return target.apply(thisArg, args);
+        }
+      };
+      
+      const getParameter = WebGLRenderingContext.prototype.getParameter;
+      WebGLRenderingContext.prototype.getParameter = new Proxy(getParameter, getParameterProxyHandler);
+      
+      if (typeof WebGL2RenderingContext !== 'undefined') {
+        const getParameter2 = WebGL2RenderingContext.prototype.getParameter;
+        WebGL2RenderingContext.prototype.getParameter = new Proxy(getParameter2, getParameterProxyHandler);
+      }
+      
+      // ===== MEDIA DEVICES (prevent fingerprinting) =====
+      if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+        navigator.mediaDevices.enumerateDevices = () => Promise.resolve([
+          { deviceId: 'default', groupId: 'default', kind: 'audioinput', label: 'Default Audio Device' },
+          { deviceId: 'default', groupId: 'default', kind: 'videoinput', label: 'Integrated Camera' }
+        ]);
+      }
+      
+      // ===== SCREEN PROPERTIES =====
+      Object.defineProperty(screen, 'width', { get: () => 1920 });
+      Object.defineProperty(screen, 'height', { get: () => 1080 });
+      Object.defineProperty(screen, 'availWidth', { get: () => 1920 });
+      Object.defineProperty(screen, 'availHeight', { get: () => 1040 });
+      Object.defineProperty(screen, 'colorDepth', { get: () => 24 });
+      Object.defineProperty(screen, 'pixelDepth', { get: () => 24 });
+      
+      // ===== BATTERY API =====
+      navigator.getBattery = () => Promise.resolve({
+        charging: true,
+        chargingTime: 0,
+        dischargingTime: Infinity,
+        level: 1,
+        addEventListener: () => {},
+        removeEventListener: () => {}
+      });
+      
+      // ===== CONNECTION API =====
+      Object.defineProperty(navigator, 'connection', {
+        get: () => ({
+          effectiveType: '4g',
+          rtt: 50,
+          downlink: 10,
+          saveData: false,
+          addEventListener: () => {},
+          removeEventListener: () => {}
+        })
+      });
+      
+      // ===== DISABLE AUTOMATION FLAGS =====
+      Object.defineProperty(navigator, 'automationControlled', { get: () => undefined });
+      
+      // Remove Puppeteer/headless indicators from Error stack
+      const originalError = Error;
+      Error = function(...args) {
+        const error = new originalError(...args);
+        if (error.stack) {
+          error.stack = error.stack.replace(/puppeteer/gi, 'browser');
+        }
+        return error;
+      };
+    });
     
     // Set extra headers to appear more like a real browser
     await page.setExtraHTTPHeaders({
@@ -96,100 +288,139 @@ export default async ({ page }) => {
       'Pragma': 'no-cache',
       'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
       'Sec-Ch-Ua-Mobile': '?0',
-      'Sec-Ch-Ua-Platform': '"Windows"',
+      'Sec-Ch-Ua-Platform': '"${isWindows ? 'Windows' : 'macOS'}"',
       'Sec-Fetch-Dest': 'document',
       'Sec-Fetch-Mode': 'navigate',
       'Sec-Fetch-Site': 'none',
       'Sec-Fetch-User': '?1',
-      'Upgrade-Insecure-Requests': '1'
+      'Upgrade-Insecure-Requests': '1',
+      'DNT': '1'
     });
     
-    // Override navigator properties to evade detection
-    await page.evaluateOnNewDocument(() => {
-      // Hide webdriver
-      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-      
-      // Override plugins
-      Object.defineProperty(navigator, 'plugins', {
-        get: () => [
-          { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
-          { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
-          { name: 'Native Client', filename: 'internal-nacl-plugin' }
-        ]
-      });
-      
-      // Override languages
-      Object.defineProperty(navigator, 'languages', { get: () => ['nl-NL', 'nl', 'en-US', 'en'] });
-      
-      // Override permissions
-      const originalQuery = window.navigator.permissions.query;
-      window.navigator.permissions.query = (parameters) => (
-        parameters.name === 'notifications' ?
-          Promise.resolve({ state: Notification.permission }) :
-          originalQuery(parameters)
-      );
-      
-      // Add Chrome runtime
-      window.chrome = { runtime: {} };
+    // ===== PRE-NAVIGATION WARMING: Visit DUO main site first =====
+    console.log('🌐 Phase 1: Warming up - visiting duo.nl first...');
+    await page.goto(DUO_MAIN_URL, { 
+      waitUntil: 'networkidle2',
+      timeout: 30000 
     });
     
-    // Random initial mouse movement (human-like)
+    // Simulate reading the homepage
+    await humanWait(3000, 5000);
     await randomMouseMove();
+    await naturalScroll();
+    await humanWait(1000, 2000);
     
-    console.log('🌐 Navigating to DUO portal...');
+    // Set cookies to simulate previous visits and GDPR consent
+    console.log('🍪 Setting consent cookies...');
+    await page.evaluate(() => {
+      // Common Dutch cookie consent patterns
+      document.cookie = 'cookieconsent_status=allow; path=/; domain=.duo.nl; max-age=31536000';
+      document.cookie = 'consent=1; path=/; domain=.duo.nl; max-age=31536000';
+      document.cookie = 'accepted_cookies=true; path=/; domain=.zakelijk.duo.nl; max-age=31536000';
+      document.cookie = '_ga=GA1.2.' + Math.floor(Math.random() * 1000000000) + '.' + Math.floor(Date.now() / 1000 - 86400 * 30); 
+      
+      // Store session indicators
+      sessionStorage.setItem('visited', 'true');
+      localStorage.setItem('returningVisitor', 'true');
+    });
+    
+    await randomMouseMove();
+    await humanWait(1500, 3000);
+    
+    // ===== NAVIGATE TO DIPLOMA VERIFICATION PAGE =====
+    console.log('🌐 Phase 2: Navigating to diploma verification page...');
+    
+    // Click behavior: try to find a link to zakelijk.duo.nl if available
+    const zakelijkLink = await page.$('a[href*="zakelijk"]');
+    if (zakelijkLink) {
+      console.log('Found link to zakelijk portal, clicking...');
+      await humanWait(500, 1000);
+      await zakelijkLink.click();
+      await humanWait(2000, 4000);
+    }
+    
+    // Navigate to the actual verification page
     await page.goto(DUO_PORTAL_URL, { 
       waitUntil: 'networkidle2',
-      timeout: 45000 
+      timeout: 45000,
+      referer: DUO_MAIN_URL  // Set referer to appear as natural navigation
     });
     
-    // Human-like wait after page load
+    // Long warming period - simulate reading the page
+    console.log('⏳ Warming up on verification page...');
+    await humanWait(4000, 6000);
+    await randomMouseMove();
+    await naturalScroll();
     await humanWait(2000, 4000);
+    await randomMouseMove();
     
-    // Random scroll to simulate reading
-    await page.evaluate(() => window.scrollBy(0, Math.floor(Math.random() * 200)));
-    await humanWait(500, 1500);
+    // Check current URL and page content
+    const currentUrl = page.url();
+    console.log('Current URL:', currentUrl);
+    
+    // Check if we got redirected to login
+    if (currentUrl.includes('inloggen') || currentUrl.includes('login') || currentUrl.includes('mijn.duo.nl')) {
+      console.log('⚠️ Redirected to login page - this should be public!');
+      
+      const screenshotLogin = await page.screenshot({ encoding: 'base64' });
+      
+      return {
+        success: false,
+        status: 'manual_review',
+        message: 'DUO heeft doorgestuurd naar login pagina - de publieke diplomacontrole is momenteel niet toegankelijk. Probeer later opnieuw of gebruik handmatige verificatie.',
+        redirect_detected: true,
+        current_url: currentUrl,
+        screenshot: screenshotLogin.substring(0, 500)
+      };
+    }
     
     // Check if we're on the right page
     const pageTitle = await page.title();
+    const pageContent = await page.content();
     console.log('Page title:', pageTitle);
     
     // Check for captcha or bot detection
-    const pageContent = await page.content();
-    if (pageContent.includes('captcha') || pageContent.includes('robot') || 
-        pageContent.includes('geblokkeerd') || pageContent.includes('blocked')) {
+    const pageContentLower = pageContent.toLowerCase();
+    if (pageContentLower.includes('captcha') || pageContentLower.includes('robot') || 
+        pageContentLower.includes('geblokkeerd') || pageContentLower.includes('blocked') ||
+        pageContentLower.includes('verdachte activiteit') || pageContentLower.includes('suspicious')) {
       console.log('⚠️ Bot detection or captcha detected');
+      const screenshotBot = await page.screenshot({ encoding: 'base64' });
       return {
         success: false,
         status: 'manual_review',
         message: 'DUO portal heeft bot-detectie geactiveerd - handmatige verificatie vereist',
         bot_detected: true,
-        page_title: pageTitle
+        page_title: pageTitle,
+        screenshot: screenshotBot.substring(0, 500)
       };
     }
     
     // Take screenshot for debugging
     const screenshotBefore = await page.screenshot({ encoding: 'base64' });
-    console.log('Screenshot before upload (base64 length):', screenshotBefore.length);
+    console.log('Screenshot before upload taken, length:', screenshotBefore.length);
     
-    // Move mouse before interacting
+    // More human behavior before interacting
     await randomMouseMove();
-    await humanWait(300, 800);
+    await humanWait(1000, 2000);
     
     // Find the file upload input
-    const fileInput = await page.$('input[type="file"]');
+    console.log('🔍 Looking for file upload input...');
+    let fileInput = await page.$('input[type="file"]');
     
     if (!fileInput) {
-      console.log('❌ File input not found, checking for alternative upload methods...');
+      console.log('❌ File input not found directly, checking for alternative upload methods...');
       
       // Try to find any upload button or drop zone
-      let uploadButton = await page.$('[data-testid="upload"], .upload-button');
+      let uploadButton = await page.$('[data-testid="upload"], .upload-button, .file-upload, [class*="upload"]');
       
       // If not found, search buttons by text content
       if (!uploadButton) {
-        const buttons = await page.$$('button');
+        const buttons = await page.$$('button, [role="button"], a.btn');
         for (const btn of buttons) {
           const text = await btn.evaluate(el => el.textContent?.toLowerCase() || '');
-          if (text.includes('upload') || text.includes('bestand') || text.includes('kiezen')) {
+          if (text.includes('upload') || text.includes('bestand') || text.includes('kiezen') || 
+              text.includes('selecteer') || text.includes('bladeren')) {
             uploadButton = btn;
             break;
           }
@@ -197,33 +428,39 @@ export default async ({ page }) => {
       }
       
       if (uploadButton) {
-        await humanWait(200, 500);
+        await humanWait(500, 1000);
+        await randomMouseMove();
         await uploadButton.click();
-        await humanWait(1000, 2000);
+        await humanWait(1500, 3000);
       }
       
-      // Re-check for file input
-      const fileInputRetry = await page.$('input[type="file"]');
-      if (!fileInputRetry) {
-        return {
-          success: false,
-          status: 'manual_review',
-          message: 'DUO portal structuur gewijzigd of niet toegankelijk - handmatige verificatie vereist',
-          page_title: pageTitle,
-          screenshot: screenshotBefore
-        };
-      }
+      // Re-check for file input after potential button click
+      fileInput = await page.$('input[type="file"]');
+    }
+    
+    if (!fileInput) {
+      console.log('❌ File input still not found after button click');
+      const bodyText = await page.evaluate(() => document.body.innerText);
+      
+      return {
+        success: false,
+        status: 'manual_review',
+        message: 'DUO portal structuur gewijzigd of niet toegankelijk - handmatige verificatie vereist',
+        page_title: pageTitle,
+        current_url: currentUrl,
+        body_preview: bodyText.substring(0, 800),
+        screenshot: screenshotBefore.substring(0, 500)
+      };
     }
     
     // Upload PDF using base64 buffer
     console.log('📄 Uploading PDF...');
     
-    const actualFileInput = await page.$('input[type="file"]');
-    if (actualFileInput) {
-      await page.evaluate(async (base64Data) => {
-        const input = document.querySelector('input[type="file"]');
-        if (!input) return false;
-        
+    const uploadSuccess = await page.evaluate(async (base64Data) => {
+      const input = document.querySelector('input[type="file"]');
+      if (!input) return { success: false, error: 'Input not found' };
+      
+      try {
         // Convert base64 to blob
         const binaryString = atob(base64Data);
         const bytes = new Uint8Array(binaryString.length);
@@ -231,36 +468,39 @@ export default async ({ page }) => {
           bytes[i] = binaryString.charCodeAt(i);
         }
         const blob = new Blob([bytes], { type: 'application/pdf' });
-        const file = new File([blob], 'diploma.pdf', { type: 'application/pdf' });
+        const file = new File([blob], 'diploma.pdf', { type: 'application/pdf', lastModified: Date.now() - Math.random() * 86400000 });
         
         // Create DataTransfer and set file
         const dataTransfer = new DataTransfer();
         dataTransfer.items.add(file);
         input.files = dataTransfer.files;
         
-        // Trigger change event
+        // Trigger multiple events to ensure detection
+        input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new Event('change', { bubbles: true }));
-        return true;
-      }, '${pdfBase64}');
-      
-      console.log('✅ File uploaded via DataTransfer');
-    }
+        
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: err.toString() };
+      }
+    }, '${pdfBase64}');
+    
+    console.log('File upload result:', JSON.stringify(uploadSuccess));
     
     // Human-like wait after upload
     await humanWait(3000, 5000);
-    
-    // Move mouse around (human behavior)
     await randomMouseMove();
     
     // Look for and click the "Controleer" (Verify) button
     console.log('🔍 Looking for verify button...');
-    let verifyButton = await page.$('button[type="submit"], .btn-primary');
+    let verifyButton = await page.$('button[type="submit"], input[type="submit"], .btn-primary, [class*="submit"]');
     
     if (!verifyButton) {
-      const buttons = await page.$$('button');
+      const buttons = await page.$$('button, input[type="button"], [role="button"]');
       for (const btn of buttons) {
-        const text = await btn.evaluate(el => el.textContent?.toLowerCase() || '');
-        if (text.includes('controleer') || text.includes('verifieer') || text.includes('verify')) {
+        const text = await btn.evaluate(el => el.textContent?.toLowerCase() || el.value?.toLowerCase() || '');
+        if (text.includes('controleer') || text.includes('verifieer') || text.includes('verify') || 
+            text.includes('check') || text.includes('valideer')) {
           verifyButton = btn;
           break;
         }
@@ -269,13 +509,15 @@ export default async ({ page }) => {
     
     if (verifyButton) {
       console.log('✅ Found verify button, clicking...');
-      await humanWait(300, 700);
+      await humanWait(800, 1500);
+      await randomMouseMove();
       await verifyButton.click();
       
       // Wait for result page with human-like timing
       await humanWait(5000, 8000);
     } else {
-      console.log('⚠️ Verify button not found, checking if auto-verification...');
+      console.log('⚠️ Verify button not found, waiting for auto-verification...');
+      await humanWait(5000, 8000);
     }
     
     // Take screenshot after verification attempt
@@ -293,31 +535,34 @@ export default async ({ page }) => {
     const bodyTextLower = bodyText.toLowerCase();
     if (bodyTextLower.includes('geldig') || 
         bodyTextLower.includes('geregistreerd') || 
-        bodyTextLower.includes('bekend') ||
+        bodyTextLower.includes('bekend bij duo') ||
         bodyTextLower.includes('echtheidskenmerk is aanwezig') ||
+        bodyTextLower.includes('echtheidskenmerk aanwezig') ||
         bodyTextLower.includes('document origineel is en uitgegeven door duo') ||
         bodyTextLower.includes('document is door duo gecontroleerd') ||
         bodyTextLower.includes('controle geslaagd') ||
-        bodyTextLower.includes('authentiek')) {
+        bodyTextLower.includes('authentiek') ||
+        bodyTextLower.includes('diploma is echt')) {
       status = 'verified';
       message = 'Diploma is geverifieerd en geldig volgens DUO register';
     }
     // Check for invalid indicators
-    else if (bodyTextLower.includes('ongeldig') ||
+    else if (bodyTextLower.includes('ongeldig') || bodyTextLower.includes('niet authentiek') ||
              bodyTextLower.includes('niet gevonden') || bodyTextLower.includes('onbekend') ||
-             bodyTextLower.includes('niet authentiek') || bodyTextLower.includes('vervalst')) {
+             bodyTextLower.includes('vervalst') || bodyTextLower.includes('geen echtheidskenmerk')) {
       status = 'invalid';
       message = 'Diploma is niet gevonden in DUO register of is ongeldig';
     }
     // Check for "not digital" indicators (older diplomas not in system)
     else if (bodyTextLower.includes('niet digitaal') || bodyTextLower.includes('geen digitale') ||
-             bodyTextLower.includes('1996')) {
+             bodyTextLower.includes('1996') || bodyTextLower.includes('niet geregistreerd')) {
       status = 'not_digital';
       message = 'Diploma is van voor 1996 of niet digitaal geregistreerd - handmatige verificatie vereist';
     }
     // Check for error indicators
     else if (bodyTextLower.includes('fout') || bodyTextLower.includes('error') || 
-             bodyTextLower.includes('mislukt') || bodyTextLower.includes('probeer opnieuw')) {
+             bodyTextLower.includes('mislukt') || bodyTextLower.includes('probeer opnieuw') ||
+             bodyTextLower.includes('technische storing')) {
       status = 'manual_review';
       message = 'DUO portal gaf een foutmelding - handmatige verificatie vereist';
     }
@@ -329,8 +574,9 @@ export default async ({ page }) => {
       status: status,
       message: message,
       page_title: pageTitle,
-      body_text_preview: bodyText.substring(0, 500),
-      screenshot_after: screenshotAfter
+      current_url: currentUrl,
+      body_text_preview: bodyText.substring(0, 800),
+      screenshot_after: screenshotAfter.substring(0, 500)
     };
     
   } catch (error) {
@@ -396,7 +642,8 @@ async function callBrowserlessWithRetry(
       // Note: Residential proxy requires Browserless paid plan
       // If you have it, add: proxy: 'residential', proxyCountry: 'nl'
       
-      const browserlessUrl = `https://production-sfo.browserless.io/function?${queryParams.toString()}`;
+      // Use European server (London) for better connection to Dutch DUO servers
+      const browserlessUrl = `https://production-lon.browserless.io/function?${queryParams.toString()}`;
       
       const response = await fetch(browserlessUrl, {
         method: 'POST',
