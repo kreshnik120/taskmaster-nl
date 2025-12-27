@@ -29,6 +29,8 @@ interface CleanupResult {
     slot_detection_audit: number;
     intent_classification_audit: number;
     processed_emails: number;
+    // 🔧 FASE 3 FIX: Tasks cleanup toegevoegd
+    tasks: number;
   };
   errors: string[];
 }
@@ -73,6 +75,8 @@ Deno.serve(async (req) => {
         slot_detection_audit: 0,
         intent_classification_audit: 0,
         processed_emails: 0,
+        // 🔧 FASE 3 FIX: Tasks cleanup
+        tasks: 0,
       },
       errors: [],
     };
@@ -316,7 +320,64 @@ Deno.serve(async (req) => {
     }
     console.log(`🎯 Agent goals: ${result.deleted.agent_goals}`);
 
-    // 3j. system_events (optional)
+    // 3j. 🔧 FASE 3 FIX: Tasks cleanup - verwijder interview taken gekoppeld aan applications
+    if (applicationIds.length > 0) {
+      // Methode 1: Tasks met application_id direct
+      const { data: tasksByAppId } = await supabase
+        .from("tasks")
+        .select("id")
+        .in("application_id", applicationIds);
+      
+      // Methode 2: Tasks met interview_details->application_id
+      const { data: allTasks } = await supabase
+        .from("tasks")
+        .select("id, title, interview_details, application_id");
+      
+      const tasksByInterviewDetails = allTasks?.filter((t) => {
+        const interviewAppId = t.interview_details?.application_id;
+        return interviewAppId && applicationIds.includes(interviewAppId);
+      }) || [];
+      
+      // Methode 3: Tasks met title die email pattern bevat (bijv. "Interview: Erik")
+      const tasksByTitle = allTasks?.filter((t) => 
+        t.title && t.title.toLowerCase().includes(email_pattern.split('@')[0].toLowerCase())
+      ) || [];
+      
+      // Combineer alle unieke task IDs
+      const allTaskIds = [...new Set([
+        ...(tasksByAppId?.map((t) => t.id) || []),
+        ...tasksByInterviewDetails.map((t) => t.id),
+        ...tasksByTitle.map((t) => t.id),
+      ])];
+      
+      result.deleted.tasks = allTaskIds.length;
+      
+      if (!dry_run && allTaskIds.length > 0) {
+        // Eerst subtasks verwijderen (FK constraint)
+        const { error: subtaskError } = await supabase
+          .from("subtasks")
+          .delete()
+          .in("task_id", allTaskIds);
+        if (subtaskError) result.errors.push(`subtasks: ${subtaskError.message}`);
+        
+        // Dann time_entries verwijderen
+        const { error: timeError } = await supabase
+          .from("time_entries")
+          .delete()
+          .in("task_id", allTaskIds);
+        if (timeError) result.errors.push(`time_entries: ${timeError.message}`);
+        
+        // Dan de tasks zelf
+        const { error } = await supabase
+          .from("tasks")
+          .delete()
+          .in("id", allTaskIds);
+        if (error) result.errors.push(`tasks: ${error.message}`);
+      }
+      console.log(`📋 Tasks: ${result.deleted.tasks}`);
+    }
+
+    // 3k. system_events (optional)
     if (!keep_system_events) {
       const allEntityIds = [...applicationIds, ...allProfessionalIds];
       if (allEntityIds.length > 0) {
