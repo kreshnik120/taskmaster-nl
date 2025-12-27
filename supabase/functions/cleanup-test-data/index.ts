@@ -29,7 +29,7 @@ interface CleanupResult {
     slot_detection_audit: number;
     intent_classification_audit: number;
     processed_emails: number;
-    // 🔧 FASE 3 FIX: Tasks cleanup toegevoegd
+    // FASE 3 FIX: Tasks cleanup toegevoegd
     tasks: number;
   };
   errors: string[];
@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
         slot_detection_audit: 0,
         intent_classification_audit: 0,
         processed_emails: 0,
-        // 🔧 FASE 3 FIX: Tasks cleanup
+        // FASE 3 FIX: Tasks cleanup
         tasks: 0,
       },
       errors: [],
@@ -320,7 +320,7 @@ Deno.serve(async (req) => {
     }
     console.log(`🎯 Agent goals: ${result.deleted.agent_goals}`);
 
-    // 3j. 🔧 FASE 3 FIX: Tasks cleanup - verwijder interview taken gekoppeld aan applications
+    // 3j. FASE 3 FIX: Tasks cleanup - verwijder interview taken gekoppeld aan applications
     if (applicationIds.length > 0) {
       // Methode 1: Tasks met application_id direct
       const { data: tasksByAppId } = await supabase
