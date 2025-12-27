@@ -31,6 +31,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { logDocumentAction } from '@/lib/documentAuditLogger';
+import { DocumentAuditHistory } from './DocumentAuditHistory';
 
 // ZZP Document types
 type ZZPDocumentType = 
@@ -1089,6 +1090,9 @@ export function ZZPDocumentUploadSection({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Document Audit History */}
+      <DocumentAuditHistory applicationId={applicationId} />
     </TooltipProvider>
   );
 }
