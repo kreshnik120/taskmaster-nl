@@ -533,6 +533,11 @@ Deno.serve(async (req) => {
     const lockId = idempotencyCheck.lockId;
     
     // =====================================================
+    // 🔒 TRY-FINALLY WRAPPER: Garanteer lock release
+    // =====================================================
+    try {
+    
+    // =====================================================
     // 🎯 FASE 1: INTENT CLASSIFICATION + URGENCY DETECTION
     // =====================================================
     const strippedReply = stripQuotedContent(emailText);
@@ -598,24 +603,27 @@ Deno.serve(async (req) => {
     // =====================================================
     
     // Pre-AI regex detection met confidence scoring
+    // 🔧 FASE 1 FIX: Gebruik detectInterviewSlot (met audit logging) ipv detectSlotWithRegex
+    let slotDetectionResult: Awaited<ReturnType<typeof detectInterviewSlot>> | null = null;
     let regexDetectedSlot: number | null = null;
     
     if (hasOfferedSlots && strippedReply) {
       console.log("========================================");
-      console.log("🎯 PRE-AI SLOT DETECTION:");
+      console.log("🎯 SLOT DETECTION (FASE 1 - MET AUDIT):");
       console.log("   Original email length:", emailText.length, "chars");
       console.log("   Stripped reply length:", strippedReply.length, "chars");
       console.log("   Stripped reply content:", strippedReply.substring(0, 200));
       console.log("   Number of offered slots:", offeredSlots.length);
       console.log("========================================");
       
-      const regexResult = detectSlotWithRegex(strippedReply, offeredSlots.length);
-      regexDetectedSlot = regexResult.slot;
+      // Stap 1: Pre-AI regex detection voor snelle detectie
+      const regexOnlyResult = detectSlotWithRegex(strippedReply, offeredSlots.length);
+      regexDetectedSlot = regexOnlyResult.slot;
       
       if (regexDetectedSlot !== null) {
-        console.log(`✅ REGEX SLOT DETECTION SUCCESS: Kandidaat koos slot ${regexDetectedSlot} (confidence: ${regexResult.confidence})`);
+        console.log(`✅ REGEX SLOT DETECTION: Kandidaat koos slot ${regexDetectedSlot} (confidence: ${regexOnlyResult.confidence})`);
       } else {
-        console.log("⏭️ Regex detection found no match, falling back to AI analysis");
+        console.log("⏭️ Regex detection found no match, AI analysis will follow");
       }
     }
     
@@ -1023,6 +1031,47 @@ Return JSON in dit formaat:
     // Log rejection context if any rejections occurred
     if (Object.keys(rejectionContext).length > 0) {
       console.log("📝 Rejection context voor slimme follow-up:", JSON.stringify(rejectionContext));
+    }
+
+    // =====================================================
+    // 🔒 FASE 1 FIX: SLOT DETECTION MET AUDIT LOGGING
+    // Combineert regex + AI resultaten en logt naar slot_detection_audit
+    // =====================================================
+    if (hasOfferedSlots && strippedReply) {
+      console.log("🎯 Running combined slot detection with audit logging...");
+      
+      const slotDetectionInput: SlotDetectionInput = {
+        rawEmailText: emailText,
+        strippedReply: strippedReply,
+        offeredSlots: offeredSlots,
+        applicationId: applicationId!,
+        emailId: emailId,
+        messageId: message_id,
+        orgId: application.org_id,
+      };
+      
+      // AI analysis result (if slot was detected by AI)
+      const aiAnalysisForSlots = analysis.selected_slot_index !== null ? {
+        selected_slot_index: analysis.selected_slot_index,
+        confidence: analysis.confidence || 0.7,
+      } : undefined;
+      
+      slotDetectionResult = await detectInterviewSlot(
+        supabase,
+        slotDetectionInput,
+        aiAnalysisForSlots
+      );
+      
+      console.log("🎯 SLOT DETECTION RESULT (with audit):");
+      console.log("   Detected slot:", slotDetectionResult.detectedSlot);
+      console.log("   Confidence:", slotDetectionResult.confidence);
+      console.log("   Method:", slotDetectionResult.method);
+      console.log("   Requires confirmation:", slotDetectionResult.requiresConfirmation);
+      
+      // Update regexDetectedSlot met het gecombineerde resultaat
+      if (slotDetectionResult.detectedSlot !== null) {
+        regexDetectedSlot = slotDetectionResult.detectedSlot;
+      }
     }
 
     // =====================================================
@@ -1848,6 +1897,21 @@ Return JSON in dit formaat:
 
     console.log("=== Reply Processing Complete (AI Agent Flow) ===");
 
+    // =====================================================
+    // 🔒 FASE 1: Mark processing complete (success path)
+    // =====================================================
+    await markProcessingComplete(supabase, lockId, {
+      success: true,
+      summary: {
+        application_id: applicationId,
+        completeness_score: newCompletenessScore,
+        remaining_missing_info: finalRemainingMissing,
+        intent_classification: intentResult?.primaryIntent,
+        interview_confirmed: interviewConfirmed,
+        processed_documents: processedDocuments.length,
+      },
+    });
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -1862,6 +1926,24 @@ Return JSON in dit formaat:
         status: 200,
       }
     );
+    
+    // =====================================================
+    // 🔒 END OF INNER TRY BLOCK (lock management)
+    // =====================================================
+    } catch (innerError) {
+      // 🔒 FASE 1: Mark processing failed + release lock
+      console.error("❌ Processing failed, releasing lock:", innerError);
+      await markProcessingComplete(supabase, lockId, {
+        success: false,
+        summary: { application_id: applicationId || 'unknown' },
+        error: innerError instanceof Error ? innerError.message : 'Unknown error',
+      });
+      throw innerError; // Re-throw voor outer catch
+    }
+    // =====================================================
+    // END OF LOCK-PROTECTED BLOCK
+    // =====================================================
+    
   } catch (error) {
     console.error("Error processing reply:", error);
     return new Response(
