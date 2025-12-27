@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { 
   Upload, 
   FileText, 
@@ -24,7 +25,8 @@ import {
   Heart,
   Car,
   Plus,
-  Eye
+  Eye,
+  ExternalLink
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -137,6 +139,13 @@ export function ZZPDocumentUploadSection({
   const [downloadingDoc, setDownloadingDoc] = useState<string | null>(null);
   const [previewingDoc, setPreviewingDoc] = useState<string | null>(null);
   const [savingDetails, setSavingDetails] = useState(false);
+  
+  // Inline viewer state
+  const [inlineViewerOpen, setInlineViewerOpen] = useState(false);
+  const [inlineViewerUrl, setInlineViewerUrl] = useState<string | null>(null);
+  const [inlineViewerType, setInlineViewerType] = useState<'pdf' | 'image'>('pdf');
+  const [inlineViewerTitle, setInlineViewerTitle] = useState('');
+  const [loadingInlineViewer, setLoadingInlineViewer] = useState(false);
   
   // Bedrijfsgegevens state
   const [localBedrijfsnaam, setLocalBedrijfsnaam] = useState(bedrijfsnaam || '');
@@ -368,6 +377,51 @@ export function ZZPDocumentUploadSection({
     }
   };
 
+  // Inline preview handler - opens document in modal
+  const handleInlinePreview = async (filePath: string, docLabel: string) => {
+    setLoadingInlineViewer(true);
+    
+    try {
+      const { data: blobData, error } = await supabase.storage
+        .from('zzp-documents')
+        .download(filePath);
+
+      if (error) throw error;
+
+      // Detect MIME type
+      const fileName = filePath.toLowerCase();
+      let mimeType = 'application/pdf';
+      let viewerType: 'pdf' | 'image' = 'pdf';
+      
+      if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) {
+        mimeType = 'image/jpeg';
+        viewerType = 'image';
+      } else if (fileName.endsWith('.png')) {
+        mimeType = 'image/png';
+        viewerType = 'image';
+      } else if (fileName.endsWith('.docx')) {
+        // DOCX files cannot be displayed inline, open in new tab instead
+        toast.info('Word documenten kunnen niet inline bekeken worden');
+        setLoadingInlineViewer(false);
+        return;
+      }
+
+      const blob = new Blob([blobData], { type: mimeType });
+      const blobUrl = URL.createObjectURL(blob);
+      
+      setInlineViewerUrl(blobUrl);
+      setInlineViewerType(viewerType);
+      setInlineViewerTitle(docLabel);
+      setInlineViewerOpen(true);
+      
+    } catch (error) {
+      console.error('Inline preview error:', error);
+      toast.error('Fout bij laden document');
+    } finally {
+      setLoadingInlineViewer(false);
+    }
+  };
+
   const handleDelete = async (docType: ZZPDocumentType) => {
     const filePath = getDocumentPath(docType);
     if (!filePath) return;
@@ -595,17 +649,34 @@ export function ZZPDocumentUploadSection({
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => handlePreview(filePath, doc.type)}
-                                    disabled={isPreviewing}
+                                    onClick={() => handleInlinePreview(filePath, doc.label)}
+                                    disabled={loadingInlineViewer}
                                   >
-                                    {isPreviewing ? (
+                                    {loadingInlineViewer ? (
                                       <Loader2 className="h-4 w-4 animate-spin" />
                                     ) : (
                                       <Eye className="h-4 w-4" />
                                     )}
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>Bekijken</TooltipContent>
+                                <TooltipContent>Bekijken in modal</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handlePreview(filePath, doc.type)}
+                                    disabled={isPreviewing}
+                                  >
+                                    {isPreviewing ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <ExternalLink className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Open in nieuw tabblad</TooltipContent>
                               </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -715,17 +786,34 @@ export function ZZPDocumentUploadSection({
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => handlePreview(filePath, doc.type)}
-                                    disabled={isPreviewing}
+                                    onClick={() => handleInlinePreview(filePath, doc.label)}
+                                    disabled={loadingInlineViewer}
                                   >
-                                    {isPreviewing ? (
+                                    {loadingInlineViewer ? (
                                       <Loader2 className="h-4 w-4 animate-spin" />
                                     ) : (
                                       <Eye className="h-4 w-4" />
                                     )}
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>Bekijken</TooltipContent>
+                                <TooltipContent>Bekijken in modal</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handlePreview(filePath, doc.type)}
+                                    disabled={isPreviewing}
+                                  >
+                                    {isPreviewing ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <ExternalLink className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Open in nieuw tabblad</TooltipContent>
                               </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -848,13 +936,25 @@ export function ZZPDocumentUploadSection({
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                onClick={() => handleInlinePreview(path, `Certificering ${index + 1}`)}
+                                disabled={loadingInlineViewer}
+                              >
+                                {loadingInlineViewer ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => handlePreview(path, `overig-preview-${index}`)}
                                 disabled={previewingDoc === `overig-preview-${index}`}
                               >
                                 {previewingDoc === `overig-preview-${index}` ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
-                                  <Eye className="h-4 w-4" />
+                                  <ExternalLink className="h-4 w-4" />
                                 )}
                               </Button>
                               <Button
@@ -889,6 +989,47 @@ export function ZZPDocumentUploadSection({
           </CollapsibleContent>
         </Card>
       </Collapsible>
+
+      {/* Inline Document Viewer Modal */}
+      <Dialog open={inlineViewerOpen} onOpenChange={(open) => {
+        setInlineViewerOpen(open);
+        if (!open && inlineViewerUrl) {
+          URL.revokeObjectURL(inlineViewerUrl);
+          setInlineViewerUrl(null);
+        }
+      }}>
+        <DialogContent className="max-w-4xl h-[85vh] p-0 flex flex-col">
+          <DialogHeader className="p-4 border-b shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              {inlineViewerTitle} Bekijken
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden p-2">
+            {loadingInlineViewer ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : inlineViewerUrl ? (
+              inlineViewerType === 'pdf' ? (
+                <iframe
+                  src={inlineViewerUrl}
+                  className="w-full h-full rounded border"
+                  title={inlineViewerTitle}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full bg-muted/30 rounded">
+                  <img
+                    src={inlineViewerUrl}
+                    alt={inlineViewerTitle}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                </div>
+              )
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 }
