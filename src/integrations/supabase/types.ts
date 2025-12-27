@@ -2084,6 +2084,50 @@ export type Database = {
           },
         ]
       }
+      document_audit_logs: {
+        Row: {
+          action: string
+          application_id: string
+          document_type: string
+          file_path: string | null
+          id: string
+          metadata: Json | null
+          performed_at: string
+          performed_by: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          action: string
+          application_id: string
+          document_type: string
+          file_path?: string | null
+          id?: string
+          metadata?: Json | null
+          performed_at?: string
+          performed_by?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          action?: string
+          application_id?: string
+          document_type?: string
+          file_path?: string | null
+          id?: string
+          metadata?: Json | null
+          performed_at?: string
+          performed_by?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_audit_logs_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       embedding_failures: {
         Row: {
           attempted_at: string

@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logDocumentAction } from '@/lib/documentAuditLogger';
 
 // ZZP Document types
 type ZZPDocumentType = 
@@ -231,6 +232,15 @@ export function ZZPDocumentUploadSection({
 
       if (updateError) throw updateError;
 
+      // Log audit event for upload
+      await logDocumentAction({
+        applicationId,
+        documentType: docType,
+        action: 'upload',
+        filePath,
+        metadata: { fileName: file.name, fileSize: file.size, mimeType: file.type }
+      });
+
       toast.success(`${docConfig.label} geüpload`);
       onUploadComplete();
     } catch (error) {
@@ -293,6 +303,15 @@ export function ZZPDocumentUploadSection({
 
       if (updateError) throw updateError;
 
+      // Log audit event for overig upload
+      await logDocumentAction({
+        applicationId,
+        documentType: 'overig',
+        action: 'upload',
+        filePath,
+        metadata: { fileName: file.name, fileSize: file.size, mimeType: file.type }
+      });
+
       toast.success('Certificering toegevoegd');
       onUploadComplete();
     } catch (error) {
@@ -326,6 +345,14 @@ export function ZZPDocumentUploadSection({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      
+      // Log audit event for download
+      await logDocumentAction({
+        applicationId,
+        documentType: docType,
+        action: 'download',
+        filePath
+      });
       
       toast.success('Document gedownload');
     } catch (error) {
@@ -368,6 +395,14 @@ export function ZZPDocumentUploadSection({
       if (newWindow) {
         setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
       }
+      
+      // Log audit event for preview
+      await logDocumentAction({
+        applicationId,
+        documentType: docType,
+        action: 'preview',
+        filePath
+      });
       
     } catch (error) {
       console.error('Preview error:', error);
@@ -414,6 +449,14 @@ export function ZZPDocumentUploadSection({
       setInlineViewerTitle(docLabel);
       setInlineViewerOpen(true);
       
+      // Log audit event for inline preview
+      await logDocumentAction({
+        applicationId,
+        documentType: docLabel.toLowerCase().replace(/ /g, '_'),
+        action: 'inline_preview',
+        filePath
+      });
+      
     } catch (error) {
       console.error('Inline preview error:', error);
       toast.error('Fout bij laden document');
@@ -444,6 +487,14 @@ export function ZZPDocumentUploadSection({
 
       if (updateError) throw updateError;
 
+      // Log audit event for delete
+      await logDocumentAction({
+        applicationId,
+        documentType: docType,
+        action: 'delete',
+        filePath
+      });
+
       toast.success('Document verwijderd');
       onUploadComplete();
     } catch (error) {
@@ -470,6 +521,14 @@ export function ZZPDocumentUploadSection({
         .eq('id', applicationId);
 
       if (updateError) throw updateError;
+
+      // Log audit event for delete overig
+      await logDocumentAction({
+        applicationId,
+        documentType: 'overig',
+        action: 'delete',
+        filePath
+      });
 
       toast.success('Certificering verwijderd');
       onUploadComplete();

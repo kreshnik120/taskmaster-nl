@@ -26,6 +26,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logDocumentAction } from '@/lib/documentAuditLogger';
+import { DocumentAuditHistory } from './DocumentAuditHistory';
 
 interface VogVerificationResponse {
   gaav_code?: number;
@@ -286,6 +288,15 @@ export function DocumentUploadSection({
         }
       }
       
+      // Log audit event for upload
+      await logDocumentAction({
+        applicationId,
+        documentType: docType,
+        action: 'upload',
+        filePath,
+        metadata: { fileName: file.name, fileSize: file.size, mimeType: file.type }
+      });
+      
       onUploadComplete();
     } catch (error) {
       console.error('Upload error:', error);
@@ -323,6 +334,14 @@ export function DocumentUploadSection({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      
+      // Log audit event for download
+      await logDocumentAction({
+        applicationId,
+        documentType: docType,
+        action: 'download',
+        filePath
+      });
       
       toast.success(`${docType.toUpperCase()} gedownload`);
     } catch (error) {
@@ -368,6 +387,14 @@ export function DocumentUploadSection({
         setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
       }
       
+      // Log audit event for preview
+      await logDocumentAction({
+        applicationId,
+        documentType: docType,
+        action: 'preview',
+        filePath
+      });
+      
     } catch (error) {
       console.error('Preview error:', error);
       toast.error('Fout bij openen document');
@@ -409,6 +436,14 @@ export function DocumentUploadSection({
       setInlineViewerType(viewerType);
       setInlineViewerTitle(docType === 'cv' ? 'CV' : docType === 'vog' ? 'VOG' : 'Diploma');
       setInlineViewerOpen(true);
+      
+      // Log audit event for inline preview
+      await logDocumentAction({
+        applicationId,
+        documentType: docType,
+        action: 'inline_preview',
+        filePath
+      });
       
     } catch (error) {
       console.error('Inline preview error:', error);
@@ -478,6 +513,14 @@ export function DocumentUploadSection({
 
         if (updateError) throw updateError;
       }
+
+      // Log audit event for delete
+      await logDocumentAction({
+        applicationId,
+        documentType: docType,
+        action: 'delete',
+        filePath
+      });
 
       toast.success(`${docType.toUpperCase()} verwijderd`);
       onUploadComplete();
@@ -1303,6 +1346,9 @@ export function DocumentUploadSection({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Document Audit History */}
+      <DocumentAuditHistory applicationId={applicationId} />
     </TooltipProvider>
   );
 }
