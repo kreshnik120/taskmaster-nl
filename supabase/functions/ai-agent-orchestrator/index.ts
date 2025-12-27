@@ -55,7 +55,7 @@ const GOAL_CONFIGS: Record<string, {
           console.log('✅ [Orchestrator] Got missing_info from database:', missingInfo);
         } else if (app?.extracted_data) {
           const extractedData = app.extracted_data as Record<string, any>;
-          const criticalFields = ['functie_niveau', 'werkvorm', 'regio', 'beschikbaarheid', 'telefoonnummer'];
+          const criticalFields = ['functie_niveau', 'werkvorm', 'regio', 'beschikbaarheid', 'telefoonnummer', 'diploma'];
           missingInfo = criticalFields.filter(field => !extractedData[field]);
           console.log('✅ [Orchestrator] Derived missing_info from extracted_data:', missingInfo);
         }
@@ -133,7 +133,7 @@ const GOAL_CONFIGS: Record<string, {
         } else if (app?.extracted_data) {
           // Derive from extracted_data if missing_info column is empty
           const extractedData = app.extracted_data as Record<string, any>;
-          const criticalFields = ['functie_niveau', 'werkvorm', 'regio', 'beschikbaarheid', 'telefoonnummer'];
+          const criticalFields = ['functie_niveau', 'werkvorm', 'regio', 'beschikbaarheid', 'telefoonnummer', 'diploma'];
           missingInfo = criticalFields.filter(field => !extractedData[field]);
           console.log('✅ [Orchestrator] Derived missing_info from extracted_data:', missingInfo);
         }

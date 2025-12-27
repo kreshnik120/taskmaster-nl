@@ -3424,6 +3424,10 @@ export type Database = {
           cv_file_path: string | null
           cv_uploaded_at: string | null
           deleted_at: string | null
+          diploma_document_path: string | null
+          diploma_verification_details: Json | null
+          diploma_verified: boolean | null
+          diploma_verified_at: string | null
           doelgroep_ervaring: string[] | null
           email: string | null
           ervaring_sector: string[] | null
@@ -3483,6 +3487,10 @@ export type Database = {
           cv_file_path?: string | null
           cv_uploaded_at?: string | null
           deleted_at?: string | null
+          diploma_document_path?: string | null
+          diploma_verification_details?: Json | null
+          diploma_verified?: boolean | null
+          diploma_verified_at?: string | null
           doelgroep_ervaring?: string[] | null
           email?: string | null
           ervaring_sector?: string[] | null
@@ -3542,6 +3550,10 @@ export type Database = {
           cv_file_path?: string | null
           cv_uploaded_at?: string | null
           deleted_at?: string | null
+          diploma_document_path?: string | null
+          diploma_verification_details?: Json | null
+          diploma_verified?: boolean | null
+          diploma_verified_at?: string | null
           doelgroep_ervaring?: string[] | null
           email?: string | null
           ervaring_sector?: string[] | null

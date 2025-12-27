@@ -102,6 +102,24 @@ export async function syncApplicationToProfessional(
       ['beschikbaarheid', 'beschikbaarheid_uren', 'beschikbaarheid'],
     ];
 
+    // 2b. Sync diploma verification from application to professional
+    // Check if application has diploma verification data
+    const applicationData = application as any; // Type assertion for extended fields
+    if (applicationData.diploma_file_path && !professional.diploma_document_path) {
+      updates.diploma_document_path = applicationData.diploma_file_path;
+      fieldsSynced.push('diploma_document_path');
+    }
+    
+    if (applicationData.diploma_validation_status && !professional.diploma_verified) {
+      const isVerified = ['verified_duo', 'verified_manual', 'signature_valid'].includes(applicationData.diploma_validation_status);
+      if (isVerified) {
+        updates.diploma_verified = true;
+        updates.diploma_verified_at = applicationData.duo_verified_at || new Date().toISOString();
+        updates.diploma_verification_details = applicationData.diploma_verification_response || {};
+        fieldsSynced.push('diploma_verified');
+      }
+    }
+
     // 3. Loop door mappings en bepaal wat gesynct moet worden
     for (const [appField, profField, fieldType] of fieldMappings) {
       const appValue = extracted[appField];
