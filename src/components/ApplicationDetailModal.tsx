@@ -1020,7 +1020,7 @@ export function ApplicationDetailModal({
                     <DocumentUploadSection
                       applicationId={application.id}
                       vogFilePath={application.extracted_data?.vog_file_path || null}
-                      diplomaFilePath={application.extracted_data?.diploma_file_path || null}
+                      diplomaFilePath={(application as any).diploma_file_path || application.extracted_data?.diploma_file_path || null}
                       cvFilePath={application.cv_file_path}
                       cvFileName={application.cv_file_name}
                       vogStatus={vogStatus}
@@ -1110,6 +1110,7 @@ export function ApplicationDetailModal({
                       diplomaFilePath={(application as any).diploma_file_path || application.extracted_data?.diploma_file_path || null}
                       duoVerificationResult={(application as any).duo_verification_result}
                       duoVerifiedAt={(application as any).duo_verified_at}
+                      diplomaVerificationResponse={(application as any).diploma_verification_response}
                       onStatusUpdate={onApplicationUpdated}
                     />
                   </div>
