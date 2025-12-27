@@ -655,6 +655,25 @@ Deno.serve(async (req: Request) => {
       confidence_score: result.status === 'signature_valid' || result.status === 'verified_duo' ? 0.95 : 0.5,
     });
     
+    // Extra logging voor fraude detectie bij duo_invalid
+    if (dbStatus === 'duo_invalid') {
+      console.log('🚨 FRAUDE ALERT: Diploma ongeldig bevonden via DUO verificatie');
+      await supabase.from('ai_learning_events').insert({
+        event_type: 'diploma_fraud_alert',
+        org_id: '550e8400-e29b-41d4-a716-446655440000',
+        context: {
+          application_id,
+          alert_type: 'potential_fraud',
+          filename,
+          pdf_size: pdfBytes.length,
+          verification_method: result.method,
+          indicators: result.details,
+        },
+        outcome: 'flagged_for_review',
+        confidence_score: 0.8,
+      });
+    }
+    
     return jsonResponse({
       success: true,
       status: dbStatus,
