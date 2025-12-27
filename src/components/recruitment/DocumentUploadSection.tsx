@@ -290,12 +290,29 @@ export function DocumentUploadSection({
     try {
       // CV files are stored in 'application-cvs' bucket, others in 'application-documents'
       const bucket = docType === 'cv' ? 'application-cvs' : 'application-documents';
-      const { data, error } = await supabase.storage
+      
+      // Use blob download instead of window.open to bypass browser blocking (Edge, adblockers)
+      const { data: blobData, error: downloadError } = await supabase.storage
         .from(bucket)
-        .createSignedUrl(filePath, 60);
+        .download(filePath);
 
-      if (error) throw error;
-      window.open(data.signedUrl, '_blank');
+      if (downloadError) throw downloadError;
+
+      // Create blob URL and trigger download
+      const url = URL.createObjectURL(blobData);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      // Extract filename from path
+      const filename = filePath.split('/').pop() || `${docType}-document`;
+      a.download = filename;
+      
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success(`${docType.toUpperCase()} gedownload`);
     } catch (error) {
       console.error('Download error:', error);
       toast.error('Fout bij downloaden');
