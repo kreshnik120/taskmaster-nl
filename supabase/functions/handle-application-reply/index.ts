@@ -1220,18 +1220,51 @@ Return JSON in dit formaat:
             continue;
           }
           
-          // Detect document type from filename
+          // Detect document type from filename - expanded for Dutch healthcare education
           const detectDocType = (filename: string): 'vog' | 'diploma' | 'certificate' | 'cv' | 'id' | 'other' => {
             const lower = filename.toLowerCase();
+            
+            // VOG detection
             if (lower.includes('vog') || lower.includes('verklaring omtrent') || lower.includes('verklaring_omtrent')) return 'vog';
-            if (lower.includes('diploma') || lower.includes('getuigschrift')) return 'diploma';
+            
+            // Diploma detection - expanded for Dutch healthcare education
+            if (
+              lower.includes('diploma') || 
+              lower.includes('getuigschrift') ||
+              // Education levels
+              lower.includes('mbo') ||
+              lower.includes('hbo') ||
+              lower.match(/\bwo\b/) ||
+              lower.includes('bachelor') ||
+              lower.includes('master') ||
+              // Healthcare education keywords
+              lower.includes('verpleegkund') ||
+              lower.includes('verzorgend') ||
+              lower.includes('helpende') ||
+              lower.includes('ggz') ||
+              lower.includes('gehandicaptenzorg') ||
+              lower.includes('maatschappelijke zorg') ||
+              lower.includes('welzijn') ||
+              lower.includes('zorg') ||
+              // Qualification terms
+              lower.match(/niveau\s*[2-5]/) ||
+              lower.includes('kwalificatie')
+            ) return 'diploma';
+            
+            // Certificate detection
             if (lower.includes('certificaat') || lower.includes('certificate') || lower.includes('bhv') || lower.includes('ehbo')) return 'certificate';
+            
+            // CV detection
             if (lower.includes('cv') || lower.includes('curriculum') || lower.includes('resume')) return 'cv';
+            
+            // ID detection
             if (lower.includes('id') || lower.includes('paspoort') || lower.includes('rijbewijs') || lower.includes('identiteit')) return 'id';
+            
             return 'other';
           };
 
           const documentType = detectDocType(attachment.filename);
+          console.log(`📄 Document type detected: ${documentType} for file: ${attachment.filename}`);
           
           // Decode base64 content
           const fileBuffer = Uint8Array.from(atob(attachment.content), c => c.charCodeAt(0));
