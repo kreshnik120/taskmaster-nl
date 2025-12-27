@@ -1421,21 +1421,58 @@ Return JSON in dit formaat:
             } else {
               console.log(`✅ Application updated with diploma_file_path: ${doc.file_path}`);
               
-              // Trigger async DUO verification - non-blocking
+              // Trigger async DUO verification - non-blocking with robust fallback
               supabase.functions.invoke('verify-diploma-duo', {
                 body: {
                   action: 'verify',
                   application_id: applicationId,
                   diploma_file_path: doc.file_path
                 }
-              }).then(result => {
+              }).then(async (result) => {
                 if (result.error) {
                   console.error('❌ DUO verification trigger failed:', result.error);
+                  
+                  // Fallback: set to manual_review instead of leaving as error
+                  const { error: fallbackError } = await supabase
+                    .from('professional_applications')
+                    .update({ 
+                      duo_verification_status: 'manual_review',
+                      duo_verification_result: { 
+                        message: 'DUO verificatie kon niet worden gestart - handmatige verificatie vereist',
+                        error: result.error.message,
+                        fallback_at: new Date().toISOString()
+                      }
+                    })
+                    .eq('id', applicationId);
+                    
+                  if (fallbackError) {
+                    console.error('❌ Failed to set fallback status:', fallbackError);
+                  } else {
+                    console.log('✅ DUO verification set to manual_review for HR follow-up');
+                  }
                 } else {
                   console.log('✅ DUO verification triggered successfully:', result.data);
                 }
-              }).catch(err => {
+              }).catch(async (err) => {
                 console.error('❌ DUO verification invoke error:', err);
+                
+                // Fallback: set to manual_review on network/invocation errors
+                try {
+                  await supabase
+                    .from('professional_applications')
+                    .update({ 
+                      duo_verification_status: 'manual_review',
+                      duo_verification_result: { 
+                        message: 'DUO verificatie service niet bereikbaar - handmatige verificatie vereist',
+                        error: err instanceof Error ? err.message : 'Invocation failed',
+                        fallback_at: new Date().toISOString()
+                      }
+                    })
+                    .eq('id', applicationId);
+                  console.log('✅ DUO verification set to manual_review after invoke error');
+                } catch (fallbackErr) {
+                  console.error('❌ Failed to set fallback status:', fallbackErr);
+                }
               });
               
               console.log(`✅ DUO verification queued for ${doc.filename}`);
