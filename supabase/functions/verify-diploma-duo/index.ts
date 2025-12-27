@@ -672,6 +672,64 @@ Deno.serve(async (req: Request) => {
         outcome: 'flagged_for_review',
         confidence_score: 0.8,
       });
+      
+      // 🆕 Trigger AI agent goal to request valid diploma from candidate
+      const { data: appData } = await supabase
+        .from('professional_applications')
+        .select('org_id, email_from, extracted_data')
+        .eq('id', application_id)
+        .single();
+      
+      if (appData) {
+        const candidateName = (appData.extracted_data as any)?.naam || 'Kandidaat';
+        console.log('📧 Creating AI agent goal to request valid diploma from:', candidateName);
+        
+        await supabase.from('agent_goals').insert({
+          org_id: appData.org_id,
+          goal_type: 'request_documents',
+          goal_description: `Vraag geldig diploma aan na DUO verificatie failure voor ${candidateName}`,
+          input_data: {
+            application_id,
+            candidate_email: appData.email_from,
+            candidate_name: candidateName,
+            documents: ['Officieel diploma met digitale handtekening van DUO'],
+            urgent: true,
+            reason: 'DUO verificatie kon diploma niet valideren - mogelijk ongeldig of niet-digitaal document',
+            verification_result: result.details,
+          },
+          status: 'pending',
+          priority: 10,
+        });
+      }
+    }
+    
+    // 🆕 Recruiter notification for successful verification
+    if (dbStatus === 'verified_duo') {
+      console.log('✅ Logging successful diploma verification for recruiter notification');
+      
+      const { data: appData } = await supabase
+        .from('professional_applications')
+        .select('org_id, extracted_data')
+        .eq('id', application_id)
+        .single();
+      
+      if (appData) {
+        const candidateName = (appData.extracted_data as any)?.naam || 'Kandidaat';
+        
+        await supabase.from('system_events').insert({
+          event_type: 'diploma_verification_success',
+          entity_type: 'application',
+          entity_id: application_id,
+          org_id: appData.org_id,
+          event_data: {
+            verification_method: result.method,
+            is_duo_certificate: result.details?.is_duo_certificate || false,
+            candidate_name: candidateName,
+            verified_at: result.verified_at,
+            message: result.message,
+          },
+        });
+      }
     }
     
     return jsonResponse({

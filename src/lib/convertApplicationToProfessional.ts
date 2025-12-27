@@ -206,6 +206,13 @@ export async function convertApplicationToProfessional(
       specifieke_doelgroepen: application.extracted_data.specifieke_doelgroepen || [],
       max_reisafstand_km: application.extracted_data.max_reisafstand_km || null,
       specialisaties: application.extracted_data.specialisaties || [],
+      // Diploma verification fields (sync from application)
+      diploma_verified: (application as any).diploma_validation_status === 'verified_duo' || 
+                        (application as any).diploma_validation_status === 'verified_manual' ||
+                        (application as any).diploma_validation_status === 'signature_valid',
+      diploma_document_path: (application as any).diploma_file_path || null,
+      diploma_verified_at: (application as any).duo_verified_at || null,
+      diploma_verification_details: (application as any).diploma_verification_response || {},
     };
 
     // Create professional
