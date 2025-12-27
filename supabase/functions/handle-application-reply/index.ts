@@ -1406,11 +1406,12 @@ Return JSON in dit formaat:
             console.log(`🎓 Diploma detected: ${doc.file_path} - updating application and triggering DUO verification`);
             
             // Update application with diploma file path and set verification to pending
+            // Note: diploma_validation_status uses 'received' (not 'pending') per DB constraint
             const { error: diplomaUpdateError } = await supabase
               .from('professional_applications')
               .update({ 
                 diploma_file_path: doc.file_path,
-                diploma_validation_status: 'pending',
+                diploma_validation_status: 'received',
                 duo_verification_status: 'pending'
               })
               .eq('id', applicationId);
