@@ -1254,6 +1254,42 @@ Return JSON in dit formaat:
           }
           if (doc.document_type === 'diploma' || doc.document_type === 'certificate') {
             hasDiploma = true;
+            
+            // 🎓 FASE: Trigger autonomous DUO diploma verification via Browserless.io
+            // This runs async - doesn't block the reply processing
+            console.log(`🎓 Triggering DUO diploma verification for: ${doc.file_path}`);
+            try {
+              // Update application with diploma file path first
+              await supabase
+                .from('professional_applications')
+                .update({ 
+                  diploma_file_path: doc.file_path,
+                  duo_verification_status: 'pending'
+                })
+                .eq('id', applicationId);
+              
+              // Trigger async verification - non-blocking
+              supabase.functions.invoke('verify-diploma-duo', {
+                body: {
+                  action: 'verify',
+                  application_id: applicationId,
+                  diploma_file_path: doc.file_path
+                }
+              }).then(result => {
+                if (result.error) {
+                  console.error('❌ DUO verification trigger failed:', result.error);
+                } else {
+                  console.log('✅ DUO verification triggered successfully:', result.data);
+                }
+              }).catch(err => {
+                console.error('❌ DUO verification invoke error:', err);
+              });
+              
+              console.log(`✅ DUO verification queued for ${doc.filename}`);
+            } catch (duoError) {
+              console.error('❌ Failed to trigger DUO verification:', duoError);
+              // Non-blocking - continue processing
+            }
           }
         }
         

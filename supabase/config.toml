@@ -137,6 +137,10 @@ verify_jwt = false
 verify_jwt = false
 # Purpose: EMREX diploma verification via DUO (generate link, callback, reminders)
 
+[functions.verify-diploma-duo]
+verify_jwt = false
+# Purpose: Autonomous DUO Online Diplomacontrole verification via Browserless.io
+
 # -----------------------------------------------------------------------------
 # AUTHENTICATED FUNCTIONS (JWT verification required)
 # -----------------------------------------------------------------------------

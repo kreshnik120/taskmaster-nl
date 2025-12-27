@@ -2974,11 +2974,15 @@ export type Database = {
           cv_file_path: string | null
           deleted_at: string | null
           deleted_by: string | null
+          diploma_file_path: string | null
           diploma_validation_source: string | null
           diploma_validation_status: string | null
           diploma_verification_response: Json | null
           documents_verified_at: string | null
           documents_verified_by: string | null
+          duo_verification_result: Json | null
+          duo_verification_status: string | null
+          duo_verified_at: string | null
           email_body: string | null
           email_from: string
           email_subject: string | null
@@ -3021,11 +3025,15 @@ export type Database = {
           cv_file_path?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
+          diploma_file_path?: string | null
           diploma_validation_source?: string | null
           diploma_validation_status?: string | null
           diploma_verification_response?: Json | null
           documents_verified_at?: string | null
           documents_verified_by?: string | null
+          duo_verification_result?: Json | null
+          duo_verification_status?: string | null
+          duo_verified_at?: string | null
           email_body?: string | null
           email_from: string
           email_subject?: string | null
@@ -3068,11 +3076,15 @@ export type Database = {
           cv_file_path?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
+          diploma_file_path?: string | null
           diploma_validation_source?: string | null
           diploma_validation_status?: string | null
           diploma_verification_response?: Json | null
           documents_verified_at?: string | null
           documents_verified_by?: string | null
+          duo_verification_result?: Json | null
+          duo_verification_status?: string | null
+          duo_verified_at?: string | null
           email_body?: string | null
           email_from?: string
           email_subject?: string | null
