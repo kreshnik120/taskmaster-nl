@@ -19,7 +19,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 type VogStatus = 'missing' | 'received' | 'validating' | 'authentic_ok' | 'authentic_fail' | 'expired' | 'manual_review';
-type DiplomaStatus = 'missing' | 'received' | 'verified_emrex' | 'verified_manual' | 'manual_review';
+type DiplomaStatus = 'missing' | 'received' | 'verified_emrex' | 'verified_manual' | 'verified_duo' | 'duo_pending' | 'duo_invalid' | 'duo_not_digital' | 'duo_error' | 'manual_review';
 
 interface DocumentVerificationStatusProps {
   applicationId: string;
@@ -91,6 +91,36 @@ const DIPLOMA_STATUS_CONFIG: Record<DiplomaStatus, { icon: React.ElementType; la
     label: 'Ontvangen', 
     color: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
     description: 'Diploma ontvangen, wacht op verificatie'
+  },
+  duo_pending: { 
+    icon: Loader2, 
+    label: 'DUO Verificatie...', 
+    color: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
+    description: 'DUO Online Diplomacontrole wordt uitgevoerd'
+  },
+  verified_duo: { 
+    icon: ShieldCheck, 
+    label: 'DUO Geverifieerd', 
+    color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+    description: 'Diploma geverifieerd via DUO Online Diplomacontrole'
+  },
+  duo_invalid: { 
+    icon: ShieldX, 
+    label: 'DUO Ongeldig', 
+    color: 'bg-destructive/10 text-destructive border-destructive/20',
+    description: 'Diploma niet gevonden in DUO register'
+  },
+  duo_not_digital: { 
+    icon: ShieldAlert, 
+    label: 'Niet Digitaal', 
+    color: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+    description: 'Diploma van voor 1996 of niet digitaal geregistreerd'
+  },
+  duo_error: { 
+    icon: XCircle, 
+    label: 'DUO Fout', 
+    color: 'bg-destructive/10 text-destructive border-destructive/20',
+    description: 'Fout bij DUO verificatie, probeer opnieuw'
   },
   verified_emrex: { 
     icon: CheckCircle2, 
