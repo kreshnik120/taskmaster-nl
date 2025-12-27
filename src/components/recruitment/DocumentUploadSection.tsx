@@ -191,38 +191,80 @@ export function DocumentUploadSection({
             body: { application_id: applicationId }
           });
 
+          console.log('DUO verification result:', verifyResult);
+
+          // Determine the final status from the edge function response
+          const finalStatus = verifyResult?.status;
+          
+          // FALLBACK: Ensure database is updated even if edge function update failed
+          if (finalStatus && finalStatus !== 'received') {
+            console.log('Applying fallback database update with status:', finalStatus);
+            const { error: fallbackError } = await supabase
+              .from('professional_applications')
+              .update({
+                diploma_validation_status: finalStatus,
+                diploma_verification_response: verifyResult.details || null,
+                duo_verified_at: verifyResult.verified_at || new Date().toISOString()
+              })
+              .eq('id', applicationId);
+            
+            if (fallbackError) {
+              console.error('Fallback update failed:', fallbackError);
+            } else {
+              console.log('Fallback update successful');
+            }
+          }
+
           if (verifyError) {
             console.error('DUO verification error:', verifyError);
             toast.warning('Diploma geüpload - automatische verificatie niet beschikbaar, handmatige controle vereist');
+            
+            // Update status to manual_review if DUO failed
+            await supabase
+              .from('professional_applications')
+              .update({ diploma_validation_status: 'manual_review' })
+              .eq('id', applicationId);
             
             // Still trigger level validation even if DUO failed
             await supabase.functions.invoke('validate-diploma-level', {
               body: { application_id: applicationId, diploma_info: { diploma_naam: file.name } }
             });
-          } else if (verifyResult?.status === 'verified_duo') {
+          } else if (finalStatus === 'verified_duo') {
             toast.success('✅ Diploma automatisch geverifieerd via DUO!');
             
             // Trigger level validation with DUO details
             await supabase.functions.invoke('validate-diploma-level', {
               body: { application_id: applicationId, diploma_info: verifyResult.details }
             });
-          } else if (verifyResult?.status === 'manual_review') {
+          } else if (finalStatus === 'manual_review') {
             toast.info('Diploma ontvangen - handmatige verificatie vereist');
             
             // Still trigger level validation for manual review cases
             await supabase.functions.invoke('validate-diploma-level', {
               body: { application_id: applicationId, diploma_info: verifyResult.details || { diploma_naam: file.name } }
             });
-          } else if (verifyResult?.status === 'duo_invalid') {
+          } else if (finalStatus === 'duo_invalid' || finalStatus === 'duo_not_digital') {
             toast.warning('⚠️ Diploma kon niet via DUO geverifieerd worden');
             
             // Still trigger level validation even if DUO invalid
             await supabase.functions.invoke('validate-diploma-level', {
               body: { application_id: applicationId, diploma_info: verifyResult.details || { diploma_naam: file.name } }
             });
+          } else {
+            // Unknown status - set to manual_review
+            toast.info('Diploma ontvangen - handmatige verificatie vereist');
+            await supabase
+              .from('professional_applications')
+              .update({ diploma_validation_status: 'manual_review' })
+              .eq('id', applicationId);
           }
         } catch (e) {
           console.error('Error during diploma verification:', e);
+          // Set to manual_review on any error
+          await supabase
+            .from('professional_applications')
+            .update({ diploma_validation_status: 'manual_review' })
+            .eq('id', applicationId);
         } finally {
           setVerifyingDiploma(false);
         }
