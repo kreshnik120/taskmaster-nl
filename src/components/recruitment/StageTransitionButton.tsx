@@ -41,11 +41,15 @@ const STAGE_LABELS: Record<PipelineStage, string> = {
 
 // Define which transitions require document verification
 const DOCUMENT_REQUIREMENTS: Partial<Record<PipelineStage, { vog?: string[]; diploma?: string[] }>> = {
+  interview: {
+    diploma: ['verified_duo', 'verified_manual', 'verified_emrex'] // Diploma must be verified before interview
+  },
   screening: {
     vog: ['received', 'validating', 'authentic_ok', 'manual_review'] // VOG must at least be received
   },
   goedgekeurd: {
-    vog: ['authentic_ok'] // VOG must be verified
+    vog: ['authentic_ok'], // VOG must be verified
+    diploma: ['verified_duo', 'verified_manual', 'verified_emrex'] // Diploma must be verified
   }
 };
 
@@ -69,6 +73,22 @@ export function StageTransitionButton({
   const checkDocumentRequirements = (): { blocked: boolean; reason: string | null } => {
     const requirements = DOCUMENT_REQUIREMENTS[targetStage];
     if (!requirements) return { blocked: false, reason: null };
+
+    // Check diploma requirements first (for interview stage)
+    if (requirements.diploma && !requirements.diploma.includes(diplomaStatus)) {
+      if (targetStage === 'interview') {
+        return { 
+          blocked: true, 
+          reason: 'Diploma moet geverifieerd zijn (DUO, EMREX of handmatig) voordat een interview gepland kan worden.'
+        };
+      }
+      if (targetStage === 'goedgekeurd') {
+        return { 
+          blocked: true, 
+          reason: 'Diploma moet geverifieerd zijn voordat de kandidaat goedgekeurd kan worden.'
+        };
+      }
+    }
 
     if (requirements.vog && !requirements.vog.includes(vogStatus)) {
       if (targetStage === 'goedgekeurd') {
