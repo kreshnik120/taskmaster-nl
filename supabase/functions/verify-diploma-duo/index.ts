@@ -516,8 +516,11 @@ Deno.serve(async (req: Request) => {
     // Map result to database status
     const dbStatus = result.status === 'signature_valid' ? 'verified_duo' : result.status;
     
-    // Update application
-    const { error: updateError } = await supabase
+    console.log('📝 Updating application with status:', dbStatus);
+    console.log('📝 Application ID:', application_id);
+    
+    // Update application with .select() to confirm what was updated
+    const { data: updateData, error: updateError } = await supabase
       .from('professional_applications')
       .update({
         diploma_validation_status: dbStatus,
@@ -527,12 +530,17 @@ Deno.serve(async (req: Request) => {
           message: result.message,
           verified_at: result.verified_at,
         },
-        duo_verified_at: result.verified_at || null,
+        duo_verified_at: result.verified_at || new Date().toISOString(),
       })
-      .eq('id', application_id);
+      .eq('id', application_id)
+      .select('id, diploma_validation_status')
+      .single();
     
     if (updateError) {
-      console.error('Update error:', updateError);
+      console.error('❌ Database update FAILED:', updateError);
+      console.error('❌ Error details:', JSON.stringify(updateError));
+    } else {
+      console.log('✅ Database update SUCCESS:', updateData?.diploma_validation_status);
     }
     
     // Log for AI learning
