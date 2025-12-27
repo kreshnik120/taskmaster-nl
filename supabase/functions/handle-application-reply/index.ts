@@ -1310,15 +1310,62 @@ Return JSON in dit formaat:
     }
 
     // =====================================================
-    // FASE 1 FIX: SMART COMPLETENESS CALCULATION
+    // FASE 3 FIX: DEEP MERGE + SMART COMPLETENESS CALCULATION
     // Met placeholder telefoon detectie en diploma validatie
+    // 🔧 KRITIEK: Deep merge behoudt bestaande data bij updates!
     // =====================================================
     
-    // Merge new data with existing extracted_data FIRST
-    const mergedData = {
-      ...(application.extracted_data || {}),
-      ...(analysis.new_data || {}),
+    // 🔧 FASE 3 FIX: Deep merge helper - behoudt bestaande waarden, voegt nieuwe toe
+    const deepMergeData = (existing: Record<string, any>, newData: Record<string, any>): Record<string, any> => {
+      const result = { ...existing };
+      
+      for (const key of Object.keys(newData)) {
+        const newValue = newData[key];
+        const existingValue = result[key];
+        
+        // Skip null/undefined nieuwe waarden - behoud bestaande
+        if (newValue === null || newValue === undefined || newValue === '') {
+          continue;
+        }
+        
+        // Deep merge voor nested objects (maar niet arrays)
+        if (
+          typeof newValue === 'object' && 
+          !Array.isArray(newValue) &&
+          typeof existingValue === 'object' && 
+          existingValue !== null &&
+          !Array.isArray(existingValue)
+        ) {
+          result[key] = deepMergeData(existingValue, newValue);
+        } else {
+          // Nieuwe waarde overschrijft alleen als het een echte waarde is
+          result[key] = newValue;
+        }
+      }
+      
+      return result;
     };
+    
+    // 🔧 FASE 3 FIX: DEEP MERGE in plaats van shallow merge
+    const mergedData = deepMergeData(
+      application.extracted_data || {},
+      analysis.new_data || {}
+    );
+    
+    console.log("🔧 FASE 3 DEEP MERGE DEBUG:");
+    console.log("   Bestaande velden:", Object.keys(application.extracted_data || {}).length);
+    console.log("   Nieuwe velden:", Object.keys(analysis.new_data || {}).length);
+    console.log("   Gemerged velden:", Object.keys(mergedData).length);
+    
+    // 🔧 FASE 3 FIX: Normaliseer telefoon velden (AI kan naar verschillende keys schrijven)
+    if (analysis.new_data?.telefoonnummer && !mergedData.telefoon) {
+      mergedData.telefoon = analysis.new_data.telefoonnummer;
+      console.log("📱 Telefoon genormaliseerd van telefoonnummer:", mergedData.telefoon);
+    }
+    if (analysis.new_data?.phone && !mergedData.telefoon) {
+      mergedData.telefoon = analysis.new_data.phone;
+      console.log("📱 Telefoon genormaliseerd van phone:", mergedData.telefoon);
+    }
     
     // Normalize naam/full_name: ensure naam is set if full_name exists
     if (!mergedData.naam && mergedData.full_name) {

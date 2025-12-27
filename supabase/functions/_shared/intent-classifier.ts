@@ -65,11 +65,17 @@ const FRUSTRATION_INDICATORS: Array<{ pattern: RegExp; weight: number; label: st
 
 // Intent detection patterns
 const INTENT_PATTERNS: Array<{ intent: IntentType; pattern: RegExp; weight: number }> = [
-  // Slot selection
+  // Slot selection - 🔧 FASE 3 FIX: Toegevoegd pattern voor "1. maandag om 10:00" formaat
   { intent: 'slot_selection', pattern: /^[1-6](?:\.\d+)?[\s:,.!?]*$/im, weight: 0.95 },
   { intent: 'slot_selection', pattern: /(?:optie|slot|keuze|moment)\s*[1-6]/i, weight: 0.85 },
   { intent: 'slot_selection', pattern: /(?:de\s+)?(eerste|tweede|derde|vierde|vijfde)/i, weight: 0.8 },
   { intent: 'slot_selection', pattern: /(?:graag|kies|neem)\s+(?:optie\s+)?[1-6]/i, weight: 0.85 },
+  // 🔧 NIEUW: Herken "1. maandag om 10:00" formaat (nummer + dagnaam)
+  { intent: 'slot_selection', pattern: /^[1-6]\.\s*(?:maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag)/im, weight: 0.95 },
+  // 🔧 NIEUW: Herken keuze met datum/tijd bevestiging
+  { intent: 'slot_selection', pattern: /(?:kies|neem|graag)\s+(?:optie\s+)?[1-6]\s*[\.,:]/i, weight: 0.9 },
+  // 🔧 NIEUW: Simpele nummer + dagnaam combinatie
+  { intent: 'slot_selection', pattern: /\b([1-6])\s*[-.:]\s*(?:ma|di|wo|do|vr|za|zo)/i, weight: 0.9 },
   
   // Slot rejection
   { intent: 'slot_rejection', pattern: /geen\s+van\s+(de|deze)/i, weight: 0.9 },
