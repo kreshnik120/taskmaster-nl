@@ -33,8 +33,11 @@ interface DocumentVerificationStatusProps {
   diplomaSource?: string | null;
   vogFilePath?: string | null;
   diplomaFilePath?: string | null;
+  /** @deprecated Use diplomaVerificationResponse instead */
   duoVerificationResult?: Record<string, unknown> | null;
   duoVerifiedAt?: string | null;
+  /** New correct field - contains actual DUO signature verification result */
+  diplomaVerificationResponse?: Record<string, unknown> | null;
   onStatusUpdate?: () => void;
 }
 
@@ -159,6 +162,7 @@ export function DocumentVerificationStatus({
   diplomaFilePath,
   duoVerificationResult,
   duoVerifiedAt,
+  diplomaVerificationResponse,
   onStatusUpdate
 }: DocumentVerificationStatusProps) {
   const [isVerifying, setIsVerifying] = useState(false);
@@ -514,8 +518,38 @@ export function DocumentVerificationStatus({
           </div>
         )}
 
-        {/* DUO Verification Details (if available) */}
-        {duoVerificationResult && Object.keys(duoVerificationResult).length > 0 && (
+        {/* DUO Verification Details - Show based on status and correct data source */}
+        {diplomaStatus === 'verified_duo' && diplomaVerificationResponse && (
+          <div className="p-3 rounded-lg border bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800">
+            <div className="flex items-start gap-2">
+              <ShieldCheck className="h-4 w-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1">
+                  DUO Diploma Geverifieerd
+                </p>
+                <div className="text-xs space-y-0.5 text-emerald-600 dark:text-emerald-500">
+                  {diplomaVerificationResponse.is_duo_certificate && (
+                    <p>• Erkend DUO onderwijsdiploma</p>
+                  )}
+                  {diplomaVerificationResponse.method === 'signature' && (
+                    <p>• Digitale handtekening geverifieerd</p>
+                  )}
+                  {diplomaVerificationResponse.signature_type && (
+                    <p>• Handtekeningtype: {String(diplomaVerificationResponse.signature_type)}</p>
+                  )}
+                  {diplomaVerificationResponse.verified_at && (
+                    <p className="text-emerald-500 dark:text-emerald-600 pt-1">
+                      Geverifieerd: {new Date(String(diplomaVerificationResponse.verified_at)).toLocaleString('nl-NL')}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* DUO Verification Details for non-verified statuses - use fallback data */}
+        {diplomaStatus !== 'verified_duo' && duoVerificationResult && Object.keys(duoVerificationResult).length > 0 && (
           <div className="p-2 rounded border bg-muted/30">
             <p className="text-xs font-medium text-muted-foreground mb-1">DUO Verificatie Details</p>
             <div className="text-xs space-y-0.5">
