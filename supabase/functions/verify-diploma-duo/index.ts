@@ -459,6 +459,103 @@ Deno.serve(async (req: Request) => {
       });
     }
     
+    // Handle retry action - re-verify existing diploma
+    if (action === 'retry') {
+      console.log('🔄 Retry verification requested for application:', application_id);
+      
+      // Get application with diploma file
+      const { data: app, error: appFetchError } = await supabase
+        .from('professional_applications')
+        .select('id, diploma_file_path, diploma_validation_status')
+        .eq('id', application_id)
+        .single();
+      
+      if (appFetchError || !app) {
+        console.error('Application fetch error:', appFetchError);
+        return errorResponse('Application not found', 404);
+      }
+      
+      if (!app.diploma_file_path) {
+        return errorResponse('Geen diploma bestand gevonden', 400);
+      }
+      
+      console.log('📥 Downloading diploma for retry:', app.diploma_file_path);
+      
+      // Download diploma from storage
+      const { data: fileData, error: fileDownloadError } = await supabase.storage
+        .from('application-documents')
+        .download(app.diploma_file_path);
+      
+      if (fileDownloadError || !fileData) {
+        console.error('File download error:', fileDownloadError);
+        return errorResponse('Failed to download diploma file', 500);
+      }
+      
+      // Convert to bytes
+      const pdfBytes = new Uint8Array(await fileData.arrayBuffer());
+      const filename = app.diploma_file_path.split('/').pop() || 'diploma.pdf';
+      
+      console.log('🎓 Re-verifying diploma:', filename, 'size:', pdfBytes.length);
+      
+      // Run verification
+      const result = await verifyDiploma(pdfBytes, filename);
+      
+      // Map result to database status
+      const dbStatus = result.status === 'signature_valid' ? 'verified_duo' : result.status;
+      
+      console.log('📝 Retry result - updating application with status:', dbStatus);
+      
+      // Update application
+      const { data: updateData, error: updateError } = await supabase
+        .from('professional_applications')
+        .update({
+          diploma_validation_status: dbStatus,
+          diploma_verification_response: {
+            ...result.details,
+            method: result.method,
+            message: result.message,
+            verified_at: result.verified_at,
+            retry: true,
+          },
+          duo_verified_at: result.verified_at || new Date().toISOString(),
+        })
+        .eq('id', application_id)
+        .select('id, diploma_validation_status')
+        .single();
+      
+      if (updateError) {
+        console.error('❌ Retry update FAILED:', updateError);
+      } else {
+        console.log('✅ Retry update SUCCESS:', updateData?.diploma_validation_status);
+      }
+      
+      // Log for AI learning
+      await supabase.from('ai_learning_events').insert({
+        event_type: 'diploma_verification_retry',
+        org_id: '550e8400-e29b-41d4-a716-446655440000',
+        context: {
+          application_id,
+          verification_method: result.method,
+          status: result.status,
+          filename,
+          pdf_size: pdfBytes.length,
+          previous_status: app.diploma_validation_status,
+        },
+        outcome: result.status,
+        confidence_score: result.status === 'signature_valid' || result.status === 'verified_duo' ? 0.95 : 0.5,
+      });
+      
+      return jsonResponse({
+        success: true,
+        status: dbStatus,
+        method: result.method,
+        message: result.message,
+        details: result.details,
+        verified_at: result.verified_at,
+        retry: true,
+      });
+    }
+    
     // Handle check_status action
     if (action === 'check_status') {
       const { data: appData, error: appError } = await supabase

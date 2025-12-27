@@ -17,7 +17,8 @@ import {
   Info,
   ShieldCheck,
   Clock,
-  Eye
+  Eye,
+  RefreshCw
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -89,6 +90,7 @@ export function DocumentUploadSection({
   const [downloadingDiploma, setDownloadingDiploma] = useState(false);
   const [downloadingCV, setDownloadingCV] = useState(false);
   const [verifyingDiploma, setVerifyingDiploma] = useState(false);
+  const [retryingDuoVerification, setRetryingDuoVerification] = useState(false);
   
   const vogInputRef = useRef<HTMLInputElement>(null);
   const diplomaInputRef = useRef<HTMLInputElement>(null);
@@ -366,6 +368,75 @@ export function DocumentUploadSection({
     } catch (error) {
       console.error('Delete error:', error);
       toast.error('Fout bij verwijderen');
+    }
+  };
+
+  // Retry DUO verification handler
+  const handleRetryDuoVerification = async () => {
+    if (!diplomaFilePath) {
+      toast.error('Geen diploma bestand gevonden');
+      return;
+    }
+    
+    setRetryingDuoVerification(true);
+    
+    try {
+      console.log('🔄 Retry DUO verificatie voor diploma:', diplomaFilePath);
+      
+      const { data: verifyResult, error: verifyError } = await supabase.functions.invoke('verify-diploma-duo', {
+        body: { 
+          application_id: applicationId,
+          action: 'retry'
+        }
+      });
+      
+      if (verifyError) {
+        console.error('DUO retry verificatie fout:', verifyError);
+        toast.error('DUO verificatie opnieuw proberen mislukt');
+        return;
+      }
+      
+      console.log('DUO retry result:', verifyResult);
+      
+      // Update database met resultaat (fallback)
+      if (verifyResult?.status) {
+        const { error: updateError } = await supabase
+          .from('professional_applications')
+          .update({
+            diploma_validation_status: verifyResult.status,
+            diploma_verification_response: verifyResult.details || null,
+            duo_verified_at: verifyResult.verified_at || new Date().toISOString()
+          })
+          .eq('id', applicationId);
+        
+        if (updateError) {
+          console.error('Fallback update failed:', updateError);
+        }
+      }
+      
+      // Trigger ook niveau validatie
+      await supabase.functions.invoke('validate-diploma-level', {
+        body: { 
+          application_id: applicationId, 
+          diploma_info: verifyResult?.details || {}
+        }
+      });
+      
+      if (verifyResult?.status === 'verified_duo') {
+        toast.success('✅ Diploma geverifieerd via DUO!');
+      } else if (verifyResult?.status === 'manual_review') {
+        toast.info('Handmatige verificatie vereist');
+      } else {
+        toast.info(`Verificatie resultaat: ${verifyResult?.message || 'Onbekend'}`);
+      }
+      
+      onUploadComplete(); // Refresh data
+      
+    } catch (error) {
+      console.error('DUO retry error:', error);
+      toast.error('Er ging iets mis bij het opnieuw verifiëren');
+    } finally {
+      setRetryingDuoVerification(false);
     }
   };
 
@@ -789,6 +860,36 @@ export function DocumentUploadSection({
               <div className="flex items-center gap-2 p-3 mb-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
                 <AlertCircle className="h-5 w-5 text-red-600" />
                 <span className="text-red-700 dark:text-red-400 font-medium text-sm">⚠️ DUO verificatie gefaald - handmatige controle vereist</span>
+              </div>
+            )}
+
+            {/* Retry DUO Verification Button */}
+            {diplomaFilePath && (
+              diplomaStatus === 'manual_review' || 
+              diplomaStatus === 'duo_invalid' || 
+              diplomaStatus === 'received' ||
+              diplomaStatus === 'pending'
+            ) && !verifyingDiploma && (
+              <div className="mb-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRetryDuoVerification}
+                  disabled={retryingDuoVerification}
+                  className="w-full"
+                >
+                  {retryingDuoVerification ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      DUO verificatie bezig...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Opnieuw Verifiëren via DUO
+                    </>
+                  )}
+                </Button>
               </div>
             )}
 
