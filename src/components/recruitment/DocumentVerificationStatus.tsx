@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { ManualDiplomaVerification } from './ManualDiplomaVerification';
 
 type VogStatus = 'missing' | 'received' | 'validating' | 'authentic_ok' | 'authentic_fail' | 'expired' | 'manual_review';
 type DiplomaStatus = 'missing' | 'received' | 'verified_emrex' | 'verified_manual' | 'verified_duo' | 'duo_pending' | 'duo_invalid' | 'duo_not_digital' | 'duo_error' | 'manual_review';
@@ -544,6 +545,13 @@ export function DocumentVerificationStatus({
             </div>
           </div>
         )}
+
+        {/* Manual Verification UI for manual_review status */}
+        <ManualDiplomaVerification
+          applicationId={applicationId}
+          currentStatus={diplomaStatus}
+          onStatusUpdate={onStatusUpdate}
+        />
       </div>
     </TooltipProvider>
   );
