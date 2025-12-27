@@ -69,8 +69,21 @@ export default async ({ page }) => {
     if (!fileInput) {
       console.log('❌ File input not found, checking for alternative upload methods...');
       
-      // Try to find any upload button or drop zone
-      const uploadButton = await page.$('[data-testid="upload"], .upload-button, button:has-text("Upload"), button:has-text("Bestand kiezen")');
+      // Try to find any upload button or drop zone (Puppeteer-compatible, no :has-text())
+      let uploadButton = await page.$('[data-testid="upload"], .upload-button');
+      
+      // If not found, search buttons by text content
+      if (!uploadButton) {
+        const buttons = await page.$$('button');
+        for (const btn of buttons) {
+          const text = await btn.evaluate(el => el.textContent?.toLowerCase() || '');
+          if (text.includes('upload') || text.includes('bestand') || text.includes('kiezen')) {
+            uploadButton = btn;
+            break;
+          }
+        }
+      }
+      
       if (uploadButton) {
         await uploadButton.click();
         await wait(1000);
@@ -127,9 +140,21 @@ export default async ({ page }) => {
     // Wait for upload to process
     await wait(3000);
     
-    // Look for and click the "Controleer" (Verify) button
+    // Look for and click the "Controleer" (Verify) button (Puppeteer-compatible, no :has-text())
     console.log('🔍 Looking for verify button...');
-    const verifyButton = await page.$('button:has-text("Controleer"), button:has-text("Verifieer"), button[type="submit"], .btn-primary');
+    let verifyButton = await page.$('button[type="submit"], .btn-primary');
+    
+    // If not found, search buttons by text content
+    if (!verifyButton) {
+      const buttons = await page.$$('button');
+      for (const btn of buttons) {
+        const text = await btn.evaluate(el => el.textContent?.toLowerCase() || '');
+        if (text.includes('controleer') || text.includes('verifieer') || text.includes('verify')) {
+          verifyButton = btn;
+          break;
+        }
+      }
+    }
     
     if (verifyButton) {
       console.log('✅ Found verify button, clicking...');
