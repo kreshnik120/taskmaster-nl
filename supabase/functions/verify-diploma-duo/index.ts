@@ -433,14 +433,15 @@ Deno.serve(async (req: Request) => {
       const { data: updateData, error: updateError } = await supabase
         .from('professional_applications')
         .update({
-          diploma_status: verified ? 'verified_manual' : 'duo_invalid',
-          duo_verification_response: {
+          diploma_validation_status: verified ? 'verified_manual' : 'duo_invalid',
+          diploma_verification_response: {
             method: 'manual',
             verified,
             notes,
             verified_at: new Date().toISOString(),
             verified_by: 'recruiter',
           },
+          duo_verified_at: new Date().toISOString(),
         })
         .eq('id', application_id)
         .select()
@@ -462,7 +463,7 @@ Deno.serve(async (req: Request) => {
     if (action === 'check_status') {
       const { data: appData, error: appError } = await supabase
         .from('professional_applications')
-        .select('diploma_status, duo_verification_response, diploma_verified_at')
+        .select('diploma_validation_status, diploma_verification_response, duo_verified_at')
         .eq('id', application_id)
         .single();
       
@@ -472,9 +473,9 @@ Deno.serve(async (req: Request) => {
       
       return jsonResponse({
         success: true,
-        status: appData.diploma_status,
-        verification_response: appData.duo_verification_response,
-        verified_at: appData.diploma_verified_at,
+        status: appData.diploma_validation_status,
+        verification_response: appData.diploma_verification_response,
+        verified_at: appData.duo_verified_at,
       });
     }
     
@@ -482,7 +483,7 @@ Deno.serve(async (req: Request) => {
     // Get application with diploma file
     const { data: application, error: appError } = await supabase
       .from('professional_applications')
-      .select('id, diploma_file_path, diploma_status')
+      .select('id, diploma_file_path, diploma_validation_status')
       .eq('id', application_id)
       .single();
     
@@ -497,7 +498,7 @@ Deno.serve(async (req: Request) => {
     // Download PDF from storage
     console.log('Downloading diploma from:', application.diploma_file_path);
     const { data: fileData, error: fileError } = await supabase.storage
-      .from('cv-uploads')
+      .from('application-documents')
       .download(application.diploma_file_path);
     
     if (fileError || !fileData) {
@@ -519,14 +520,14 @@ Deno.serve(async (req: Request) => {
     const { error: updateError } = await supabase
       .from('professional_applications')
       .update({
-        diploma_status: dbStatus,
-        duo_verification_response: {
+        diploma_validation_status: dbStatus,
+        diploma_verification_response: {
           ...result.details,
           method: result.method,
           message: result.message,
           verified_at: result.verified_at,
         },
-        diploma_verified_at: result.verified_at || null,
+        duo_verified_at: result.verified_at || null,
       })
       .eq('id', application_id);
     
