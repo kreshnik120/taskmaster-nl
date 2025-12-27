@@ -1394,37 +1394,33 @@ Return JSON in dit formaat:
       console.log(`📎 Processed ${processedDocuments.length} documents`);
       
       // =====================================================
-      // PHASE 3: Update Professional with Documents (if exists)
+      // PHASE 2.5: Update Application with Document Paths (ALWAYS)
+      // This runs REGARDLESS of professional_id existence
       // =====================================================
-      if (application.professional_id && processedDocuments.length > 0) {
-        console.log(`📄 [Phase 3] Updating professional ${application.professional_id} with documents...`);
-        
-        const updateData: Record<string, any> = {};
-        let hasVog = false;
-        let hasDiploma = false;
+      if (processedDocuments.length > 0) {
+        console.log(`📄 [Phase 2.5] Updating application with document paths...`);
         
         for (const doc of processedDocuments) {
-          if (doc.document_type === 'vog' && doc.vog_expiry_status === 'valid') {
-            updateData.vog_file_path = doc.file_path;
-            hasVog = true;
-          }
+          // Handle diploma documents - trigger DUO verification
           if (doc.document_type === 'diploma' || doc.document_type === 'certificate') {
-            hasDiploma = true;
+            console.log(`🎓 Diploma detected: ${doc.file_path} - updating application and triggering DUO verification`);
             
-            // 🎓 FASE: Trigger autonomous DUO diploma verification via Browserless.io
-            // This runs async - doesn't block the reply processing
-            console.log(`🎓 Triggering DUO diploma verification for: ${doc.file_path}`);
-            try {
-              // Update application with diploma file path first
-              await supabase
-                .from('professional_applications')
-                .update({ 
-                  diploma_file_path: doc.file_path,
-                  duo_verification_status: 'pending'
-                })
-                .eq('id', applicationId);
+            // Update application with diploma file path and set verification to pending
+            const { error: diplomaUpdateError } = await supabase
+              .from('professional_applications')
+              .update({ 
+                diploma_file_path: doc.file_path,
+                diploma_validation_status: 'pending',
+                duo_verification_status: 'pending'
+              })
+              .eq('id', applicationId);
+            
+            if (diplomaUpdateError) {
+              console.error(`❌ Failed to update diploma_file_path:`, diplomaUpdateError);
+            } else {
+              console.log(`✅ Application updated with diploma_file_path: ${doc.file_path}`);
               
-              // Trigger async verification - non-blocking
+              // Trigger async DUO verification - non-blocking
               supabase.functions.invoke('verify-diploma-duo', {
                 body: {
                   action: 'verify',
@@ -1442,10 +1438,46 @@ Return JSON in dit formaat:
               });
               
               console.log(`✅ DUO verification queued for ${doc.filename}`);
-            } catch (duoError) {
-              console.error('❌ Failed to trigger DUO verification:', duoError);
-              // Non-blocking - continue processing
             }
+          }
+          
+          // Handle VOG documents
+          if (doc.document_type === 'vog' && doc.vog_expiry_status === 'valid') {
+            const { error: vogUpdateError } = await supabase
+              .from('professional_applications')
+              .update({ 
+                vog_file_path: doc.file_path,
+                vog_validation_status: 'valid'
+              })
+              .eq('id', applicationId);
+            
+            if (vogUpdateError) {
+              console.error(`❌ Failed to update vog_file_path:`, vogUpdateError);
+            } else {
+              console.log(`✅ Application updated with vog_file_path: ${doc.file_path}`);
+            }
+          }
+        }
+      }
+      
+      // =====================================================
+      // PHASE 3: Update Professional with Documents (if exists)
+      // =====================================================
+      if (application.professional_id && processedDocuments.length > 0) {
+        console.log(`📄 [Phase 3] Updating professional ${application.professional_id} with documents...`);
+        
+        const updateData: Record<string, any> = {};
+        let hasVog = false;
+        let hasDiploma = false;
+        
+        for (const doc of processedDocuments) {
+          if (doc.document_type === 'vog' && doc.vog_expiry_status === 'valid') {
+            updateData.vog_file_path = doc.file_path;
+            hasVog = true;
+          }
+          if (doc.document_type === 'diploma' || doc.document_type === 'certificate') {
+            hasDiploma = true;
+            // DUO verification already triggered in Phase 2.5
           }
         }
         
