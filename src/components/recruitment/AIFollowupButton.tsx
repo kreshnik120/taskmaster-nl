@@ -23,15 +23,24 @@ export function AIFollowupButton({
   const [triggering, setTriggering] = useState(false);
 
   // Check if there's already an active AI goal for this application
+  // Check for ANY relevant AI goal types for this application
   const { data: existingGoal, refetch } = useQuery({
     queryKey: ["ai-goal", applicationId],
     queryFn: async () => {
+      // Check all relevant goal types that could be active for this application
       const { data } = await supabase
         .from("agent_goals")
-        .select("id, status, created_at")
-        .eq("input_data->>application_id", applicationId)
-        .eq("goal_type", "application_intake_completion")
-        .in("status", ["pending", "in_progress"])
+        .select("id, status, goal_type, created_at")
+        .filter("input_data->>application_id", "eq", applicationId)
+        .in("goal_type", [
+          "send_welcome_and_intake",
+          "application_intake_completion", 
+          "send_reply_response",
+          "request_documents"
+        ])
+        .in("status", ["pending", "planning", "executing", "in_progress"])
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
       return data;
     },

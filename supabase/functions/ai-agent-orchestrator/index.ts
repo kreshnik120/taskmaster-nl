@@ -1614,6 +1614,36 @@ async function executeWelcomeAndIntake(supabase: any, action: any) {
     }
 
     console.log('✅ [Welcome] Welcome email sent successfully');
+    
+    // 🔧 FASE 1 FIX: Update pipeline_stage to 'screening' after welcome email
+    const { error: stageError } = await supabase
+      .from('professional_applications')
+      .update({
+        pipeline_stage: 'screening',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', applicationId)
+      .eq('pipeline_stage', 'nieuw'); // Only update if still 'nieuw'
+    
+    if (stageError) {
+      console.error('[Welcome] Pipeline stage update failed:', stageError);
+    } else {
+      console.log('✅ [Welcome] Pipeline stage updated to screening');
+      
+      // Log stage audit
+      await supabase.from('application_stage_audit').insert({
+        application_id: applicationId,
+        from_stage: 'nieuw',
+        to_stage: 'screening',
+        reason: 'Automatische transitie: Welkomstmail verzonden',
+        performed_by: null,
+        metadata: {
+          trigger: 'executeWelcomeAndIntake',
+          email_sent: true,
+        }
+      });
+    }
+    
     return { 
       executed_via: 'resend', 
       organization, 
@@ -1621,6 +1651,7 @@ async function executeWelcomeAndIntake(supabase: any, action: any) {
       email_generated: !!emailData,
       email_sent: !!sendData,
       fields_asked: action.input_data.fields_to_ask?.length || 0,
+      pipeline_stage_updated: !stageError,
       ...sendData 
     };
 

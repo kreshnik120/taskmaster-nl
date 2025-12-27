@@ -1,6 +1,16 @@
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
-import { normalizeFunctieNiveau, normalizeWerkvorm, getOrganizationById, getEmailConfig } from '../_shared/healthcare-mappings.ts';
+import { 
+  normalizeFunctieNiveau, 
+  normalizeWerkvorm, 
+  getOrganizationById, 
+  getEmailConfig,
+  isPlaceholderPhone,
+  MAX_FOLLOWUP_EMAILS,
+  APPLICATION_GOAL_TYPES,
+  ACTIVE_GOAL_STATUSES,
+  recalculateMissingInfo
+} from '../_shared/healthcare-mappings.ts';
 // Fase 1: Quick Wins - Modulaire detection & audit
 import { stripQuotedContent, detectSlotWithRegex, detectInterviewSlot, type SlotDetectionInput } from '../_shared/slot-detection.ts';
 import { classifyEmailIntent, shouldBypassCooldown } from '../_shared/intent-classifier.ts';
@@ -2093,83 +2103,131 @@ Return JSON in dit formaat:
     if (skipResponseEmail) {
       console.log(`⏭️ Skipping agent response - combined interview email already sent`);
     } else {
-      // Bepaal het response type op basis van situatie
-      let responseType = 'standard_reply';
-      let responsePriority = 100;
-      
-      if (pipelineStage === 'screening') {
-        responseType = 'document_request';
-        responsePriority = 120;
-      } else if (pipelineStage === 'interview' || interviewStatus === 'scheduled') {
-        responseType = 'interview_acknowledgment';
-        responsePriority = 80;
-      } else if (newCompletenessScore >= 80) {
-        responseType = 'ready_for_interview';
-        responsePriority = 150;
-      } else if (finalRemainingMissing.length > 0 || Object.keys(rejectionContext).length > 0) {
-        responseType = 'followup_with_context';
-        responsePriority = 130;
-      }
-
-      console.log(`🤖 Creating unified agent goal: send_reply_response (type: ${responseType})`);
-
-      // Maak agent goal met ALLE context voor slimme AI response
-      const { error: goalError } = await supabase
+      // 🔧 FIX: Check for existing pending goals to prevent duplicates
+      const { data: existingGoal } = await supabase
         .from("agent_goals")
-        .insert({
-          org_id: application.org_id,
-          goal_type: "send_reply_response",
-          goal_description: `Reageer slim op reply van ${professionalName} (${responseType})`,
-          priority: responsePriority,
-          input_data: {
-            application_id: applicationId,
-            candidate_email: from,
-            candidate_name: professionalName,
-            // Volledige context voor AI-gestuurde response
-            response_type: responseType,
-            newly_extracted_data: analysis.new_data || {},
-            rejection_context: Object.keys(rejectionContext).length > 0 ? rejectionContext : undefined,
-            accepted_data: Object.keys(analysis.new_data || {}).filter(k => !rejectionContext[k]),
-            remaining_missing_info: finalRemainingMissing,
-            current_completeness: newCompletenessScore,
-            pipeline_stage: pipelineStage,
-            interview_status: interviewStatus,
-            original_message_preview: emailText?.substring(0, 500),
-            subject: subject,
-            org_name: orgInfo.displayName,
-            email_config: emailConfig,
-          },
-          status: "pending"
-        });
-
-      if (goalError) {
-        console.error("Error creating reply response goal:", goalError);
+        .select("id, goal_type, status, created_at")
+        .filter("input_data->>application_id", "eq", applicationId)
+        .in("goal_type", APPLICATION_GOAL_TYPES as unknown as string[])
+        .in("status", ACTIVE_GOAL_STATUSES as unknown as string[])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (existingGoal) {
+        console.log(`⏭️ Skipping goal creation - existing active goal found: ${existingGoal.goal_type} (${existingGoal.status})`);
       } else {
-        console.log(`✅ Created send_reply_response goal for application ${applicationId}`);
+        // 🔧 FIX: Check follow-up count to prevent email spam
+        const currentFollowupCount = (mergedData.followup_email_count as number) || 0;
         
-        // Direct de agent triggeren (geen wachten op cron)
-        try {
-          console.log("🚀 Triggering ai-agent-orchestrator for immediate response...");
+        if (currentFollowupCount >= MAX_FOLLOWUP_EMAILS) {
+          console.log(`⚠️ Max follow-up emails reached (${currentFollowupCount}/${MAX_FOLLOWUP_EMAILS}), creating manual intervention goal`);
           
-          // Stap 1: Plan de goal (voegt actie toe aan queue)
-          await supabase.functions.invoke('ai-agent-orchestrator', {
-            body: { 
-              action: 'process_pending_goals',
-              filter_application_id: applicationId 
-            }
+          await supabase.from("agent_goals").insert({
+            org_id: application.org_id,
+            goal_type: "manual_intervention_required",
+            goal_description: `Handmatige opvolging nodig voor ${professionalName} - max follow-ups bereikt`,
+            priority: 50,
+            input_data: {
+              application_id: applicationId,
+              reason: 'max_followup_emails_exceeded',
+              followup_count: currentFollowupCount,
+              current_completeness: newCompletenessScore,
+            },
+            status: "pending"
           });
+        } else {
+          // Bepaal het response type op basis van situatie
+          let responseType = 'standard_reply';
+          let responsePriority = 100;
           
-          // Stap 2: Voer de actie DIRECT uit
-          await supabase.functions.invoke('ai-agent-orchestrator', {
-            body: { 
-              action: 'execute_actions'
+          if (pipelineStage === 'screening') {
+            responseType = 'document_request';
+            responsePriority = 120;
+          } else if (pipelineStage === 'interview' || interviewStatus === 'scheduled') {
+            responseType = 'interview_acknowledgment';
+            responsePriority = 80;
+          } else if (newCompletenessScore >= 80) {
+            responseType = 'ready_for_interview';
+            responsePriority = 150;
+          } else if (finalRemainingMissing.length > 0 || Object.keys(rejectionContext).length > 0) {
+            responseType = 'followup_with_context';
+            responsePriority = 130;
+          }
+
+          console.log(`🤖 Creating unified agent goal: send_reply_response (type: ${responseType})`);
+
+          // Maak agent goal met ALLE context voor slimme AI response
+          const { error: goalError } = await supabase
+            .from("agent_goals")
+            .insert({
+              org_id: application.org_id,
+              goal_type: "send_reply_response",
+              goal_description: `Reageer slim op reply van ${professionalName} (${responseType})`,
+              priority: responsePriority,
+              input_data: {
+                application_id: applicationId,
+                candidate_email: from,
+                candidate_name: professionalName,
+                // Volledige context voor AI-gestuurde response
+                response_type: responseType,
+                newly_extracted_data: analysis.new_data || {},
+                rejection_context: Object.keys(rejectionContext).length > 0 ? rejectionContext : undefined,
+                accepted_data: Object.keys(analysis.new_data || {}).filter(k => !rejectionContext[k]),
+                remaining_missing_info: finalRemainingMissing,
+                current_completeness: newCompletenessScore,
+                pipeline_stage: pipelineStage,
+                interview_status: interviewStatus,
+                original_message_preview: emailText?.substring(0, 500),
+                subject: subject,
+                org_name: orgInfo.displayName,
+                email_config: emailConfig,
+                followup_count: currentFollowupCount + 1, // Track follow-up count
+              },
+              status: "pending"
+            });
+
+          if (goalError) {
+            console.error("Error creating reply response goal:", goalError);
+          } else {
+            console.log(`✅ Created send_reply_response goal for application ${applicationId}`);
+            
+            // Update follow-up count in extracted_data
+            await supabase
+              .from("professional_applications")
+              .update({
+                extracted_data: {
+                  ...mergedData,
+                  followup_email_count: currentFollowupCount + 1,
+                }
+              })
+              .eq("id", applicationId);
+
+            // Direct de agent triggeren (geen wachten op cron)
+            try {
+              console.log("🚀 Triggering ai-agent-orchestrator for immediate response...");
+              
+              // Stap 1: Plan de goal (voegt actie toe aan queue)
+              await supabase.functions.invoke('ai-agent-orchestrator', {
+                body: { 
+                  action: 'process_pending_goals',
+                  filter_application_id: applicationId 
+                }
+              });
+              
+              // Stap 2: Voer de actie DIRECT uit
+              await supabase.functions.invoke('ai-agent-orchestrator', {
+                body: { 
+                  action: 'execute_actions'
+                }
+              });
+              
+              console.log("✅ AI Agent triggered for immediate response");
+            } catch (orchestratorErr) {
+              console.warn("⚠️ Orchestrator trigger failed, will retry via cron:", orchestratorErr);
+              // Non-blocking: als het faalt, pakt de cron job het op
             }
-          });
-          
-          console.log("✅ AI Agent triggered for immediate response");
-        } catch (orchestratorErr) {
-          console.warn("⚠️ Orchestrator trigger failed, will retry via cron:", orchestratorErr);
-          // Non-blocking: als het faalt, pakt de cron job het op
+          }
         }
       }
     }
