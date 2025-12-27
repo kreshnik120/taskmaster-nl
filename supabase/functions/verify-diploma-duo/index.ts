@@ -16,7 +16,8 @@ type DuoVerificationStatus =
   | 'invalid' 
   | 'not_digital' 
   | 'error' 
-  | 'manual_review';
+  | 'manual_review'
+  | 'queued';
 
 interface VerificationResult {
   status: DuoVerificationStatus;
@@ -25,43 +26,154 @@ interface VerificationResult {
   verified_at?: string;
 }
 
+// Retry configuration
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [5000, 15000, 30000]; // 5s, 15s, 30s exponential backoff
+
+// Realistic User Agents for rotation
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+];
+
+/**
+ * Get a random user agent from the list
+ */
+function getRandomUserAgent(): string {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
+/**
+ * Sleep for a given number of milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 /**
  * Puppeteer script that runs on Browserless.io to verify diploma via DUO portal
- * Updated to ESM format (export default async) for Browserless v2
- * 
- * This script:
- * 1. Navigates to DUO Online Diplomacontrole portal
- * 2. Uploads the PDF diploma
- * 3. Clicks verify button
- * 4. Parses the result
+ * Enhanced with anti-bot detection measures and human-like behavior
  */
-function generatePuppeteerScript(pdfBase64: string): string {
-  // ESM format for Browserless v2 - uses export default async instead of module.exports
-  // NOTE: page.waitForTimeout() is NOT available in Browserless v2 - use setTimeout Promise instead
+function generatePuppeteerScript(pdfBase64: string, userAgent: string): string {
   return `
 export default async ({ page }) => {
   const DUO_PORTAL_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
   
-  // Helper function to replace page.waitForTimeout (not available in Browserless v2)
+  // Helper function for waiting
   const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
   
+  // Human-like random wait (adds natural variation)
+  const humanWait = async (minMs, maxMs) => {
+    const delay = Math.floor(Math.random() * (maxMs - minMs)) + minMs;
+    await wait(delay);
+  };
+  
+  // Simulate mouse movement (human-like behavior)
+  const randomMouseMove = async () => {
+    const x = Math.floor(Math.random() * 800) + 100;
+    const y = Math.floor(Math.random() * 400) + 100;
+    await page.mouse.move(x, y, { steps: 10 });
+  };
+  
   try {
-    console.log('🎓 Navigating to DUO portal...');
-    await page.goto(DUO_PORTAL_URL, { 
-      waitUntil: 'networkidle2',
-      timeout: 30000 
+    console.log('🎓 Starting DUO verification with anti-detection...');
+    
+    // Set user agent before navigation
+    await page.setUserAgent('${userAgent}');
+    
+    // Set viewport to common desktop size
+    await page.setViewport({ width: 1920, height: 1080 });
+    
+    // Set extra headers to appear more like a real browser
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'nl-NL,nl;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+      'Sec-Ch-Ua-Mobile': '?0',
+      'Sec-Ch-Ua-Platform': '"Windows"',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+      'Upgrade-Insecure-Requests': '1'
     });
     
-    // Wait for the page to fully load
-    await wait(2000);
+    // Override navigator properties to evade detection
+    await page.evaluateOnNewDocument(() => {
+      // Hide webdriver
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      
+      // Override plugins
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [
+          { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
+          { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
+          { name: 'Native Client', filename: 'internal-nacl-plugin' }
+        ]
+      });
+      
+      // Override languages
+      Object.defineProperty(navigator, 'languages', { get: () => ['nl-NL', 'nl', 'en-US', 'en'] });
+      
+      // Override permissions
+      const originalQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = (parameters) => (
+        parameters.name === 'notifications' ?
+          Promise.resolve({ state: Notification.permission }) :
+          originalQuery(parameters)
+      );
+      
+      // Add Chrome runtime
+      window.chrome = { runtime: {} };
+    });
+    
+    // Random initial mouse movement (human-like)
+    await randomMouseMove();
+    
+    console.log('🌐 Navigating to DUO portal...');
+    await page.goto(DUO_PORTAL_URL, { 
+      waitUntil: 'networkidle2',
+      timeout: 45000 
+    });
+    
+    // Human-like wait after page load
+    await humanWait(2000, 4000);
+    
+    // Random scroll to simulate reading
+    await page.evaluate(() => window.scrollBy(0, Math.floor(Math.random() * 200)));
+    await humanWait(500, 1500);
     
     // Check if we're on the right page
     const pageTitle = await page.title();
     console.log('Page title:', pageTitle);
     
+    // Check for captcha or bot detection
+    const pageContent = await page.content();
+    if (pageContent.includes('captcha') || pageContent.includes('robot') || 
+        pageContent.includes('geblokkeerd') || pageContent.includes('blocked')) {
+      console.log('⚠️ Bot detection or captcha detected');
+      return {
+        success: false,
+        status: 'manual_review',
+        message: 'DUO portal heeft bot-detectie geactiveerd - handmatige verificatie vereist',
+        bot_detected: true,
+        page_title: pageTitle
+      };
+    }
+    
     // Take screenshot for debugging
     const screenshotBefore = await page.screenshot({ encoding: 'base64' });
     console.log('Screenshot before upload (base64 length):', screenshotBefore.length);
+    
+    // Move mouse before interacting
+    await randomMouseMove();
+    await humanWait(300, 800);
     
     // Find the file upload input
     const fileInput = await page.$('input[type="file"]');
@@ -69,7 +181,7 @@ export default async ({ page }) => {
     if (!fileInput) {
       console.log('❌ File input not found, checking for alternative upload methods...');
       
-      // Try to find any upload button or drop zone (Puppeteer-compatible, no :has-text())
+      // Try to find any upload button or drop zone
       let uploadButton = await page.$('[data-testid="upload"], .upload-button');
       
       // If not found, search buttons by text content
@@ -85,14 +197,14 @@ export default async ({ page }) => {
       }
       
       if (uploadButton) {
+        await humanWait(200, 500);
         await uploadButton.click();
-        await wait(1000);
+        await humanWait(1000, 2000);
       }
       
       // Re-check for file input
       const fileInputRetry = await page.$('input[type="file"]');
       if (!fileInputRetry) {
-        // Graceful fallback - portal structure changed or not accessible
         return {
           success: false,
           status: 'manual_review',
@@ -103,14 +215,11 @@ export default async ({ page }) => {
       }
     }
     
-    // Upload PDF using base64 buffer - ESM compatible method
+    // Upload PDF using base64 buffer
     console.log('📄 Uploading PDF...');
-    const pdfBuffer = Uint8Array.from(atob('${pdfBase64}'), c => c.charCodeAt(0));
     
-    // Use page.evaluate to create a File object and trigger upload
     const actualFileInput = await page.$('input[type="file"]');
     if (actualFileInput) {
-      // Create a data transfer with the file
       await page.evaluate(async (base64Data) => {
         const input = document.querySelector('input[type="file"]');
         if (!input) return false;
@@ -137,14 +246,16 @@ export default async ({ page }) => {
       console.log('✅ File uploaded via DataTransfer');
     }
     
-    // Wait for upload to process
-    await wait(3000);
+    // Human-like wait after upload
+    await humanWait(3000, 5000);
     
-    // Look for and click the "Controleer" (Verify) button (Puppeteer-compatible, no :has-text())
+    // Move mouse around (human behavior)
+    await randomMouseMove();
+    
+    // Look for and click the "Controleer" (Verify) button
     console.log('🔍 Looking for verify button...');
     let verifyButton = await page.$('button[type="submit"], .btn-primary');
     
-    // If not found, search buttons by text content
     if (!verifyButton) {
       const buttons = await page.$$('button');
       for (const btn of buttons) {
@@ -158,10 +269,11 @@ export default async ({ page }) => {
     
     if (verifyButton) {
       console.log('✅ Found verify button, clicking...');
+      await humanWait(300, 700);
       await verifyButton.click();
       
-      // Wait for result page
-      await wait(5000);
+      // Wait for result page with human-like timing
+      await humanWait(5000, 8000);
     } else {
       console.log('⚠️ Verify button not found, checking if auto-verification...');
     }
@@ -223,16 +335,155 @@ export default async ({ page }) => {
     
   } catch (error) {
     console.error('❌ Puppeteer error:', error.message);
-    // Graceful fallback to manual_review instead of error
     return {
       success: false,
       status: 'manual_review',
       message: 'DUO verificatie niet automatisch mogelijk - handmatige verificatie vereist: ' + error.message,
-      error: error.toString()
+      error: error.toString(),
+      retryable: true
     };
   }
 };
 `;
+}
+
+/**
+ * Check rate limiting - prevent too many requests to DUO
+ */
+async function checkRateLimit(supabase: ReturnType<typeof createAdminClient>): Promise<{ allowed: boolean; queuePosition?: number }> {
+  const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
+  
+  const { data: recentAttempts, error } = await supabase
+    .from('professional_applications')
+    .select('id')
+    .gte('duo_verified_at', oneMinuteAgo)
+    .limit(10);
+  
+  if (error) {
+    console.warn('Rate limit check failed:', error);
+    return { allowed: true }; // Allow on error
+  }
+  
+  // Allow max 3 verifications per minute
+  if (recentAttempts && recentAttempts.length >= 3) {
+    return { allowed: false, queuePosition: recentAttempts.length - 2 };
+  }
+  
+  return { allowed: true };
+}
+
+/**
+ * Call Browserless.io with stealth mode and retry logic
+ */
+async function callBrowserlessWithRetry(
+  browserlessApiKey: string,
+  puppeteerCode: string,
+  applicationId: string
+): Promise<{ success: boolean; result: unknown; attempt: number }> {
+  
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    console.log(`🔄 Browserless attempt ${attempt + 1}/${MAX_RETRIES}...`);
+    
+    try {
+      // Build URL with stealth options
+      const queryParams = new URLSearchParams({
+        token: browserlessApiKey,
+        stealth: 'true',              // Enable stealth mode
+        blockAds: 'true',             // Block ads and trackers
+        timeout: '60000'              // 60 second timeout
+      });
+      
+      // Note: Residential proxy requires Browserless paid plan
+      // If you have it, add: proxy: 'residential', proxyCountry: 'nl'
+      
+      const browserlessUrl = `https://production-sfo.browserless.io/function?${queryParams.toString()}`;
+      
+      const response = await fetch(browserlessUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/javascript'
+        },
+        body: puppeteerCode
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`❌ Browserless API error (${response.status}):`, errorText.substring(0, 300));
+        
+        // Check if retryable
+        if (response.status >= 500 || response.status === 429) {
+          if (attempt < MAX_RETRIES - 1) {
+            console.log(`⏳ Waiting ${RETRY_DELAYS[attempt]}ms before retry...`);
+            await sleep(RETRY_DELAYS[attempt]);
+            continue;
+          }
+        }
+        
+        return {
+          success: false,
+          result: {
+            status: 'manual_review',
+            message: 'DUO verificatie service tijdelijk niet beschikbaar - handmatige verificatie vereist',
+            status_code: response.status,
+            details: errorText.substring(0, 500)
+          },
+          attempt: attempt + 1
+        };
+      }
+      
+      const result = await response.json();
+      console.log(`✅ Browserless response (attempt ${attempt + 1}):`, JSON.stringify(result).substring(0, 300));
+      
+      // Check if result indicates retryable error
+      if (result.retryable && result.status === 'manual_review' && attempt < MAX_RETRIES - 1) {
+        console.log(`⏳ Retryable error, waiting ${RETRY_DELAYS[attempt]}ms...`);
+        await sleep(RETRY_DELAYS[attempt]);
+        continue;
+      }
+      
+      // Check for bot detection - might succeed on retry with different timing
+      if (result.bot_detected && attempt < MAX_RETRIES - 1) {
+        console.log(`⏳ Bot detected, waiting ${RETRY_DELAYS[attempt]}ms before retry...`);
+        await sleep(RETRY_DELAYS[attempt]);
+        continue;
+      }
+      
+      return {
+        success: result.success || result.status === 'verified',
+        result,
+        attempt: attempt + 1
+      };
+      
+    } catch (fetchError) {
+      console.error(`❌ Browserless fetch error (attempt ${attempt + 1}):`, fetchError);
+      
+      if (attempt < MAX_RETRIES - 1) {
+        console.log(`⏳ Network error, waiting ${RETRY_DELAYS[attempt]}ms before retry...`);
+        await sleep(RETRY_DELAYS[attempt]);
+        continue;
+      }
+      
+      return {
+        success: false,
+        result: {
+          status: 'manual_review',
+          message: 'DUO verificatie service niet bereikbaar na meerdere pogingen - handmatige verificatie vereist',
+          error: fetchError instanceof Error ? fetchError.message : 'Network error'
+        },
+        attempt: attempt + 1
+      };
+    }
+  }
+  
+  // Should not reach here, but return fallback
+  return {
+    success: false,
+    result: {
+      status: 'manual_review',
+      message: 'Maximaal aantal pogingen bereikt - handmatige verificatie vereist'
+    },
+    attempt: MAX_RETRIES
+  };
 }
 
 Deno.serve(async (req) => {
@@ -285,6 +536,32 @@ Deno.serve(async (req) => {
         return errorResponse("diploma_file_path is required for verify action", 400);
       }
 
+      // Check rate limiting
+      const rateLimitCheck = await checkRateLimit(supabase);
+      if (!rateLimitCheck.allowed) {
+        console.log(`⏳ Rate limited - queue position: ${rateLimitCheck.queuePosition}`);
+        
+        await supabase
+          .from('professional_applications')
+          .update({ 
+            duo_verification_status: 'queued',
+            duo_verification_result: { 
+              message: 'Verificatie in wachtrij om overbelasting te voorkomen',
+              queue_position: rateLimitCheck.queuePosition,
+              queued_at: new Date().toISOString()
+            }
+          })
+          .eq('id', application_id);
+        
+        return jsonResponse({
+          success: false,
+          application_id,
+          verification_status: 'queued',
+          message: 'Verificatie in wachtrij - probeer over 1 minuut opnieuw',
+          queue_position: rateLimitCheck.queuePosition
+        });
+      }
+
       // Update status to pending
       await supabase
         .from('professional_applications')
@@ -304,7 +581,6 @@ Deno.serve(async (req) => {
       if (downloadError || !pdfData) {
         console.error("❌ Failed to download diploma PDF:", downloadError);
         
-        // Graceful fallback to manual_review instead of error
         await supabase
           .from('professional_applications')
           .update({ 
@@ -334,85 +610,37 @@ Deno.serve(async (req) => {
       const pdfBase64 = btoa(binaryString);
       console.log(`✅ PDF converted to base64 (${pdfBase64.length} chars)`);
 
-      // Generate Puppeteer script (ESM format)
-      const puppeteerCode = generatePuppeteerScript(pdfBase64);
+      // Generate Puppeteer script with random user agent
+      const userAgent = getRandomUserAgent();
+      const puppeteerCode = generatePuppeteerScript(pdfBase64, userAgent);
       
-      console.log("🌐 Calling Browserless.io Function API (ESM format)...");
+      console.log("🌐 Calling Browserless.io with stealth mode and retry logic...");
+      console.log(`📱 Using User-Agent: ${userAgent.substring(0, 50)}...`);
       
-      // Call Browserless.io Function API with ESM format
-      // Updated endpoint and content-type for Browserless v2
-      let browserlessResponse;
-      try {
-        browserlessResponse = await fetch(
-          `https://production-sfo.browserless.io/function?token=${browserlessApiKey}`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/javascript'  // ESM format requires this
-            },
-            body: puppeteerCode  // Direct script, no JSON wrapper for ESM
-          }
-        );
-      } catch (fetchError) {
-        console.error("❌ Browserless fetch error:", fetchError);
-        
-        // Graceful fallback to manual_review
-        await supabase
-          .from('professional_applications')
-          .update({ 
-            duo_verification_status: 'manual_review',
-            duo_verification_result: { 
-              message: 'DUO verificatie service niet bereikbaar - handmatige verificatie vereist',
-              error: fetchError instanceof Error ? fetchError.message : 'Network error'
-            }
-          })
-          .eq('id', application_id);
-        
-        return jsonResponse({
-          success: false,
-          application_id,
-          verification_status: 'manual_review',
-          message: 'DUO verificatie service niet bereikbaar - handmatige verificatie vereist'
-        });
-      }
+      // Call Browserless with retry logic
+      const { success, result, attempt } = await callBrowserlessWithRetry(
+        browserlessApiKey,
+        puppeteerCode,
+        application_id
+      );
+      
+      console.log(`📊 Browserless completed after ${attempt} attempt(s), success: ${success}`);
 
-      if (!browserlessResponse.ok) {
-        const errorText = await browserlessResponse.text();
-        console.error(`❌ Browserless API error (${browserlessResponse.status}):`, errorText);
-        
-        // Graceful fallback to manual_review instead of error
-        await supabase
-          .from('professional_applications')
-          .update({ 
-            duo_verification_status: 'manual_review',
-            duo_verification_result: { 
-              message: 'DUO verificatie niet automatisch mogelijk - handmatige verificatie vereist',
-              status_code: browserlessResponse.status,
-              details: errorText.substring(0, 500)
-            }
-          })
-          .eq('id', application_id);
-        
-        return jsonResponse({
-          success: false,
-          application_id,
-          verification_status: 'manual_review',
-          message: 'DUO verificatie niet automatisch mogelijk - handmatige verificatie vereist'
-        });
-      }
-
-      const result = await browserlessResponse.json();
-      console.log("✅ Browserless response received:", JSON.stringify(result).substring(0, 500));
-
-      // Map Browserless result to our status - default to manual_review instead of error
-      const verificationStatus: DuoVerificationStatus = result.status || 'manual_review';
+      // Extract result data
+      const resultData = result as Record<string, unknown>;
+      
+      // Map result to our status
+      const verificationStatus: DuoVerificationStatus = (resultData.status as DuoVerificationStatus) || 'manual_review';
       const verificationResult: VerificationResult = {
         status: verificationStatus,
-        message: result.message || 'Verificatie voltooid',
+        message: (resultData.message as string) || 'Verificatie voltooid',
         details: {
-          page_title: result.page_title,
-          body_preview: result.body_text_preview,
-          browserless_success: result.success
+          page_title: resultData.page_title,
+          body_preview: resultData.body_text_preview,
+          browserless_success: success,
+          attempts: attempt,
+          user_agent_used: userAgent.substring(0, 50),
+          bot_detected: resultData.bot_detected || false
         },
         verified_at: new Date().toISOString()
       };
@@ -434,12 +662,14 @@ Deno.serve(async (req) => {
       // Log to AI learning for pattern detection
       try {
         await supabase.from('ai_learning_events').insert({
-          org_id: '00000000-0000-0000-0000-000000000001', // Default org
+          org_id: '00000000-0000-0000-0000-000000000001',
           event_type: 'duo_diploma_verification',
           context: {
             application_id,
             verification_status: verificationStatus,
-            success: result.success
+            success,
+            attempts: attempt,
+            bot_detected: resultData.bot_detected || false
           },
           outcome: verificationStatus === 'verified' ? 'success' : 'needs_review'
         });
@@ -447,14 +677,15 @@ Deno.serve(async (req) => {
         console.warn("Could not log learning event:", logError);
       }
 
-      console.log(`✅ DUO Verification complete: ${verificationStatus}`);
+      console.log(`✅ DUO Verification complete: ${verificationStatus} (${attempt} attempts)`);
 
       return jsonResponse({
         success: verificationStatus === 'verified',
         application_id,
         verification_status: verificationStatus,
         message: verificationResult.message,
-        verified_at: verificationResult.verified_at
+        verified_at: verificationResult.verified_at,
+        attempts: attempt
       });
     }
 
@@ -463,7 +694,6 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("❌ Error in verify-diploma-duo:", error);
     
-    // Even for unexpected errors, try to gracefully fallback
     return jsonResponse({
       success: false,
       verification_status: 'manual_review',
