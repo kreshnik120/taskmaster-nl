@@ -37,9 +37,13 @@ interface VerificationResult {
  */
 function generatePuppeteerScript(pdfBase64: string): string {
   // ESM format for Browserless v2 - uses export default async instead of module.exports
+  // NOTE: page.waitForTimeout() is NOT available in Browserless v2 - use setTimeout Promise instead
   return `
 export default async ({ page }) => {
   const DUO_PORTAL_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
+  
+  // Helper function to replace page.waitForTimeout (not available in Browserless v2)
+  const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
   
   try {
     console.log('🎓 Navigating to DUO portal...');
@@ -49,7 +53,7 @@ export default async ({ page }) => {
     });
     
     // Wait for the page to fully load
-    await page.waitForTimeout(2000);
+    await wait(2000);
     
     // Check if we're on the right page
     const pageTitle = await page.title();
@@ -69,7 +73,7 @@ export default async ({ page }) => {
       const uploadButton = await page.$('[data-testid="upload"], .upload-button, button:has-text("Upload"), button:has-text("Bestand kiezen")');
       if (uploadButton) {
         await uploadButton.click();
-        await page.waitForTimeout(1000);
+        await wait(1000);
       }
       
       // Re-check for file input
@@ -121,7 +125,7 @@ export default async ({ page }) => {
     }
     
     // Wait for upload to process
-    await page.waitForTimeout(3000);
+    await wait(3000);
     
     // Look for and click the "Controleer" (Verify) button
     console.log('🔍 Looking for verify button...');
@@ -132,7 +136,7 @@ export default async ({ page }) => {
       await verifyButton.click();
       
       // Wait for result page
-      await page.waitForTimeout(5000);
+      await wait(5000);
     } else {
       console.log('⚠️ Verify button not found, checking if auto-verification...');
     }
