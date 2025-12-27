@@ -91,6 +91,9 @@ export function DocumentUploadSection({
   const [downloadingVog, setDownloadingVog] = useState(false);
   const [downloadingDiploma, setDownloadingDiploma] = useState(false);
   const [downloadingCV, setDownloadingCV] = useState(false);
+  const [previewingVog, setPreviewingVog] = useState(false);
+  const [previewingDiploma, setPreviewingDiploma] = useState(false);
+  const [previewingCV, setPreviewingCV] = useState(false);
   const [verifyingDiploma, setVerifyingDiploma] = useState(false);
   const [retryingDuoVerification, setRetryingDuoVerification] = useState(false);
   
@@ -318,6 +321,49 @@ export function DocumentUploadSection({
       toast.error('Fout bij downloaden');
     } finally {
       setDownloading(false);
+    }
+  };
+
+  // Preview handler - opens document in new tab
+  const handlePreview = async (filePath: string, docType: DocumentType) => {
+    const setPreviewing = docType === 'vog' ? setPreviewingVog : docType === 'diploma' ? setPreviewingDiploma : setPreviewingCV;
+    setPreviewing(true);
+
+    try {
+      const bucket = docType === 'cv' ? 'application-cvs' : 'application-documents';
+      
+      // Download as blob to bypass browser blocking
+      const { data: blobData, error: downloadError } = await supabase.storage
+        .from(bucket)
+        .download(filePath);
+
+      if (downloadError) throw downloadError;
+
+      // Determine MIME type for correct display
+      const fileName = filePath.toLowerCase();
+      let mimeType = 'application/pdf';
+      if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) {
+        mimeType = 'image/jpeg';
+      } else if (fileName.endsWith('.png')) {
+        mimeType = 'image/png';
+      }
+
+      // Create blob URL and open in new tab
+      const blob = new Blob([blobData], { type: mimeType });
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const newWindow = window.open(blobUrl, '_blank');
+      
+      // Revoke URL after delay to free memory
+      if (newWindow) {
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+      }
+      
+    } catch (error) {
+      console.error('Preview error:', error);
+      toast.error('Fout bij openen document');
+    } finally {
+      setPreviewing(false);
     }
   };
 
@@ -615,6 +661,23 @@ export function DocumentUploadSection({
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => handlePreview(cvFilePath, 'cv')}
+                        disabled={previewingCV}
+                      >
+                        {previewingCV ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Bekijken</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleDownload(cvFilePath, 'cv')}
                         disabled={downloadingCV}
                       >
@@ -625,7 +688,7 @@ export function DocumentUploadSection({
                         )}
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Bekijken</TooltipContent>
+                    <TooltipContent>Downloaden</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -730,6 +793,23 @@ export function DocumentUploadSection({
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => handlePreview(vogFilePath, 'vog')}
+                        disabled={previewingVog}
+                      >
+                        {previewingVog ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Bekijken</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleDownload(vogFilePath, 'vog')}
                         disabled={downloadingVog}
                       >
@@ -740,7 +820,7 @@ export function DocumentUploadSection({
                         )}
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Bekijken</TooltipContent>
+                    <TooltipContent>Downloaden</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -987,6 +1067,23 @@ export function DocumentUploadSection({
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => handlePreview(diplomaFilePath, 'diploma')}
+                        disabled={previewingDiploma}
+                      >
+                        {previewingDiploma ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Bekijken</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleDownload(diplomaFilePath, 'diploma')}
                         disabled={downloadingDiploma}
                       >
@@ -997,7 +1094,7 @@ export function DocumentUploadSection({
                         )}
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Bekijken</TooltipContent>
+                    <TooltipContent>Downloaden</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>

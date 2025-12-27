@@ -23,7 +23,8 @@ import {
   FileWarning,
   Heart,
   Car,
-  Plus
+  Plus,
+  Eye
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -134,6 +135,7 @@ export function ZZPDocumentUploadSection({
   const [isOpen, setIsOpen] = useState(true);
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
   const [downloadingDoc, setDownloadingDoc] = useState<string | null>(null);
+  const [previewingDoc, setPreviewingDoc] = useState<string | null>(null);
   const [savingDetails, setSavingDetails] = useState(false);
   
   // Bedrijfsgegevens state
@@ -296,17 +298,73 @@ export function ZZPDocumentUploadSection({
     setDownloadingDoc(docType);
 
     try {
-      const { data, error } = await supabase.storage
+      // Use blob download to bypass browser blocking
+      const { data: blobData, error: downloadError } = await supabase.storage
         .from('zzp-documents')
-        .createSignedUrl(filePath, 60);
+        .download(filePath);
 
-      if (error) throw error;
-      window.open(data.signedUrl, '_blank');
+      if (downloadError) throw downloadError;
+
+      // Create blob URL and trigger download
+      const url = URL.createObjectURL(blobData);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      const filename = filePath.split('/').pop() || 'document';
+      a.download = filename;
+      
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success('Document gedownload');
     } catch (error) {
       console.error('Download error:', error);
       toast.error('Fout bij downloaden');
     } finally {
       setDownloadingDoc(null);
+    }
+  };
+
+  const handlePreview = async (filePath: string, docType: string) => {
+    setPreviewingDoc(docType);
+
+    try {
+      // Download as blob to bypass browser blocking
+      const { data: blobData, error: downloadError } = await supabase.storage
+        .from('zzp-documents')
+        .download(filePath);
+
+      if (downloadError) throw downloadError;
+
+      // Determine MIME type for correct display
+      const fileName = filePath.toLowerCase();
+      let mimeType = 'application/pdf';
+      if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) {
+        mimeType = 'image/jpeg';
+      } else if (fileName.endsWith('.png')) {
+        mimeType = 'image/png';
+      } else if (fileName.endsWith('.docx')) {
+        mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      }
+
+      // Create blob URL and open in new tab
+      const blob = new Blob([blobData], { type: mimeType });
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const newWindow = window.open(blobUrl, '_blank');
+      
+      // Revoke URL after delay to free memory
+      if (newWindow) {
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+      }
+      
+    } catch (error) {
+      console.error('Preview error:', error);
+      toast.error('Fout bij openen document');
+    } finally {
+      setPreviewingDoc(null);
     }
   };
 
@@ -511,6 +569,7 @@ export function ZZPDocumentUploadSection({
                     const filePath = getDocumentPath(doc.type);
                     const isUploading = uploadingDoc === doc.type;
                     const isDownloading = downloadingDoc === doc.type;
+                    const isPreviewing = previewingDoc === doc.type;
 
                     return (
                       <div 
@@ -536,6 +595,23 @@ export function ZZPDocumentUploadSection({
                                   <Button
                                     variant="ghost"
                                     size="sm"
+                                    onClick={() => handlePreview(filePath, doc.type)}
+                                    disabled={isPreviewing}
+                                  >
+                                    {isPreviewing ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Eye className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Bekijken</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
                                     onClick={() => handleDownload(filePath, doc.type)}
                                     disabled={isDownloading}
                                   >
@@ -546,7 +622,7 @@ export function ZZPDocumentUploadSection({
                                     )}
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>Bekijken</TooltipContent>
+                                <TooltipContent>Downloaden</TooltipContent>
                               </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -613,6 +689,7 @@ export function ZZPDocumentUploadSection({
                     const filePath = getDocumentPath(doc.type);
                     const isUploading = uploadingDoc === doc.type;
                     const isDownloading = downloadingDoc === doc.type;
+                    const isPreviewing = previewingDoc === doc.type;
 
                     return (
                       <div 
@@ -638,6 +715,23 @@ export function ZZPDocumentUploadSection({
                                   <Button
                                     variant="ghost"
                                     size="sm"
+                                    onClick={() => handlePreview(filePath, doc.type)}
+                                    disabled={isPreviewing}
+                                  >
+                                    {isPreviewing ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Eye className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Bekijken</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
                                     onClick={() => handleDownload(filePath, doc.type)}
                                     disabled={isDownloading}
                                   >
@@ -648,7 +742,7 @@ export function ZZPDocumentUploadSection({
                                     )}
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>Bekijken</TooltipContent>
+                                <TooltipContent>Downloaden</TooltipContent>
                               </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -751,6 +845,18 @@ export function ZZPDocumentUploadSection({
                               </span>
                             </div>
                             <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handlePreview(path, `overig-preview-${index}`)}
+                                disabled={previewingDoc === `overig-preview-${index}`}
+                              >
+                                {previewingDoc === `overig-preview-${index}` ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
