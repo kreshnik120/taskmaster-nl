@@ -210,9 +210,11 @@ export function StageTransitionButton({
                   <Badge variant={diplomaStatus.includes('verified') ? 'default' : 'secondary'}>
                     {diplomaStatus === 'missing' && '❌ Ontbreekt'}
                     {diplomaStatus === 'received' && '📥 Ontvangen'}
+                    {diplomaStatus === 'verified_duo' && '✅ DUO Geverifieerd'}
                     {diplomaStatus === 'verified_emrex' && '✅ EMREX'}
                     {diplomaStatus === 'verified_manual' && '✅ Handmatig'}
                     {diplomaStatus === 'manual_review' && '👁️ Controle'}
+                    {diplomaStatus === 'duo_invalid' && '⚠️ DUO Ongeldig'}
                   </Badge>
                 </div>
               </div>

@@ -43,6 +43,7 @@ import { ZZPDocumentUploadSection } from "@/components/recruitment/ZZPDocumentUp
 import { StageTransitionButton } from "@/components/recruitment/StageTransitionButton";
 import { WerkvormDetectionBanner } from "@/components/recruitment/WerkvormDetectionBanner";
 import { DiplomaVerificationBanner } from "@/components/recruitment/DiplomaVerificationBanner";
+import { DiplomaLevelMismatchAlert } from "@/components/recruitment/DiplomaLevelMismatchAlert";
 
 interface Application {
   id: string;
@@ -1002,6 +1003,15 @@ export function ApplicationDetailModal({
                     candidateName={resolveApplicationName(application)}
                     orgId={application.org_id || '550e8400-e29b-41d4-a716-446655440000'}
                     onStatusUpdated={onApplicationUpdated}
+                  />
+
+                  {/* Diploma Level Mismatch Alert */}
+                  <DiplomaLevelMismatchAlert
+                    applicationId={application.id}
+                    mismatchData={application.extracted_data?.diploma_level_mismatch}
+                    candidateName={candidateName}
+                    candidateEmail={application.email_from}
+                    onResolved={onApplicationUpdated}
                   />
 
                   {/* Basis Document Upload Section */}
