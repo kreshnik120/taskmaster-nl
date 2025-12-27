@@ -31,6 +31,9 @@ interface DocumentVerificationStatusProps {
   diplomaStatus: DiplomaStatus;
   diplomaSource?: string | null;
   vogFilePath?: string | null;
+  diplomaFilePath?: string | null;
+  duoVerificationResult?: Record<string, unknown> | null;
+  duoVerifiedAt?: string | null;
   onStatusUpdate?: () => void;
 }
 
@@ -152,9 +155,13 @@ export function DocumentVerificationStatus({
   diplomaStatus,
   diplomaSource,
   vogFilePath,
+  diplomaFilePath,
+  duoVerificationResult,
+  duoVerifiedAt,
   onStatusUpdate
 }: DocumentVerificationStatusProps) {
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isDuoVerifying, setIsDuoVerifying] = useState(false);
   const [isManualVerifying, setIsManualVerifying] = useState<'vog' | 'diploma' | null>(null);
 
   const vogConfig = VOG_STATUS_CONFIG[vogStatus] || VOG_STATUS_CONFIG.missing;
@@ -197,6 +204,46 @@ export function DocumentVerificationStatus({
       toast.error('Fout bij GAAV verificatie');
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+  // Trigger DUO verification
+  const handleDuoVerification = async () => {
+    if (!diplomaFilePath) {
+      toast.error('Geen diploma bestand beschikbaar');
+      return;
+    }
+
+    setIsDuoVerifying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-diploma-duo', {
+        body: {
+          action: 'verify',
+          application_id: applicationId
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        const statusMsg = data.status === 'verified_duo' 
+          ? 'Diploma geverifieerd via DUO!' 
+          : data.status === 'duo_invalid'
+          ? 'Diploma niet gevonden in DUO register'
+          : data.status === 'duo_not_digital'
+          ? 'Diploma niet digitaal geregistreerd'
+          : `DUO status: ${data.status}`;
+        
+        toast.success(statusMsg);
+        onStatusUpdate?.();
+      } else {
+        toast.error(data?.error || 'DUO verificatie mislukt');
+      }
+    } catch (error) {
+      console.error('DUO verification error:', error);
+      toast.error('Fout bij DUO verificatie');
+    } finally {
+      setIsDuoVerifying(false);
     }
   };
 
@@ -368,8 +415,46 @@ export function DocumentVerificationStatus({
           </div>
 
           <div className="flex items-center gap-1">
+            {/* DUO Verify Button */}
+            {diplomaFilePath && !['verified_duo', 'verified_emrex', 'verified_manual'].includes(diplomaStatus) && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDuoVerification}
+                    disabled={isDuoVerifying}
+                  >
+                    {isDuoVerifying ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileSearch className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>DUO Verificatie uitvoeren</TooltipContent>
+              </Tooltip>
+            )}
+
+            {/* Re-verify button for DUO verified or error */}
+            {diplomaFilePath && (diplomaStatus === 'verified_duo' || diplomaStatus === 'duo_error') && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDuoVerification}
+                    disabled={isDuoVerifying}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isDuoVerifying ? 'animate-spin' : ''}`} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Opnieuw DUO verifiëren</TooltipContent>
+              </Tooltip>
+            )}
+
             {/* Manual Verify Buttons for Diploma */}
-            {diplomaStatus !== 'verified_emrex' && diplomaStatus !== 'verified_manual' && diplomaStatus !== 'missing' && (
+            {diplomaStatus !== 'verified_emrex' && diplomaStatus !== 'verified_manual' && diplomaStatus !== 'verified_duo' && diplomaStatus !== 'missing' && (
               <>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -422,6 +507,38 @@ export function DocumentVerificationStatus({
               {vogVerificationResponse.verified_at && (
                 <p className="text-muted-foreground">
                   Geverifieerd: {new Date(String(vogVerificationResponse.verified_at)).toLocaleString('nl-NL')}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* DUO Verification Details (if available) */}
+        {duoVerificationResult && Object.keys(duoVerificationResult).length > 0 && (
+          <div className="p-2 rounded border bg-muted/30">
+            <p className="text-xs font-medium text-muted-foreground mb-1">DUO Verificatie Details</p>
+            <div className="text-xs space-y-0.5">
+              {duoVerificationResult.diploma_name && (
+                <p><span className="font-medium">Diploma:</span> {String(duoVerificationResult.diploma_name)}</p>
+              )}
+              {duoVerificationResult.institution && (
+                <p><span className="font-medium">Instelling:</span> {String(duoVerificationResult.institution)}</p>
+              )}
+              {duoVerificationResult.graduation_date && (
+                <p><span className="font-medium">Afstudeerdatum:</span> {String(duoVerificationResult.graduation_date)}</p>
+              )}
+              {duoVerificationResult.crebo_code && (
+                <p><span className="font-medium">CREBO:</span> {String(duoVerificationResult.crebo_code)}</p>
+              )}
+              {duoVerificationResult.level && (
+                <p><span className="font-medium">Niveau:</span> {String(duoVerificationResult.level)}</p>
+              )}
+              {duoVerificationResult.message && (
+                <p className="text-muted-foreground">{String(duoVerificationResult.message)}</p>
+              )}
+              {duoVerifiedAt && (
+                <p className="text-muted-foreground">
+                  Geverifieerd: {new Date(duoVerifiedAt).toLocaleString('nl-NL')}
                 </p>
               )}
             </div>
