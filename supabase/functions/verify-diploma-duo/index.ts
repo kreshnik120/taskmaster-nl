@@ -178,26 +178,34 @@ export default async ({ page }) => {
     let message = 'Kon verificatie resultaat niet automatisch bepalen - handmatige verificatie vereist';
     
     // Check for success indicators (Dutch text)
-    if (bodyText.includes('geldig') || bodyText.includes('Geldig') || 
-        bodyText.includes('geregistreerd') || bodyText.includes('bekend')) {
+    const bodyTextLower = bodyText.toLowerCase();
+    if (bodyTextLower.includes('geldig') || 
+        bodyTextLower.includes('geregistreerd') || 
+        bodyTextLower.includes('bekend') ||
+        bodyTextLower.includes('echtheidskenmerk is aanwezig') ||
+        bodyTextLower.includes('document origineel is en uitgegeven door duo') ||
+        bodyTextLower.includes('document is door duo gecontroleerd') ||
+        bodyTextLower.includes('controle geslaagd') ||
+        bodyTextLower.includes('authentiek')) {
       status = 'verified';
       message = 'Diploma is geverifieerd en geldig volgens DUO register';
     }
     // Check for invalid indicators
-    else if (bodyText.includes('ongeldig') || bodyText.includes('Ongeldig') ||
-             bodyText.includes('niet gevonden') || bodyText.includes('onbekend')) {
+    else if (bodyTextLower.includes('ongeldig') ||
+             bodyTextLower.includes('niet gevonden') || bodyTextLower.includes('onbekend') ||
+             bodyTextLower.includes('niet authentiek') || bodyTextLower.includes('vervalst')) {
       status = 'invalid';
       message = 'Diploma is niet gevonden in DUO register of is ongeldig';
     }
     // Check for "not digital" indicators (older diplomas not in system)
-    else if (bodyText.includes('niet digitaal') || bodyText.includes('geen digitale') ||
-             bodyText.includes('handmatig') || bodyText.includes('1996')) {
+    else if (bodyTextLower.includes('niet digitaal') || bodyTextLower.includes('geen digitale') ||
+             bodyTextLower.includes('1996')) {
       status = 'not_digital';
       message = 'Diploma is van voor 1996 of niet digitaal geregistreerd - handmatige verificatie vereist';
     }
     // Check for error indicators
-    else if (bodyText.includes('fout') || bodyText.includes('error') || 
-             bodyText.includes('mislukt') || bodyText.includes('probeer opnieuw')) {
+    else if (bodyTextLower.includes('fout') || bodyTextLower.includes('error') || 
+             bodyTextLower.includes('mislukt') || bodyTextLower.includes('probeer opnieuw')) {
       status = 'manual_review';
       message = 'DUO portal gaf een foutmelding - handmatige verificatie vereist';
     }
