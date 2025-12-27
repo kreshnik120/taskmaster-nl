@@ -2261,6 +2261,75 @@ export type Database = {
           },
         ]
       }
+      intent_classification_audit: {
+        Row: {
+          application_id: string | null
+          bypass_cooldown: boolean | null
+          content_length: number | null
+          created_at: string
+          detected_intents: Json | null
+          email_id: string | null
+          frustration_indicators: Json | null
+          id: string
+          is_urgent: boolean | null
+          org_id: string | null
+          primary_confidence: number | null
+          primary_intent: string | null
+          processing_time_ms: number | null
+          stripped_content: string | null
+          urgency_score: number | null
+        }
+        Insert: {
+          application_id?: string | null
+          bypass_cooldown?: boolean | null
+          content_length?: number | null
+          created_at?: string
+          detected_intents?: Json | null
+          email_id?: string | null
+          frustration_indicators?: Json | null
+          id?: string
+          is_urgent?: boolean | null
+          org_id?: string | null
+          primary_confidence?: number | null
+          primary_intent?: string | null
+          processing_time_ms?: number | null
+          stripped_content?: string | null
+          urgency_score?: number | null
+        }
+        Update: {
+          application_id?: string | null
+          bypass_cooldown?: boolean | null
+          content_length?: number | null
+          created_at?: string
+          detected_intents?: Json | null
+          email_id?: string | null
+          frustration_indicators?: Json | null
+          id?: string
+          is_urgent?: boolean | null
+          org_id?: string | null
+          primary_confidence?: number | null
+          primary_intent?: string | null
+          processing_time_ms?: number | null
+          stripped_content?: string | null
+          urgency_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intent_classification_audit_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intent_classification_audit_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       interview_appointments: {
         Row: {
           application_id: string
@@ -2762,6 +2831,60 @@ export type Database = {
         }
         Relationships: []
       }
+      processed_emails: {
+        Row: {
+          application_id: string | null
+          completed_at: string | null
+          email_id: string | null
+          error_message: string | null
+          id: string
+          message_id: string | null
+          org_id: string | null
+          processed_at: string
+          processing_status: string
+          result_summary: Json | null
+        }
+        Insert: {
+          application_id?: string | null
+          completed_at?: string | null
+          email_id?: string | null
+          error_message?: string | null
+          id?: string
+          message_id?: string | null
+          org_id?: string | null
+          processed_at?: string
+          processing_status?: string
+          result_summary?: Json | null
+        }
+        Update: {
+          application_id?: string | null
+          completed_at?: string | null
+          email_id?: string | null
+          error_message?: string | null
+          id?: string
+          message_id?: string | null
+          org_id?: string | null
+          processed_at?: string
+          processing_status?: string
+          result_summary?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processed_emails_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "processed_emails_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       processing_jobs: {
         Row: {
           chunk_index: number | null
@@ -2841,6 +2964,7 @@ export type Database = {
       }
       professional_applications: {
         Row: {
+          ai_response_count: number | null
           bedrijfsnaam: string | null
           beroepsaansprakelijkheid_path: string | null
           bhv_certificaat_path: string | null
@@ -2868,6 +2992,7 @@ export type Database = {
           is_test_data: boolean | null
           klachtenportaal_wkkgz_path: string | null
           kvk_uittreksel_path: string | null
+          last_ai_response_at: string | null
           missing_info: Json | null
           org_id: string | null
           overige_certificeringen_paths: Json | null
@@ -2886,6 +3011,7 @@ export type Database = {
           vog_verification_response: Json | null
         }
         Insert: {
+          ai_response_count?: number | null
           bedrijfsnaam?: string | null
           beroepsaansprakelijkheid_path?: string | null
           bhv_certificaat_path?: string | null
@@ -2913,6 +3039,7 @@ export type Database = {
           is_test_data?: boolean | null
           klachtenportaal_wkkgz_path?: string | null
           kvk_uittreksel_path?: string | null
+          last_ai_response_at?: string | null
           missing_info?: Json | null
           org_id?: string | null
           overige_certificeringen_paths?: Json | null
@@ -2931,6 +3058,7 @@ export type Database = {
           vog_verification_response?: Json | null
         }
         Update: {
+          ai_response_count?: number | null
           bedrijfsnaam?: string | null
           beroepsaansprakelijkheid_path?: string | null
           bhv_certificaat_path?: string | null
@@ -2958,6 +3086,7 @@ export type Database = {
           is_test_data?: boolean | null
           klachtenportaal_wkkgz_path?: string | null
           kvk_uittreksel_path?: string | null
+          last_ai_response_at?: string | null
           missing_info?: Json | null
           org_id?: string | null
           overige_certificeringen_paths?: Json | null
@@ -3712,6 +3841,84 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      slot_detection_audit: {
+        Row: {
+          ai_confidence: number | null
+          ai_result: number | null
+          application_id: string | null
+          correct_slot: number | null
+          created_at: string
+          detection_method: string | null
+          email_id: string | null
+          feedback_at: string | null
+          final_result: number | null
+          id: string
+          message_id: string | null
+          offered_slots: Json | null
+          org_id: string | null
+          processing_time_ms: number | null
+          raw_email_text: string | null
+          regex_result: number | null
+          stripped_reply: string | null
+          user_confirmed: boolean | null
+        }
+        Insert: {
+          ai_confidence?: number | null
+          ai_result?: number | null
+          application_id?: string | null
+          correct_slot?: number | null
+          created_at?: string
+          detection_method?: string | null
+          email_id?: string | null
+          feedback_at?: string | null
+          final_result?: number | null
+          id?: string
+          message_id?: string | null
+          offered_slots?: Json | null
+          org_id?: string | null
+          processing_time_ms?: number | null
+          raw_email_text?: string | null
+          regex_result?: number | null
+          stripped_reply?: string | null
+          user_confirmed?: boolean | null
+        }
+        Update: {
+          ai_confidence?: number | null
+          ai_result?: number | null
+          application_id?: string | null
+          correct_slot?: number | null
+          created_at?: string
+          detection_method?: string | null
+          email_id?: string | null
+          feedback_at?: string | null
+          final_result?: number | null
+          id?: string
+          message_id?: string | null
+          offered_slots?: Json | null
+          org_id?: string | null
+          processing_time_ms?: number | null
+          raw_email_text?: string | null
+          regex_result?: number | null
+          stripped_reply?: string | null
+          user_confirmed?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slot_detection_audit_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "slot_detection_audit_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
