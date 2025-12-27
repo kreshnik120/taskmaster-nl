@@ -141,6 +141,10 @@ verify_jwt = false
 verify_jwt = false
 # Purpose: Autonomous DUO Online Diplomacontrole verification via Browserless.io
 
+[functions.validate-diploma-level]
+verify_jwt = false
+# Purpose: Cross-validate CV niveau against diploma niveau
+
 # -----------------------------------------------------------------------------
 # AUTHENTICATED FUNCTIONS (JWT verification required)
 # -----------------------------------------------------------------------------

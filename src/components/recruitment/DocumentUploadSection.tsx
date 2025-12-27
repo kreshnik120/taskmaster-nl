@@ -14,7 +14,10 @@ import {
   AlertTriangle,
   GraduationCap,
   Shield,
-  Info
+  Info,
+  ShieldCheck,
+  Clock,
+  Eye
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -46,6 +49,7 @@ interface DocumentUploadSectionProps {
   cvFileName?: string | null;
   vogStatus?: string | null;
   diplomaStatus?: string | null;
+  diplomaVerificationResponse?: any | null;
   vogVerificationResponse?: VogVerificationResponse | null;
   pipelineStage?: string | null; // For VOG flow differentiation
   onUploadComplete: () => void;
@@ -69,6 +73,7 @@ export function DocumentUploadSection({
   cvFileName,
   vogStatus,
   diplomaStatus,
+  diplomaVerificationResponse,
   vogVerificationResponse,
   pipelineStage = 'nieuw',
   onUploadComplete,
@@ -83,6 +88,7 @@ export function DocumentUploadSection({
   const [downloadingVog, setDownloadingVog] = useState(false);
   const [downloadingDiploma, setDownloadingDiploma] = useState(false);
   const [downloadingCV, setDownloadingCV] = useState(false);
+  const [verifyingDiploma, setVerifyingDiploma] = useState(false);
   
   const vogInputRef = useRef<HTMLInputElement>(null);
   const diplomaInputRef = useRef<HTMLInputElement>(null);
@@ -173,9 +179,39 @@ export function DocumentUploadSection({
         docType === 'vog' 
           ? 'VOG geüpload - automatische verificatie gestart' 
           : docType === 'diploma'
-          ? 'Diploma geüpload'
+          ? 'Diploma geüpload - DUO verificatie gestart...'
           : 'CV geüpload'
       );
+      
+      // Auto-trigger DUO verification for diploma
+      if (docType === 'diploma') {
+        setVerifyingDiploma(true);
+        try {
+          const { data: verifyResult, error: verifyError } = await supabase.functions.invoke('verify-diploma-duo', {
+            body: { application_id: applicationId }
+          });
+
+          if (verifyError) {
+            console.error('DUO verification error:', verifyError);
+            toast.warning('Diploma geüpload - automatische verificatie niet beschikbaar, handmatige controle vereist');
+          } else if (verifyResult?.status === 'verified_duo') {
+            toast.success('✅ Diploma automatisch geverifieerd via DUO!');
+            
+            // Also trigger level validation
+            await supabase.functions.invoke('validate-diploma-level', {
+              body: { application_id: applicationId, diploma_info: verifyResult.details }
+            });
+          } else if (verifyResult?.status === 'manual_review') {
+            toast.info('Diploma ontvangen - handmatige verificatie vereist');
+          } else if (verifyResult?.status === 'duo_invalid') {
+            toast.warning('⚠️ Diploma kon niet via DUO geverifieerd worden');
+          }
+        } catch (e) {
+          console.error('Error during diploma verification:', e);
+        } finally {
+          setVerifyingDiploma(false);
+        }
+      }
       
       onUploadComplete();
     } catch (error) {
@@ -659,6 +695,53 @@ export function DocumentUploadSection({
             </div>
           </CardHeader>
           <CardContent className="py-2 px-4">
+            {/* DUO Verification Status Banner */}
+            {diplomaFilePath && diplomaStatus === 'verified_duo' && (
+              <div className="flex items-center gap-2 p-3 mb-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
+                <ShieldCheck className="h-5 w-5 text-green-600" />
+                <div className="flex-1">
+                  <span className="text-green-700 dark:text-green-400 font-medium text-sm">✅ Geverifieerd via DUO</span>
+                  {diplomaVerificationResponse?.verified_at && (
+                    <p className="text-xs text-green-600 dark:text-green-500">
+                      Geverifieerd op {new Date(diplomaVerificationResponse.verified_at).toLocaleDateString('nl-NL')}
+                    </p>
+                  )}
+                </div>
+                <Badge className="bg-green-600 text-white">DUO Verified</Badge>
+              </div>
+            )}
+
+            {diplomaFilePath && diplomaStatus === 'verified_manual' && (
+              <div className="flex items-center gap-2 p-3 mb-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                <Eye className="h-5 w-5 text-blue-600" />
+                <div className="flex-1">
+                  <span className="text-blue-700 dark:text-blue-400 font-medium text-sm">✓ Handmatig Geverifieerd</span>
+                </div>
+                <Badge className="bg-blue-600 text-white">Handmatig</Badge>
+              </div>
+            )}
+
+            {diplomaFilePath && diplomaStatus === 'manual_review' && (
+              <div className="flex items-center gap-2 p-3 mb-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                <Clock className="h-5 w-5 text-amber-600" />
+                <span className="text-amber-700 dark:text-amber-400 font-medium text-sm">Handmatige verificatie vereist</span>
+              </div>
+            )}
+
+            {diplomaFilePath && diplomaStatus === 'duo_invalid' && (
+              <div className="flex items-center gap-2 p-3 mb-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+                <span className="text-red-700 dark:text-red-400 font-medium text-sm">⚠️ DUO verificatie gefaald - handmatige controle vereist</span>
+              </div>
+            )}
+
+            {verifyingDiploma && (
+              <div className="flex items-center gap-2 p-3 mb-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+                <span className="text-blue-700 dark:text-blue-400 font-medium text-sm">DUO verificatie bezig...</span>
+              </div>
+            )}
+
             {diplomaFilePath ? (
               <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
                 <div className="flex items-center gap-2">
@@ -666,7 +749,7 @@ export function DocumentUploadSection({
                   <span className="text-sm truncate max-w-[200px]">
                     {diplomaFilePath.split('/').pop()}
                   </span>
-                  {(diplomaStatus === 'verified_emrex' || diplomaStatus === 'verified_manual') && (
+                  {(diplomaStatus === 'verified_duo' || diplomaStatus === 'verified_emrex' || diplomaStatus === 'verified_manual') && (
                     <CheckCircle2 className="h-4 w-4 text-green-600" />
                   )}
                 </div>
@@ -743,10 +826,10 @@ export function DocumentUploadSection({
                 Diploma geverifieerd via DUO EMREX
               </p>
             )}
-            {diplomaStatus === 'verified_manual' && (
-              <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
-                <CheckCircle2 className="h-3 w-3" />
-                Diploma handmatig geverifieerd
+            {diplomaStatus === 'received' && !verifyingDiploma && (
+              <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                Diploma ontvangen - verificatie in behandeling
               </p>
             )}
           </CardContent>
