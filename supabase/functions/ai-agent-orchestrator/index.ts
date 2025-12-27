@@ -395,6 +395,35 @@ const GOAL_CONFIGS: Record<string, {
     }
   },
 
+  // =====================================================
+  // Request Additional Diploma - When CV niveau > diploma niveau
+  // =====================================================
+  'request_additional_diploma': {
+    requiredFields: ['application_id', 'candidate_email'],
+    planGenerator: (goal, context) => {
+      return [
+        {
+          action_type: 'send_document_request',
+          action_order: 1,
+          action_description: `Vraag aanvullend diploma dat niveau ${goal.input_data.claimed_niveau || 'hoger'} bewijst aan ${goal.input_data.candidate_name || 'kandidaat'}`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            application_id: goal.input_data.application_id,
+            candidate_email: goal.input_data.candidate_email,
+            candidate_name: goal.input_data.candidate_name,
+            documents: ['Aanvullend diploma'],
+            email_type: 'additional_diploma_request',
+            context: goal.input_data.context || `Uw CV vermeldt een hoger functieniveau dan uw geüploade diploma aantoont. Kunt u een aanvullend diploma uploaden dat uw niveau bevestigt?`,
+            claimed_niveau: goal.input_data.claimed_niveau,
+            claimed_functie: goal.input_data.claimed_functie,
+            proven_niveau: goal.input_data.proven_niveau,
+            urgent: false
+          }
+        }
+      ];
+    }
+  },
+
   'interview_reminder': {
     requiredFields: ['interview_id', 'scheduled_at', 'professional_id'],
     planGenerator: (goal, context) => {

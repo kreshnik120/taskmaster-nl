@@ -5487,15 +5487,24 @@ export type Database = {
             }[]
           }
       redact_pii: { Args: { input_text: string }; Returns: string }
-      transition_application_stage: {
-        Args: {
-          p_application_id: string
-          p_metadata?: Json
-          p_reason?: string
-          p_to_stage: string
-        }
-        Returns: Json
-      }
+      transition_application_stage:
+        | {
+            Args: {
+              p_application_id: string
+              p_metadata?: Json
+              p_reason?: string
+              p_to_stage: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_application_id: string
+              p_to_stage: string
+              p_user_id?: string
+            }
+            Returns: Json
+          }
       user_is_org_member: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean

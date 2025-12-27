@@ -194,17 +194,32 @@ export function DocumentUploadSection({
           if (verifyError) {
             console.error('DUO verification error:', verifyError);
             toast.warning('Diploma geüpload - automatische verificatie niet beschikbaar, handmatige controle vereist');
+            
+            // Still trigger level validation even if DUO failed
+            await supabase.functions.invoke('validate-diploma-level', {
+              body: { application_id: applicationId, diploma_info: { diploma_naam: file.name } }
+            });
           } else if (verifyResult?.status === 'verified_duo') {
             toast.success('✅ Diploma automatisch geverifieerd via DUO!');
             
-            // Also trigger level validation
+            // Trigger level validation with DUO details
             await supabase.functions.invoke('validate-diploma-level', {
               body: { application_id: applicationId, diploma_info: verifyResult.details }
             });
           } else if (verifyResult?.status === 'manual_review') {
             toast.info('Diploma ontvangen - handmatige verificatie vereist');
+            
+            // Still trigger level validation for manual review cases
+            await supabase.functions.invoke('validate-diploma-level', {
+              body: { application_id: applicationId, diploma_info: verifyResult.details || { diploma_naam: file.name } }
+            });
           } else if (verifyResult?.status === 'duo_invalid') {
             toast.warning('⚠️ Diploma kon niet via DUO geverifieerd worden');
+            
+            // Still trigger level validation even if DUO invalid
+            await supabase.functions.invoke('validate-diploma-level', {
+              body: { application_id: applicationId, diploma_info: verifyResult.details || { diploma_naam: file.name } }
+            });
           }
         } catch (e) {
           console.error('Error during diploma verification:', e);
