@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { 
   Upload, 
   FileText, 
@@ -20,7 +21,8 @@ import {
   Eye,
   RefreshCw,
   ShieldX,
-  XCircle
+  XCircle,
+  ExternalLink
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -96,6 +98,13 @@ export function DocumentUploadSection({
   const [previewingCV, setPreviewingCV] = useState(false);
   const [verifyingDiploma, setVerifyingDiploma] = useState(false);
   const [retryingDuoVerification, setRetryingDuoVerification] = useState(false);
+  
+  // Inline viewer state
+  const [inlineViewerOpen, setInlineViewerOpen] = useState(false);
+  const [inlineViewerUrl, setInlineViewerUrl] = useState<string | null>(null);
+  const [inlineViewerType, setInlineViewerType] = useState<'pdf' | 'image'>('pdf');
+  const [inlineViewerTitle, setInlineViewerTitle] = useState('');
+  const [loadingInlineViewer, setLoadingInlineViewer] = useState(false);
   
   const vogInputRef = useRef<HTMLInputElement>(null);
   const diplomaInputRef = useRef<HTMLInputElement>(null);
@@ -364,6 +373,48 @@ export function DocumentUploadSection({
       toast.error('Fout bij openen document');
     } finally {
       setPreviewing(false);
+    }
+  };
+
+  // Inline preview handler - opens document in modal
+  const handleInlinePreview = async (filePath: string, docType: DocumentType) => {
+    setLoadingInlineViewer(true);
+    
+    try {
+      const bucket = docType === 'cv' ? 'application-cvs' : 'application-documents';
+      
+      const { data: blobData, error } = await supabase.storage
+        .from(bucket)
+        .download(filePath);
+
+      if (error) throw error;
+
+      // Detect MIME type
+      const fileName = filePath.toLowerCase();
+      let mimeType = 'application/pdf';
+      let viewerType: 'pdf' | 'image' = 'pdf';
+      
+      if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) {
+        mimeType = 'image/jpeg';
+        viewerType = 'image';
+      } else if (fileName.endsWith('.png')) {
+        mimeType = 'image/png';
+        viewerType = 'image';
+      }
+
+      const blob = new Blob([blobData], { type: mimeType });
+      const blobUrl = URL.createObjectURL(blob);
+      
+      setInlineViewerUrl(blobUrl);
+      setInlineViewerType(viewerType);
+      setInlineViewerTitle(docType === 'cv' ? 'CV' : docType === 'vog' ? 'VOG' : 'Diploma');
+      setInlineViewerOpen(true);
+      
+    } catch (error) {
+      console.error('Inline preview error:', error);
+      toast.error('Fout bij laden document');
+    } finally {
+      setLoadingInlineViewer(false);
     }
   };
 
@@ -661,17 +712,34 @@ export function DocumentUploadSection({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handlePreview(cvFilePath, 'cv')}
-                        disabled={previewingCV}
+                        onClick={() => handleInlinePreview(cvFilePath, 'cv')}
+                        disabled={loadingInlineViewer}
                       >
-                        {previewingCV ? (
+                        {loadingInlineViewer ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                           <Eye className="h-4 w-4" />
                         )}
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Bekijken</TooltipContent>
+                    <TooltipContent>Bekijken in modal</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handlePreview(cvFilePath, 'cv')}
+                        disabled={previewingCV}
+                      >
+                        {previewingCV ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <ExternalLink className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Open in nieuw tabblad</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -793,17 +861,34 @@ export function DocumentUploadSection({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handlePreview(vogFilePath, 'vog')}
-                        disabled={previewingVog}
+                        onClick={() => handleInlinePreview(vogFilePath, 'vog')}
+                        disabled={loadingInlineViewer}
                       >
-                        {previewingVog ? (
+                        {loadingInlineViewer ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                           <Eye className="h-4 w-4" />
                         )}
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Bekijken</TooltipContent>
+                    <TooltipContent>Bekijken in modal</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handlePreview(vogFilePath, 'vog')}
+                        disabled={previewingVog}
+                      >
+                        {previewingVog ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <ExternalLink className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Open in nieuw tabblad</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -1067,17 +1152,34 @@ export function DocumentUploadSection({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handlePreview(diplomaFilePath, 'diploma')}
-                        disabled={previewingDiploma}
+                        onClick={() => handleInlinePreview(diplomaFilePath, 'diploma')}
+                        disabled={loadingInlineViewer}
                       >
-                        {previewingDiploma ? (
+                        {loadingInlineViewer ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                           <Eye className="h-4 w-4" />
                         )}
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Bekijken</TooltipContent>
+                    <TooltipContent>Bekijken in modal</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handlePreview(diplomaFilePath, 'diploma')}
+                        disabled={previewingDiploma}
+                      >
+                        {previewingDiploma ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <ExternalLink className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Open in nieuw tabblad</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -1160,6 +1262,47 @@ export function DocumentUploadSection({
           </CardContent>
         </Card>
       </div>
+
+      {/* Inline Document Viewer Modal */}
+      <Dialog open={inlineViewerOpen} onOpenChange={(open) => {
+        setInlineViewerOpen(open);
+        if (!open && inlineViewerUrl) {
+          URL.revokeObjectURL(inlineViewerUrl);
+          setInlineViewerUrl(null);
+        }
+      }}>
+        <DialogContent className="max-w-4xl h-[85vh] p-0 flex flex-col">
+          <DialogHeader className="p-4 border-b shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              {inlineViewerTitle} Bekijken
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden p-2">
+            {loadingInlineViewer ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : inlineViewerUrl ? (
+              inlineViewerType === 'pdf' ? (
+                <iframe
+                  src={inlineViewerUrl}
+                  className="w-full h-full rounded border"
+                  title={inlineViewerTitle}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full bg-muted/30 rounded">
+                  <img
+                    src={inlineViewerUrl}
+                    alt={inlineViewerTitle}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                </div>
+              )
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 }
