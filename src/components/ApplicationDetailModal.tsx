@@ -1097,6 +1097,9 @@ export function ApplicationDetailModal({
                       diplomaStatus={diplomaStatus as any}
                       diplomaSource={application.diploma_validation_source}
                       vogFilePath={application.extracted_data?.vog_file_path || null}
+                      diplomaFilePath={(application as any).diploma_file_path || application.extracted_data?.diploma_file_path || null}
+                      duoVerificationResult={(application as any).duo_verification_result}
+                      duoVerifiedAt={(application as any).duo_verified_at}
                       onStatusUpdate={onApplicationUpdated}
                     />
                   </div>
