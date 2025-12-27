@@ -1,6 +1,10 @@
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 import { normalizeFunctieNiveau, normalizeWerkvorm, getOrganizationById, getEmailConfig } from '../_shared/healthcare-mappings.ts';
+// Fase 1: Quick Wins - Modulaire detection & audit
+import { stripQuotedContent, detectSlotWithRegex, detectInterviewSlot, type SlotDetectionInput } from '../_shared/slot-detection.ts';
+import { classifyEmailIntent, shouldBypassCooldown } from '../_shared/intent-classifier.ts';
+import { checkIdempotency, markProcessingComplete, releaseLock, type ProcessingResult } from '../_shared/idempotency-guard.ts';
 
 interface ResendWebhookPayload {
   type: string;
@@ -502,6 +506,57 @@ Deno.serve(async (req) => {
     console.log(`🏢 Organization branding: ${orgInfo.displayName} (org_id: ${application.org_id})`);
     console.log(`📧 Email config: from=${emailConfig.from}, replyTo=${emailConfig.replyTo}`);
 
+    // =====================================================
+    // 🔒 FASE 1: IDEMPOTENCY GUARD - Voorkom dubbele verwerking
+    // =====================================================
+    const idempotencyCheck = await checkIdempotency(supabase, emailId, message_id, applicationId!, application.org_id);
+    
+    if (idempotencyCheck.alreadyProcessed) {
+      console.log("✅ Email already processed, returning cached result");
+      return jsonResponse({
+        success: true,
+        message: "Email already processed",
+        cached: true,
+        previousResult: idempotencyCheck.previousResult,
+      });
+    }
+    
+    if (idempotencyCheck.processingLocked) {
+      console.log("🔒 Email currently being processed by another instance");
+      return jsonResponse({
+        success: true,
+        message: "Email processing in progress",
+        locked: true,
+      });
+    }
+    
+    const lockId = idempotencyCheck.lockId;
+    
+    // =====================================================
+    // 🎯 FASE 1: INTENT CLASSIFICATION + URGENCY DETECTION
+    // =====================================================
+    const strippedReply = stripQuotedContent(emailText);
+    
+    const intentResult = await classifyEmailIntent(
+      supabase,
+      strippedReply,
+      applicationId!,
+      emailId,
+      application.last_ai_response_at ? new Date(application.last_ai_response_at) : null,
+      application.ai_response_count || 0,
+      application.org_id
+    );
+    
+    console.log("========================================");
+    console.log("🎯 INTENT CLASSIFICATION RESULT:");
+    console.log("   Primary intent:", intentResult.primaryIntent);
+    console.log("   Confidence:", intentResult.primaryConfidence);
+    console.log("   Is urgent:", intentResult.isUrgent);
+    console.log("   Urgency score:", intentResult.urgencyScore);
+    console.log("   Bypass cooldown:", intentResult.bypassCooldown);
+    console.log("   Frustration indicators:", intentResult.frustrationIndicators);
+    console.log("========================================");
+
     // Save the applicant's reply to conversations
     // 🔑 FIX: Store the correct emailId (Resend UUID) for API retrieval, not message_id
     console.log("========================================");
@@ -524,6 +579,7 @@ Deno.serve(async (req) => {
           message_id: message_id,   // Original email header for audit
           subject: subject,
           fetched_body: emailText?.length > 0, // Track if body was successfully fetched
+          intent_classification: intentResult,
         },
       });
 
@@ -538,111 +594,10 @@ Deno.serve(async (req) => {
     const hasOfferedSlots = offeredSlots && offeredSlots.length > 0;
     
     // =====================================================
-    // 🎯 VERBETERDE SLOT-DETECTIE: Strip quoted content + regex pre-processing
+    // 🎯 FASE 1: SLOT DETECTION MET AUDIT LOGGING (uses imported modules)
     // =====================================================
     
-    /**
-     * Strip quoted email content om alleen het antwoord van de kandidaat te krijgen
-     * Verwijdert: quote markers (>), originele email thread, inline images
-     */
-    const stripQuotedContent = (emailBody: string): string => {
-      if (!emailBody) return '';
-      
-      const lines = emailBody.split('\n');
-      const cleanLines: string[] = [];
-      
-      for (const line of lines) {
-        // Stop bij quote markers - dit zijn tekens dat de originele email begint
-        if (line.match(/^(>|_{3,}|─{3,}|Van:|From:|Op \d|On \d|Verzonden:|Sent:|-----Original|Oorspronkelijk bericht)/i)) {
-          break;
-        }
-        // Skip embedded image references [cid:xxx]
-        if (line.match(/^\[cid:/)) continue;
-        // Skip lege Outlook signature blocks
-        if (line.match(/^(\[|\<)?(image\d+|signature)/i)) continue;
-        
-        cleanLines.push(line);
-      }
-      
-      return cleanLines.join('\n').trim();
-    };
-    
-    /**
-     * Regex-based slot detectie VOOR AI call
-     * Detecteert simpele antwoorden zoals "3", "optie 2", "de derde"
-     */
-    const detectSlotFromSimpleReply = (text: string, slotCount: number): number | null => {
-      if (!text) return null;
-      
-      const trimmed = text.trim().toLowerCase();
-      
-      // Pattern 1: Alleen een nummer aan het begin (bijv. "3" of "3.0" of "3:")
-      const simpleNumberMatch = trimmed.match(/^(\d)(?:\.\d+)?[\s:,.!?]*$/);
-      if (simpleNumberMatch) {
-        const num = parseInt(simpleNumberMatch[1]);
-        if (num >= 1 && num <= slotCount) {
-          console.log(`🎯 Regex slot detection: simpel getal "${simpleNumberMatch[1]}" → slot ${num}`);
-          return num;
-        }
-      }
-      
-      // Pattern 1b: Nummer aan het begin van eerste regel (bijv. "3\n\n[rest van quoted email]")
-      const firstLineMatch = trimmed.split('\n')[0].trim().match(/^(\d)(?:\.\d+)?[\s:,.!?]*$/);
-      if (firstLineMatch) {
-        const num = parseInt(firstLineMatch[1]);
-        if (num >= 1 && num <= slotCount) {
-          console.log(`🎯 Regex slot detection: nummer op eerste regel "${firstLineMatch[1]}" → slot ${num}`);
-          return num;
-        }
-      }
-      
-      // Pattern 2: "optie X", "slot X", "nummer X", "keuze X", "moment X"
-      const optionPattern = /(?:optie|slot|nummer|keuze|moment|mogelijkheid)\s*(\d)/i;
-      const optionMatch = trimmed.match(optionPattern);
-      if (optionMatch) {
-        const num = parseInt(optionMatch[1]);
-        if (num >= 1 && num <= slotCount) {
-          console.log(`🎯 Regex slot detection: optie-patroon "${optionMatch[0]}" → slot ${num}`);
-          return num;
-        }
-      }
-      
-      // Pattern 3: Ordinalen ("de eerste", "de tweede", "de derde", etc.)
-      const ordinalMap: Record<string, number> = {
-        'eerste': 1, 'een': 1, '1e': 1, '1ste': 1,
-        'tweede': 2, 'twee': 2, '2e': 2, '2de': 2,
-        'derde': 3, 'drie': 3, '3e': 3, '3de': 3,
-        'vierde': 4, 'vier': 4, '4e': 4, '4de': 4,
-        'vijfde': 5, 'vijf': 5, '5e': 5, '5de': 5,
-        'zesde': 6, 'zes': 6, '6e': 6, '6de': 6,
-      };
-      const ordinalPattern = /(?:de\s+)?(eerste|tweede|derde|vierde|vijfde|zesde|\d+e|\d+ste|\d+de)/i;
-      const ordinalMatch = trimmed.match(ordinalPattern);
-      if (ordinalMatch) {
-        const ordinal = ordinalMatch[1].toLowerCase();
-        const num = ordinalMap[ordinal];
-        if (num && num >= 1 && num <= slotCount) {
-          console.log(`🎯 Regex slot detection: ordinaal "${ordinalMatch[0]}" → slot ${num}`);
-          return num;
-        }
-      }
-      
-      // Pattern 4: "graag X" of "kies X" of "wordt X"
-      const preferencePattern = /(?:graag|kies|wordt|neem|wil)\s+(?:optie\s+)?(\d)/i;
-      const prefMatch = trimmed.match(preferencePattern);
-      if (prefMatch) {
-        const num = parseInt(prefMatch[1]);
-        if (num >= 1 && num <= slotCount) {
-          console.log(`🎯 Regex slot detection: voorkeur-patroon "${prefMatch[0]}" → slot ${num}`);
-          return num;
-        }
-      }
-      
-      return null;
-    };
-    
-    // Strip quoted content en detecteer slot via regex EERST
-    const strippedReply = stripQuotedContent(emailText);
+    // Pre-AI regex detection met confidence scoring
     let regexDetectedSlot: number | null = null;
     
     if (hasOfferedSlots && strippedReply) {
@@ -654,10 +609,11 @@ Deno.serve(async (req) => {
       console.log("   Number of offered slots:", offeredSlots.length);
       console.log("========================================");
       
-      regexDetectedSlot = detectSlotFromSimpleReply(strippedReply, offeredSlots.length);
+      const regexResult = detectSlotWithRegex(strippedReply, offeredSlots.length);
+      regexDetectedSlot = regexResult.slot;
       
       if (regexDetectedSlot !== null) {
-        console.log(`✅ REGEX SLOT DETECTION SUCCESS: Kandidaat koos slot ${regexDetectedSlot}`);
+        console.log(`✅ REGEX SLOT DETECTION SUCCESS: Kandidaat koos slot ${regexDetectedSlot} (confidence: ${regexResult.confidence})`);
       } else {
         console.log("⏭️ Regex detection found no match, falling back to AI analysis");
       }
