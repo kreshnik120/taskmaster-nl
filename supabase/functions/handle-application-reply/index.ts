@@ -6,6 +6,16 @@ import { stripQuotedContent, detectSlotWithRegex, detectInterviewSlot, type Slot
 import { classifyEmailIntent, shouldBypassCooldown } from '../_shared/intent-classifier.ts';
 import { checkIdempotency, markProcessingComplete, releaseLock, type ProcessingResult } from '../_shared/idempotency-guard.ts';
 
+interface AttachmentData {
+  id?: string; // Resend attachment ID for fetching via API
+  filename: string;
+  content?: string; // Base64 encoded content (may be empty in webhook, fetched later)
+  content_type: string;
+  content_disposition?: string;
+  content_id?: string;
+  size?: number;
+}
+
 interface ResendWebhookPayload {
   type: string;
   _forwarded_email_id?: string; // Email ID from process-application-email forward
@@ -21,14 +31,7 @@ interface ResendWebhookPayload {
     references?: string;
     message_id?: string;
     headers?: Record<string, string>;
-    attachments?: Array<{
-      filename: string;
-      content?: string;
-      content_type: string;
-      content_disposition?: string;
-      content_id?: string;
-      size?: number;
-    }>;
+    attachments?: AttachmentData[];
   };
 }
 
@@ -93,6 +96,7 @@ Deno.serve(async (req) => {
         message_id: z.string().max(255).optional(),
         headers: z.record(z.string()).optional(),
         attachments: z.array(z.object({
+          id: z.string().optional(), // Resend attachment ID for fetching via API
           filename: z.string().max(255),
           content: z.string().max(20000000).optional(),
           content_type: z.string().max(100),
@@ -328,16 +332,135 @@ Deno.serve(async (req) => {
       console.log("   Full payload (debug):", JSON.stringify(debugPayload));
     }
     
-    // Filter out inline attachments (Outlook signatures, embedded images)
-    const realAttachments = payload.data.attachments?.filter(att => 
-      att.content && att.content_disposition !== 'inline'
-    ) || [];
+    // =====================================================
+    // 🔧 FIX: FETCH ATTACHMENT CONTENT VIA RESEND API
+    // Resend webhook payload bevat GEEN attachment content!
+    // We moeten de content ophalen via de Receiving API
+    // =====================================================
+    let realAttachments: AttachmentData[] = [];
+    const webhookAttachments = payload.data.attachments || [];
+    
+    console.log("========================================");
+    console.log(`📎 ATTACHMENT CONTENT FETCH: ${webhookAttachments.length} attachments in webhook`);
+    console.log("========================================");
+    
+    if (webhookAttachments.length > 0 && emailId) {
+      console.log(`📎 Fetching attachment content via Resend Receiving API for email: ${emailId}`);
+      
+      try {
+        // Step 1: Get list of attachments with download URLs
+        const attachmentsListUrl = `https://api.resend.com/emails/receiving/${emailId}/attachments`;
+        console.log(`📎 Fetching attachment list from: ${attachmentsListUrl}`);
+        
+        const attachmentsListResponse = await fetch(attachmentsListUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (attachmentsListResponse.ok) {
+          const attachmentsList = await attachmentsListResponse.json();
+          console.log(`📎 Attachment list response:`, JSON.stringify(attachmentsList).substring(0, 500));
+          
+          // Resend returns { data: [{ id, filename, content_type, download_url }] }
+          const attachmentsData = attachmentsList.data || attachmentsList || [];
+          
+          if (Array.isArray(attachmentsData) && attachmentsData.length > 0) {
+            console.log(`📎 Found ${attachmentsData.length} attachments with download URLs`);
+            
+            for (const attInfo of attachmentsData) {
+              // Skip inline attachments early
+              if (attInfo.content_disposition === 'inline') {
+                console.log(`📎 Skipping inline attachment: ${attInfo.filename}`);
+                continue;
+              }
+              
+              console.log(`📎 Processing attachment: ${attInfo.filename} (${attInfo.content_type})`);
+              
+              // Download the attachment content
+              if (attInfo.download_url) {
+                try {
+                  console.log(`📎 Downloading from: ${attInfo.download_url}`);
+                  const contentResponse = await fetch(attInfo.download_url);
+                  
+                  if (contentResponse.ok) {
+                    const arrayBuffer = await contentResponse.arrayBuffer();
+                    const uint8Array = new Uint8Array(arrayBuffer);
+                    
+                    // Convert to base64
+                    let base64Content = '';
+                    const chunkSize = 8192;
+                    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+                      const chunk = uint8Array.slice(i, i + chunkSize);
+                      base64Content += String.fromCharCode.apply(null, Array.from(chunk));
+                    }
+                    base64Content = btoa(base64Content);
+                    
+                    console.log(`✅ Downloaded ${attInfo.filename}: ${arrayBuffer.byteLength} bytes → ${base64Content.length} chars base64`);
+                    
+                    realAttachments.push({
+                      id: attInfo.id,
+                      filename: attInfo.filename,
+                      content: base64Content,
+                      content_type: attInfo.content_type,
+                      content_disposition: attInfo.content_disposition,
+                      size: arrayBuffer.byteLength
+                    });
+                  } else {
+                    console.error(`❌ Failed to download ${attInfo.filename}: ${contentResponse.status}`);
+                  }
+                } catch (downloadError) {
+                  console.error(`❌ Error downloading ${attInfo.filename}:`, downloadError);
+                }
+              } else {
+                console.log(`⚠️ No download_url for ${attInfo.filename}`);
+              }
+            }
+          } else {
+            console.log("⚠️ No attachments in API response or unexpected format");
+          }
+        } else {
+          const errorText = await attachmentsListResponse.text();
+          console.log(`⚠️ Failed to fetch attachments list: ${attachmentsListResponse.status} - ${errorText}`);
+          
+          // Fallback: Try to use webhook attachments if they have content
+          console.log("📎 Fallback: checking webhook attachments for content...");
+          realAttachments = webhookAttachments.filter(att => 
+            att.content && att.content_disposition !== 'inline'
+          );
+          console.log(`📎 Fallback found ${realAttachments.length} attachments with content in webhook`);
+        }
+      } catch (attachmentFetchError) {
+        console.error("❌ Error fetching attachments via API:", attachmentFetchError);
+        
+        // Fallback: Use webhook attachments if available
+        realAttachments = webhookAttachments.filter(att => 
+          att.content && att.content_disposition !== 'inline'
+        );
+        console.log(`📎 Error fallback: ${realAttachments.length} attachments from webhook`);
+      }
+    } else if (webhookAttachments.length > 0) {
+      // No emailId available, try webhook attachments directly
+      console.log("📎 No emailId available, using webhook attachments directly");
+      realAttachments = webhookAttachments.filter(att => 
+        att.content && att.content_disposition !== 'inline'
+      );
+    }
+    
+    console.log("========================================");
+    console.log(`📎 FINAL: ${realAttachments.length} real attachments ready for processing`);
+    for (const att of realAttachments) {
+      console.log(`   - ${att.filename} (${att.content_type}): ${att.content?.length || 0} chars content`);
+    }
+    console.log("========================================");
     
     console.log("From:", from);
     console.log("Subject:", subject);
     console.log("In-Reply-To:", in_reply_to);
     console.log("Email body length:", emailText.length, "chars");
-    console.log("Real attachments (excluding inline):", realAttachments.length);
+    console.log("Real attachments (fetched via API):", realAttachments.length);
 
     // Find the original conversation by matching in_reply_to with the email_id in metadata
     let applicationId: string | null = null;
