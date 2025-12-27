@@ -25,6 +25,10 @@ interface CleanupResult {
     system_events: number;
     professional_applications: number;
     professionals: number;
+    // New audit tables
+    slot_detection_audit: number;
+    intent_classification_audit: number;
+    processed_emails: number;
   };
   errors: string[];
 }
@@ -65,6 +69,10 @@ Deno.serve(async (req) => {
         system_events: 0,
         professional_applications: 0,
         professionals: 0,
+        // New audit tables
+        slot_detection_audit: 0,
+        intent_classification_audit: 0,
+        processed_emails: 0,
       },
       errors: [],
     };
@@ -200,7 +208,69 @@ Deno.serve(async (req) => {
       console.log(`🔗 Matches: ${result.deleted.application_sublocation_matches}`);
     }
 
-    // 3f. agent_goals (match by input_data containing email pattern)
+    // 3f. NEW AUDIT TABLES - slot_detection_audit
+    if (applicationIds.length > 0) {
+      const { data: slotAudits } = await supabase
+        .from("slot_detection_audit")
+        .select("id")
+        .in("application_id", applicationIds);
+      
+      result.deleted.slot_detection_audit = slotAudits?.length || 0;
+      
+      if (!dry_run && slotAudits && slotAudits.length > 0) {
+        const { error } = await supabase
+          .from("slot_detection_audit")
+          .delete()
+          .in("application_id", applicationIds);
+        if (error) result.errors.push(`slot_detection_audit: ${error.message}`);
+      }
+      console.log(`🎰 Slot detection audits: ${result.deleted.slot_detection_audit}`);
+    }
+
+    // 3g. NEW AUDIT TABLES - intent_classification_audit
+    if (applicationIds.length > 0) {
+      const { data: intentAudits } = await supabase
+        .from("intent_classification_audit")
+        .select("id")
+        .in("application_id", applicationIds);
+      
+      result.deleted.intent_classification_audit = intentAudits?.length || 0;
+      
+      if (!dry_run && intentAudits && intentAudits.length > 0) {
+        const { error } = await supabase
+          .from("intent_classification_audit")
+          .delete()
+          .in("application_id", applicationIds);
+        if (error) result.errors.push(`intent_classification_audit: ${error.message}`);
+      }
+      console.log(`🧠 Intent classification audits: ${result.deleted.intent_classification_audit}`);
+    }
+
+    // 3h. NEW AUDIT TABLES - processed_emails (match by email_id containing email pattern or application_id)
+    // First try to match by application_id reference in email_id field
+    const { data: allProcessedEmails } = await supabase
+      .from("processed_emails")
+      .select("id, email_id, message_id");
+    
+    const matchingProcessedEmailIds = allProcessedEmails
+      ?.filter((e) => 
+        (e.email_id && e.email_id.toLowerCase().includes(email_pattern.toLowerCase())) ||
+        (e.message_id && e.message_id.toLowerCase().includes(email_pattern.toLowerCase()))
+      )
+      .map((e) => e.id) || [];
+    
+    result.deleted.processed_emails = matchingProcessedEmailIds.length;
+    
+    if (!dry_run && matchingProcessedEmailIds.length > 0) {
+      const { error } = await supabase
+        .from("processed_emails")
+        .delete()
+        .in("id", matchingProcessedEmailIds);
+      if (error) result.errors.push(`processed_emails: ${error.message}`);
+    }
+    console.log(`📧 Processed emails: ${result.deleted.processed_emails}`);
+
+    // 3i. agent_goals (match by input_data containing email pattern)
     const { data: goals } = await supabase
       .from("agent_goals")
       .select("id")
@@ -246,7 +316,7 @@ Deno.serve(async (req) => {
     }
     console.log(`🎯 Agent goals: ${result.deleted.agent_goals}`);
 
-    // 3g. system_events (optional)
+    // 3j. system_events (optional)
     if (!keep_system_events) {
       const allEntityIds = [...applicationIds, ...allProfessionalIds];
       if (allEntityIds.length > 0) {
@@ -268,7 +338,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3h. Unlink professional_id from applications before deleting
+    // 3k. Unlink professional_id from applications before deleting
     if (!dry_run && applicationIds.length > 0) {
       const { error } = await supabase
         .from("professional_applications")
@@ -277,7 +347,7 @@ Deno.serve(async (req) => {
       if (error) result.errors.push(`unlink professional_id: ${error.message}`);
     }
 
-    // 3i. Delete professional_applications
+    // 3l. Delete professional_applications
     result.deleted.professional_applications = applicationIds.length;
     if (!dry_run && applicationIds.length > 0) {
       const { error } = await supabase
@@ -288,7 +358,7 @@ Deno.serve(async (req) => {
     }
     console.log(`📨 Applications: ${result.deleted.professional_applications}`);
 
-    // 3j. Delete professionals
+    // 3m. Delete professionals
     result.deleted.professionals = allProfessionalIds.length;
     if (!dry_run && allProfessionalIds.length > 0) {
       // First delete any assignments linked to these professionals
