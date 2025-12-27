@@ -27,6 +27,8 @@ interface VerificationResult {
 
 /**
  * Puppeteer script that runs on Browserless.io to verify diploma via DUO portal
+ * Updated to ESM format (export default async) for Browserless v2
+ * 
  * This script:
  * 1. Navigates to DUO Online Diplomacontrole portal
  * 2. Uploads the PDF diploma
@@ -34,8 +36,9 @@ interface VerificationResult {
  * 4. Parses the result
  */
 function generatePuppeteerScript(pdfBase64: string): string {
+  // ESM format for Browserless v2 - uses export default async instead of module.exports
   return `
-module.exports = async ({ page }) => {
+export default async ({ page }) => {
   const DUO_PORTAL_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
   
   try {
@@ -57,7 +60,6 @@ module.exports = async ({ page }) => {
     console.log('Screenshot before upload (base64 length):', screenshotBefore.length);
     
     // Find the file upload input
-    // DUO portal uses a file input for PDF uploads
     const fileInput = await page.$('input[type="file"]');
     
     if (!fileInput) {
@@ -73,33 +75,49 @@ module.exports = async ({ page }) => {
       // Re-check for file input
       const fileInputRetry = await page.$('input[type="file"]');
       if (!fileInputRetry) {
+        // Graceful fallback - portal structure changed or not accessible
         return {
           success: false,
-          status: 'error',
-          message: 'Could not find file upload element on DUO portal',
+          status: 'manual_review',
+          message: 'DUO portal structuur gewijzigd of niet toegankelijk - handmatige verificatie vereist',
+          page_title: pageTitle,
           screenshot: screenshotBefore
         };
       }
     }
     
-    // Convert base64 PDF to buffer and upload
+    // Upload PDF using base64 buffer - ESM compatible method
     console.log('📄 Uploading PDF...');
-    const pdfBuffer = Buffer.from('${pdfBase64}', 'base64');
+    const pdfBuffer = Uint8Array.from(atob('${pdfBase64}'), c => c.charCodeAt(0));
     
-    // Create a temporary file path for Puppeteer
-    const fs = require('fs');
-    const path = require('path');
-    const tempDir = '/tmp';
-    const tempFilePath = path.join(tempDir, 'diploma_' + Date.now() + '.pdf');
-    
-    fs.writeFileSync(tempFilePath, pdfBuffer);
-    console.log('Temp file created:', tempFilePath);
-    
-    // Upload the file
+    // Use page.evaluate to create a File object and trigger upload
     const actualFileInput = await page.$('input[type="file"]');
     if (actualFileInput) {
-      await actualFileInput.uploadFile(tempFilePath);
-      console.log('✅ File uploaded');
+      // Create a data transfer with the file
+      await page.evaluate(async (base64Data) => {
+        const input = document.querySelector('input[type="file"]');
+        if (!input) return false;
+        
+        // Convert base64 to blob
+        const binaryString = atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        const file = new File([blob], 'diploma.pdf', { type: 'application/pdf' });
+        
+        // Create DataTransfer and set file
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        input.files = dataTransfer.files;
+        
+        // Trigger change event
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      }, '${pdfBase64}');
+      
+      console.log('✅ File uploaded via DataTransfer');
     }
     
     // Wait for upload to process
@@ -124,12 +142,11 @@ module.exports = async ({ page }) => {
     
     // Parse the result page
     console.log('📊 Parsing verification result...');
-    const pageContent = await page.content();
     const bodyText = await page.evaluate(() => document.body.innerText);
     
     // Determine verification status based on page content
     let status = 'manual_review';
-    let message = 'Kon verificatie resultaat niet automatisch bepalen';
+    let message = 'Kon verificatie resultaat niet automatisch bepalen - handmatige verificatie vereist';
     
     // Check for success indicators (Dutch text)
     if (bodyText.includes('geldig') || bodyText.includes('Geldig') || 
@@ -152,15 +169,8 @@ module.exports = async ({ page }) => {
     // Check for error indicators
     else if (bodyText.includes('fout') || bodyText.includes('error') || 
              bodyText.includes('mislukt') || bodyText.includes('probeer opnieuw')) {
-      status = 'error';
-      message = 'Er is een fout opgetreden bij de DUO verificatie';
-    }
-    
-    // Cleanup temp file
-    try {
-      fs.unlinkSync(tempFilePath);
-    } catch (e) {
-      console.log('Could not delete temp file:', e.message);
+      status = 'manual_review';
+      message = 'DUO portal gaf een foutmelding - handmatige verificatie vereist';
     }
     
     console.log('✅ Verification complete:', status);
@@ -176,10 +186,11 @@ module.exports = async ({ page }) => {
     
   } catch (error) {
     console.error('❌ Puppeteer error:', error.message);
+    // Graceful fallback to manual_review instead of error
     return {
       success: false,
-      status: 'error',
-      message: 'Browserless execution error: ' + error.message,
+      status: 'manual_review',
+      message: 'DUO verificatie niet automatisch mogelijk - handmatige verificatie vereist: ' + error.message,
       error: error.toString()
     };
   }
@@ -256,19 +267,24 @@ Deno.serve(async (req) => {
       if (downloadError || !pdfData) {
         console.error("❌ Failed to download diploma PDF:", downloadError);
         
-        // Update status to error
+        // Graceful fallback to manual_review instead of error
         await supabase
           .from('professional_applications')
           .update({ 
-            duo_verification_status: 'error',
+            duo_verification_status: 'manual_review',
             duo_verification_result: { 
-              error: 'Failed to download diploma file',
+              message: 'Diploma bestand kon niet worden geladen - handmatige verificatie vereist',
               details: downloadError?.message
             }
           })
           .eq('id', application_id);
         
-        return errorResponse("Failed to download diploma file", 500);
+        return jsonResponse({
+          success: false,
+          application_id,
+          verification_status: 'manual_review',
+          message: 'Diploma bestand kon niet worden geladen - handmatige verificatie vereist'
+        });
       }
 
       // Convert PDF to base64
@@ -281,55 +297,81 @@ Deno.serve(async (req) => {
       const pdfBase64 = btoa(binaryString);
       console.log(`✅ PDF converted to base64 (${pdfBase64.length} chars)`);
 
-      // Generate Puppeteer script
+      // Generate Puppeteer script (ESM format)
       const puppeteerCode = generatePuppeteerScript(pdfBase64);
       
-      console.log("🌐 Calling Browserless.io Function API...");
+      console.log("🌐 Calling Browserless.io Function API (ESM format)...");
       
-      // Call Browserless.io Function API
-      // Docs: https://docs.browserless.io/http-apis/function
-      const browserlessResponse = await fetch(
-        `https://chrome.browserless.io/function?token=${browserlessApiKey}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            code: puppeteerCode,
-            context: {}
+      // Call Browserless.io Function API with ESM format
+      // Updated endpoint and content-type for Browserless v2
+      let browserlessResponse;
+      try {
+        browserlessResponse = await fetch(
+          `https://production-sfo.browserless.io/function?token=${browserlessApiKey}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/javascript'  // ESM format requires this
+            },
+            body: puppeteerCode  // Direct script, no JSON wrapper for ESM
+          }
+        );
+      } catch (fetchError) {
+        console.error("❌ Browserless fetch error:", fetchError);
+        
+        // Graceful fallback to manual_review
+        await supabase
+          .from('professional_applications')
+          .update({ 
+            duo_verification_status: 'manual_review',
+            duo_verification_result: { 
+              message: 'DUO verificatie service niet bereikbaar - handmatige verificatie vereist',
+              error: fetchError instanceof Error ? fetchError.message : 'Network error'
+            }
           })
-        }
-      );
+          .eq('id', application_id);
+        
+        return jsonResponse({
+          success: false,
+          application_id,
+          verification_status: 'manual_review',
+          message: 'DUO verificatie service niet bereikbaar - handmatige verificatie vereist'
+        });
+      }
 
       if (!browserlessResponse.ok) {
         const errorText = await browserlessResponse.text();
         console.error(`❌ Browserless API error (${browserlessResponse.status}):`, errorText);
         
-        // Update status to error
+        // Graceful fallback to manual_review instead of error
         await supabase
           .from('professional_applications')
           .update({ 
-            duo_verification_status: 'error',
+            duo_verification_status: 'manual_review',
             duo_verification_result: { 
-              error: 'Browserless API error',
+              message: 'DUO verificatie niet automatisch mogelijk - handmatige verificatie vereist',
               status_code: browserlessResponse.status,
               details: errorText.substring(0, 500)
             }
           })
           .eq('id', application_id);
         
-        return errorResponse(`Browserless API error: ${browserlessResponse.status}`, 500);
+        return jsonResponse({
+          success: false,
+          application_id,
+          verification_status: 'manual_review',
+          message: 'DUO verificatie niet automatisch mogelijk - handmatige verificatie vereist'
+        });
       }
 
       const result = await browserlessResponse.json();
       console.log("✅ Browserless response received:", JSON.stringify(result).substring(0, 500));
 
-      // Map Browserless result to our status
+      // Map Browserless result to our status - default to manual_review instead of error
       const verificationStatus: DuoVerificationStatus = result.status || 'manual_review';
       const verificationResult: VerificationResult = {
         status: verificationStatus,
-        message: result.message || 'Verification completed',
+        message: result.message || 'Verificatie voltooid',
         details: {
           page_title: result.page_title,
           body_preview: result.body_text_preview,
@@ -383,9 +425,13 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error("❌ Error in verify-diploma-duo:", error);
-    return errorResponse(
-      error instanceof Error ? error.message : "Unknown error",
-      500
-    );
+    
+    // Even for unexpected errors, try to gracefully fallback
+    return jsonResponse({
+      success: false,
+      verification_status: 'manual_review',
+      message: 'DUO verificatie service error - handmatige verificatie vereist',
+      error: error instanceof Error ? error.message : "Unknown error"
+    });
   }
 });
