@@ -18,7 +18,9 @@ import {
   ShieldCheck,
   Clock,
   Eye,
-  RefreshCw
+  RefreshCw,
+  ShieldX,
+  XCircle
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -453,8 +455,20 @@ export function DocumentUploadSection({
     if (status === 'authentic_ok' || status === 'verified_emrex' || status === 'verified_manual') {
       return <Badge variant="outline" className="text-green-600 border-green-300">Geverifieerd</Badge>;
     }
+    if (status === 'verified_duo') {
+      return <Badge variant="outline" className="text-green-600 border-green-300">DUO Geverifieerd</Badge>;
+    }
     if (status === 'authentic_fail' || status === 'expired') {
       return <Badge variant="outline" className="text-destructive border-destructive/30">Afgekeurd</Badge>;
+    }
+    if (status === 'duo_invalid') {
+      return <Badge variant="outline" className="text-destructive border-destructive/30">DUO Ongeldig</Badge>;
+    }
+    if (status === 'duo_not_digital') {
+      return <Badge variant="outline" className="text-amber-600 border-amber-300">Niet Digitaal</Badge>;
+    }
+    if (status === 'duo_error') {
+      return <Badge variant="outline" className="text-blue-600 border-blue-300">Verificatie Fout</Badge>;
     }
     if (status === 'wrong_profile') {
       return <Badge variant="outline" className="text-amber-600 border-amber-300">Verkeerd profiel</Badge>;
@@ -857,9 +871,48 @@ export function DocumentUploadSection({
             )}
 
             {diplomaFilePath && diplomaStatus === 'duo_invalid' && (
-              <div className="flex items-center gap-2 p-3 mb-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
-                <AlertCircle className="h-5 w-5 text-red-600" />
-                <span className="text-red-700 dark:text-red-400 font-medium text-sm">⚠️ DUO verificatie gefaald - handmatige controle vereist</span>
+              <div className="p-4 mb-3 rounded-lg bg-red-100 dark:bg-red-950/50 border-2 border-red-400 dark:border-red-700">
+                <div className="flex items-start gap-3">
+                  <ShieldX className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-red-800 dark:text-red-300 text-sm">⚠️ WAARSCHUWING: Diploma Ongeldig</h4>
+                    <p className="text-red-700 dark:text-red-400 text-xs mt-1">
+                      Dit diploma is NIET gevonden in het DUO register of is als ongeldig gemarkeerd. Dit kan betekenen:
+                    </p>
+                    <ul className="text-red-700 dark:text-red-400 text-xs mt-2 list-disc list-inside space-y-0.5">
+                      <li>Het diploma is mogelijk vervalst</li>
+                      <li>De gegevens komen niet overeen met het register</li>
+                      <li>Het diploma is ingetrokken</li>
+                    </ul>
+                    <p className="text-red-800 dark:text-red-300 font-medium text-xs mt-2">
+                      Vraag de kandidaat om een origineel diploma of neem contact op met de onderwijsinstelling.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {diplomaFilePath && diplomaStatus === 'duo_not_digital' && (
+              <div className="flex items-center gap-2 p-3 mb-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+                <div className="flex-1">
+                  <span className="text-amber-700 dark:text-amber-400 font-medium text-sm">Diploma niet digitaal geregistreerd</span>
+                  <p className="text-amber-600 dark:text-amber-500 text-xs mt-1">
+                    Dit diploma is niet in het digitale DUO register gevonden (mogelijk van voor 1996). Handmatige verificatie vereist.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {diplomaFilePath && diplomaStatus === 'duo_error' && (
+              <div className="flex items-center gap-2 p-3 mb-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                <AlertCircle className="h-5 w-5 text-blue-600" />
+                <div className="flex-1">
+                  <span className="text-blue-700 dark:text-blue-400 font-medium text-sm">DUO verificatie kon niet worden uitgevoerd</span>
+                  <p className="text-blue-600 dark:text-blue-500 text-xs mt-1">
+                    Er is een technische fout opgetreden. Probeer het opnieuw of voer handmatige verificatie uit.
+                  </p>
+                </div>
               </div>
             )}
 
