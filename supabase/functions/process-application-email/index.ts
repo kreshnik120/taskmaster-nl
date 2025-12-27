@@ -569,22 +569,13 @@ Belangrijk:
     }
 
     // 🧠 HR SPECIALIST POST-PROCESSING: Detect placeholder phones and generate smart missing_info
-    const PLACEHOLDER_PHONE_PATTERNS = [
-      /^06[-\s]?0{6,}$/,              // 06-00000000, 06 000000
-      /^06[-\s]?1234567[89]?$/,       // 06-12345678, 06-123456789
-      /^000/,                          // starts with 000
-      /^06[-\s]?9{6,}$/,              // 06-99999999
-      /^(\d)\1{7,}$/,                  // all same digit like 00000000
-      /^0612345/,                      // obvious test pattern
-    ];
+    // 🔧 FIX: Use centralized isPlaceholderPhone from healthcare-mappings
     
     // Check for placeholder phone and set to null if detected
     if (extractedData.telefoonnummer) {
       const phone = String(extractedData.telefoonnummer);
-      const cleanedPhone = phone.replace(/[\s-]/g, '');
-      const isPlaceholder = PLACEHOLDER_PHONE_PATTERNS.some(p => p.test(phone) || p.test(cleanedPhone));
       
-      if (isPlaceholder) {
+      if (isPlaceholderPhone(phone)) {
         console.log(`🧠 HR Smart: Detected placeholder phone "${phone}" - setting to null`);
         extractedData.telefoonnummer = null;
         if (!extractedData.missing_info.includes('Telefoonnummer')) {

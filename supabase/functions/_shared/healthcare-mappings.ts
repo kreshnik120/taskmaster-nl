@@ -284,3 +284,83 @@ export function cleanPhoneNumber(phone: string | null | undefined): string | nul
   
   return phone.trim();
 }
+
+// ============================================
+// APPLICATION HELPERS
+// ============================================
+
+/**
+ * Maximum number of follow-up emails before stopping
+ */
+export const MAX_FOLLOWUP_EMAILS = 5;
+
+/**
+ * Cooldown period between follow-ups in hours
+ */
+export const FOLLOWUP_COOLDOWN_HOURS = 24;
+
+/**
+ * Critical fields that determine application completeness
+ */
+export const CRITICAL_FIELDS = [
+  'functie_niveau',
+  'werkvorm', 
+  'regio',
+  'beschikbaarheid',
+  'telefoonnummer',
+  'diploma'
+] as const;
+
+/**
+ * All goal types related to application intake
+ */
+export const APPLICATION_GOAL_TYPES = [
+  'send_welcome_and_intake',
+  'application_intake_completion',
+  'send_reply_response',
+  'request_documents'
+] as const;
+
+/**
+ * Active goal statuses that indicate work in progress
+ */
+export const ACTIVE_GOAL_STATUSES = [
+  'pending',
+  'planning', 
+  'executing',
+  'in_progress'
+] as const;
+
+/**
+ * Recalculates missing_info based on extracted_data
+ */
+export function recalculateMissingInfo(
+  extractedData: Record<string, unknown> | null
+): string[] {
+  if (!extractedData) return [...CRITICAL_FIELDS];
+  
+  return CRITICAL_FIELDS.filter(field => {
+    const value = extractedData[field];
+    // Field is missing if null, undefined, empty string, or placeholder
+    if (value === null || value === undefined || value === '') return true;
+    if (typeof value === 'string' && isPlaceholderPhone(value)) return true;
+    return false;
+  });
+}
+
+/**
+ * Pipeline stage progression map
+ */
+export const PIPELINE_STAGE_PROGRESSION: Record<string, string> = {
+  'nieuw': 'screening',
+  'screening': 'interview',
+  'interview': 'goedgekeurd',
+  'goedgekeurd': 'geplaatst'
+} as const;
+
+/**
+ * Gets the next pipeline stage
+ */
+export function getNextPipelineStage(currentStage: string): string | null {
+  return PIPELINE_STAGE_PROGRESSION[currentStage] || null;
+}
