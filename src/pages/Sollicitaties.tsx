@@ -21,6 +21,7 @@ import { NewApplicationDialog } from "@/components/NewApplicationDialog";
 import { BulkActionBar } from "@/components/recruitment/BulkActionBar";
 import { AnalyticsSheet } from "@/components/recruitment/AnalyticsSheet";
 import { AIIntakeStatusWidget } from "@/components/recruitment/AIIntakeStatusWidget";
+import { PipelineAnalyticsWidget } from "@/components/recruitment/PipelineAnalyticsWidget";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -235,9 +236,11 @@ const Sollicitaties = () => {
     };
   }, []);
 
-  // Auto-open application from URL parameter
+  // Auto-open application from URL parameter or set stage filter
   useEffect(() => {
     const applicationId = searchParams.get('application');
+    const stageParam = searchParams.get('stage');
+    
     if (applicationId && applications.length > 0 && !loading) {
       // Find the application in our data
       const targetApp = applications.find(app => app.id === applicationId);
@@ -247,6 +250,16 @@ const Sollicitaties = () => {
         setDetailModalOpen(true);
         
         // Clean up URL (remove query param)
+        setSearchParams({});
+      }
+    }
+    
+    // Handle stage filter from URL (e.g., from UrgencyActionPanel navigation)
+    if (stageParam && !loading) {
+      const validStages = ['nieuw', 'screening', 'interview', 'goedgekeurd', 'geplaatst', 'afgewezen'];
+      if (validStages.includes(stageParam)) {
+        setFilterStage(stageParam);
+        // Clean up URL
         setSearchParams({});
       }
     }
@@ -1096,6 +1109,9 @@ const Sollicitaties = () => {
                 }}
               />
             </div>
+
+            {/* Pipeline Analytics Widget */}
+            <PipelineAnalyticsWidget applications={filteredApplications} />
 
             {/* Search and Filter Bar */}
             <div className="py-4">
