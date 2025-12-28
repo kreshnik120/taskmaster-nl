@@ -5522,6 +5522,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_usage_count: {
+        Args: { knowledge_id: string }
+        Returns: undefined
+      }
       is_knowledge_valid: {
         Args: { _valid_from: string; _valid_to: string }
         Returns: boolean
