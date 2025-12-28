@@ -15,6 +15,7 @@ import { TaskDialog } from "@/components/TaskDialog";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { QuickTimerButton } from "@/components/QuickTimerButton";
 import { RecruitmentKPIs } from "@/components/dashboard/RecruitmentKPIs";
+import { AILearningProgressWidget } from "@/components/recruitment/AILearningProgressWidget";
 import { TodayFocusCard } from "@/components/dashboard/TodayFocusCard";
 import {
   AlertDialog,
@@ -709,7 +710,14 @@ const Dashboard = () => {
       </div>
 
       {/* Recruitment KPI's - Core Dashboard Metrics */}
-      <RecruitmentKPIs />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <RecruitmentKPIs />
+        </div>
+        <div className="lg:col-span-1">
+          <AILearningProgressWidget />
+        </div>
+      </div>
 
       {/* Vandaag Focus - Full Width */}
       <TodayFocusCard />

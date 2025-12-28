@@ -10,6 +10,7 @@ import { nl } from "date-fns/locale";
 import { Phone, Mail, MapPin } from "lucide-react";
 import { getOrganizationName } from "@/lib/organizationMapping";
 import { DirectPlacementButton } from "@/components/DirectPlacementButton";
+import { AIMatchInsights } from "@/components/recruitment/AIMatchInsights";
 import { cn } from "@/lib/utils";
 
 interface Professional {
@@ -355,6 +356,12 @@ export function ProfessionalCard({
               </div>
             </div>
           )}
+
+          {/* AI Match Insights */}
+          <AIMatchInsights 
+            functieNiveau={professional.functie_niveau}
+            sector={professional.skills}
+          />
         </div>
       </HoverCardContent>
     </HoverCard>
