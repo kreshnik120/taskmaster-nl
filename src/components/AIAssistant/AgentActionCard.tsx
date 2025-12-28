@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Mail, Calendar, FileText, Loader2, Check, X, AlertCircle, Clock, User, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Mail, Calendar, FileText, Loader2, Check, X, AlertCircle, Clock, User, ChevronDown, ChevronUp, Undo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -26,7 +27,9 @@ interface AgentActionCardProps {
   onCancel: () => void;
 }
 
-type ActionStatus = 'pending' | 'confirming' | 'processing' | 'completed' | 'failed';
+type ActionStatus = 'pending' | 'countdown' | 'confirming' | 'processing' | 'completed' | 'failed' | 'cancelled';
+
+const UNDO_COUNTDOWN_SECONDS = 10;
 
 const ACTION_TYPE_CONFIG: Record<string, { icon: React.ElementType; label: string; color: string }> = {
   send_email: { icon: Mail, label: 'Email versturen', color: 'text-blue-500' },
@@ -44,16 +47,147 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [goalId, setGoalId] = useState<string | null>(actionData.pending_goal_id || null);
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const [countdownSeconds, setCountdownSeconds] = useState(UNDO_COUNTDOWN_SECONDS);
   const { toast } = useToast();
 
-  // useRef for stable status tracking in timeout callback
+  // Refs for stable callbacks and cleanup
   const statusRef = useRef<ActionStatus>(status);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const sendTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
 
   const config = ACTION_TYPE_CONFIG[actionData.action_type] || ACTION_TYPE_CONFIG.send_email;
   const IconComponent = config.icon;
+
+  // Cleanup countdown on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      if (sendTimeoutRef.current) clearTimeout(sendTimeoutRef.current);
+    };
+  }, []);
+
+  // Execute the actual send
+  const executeSend = useCallback(async () => {
+    setStatus('confirming');
+    setStatusMessage('⏳ Bevestiging wordt verwerkt...');
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Niet ingelogd');
+      }
+
+      const { data: userOrg } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', session.user.id)
+        .limit(1)
+        .single();
+
+      const orgId = userOrg?.org_id || '550e8400-e29b-41d4-a716-446655440000';
+
+      const { data: goal, error } = await supabase
+        .from('agent_goals')
+        .insert({
+          org_id: orgId,
+          goal_type: 'chat_triggered_followup',
+          goal_description: `Chat-triggered follow-up naar ${actionData.candidate_name}`,
+          status: 'pending',
+          priority: 5,
+          input_data: {
+            application_id: actionData.application_id,
+            candidate_email: actionData.candidate_email,
+            candidate_name: actionData.candidate_name,
+            priority_fields: actionData.missing_fields || [],
+            custom_message: actionData.custom_message,
+            triggered_by: 'chat',
+            chat_user_id: session.user.id,
+          },
+        })
+        .select('id')
+        .single();
+
+      if (error) throw error;
+
+      setGoalId(goal.id);
+      setStatus('processing');
+      setStatusMessage('📤 Email wordt verstuurd...');
+      onConfirm(goal.id);
+
+      await supabase.functions.invoke('ai-agent-orchestrator', {
+        body: { action: 'process_pending_goals' },
+      });
+
+    } catch (error: any) {
+      console.error('Error confirming action:', error);
+      setStatus('failed');
+      setStatusMessage(`❌ ${error.message}`);
+      toast({
+        title: 'Fout',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  }, [actionData, onConfirm, toast]);
+
+  // Start countdown and schedule send
+  const handleConfirm = () => {
+    setStatus('countdown');
+    setCountdownSeconds(UNDO_COUNTDOWN_SECONDS);
+    setStatusMessage(`⏳ Wordt verstuurd over ${UNDO_COUNTDOWN_SECONDS} seconden...`);
+
+    // Countdown interval
+    countdownIntervalRef.current = setInterval(() => {
+      setCountdownSeconds(prev => {
+        const next = prev - 1;
+        if (next > 0) {
+          setStatusMessage(`⏳ Wordt verstuurd over ${next} seconden...`);
+        }
+        return next;
+      });
+    }, 1000);
+
+    // Schedule actual send
+    sendTimeoutRef.current = setTimeout(() => {
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      executeSend();
+    }, UNDO_COUNTDOWN_SECONDS * 1000);
+
+    toast({
+      description: `Follow-up wordt over ${UNDO_COUNTDOWN_SECONDS} seconden verstuurd. Klik op "Ongedaan maken" om te annuleren.`,
+    });
+  };
+
+  // Undo/cancel during countdown
+  const handleUndo = () => {
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    if (sendTimeoutRef.current) clearTimeout(sendTimeoutRef.current);
+    
+    setStatus('cancelled');
+    setStatusMessage('🚫 Verzending geannuleerd');
+    
+    toast({
+      description: 'Follow-up verzending geannuleerd',
+    });
+
+    // Reset to pending after short delay
+    setTimeout(() => {
+      setStatus('pending');
+      setStatusMessage('');
+      setCountdownSeconds(UNDO_COUNTDOWN_SECONDS);
+    }, 2000);
+  };
+
+  const handleCancel = () => {
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    if (sendTimeoutRef.current) clearTimeout(sendTimeoutRef.current);
+    setStatus('pending');
+    onCancel();
+  };
 
   // Realtime subscription for goal status updates
   useEffect(() => {
@@ -86,7 +220,6 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
       }
     };
 
-    // Initial status fetch
     const fetchCurrentStatus = async () => {
       const { data: goal } = await supabase
         .from('agent_goals')
@@ -99,7 +232,6 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
       }
     };
 
-    // Set up realtime subscription
     const channel = supabase
       .channel(`agent-goal-${goalId}`)
       .on(
@@ -122,12 +254,10 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
           fetchCurrentStatus();
         } else if (subscriptionStatus === 'CHANNEL_ERROR') {
           console.error('❌ Subscription error:', err);
-          // Fallback: fetch status once on error
           fetchCurrentStatus();
         }
       });
 
-    // Fallback timeout - uses ref for stable status check
     const timeoutId = setTimeout(() => {
       if (statusRef.current === 'processing' || statusRef.current === 'confirming') {
         setStatus('completed');
@@ -142,80 +272,10 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
     };
   }, [goalId, actionData.candidate_name, toast]);
 
-  const handleConfirm = async () => {
-    setStatus('confirming');
-    setStatusMessage('⏳ Bevestiging wordt verwerkt...');
-
-    try {
-      // Get session
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('Niet ingelogd');
-      }
-
-      // Get user's org_id dynamically
-      const { data: userOrg } = await supabase
-        .from('user_organizations')
-        .select('org_id')
-        .eq('user_id', session.user.id)
-        .limit(1)
-        .single();
-
-      const orgId = userOrg?.org_id || '550e8400-e29b-41d4-a716-446655440000'; // Fallback to ABCzorg
-
-      // Create agent goal for chat-triggered followup
-      const { data: goal, error } = await supabase
-        .from('agent_goals')
-        .insert({
-          org_id: orgId,
-          goal_type: 'chat_triggered_followup',
-          goal_description: `Chat-triggered follow-up naar ${actionData.candidate_name}`,
-          status: 'pending',
-          priority: 5,
-          input_data: {
-            application_id: actionData.application_id,
-            candidate_email: actionData.candidate_email,
-            candidate_name: actionData.candidate_name,
-            priority_fields: actionData.missing_fields || [],
-            custom_message: actionData.custom_message,
-            triggered_by: 'chat',
-            chat_user_id: session.user.id,
-          },
-        })
-        .select('id')
-        .single();
-
-      if (error) throw error;
-
-      setGoalId(goal.id);
-      setStatus('processing');
-      setStatusMessage('📤 Email wordt verstuurd...');
-      onConfirm(goal.id);
-
-      // Trigger orchestrator to process the goal
-      await supabase.functions.invoke('ai-agent-orchestrator', {
-        body: { action: 'process_pending_goals' },
-      });
-
-    } catch (error: any) {
-      console.error('Error confirming action:', error);
-      setStatus('failed');
-      setStatusMessage(`❌ ${error.message}`);
-      toast({
-        title: 'Fout',
-        description: error.message,
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleCancel = () => {
-    setStatus('pending');
-    onCancel();
-  };
-
   const renderStatusBadge = () => {
     switch (status) {
+      case 'countdown':
+        return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200"><Clock className="w-3 h-3 mr-1" /> {countdownSeconds}s</Badge>;
       case 'confirming':
         return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Bevestigen...</Badge>;
       case 'processing':
@@ -224,6 +284,8 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
         return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200"><Check className="w-3 h-3 mr-1" /> Voltooid</Badge>;
       case 'failed':
         return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200"><AlertCircle className="w-3 h-3 mr-1" /> Mislukt</Badge>;
+      case 'cancelled':
+        return <Badge variant="outline" className="bg-muted text-muted-foreground border-border"><X className="w-3 h-3 mr-1" /> Geannuleerd</Badge>;
       default:
         return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200"><Clock className="w-3 h-3 mr-1" /> Wacht op bevestiging</Badge>;
     }
@@ -289,6 +351,16 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
           </div>
         </div>
 
+        {/* Countdown Progress Bar */}
+        {status === 'countdown' && (
+          <div className="mb-2">
+            <Progress 
+              value={(countdownSeconds / UNDO_COUNTDOWN_SECONDS) * 100} 
+              className="h-1.5"
+            />
+          </div>
+        )}
+
         {/* Missing Fields Preview */}
         {renderMissingFields()}
 
@@ -317,7 +389,7 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
         )}
       </CardContent>
 
-      {/* Actions - only show when pending */}
+      {/* Actions - show when pending */}
       {status === 'pending' && (
         <CardFooter className="px-4 pb-3 pt-0 gap-2">
           <Button
@@ -336,6 +408,21 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
           >
             <X className="w-3 h-3 mr-1" />
             Annuleer
+          </Button>
+        </CardFooter>
+      )}
+
+      {/* Undo button during countdown */}
+      {status === 'countdown' && (
+        <CardFooter className="px-4 pb-3 pt-0">
+          <Button
+            onClick={handleUndo}
+            variant="destructive"
+            size="sm"
+            className="w-full h-8"
+          >
+            <Undo2 className="w-3 h-3 mr-1" />
+            Ongedaan maken ({countdownSeconds}s)
           </Button>
         </CardFooter>
       )}
