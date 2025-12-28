@@ -827,11 +827,179 @@ async function trackKnowledgeUsage(
   return usedKnowledgeIds;
 }
 
+// ============================================
+// HEALTH CHECK ENDPOINT
+// ============================================
+async function performHealthCheck(supabase: any): Promise<Response> {
+  const checks: Record<string, { status: string; message: string; durationMs?: number }> = {};
+  const startTime = Date.now();
+
+  // 1. VERSION CHECK
+  checks.version = {
+    status: 'ok',
+    message: SYSTEM_PROMPT_VERSION
+  };
+
+  // 2. KNOWLEDGE_CRUD VERSION
+  checks.knowledge_crud_version = {
+    status: 'ok',
+    message: 'v2025-12-28-v2'
+  };
+
+  // 3. DATABASE CONNECTION TEST
+  try {
+    const start = Date.now();
+    const { count, error } = await supabase
+      .from('ai_knowledge_base')
+      .select('*', { count: 'exact', head: true })
+      .is('deleted_at', null);
+    
+    checks.database = error 
+      ? { status: 'error', message: error.message }
+      : { status: 'ok', message: `Connected - ${count} knowledge items`, durationMs: Date.now() - start };
+  } catch (e: any) {
+    checks.database = { status: 'error', message: e.message };
+  }
+
+  // 4. RPC: atomic_reinforce_knowledge (dry-run with fake ID)
+  try {
+    const start = Date.now();
+    const { data, error } = await supabase.rpc('atomic_reinforce_knowledge', {
+      p_knowledge_id: '00000000-0000-0000-0000-000000000000',
+      p_org_id: '550e8400-e29b-41d4-a716-446655440000',
+      p_stability_boost: 0.0,
+      p_usage_increment: 0
+    });
+    
+    // Expected: success=false, error='Knowledge item not found or access denied'
+    if (error) {
+      // PGRST202 = function not found or wrong params (CACHE ISSUE!)
+      const isCacheIssue = error.message?.includes('PGRST202') || error.code === 'PGRST202';
+      checks.rpc_reinforce = { 
+        status: 'error', 
+        message: isCacheIssue 
+          ? `CACHE ISSUE! RPC function not found or wrong parameters: ${error.message}` 
+          : error.message,
+        durationMs: Date.now() - start
+      };
+    } else {
+      checks.rpc_reinforce = {
+        status: (data?.success === false) ? 'ok' : 'warning',
+        message: data?.error || data?.message || 'RPC callable with correct 4 parameters (incl. p_org_id)',
+        durationMs: Date.now() - start
+      };
+    }
+  } catch (e: any) {
+    checks.rpc_reinforce = { 
+      status: 'error', 
+      message: e.message?.includes('PGRST202') 
+        ? 'CACHE ISSUE! RPC function not found or wrong parameters' 
+        : e.message 
+    };
+  }
+
+  // 5. RPC: atomic_update_confidence (dry-run)
+  try {
+    const start = Date.now();
+    const { data, error } = await supabase.rpc('atomic_update_confidence', {
+      p_knowledge_id: '00000000-0000-0000-0000-000000000000',
+      p_org_id: '550e8400-e29b-41d4-a716-446655440000',
+      p_delta: 0.0,
+      p_min_confidence: 0.0,
+      p_max_confidence: 1.0,
+      p_auto_prune: false
+    });
+    
+    if (error) {
+      const isCacheIssue = error.message?.includes('PGRST202') || error.code === 'PGRST202';
+      checks.rpc_update_confidence = { 
+        status: 'error', 
+        message: isCacheIssue ? 'CACHE ISSUE! Wrong parameters' : error.message,
+        durationMs: Date.now() - start
+      };
+    } else {
+      checks.rpc_update_confidence = {
+        status: (data?.success === false || data?.was_pruned === false) ? 'ok' : 'warning',
+        message: data?.error || 'RPC callable with 6 parameters',
+        durationMs: Date.now() - start
+      };
+    }
+  } catch (e: any) {
+    checks.rpc_update_confidence = { status: 'error', message: e.message };
+  }
+
+  // 6. RPC: match_knowledge (embedding test with dummy vector)
+  try {
+    const start = Date.now();
+    const dummyEmbedding = new Array(1536).fill(0);
+    const { data, error } = await supabase.rpc('match_knowledge', {
+      query_embedding: dummyEmbedding,
+      match_threshold: 0.99, // Very high threshold = no matches
+      match_count: 1,
+      filter_org_id: '550e8400-e29b-41d4-a716-446655440000',
+      filter_role_tags: null,
+      require_verified: false,
+      include_shared: false
+    });
+    
+    checks.rpc_match_knowledge = error 
+      ? { status: 'error', message: error.message }
+      : { status: 'ok', message: `RPC callable - ${data?.length || 0} results`, durationMs: Date.now() - start };
+  } catch (e: any) {
+    checks.rpc_match_knowledge = { status: 'error', message: e.message };
+  }
+
+  // 7. CACHE TABLE ACCESS
+  try {
+    const start = Date.now();
+    const { count, error } = await supabase
+      .from('ai_response_cache')
+      .select('*', { count: 'exact', head: true });
+    
+    checks.cache_table = error 
+      ? { status: 'error', message: error.message }
+      : { status: 'ok', message: `${count} cached responses`, durationMs: Date.now() - start };
+  } catch (e: any) {
+    checks.cache_table = { status: 'error', message: e.message };
+  }
+
+  // OVERALL STATUS
+  const allOk = Object.values(checks).every(c => c.status === 'ok');
+  const hasErrors = Object.values(checks).some(c => c.status === 'error');
+  const status = hasErrors ? 'unhealthy' : (allOk ? 'healthy' : 'degraded');
+
+  console.log(`🏥 [HEALTH-CHECK] Status: ${status}, Duration: ${Date.now() - startTime}ms`);
+
+  return new Response(JSON.stringify({
+    status,
+    timestamp: new Date().toISOString(),
+    totalDurationMs: Date.now() - startTime,
+    checks
+  }, null, 2), {
+    status: hasErrors ? 503 : 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+  });
+}
+
 Deno.serve(async (req: Request) => {
   const startTime = Date.now(); // Track execution time
   
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // ============================================
+  // HEALTH-CHECK ROUTE (uses admin client, no user auth required for health check)
+  // ============================================
+  try {
+    const url = new URL(req.url);
+    if (url.searchParams.get('health') === 'true') {
+      console.log('🏥 Health-check requested');
+      const supabaseServiceClient = createAdminClient();
+      return await performHealthCheck(supabaseServiceClient);
+    }
+  } catch (healthError) {
+    console.error('Health check URL parse error:', healthError);
   }
 
   try {
