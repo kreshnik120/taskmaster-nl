@@ -16,7 +16,6 @@ import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { QuickTimerButton } from "@/components/QuickTimerButton";
 import { RecruitmentKPIs } from "@/components/dashboard/RecruitmentKPIs";
 import { TodayFocusCard } from "@/components/dashboard/TodayFocusCard";
-import { UnifiedAIHealthDashboard } from "@/components/AITraining/UnifiedAIHealthDashboard";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -708,9 +707,6 @@ const Dashboard = () => {
 
       {/* Recruitment KPI's - Core Dashboard Metrics */}
       <RecruitmentKPIs />
-
-      {/* AI Learning Status - Real-time monitoring */}
-      <UnifiedAIHealthDashboard compact={true} />
 
       {/* Vandaag Focus - Full Width */}
       <TodayFocusCard />
