@@ -1,6 +1,11 @@
 // CV Data Extraction - AI-powered PDF analysis for healthcare recruitment
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
-import { isPlaceholderPhone } from '../_shared/healthcare-mappings.ts';
+import { 
+  isPlaceholderPhone, 
+  validateAllExtractedFields, 
+  validateBIGNumber,
+  type CVValidationResult 
+} from '../_shared/healthcare-mappings.ts';
 
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -392,8 +397,48 @@ Belangrijk:
       extractedData.placeholder_phone_detected = { value: true, confidence: 1.0 };
     }
 
+    // === FASE 2C: AI HALLUCINATION CROSS-VALIDATION ===
+    console.log("🔍 Running AI hallucination cross-validation...");
+    
+    const validationResult: CVValidationResult = validateAllExtractedFields(extractedData);
+    
+    // Log warnings
+    for (const warning of validationResult.warnings) {
+      console.warn(warning);
+    }
+    
+    // Nullify hallucinated fields
+    for (const field of validationResult.nullifiedFields) {
+      console.log(`🚫 Nullifying hallucinated field: ${field}`);
+      if (typeof extractedData[field] === 'object' && 'value' in extractedData[field]) {
+        extractedData[field] = { value: null, confidence: 0, hallucination_detected: true };
+      } else {
+        extractedData[field] = null;
+      }
+    }
+    
+    // Adjust global confidence based on validation
+    if (validationResult.hasHallucinationFlags) {
+      const originalConfidence = extractedData.global_confidence || 0.5;
+      extractedData.global_confidence = validationResult.adjustedConfidence;
+      extractedData.hallucination_flags = validationResult.warnings;
+      console.log(`📉 Confidence adjusted: ${originalConfidence.toFixed(2)} → ${validationResult.adjustedConfidence.toFixed(2)}`);
+    }
+    
+    // Special validation for BIG nummer
+    const bigNummerValue = getValue(extractedData.BIG_nummer);
+    if (bigNummerValue) {
+      const bigValidation = validateBIGNumber(String(bigNummerValue));
+      if (!bigValidation.valid) {
+        console.warn(`⚠️ BIG nummer validation failed: ${bigValidation.reason}`);
+        extractedData.BIG_nummer = { value: null, confidence: 0, validation_error: bigValidation.reason };
+        extractedData.big_validation_failed = { value: true, confidence: 1.0 };
+      }
+    }
+
     console.log("CV extraction complete with per-field confidence scores");
     console.log("Global confidence:", extractedData.global_confidence);
+    console.log(`🛡️ Hallucination check: ${validationResult.hasHallucinationFlags ? 'FLAGS DETECTED' : 'CLEAN'}`);
     
     // Log photo detection status
     const hasPhoto = getValue(extractedData.has_profile_photo);
@@ -520,8 +565,40 @@ Do NOT include any text, logos, or other elements - just the person's face.`
     }
 
     // 🆕 Create searchable knowledge items if orgId is provided
+    // === FASE 2C: SKIP KNOWLEDGE CREATION FOR LOW-CONFIDENCE/HALLUCINATED DATA ===
+    const minConfidenceForKnowledge = 0.5; // Minimum confidence to create knowledge items
+    const shouldCreateKnowledge = orgId && 
+      (extractedData.global_confidence || 0) >= minConfidenceForKnowledge &&
+      !validationResult.hasHallucinationFlags;
+    
     let knowledgeItemsCreated = 0;
-    if (orgId) {
+    
+    if (!shouldCreateKnowledge && orgId) {
+      console.warn(`⚠️ Skipping knowledge creation - low confidence (${extractedData.global_confidence}) or hallucination detected`);
+      
+      // Log to system_events for HR review if hallucination flags exist
+      if (validationResult.hasHallucinationFlags) {
+        try {
+          await supabase.from('system_events').insert({
+            event_type: 'cv_hallucination_detected',
+            severity: 'medium',
+            title: '⚠️ AI Hallucination Detected in CV Extraction',
+            details: {
+              application_id: applicationId,
+              filename: filename,
+              warnings: validationResult.warnings,
+              nullified_fields: validationResult.nullifiedFields,
+              adjusted_confidence: validationResult.adjustedConfidence,
+            },
+            org_id: orgId,
+          });
+        } catch (logError) {
+          console.error("Failed to log hallucination event:", logError);
+        }
+      }
+    }
+    
+    if (shouldCreateKnowledge) {
       try {
         // Helper to extract skills from CV data
         const extractSkillsFromCV = (data: any): string[] => {
