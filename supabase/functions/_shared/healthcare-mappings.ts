@@ -1832,3 +1832,94 @@ export function isUrlAllowedForScraping(
     };
   }
 }
+
+// ============================================================================
+// SECURITY EVENT LOGGING HELPER
+// ============================================================================
+
+/**
+ * Security event types for centralized logging
+ */
+export type SecurityEventType = 
+  | 'ssrf_blocked' 
+  | 'injection_detected' 
+  | 'data_leakage_prevented'
+  | 'hallucination_detected'
+  | 'suspicious_input';
+
+/**
+ * Severity levels for security events
+ */
+export type SecuritySeverity = 'low' | 'medium' | 'high' | 'critical';
+
+/**
+ * Standardized security event logging interface
+ */
+export interface SecurityEventDetails {
+  function_name: string;
+  blocked_url?: string;
+  blocked_reason?: string;
+  input_content?: string;
+  detected_patterns?: string[];
+  user_id?: string;
+  org_id?: string;
+  additional_context?: Record<string, unknown>;
+}
+
+/**
+ * Log security events to system_events table for monitoring and alerting
+ * 
+ * @param supabase - Supabase admin client
+ * @param eventType - Type of security event
+ * @param severity - Severity level
+ * @param details - Event details
+ */
+export async function logSecurityEvent(
+  supabase: any,
+  eventType: SecurityEventType,
+  severity: SecuritySeverity,
+  details: SecurityEventDetails
+): Promise<void> {
+  const titleMap: Record<SecurityEventType, string> = {
+    ssrf_blocked: '🚫 SSRF Attempt Blocked',
+    injection_detected: '⚠️ Prompt Injection Detected',
+    data_leakage_prevented: '🔴 Data Leakage Prevented',
+    hallucination_detected: '🧠 AI Hallucination Detected',
+    suspicious_input: '👁️ Suspicious Input Detected',
+  };
+
+  const descriptionMap: Record<SecurityEventType, string> = {
+    ssrf_blocked: `Blocked potentially malicious URL in ${details.function_name}`,
+    injection_detected: `Detected prompt injection attempt in ${details.function_name}`,
+    data_leakage_prevented: `Prevented sensitive data exposure in ${details.function_name}`,
+    hallucination_detected: `Detected potential AI hallucination in ${details.function_name}`,
+    suspicious_input: `Flagged suspicious input pattern in ${details.function_name}`,
+  };
+
+  try {
+    await supabase.from('system_events').insert({
+      event_type: 'security_alert',
+      severity,
+      title: titleMap[eventType],
+      description: descriptionMap[eventType],
+      details: {
+        alert_category: eventType,
+        timestamp: new Date().toISOString(),
+        function_name: details.function_name,
+        blocked_url: details.blocked_url,
+        blocked_reason: details.blocked_reason,
+        input_preview: details.input_content?.substring(0, 200),
+        detected_patterns: details.detected_patterns,
+        user_id: details.user_id,
+        org_id: details.org_id,
+        ...details.additional_context,
+      },
+      processed: false,
+    });
+    
+    console.log(`📊 Security event logged: ${eventType} (${severity})`);
+  } catch (error) {
+    // Don't throw - logging failures shouldn't break the main flow
+    console.error(`❌ Failed to log security event: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}

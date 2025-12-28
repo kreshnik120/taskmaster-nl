@@ -1,5 +1,5 @@
 import { corsHeaders, handleCors, jsonResponse, errorResponse, createAdminClient } from "../_shared/core.ts";
-import { isUrlAllowedForScraping } from "../_shared/healthcare-mappings.ts";
+import { isUrlAllowedForScraping, logSecurityEvent } from "../_shared/healthcare-mappings.ts";
 
 interface EnrichRequest {
   organizationId?: string;
@@ -348,7 +348,7 @@ function extractQualityDescription(content: string): string | null {
 /**
  * Scrape a single URL with timeout
  */
-async function scrapeUrl(apiKey: string, url: string, timeout = 30000): Promise<{ markdown: string; html: string } | null> {
+async function scrapeUrl(apiKey: string, url: string, timeout = 30000, supabase?: any): Promise<{ markdown: string; html: string } | null> {
   try {
     // === SSRF PROTECTION ===
     const urlValidation = isUrlAllowedForScraping(url, { 
@@ -358,6 +358,16 @@ async function scrapeUrl(apiKey: string, url: string, timeout = 30000): Promise<
 
     if (!urlValidation.allowed) {
       console.warn(`🚫 SSRF Protection in enrichment: Blocked ${url} - ${urlValidation.reason}`);
+      
+      // Log security event if supabase client is available
+      if (supabase) {
+        await logSecurityEvent(supabase, 'ssrf_blocked', 'medium', {
+          function_name: 'firecrawl-enrich-organization',
+          blocked_url: url,
+          blocked_reason: urlValidation.reason,
+        });
+      }
+      
       return null;
     }
 
@@ -457,7 +467,7 @@ async function enrichSingleOrganization(
     
     // STEP 1: Scrape homepage
     console.log(`📄 Step 1: Scraping homepage...`);
-    const homepageContent = await scrapeUrl(apiKey, urlToScrape, 30000);
+    const homepageContent = await scrapeUrl(apiKey, urlToScrape, 30000, supabase);
     
     if (!homepageContent) {
       result.error = 'Homepage scrape failed';
@@ -476,7 +486,7 @@ async function enrichSingleOrganization(
         const contactUrl = `${baseUrl}${path}`;
         console.log(`   Trying: ${contactUrl}`);
         
-        const contactContent = await scrapeUrl(apiKey, contactUrl, 15000);
+        const contactContent = await scrapeUrl(apiKey, contactUrl, 15000, supabase);
         
         if (contactContent) {
           const contactData = extractDataFromContent(contactContent.markdown, contactContent.html);
