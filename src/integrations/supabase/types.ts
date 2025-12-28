@@ -2658,21 +2658,30 @@ export type Database = {
           created_at: string | null
           feedback_type: string
           id: string
+          knowledge_ids: string[] | null
           message_id: string
+          processed_at: string | null
+          processed_by: string | null
           user_id: string
         }
         Insert: {
           created_at?: string | null
           feedback_type: string
           id?: string
+          knowledge_ids?: string[] | null
           message_id: string
+          processed_at?: string | null
+          processed_by?: string | null
           user_id: string
         }
         Update: {
           created_at?: string | null
           feedback_type?: string
           id?: string
+          knowledge_ids?: string[] | null
           message_id?: string
+          processed_at?: string | null
+          processed_by?: string | null
           user_id?: string
         }
         Relationships: [

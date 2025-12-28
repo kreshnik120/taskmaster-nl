@@ -207,11 +207,13 @@ export async function processFeedbackLearning(
   try {
     const { feedback, knowledge_ids, message_id, org_id, user_id, batch_mode } = payload;
 
-    // Batch mode: process all pending feedback
+    // Batch mode: process all pending feedback from message_feedback table
     if (batch_mode) {
+      // FIX: Query message_feedback instead of ai_chat_feedback (which is empty)
       const { data: pendingFeedback, error: fetchError } = await supabase
-        .from('ai_chat_feedback')
-        .select('id, feedback_type, knowledge_ids, message_id, user_id')
+        .from('message_feedback')
+        .select('id, message_id, feedback_type, knowledge_ids, user_id')
+        .is('processed_at', null)
         .order('created_at', { ascending: true })
         .limit(100);
 
@@ -220,10 +222,29 @@ export async function processFeedbackLearning(
       }
 
       for (const fb of pendingFeedback ?? []) {
-        const knowledgeIds = fb.knowledge_ids ?? [];
-        const feedbackType = fb.feedback_type as 'helpful' | 'harmful';
+        let knowledgeIds = fb.knowledge_ids ?? [];
         
-        // Get org_id from knowledge item if not in feedback
+        // If no knowledge_ids stored, try to fetch from message metadata
+        if (knowledgeIds.length === 0 && fb.message_id) {
+          const { data: message } = await supabase
+            .from('ai_chat_messages')
+            .select('used_knowledge')
+            .eq('id', fb.message_id)
+            .maybeSingle();
+          
+          if (message?.used_knowledge) {
+            const usedKnowledge = message.used_knowledge as Array<{ id?: string } | string>;
+            knowledgeIds = usedKnowledge
+              .map(k => typeof k === 'string' ? k : k.id)
+              .filter((id): id is string => !!id);
+          }
+        }
+        
+        // Map feedback_type: 'positive'/'negative' -> 'helpful'/'harmful'
+        const rawType = fb.feedback_type || '';
+        const feedbackType: 'helpful' | 'harmful' = 
+          rawType === 'positive' || rawType === 'helpful' ? 'helpful' : 'harmful';
+        
         const feedbackOrgId = org_id || '550e8400-e29b-41d4-a716-446655440000';
         
         for (const kId of knowledgeIds) {
@@ -239,6 +260,16 @@ export async function processFeedbackLearning(
             result.errors.push(`Batch update failed for ${kId}: ${errorMessage}`);
           }
         }
+        
+        // Mark feedback as processed
+        await supabase
+          .from('message_feedback')
+          .update({ 
+            processed_at: new Date().toISOString(),
+            processed_by: 'unified-learner'
+          })
+          .eq('id', fb.id);
+        
         result.processed++;
       }
 

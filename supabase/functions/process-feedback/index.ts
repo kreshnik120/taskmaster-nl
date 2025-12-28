@@ -84,13 +84,14 @@ Deno.serve(async (req) => {
     const isPositive = feedback === 'positive';
     const feedbackType = isPositive ? 'helpful' : 'harmful';
 
-    // Save to message_feedback table (prevents duplicate feedback)
+    // Save to message_feedback table with knowledge_ids (prevents duplicate feedback)
     const { error: feedbackError } = await supabase
       .from('message_feedback')
       .insert({
         user_id: user.id,
         message_id: messageId,
         feedback_type: feedback,
+        knowledge_ids: usedKnowledge, // FIX: Store knowledge_ids for batch processing
       });
 
     // Ignore duplicate key errors
