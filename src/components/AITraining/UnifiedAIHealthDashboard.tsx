@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useUnifiedAIHealth, EdgeFunctionStatus } from "@/hooks/useUnifiedAIHealth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,16 @@ import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Link } from "react-router-dom";
 
+/**
+ * UnifiedAIHealthDashboard - Geconsolideerde AI system health monitoring
+ * 
+ * @param compact - Toont alleen summary (voor hoofddashboard)
+ * 
+ * Combineert:
+ * - Edge Function status monitoring (8 learning loops)
+ * - Knowledge Base quality metrics
+ * - Real-time updates via Supabase subscriptions
+ */
 interface UnifiedAIHealthDashboardProps {
   compact?: boolean;
 }
@@ -135,6 +146,16 @@ function EdgeFunctionCard({ fn }: { fn: EdgeFunctionStatus }) {
 
 export function UnifiedAIHealthDashboard({ compact = false }: UnifiedAIHealthDashboardProps) {
   const { data, isLoading, error, refetch } = useUnifiedAIHealth();
+  const [isRefetching, setIsRefetching] = useState(false);
+
+  const handleRefetch = async () => {
+    setIsRefetching(true);
+    try {
+      await refetch();
+    } finally {
+      setIsRefetching(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -158,9 +179,14 @@ export function UnifiedAIHealthDashboard({ compact = false }: UnifiedAIHealthDas
 
   if (error || !data) {
     return (
-      <Card className="col-span-full border-destructive">
-        <CardContent className="p-4">
-          <p className="text-destructive">Fout bij laden van AI health data</p>
+      <Card className="col-span-full border-destructive/50">
+        <CardContent className="p-6 text-center">
+          <XCircle className="h-8 w-8 text-destructive mx-auto mb-2" />
+          <p className="text-destructive font-medium mb-2">Fout bij laden van AI health data</p>
+          <Button variant="outline" size="sm" onClick={handleRefetch} disabled={isRefetching}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isRefetching ? 'animate-spin' : ''}`} />
+            Opnieuw proberen
+          </Button>
         </CardContent>
       </Card>
     );
@@ -277,8 +303,8 @@ export function UnifiedAIHealthDashboard({ compact = false }: UnifiedAIHealthDas
               Live
             </div>
             {getHealthBadge(summary.overallHealth)}
-            <Button variant="ghost" size="sm" onClick={() => refetch()}>
-              <RefreshCw className="h-4 w-4" />
+            <Button variant="ghost" size="sm" onClick={handleRefetch} disabled={isRefetching}>
+              <RefreshCw className={`h-4 w-4 ${isRefetching ? 'animate-spin' : ''}`} />
             </Button>
           </div>
         </div>
