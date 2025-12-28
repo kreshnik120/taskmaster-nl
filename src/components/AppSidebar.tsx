@@ -236,7 +236,8 @@ export function AppSidebar() {
     enabled: isAdmin(),
     staleTime: 60000,
     // ⚡ CACHE: 60s (reduces queries)
-    refetchInterval: 60000
+    refetchInterval: 60000,
+    refetchIntervalInBackground: false,
   });
 
   // ⚡ EFFICIENT COUNT: Active tasks (not completed, not deleted)
@@ -260,7 +261,8 @@ export function AppSidebar() {
     },
     staleTime: 30000,
     // ⚡ CACHE: 30s (tasks change more frequently)
-    refetchInterval: 30000
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 
   // 🔄 REAL-TIME: Listen for task changes

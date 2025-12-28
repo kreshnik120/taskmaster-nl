@@ -74,6 +74,7 @@ export const AutoLearnedKnowledgeDashboard = () => {
       return data as AutoLearnedItem[];
     },
     refetchInterval: 30000, // Refresh every 30 seconds
+    refetchIntervalInBackground: false,
   });
 
   // Calculate stats

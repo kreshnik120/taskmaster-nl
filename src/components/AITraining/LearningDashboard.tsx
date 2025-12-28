@@ -124,6 +124,7 @@ export const LearningDashboard = () => {
       };
     },
     refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 
   // Fetch learning events
@@ -169,7 +170,8 @@ export const LearningDashboard = () => {
 
       return kbGrowth || 0;
     },
-    refetchInterval: 30000 // refresh every 30s
+    refetchInterval: 30000, // refresh every 30s
+    refetchIntervalInBackground: false,
   });
 
   const getCategoryIcon = (category: string) => {

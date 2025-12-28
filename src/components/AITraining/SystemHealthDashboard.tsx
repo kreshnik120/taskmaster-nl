@@ -33,6 +33,7 @@ export function SystemHealthDashboard() {
       return data;
     },
     refetchInterval: 30000, // Refresh every 30s
+    refetchIntervalInBackground: false,
   });
 
   // Fetch recent health logs
@@ -49,6 +50,7 @@ export function SystemHealthDashboard() {
       return data;
     },
     refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 
   // Fetch system config (automation status & budget)
@@ -65,6 +67,7 @@ export function SystemHealthDashboard() {
       return data;
     },
     refetchInterval: 10000,
+    refetchIntervalInBackground: false,
   });
 
   // Fetch daily AI spend
@@ -87,6 +90,7 @@ export function SystemHealthDashboard() {
       return { total, date: today };
     },
     refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 
   // Trigger manual backfill - intelligently resume or start new

@@ -50,6 +50,7 @@ export function BudgetDashboard() {
       return data;
     },
     refetchInterval: 30000, // Refresh elke 30 sec
+    refetchIntervalInBackground: false,
   });
 
   const { data: recentAlerts } = useQuery({

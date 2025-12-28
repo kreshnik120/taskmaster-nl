@@ -138,7 +138,8 @@ export function AILearningProgressWidget() {
         }))
       };
     },
-    refetchInterval: 60000 // Refresh every minute
+    refetchInterval: 60000, // Refresh every minute
+    refetchIntervalInBackground: false,
   });
 
   if (isLoading) {

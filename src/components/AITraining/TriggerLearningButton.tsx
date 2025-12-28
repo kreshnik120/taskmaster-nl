@@ -149,7 +149,8 @@ export function TriggerLearningButton() {
         embeddingCoverage
       };
     },
-    refetchInterval: 30000
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 
   const triggerContinuousLearner = async () => {

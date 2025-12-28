@@ -72,6 +72,7 @@ export function AIAgentTestPanel() {
       };
     },
     refetchInterval: 10000,
+    refetchIntervalInBackground: false,
   });
 
   const handleSendTestEmail = async () => {

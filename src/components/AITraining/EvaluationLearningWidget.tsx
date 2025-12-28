@@ -109,6 +109,7 @@ export function EvaluationLearningWidget() {
       };
     },
     refetchInterval: 60000, // Refresh every minute
+    refetchIntervalInBackground: false,
   });
 
   if (isLoading) {
