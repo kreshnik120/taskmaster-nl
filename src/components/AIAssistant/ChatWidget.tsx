@@ -26,6 +26,9 @@ import { AgentActionCard, AgentActionData } from './AgentActionCard';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
+import { logger } from '@/lib/logger';
+
+const log = logger.create('ChatWidget');
 
 // Page context configuration for context-aware AI responses
 interface PageContext {
@@ -206,7 +209,7 @@ const getConversationId = (): string => {
   if (!conversationId) {
     conversationId = crypto.randomUUID();
     localStorage.setItem('chat_conversation_id', conversationId);
-    console.log('🆕 New conversation started:', conversationId);
+    log.log('🆕 New conversation started:', conversationId);
   }
   return conversationId;
 };
@@ -214,7 +217,7 @@ const getConversationId = (): string => {
 const startNewConversation = (): string => {
   const newConversationId = crypto.randomUUID();
   localStorage.setItem('chat_conversation_id', newConversationId);
-  console.log('🔄 Conversation reset:', newConversationId);
+  log.log('🔄 Conversation reset:', newConversationId);
   return newConversationId;
 };
 
@@ -281,7 +284,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
   // Training mode indicator
   useEffect(() => {
     if (trainingMode) {
-      console.log('🎓 Training mode enabled - tool calling active');
+      log.log('🎓 Training mode enabled - tool calling active');
     }
   }, [trainingMode]);
 
@@ -337,12 +340,12 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
         .limit(50);
       
       if (error) {
-        console.error('⚠️ Error loading conversation history:', error.code, error.message);
+        log.error('⚠️ Error loading conversation history:', error.code, error.message);
         return;
       }
       
       if (data && data.length > 0) {
-        console.log(`📚 Loaded ${data.length} messages (lazy)`);
+        log.log(`📚 Loaded ${data.length} messages (lazy)`);
         setMessages(data.reverse().map(m => ({
           role: m.role as 'user' | 'assistant',
           content: m.content,
@@ -405,7 +408,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
       
       // 1️⃣ Remove conversation_id EERST (voor nieuwe start)
       localStorage.removeItem('chat_conversation_id');
-      console.log('🗑️ Cleared conversation:', oldConversationId);
+      log.log('🗑️ Cleared conversation:', oldConversationId);
       
       // 2️⃣ Clear UI state
       setMessages([]);
@@ -418,7 +421,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
         description: '✅ Chat gewist - nieuwe conversatie gestart',
       });
     } catch (error) {
-      console.error('Error clearing chat:', error);
+      log.error('Error clearing chat:', error);
       toast({
         title: "Fout",
         description: "Kon chat niet wissen. Probeer het opnieuw.",
@@ -459,7 +462,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
         const cleanedContent = content.replace(/\[AGENT_ACTION_CARD\][\s\S]*?\[\/AGENT_ACTION_CARD\]/, '').trim();
         return { content: cleanedContent, agentAction: actionData };
       } catch (e) {
-        console.error('Failed to parse agent action card:', e);
+        log.error('Failed to parse agent action card:', e);
       }
     }
     
@@ -702,7 +705,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
 
     // Timeout mechanism for robustness (increased for bulk validate scenario)
     const timeoutId = setTimeout(() => {
-      console.error('Stream timeout after 120s');
+      log.error('Stream timeout after 120s');
       setIsLoading(false);
       toast({
         title: 'Time-out',
@@ -730,13 +733,13 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
 
     try {
 
-      console.log('🤖 AI Request:', {
+      log.log('🤖 AI Request:', {
         messageCount: newMessages.length,
         timestamp: new Date().toISOString()
       });
       
-      const conversationId = getConversationId(); // ✅ Haal huidige conversation_id op
-      console.log('🔑 Sending conversation_id to ai-chat:', conversationId);
+      const conversationId = getConversationId();
+      log.log('🔑 Sending conversation_id to ai-chat:', conversationId);
       
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`,
@@ -773,14 +776,14 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
       if (!response.ok) {
         clearTimeout(timeoutId);
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('AI response error:', response.status, errorData);
+        log.error('AI response error:', response.status, errorData);
         
         // Auto-retry voor missing conversation_id
         if (response.status === 400 && errorData.error?.includes('conversation_id') && retryCount === 0) {
-          console.warn('⚠️ Missing conversation_id, regenerating and retrying...');
+          log.warn('⚠️ Missing conversation_id, regenerating and retrying...');
           startNewConversation();
-          setMessages(prev => prev.slice(0, -1)); // Verwijder user message
-          return streamChat(userMessage, 1); // Retry 1x
+          setMessages(prev => prev.slice(0, -1));
+          return streamChat(userMessage, 1);
         }
         
         // Enhanced error messages
@@ -819,13 +822,13 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
       // Add empty assistant message that we'll update
       setMessages(prev => [...prev, { role: 'assistant', content: '', showInteractive: false, usedKnowledge: [] }]);
 
-      console.log('📡 Starting stream...');
+      log.log('📡 Starting stream...');
 
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) {
-            console.log('✅ Stream complete:', { totalChunks: chunkCount, messageLength: assistantMessage.length });
+            log.log('✅ Stream complete:', { totalChunks: chunkCount, messageLength: assistantMessage.length });
             break;
           }
 
@@ -852,13 +855,13 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
               // Capture usedKnowledge metadata
               if (metadata?.usedKnowledge) {
                 usedKnowledge = metadata.usedKnowledge;
-                console.log('📚 Knowledge used:', usedKnowledge.length, 'items');
+                log.log('📚 Knowledge used:', usedKnowledge.length, 'items');
               }
               
               // Capture messageId metadata
               if (metadata?.messageId) {
                 messageId = metadata.messageId;
-                console.log('🆔 Message ID received:', messageId);
+                log.log('🆔 Message ID received:', messageId);
               }
               
               if (content) {
@@ -880,12 +883,12 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
                 });
               }
             } catch (parseError) {
-              console.warn('Parse error for chunk:', jsonStr.substring(0, 50));
+              log.warn('Parse error for chunk:', jsonStr.substring(0, 50));
             }
           }
         }
       } catch (streamError) {
-        console.error('Stream reading error:', streamError);
+        log.error('Stream reading error:', streamError);
         throw new Error('Fout bij het ontvangen van AI-antwoord');
       }
 
@@ -896,7 +899,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
       // FALLBACK: Ensure messageId is set
       // ============================================
       if (!messageId) {
-        console.warn('⚠️ No messageId received during stream, fetching from DB...');
+        log.warn('⚠️ No messageId received during stream, fetching from DB...');
         try {
           const conversationId = getConversationId();
           const { data: latestMessage } = await supabase

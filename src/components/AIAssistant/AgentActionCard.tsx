@@ -7,6 +7,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { logger } from '@/lib/logger';
+
+const log = logger.create('AgentAction');
 
 export interface AgentActionData {
   type: 'agent_action_pending';
@@ -134,7 +137,7 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
       });
 
     } catch (error: any) {
-      console.error('Error confirming action:', error);
+      log.error('Error confirming action:', error);
       setStatus('failed');
       setStatusMessage(`❌ ${error.message}`);
       toast({
@@ -201,10 +204,10 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
   useEffect(() => {
     if (!goalId) return;
 
-    console.log('🔔 Setting up realtime subscription for goal:', goalId);
+    log.log('🔔 Setting up realtime subscription for goal:', goalId);
 
     const handleGoalStatusUpdate = (goalStatus: string, outputData: unknown) => {
-      console.log('📡 Goal status update:', goalStatus);
+      log.log('📡 Goal status update:', goalStatus);
       const output = outputData as { error?: string; message?: string } | null;
       
       if (goalStatus === 'completed') {
@@ -274,7 +277,7 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
     }, 60000);
 
     return () => {
-      console.log('🔕 Cleaning up realtime subscription for goal:', goalId);
+      log.log('🔕 Cleaning up realtime subscription for goal:', goalId);
       supabase.removeChannel(channel);
       clearTimeout(timeoutId);
     };

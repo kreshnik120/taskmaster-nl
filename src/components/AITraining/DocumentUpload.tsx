@@ -18,6 +18,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('DocumentUpload');
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
 const LARGE_FILE_THRESHOLD = 100 * 1024 * 1024; // 100MB
@@ -64,26 +67,25 @@ export const DocumentUpload = () => {
           .limit(1);
 
         if (error) {
-          console.error('Error checking pending jobs:', error);
+          log.error('Error checking pending jobs:', error);
           return;
         }
 
         // Als er pending jobs zijn, trigger process-pending-jobs
         if (pendingJobs && pendingJobs.length > 0) {
-          console.log(`[AUTO-POLL] ${pendingJobs.length} pending jobs gevonden, triggering verwerking...`);
+          log.log(`[AUTO-POLL] ${pendingJobs.length} pending jobs gevonden, triggering verwerking...`);
           
           const { data, error: invokeError } = await supabase.functions.invoke('process-pending-jobs');
           
           if (invokeError) {
-            console.error('[AUTO-POLL] Error triggering process-pending-jobs:', invokeError);
+            log.error('[AUTO-POLL] Error triggering process-pending-jobs:', invokeError);
           } else {
-            console.log('[AUTO-POLL] Verwerking getriggerd:', data);
-            // Refresh document lijst
+            log.log('[AUTO-POLL] Verwerking getriggerd:', data);
             refetch();
           }
         }
       } catch (error) {
-        console.error('[AUTO-POLL] Unexpected error:', error);
+        log.error('[AUTO-POLL] Unexpected error:', error);
       }
     };
 
@@ -114,7 +116,7 @@ export const DocumentUpload = () => {
   useEffect(() => {
     if (!activeJobs || Object.keys(activeJobs).length === 0) return;
 
-    console.log(`[REALTIME] Subscribing to job progress for ${Object.keys(activeJobs).length} jobs`);
+    log.log(`[REALTIME] Subscribing to job progress for ${Object.keys(activeJobs).length} jobs`);
     
     const channel = supabase
       .channel('document-upload-job-progress')
@@ -124,7 +126,7 @@ export const DocumentUpload = () => {
         table: 'processing_jobs',
         filter: `id=in.(${Object.keys(activeJobs).join(',')})`
       }, (payload) => {
-        console.log('✅ Job update:', payload.new);
+        log.log('✅ Job update:', payload.new);
         
         setActiveJobs(prev => ({
           ...prev,
@@ -137,10 +139,9 @@ export const DocumentUpload = () => {
             description: `Chunk ${payload.new.chunk_index + 1}/${totalChunks} voltooid · ${payload.new.items_processed} items gevonden`,
           });
           
-          // Check if all jobs are done
           const allJobsDone = Object.values(activeJobs).every(pct => pct === 100);
           if (allJobsDone) {
-            console.log('[REALTIME] All jobs completed, refreshing knowledge base');
+            log.log('[REALTIME] All jobs completed, refreshing knowledge base');
             queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
             refetch();
             setActiveJobs({});
@@ -156,10 +157,9 @@ export const DocumentUpload = () => {
           });
         }
       })
-      .subscribe();
       
     return () => {
-      console.log('🔌 Unsubscribe van job progress channel');
+      log.log('🔌 Unsubscribe van job progress channel');
       supabase.removeChannel(channel);
     };
   }, [activeJobs, totalChunks, toast, queryClient, refetch]);
@@ -284,7 +284,7 @@ export const DocumentUpload = () => {
         });
         
         if (invokeResult.error) {
-          console.error('Queue error:', invokeResult.error);
+          log.error('Queue error:', invokeResult.error);
           toast({
             title: "Fout bij verwerking",
             description: `${file.name} kon niet worden toegevoegd aan de wachtrij`,
@@ -292,7 +292,7 @@ export const DocumentUpload = () => {
           });
         } else {
           const { queued, estimated_time, file_type, job_ids, total_chunks } = invokeResult.data || {};
-          console.log(`✅ Queued ${queued} chunks for ${file.name} (${file_type}, ~${estimated_time})`);
+          log.log(`✅ Queued ${queued} chunks for ${file.name} (${file_type}, ~${estimated_time})`);
           
           // Initialize job tracking for real-time progress
           if (job_ids && job_ids.length > 0) {
@@ -321,7 +321,7 @@ export const DocumentUpload = () => {
       }
       
       // 🔄 POLL FOR COMPLETION & FORCE REFRESH
-      console.log('[UPLOAD] Waiting for processing to complete...');
+      log.log('[UPLOAD] Waiting for processing to complete...');
       let pollAttempts = 0;
       const maxPollAttempts = 30;
 
@@ -336,8 +336,7 @@ export const DocumentUpload = () => {
         const allCompleted = docs?.every(d => d.status === 'completed' || d.status === 'failed');
         
         if (allCompleted) {
-          console.log('[UPLOAD] All documents processed, refreshing knowledge base...');
-          // Force refresh knowledge base
+          log.log('[UPLOAD] All documents processed, refreshing knowledge base...');
           queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
           refetch();
           break;
@@ -347,14 +346,14 @@ export const DocumentUpload = () => {
       }
 
       if (pollAttempts >= maxPollAttempts) {
-        console.warn('[UPLOAD] Polling timeout, knowledge base may not be refreshed yet');
+        log.warn('[UPLOAD] Polling timeout, knowledge base may not be refreshed yet');
       }
       
       // Initial refresh
       refetch();
       queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
     } catch (error: any) {
-      console.error("Upload error:", error);
+      log.error("Upload error:", error);
       toast({
         title: "Upload mislukt",
         description: error.message,
@@ -483,7 +482,7 @@ export const DocumentUpload = () => {
 
       refetch();
     } catch (error: any) {
-      console.error("Force stop error:", error);
+      log.error("Force stop error:", error);
       toast({
         title: "Forceer stoppen mislukt",
         description: error.message,

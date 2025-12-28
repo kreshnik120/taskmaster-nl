@@ -23,6 +23,9 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2, AlertCircle, Check, X } from "lucide-react";
 import { z } from "zod";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('Auth');
 
 /**
  * Password strength validation schema (min 12 chars + complexity + special char)
@@ -67,7 +70,7 @@ const getPasswordRequirements = (pwd: string) => ({
  * Translate common Supabase authentication errors to Dutch.
  */
 const translateAuthError = (error: any): string => {
-  console.log("🔍 Supabase error:", error);
+  log.log("🔍 Supabase error:", error);
 
   const errorMsg = error?.message?.toLowerCase() || "";
 
@@ -143,10 +146,10 @@ const Auth = () => {
 
   const checkBackendHealth = async () => {
     const startTime = Date.now();
-    console.info('[AUTH][HEALTH] Starting check...', { timestamp: new Date().toISOString() });
+    log.log('[HEALTH] Starting check...', { timestamp: new Date().toISOString() });
 
     if (!navigator.onLine) {
-      console.info('[AUTH][HEALTH] Browser offline detected');
+      log.log('[HEALTH] Browser offline detected');
       setBackendOffline(true);
       setHealthCheckAttempts(0);
       setLastHealthCheck({
@@ -176,7 +179,7 @@ const Auth = () => {
       clearTimeout(timeoutId);
       const duration = Date.now() - startTime;
 
-      console.info('[AUTH][HEALTH] ✅ Success', { duration: `${duration}ms`, status: response.status });
+      log.log('[HEALTH] ✅ Success', { duration: `${duration}ms`, status: response.status });
 
       setBackendOffline(false);
       setHealthCheckAttempts(0);
@@ -190,7 +193,7 @@ const Auth = () => {
       const errorMsg = error.name === 'AbortError' ? 'Timeout (3s)' : error.message;
       const newAttempts = healthCheckAttempts + 1;
 
-      console.warn('[AUTH][HEALTH] ❌ Failed', {
+      log.warn('[HEALTH] ❌ Failed', {
         attempt: newAttempts,
         duration: `${duration}ms`,
         error: errorMsg,
@@ -215,7 +218,7 @@ const Auth = () => {
     if (!isMountedRef.current) return;
     
     const delay = Math.min(3000 * Math.pow(2, healthCheckAttempts), 60000);
-    console.info('[AUTH][HEALTH] Next check scheduled in', { delay: `${delay / 1000}s` });
+    log.log('[HEALTH] Next check scheduled in', { delay: `${delay / 1000}s` });
 
     if (healthCheckTimeoutRef.current) {
       clearTimeout(healthCheckTimeoutRef.current);
@@ -261,12 +264,12 @@ const Auth = () => {
 
   useEffect(() => {
     const handleOnline = () => {
-      console.log('[Network] Browser is online, checking backend...');
+      log.log('[Network] Browser is online, checking backend...');
       checkBackendHealth();
     };
 
     const handleOffline = () => {
-      console.log('[Network] Browser is offline');
+      log.log('[Network] Browser is offline');
       setBackendOffline(true);
     };
 
@@ -344,7 +347,7 @@ const Auth = () => {
     }
 
     setLoading(true);
-    console.info('[AUTH] Login attempt started', { email, forced: forceLoginAttempt });
+    log.log('Login attempt started', { email, forced: forceLoginAttempt });
 
     try {
       const { error } = await withTimeout(
