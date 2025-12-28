@@ -19,6 +19,7 @@ export const KnowledgeOverview = () => {
   const [sourceFilter, setSourceFilter] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
+  const [sharedFilter, setSharedFilter] = useState<'all' | 'shared' | 'own'>('all');
   const [onlyEmbedded, setOnlyEmbedded] = useState(false);
   const [sortBy, setSortBy] = useState<'recent' | 'usage' | 'confidence'>('recent');
   const [editingItem, setEditingItem] = useState<any | null>(null);
@@ -184,10 +185,15 @@ export const KnowledgeOverview = () => {
       const matchesGroup = !groupFilter || 
         CATEGORY_GROUPS.find(g => g.id === groupFilter)?.categories.includes(item.category);
       
+      // Shared filter
+      const matchesShared = sharedFilter === 'all' || 
+        (sharedFilter === 'shared' && item.is_shared) ||
+        (sharedFilter === 'own' && !item.is_shared);
+      
       // Embedded filter
       const matchesEmbedded = !onlyEmbedded || item.hasEmbedding;
       
-      return matchesSearch && matchesSource && matchesCategory && matchesGroup && matchesEmbedded;
+      return matchesSearch && matchesSource && matchesCategory && matchesGroup && matchesShared && matchesEmbedded;
     }) || [];
 
     // Sort
@@ -200,7 +206,7 @@ export const KnowledgeOverview = () => {
     }
 
     return result;
-  }, [knowledge, searchQuery, sourceFilter, categoryFilter, groupFilter, onlyEmbedded, sortBy]);
+  }, [knowledge, searchQuery, sourceFilter, categoryFilter, groupFilter, sharedFilter, onlyEmbedded, sortBy]);
 
   return (
     <div className="space-y-6">
@@ -319,6 +325,29 @@ export const KnowledgeOverview = () => {
               </DropdownMenuContent>
             </DropdownMenu>
 
+            {/* Shared Filter */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant={sharedFilter !== 'all' ? "default" : "outline"} size="sm" className="gap-2">
+                  <Users className="h-4 w-4" />
+                  {sharedFilter === 'shared' ? "Alleen Gedeeld" : sharedFilter === 'own' ? "Alleen Eigen" : "Gedeeld/Eigen"}
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => setSharedFilter('all')}>
+                  Alle Kennis
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setSharedFilter('shared')}>
+                  <Users className="h-4 w-4 mr-2 text-blue-600" /> Alleen Gedeeld
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSharedFilter('own')}>
+                  <Lock className="h-4 w-4 mr-2" /> Alleen Eigen
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {/* Sort Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -349,8 +378,8 @@ export const KnowledgeOverview = () => {
           </div>
 
           {/* Active Filters Summary */}
-          {(groupFilter || categoryFilter || sourceFilter || onlyEmbedded) && (
-            <div className="flex items-center gap-2 text-sm">
+          {(groupFilter || categoryFilter || sourceFilter || sharedFilter !== 'all' || onlyEmbedded) && (
+            <div className="flex items-center gap-2 text-sm flex-wrap">
               <span className="text-muted-foreground">Actieve filters:</span>
               {groupFilter && (
                 <Badge variant="secondary" className="gap-1">
@@ -370,6 +399,12 @@ export const KnowledgeOverview = () => {
                   <button onClick={() => setSourceFilter(null)} className="ml-1 hover:text-destructive">×</button>
                 </Badge>
               )}
+              {sharedFilter !== 'all' && (
+                <Badge variant="secondary" className="gap-1">
+                  {sharedFilter === 'shared' ? 'Gedeeld' : 'Eigen'}
+                  <button onClick={() => setSharedFilter('all')} className="ml-1 hover:text-destructive">×</button>
+                </Badge>
+              )}
               {onlyEmbedded && (
                 <Badge variant="secondary" className="gap-1">
                   AI-bruikbaar
@@ -383,6 +418,7 @@ export const KnowledgeOverview = () => {
                   setGroupFilter(null);
                   setCategoryFilter(null);
                   setSourceFilter(null);
+                  setSharedFilter('all');
                   setOnlyEmbedded(false);
                 }}
               >
