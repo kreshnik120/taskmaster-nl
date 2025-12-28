@@ -1045,7 +1045,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
     console.log('📡 Starting realtime tracking for jobs:', jobIds);
     
     const channel = supabase
-      .channel('job-progress')
+      .channel('chat-widget-job-progress')
       .on(
         'postgres_changes',
         {

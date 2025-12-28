@@ -117,7 +117,7 @@ export const DocumentUpload = () => {
     console.log(`[REALTIME] Subscribing to job progress for ${Object.keys(activeJobs).length} jobs`);
     
     const channel = supabase
-      .channel('job-progress')
+      .channel('document-upload-job-progress')
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
