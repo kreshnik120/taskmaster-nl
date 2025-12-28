@@ -387,6 +387,7 @@ export type Database = {
           harmful_count: number | null
           helpful_count: number | null
           id: string
+          is_shared: boolean | null
           jurisdiction: string | null
           key: string
           kvk_source_data: Json | null
@@ -447,6 +448,7 @@ export type Database = {
           harmful_count?: number | null
           helpful_count?: number | null
           id?: string
+          is_shared?: boolean | null
           jurisdiction?: string | null
           key: string
           kvk_source_data?: Json | null
@@ -507,6 +509,7 @@ export type Database = {
           harmful_count?: number | null
           helpful_count?: number | null
           id?: string
+          is_shared?: boolean | null
           jurisdiction?: string | null
           key?: string
           kvk_source_data?: Json | null
