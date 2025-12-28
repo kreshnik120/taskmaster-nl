@@ -1791,6 +1791,7 @@ Deno.serve(async (req: Request) => {
           const matchThreshold = isCompanyInfoQuery ? 0.65 : 0.75;
           
           // Call match_knowledge V3 function with validation filter AND explicit shared knowledge
+          // ⚠️ CRITICAL: Parameter order must match function signature exactly!
           const { data: semanticMatches, error: matchError } = await supabaseClient
             .rpc('match_knowledge', {
               query_embedding: queryEmbedding,
@@ -1798,15 +1799,19 @@ Deno.serve(async (req: Request) => {
               match_count: 20,  // Verlaagd voor snelheid
               filter_org_id: userOrgId,
               filter_role_tags: [detectedRole],
-              filter_jurisdiction: 'NL',
-              require_verified: true,  // ✨ alleen verified items voor betere kwaliteit
-              filter_customer_id: null,  // ✅ V3: geen customer filtering
-              include_shared: true       // ✅ V3: expliciet shared knowledge ophalen (wetgeving, CAO's etc.)
+              filter_customer_id: null,         // ✅ Positie 6: geen customer filtering
+              filter_jurisdiction: 'NL',        // ✅ Positie 7: Nederlandse jurisdictie
+              require_verified: true,           // ✅ Positie 8: alleen verified items
+              include_shared: true              // ✅ Positie 9: shared knowledge ophalen
             });
 
           if (matchError) {
             console.error('❌ match_knowledge error:', matchError);
-          } else if (semanticMatches && semanticMatches.length > 0) {
+          } else if (!semanticMatches || semanticMatches.length === 0) {
+            // ⚠️ No results logging for debugging
+            console.log('⚠️ [SEMANTIC SEARCH] No matches found');
+            console.log(`   - Threshold: ${matchThreshold}, Org: ${userOrgId}, include_shared: true`);
+          } else if (semanticMatches.length > 0) {
             // 🔍 DEBUG: Log shared knowledge retrieval
             const sharedCount = semanticMatches.filter((m: any) => m.is_shared === true).length;
             const ownOrgCount = semanticMatches.filter((m: any) => m.org_id === userOrgId && !m.is_shared).length;
