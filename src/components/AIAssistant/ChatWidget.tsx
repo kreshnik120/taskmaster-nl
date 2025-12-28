@@ -23,6 +23,7 @@ import { ChatDatePicker, ChatTimePicker, ChatSelect, ChatButtonGroup } from './I
 import { MessageFeedback } from './MessageFeedback';
 import { AIMemoryPanel } from './AIMemoryPanel';
 import { AgentActionCard, AgentActionData } from './AgentActionCard';
+import { FeedbackReminderBanner } from './FeedbackReminderBanner';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
@@ -255,6 +256,9 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragCounter, setDragCounter] = useState(0);
+  const [messagesWithoutFeedback, setMessagesWithoutFeedback] = useState(0);
+  const [feedbackReminderDismissed, setFeedbackReminderDismissed] = useState(false);
+  const [lastMessageIndex, setLastMessageIndex] = useState(-1); // Track latest message for pulse animation
   const [processingJobs, setProcessingJobs] = useState<Record<string, ProcessingJob>>({});
   
   // Robot context states voor contextuele animaties
@@ -384,6 +388,25 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
       window.removeEventListener('drop', preventDefaults);
     };
   }, []);
+
+  // Track messages without feedback for reminder banner
+  useEffect(() => {
+    if (!feedbackReminderDismissed) {
+      // Count AI messages that don't have feedback yet (heuristic based on messageId presence)
+      const aiMessagesCount = messages.filter(m => m.role === 'assistant' && m.messageId).length;
+      setMessagesWithoutFeedback(aiMessagesCount);
+    }
+  }, [messages, feedbackReminderDismissed]);
+
+  // Track latest message index for pulse animation
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastIdx = messages.length - 1;
+      if (messages[lastIdx].role === 'assistant' && lastIdx > lastMessageIndex) {
+        setLastMessageIndex(lastIdx);
+      }
+    }
+  }, [messages, lastMessageIndex]);
 
   // ✅ REMOVED: Duplicate history loader that overwrote messageId
   // History is loaded by the first useEffect (lines ~126-164) which properly includes id → messageId
@@ -1551,6 +1574,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
                             messageContent={msg.content} 
                             messageId={msg.messageId}
                             usedKnowledge={msg.usedKnowledge}
+                            isNewMessage={idx === lastMessageIndex}
                           />
                           {msg.usedKnowledge && msg.usedKnowledge.length > 0 && (
                             <AIMemoryPanel knowledgeIds={msg.usedKnowledge} />
@@ -1603,6 +1627,15 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
               <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
+
+          {/* Feedback Reminder Banner */}
+          <FeedbackReminderBanner
+            messagesWithoutFeedback={messagesWithoutFeedback}
+            onDismiss={() => {
+              setFeedbackReminderDismissed(true);
+              setMessagesWithoutFeedback(0);
+            }}
+          />
 
           {/* Input */}
           <form onSubmit={handleSubmit} className="p-4 border-t bg-background/50 backdrop-blur-sm">
