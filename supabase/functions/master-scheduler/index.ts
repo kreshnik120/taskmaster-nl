@@ -15,6 +15,8 @@ const SCHEDULES = {
   'temporal-decay': '0 3 * * *',                // Daily at 03:00 (Temporal decay for stale knowledge)
   // Phase 2.5: Retroactive Training (re-evaluate previously rejected learning events)
   'retroactive-training-evaluator': '0 4 * * *', // Daily at 04:00
+  // Health Monitoring
+  'ai-chat-health-monitor': '*/5 * * * *',      // Every 5 minutes (AI Chat health check with alerts)
   // Note: continuous-learner (Loop 1) runs via database trigger, not scheduler
 };
 
