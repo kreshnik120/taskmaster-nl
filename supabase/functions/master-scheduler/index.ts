@@ -13,6 +13,8 @@ const SCHEDULES = {
   // Phase 2: Self-Learning Reinforcement
   'apply-meta-patterns': '0 */6 * * *',         // Every 6 hours (Meta-pattern application)
   'temporal-decay': '0 3 * * *',                // Daily at 03:00 (Temporal decay for stale knowledge)
+  // Phase 2.5: Retroactive Training (re-evaluate previously rejected learning events)
+  'retroactive-training-evaluator': '0 4 * * *', // Daily at 04:00
   // Note: continuous-learner (Loop 1) runs via database trigger, not scheduler
 };
 
