@@ -1805,6 +1805,18 @@ Deno.serve(async (req: Request) => {
           if (matchError) {
             console.error('❌ match_knowledge error:', matchError);
           } else if (semanticMatches && semanticMatches.length > 0) {
+            // 🔍 DEBUG: Log shared knowledge retrieval
+            const sharedCount = semanticMatches.filter((m: any) => m.is_shared === true).length;
+            const ownOrgCount = semanticMatches.filter((m: any) => m.org_id === userOrgId && !m.is_shared).length;
+            console.log(`🔗 [SHARED KNOWLEDGE DEBUG] Retrieved ${semanticMatches.length} items:`);
+            console.log(`   - Shared (is_shared=true): ${sharedCount}`);
+            console.log(`   - Own org: ${ownOrgCount}`);
+            console.log(`   - User org_id: ${userOrgId}`);
+            if (sharedCount > 0) {
+              const sharedCategories = [...new Set(semanticMatches.filter((m: any) => m.is_shared).map((m: any) => m.category))];
+              console.log(`   - Shared categories: ${sharedCategories.join(', ')}`);
+            }
+            
             // Merge keyword matches met semantic matches (keyword matches eerst)
             const existingIds = new Set(semanticKnowledge.map((k: any) => k.id));
             const newSemanticMatches = semanticMatches
@@ -1821,7 +1833,8 @@ Deno.serve(async (req: Request) => {
                 valid_to: m.valid_to,
                 usage_count: 0,
                 source: 'semantic_search',
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
+                is_shared: m.is_shared || false  // Track shared status
               }));
             
             // Voeg semantic matches toe aan bestaande keyword matches
