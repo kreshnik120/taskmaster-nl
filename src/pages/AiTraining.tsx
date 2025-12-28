@@ -37,6 +37,7 @@ import { UnifiedAIHealthDashboard } from "@/components/AITraining/UnifiedAIHealt
 
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { SystemHealthDashboard } from "@/components/AITraining/SystemHealthDashboard";
+import { LearningDashboard } from "@/components/AITraining/LearningDashboard";
 import { CleanupDuplicateFields } from "@/components/AITraining/CleanupDuplicateFields";
 import { EvaluationLearningWidget } from "@/components/AITraining/EvaluationLearningWidget";
 import { TriggerLearningButton } from "@/components/AITraining/TriggerLearningButton";
@@ -215,6 +216,7 @@ const AiTraining = () => {
                   <TabsContent value="health" className="mt-4">
                     <div className="space-y-6">
                       <UnifiedAIHealthDashboard />
+                      <LearningDashboard />
                       <SystemHealthDashboard />
                     </div>
                   </TabsContent>
