@@ -1,4 +1,5 @@
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
+import { isUrlAllowedForScraping } from '../_shared/healthcare-mappings.ts';
 
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -91,6 +92,29 @@ Deno.serve(async (req) => {
           results.skipped++;
           results.details.push({ name: org.name, status: 'skipped', error: 'No website URL and name lookup disabled' });
           continue;
+        }
+
+        // === SSRF PROTECTION ===
+        if (websiteUrl) {
+          const urlValidation = isUrlAllowedForScraping(websiteUrl, { 
+            allowAnyDutchDomain: true,
+            strictMode: false 
+          });
+          
+          if (!urlValidation.allowed) {
+            console.warn(`🚫 [fetch-organization-logos] SSRF Protection: Blocked for ${org.name} - ${websiteUrl} - ${urlValidation.reason}`);
+            results.skipped++;
+            results.details.push({ name: org.name, status: 'skipped', error: `Blocked URL: ${urlValidation.reason}` });
+            continue;
+          }
+          
+          websiteUrl = urlValidation.sanitizedUrl || websiteUrl;
+          // Update domain if sanitized URL changed
+          try {
+            domain = new URL(websiteUrl).hostname;
+          } catch {
+            // Keep existing domain
+          }
         }
 
         console.log(`[fetch-organization-logos] Processing ${org.name} - domain: ${domain}`);
