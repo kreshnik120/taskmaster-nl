@@ -14,6 +14,9 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { useAiScoring } from "@/hooks/useAiScoring";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('Kanban');
 
 interface Task {
   id: string;
@@ -137,7 +140,7 @@ const Kanban = () => {
 
       setLoading(false);
     } catch (error) {
-      console.error('Error loading data:', error);
+      log.error('Error loading data:', error);
       setLoading(false);
       toast.error("Er is een fout opgetreden bij het laden van data");
     }
@@ -213,14 +216,14 @@ const Kanban = () => {
     setActiveTask(null);
 
     if (!over) {
-      console.log("Drag geannuleerd: geen geldige drop zone");
+      log.log("Drag geannuleerd: geen geldige drop zone");
       return;
     }
 
     const taskId = active.id as string;
     const task = tasks.find((t) => t.id === taskId);
     if (!task) {
-      console.error("Taak niet gevonden:", taskId);
+      log.error("Taak niet gevonden:", taskId);
       toast.error("Taak niet gevonden");
       return;
     }
@@ -236,7 +239,7 @@ const Kanban = () => {
       // Op een taak gesleept, zoek de column_id van die taak
       const targetTask = tasks.find((t) => t.id === over.id);
       if (!targetTask || !targetTask.column_id) {
-        console.error("Kan kolom niet bepalen voor drop target:", over.id);
+        log.error("Kan kolom niet bepalen voor drop target:", over.id);
         toast.error("Fout bij verplaatsen: ongeldige bestemming");
         return;
       }
@@ -245,13 +248,13 @@ const Kanban = () => {
 
     // Check if task is already in this column
     if (task.column_id === newColumnId) {
-      console.log("Taak is al in deze kolom");
+      log.log("Taak is al in deze kolom");
       return;
     }
 
     const targetColumn = columns.find((c) => c.id === newColumnId);
     const oldColumn = columns.find((c) => c.id === task.column_id);
-    console.log(`Verplaats taak "${task.title}" naar kolom "${targetColumn?.name}"`);
+    log.log(`Verplaats taak "${task.title}" naar kolom "${targetColumn?.name}"`);
 
     try {
       // Bereid updates voor
@@ -273,7 +276,7 @@ const Kanban = () => {
         .eq("id", taskId);
 
       if (error) {
-        console.error("Database error bij verplaatsen:", error);
+        log.error("Database error bij verplaatsen:", error);
         toast.error(`Fout bij verplaatsen: ${error.message}`);
         return;
       }
@@ -285,7 +288,7 @@ const Kanban = () => {
 
       toast.success(`Taak verplaatst naar ${targetColumn?.name}`);
     } catch (err: any) {
-      console.error("Onverwachte fout bij verplaatsen:", err);
+      log.error("Onverwachte fout bij verplaatsen:", err);
       toast.error("Onverwachte fout bij verplaatsen van taak");
     }
   };
@@ -324,7 +327,7 @@ const Kanban = () => {
         .eq("id", columnId);
 
       if (error) {
-        console.error("Fout bij bijwerken kolomnaam:", error);
+        log.error("Fout bij bijwerken kolomnaam:", error);
         toast.error(`Fout bij opslaan: ${error.message}`);
         return;
       }
@@ -338,7 +341,7 @@ const Kanban = () => {
 
       toast.success("Kolomnaam bijgewerkt");
     } catch (err: any) {
-      console.error("Onverwachte fout bij bijwerken kolomnaam:", err);
+      log.error("Onverwachte fout bij bijwerken kolomnaam:", err);
       toast.error("Fout bij opslaan van kolomnaam");
     }
   };

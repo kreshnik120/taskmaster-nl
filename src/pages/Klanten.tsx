@@ -22,6 +22,9 @@ import { ABCzorgExcelImport } from "@/components/AITraining/ABCzorgExcelImport";
 import { AdminOnly } from "@/components/auth/AdminOnly";
 import { firecrawlApi } from "@/lib/api/firecrawl";
 import { FirecrawlProgressDialog, EnrichmentLogEntry } from "@/components/organization/FirecrawlProgressDialog";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('Klanten');
 
 // Unified Organization type used in both views
 interface Sublocation {
@@ -99,15 +102,15 @@ export default function Klanten() {
   
   // Logo fetch handler
   const handleFetchLogos = async () => {
-    console.log("[handleFetchLogos] Button clicked");
-    console.log("[handleFetchLogos] Organizations loaded:", organizations.length);
+    log.log("Button clicked");
+    log.log("Organizations loaded:", organizations.length);
     
     // Check how many orgs actually need logos
     const orgsWithoutLogos = organizations.filter(org => !org.logo_url);
-    console.log("[handleFetchLogos] Organizations without logos:", orgsWithoutLogos.length);
+    log.log("Organizations without logos:", orgsWithoutLogos.length);
     
     if (orgsWithoutLogos.length === 0) {
-      console.log("[handleFetchLogos] All organizations have logos - showing info toast");
+      log.log("All organizations have logos - showing info toast");
       toast.info("✅ Alle organisaties hebben al een logo", {
         description: `${organizations.length} organisaties gecontroleerd.`
       });
@@ -120,12 +123,12 @@ export default function Klanten() {
     });
     
     try {
-      console.log("[handleFetchLogos] Invoking edge function...");
+      log.log("Invoking edge function...");
       const { data, error } = await supabase.functions.invoke("fetch-organization-logos", {
         body: { fetchAll: false, includeNameLookup: true }
       });
       
-      console.log("[handleFetchLogos] Response:", { data, error });
+      log.log("Response:", { data, error });
       
       if (error) throw error;
       
@@ -146,7 +149,7 @@ export default function Klanten() {
         }
       }
     } catch (error: any) {
-      console.error("[handleFetchLogos] Error:", error);
+      log.error("Error:", error);
       toast.error(`Fout bij ophalen logo's: ${error.message}`, { id: toastId });
     } finally {
       setIsFetchingLogos(false);
@@ -155,7 +158,7 @@ export default function Klanten() {
   
   // Firecrawl enrich handler with progress dialog
   const handleFirecrawlEnrich = async () => {
-    console.log("[handleFirecrawlEnrich] Button clicked");
+    log.log("Enrich button clicked");
     
     if (organizations.length === 0) {
       toast.error("Geen organisaties geladen", {
@@ -192,7 +195,7 @@ export default function Klanten() {
     setEnrichLogs(initialLogs);
     
     try {
-      console.log("[handleFirecrawlEnrich] Starting batch enrich...");
+      log.log("Starting batch enrich...");
       
       const result = await firecrawlApi.batchEnrich(
         orgsToEnrich.map(o => o.id),
@@ -242,7 +245,7 @@ export default function Klanten() {
         }
       );
       
-      console.log("[handleFirecrawlEnrich] Result:", result);
+      log.log("Result:", result);
       setEnrichComplete(true);
       
       // Show summary toast
@@ -252,7 +255,7 @@ export default function Klanten() {
       
       loadOrganizations();
     } catch (error: any) {
-      console.error("[handleFirecrawlEnrich] Error:", error);
+      log.error("Error:", error);
       toast.error(`Fout bij verrijken: ${error.message}`);
       setEnrichComplete(true);
     } finally {
@@ -375,7 +378,7 @@ export default function Klanten() {
 
       setOrganizations(orgsWithHierarchy);
     } catch (error: any) {
-      console.error("Error loading organizations:", error);
+      log.error("Error loading organizations:", error);
       toast.error("Kon organisaties niet laden");
     } finally {
       setLoading(false);

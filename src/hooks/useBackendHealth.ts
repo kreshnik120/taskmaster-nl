@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
+
+const log = logger.create('BackendHealth');
 
 export type BackendStatus = 'online' | 'offline' | 'checking';
 
@@ -85,7 +88,7 @@ export const useBackendHealth = () => {
         errorMsg = error.message;
       }
       
-      console.warn('[HEALTH] ❌ Offline', { duration: `${duration}ms`, error: errorMsg });
+      log.warn('❌ Offline', { duration: `${duration}ms`, error: errorMsg });
       
       setHealthState(prev => ({
         status: 'offline',
@@ -114,7 +117,7 @@ export const useBackendHealth = () => {
       ? HEALTHY_CHECK_INTERVAL 
       : Math.min(INITIAL_RETRY_DELAY * Math.pow(1.5, healthState.retryCount), MAX_RETRY_DELAY);
     
-    console.info('[HEALTH] Next check in', { delay: `${Math.round(delay / 1000)}s` });
+    log.log('Next check in', { delay: `${Math.round(delay / 1000)}s` });
     
     timeoutRef.current = setTimeout(() => {
       if (isMountedRef.current) {
@@ -137,12 +140,12 @@ export const useBackendHealth = () => {
     checkHealth();
 
     const handleOnline = () => {
-      console.info('[HEALTH] Browser online event');
+      log.log('Browser online event');
       checkHealth();
     };
     
     const handleOffline = () => {
-      console.info('[HEALTH] Browser offline event');
+      log.log('Browser offline event');
       setHealthState(prev => ({
         ...prev,
         status: 'offline',

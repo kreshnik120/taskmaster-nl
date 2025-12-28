@@ -4,6 +4,9 @@ import {
   getSectorAffinity, 
   getDoelgroepCompatibility 
 } from "@/lib/constants/aiDomainKnowledge";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('AIPatterns');
 
 export interface SuccessPattern {
   id: string; // Knowledge base ID for usage tracking
@@ -33,7 +36,7 @@ export async function loadSuccessPatterns(): Promise<SuccessPattern[]> {
   
   // Return cached data if still valid
   if (successPatternsCache.length > 0 && now - lastCacheUpdate < CACHE_TTL) {
-    console.log(`[AI Patterns] Using cached patterns: ${successPatternsCache.length} patterns`);
+    log.log(`Using cached patterns: ${successPatternsCache.length} patterns`);
     return successPatternsCache;
   }
   
@@ -48,10 +51,9 @@ export async function loadSuccessPatterns(): Promise<SuccessPattern[]> {
       .limit(100);
     
     if (error) {
-      console.error("[AI Patterns] Error loading:", error);
+      log.error("Error loading:", error);
       return successPatternsCache;
     }
-    
     // Parse knowledge items into success patterns
     const patterns: SuccessPattern[] = [];
     
@@ -84,10 +86,10 @@ export async function loadSuccessPatterns(): Promise<SuccessPattern[]> {
     successPatternsCache = patterns;
     lastCacheUpdate = now;
     
-    console.log(`[AI Patterns] Loaded ${patterns.length} patterns from database`);
+    log.log(`Loaded ${patterns.length} patterns from database`);
     return patterns;
   } catch (err) {
-    console.error("[AI Patterns] Failed to load:", err);
+    log.error("Failed to load:", err);
     return successPatternsCache;
   }
 }
@@ -235,7 +237,7 @@ export function calculateAILearningBoost(
   
   // Log usage for debugging
   if (usedPatternIds.length > 0) {
-    console.log(`[AI Boost] Applied ${usedPatternIds.length} patterns, total boost: ${totalBoost}%`);
+    log.log(`Applied ${usedPatternIds.length} patterns, total boost: ${totalBoost}%`);
   }
   
   return {
@@ -285,12 +287,12 @@ export async function updatePatternUsage(patternIds?: string[]): Promise<void> {
         .eq('id', id);
     }
     
-    console.log(`[AI Patterns] ✅ Updated usage_count for ${idsToUpdate.length} patterns`);
+    log.log(`✅ Updated usage_count for ${idsToUpdate.length} patterns`);
     
     // Clear tracked IDs after update
     lastUsedPatternIds = [];
   } catch (err) {
-    console.error('[AI Patterns] Failed to update usage:', err);
+    log.error('Failed to update usage:', err);
   }
 }
 
@@ -321,8 +323,8 @@ export async function trackPatternUsage(patternIds: string[]): Promise<void> {
         .eq('id', id);
     }
     
-    console.log(`[AI Patterns] ✅ Tracked usage for ${patternIds.length} patterns`);
+    log.log(`✅ Tracked usage for ${patternIds.length} patterns`);
   } catch (err) {
-    console.error('[AI Patterns] Usage tracking failed:', err);
+    log.error('Usage tracking failed:', err);
   }
 }

@@ -6,6 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Play, CheckCircle2, AlertCircle, AlertTriangle, RefreshCw, Database } from "lucide-react";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('ManualTrigger');
 
 interface ManualFunctionTriggerProps {
   hideBackfill?: boolean;
@@ -102,7 +105,7 @@ export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTr
       setResult(data);
       toast.success(`✅ Forecast Generator completed! Generated ${data?.generatedTasks || 0} tasks`);
     } catch (error: any) {
-      console.error("Error triggering function:", error);
+      log.error("Error triggering function:", error);
       setStatus("error");
       toast.error(`❌ Error: ${error.message || 'Failed to trigger function'}`);
     } finally {
@@ -151,7 +154,7 @@ export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTr
       // Refresh metrics after function completes
       setTimeout(() => refetchMetrics(), 2000);
     } catch (error: any) {
-      console.error(`Error triggering ${functionName}:`, error);
+      log.error(`Error triggering ${functionName}:`, error);
       toast.error(`❌ Error: ${error.message || 'Failed to trigger function'}`);
     } finally {
       setTriggeringFunction(null);
@@ -258,7 +261,7 @@ export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTr
         }
       } catch (err) {
         if (active) {
-          console.error('Polling error:', err);
+          log.error('Polling error:', err);
         }
       }
     };
@@ -322,7 +325,7 @@ export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTr
           .eq('id', state.id);
 
         if (resetError) {
-          console.error('Reset error:', resetError);
+          log.error('Reset error:', resetError);
           toast.error(`❌ Reset mislukt: ${resetError.message}`);
           return;
         }
@@ -333,7 +336,7 @@ export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTr
       setIsStaleHeartbeat(false);
       toast.success('✅ Reset voltooid - je kunt nu opnieuw starten');
     } catch (err: any) {
-      console.error('Reset error:', err);
+      log.error('Reset error:', err);
       toast.error(`❌ Reset mislukt: ${err.message}`);
     }
   };
@@ -349,7 +352,7 @@ export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTr
         description: "Backfill opnieuw gestart met verse configuratie.",
       });
     } catch (error: any) {
-      console.error('Reset & restart error:', error);
+      log.error('Reset & restart error:', error);
       toast.error(`❌ Fout bij herstart: ${error.message}`);
     }
   };
@@ -418,7 +421,7 @@ export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTr
               .eq('id', state.id);
             
             if (resetError) {
-              console.error('Failed to reset stale run:', resetError);
+              log.error('Failed to reset stale run:', resetError);
               toast.error(`❌ Kon stale run niet resetten: ${resetError.message}`);
               return;
             }
@@ -456,10 +459,10 @@ export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTr
 
       if (error) throw error;
 
-      if (data.success) {
+        if (data.success) {
         // Check if we should auto-restart
         if (data.should_restart === true) {
-          console.log(`⏸️ Orchestrator paused after processing ${data.processed} items, auto-restarting in 2 seconds...`);
+          log.log(`⏸️ Orchestrator paused after processing ${data.processed} items, auto-restarting in 2 seconds...`);
           toast.info(`⏸️ Checkpoint bereikt (${data.processed} items verwerkt), herstart automatisch...`, {
             duration: 2000
           });
@@ -480,7 +483,7 @@ export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTr
         setBackfillProgress(null);
       }
     } catch (err: any) {
-      console.error('Auto-backfill error:', err);
+      log.error('Auto-backfill error:', err);
       toast.error(`❌ Kon auto-backfill niet starten: ${err.message}`);
       setIsBackfilling(false);
       setBackfillProgress(null);
