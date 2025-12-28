@@ -5,6 +5,7 @@
  * FASE 2: Nu met atomische RPC's voor race condition prevention
  * 
  * @module _shared/knowledge-crud
+ * @version 2025-12-28-v2 - Cache refresh: atomic_reinforce_knowledge fix with p_org_id
  */
 
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
