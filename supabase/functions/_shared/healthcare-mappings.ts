@@ -659,3 +659,247 @@ export function extractBasicTextFromPdf(pdfBytes: Uint8Array): string {
   
   return textParts.join(' ').toLowerCase();
 }
+
+// ============================================
+// PHASE 2A: NAME CROSS-VALIDATION HELPERS
+// ============================================
+
+/**
+ * Dutch name particles (tussenvoegels) to normalize
+ */
+const DUTCH_NAME_PARTICLES = [
+  'van', 'de', 'den', 'der', 'het', 'ter', 'ten', 'te', 
+  "'t", 'in', 'op', 'aan', 'bij', 'tot', 'uit', 'voor'
+];
+
+/**
+ * Normalize a name for comparison:
+ * - Lowercase
+ * - Remove accents
+ * - Remove punctuation
+ * - Optionally remove tussenvoegels
+ */
+function normalizeName(name: string, removeTussenvoegels = true): string {
+  let normalized = name
+    .toLowerCase()
+    .trim()
+    // Remove accents
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    // Remove punctuation except spaces and hyphens
+    .replace(/[^\w\s-]/g, '')
+    // Normalize spaces
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  if (removeTussenvoegels) {
+    const words = normalized.split(' ');
+    const filtered = words.filter(w => !DUTCH_NAME_PARTICLES.includes(w));
+    normalized = filtered.join(' ');
+  }
+  
+  return normalized;
+}
+
+/**
+ * Calculate Levenshtein distance between two strings
+ */
+function levenshteinDistance(str1: string, str2: string): number {
+  const m = str1.length;
+  const n = str2.length;
+  
+  // Early exit for empty strings
+  if (m === 0) return n;
+  if (n === 0) return m;
+  
+  // Create matrix
+  const dp: number[][] = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+  
+  // Initialize first column
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  // Initialize first row
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  
+  // Fill matrix
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,      // deletion
+        dp[i][j - 1] + 1,      // insertion
+        dp[i - 1][j - 1] + cost // substitution
+      );
+    }
+  }
+  
+  return dp[m][n];
+}
+
+/**
+ * Check if one name is an initials match of another
+ * e.g. "J. Pietersen" matches "Jan Pietersen"
+ */
+function isInitialsMatch(name1: string, name2: string): boolean {
+  const words1 = name1.split(' ').filter(w => w.length > 0);
+  const words2 = name2.split(' ').filter(w => w.length > 0);
+  
+  // Need at least 2 parts to check
+  if (words1.length < 2 || words2.length < 2) return false;
+  
+  // Check if last name matches
+  const lastName1 = words1[words1.length - 1];
+  const lastName2 = words2[words2.length - 1];
+  
+  if (lastName1 !== lastName2 && levenshteinDistance(lastName1, lastName2) > 2) {
+    return false;
+  }
+  
+  // Check if first name is initial
+  const firstName1 = words1[0].replace(/\./g, '');
+  const firstName2 = words2[0].replace(/\./g, '');
+  
+  // One is initial of the other
+  if (firstName1.length === 1 && firstName2.startsWith(firstName1)) return true;
+  if (firstName2.length === 1 && firstName1.startsWith(firstName2)) return true;
+  
+  return false;
+}
+
+/**
+ * Name match result interface
+ */
+export interface NameMatchResult {
+  score: number;           // 0-100 similarity score
+  matchType: 'exact' | 'fuzzy' | 'initials' | 'partial' | 'mismatch' | 'not_extractable';
+  name1Normalized: string;
+  name2Normalized: string;
+  details: string;
+}
+
+/**
+ * Fuzzy name matching with support for Dutch names
+ * Returns score 0-100 and match type
+ */
+export function fuzzyNameMatch(
+  documentName: string | null | undefined,
+  applicantName: string | null | undefined
+): NameMatchResult {
+  // Handle null/undefined cases
+  if (!documentName || documentName.trim().length === 0) {
+    return {
+      score: 0,
+      matchType: 'not_extractable',
+      name1Normalized: '',
+      name2Normalized: applicantName ? normalizeName(applicantName) : '',
+      details: 'Document name could not be extracted',
+    };
+  }
+  
+  if (!applicantName || applicantName.trim().length === 0) {
+    return {
+      score: 0,
+      matchType: 'not_extractable',
+      name1Normalized: documentName ? normalizeName(documentName) : '',
+      name2Normalized: '',
+      details: 'Applicant name not available',
+    };
+  }
+  
+  // Normalize both names
+  const docNameNorm = normalizeName(documentName, true);
+  const appNameNorm = normalizeName(applicantName, true);
+  
+  // Exact match
+  if (docNameNorm === appNameNorm) {
+    return {
+      score: 100,
+      matchType: 'exact',
+      name1Normalized: docNameNorm,
+      name2Normalized: appNameNorm,
+      details: 'Names match exactly after normalization',
+    };
+  }
+  
+  // Check initials match (e.g., "J. Pietersen" vs "Jan Pietersen")
+  if (isInitialsMatch(docNameNorm, appNameNorm)) {
+    return {
+      score: 90,
+      matchType: 'initials',
+      name1Normalized: docNameNorm,
+      name2Normalized: appNameNorm,
+      details: 'First name matches as initial',
+    };
+  }
+  
+  // Calculate Levenshtein-based similarity
+  const maxLen = Math.max(docNameNorm.length, appNameNorm.length);
+  const distance = levenshteinDistance(docNameNorm, appNameNorm);
+  const similarity = Math.round((1 - distance / maxLen) * 100);
+  
+  // High similarity = fuzzy match
+  if (similarity >= 85) {
+    return {
+      score: similarity,
+      matchType: 'fuzzy',
+      name1Normalized: docNameNorm,
+      name2Normalized: appNameNorm,
+      details: `Names similar (Levenshtein distance: ${distance})`,
+    };
+  }
+  
+  // Check partial match (last name only)
+  const docWords = docNameNorm.split(' ');
+  const appWords = appNameNorm.split(' ');
+  
+  if (docWords.length > 0 && appWords.length > 0) {
+    const docLastName = docWords[docWords.length - 1];
+    const appLastName = appWords[appWords.length - 1];
+    
+    if (docLastName === appLastName) {
+      return {
+        score: 65,
+        matchType: 'partial',
+        name1Normalized: docNameNorm,
+        name2Normalized: appNameNorm,
+        details: 'Last name matches exactly, first name different',
+      };
+    }
+    
+    // Last name similar but not exact
+    const lastNameDistance = levenshteinDistance(docLastName, appLastName);
+    const lastNameSimilarity = Math.round((1 - lastNameDistance / Math.max(docLastName.length, appLastName.length)) * 100);
+    
+    if (lastNameSimilarity >= 80) {
+      return {
+        score: 55,
+        matchType: 'partial',
+        name1Normalized: docNameNorm,
+        name2Normalized: appNameNorm,
+        details: `Last names similar (${lastNameSimilarity}%), first names different`,
+      };
+    }
+  }
+  
+  // Low similarity = mismatch
+  return {
+    score: similarity,
+    matchType: 'mismatch',
+    name1Normalized: docNameNorm,
+    name2Normalized: appNameNorm,
+    details: `Names do not match (similarity: ${similarity}%)`,
+  };
+}
+
+/**
+ * Identity validation result stored in document metadata
+ */
+export interface IdentityValidationResult {
+  document_name: string | null;
+  applicant_name: string;
+  match_score: number;
+  match_type: NameMatchResult['matchType'];
+  confidence: number;
+  validated_at: string;
+  ai_model?: string;
+  extraction_method: 'ai_vision' | 'text_extraction' | 'not_attempted';
+}
