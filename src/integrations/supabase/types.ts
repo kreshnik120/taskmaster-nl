@@ -2272,6 +2272,7 @@ export type Database = {
           function_name: string
           id: string
           input_tokens: number | null
+          metadata: Json | null
           model_used: string | null
           org_id: string
           output_tokens: number | null
@@ -2279,7 +2280,7 @@ export type Database = {
           semantic_match_score: number | null
           success: boolean | null
           total_tokens: number | null
-          user_id: string
+          user_id: string | null
           validation_failed_count: number | null
         }
         Insert: {
@@ -2290,6 +2291,7 @@ export type Database = {
           function_name: string
           id?: string
           input_tokens?: number | null
+          metadata?: Json | null
           model_used?: string | null
           org_id: string
           output_tokens?: number | null
@@ -2297,7 +2299,7 @@ export type Database = {
           semantic_match_score?: number | null
           success?: boolean | null
           total_tokens?: number | null
-          user_id: string
+          user_id?: string | null
           validation_failed_count?: number | null
         }
         Update: {
@@ -2308,6 +2310,7 @@ export type Database = {
           function_name?: string
           id?: string
           input_tokens?: number | null
+          metadata?: Json | null
           model_used?: string | null
           org_id?: string
           output_tokens?: number | null
@@ -2315,7 +2318,7 @@ export type Database = {
           semantic_match_score?: number | null
           success?: boolean | null
           total_tokens?: number | null
-          user_id?: string
+          user_id?: string | null
           validation_failed_count?: number | null
         }
         Relationships: []
