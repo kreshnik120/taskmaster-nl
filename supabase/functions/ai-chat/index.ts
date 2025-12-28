@@ -946,7 +946,6 @@ async function performHealthCheck(supabase: any): Promise<Response> {
     const duration = Date.now() - start;
 
     // 📊 Log health check call metrics (fire-and-forget)
-    const { logMatchKnowledgeCall } = await import('../_shared/telemetry.ts');
     logMatchKnowledgeCall(supabase, {
       call_type: 'health_check',
       include_shared: false,
