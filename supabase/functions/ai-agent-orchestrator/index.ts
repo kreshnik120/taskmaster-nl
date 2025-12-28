@@ -703,6 +703,71 @@ const GOAL_CONFIGS: Record<string, {
         }
       ];
     }
+  },
+
+  // =====================================================
+  // NEW: Chat Triggered Follow-up - Triggered by recruiter via AI Assistant
+  // =====================================================
+  'chat_triggered_followup': {
+    requiredFields: ['application_id'],
+    planGenerator: async (goal, context) => {
+      // Get candidate info from input_data
+      const candidateEmail = goal.input_data.candidate_email;
+      const candidateName = goal.input_data.candidate_name || 'kandidaat';
+      
+      if (!candidateEmail) {
+        throw new Error('Missing required field: candidate_email');
+      }
+      
+      // Get missing_info from input_data or fallback to database query
+      let missingInfo = goal.input_data.priority_fields || [];
+      
+      // FALLBACK: If priority_fields is empty, query the database
+      if (missingInfo.length === 0 && goal.input_data.application_id && context?.supabase) {
+        console.log('📋 [Orchestrator] Chat follow-up: priority_fields empty, querying database...');
+        const { data: app } = await context.supabase
+          .from('professional_applications')
+          .select('missing_info, extracted_data')
+          .eq('id', goal.input_data.application_id)
+          .single();
+        
+        if (app?.missing_info && app.missing_info.length > 0) {
+          missingInfo = app.missing_info;
+          console.log('✅ [Orchestrator] Got missing_info from database:', missingInfo);
+        } else if (app?.extracted_data) {
+          const extractedData = app.extracted_data as Record<string, any>;
+          const criticalFields = ['functie_niveau', 'werkvorm', 'regio', 'beschikbaarheid', 'telefoonnummer', 'diploma'];
+          missingInfo = criticalFields.filter(field => !extractedData[field]);
+          console.log('✅ [Orchestrator] Derived missing_info from extracted_data:', missingInfo);
+        }
+      }
+      
+      // Limit to 10 fields
+      const fieldsToAsk = missingInfo.slice(0, 10);
+      
+      console.log(`💬 [Orchestrator] Chat-triggered follow-up for: ${candidateName}, fields:`, fieldsToAsk);
+      console.log(`👤 [Orchestrator] Triggered by user: ${goal.input_data.chat_user_id || 'unknown'}`);
+      
+      return [
+        {
+          action_type: 'send_followup_question',
+          action_order: 1,
+          action_description: `Chat-triggered follow-up naar ${candidateName}`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            application_id: goal.input_data.application_id,
+            candidate_email: candidateEmail,
+            candidate_name: candidateName,
+            fields_to_ask: fieldsToAsk,
+            all_missing_info: missingInfo,
+            custom_message: goal.input_data.custom_message,
+            triggered_by: 'chat',
+            chat_user_id: goal.input_data.chat_user_id,
+            follow_up_count: 0, // Always 0 for chat-triggered (first follow-up via chat)
+          }
+        }
+      ];
+    }
   }
 };
 
