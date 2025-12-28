@@ -3434,6 +3434,64 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
         }
       },
       // =====================================================
+      // CANDIDATE LOOKUP & SMART FOLLOW-UP TOOLS (Chat ↔ Agent Integration)
+      // =====================================================
+      {
+        type: "function",
+        function: {
+          name: "lookup_candidate",
+          description: "🔍 Zoek een kandidaat/sollicitant op basis van naam, email, of (deel van) ID. GEBRUIK DIT EERST voordat je follow-up, interview, of document acties uitvoert. Retourneert alle relevante info inclusief ontbrekende velden en huidige status.",
+          parameters: {
+            type: "object",
+            properties: {
+              search_query: { 
+                type: "string", 
+                description: "Naam, email, of (deel van) UUID om te zoeken" 
+              },
+              include_missing_info: {
+                type: "boolean",
+                description: "Haal ook ontbrekende informatie op (default: true)"
+              }
+            },
+            required: ["search_query"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "send_smart_followup",
+          description: "📧 Stuur een intelligente follow-up email naar een kandidaat. Haalt automatisch ontbrekende informatie op en genereert context-aware email. Toont een bevestigingskaart voordat de email wordt verstuurd.",
+          parameters: {
+            type: "object",
+            properties: {
+              application_id: { 
+                type: "string", 
+                description: "UUID van de sollicitatie (verkrijg via lookup_candidate)" 
+              },
+              candidate_name: {
+                type: "string",
+                description: "Naam van de kandidaat"
+              },
+              candidate_email: {
+                type: "string",
+                description: "Email adres van de kandidaat"
+              },
+              custom_message: { 
+                type: "string", 
+                description: "Optionele aangepaste boodschap toe te voegen aan de email" 
+              },
+              priority_fields: {
+                type: "array",
+                items: { type: "string" },
+                description: "Optioneel: specifieke velden om prioriteit aan te geven (bijv. ['functie_niveau', 'werkvorm'])"
+              }
+            },
+            required: ["application_id", "candidate_name", "candidate_email"]
+          }
+        }
+      },
+      // =====================================================
       // AI AGENT ACTIE TOOLS - Voert acties uit via orchestrator
       // =====================================================
       {
@@ -5570,6 +5628,193 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                               message: `📆 Kalenderafspraak aangemaakt!\n├─ Titel: ${args.title}\n├─ Datum: ${eventDate.toLocaleDateString('nl-NL')}\n├─ Tijd: ${eventDate.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}\n├─ Deelnemers: ${args.attendees?.join(', ') || 'Geen'}\n└─ ${args.is_online_meeting ? '🎥 Teams meeting link wordt aangemaakt' : '📍 Locatie: ' + (args.location || 'Nader te bepalen')}`
                             };
                           }
+                          break;
+
+                        // =====================================================
+                        // CANDIDATE LOOKUP & SMART FOLLOW-UP (Chat ↔ Agent Integration)
+                        // =====================================================
+                        case "lookup_candidate":
+                          console.log("🔍 Lookup candidate:", args.search_query);
+                          
+                          const searchQuery = args.search_query?.toLowerCase().trim() || '';
+                          const includeMissingInfo = args.include_missing_info !== false;
+                          
+                          // Search by name, email, or UUID
+                          let candidateQuery = supabaseClient
+                            .from('professional_applications')
+                            .select(`
+                              id, 
+                              email_from, 
+                              extracted_data, 
+                              missing_info, 
+                              completeness_score, 
+                              pipeline_stage, 
+                              status,
+                              professional_id,
+                              created_at,
+                              updated_at
+                            `)
+                            .is('deleted_at', null)
+                            .limit(10);
+                          
+                          // Search by email (exact or partial)
+                          if (searchQuery.includes('@')) {
+                            candidateQuery = candidateQuery.ilike('email_from', `%${searchQuery}%`);
+                          } 
+                          // Search by UUID
+                          else if (searchQuery.match(/^[0-9a-f]{8}-/i)) {
+                            candidateQuery = candidateQuery.ilike('id', `${searchQuery}%`);
+                          }
+                          // Search by name in extracted_data
+                          else {
+                            // Use textSearch or filter on extracted_data->naam
+                            candidateQuery = candidateQuery.or(`email_from.ilike.%${searchQuery}%`);
+                          }
+                          
+                          const { data: lookupCandidates, error: lookupCandidateError } = await candidateQuery;
+                          
+                          if (lookupCandidateError) {
+                            result = {
+                              success: false,
+                              message: `❌ Fout bij zoeken kandidaat: ${lookupCandidateError.message}`
+                            };
+                            break;
+                          }
+                          
+                          // Also filter by name in extracted_data (client-side)
+                          let filteredLookupCandidates = lookupCandidates || [];
+                          if (!searchQuery.includes('@') && !searchQuery.match(/^[0-9a-f]{8}-/i)) {
+                            filteredLookupCandidates = filteredLookupCandidates.filter(c => {
+                              const naam = (c.extracted_data as any)?.naam?.toLowerCase() || '';
+                              return naam.includes(searchQuery) || c.email_from?.toLowerCase().includes(searchQuery);
+                            });
+                          }
+                          
+                          if (filteredLookupCandidates.length === 0) {
+                            result = {
+                              success: false,
+                              message: `🔍 Geen kandidaat gevonden voor "${args.search_query}". Probeer te zoeken op volledige email of deel van de naam.`
+                            };
+                            break;
+                          }
+                          
+                          // Format results
+                          const lookupCandidateResults = filteredLookupCandidates.map(c => {
+                            const data = c.extracted_data as any || {};
+                            const missingFields = (c.missing_info as string[]) || [];
+                            
+                            return {
+                              id: c.id,
+                              name: data.naam || 'Onbekend',
+                              email: c.email_from,
+                              functie_niveau: data.functie_niveau || 'Niet opgegeven',
+                              werkvorm: data.werkvorm || 'Niet opgegeven',
+                              regio: data.regio || 'Niet opgegeven',
+                              pipeline_stage: c.pipeline_stage,
+                              completeness: c.completeness_score || 0,
+                              missing_fields: includeMissingInfo ? missingFields : [],
+                              missing_count: missingFields.length,
+                              professional_id: c.professional_id,
+                              last_updated: c.updated_at
+                            };
+                          });
+                          
+                          const lookupCandidateList = lookupCandidateResults.map((c, i) => 
+                            `${i + 1}. **${c.name}** (${c.email})\n` +
+                            `   ├─ ID: \`${c.id.substring(0, 8)}...\`\n` +
+                            `   ├─ Functie: ${c.functie_niveau} | Werkvorm: ${c.werkvorm}\n` +
+                            `   ├─ Pipeline: ${c.pipeline_stage} | Compleetheid: ${c.completeness}%\n` +
+                            (c.missing_count > 0 ? `   └─ ⚠️ Ontbreekt: ${c.missing_fields.slice(0, 3).join(', ')}${c.missing_count > 3 ? ` (+${c.missing_count - 3})` : ''}` : `   └─ ✅ Profiel compleet`)
+                          ).join('\n\n');
+                          
+                          result = {
+                            success: true,
+                            candidates: lookupCandidateResults,
+                            message: `🔍 **${filteredLookupCandidates.length} kandidaat(en) gevonden:**\n\n${lookupCandidateList}\n\n💡 *Wil je een follow-up sturen? Gebruik het application ID.*`
+                          };
+                          break;
+
+                        case "send_smart_followup":
+                          console.log("📧 Smart follow-up:", args);
+                          
+                          if (!args.application_id) {
+                            result = {
+                              success: false,
+                              message: `❌ Geen application_id opgegeven. Gebruik eerst lookup_candidate om de kandidaat te vinden.`
+                            };
+                            break;
+                          }
+                          
+                          // Get application details
+                          const { data: followupAppData, error: followupAppError } = await supabaseClient
+                            .from('professional_applications')
+                            .select('id, email_from, extracted_data, missing_info, completeness_score, pipeline_stage')
+                            .eq('id', args.application_id)
+                            .single();
+                          
+                          if (followupAppError || !followupAppData) {
+                            result = {
+                              success: false,
+                              message: `❌ Sollicitatie niet gevonden: ${followupAppError?.message || 'ID onbekend'}`
+                            };
+                            break;
+                          }
+                          
+                          // Determine fields to ask
+                          const followupMissingInfo = (followupAppData.missing_info as string[]) || [];
+                          const priorityFieldsToAsk = args.priority_fields?.length > 0 
+                            ? args.priority_fields 
+                            : followupMissingInfo.slice(0, 10);
+                          
+                          // Field label mapping for preview
+                          const followupFieldLabels: Record<string, string> = {
+                            functie_niveau: 'Functieniveau (VIG/HBO-V/etc)',
+                            werkvorm: 'Werkvorm (ZZP of Uitzend)',
+                            regio: 'Voorkeursregio',
+                            beschikbaarheid: 'Beschikbaarheid',
+                            telefoonnummer: 'Telefoonnummer',
+                            ervaring_sector: 'Sector ervaring',
+                            doelgroep_ervaring: 'Doelgroep ervaring',
+                            diploma: 'Diploma/opleiding'
+                          };
+                          
+                          // Generate preview
+                          const followupEmailPreview = `Beste ${args.candidate_name || 'kandidaat'},\n\n` +
+                            `Bedankt voor je interesse om via ABCzorg te werken. Om je sollicitatie compleet te maken, willen we je vragen om de volgende informatie aan te vullen:\n\n` +
+                            priorityFieldsToAsk.map((f: string) => `• ${followupFieldLabels[f] || f}`).join('\n') +
+                            (args.custom_message ? `\n\n${args.custom_message}` : '') +
+                            `\n\nJe kunt eenvoudig reageren op deze email.\n\nMet vriendelijke groet,\nHet ABCzorg team`;
+                          
+                          // Return confirmation card data (frontend will show AgentActionCard)
+                          result = {
+                            success: true,
+                            requires_confirmation: true,
+                            action_data: {
+                              type: 'agent_action_pending',
+                              action_type: 'send_followup',
+                              candidate_name: args.candidate_name || (followupAppData.extracted_data as any)?.naam || 'Kandidaat',
+                              candidate_email: args.candidate_email || followupAppData.email_from,
+                              application_id: args.application_id,
+                              action_description: `Follow-up email voor ${priorityFieldsToAsk.length} ontbrekende velden`,
+                              action_preview: followupEmailPreview,
+                              missing_fields: priorityFieldsToAsk,
+                              custom_message: args.custom_message
+                            },
+                            message: `📧 **Follow-up voorbereid voor ${args.candidate_name || 'kandidaat'}**\n\n` +
+                              `📋 Te vragen: ${priorityFieldsToAsk.slice(0, 5).map((f: string) => followupFieldLabels[f] || f).join(', ')}${priorityFieldsToAsk.length > 5 ? ` (+${priorityFieldsToAsk.length - 5})` : ''}\n\n` +
+                              `⏳ *Bevestig in de chat om de email te versturen.*\n\n` +
+                              `[AGENT_ACTION_CARD]${JSON.stringify({
+                                type: 'agent_action_pending',
+                                action_type: 'send_followup',
+                                candidate_name: args.candidate_name || (followupAppData.extracted_data as any)?.naam || 'Kandidaat',
+                                candidate_email: args.candidate_email || followupAppData.email_from,
+                                application_id: args.application_id,
+                                action_description: `Follow-up email voor ${priorityFieldsToAsk.length} ontbrekende velden`,
+                                action_preview: followupEmailPreview,
+                                missing_fields: priorityFieldsToAsk,
+                                custom_message: args.custom_message
+                              })}[/AGENT_ACTION_CARD]`
+                          };
                           break;
 
                         default:
