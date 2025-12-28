@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { AlertCircle, Clock, Users, CheckCircle, Phone, Calendar, Zap } from "lucide-react";
 import { differenceInDays } from "date-fns";
+import { useNavigate } from "react-router-dom";
 
 interface Application {
   id: string;
@@ -16,6 +17,8 @@ interface UrgencyActionPanelProps {
 }
 
 export function UrgencyActionPanel({ applications }: UrgencyActionPanelProps) {
+  const navigate = useNavigate();
+
   // Calculate stale applications (no activity for over 5 days)
   const staleApps = applications.filter(app => {
     const daysSinceUpdate = differenceInDays(new Date(), new Date(app.updated_at || app.created_at));
@@ -138,16 +141,26 @@ export function UrgencyActionPanel({ applications }: UrgencyActionPanelProps) {
               </h4>
               <div className="grid grid-cols-1 gap-2">
                 {screeningApps.length > 0 && (
-                  <Button variant="outline" size="sm" className="justify-start h-auto py-3">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="justify-start h-auto py-3"
+                    onClick={() => navigate('/sollicitaties?stage=screening')}
+                  >
                     <Phone className="h-4 w-4 mr-2" />
                     <div className="text-left">
-                      <div className="font-medium">Stuur screening email</div>
+                      <div className="font-medium">Bekijk screening kandidaten</div>
                       <div className="text-xs text-muted-foreground">{screeningApps.length} kandidaten</div>
                     </div>
                   </Button>
                 )}
                 {interviewApps.length > 0 && (
-                  <Button variant="outline" size="sm" className="justify-start h-auto py-3">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="justify-start h-auto py-3"
+                    onClick={() => navigate('/sollicitaties?stage=interview')}
+                  >
                     <Calendar className="h-4 w-4 mr-2" />
                     <div className="text-left">
                       <div className="font-medium">Plan interviews</div>
@@ -156,7 +169,12 @@ export function UrgencyActionPanel({ applications }: UrgencyActionPanelProps) {
                   </Button>
                 )}
                 {approvedApps.length > 0 && (
-                  <Button variant="outline" size="sm" className="justify-start h-auto py-3">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="justify-start h-auto py-3"
+                    onClick={() => navigate('/sollicitaties?stage=goedgekeurd')}
+                  >
                     <CheckCircle className="h-4 w-4 mr-2" />
                     <div className="text-left">
                       <div className="font-medium">Bekijk plaatsingsmogelijkheden</div>

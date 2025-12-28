@@ -16,6 +16,7 @@ import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { QuickTimerButton } from "@/components/QuickTimerButton";
 import { RecruitmentKPIs } from "@/components/dashboard/RecruitmentKPIs";
 import { TodayFocusCard } from "@/components/dashboard/TodayFocusCard";
+import { UrgencyActionPanel } from "@/components/recruitment/UrgencyActionPanel";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -91,6 +92,7 @@ const Dashboard = () => {
   const lastUserActionRef = useRef<number>(0);
   const [activatingFunctions, setActivatingFunctions] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [urgencyApplications, setUrgencyApplications] = useState<{ id: string; pipeline_stage: string; created_at: string; updated_at: string | null }[]>([]);
 
   useEffect(() => {
     const getUser = async () => {
@@ -100,11 +102,27 @@ const Dashboard = () => {
     getUser();
   }, []);
 
+  const loadUrgencyApplications = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("professional_applications")
+        .select("id, pipeline_stage, created_at, updated_at")
+        .is("deleted_at", null)
+        .in("pipeline_stage", ["nieuw", "screening", "interview", "goedgekeurd"]);
+
+      if (error) throw error;
+      setUrgencyApplications(data || []);
+    } catch (error) {
+      log.error("Error loading urgency applications:", error);
+    }
+  };
+
   useEffect(() => {
     loadTasks();
     loadTodayHours();
     loadCompletedThisWeek();
     loadActiveTimers();
+    loadUrgencyApplications();
 
     // Real-time listener voor taak updates
     const tasksChannel = supabase
@@ -120,6 +138,22 @@ const Dashboard = () => {
           log.log('Task change detected:', payload);
           loadTasks();
           loadCompletedThisWeek();
+        }
+      )
+      .subscribe();
+    
+    // Real-time listener voor applicaties (urgency panel)
+    const applicationsChannel = supabase
+      .channel('dashboard-applications-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'professional_applications'
+        },
+        () => {
+          loadUrgencyApplications();
         }
       )
       .subscribe();
@@ -166,6 +200,7 @@ const Dashboard = () => {
       supabase.removeChannel(tasksChannel);
       supabase.removeChannel(subtasksChannel);
       supabase.removeChannel(timeEntriesChannel);
+      supabase.removeChannel(applicationsChannel);
     };
   }, []);
 
@@ -710,6 +745,11 @@ const Dashboard = () => {
 
       {/* Recruitment KPI's - Core Dashboard Metrics */}
       <RecruitmentKPIs />
+
+      {/* Urgency Action Panel - Recruitment Alerts */}
+      {urgencyApplications.length > 0 && (
+        <UrgencyActionPanel applications={urgencyApplications} />
+      )}
 
       {/* Vandaag Focus - Full Width */}
       <TodayFocusCard />
