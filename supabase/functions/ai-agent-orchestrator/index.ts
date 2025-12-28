@@ -965,7 +965,7 @@ async function planAndQueueGoal(supabase: any, goal: AgentGoal) {
     if (applicationId) {
       const { data: application, error: appError } = await supabase
         .from('professional_applications')
-        .select('id, email, pipeline_stage, extracted_data')
+        .select('id, email_from, pipeline_stage, extracted_data')
         .eq('id', applicationId)
         .single();
       
@@ -1401,7 +1401,7 @@ async function executeTask(supabase: any, task: any) {
     if (applicationId) {
       const { data: app } = await supabase
         .from('professional_applications')
-        .select('id, email, pipeline_stage, extracted_data')
+        .select('id, email_from, pipeline_stage, extracted_data')
         .eq('id', applicationId)
         .single();
       

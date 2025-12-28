@@ -1025,7 +1025,8 @@ export interface PreActionValidationResult {
 export function validatePreActionRequirements(
   application: {
     id: string;
-    email: string | null;
+    email?: string | null;
+    email_from?: string | null;
     pipeline_stage?: string | null;
     extracted_data?: any;
   } | null,
@@ -1044,9 +1045,10 @@ export function validatePreActionRequirements(
     };
   }
   
-  // Check email validity
-  if (!isValidEmailFormat(application.email)) {
-    errors.push(`Invalid email format: ${application.email}`);
+  // Check email validity - support both 'email' and 'email_from' field names
+  const candidateEmail = application.email || application.email_from;
+  if (!isValidEmailFormat(candidateEmail)) {
+    errors.push(`Invalid email format: ${candidateEmail}`);
   }
   
   // Check pipeline stage for email actions
