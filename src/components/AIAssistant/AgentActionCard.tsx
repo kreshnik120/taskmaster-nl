@@ -62,13 +62,24 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
   const config = ACTION_TYPE_CONFIG[actionData.action_type] || ACTION_TYPE_CONFIG.send_email;
   const IconComponent = config.icon;
 
-  // Cleanup countdown on unmount
+  // Centralized timer cleanup helper
+  const cleanupTimers = useCallback(() => {
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    if (sendTimeoutRef.current) {
+      clearTimeout(sendTimeoutRef.current);
+      sendTimeoutRef.current = null;
+    }
+  }, []);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-      if (sendTimeoutRef.current) clearTimeout(sendTimeoutRef.current);
+      cleanupTimers();
     };
-  }, []);
+  }, [cleanupTimers]);
 
   // Execute the actual send
   const executeSend = useCallback(async () => {
@@ -153,7 +164,7 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
 
     // Schedule actual send
     sendTimeoutRef.current = setTimeout(() => {
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+      cleanupTimers();
       executeSend();
     }, UNDO_COUNTDOWN_SECONDS * 1000);
 
@@ -164,9 +175,7 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
 
   // Undo/cancel during countdown
   const handleUndo = () => {
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    if (sendTimeoutRef.current) clearTimeout(sendTimeoutRef.current);
-    
+    cleanupTimers();
     setStatus('cancelled');
     setStatusMessage('🚫 Verzending geannuleerd');
     
@@ -183,8 +192,7 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
   };
 
   const handleCancel = () => {
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    if (sendTimeoutRef.current) clearTimeout(sendTimeoutRef.current);
+    cleanupTimers();
     setStatus('pending');
     onCancel();
   };
