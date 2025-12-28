@@ -49,11 +49,14 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
   const config = ACTION_TYPE_CONFIG[actionData.action_type] || ACTION_TYPE_CONFIG.send_email;
   const IconComponent = config.icon;
 
-  // Poll goal status when confirming/processing
+  // Realtime subscription for goal status updates
   useEffect(() => {
-    if (!goalId || (status !== 'confirming' && status !== 'processing')) return;
+    if (!goalId) return;
 
-    const pollInterval = setInterval(async () => {
+    console.log('🔔 Setting up realtime subscription for goal:', goalId);
+
+    // Initial status fetch
+    const fetchCurrentStatus = async () => {
       const { data: goal } = await supabase
         .from('agent_goals')
         .select('status, output_data')
@@ -61,46 +64,74 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
         .single();
 
       if (goal) {
-        console.log('🔄 Agent goal status:', goal.status);
-        
-        if (goal.status === 'completed') {
-          setStatus('completed');
-          setStatusMessage('✅ Actie voltooid');
-          clearInterval(pollInterval);
-          toast({
-            description: `Email succesvol verstuurd naar ${actionData.candidate_name}`,
-          });
-        } else if (goal.status === 'failed') {
-          setStatus('failed');
-          const errorMsg = (goal.output_data as any)?.error || 'Onbekende fout';
-          setStatusMessage(`❌ ${errorMsg}`);
-          clearInterval(pollInterval);
-          toast({
-            title: 'Actie mislukt',
-            description: errorMsg,
-            variant: 'destructive',
-          });
-        } else if (goal.status === 'in_progress' || goal.status === 'planned') {
-          setStatus('processing');
-          setStatusMessage('📤 Wordt verwerkt...');
-        }
+        handleGoalStatusUpdate(goal.status, goal.output_data);
       }
-    }, 2000);
+    };
 
-    // Cleanup and timeout
+    const handleGoalStatusUpdate = (goalStatus: string, outputData: unknown) => {
+      console.log('📡 Goal status update:', goalStatus);
+      const output = outputData as { error?: string; message?: string } | null;
+      
+      if (goalStatus === 'completed') {
+        setStatus('completed');
+        setStatusMessage('✅ Actie voltooid');
+        toast({
+          description: `Email succesvol verstuurd naar ${actionData.candidate_name}`,
+        });
+      } else if (goalStatus === 'failed') {
+        setStatus('failed');
+        const errorMsg = output?.error || 'Onbekende fout';
+        setStatusMessage(`❌ ${errorMsg}`);
+        toast({
+          title: 'Actie mislukt',
+          description: errorMsg,
+          variant: 'destructive',
+        });
+      } else if (goalStatus === 'in_progress' || goalStatus === 'planned') {
+        setStatus('processing');
+        setStatusMessage('📤 Wordt verwerkt...');
+      }
+    };
+
+    // Set up realtime subscription
+    const channel = supabase
+      .channel(`agent-goal-${goalId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'agent_goals',
+          filter: `id=eq.${goalId}`
+        },
+        (payload) => {
+          console.log('📡 Realtime goal update received:', payload);
+          const newGoal = payload.new as { status: string; output_data: unknown };
+          handleGoalStatusUpdate(newGoal.status, newGoal.output_data);
+        }
+      )
+      .subscribe((subscriptionStatus) => {
+        console.log('📡 Subscription status:', subscriptionStatus);
+        if (subscriptionStatus === 'SUBSCRIBED') {
+          // Fetch current status after subscription is active
+          fetchCurrentStatus();
+        }
+      });
+
+    // Fallback timeout - auto-complete after 60 seconds if still processing
     const timeoutId = setTimeout(() => {
-      clearInterval(pollInterval);
       if (status === 'processing' || status === 'confirming') {
         setStatus('completed');
-        setStatusMessage('✅ Actie gestart (check email)');
+        setStatusMessage('✅ Actie gestart (controleer email inbox)');
       }
-    }, 30000); // 30 second timeout
+    }, 60000);
 
     return () => {
-      clearInterval(pollInterval);
+      console.log('🔕 Cleaning up realtime subscription for goal:', goalId);
+      supabase.removeChannel(channel);
       clearTimeout(timeoutId);
     };
-  }, [goalId, status, actionData.candidate_name, toast]);
+  }, [goalId, actionData.candidate_name, toast]);
 
   const handleConfirm = async () => {
     setStatus('confirming');
