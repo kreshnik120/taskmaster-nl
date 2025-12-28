@@ -2045,6 +2045,53 @@ export type Database = {
           },
         ]
       }
+      deduplicator_state: {
+        Row: {
+          avg_run_duration_ms: number | null
+          created_at: string | null
+          duplicates_found: number | null
+          id: string
+          items_checked: number | null
+          last_processed_id: string | null
+          last_run_at: string | null
+          org_id: string
+          total_merged_lifetime: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          avg_run_duration_ms?: number | null
+          created_at?: string | null
+          duplicates_found?: number | null
+          id?: string
+          items_checked?: number | null
+          last_processed_id?: string | null
+          last_run_at?: string | null
+          org_id: string
+          total_merged_lifetime?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          avg_run_duration_ms?: number | null
+          created_at?: string | null
+          duplicates_found?: number | null
+          id?: string
+          items_checked?: number | null
+          last_processed_id?: string | null
+          last_run_at?: string | null
+          org_id?: string
+          total_merged_lifetime?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deduplicator_state_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dependencies: {
         Row: {
           created_at: string
