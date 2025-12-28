@@ -841,7 +841,12 @@ Deno.serve(async (req: Request) => {
         role: z.enum(['user', 'assistant', 'system']),
         content: z.string().min(1).max(50000)
       })).min(1).max(100),
-      conversation_id: z.string().uuid()
+      conversation_id: z.string().uuid(),
+      pageContext: z.object({
+        path: z.string(),
+        label: z.string(),
+        description: z.string()
+      }).optional()
     });
 
     const rawBody = await req.json();
@@ -863,8 +868,8 @@ Deno.serve(async (req: Request) => {
       );
     }
     
-    const { messages, conversation_id } = validation.data;
-    console.log(`🔑 Processing conversation: ${conversation_id}`);
+    const { messages, conversation_id, pageContext } = validation.data;
+    console.log(`🔑 Processing conversation: ${conversation_id}${pageContext ? ` (page: ${pageContext.label})` : ''}`);
     
     // === FASE 2D: PROMPT INJECTION PROTECTION ===
     const lastUserMessage = messages[messages.length - 1]?.content || '';
@@ -2478,6 +2483,11 @@ Je werkt in Nederlandse tijd (Europe/Amsterdam, CET/CEST tijdzone).
 ${conversationSummary}
 
 ${keyFacts ? `📋 BELANGRIJKE CONTEXT UIT EERDERE GESPREKKEN:\n${keyFacts}\n` : ''}
+
+📍 **HUIDIGE PAGINA CONTEXT**:
+${pageContext ? `De gebruiker is momenteel op de "${pageContext.label}" pagina (${pageContext.path}).
+Omschrijving: ${pageContext.description}
+→ Pas je antwoorden aan op deze context. Als de vraag gerelateerd is aan deze pagina, geef dan relevante suggesties.` : 'Geen specifieke pagina context beschikbaar.'}
 
 HUIDIGE CONTEXT:
 ${contextSummary}
