@@ -421,7 +421,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
       // 🆕 Direct welkomstmail triggeren (geen wachten op cron job)
       if (newApplicationId) {
         try {
-          console.log("🚀 Triggering ai-agent-orchestrator for immediate welcome email...");
+          log.log("🚀 Triggering ai-agent-orchestrator for immediate welcome email...");
           
           // Stap 1: Plan de goal (voegt actie toe aan queue)
           await supabase.functions.invoke('ai-agent-orchestrator', {
@@ -438,9 +438,9 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
             }
           });
           
-          console.log("✅ Welkomstmail direct getriggerd en uitgevoerd");
+          log.log("✅ Welkomstmail direct getriggerd en uitgevoerd");
         } catch (err) {
-          console.warn("Welkomstmail wordt bij volgende cron run verstuurd:", err);
+          log.warn("Welkomstmail wordt bij volgende cron run verstuurd:", err);
           // Non-blocking: als het faalt, pakt de cron job het op
         }
       }
@@ -459,7 +459,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
           matchCount = vacancies.length;
         }
       } catch (matchError) {
-        console.warn('Could not calculate initial matches:', matchError);
+        log.warn('Could not calculate initial matches:', matchError);
       }
 
       toast.success("Sollicitatie aangemaakt", {
@@ -643,7 +643,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
         if (photoBase64) {
           setExtractedPhotoBase64(photoBase64);
           filled.push("profile_photo");
-          console.log("✅ Extracted photo base64 stored for upload");
+          log.log("✅ Extracted photo base64 stored for upload");
         }
 
         // Check if critical fields (naam + email) were extracted

@@ -1518,10 +1518,10 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
                         <AgentActionCard
                           actionData={msg.agentAction}
                           onConfirm={(goalId) => {
-                            console.log('✅ Agent action confirmed:', goalId);
+                            log.log('✅ Agent action confirmed:', goalId);
                           }}
                           onCancel={() => {
-                            console.log('❌ Agent action cancelled');
+                            log.log('❌ Agent action cancelled');
                             setMessages(prev => prev.map((m, i) => 
                               i === idx ? { ...m, agentAction: undefined } : m
                             ));

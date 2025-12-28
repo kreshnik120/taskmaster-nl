@@ -629,9 +629,9 @@ const Dashboard = () => {
         );
       }
 
-      console.log('Activation results:', result);
+      log.log('Activation results:', result);
     } catch (error) {
-      console.error('Function activation error:', error);
+      log.error('Function activation error:', error);
       toast.error('Kon edge functions niet activeren', {
         description: error instanceof Error ? error.message : 'Onbekende fout'
       });

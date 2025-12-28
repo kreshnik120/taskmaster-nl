@@ -13,6 +13,9 @@ import { toast } from "sonner";
 import { Bot, Send, Loader2, CheckCircle2, XCircle, Clock, Activity, RefreshCw, Zap, Mail, Copy, FileText, Code } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('AIAgentTestPanel');
 
 interface GeneratedEmail {
   subject: string;
@@ -112,9 +115,9 @@ export function AIAgentTestPanel() {
         description: "Bekijk de preview hieronder",
       });
 
-      console.log("Generated email:", data);
+      log.log("Generated email:", data);
     } catch (error: any) {
-      console.error("Test email error:", error);
+      log.error("Test email error:", error);
       toast.error("Fout bij genereren test email", {
         description: error.message,
       });
@@ -125,24 +128,24 @@ export function AIAgentTestPanel() {
 
   const handleActuallySendEmail = async () => {
     // STAP 1: Bevestig dat functie wordt aangeroepen
-    console.log("🚀 handleActuallySendEmail CALLED!");
+    log.log("🚀 handleActuallySendEmail CALLED!");
     toast.info("📧 Email versturen gestart...");
 
     // STAP 2: Validatie met duidelijke errors
     if (!generatedEmail) {
-      console.error("❌ No generatedEmail object");
+      log.error("❌ No generatedEmail object");
       toast.error("Geen email gegenereerd - genereer eerst een email");
       return;
     }
     
     if (!testEmail) {
-      console.error("❌ No testEmail");
+      log.error("❌ No testEmail");
       toast.error("Geen email adres ingevuld");
       return;
     }
 
-    console.log("✅ Validation passed, generatedEmail:", generatedEmail);
-    console.log("✅ testEmail:", testEmail);
+    log.log("✅ Validation passed, generatedEmail:", generatedEmail);
+    log.log("✅ testEmail:", testEmail);
 
     setSendingEmail(true);
     
@@ -162,48 +165,48 @@ export function AIAgentTestPanel() {
         },
       };
 
-      console.log("📧 REQUEST BODY:", JSON.stringify(requestBody, null, 2));
+      log.log("📧 REQUEST BODY:", JSON.stringify(requestBody, null, 2));
       toast.info("Verbinden met server...");
 
       // STAP 4: Edge function call met timing
       const startTime = Date.now();
-      console.log("🔄 Calling supabase.functions.invoke('send-ai-email')...");
+      log.log("🔄 Calling supabase.functions.invoke('send-ai-email')...");
       
       const { data, error } = await supabase.functions.invoke("send-ai-email", {
         body: requestBody,
       });
 
       const duration = Date.now() - startTime;
-      console.log(`📧 RESPONSE (${duration}ms):`, { data, error });
+      log.log(`📧 RESPONSE (${duration}ms):`, { data, error });
 
       if (error) {
-        console.error("❌ Edge function returned error:", error);
+        log.error("❌ Edge function returned error:", error);
         toast.error(`Server error: ${error.message}`);
         return;
       }
 
-      console.log("✅ Email sent successfully!");
+      log.log("✅ Email sent successfully!");
       toast.success("✅ Email verzonden via Resend!", {
         description: `Verstuurd naar ${testEmail}`,
       });
 
     } catch (error: any) {
-      console.error("❌ CATCH BLOCK ERROR:", error);
-      console.error("Error stack:", error.stack);
+      log.error("❌ CATCH BLOCK ERROR:", error);
+      log.error("Error stack:", error.stack);
       toast.error(`Onverwachte fout: ${error.message}`);
     } finally {
       setSendingEmail(false);
-      console.log("🏁 handleActuallySendEmail FINISHED");
+      log.log("🏁 handleActuallySendEmail FINISHED");
     }
   };
 
   const handleTriggerOrchestrator = async () => {
     setSending(true);
-    console.log("🚀 Triggering AI Agent Orchestrator (2-step process)...");
+    log.log("🚀 Triggering AI Agent Orchestrator (2-step process)...");
     
     try {
       // STAP 1: Process pending goals (planning fase)
-      console.log("📋 Step 1: Processing pending goals...");
+      log.log("📋 Step 1: Processing pending goals...");
       toast.info("Stap 1/2: Goals verwerken...");
       
       const { data: planData, error: planError } = await supabase.functions.invoke(
@@ -211,17 +214,17 @@ export function AIAgentTestPanel() {
         { body: { action: 'process_pending_goals' } }
       );
       
-      console.log("📋 Plan result:", planData, planError);
+      log.log("📋 Plan result:", planData, planError);
       
       if (planError) {
-        console.error("❌ Plan error:", planError);
+        log.error("❌ Plan error:", planError);
         throw planError;
       }
 
       const goalsProcessed = planData?.goalsProcessed || planData?.processed || 0;
       
       // STAP 2: Execute queued actions (dit stuurt de emails!)
-      console.log("⚡ Step 2: Executing queued actions...");
+      log.log("⚡ Step 2: Executing queued actions...");
       toast.info("Stap 2/2: Acties uitvoeren (emails versturen)...");
       
       const { data: execData, error: execError } = await supabase.functions.invoke(
@@ -229,10 +232,10 @@ export function AIAgentTestPanel() {
         { body: { action: 'execute_actions' } }
       );
       
-      console.log("⚡ Execute result:", execData, execError);
+      log.log("⚡ Execute result:", execData, execError);
       
       if (execError) {
-        console.error("❌ Execute error:", execError);
+        log.error("❌ Execute error:", execError);
         // Don't throw - still show partial success
         toast.warning("Goals verwerkt, maar acties gefaald", {
           description: execError.message,
@@ -244,18 +247,18 @@ export function AIAgentTestPanel() {
           description: `${goalsProcessed} goals gepland, ${actionsExecuted} acties uitgevoerd`,
         });
         
-        console.log("✅ Orchestrator complete:", { goalsProcessed, actionsExecuted });
+        log.log("✅ Orchestrator complete:", { goalsProcessed, actionsExecuted });
       }
 
       refetch();
     } catch (error: any) {
-      console.error("❌ Orchestrator error:", error);
+      log.error("❌ Orchestrator error:", error);
       toast.error("Fout bij triggeren orchestrator", {
         description: error.message,
       });
     } finally {
       setSending(false);
-      console.log("🏁 handleTriggerOrchestrator FINISHED");
+      log.log("🏁 handleTriggerOrchestrator FINISHED");
     }
   };
 

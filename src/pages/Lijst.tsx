@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef, memo } from "react";
 import { useNavigate } from "react-router-dom";
+import { logger } from "@/lib/logger";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -121,7 +122,7 @@ export default function Lijst() {
           table: 'tasks'
         },
         (payload) => {
-          console.log('Task change detected:', payload);
+          logger.log('Task change detected:', payload);
           fetchTasks();
         }
       )
@@ -180,7 +181,7 @@ export default function Lijst() {
       if (error) throw error;
       setProfiles(data || []);
     } catch (error) {
-      console.error("Error loading profiles:", error);
+      logger.error("Error loading profiles:", error);
     }
   };
 
@@ -214,7 +215,7 @@ export default function Lijst() {
       if (error) throw error;
       setTasks(data || []);
     } catch (error) {
-      console.error("Error fetching tasks:", error);
+      logger.error("Error fetching tasks:", error);
     } finally {
       setLoading(false);
     }
@@ -288,7 +289,7 @@ export default function Lijst() {
       toast.success(currentStatus ? "Taak gemarkeerd als actief" : "Taak afgerond");
       fetchTasks();
     } catch (error) {
-      console.error("Error toggling task completion:", error);
+      logger.error("Error toggling task completion:", error);
       toast.error("Fout bij updaten van taak");
     }
   };
@@ -312,7 +313,7 @@ export default function Lijst() {
       setEditingValue("");
       fetchTasks();
     } catch (error) {
-      console.error("Error updating next action:", error);
+      logger.error("Error updating next action:", error);
       toast.error("Fout bij bijwerken vervolgactie");
     }
   };
@@ -344,7 +345,7 @@ export default function Lijst() {
       toast.success("Taak geaccepteerd");
       fetchTasks();
     } catch (error) {
-      console.error("Error accepting task:", error);
+      logger.error("Error accepting task:", error);
       toast.error("Fout bij accepteren van taak");
     }
   };
@@ -376,7 +377,7 @@ export default function Lijst() {
       setEditingAssignee(null);
       fetchTasks();
     } catch (error) {
-      console.error("Error updating assignee:", error);
+      logger.error("Error updating assignee:", error);
       toast.error("Fout bij bijwerken verantwoordelijke");
     }
   };
@@ -453,7 +454,7 @@ export default function Lijst() {
       setTaskToDelete(null);
       fetchTasks();
     } catch (error) {
-      console.error("Error deleting task:", error);
+      logger.error("Error deleting task:", error);
       toast.error("Fout bij verwijderen van taak");
     }
   };

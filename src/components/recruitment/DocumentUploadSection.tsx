@@ -543,7 +543,7 @@ export function DocumentUploadSection({
     setRetryingDuoVerification(true);
     
     try {
-      console.log('🔄 Retry DUO verificatie voor diploma:', diplomaFilePath);
+      log.log('🔄 Retry DUO verificatie voor diploma:', diplomaFilePath);
       
       const { data: verifyResult, error: verifyError } = await supabase.functions.invoke('verify-diploma-duo', {
         body: { 
@@ -553,12 +553,12 @@ export function DocumentUploadSection({
       });
       
       if (verifyError) {
-        console.error('DUO retry verificatie fout:', verifyError);
+        log.error('DUO retry verificatie fout:', verifyError);
         toast.error('DUO verificatie opnieuw proberen mislukt');
         return;
       }
       
-      console.log('DUO retry result:', verifyResult);
+      log.log('DUO retry result:', verifyResult);
       
       // Update database met resultaat (fallback)
       if (verifyResult?.status) {
