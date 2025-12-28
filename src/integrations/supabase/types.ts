@@ -5599,6 +5599,7 @@ export type Database = {
               filter_jurisdiction?: string
               filter_org_id?: string
               filter_role_tags?: string[]
+              include_shared?: boolean
               match_count?: number
               match_threshold?: number
               query_embedding: string
@@ -5607,6 +5608,7 @@ export type Database = {
             Returns: {
               category: string
               confidence_score: number
+              is_shared: boolean
               key: string
               knowledge_id: string
               role_tags: string[]
