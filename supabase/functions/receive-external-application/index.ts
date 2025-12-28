@@ -134,6 +134,17 @@ function validatePayload(data: unknown): ValidationResult<ExternalApplication> {
   return { success: true, data: obj as unknown as ExternalApplication };
 }
 
+// XSS sanitization helper - escapes HTML special characters to prevent injection
+function escapeHtml(unsafe: string | undefined | null): string {
+  if (!unsafe) return "";
+  return String(unsafe)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function checkRateLimit(apiKey: string): { allowed: boolean; remaining: number } {
   const now = Date.now();
   const record = rateLimitMap.get(apiKey);
@@ -401,10 +412,22 @@ Deno.serve(async (req) => {
         const typeEmoji = data.type === "zzp" ? "🧑‍💼" : "👤";
         const typeName = data.type === "zzp" ? "ZZP'er" : "Uitzendkracht";
         
+        // Sanitize all user inputs to prevent XSS in email
+        const safeName = escapeHtml(data.full_name);
+        const safeEmail = escapeHtml(data.email);
+        const safeEmailHref = encodeURIComponent(data.email);
+        const safePhone = escapeHtml(data.phone) || "Niet opgegeven";
+        const safeBedrijfsnaam = escapeHtml(data.bedrijfsnaam) || "Niet opgegeven";
+        const safeKvk = escapeHtml(data.kvk_nummer) || "Niet opgegeven";
+        const safeRegio = escapeHtml(data.gewenste_regio);
+        const safeMotivatie = escapeHtml(data.motivatie);
+        const safeSource = escapeHtml(data.source);
+        const safeSourceLabel = escapeHtml(sourceLabel);
+        
         await resend.emails.send({
           from: "Taskmaster <noreply@citozorg.nl>",
           to: ["recruitment@inbound.citozorg.nl"],
-          subject: `Nieuwe ${sourceLabel} via ${data.source}: ${data.full_name}`,
+          subject: `Nieuwe ${safeSourceLabel} via ${safeSource}: ${safeName}`,
           html: `
             <!DOCTYPE html>
             <html>
@@ -414,7 +437,7 @@ Deno.serve(async (req) => {
             </head>
             <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
               <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
-                <h1 style="color: white; margin: 0; font-size: 24px;">Nieuwe ${typeName} via ${data.source}</h1>
+                <h1 style="color: white; margin: 0; font-size: 24px;">Nieuwe ${typeName} via ${safeSource}</h1>
               </div>
               
               <div style="background: #f8f9fa; padding: 24px; border-radius: 0 0 12px 12px; border: 1px solid #e9ecef; border-top: none;">
@@ -423,41 +446,41 @@ Deno.serve(async (req) => {
                     <strong>Type:</strong> ${typeEmoji} ${typeName}
                   </p>
                   <p style="margin: 0 0 8px 0;">
-                    <strong>Naam:</strong> ${data.full_name}
+                    <strong>Naam:</strong> ${safeName}
                   </p>
                   <p style="margin: 0 0 8px 0;">
-                    <strong>Email:</strong> <a href="mailto:${data.email}" style="color: #667eea;">${data.email}</a>
+                    <strong>Email:</strong> <a href="mailto:${safeEmailHref}" style="color: #667eea;">${safeEmail}</a>
                   </p>
                   <p style="margin: 0 0 8px 0;">
-                    <strong>Telefoon:</strong> ${data.phone || "Niet opgegeven"}
+                    <strong>Telefoon:</strong> ${safePhone}
                   </p>
                   <p style="margin: 0 0 8px 0;">
                     <strong>CV:</strong> ${cvFilePath ? "✅ Ja" : "❌ Nee"}
                   </p>
                   ${data.type === "zzp" ? `
                   <p style="margin: 0 0 8px 0;">
-                    <strong>Bedrijfsnaam:</strong> ${data.bedrijfsnaam || "Niet opgegeven"}
+                    <strong>Bedrijfsnaam:</strong> ${safeBedrijfsnaam}
                   </p>
                   <p style="margin: 0 0 8px 0;">
-                    <strong>KVK:</strong> ${data.kvk_nummer || "Niet opgegeven"}
+                    <strong>KVK:</strong> ${safeKvk}
                   </p>
                   ` : ""}
-                  ${data.gewenste_regio ? `
+                  ${safeRegio ? `
                   <p style="margin: 0 0 8px 0;">
-                    <strong>Gewenste regio:</strong> ${data.gewenste_regio}
+                    <strong>Gewenste regio:</strong> ${safeRegio}
                   </p>
                   ` : ""}
                   ${uploadedDocuments.length > 0 ? `
                   <p style="margin: 0;">
-                    <strong>Extra documenten:</strong> ${uploadedDocuments.map(d => d.type).join(", ")}
+                    <strong>Extra documenten:</strong> ${uploadedDocuments.map(d => escapeHtml(d.type)).join(", ")}
                   </p>
                   ` : ""}
                 </div>
                 
-                ${data.motivatie ? `
+                ${safeMotivatie ? `
                 <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 16px;">
                   <p style="margin: 0 0 8px 0;"><strong>Motivatie:</strong></p>
-                  <p style="margin: 0; color: #666;">${data.motivatie}</p>
+                  <p style="margin: 0; color: #666;">${safeMotivatie}</p>
                 </div>
                 ` : ""}
                 
