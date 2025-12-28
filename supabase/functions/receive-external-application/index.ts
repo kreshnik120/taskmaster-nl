@@ -585,31 +585,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 15. Trigger welcome email via AI Agent Orchestrator (same flow as email applications)
-    // This ensures website applicants receive the same welcome email as email applicants
-    try {
-      console.log(`[receive-external-application] Triggering welcome email via orchestrator for ${newApplication.id}`);
-      
-      // Step 1: Process pending goals (creates action in queue)
-      await supabase.functions.invoke('ai-agent-orchestrator', {
-        body: { 
-          action: 'process_pending_goals',
-          filter_application_id: newApplication.id 
-        }
-      });
-      
-      // Step 2: Execute actions immediately (don't wait for cron)
-      await supabase.functions.invoke('ai-agent-orchestrator', {
-        body: { 
-          action: 'execute_actions'
-        }
-      });
-      
-      console.log(`[receive-external-application] Welcome email triggered successfully`);
-    } catch (orchestratorErr) {
-      console.warn("[receive-external-application] Orchestrator trigger failed, will retry via cron:", orchestratorErr);
-      // Non-blocking: if it fails, cron will pick it up
-    }
+    // 15. Welcome email handling
+    // NOTE: Directe orchestrator calls zijn verwijderd om race conditions te voorkomen.
+    // De database trigger maakt automatisch een 'send_welcome_and_intake' goal aan.
+    // De master-scheduler cron (elke minuut) roept ai-agent-orchestrator aan met de juiste service role key.
+    // Dit garandeert dat de database transactie is gecommit voordat het goal wordt verwerkt.
+    console.log(`[receive-external-application] Goal 'send_welcome_and_intake' is aangemaakt via database trigger.`);
+    console.log(`[receive-external-application] Welkomstmail wordt binnen 1-2 minuten verzonden via master-scheduler cron.`);
 
     // 16. Auto-trigger interview slots if completeness >= threshold (same as email flow)
     const INTERVIEW_THRESHOLD = parseInt(Deno.env.get('INTERVIEW_THRESHOLD') || '85');
