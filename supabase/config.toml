@@ -220,10 +220,10 @@ schedule = "0 2 * * *"
 # Dependencies: Runs after daily cleanup jobs
 
 [functions.retroactive-training-evaluator]
-verify_jwt = true
+verify_jwt = false
 schedule = "30 2 * * *"
 # Purpose: Re-evaluate previously rejected learning events (daily at 02:30)
-# Dependencies: Runs after meta-orchestrator
+# Dependencies: Runs after meta-orchestrator, shim → unified-learner
 
 # -----------------------------------------------------------------------------
 # SCHEDULED FUNCTIONS (Cron Jobs)
