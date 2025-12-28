@@ -3111,6 +3111,8 @@ export type Database = {
           profile_photo_url: string | null
           rejected_at: string | null
           rejection_reason: string | null
+          source_label: string | null
+          source_project: string | null
           status: string
           tillift_certificaat_path: string | null
           updated_at: string | null
@@ -3162,6 +3164,8 @@ export type Database = {
           profile_photo_url?: string | null
           rejected_at?: string | null
           rejection_reason?: string | null
+          source_label?: string | null
+          source_project?: string | null
           status?: string
           tillift_certificaat_path?: string | null
           updated_at?: string | null
@@ -3213,6 +3217,8 @@ export type Database = {
           profile_photo_url?: string | null
           rejected_at?: string | null
           rejection_reason?: string | null
+          source_label?: string | null
+          source_project?: string | null
           status?: string
           tillift_certificaat_path?: string | null
           updated_at?: string | null
