@@ -114,6 +114,46 @@ const PAGE_CONTEXTS: Record<string, PageContext> = {
       { icon: ListTodo, label: 'Planning optimaliseren', prompt: 'Help me mijn planning te optimaliseren' },
     ]
   },
+  '/opvolging': {
+    label: 'Opvolging',
+    description: 'Follow-up taken en herinneringen',
+    icon: Clock,
+    quickActions: [
+      { icon: Clock, label: 'Openstaande opvolgingen', prompt: 'Welke opvolgingen staan er open?' },
+      { icon: Calendar, label: 'Herinneringen vandaag', prompt: 'Welke herinneringen heb ik vandaag?' },
+      { icon: ListTodo, label: 'Prioriteren', prompt: 'Help me mijn opvolgingen te prioriteren' },
+    ]
+  },
+  '/tijdregistratie': {
+    label: 'Tijdregistratie',
+    description: 'Urenregistratie en tijdsbeheer',
+    icon: Clock,
+    quickActions: [
+      { icon: Clock, label: 'Uren vandaag', prompt: 'Hoeveel uren heb ik vandaag geregistreerd?' },
+      { icon: Calendar, label: 'Weekoverzicht', prompt: 'Geef een overzicht van mijn uren deze week' },
+      { icon: ListTodo, label: 'Nieuwe registratie', prompt: 'Help me uren te registreren' },
+    ]
+  },
+  '/lijst': {
+    label: 'Lijstweergave',
+    description: 'Taken in lijstformaat',
+    icon: ListTodo,
+    quickActions: [
+      { icon: ListTodo, label: 'Alle taken', prompt: 'Geef een overzicht van al mijn taken' },
+      { icon: Clock, label: 'Urgent', prompt: 'Welke taken zijn urgent?' },
+      { icon: Calendar, label: 'Sorteren', prompt: 'Help me mijn taken te sorteren op prioriteit' },
+    ]
+  },
+  '/sollicitaties-archief': {
+    label: 'Sollicitaties Archief',
+    description: 'Gearchiveerde en afgeronde sollicitaties',
+    icon: Users,
+    quickActions: [
+      { icon: Users, label: 'Zoek in archief', prompt: 'Help me een kandidaat te vinden in het archief' },
+      { icon: Clock, label: 'Recent afgerond', prompt: 'Welke sollicitaties zijn recent afgerond?' },
+      { icon: Briefcase, label: 'Statistieken', prompt: 'Geef statistieken van afgeronde sollicitaties' },
+    ]
+  },
 };
 
 const DEFAULT_PAGE_CONTEXT: PageContext = {
