@@ -38,18 +38,17 @@ export function useUserRole(): UseUserRoleReturn {
           .select('role')
           .eq('user_id', user.id)
           .abortSignal(controller.signal)
-          .single();
+          .maybeSingle();
 
         clearTimeout(timeout);
 
         if (error) {
           console.error('⚠️ Error fetching user role:', error.code, error.message);
-          // ⚡ KEEP CACHED ROLE: Don't default to 'user' on error
-          // Only update loading state
+          // Keep cached role on error
         } else {
-          const newRole = data.role as UserRole;
+          // Default to 'user' if no role found
+          const newRole = (data?.role as UserRole) || 'user';
           setRole(newRole);
-          // ⚡ UPDATE CACHE: Persist for next load
           localStorage.setItem('user_role_cache', newRole);
         }
       } catch (error) {
