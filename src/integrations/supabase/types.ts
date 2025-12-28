@@ -727,6 +727,8 @@ export type Database = {
           confidence: number | null
           created_at: string | null
           id: string
+          items_affected: number | null
+          last_applied_at: string | null
           occurrences: number | null
           org_id: string
           pattern_data: Json | null
@@ -738,6 +740,8 @@ export type Database = {
           confidence?: number | null
           created_at?: string | null
           id?: string
+          items_affected?: number | null
+          last_applied_at?: string | null
           occurrences?: number | null
           org_id: string
           pattern_data?: Json | null
@@ -749,6 +753,8 @@ export type Database = {
           confidence?: number | null
           created_at?: string | null
           id?: string
+          items_affected?: number | null
+          last_applied_at?: string | null
           occurrences?: number | null
           org_id?: string
           pattern_data?: Json | null

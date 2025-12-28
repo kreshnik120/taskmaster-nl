@@ -333,6 +333,19 @@ verify_jwt = false
 schedule = "0 6 * * *"
 # Purpose: Clean up low-stability knowledge items (daily at 06:00)
 
+# --- Phase 2: Self-Learning Reinforcement ---
+[functions.apply-meta-patterns]
+verify_jwt = false
+schedule = "0 */6 * * *"
+# Purpose: Apply high-confidence meta-patterns to knowledge items (every 6 hours)
+# Protects core Gemini data, only applies to items with generic categories
+
+[functions.temporal-decay]
+verify_jwt = false
+schedule = "0 3 * * *"
+# Purpose: Apply temporal decay to low-quality auto-learned knowledge (daily at 03:00)
+# Protects: verified items, high-usage items, core Gemini data
+
 # --- Weekly ---
 [functions.source-validator]
 verify_jwt = false
