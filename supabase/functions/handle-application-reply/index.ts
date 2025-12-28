@@ -9,7 +9,14 @@ import {
   MAX_FOLLOWUP_EMAILS,
   APPLICATION_GOAL_TYPES,
   ACTIVE_GOAL_STATUSES,
-  recalculateMissingInfo
+  recalculateMissingInfo,
+  // Document validation helpers (Phase 1)
+  isValidPdf,
+  validateVogContent,
+  validateDiplomaContent,
+  calculateContentHash,
+  extractBasicTextFromPdf,
+  type DocumentValidationResult,
 } from '../_shared/healthcare-mappings.ts';
 // Fase 1: Quick Wins - Modulaire detection & audit
 import { stripQuotedContent, detectSlotWithRegex, detectInterviewSlot, type SlotDetectionInput } from '../_shared/slot-detection.ts';
@@ -1259,7 +1266,113 @@ Return JSON in dit formaat:
           const fileBuffer = Uint8Array.from(atob(attachment.content), c => c.charCodeAt(0));
           const filePath = `${applicationId}/${Date.now()}_${attachment.filename}`;
           
-          // Upload to Storage
+          // =====================================================
+          // PHASE 1: DOCUMENT CONTENT VALIDATION
+          // =====================================================
+          const validationFlags: string[] = [];
+          let requiresManualReview = false;
+          let contentValidationResult: { isValid: boolean; score: number; foundKeywords: string[]; warnings: string[] } | undefined;
+          
+          // 1.1 PDF Magic Bytes Check (for PDF files)
+          const isPdfFile = attachment.content_type === 'application/pdf' || 
+                           attachment.filename.toLowerCase().endsWith('.pdf');
+          
+          if (isPdfFile) {
+            if (!isValidPdf(fileBuffer)) {
+              validationFlags.push('invalid_pdf_format');
+              console.warn(`⚠️ VALIDATION: File ${attachment.filename} claims to be PDF but has invalid magic bytes`);
+              requiresManualReview = true;
+            } else {
+              console.log(`✅ PDF magic bytes valid for: ${attachment.filename}`);
+            }
+          }
+          
+          // 1.2 Content Keyword Validation (VOG/Diploma)
+          if (isPdfFile && isValidPdf(fileBuffer)) {
+            const extractedText = extractBasicTextFromPdf(fileBuffer);
+            
+            if (documentType === 'vog') {
+              const vogValidation = validateVogContent(extractedText);
+              contentValidationResult = {
+                isValid: vogValidation.isValid,
+                score: vogValidation.score,
+                foundKeywords: vogValidation.foundKeywords,
+                warnings: vogValidation.missingRequired.map(k => `missing_keyword:${k}`),
+              };
+              
+              if (!vogValidation.isValid) {
+                validationFlags.push('vog_content_invalid');
+                validationFlags.push(...vogValidation.missingRequired.map(k => `missing_vog_keyword:${k}`));
+                console.warn(`⚠️ VALIDATION: VOG content validation failed (score: ${vogValidation.score})`);
+                console.warn(`   Missing keywords: ${vogValidation.missingRequired.join(', ')}`);
+                requiresManualReview = true;
+              } else {
+                console.log(`✅ VOG content validated (score: ${vogValidation.score}, keywords: ${vogValidation.foundKeywords.join(', ')})`);
+              }
+            } else if (documentType === 'diploma' || documentType === 'certificate') {
+              const diplomaValidation = validateDiplomaContent(extractedText);
+              contentValidationResult = {
+                isValid: diplomaValidation.isValid,
+                score: diplomaValidation.score,
+                foundKeywords: diplomaValidation.foundKeywords,
+                warnings: diplomaValidation.isHealthcareRelated ? [] : ['not_healthcare_related'],
+              };
+              
+              if (!diplomaValidation.isValid) {
+                validationFlags.push('diploma_content_invalid');
+                console.warn(`⚠️ VALIDATION: Diploma content validation failed (score: ${diplomaValidation.score})`);
+                requiresManualReview = true;
+              } else {
+                console.log(`✅ Diploma content validated (score: ${diplomaValidation.score}, healthcare: ${diplomaValidation.isHealthcareRelated})`);
+                if (!diplomaValidation.isHealthcareRelated) {
+                  validationFlags.push('diploma_not_healthcare');
+                }
+              }
+            }
+          }
+          
+          // 1.3 SHA256 Duplicate Detection
+          let contentHash: string | undefined;
+          let duplicateInfo: { applicationId: string; filename: string; uploadedAt: string } | undefined;
+          
+          try {
+            contentHash = await calculateContentHash(fileBuffer);
+            console.log(`🔐 Document hash: ${contentHash.substring(0, 16)}...`);
+            
+            // Check for existing documents with same hash
+            const { data: existingDocs, error: hashCheckError } = await supabase
+              .from('application_documents')
+              .select('application_id, filename, created_at')
+              .eq('metadata->>content_hash', contentHash)
+              .limit(1);
+            
+            if (!hashCheckError && existingDocs && existingDocs.length > 0) {
+              const existing = existingDocs[0];
+              // Only flag as duplicate if from DIFFERENT application
+              if (existing.application_id !== applicationId) {
+                validationFlags.push('duplicate_document');
+                duplicateInfo = {
+                  applicationId: existing.application_id,
+                  filename: existing.filename,
+                  uploadedAt: existing.created_at,
+                };
+                console.warn(`⚠️ DUPLICATE DETECTED: Document already exists for application ${existing.application_id}`);
+                console.warn(`   Original file: ${existing.filename} uploaded at ${existing.created_at}`);
+                requiresManualReview = true;
+              } else {
+                console.log(`ℹ️ Document is re-upload of same file for this application`);
+              }
+            }
+          } catch (hashError) {
+            console.error(`❌ Failed to calculate content hash:`, hashError);
+          }
+          
+          // Log validation result
+          console.log(`📋 Validation result for ${attachment.filename}:`);
+          console.log(`   Flags: ${validationFlags.length > 0 ? validationFlags.join(', ') : 'none'}`);
+          console.log(`   Requires review: ${requiresManualReview}`);
+          
+          // Upload to Storage (always upload, even if flagged - for HR review)
           const { error: uploadError } = await supabase.storage
             .from('application-documents')
             .upload(filePath, fileBuffer, { 
@@ -1322,13 +1435,25 @@ Return JSON in dit formaat:
                 }
               }
             } else {
-              // Date not found in filename - assume valid for now, but flag for manual review
-              vogExpiryStatus = 'valid';
-              console.log(`ℹ️ VOG uploaded, date not detected in filename - assuming valid`);
+              // Date not found in filename - check if content validation passed
+              if (validationFlags.includes('vog_content_invalid')) {
+                vogExpiryStatus = 'quarantine';
+                validationFlags.push('vog_date_unknown');
+                console.log(`⚠️ VOG uploaded without date and content validation failed - quarantined`);
+              } else {
+                vogExpiryStatus = 'pending_review';
+                validationFlags.push('vog_date_unknown');
+                console.log(`ℹ️ VOG uploaded, date not detected - pending review`);
+              }
+            }
+            
+            // If VOG has validation issues, override status to quarantine
+            if (requiresManualReview && vogExpiryStatus === 'valid') {
+              vogExpiryStatus = 'pending_review';
             }
           }
           
-          // Insert document record into database
+          // Insert document record into database with validation info
           const { error: docInsertError } = await supabase
             .from('application_documents')
             .insert({
@@ -1342,6 +1467,13 @@ Return JSON in dit formaat:
               metadata: {
                 uploaded_via: 'email_reply',
                 original_email_id: message_id,
+                // Phase 1 validation data
+                content_hash: contentHash,
+                validation_flags: validationFlags,
+                requires_manual_review: requiresManualReview,
+                content_validation: contentValidationResult,
+                duplicate_info: duplicateInfo,
+                validated_at: new Date().toISOString(),
               }
             });
           
@@ -1356,7 +1488,8 @@ Return JSON in dit formaat:
             });
             
             // Update extracted_data based on document type
-            if (documentType === 'vog' && vogExpiryStatus === 'valid') {
+            // Only accept VOG if validation passed AND not quarantined
+            if (documentType === 'vog' && vogExpiryStatus === 'valid' && !requiresManualReview) {
               analysis.new_data.vog_file_path = filePath;
               analysis.new_data.vog_uploaded = true;
               if (vogIssueDate) {
@@ -1373,6 +1506,34 @@ Return JSON in dit formaat:
               analysis.new_data.vog_file_path = filePath;
               analysis.new_data.vog_expired = true;
               console.log(`⚠️ VOG expired - still in missing_info`);
+            } else if (documentType === 'vog' && requiresManualReview) {
+              // VOG needs HR review - don't accept automatically
+              analysis.new_data.vog_file_path = filePath;
+              analysis.new_data.vog_pending_review = true;
+              console.log(`⚠️ VOG requires manual review due to validation flags: ${validationFlags.join(', ')}`);
+            }
+            
+            // Log validation event for learning
+            if (validationFlags.length > 0) {
+              await supabase.from('system_events').insert({
+                org_id: application.org_id,
+                event_type: 'document_validation_flagged',
+                entity_type: 'application_document',
+                entity_id: applicationId,
+                event_data: {
+                  filename: attachment.filename,
+                  document_type: documentType,
+                  validation_flags: validationFlags,
+                  requires_manual_review: requiresManualReview,
+                  content_hash: contentHash,
+                  duplicate_info: duplicateInfo,
+                  content_validation_score: contentValidationResult?.score,
+                },
+                metadata: {
+                  applicant_email: application.email_from,
+                  applicant_name: (application.extracted_data as Record<string, unknown>)?.naam,
+                }
+              });
             }
           }
         } catch (attachmentError) {
