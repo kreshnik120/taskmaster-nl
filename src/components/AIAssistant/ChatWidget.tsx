@@ -914,29 +914,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
         }
       }
 
-      // ============================================
-      // FASE 2: TRIGGER CONTINUOUS-LEARNER
-      // ============================================
-      if (usedKnowledge.length > 0) {
-        console.log('🧠 Triggering continuous-learner with', usedKnowledge.length, 'knowledge items');
-        
-        supabase.functions.invoke('continuous-learner', {
-          body: {
-            user_question: input,
-            ai_response: assistantMessage,
-            knowledge_used: usedKnowledge.map(id => ({
-              id,
-              category: 'auto'
-            })),
-            user_feedback: null,
-            auto_apply: true
-          }
-        }).catch(err => {
-          console.warn('Continuous learner failed (non-blocking):', err);
-        });
-      }
-
-      // ✅ FIX 3: Removed duplicate storage - backend handles persistence via ai-chat function
+      // ✅ FIX: Removed duplicate continuous-learner call - backend (ai-chat) handles this already
 
     } catch (error) {
       clearTimeout(timeoutId);
