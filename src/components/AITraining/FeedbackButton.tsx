@@ -4,6 +4,9 @@ import { ThumbsUp, ThumbsDown, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('FeedbackButton');
 
 interface FeedbackButtonProps {
   messageId?: string;
@@ -18,14 +21,14 @@ export const FeedbackButton = ({ messageId, messageContent, context }: FeedbackB
 
   // Don't render if messageId is missing
   if (!messageId) {
-    console.warn('[FeedbackButton] No messageId provided, hiding feedback buttons');
+    log.warn('No messageId provided, hiding feedback buttons');
     return null;
   }
 
   const handleFeedback = async (type: 'positive' | 'negative') => {
     if (feedback === type) return;
     
-    console.log('[FeedbackButton] Submitting feedback:', { type, messageId, hasAuth: !!supabase.auth });
+    log.log('Submitting feedback:', { type, messageId, hasAuth: !!supabase.auth });
     
     setIsSubmitting(true);
     try {
@@ -42,11 +45,11 @@ export const FeedbackButton = ({ messageId, messageContent, context }: FeedbackB
       });
 
       if (error) {
-        console.error('[FeedbackButton] Edge function error:', error);
+        log.error('Edge function error:', error);
         throw error;
       }
 
-      console.log('[FeedbackButton] Feedback saved successfully:', data);
+      log.log('Feedback saved successfully:', data);
       setFeedback(type);
       toast({
         title: type === 'positive' ? '👍 Bedankt voor je positieve feedback!' : '👎 Bedankt voor je feedback',
@@ -55,7 +58,7 @@ export const FeedbackButton = ({ messageId, messageContent, context }: FeedbackB
           : 'We gebruiken dit om de AI te verbeteren.',
       });
     } catch (error: any) {
-      console.error('[FeedbackButton] Failed to save feedback:', error);
+      log.error('Failed to save feedback:', error);
       toast({
         title: 'Feedback kon niet worden opgeslagen',
         description: error.message || 'Controleer je internetverbinding en probeer het opnieuw.',

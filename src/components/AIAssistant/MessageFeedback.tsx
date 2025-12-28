@@ -3,6 +3,9 @@ import { Button } from "@/components/ui/button";
 import { ThumbsUp, ThumbsDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('MessageFeedback');
 
 interface MessageFeedbackProps {
   messageContent: string;
@@ -13,7 +16,7 @@ interface MessageFeedbackProps {
 export const MessageFeedback = ({ messageContent, messageId, usedKnowledge }: MessageFeedbackProps) => {
   // Don't render if messageId is missing - MUST be before any hooks
   if (!messageId) {
-    console.warn('[MessageFeedback] No messageId provided, hiding feedback buttons');
+    log.warn('No messageId provided, hiding feedback buttons');
     return null;
   }
 
@@ -37,7 +40,7 @@ export const MessageFeedback = ({ messageContent, messageId, usedKnowledge }: Me
           setFeedback(data.feedback_type as 'positive' | 'negative');
         }
       } catch (error) {
-        console.error('Error checking existing feedback:', error);
+        log.error('Error checking existing feedback:', error);
       }
     };
     
@@ -47,7 +50,7 @@ export const MessageFeedback = ({ messageContent, messageId, usedKnowledge }: Me
   const handleFeedback = async (type: 'positive' | 'negative') => {
     if (feedback || isLoading) return;
     
-    console.log('[MessageFeedback] Submitting feedback:', { type, messageId, hasAuth: !!supabase.auth });
+    log.log('Submitting feedback:', { type, messageId, hasAuth: !!supabase.auth });
     
     setIsLoading(true);
     setFeedback(type);
@@ -65,11 +68,11 @@ export const MessageFeedback = ({ messageContent, messageId, usedKnowledge }: Me
       });
 
       if (error) {
-        console.error('[MessageFeedback] Edge function error:', error);
+        log.error('Edge function error:', error);
         throw error;
       }
 
-      console.log('[MessageFeedback] Feedback saved successfully:', data);
+      log.log('Feedback saved successfully:', data);
       toast({
         title: type === 'positive' ? '👍 Bedankt voor je positieve feedback!' : '👎 Bedankt voor je feedback',
         description: type === 'positive' 
@@ -77,7 +80,7 @@ export const MessageFeedback = ({ messageContent, messageId, usedKnowledge }: Me
           : 'We gebruiken dit om de AI te verbeteren.',
       });
     } catch (error: any) {
-      console.error('[MessageFeedback] Failed to save feedback:', error);
+      log.error('Failed to save feedback:', error);
       setFeedback(null);
       toast({
         title: 'Feedback kon niet worden opgeslagen',

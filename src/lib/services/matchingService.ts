@@ -19,6 +19,9 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('MatchingService');
 
 import {
   SECTOR_SIMILARITY, 
@@ -247,7 +250,7 @@ export async function getProfessionalPerformance(professionalId: string): Promis
       totalEvaluations
     };
   } catch (err) {
-    console.error('[getProfessionalPerformance] Error:', err);
+    log.error('[getProfessionalPerformance] Error:', err);
     return defaultPerformance;
   }
 }
@@ -275,7 +278,7 @@ export async function loadExpertKnowledge(): Promise<ExpertKnowledge[]> {
       .select('*');
     
     if (error) {
-      console.error('[loadExpertKnowledge] Error:', error);
+      log.error('[loadExpertKnowledge] Error:', error);
       return [];
     }
     
@@ -292,10 +295,10 @@ export async function loadExpertKnowledge(): Promise<ExpertKnowledge[]> {
     }));
     
     expertCacheLoaded = true;
-    console.log(`[loadExpertKnowledge] Loaded ${expertKnowledgeCache.length} experts`);
+    log.log(`[loadExpertKnowledge] Loaded ${expertKnowledgeCache.length} experts`);
     return expertKnowledgeCache;
   } catch (err) {
-    console.error('[loadExpertKnowledge] Error:', err);
+    log.error('[loadExpertKnowledge] Error:', err);
     return [];
   }
 }

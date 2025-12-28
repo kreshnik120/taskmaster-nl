@@ -7,6 +7,9 @@ import { nl } from "date-fns/locale";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Button } from "@/components/ui/button";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('TaskCard');
 
 interface Task {
   id: string;
@@ -123,7 +126,7 @@ export function TaskCard({ task, onClick, aiScore }: TaskCardProps) {
   const handleReminderClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     // TODO: Open reminder dialog
-    console.log('Plan reminder voor', task.title);
+    log.log('Plan reminder voor', task.title);
   };
 
   const style = {

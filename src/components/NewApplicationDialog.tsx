@@ -17,6 +17,9 @@ import { useState, useCallback } from "react";
 import { Loader2, X, ChevronRight, ChevronLeft, CheckCircle2, Upload, FileText, Sparkles, ChevronDown, Search, AlertCircle, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { detectMissingInfoHR, isValidPhone, getVogExpiryStatus, getMissingInfoDescription } from "@/lib/hrValidation";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('NewApplicationDialog');
 
 const applicationSchema = z.object({
   naam: z.string().min(1, "Naam is verplicht"),
@@ -253,7 +256,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
       });
     
     if (error) {
-      console.error('Error checking duplicate email:', error);
+      log.error('Error checking duplicate email:', error);
       return { exists: false };
     }
     
@@ -361,7 +364,7 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
       // 🆕 Upload geëxtraheerde foto naar Storage na applicatie creatie
       if (extractedPhotoBase64 && newApplicationId) {
         try {
-          console.log("📤 Uploading extracted photo to Storage...");
+          log.log("📤 Uploading extracted photo to Storage...");
           
           // Parse base64 from data URL
           const base64Match = extractedPhotoBase64.match(/^data:image\/(\w+);base64,(.+)$/);
@@ -403,14 +406,14 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                   })
                   .eq('id', newApplicationId);
                 
-                console.log("✅ Photo uploaded and linked:", urlData.publicUrl);
+                log.log("✅ Photo uploaded and linked:", urlData.publicUrl);
               }
             } else {
-              console.error("❌ Photo upload error:", uploadError);
+              log.error("❌ Photo upload error:", uploadError);
             }
           }
         } catch (photoError) {
-          console.error("❌ Photo upload failed:", photoError);
+          log.error("❌ Photo upload failed:", photoError);
           // Don't fail the whole submission for photo upload error
         }
       }

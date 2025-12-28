@@ -1,4 +1,7 @@
 import { lazy, ComponentType } from 'react';
+import { logger } from '@/lib/logger';
+
+const log = logger.create('LazyWithRetry');
 
 /**
  * Wrapper for React.lazy that handles chunk loading errors by automatically reloading
@@ -18,7 +21,7 @@ export function lazyWithRetry<T extends ComponentType<unknown>>(
          error.message.includes('Loading chunk') ||
          error.message.includes('Loading CSS chunk'))
       ) {
-        console.warn('🔄 Chunk loading failed, reloading page for latest version...');
+        log.warn('🔄 Chunk loading failed, reloading page for latest version...');
         
         // Give user brief notice before reload
         window.location.reload();

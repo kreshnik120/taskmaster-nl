@@ -4,6 +4,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useRef } from "react";
 import type { Json } from "@/integrations/supabase/types";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('AIRecommendationBadge');
 
 interface AIRecommendationBadgeProps {
   matchScore: number;
@@ -22,22 +25,22 @@ async function logRecommendationAudit(
   aiConfidence: number,
   recommendationData: Json
 ) {
-  console.log(`[AIRecommendationBadge] Attempting audit log: type=${recommendationType}, entity=${entityType}, id=${entityId}, score=${matchScore}`);
+  log.log(`Attempting audit log: type=${recommendationType}, entity=${entityType}, id=${entityId}, score=${matchScore}`);
   
   try {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError) {
-      console.warn('[AIRecommendationBadge] Auth error:', authError.message);
+      log.warn('Auth error:', authError.message);
       return;
     }
     
     if (!user?.id) {
-      console.warn('[AIRecommendationBadge] No user logged in - skipping audit');
+      log.warn('No user logged in - skipping audit');
       return;
     }
     
-    console.log(`[AIRecommendationBadge] User authenticated: ${user.id}`);
+    log.log(`User authenticated: ${user.id}`);
     
     const { data: userOrg, error: orgError } = await supabase
       .from("user_organizations")
@@ -46,16 +49,16 @@ async function logRecommendationAudit(
       .single();
     
     if (orgError) {
-      console.warn('[AIRecommendationBadge] Org lookup error:', orgError.message);
+      log.warn('Org lookup error:', orgError.message);
       return;
     }
     
     if (!userOrg?.org_id) {
-      console.warn('[AIRecommendationBadge] No org_id found for user');
+      log.warn('No org_id found for user');
       return;
     }
     
-    console.log(`[AIRecommendationBadge] Org found: ${userOrg.org_id}`);
+    log.log(`Org found: ${userOrg.org_id}`);
     
     const { error: insertError } = await supabase.from("ai_recommendation_audit").insert([{
       org_id: userOrg.org_id,
@@ -69,13 +72,13 @@ async function logRecommendationAudit(
     }]);
     
     if (insertError) {
-      console.error('[AIRecommendationBadge] Insert error:', insertError.message);
+      log.error('Insert error:', insertError.message);
       return;
     }
     
-    console.log(`[AIRecommendationBadge] ✅ Audit record created successfully`);
+    log.log(`✅ Audit record created successfully`);
   } catch (err) {
-    console.error("[AIRecommendationBadge] Unexpected error:", err);
+    log.error("Unexpected error:", err);
   }
 }
 

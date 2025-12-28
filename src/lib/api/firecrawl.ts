@@ -1,4 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
+
+const log = logger.create('FirecrawlAPI');
 
 export interface ScrapeOptions {
   formats?: ('markdown' | 'html' | 'rawHtml' | 'links' | 'screenshot')[];
@@ -71,13 +74,13 @@ export const firecrawlApi = {
       });
 
       if (error) {
-        console.error('Firecrawl scrape error:', error);
+        log.error('Firecrawl scrape error:', error);
         return { success: false, error: error.message };
       }
 
       return data;
     } catch (err) {
-      console.error('Firecrawl scrape exception:', err);
+      log.error('Firecrawl scrape exception:', err);
       return { 
         success: false, 
         error: err instanceof Error ? err.message : 'Unknown error' 
@@ -102,13 +105,13 @@ export const firecrawlApi = {
       });
 
       if (error) {
-        console.error('Firecrawl enrich error:', error);
+        log.error('Firecrawl enrich error:', error);
         return { success: false, organizationId, error: error.message };
       }
 
       return data;
     } catch (err) {
-      console.error('Firecrawl enrich exception:', err);
+      log.error('Firecrawl enrich exception:', err);
       return { 
         success: false, 
         organizationId,
@@ -133,13 +136,13 @@ export const firecrawlApi = {
       });
 
       if (error) {
-        console.error('Firecrawl enrich by URL error:', error);
+        log.error('Firecrawl enrich by URL error:', error);
         return { success: false, error: error.message };
       }
 
       return data;
     } catch (err) {
-      console.error('Firecrawl enrich by URL exception:', err);
+      log.error('Firecrawl enrich by URL exception:', err);
       return { 
         success: false, 
         error: err instanceof Error ? err.message : 'Unknown error' 
@@ -180,7 +183,7 @@ export const firecrawlApi = {
           
           // Retry on timeout (only once)
           if (!result.success && result.error?.toLowerCase().includes('timeout') && retryCount < maxRetries) {
-            console.log(`🔄 Retrying ${result.organizationName} after timeout...`);
+            log.log(`🔄 Retrying ${result.organizationName} after timeout...`);
             retryCount++;
             await new Promise(resolve => setTimeout(resolve, 2000));
             continue;
