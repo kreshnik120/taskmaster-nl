@@ -9,6 +9,7 @@ interface SemanticRetrievalOptions {
   maxResults?: number;
   roleFilter?: string[];
   requireVerified?: boolean;
+  includeShared?: boolean; // Include shared knowledge from other orgs
 }
 
 interface SemanticMatch {
@@ -20,6 +21,7 @@ interface SemanticMatch {
   similarity: number;
   role_tags?: string[];
   validation_status?: string;
+  is_shared?: boolean;
 }
 
 /**
@@ -61,7 +63,8 @@ export async function semanticKnowledgeRetrieval(
     threshold = 0.65, // ⬇️ LOWERED from 0.75 to 0.65 (allows more matches)
     maxResults = 20,
     roleFilter = [],
-    requireVerified = false
+    requireVerified = false,
+    includeShared = true // ✅ Default: include shared knowledge (wetgeving, CAO, etc.)
   } = options;
 
   console.log(`🔍 Semantic retrieval for: "${question.substring(0, 100)}..."`);
@@ -71,13 +74,15 @@ export async function semanticKnowledgeRetrieval(
     const questionEmbedding = await generateQueryEmbedding(question);
 
     // 🎯 PHASE 1: Primary semantic search with standard threshold
+    // Uses V3 of match_knowledge with include_shared parameter
     const { data: primaryMatches, error } = await supabase.rpc('match_knowledge', {
       query_embedding: questionEmbedding,
       match_threshold: threshold,
       match_count: maxResults,
       filter_org_id: orgId,
       filter_role_tags: roleFilter.length > 0 ? roleFilter : null,
-      require_verified: requireVerified
+      require_verified: requireVerified,
+      include_shared: includeShared // ✅ Include shared knowledge (wetgeving, CAO, compliance)
     });
 
     if (error) {
@@ -96,7 +101,8 @@ export async function semanticKnowledgeRetrieval(
         match_count: maxResults,
         filter_org_id: orgId,
         filter_role_tags: roleFilter.length > 0 ? roleFilter : null,
-        require_verified: false // ⬇️ More lenient for fallback
+        require_verified: false, // ⬇️ More lenient for fallback
+        include_shared: includeShared // ✅ Keep shared knowledge in fallback
       });
 
       if (fallbackMatches && fallbackMatches.length > 0) {
@@ -165,7 +171,8 @@ export async function semanticKnowledgeRetrieval(
         original_similarity: m.similarity,
         usage_count: m.usage_count,
         role_tags: m.role_tags,
-        validation_status: m.validation_status
+        validation_status: m.validation_status,
+        is_shared: m.is_shared // ✅ Include shared flag for transparency
       };
     }).sort((a: any, b: any) => b.similarity - a.similarity); // Re-sort by boosted similarity
   } catch (error) {
