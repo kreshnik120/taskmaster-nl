@@ -6087,6 +6087,54 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
             console.error('❌ Failed to initiate continuous-learner:', error);
           }
           
+          // 🔄 IMPLICIT FEEDBACK: Detect rapid reformulations as negative feedback
+          try {
+            const lastUserMessage = messages[messages.length - 1];
+            
+            // Check for previous assistant messages in same conversation
+            const { data: recentMessages } = await supabaseServiceClient
+              .from('ai_chat_messages')
+              .select('id, created_at, used_knowledge, content')
+              .eq('conversation_id', conversationId)
+              .eq('role', 'assistant')
+              .order('created_at', { ascending: false })
+              .limit(2);
+            
+            if (recentMessages && recentMessages.length >= 2) {
+              const previousAssistant = recentMessages[1]; // Second most recent
+              const timeDiff = Date.now() - new Date(previousAssistant.created_at).getTime();
+              
+              // If user sent another message within 30 seconds AND previous had knowledge
+              if (timeDiff < 30000 && previousAssistant.used_knowledge?.length > 0) {
+                console.log('🔄 [IMPLICIT FEEDBACK] Detected rapid reformulation, triggering harmful feedback...');
+                
+                // Fire-and-forget implicit negative feedback
+                supabaseServiceClient.functions.invoke('unified-learner', {
+                  body: {
+                    action: 'process_feedback',
+                    batch_mode: false,
+                    knowledge_ids: previousAssistant.used_knowledge,
+                    feedback_type: 'harmful',
+                    message_context: `Implicit: user reformulated question within ${Math.round(timeDiff / 1000)}s`,
+                    org_id: userOrgId,
+                    user_id: user.id,
+                    implicit: true
+                  }
+                }).then((res) => {
+                  if (res.error) {
+                    console.error('❌ Implicit feedback error:', res.error);
+                  } else {
+                    console.log('✅ Implicit negative feedback processed:', res.data);
+                  }
+                }).catch(err => {
+                  console.warn('⚠️ Implicit feedback failed (non-blocking):', err);
+                });
+              }
+            }
+          } catch (implicitError) {
+            console.warn('⚠️ Implicit feedback detection failed (non-blocking):', implicitError);
+          }
+          
           controller.close();
           
           // ⏱️ Calculate total execution time and component timings

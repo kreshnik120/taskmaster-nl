@@ -118,6 +118,33 @@ export async function semanticKnowledgeRetrieval(
     })`);
 
     // 🎯 PHASE 3: Boost scores for high-usage items (proven relevance)
+    const matchIds = allMatches.map((m: any) => m.knowledge_id);
+    
+    // 🎯 PHASE 4: UPDATE USAGE TRACKING (fire-and-forget)
+    if (matchIds.length > 0) {
+      console.log(`📊 Tracking usage for ${matchIds.length} knowledge items...`);
+      supabase
+        .from('ai_knowledge_base')
+        .update({ 
+          usage_count: supabase.rpc ? undefined : 1, // Fallback
+          last_used_at: new Date().toISOString()
+        })
+        .in('id', matchIds)
+        .then(async () => {
+          // Use RPC for atomic increment
+          for (const id of matchIds) {
+            await supabase.rpc('increment_usage_count', { knowledge_id: id }).catch(() => {
+              // Fallback: direct update if RPC doesn't exist
+              supabase
+                .from('ai_knowledge_base')
+                .update({ last_used_at: new Date().toISOString() })
+                .eq('id', id);
+            });
+          }
+        })
+        .catch((err: any) => console.warn('⚠️ Usage tracking failed (non-blocking):', err));
+    }
+    
     return allMatches.map((m: any) => {
       let boostedSimilarity = m.similarity;
       

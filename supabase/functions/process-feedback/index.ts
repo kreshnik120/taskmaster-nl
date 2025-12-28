@@ -46,20 +46,39 @@ Deno.serve(async (req) => {
 
     const orgId = userOrg?.org_id || '550e8400-e29b-41d4-a716-446655440000';
 
-    // Fetch the chat message to get knowledge_ids_for_feedback
-    const { data: chatMessage } = await supabase
-      .from('chat_messages')
-      .select('metadata, content')
-      .eq('id', messageId)
-      .single();
-
-    // Extract usedKnowledge from message metadata
+    // ✅ FIX: Query ai_chat_messages (correct table) with fallback to legacy chat_messages
+    console.log(`🔍 [process-feedback] Looking up message ${messageId}...`);
+    
     let usedKnowledge: string[] = [];
-    if (chatMessage?.metadata) {
-      const metadata = chatMessage.metadata as Record<string, unknown>;
-      usedKnowledge = Array.isArray(metadata.knowledge_ids_for_feedback) 
-        ? metadata.knowledge_ids_for_feedback as string[]
-        : (Array.isArray(metadata.usedKnowledge) ? metadata.usedKnowledge as string[] : []);
+    
+    // Step 1: Try ai_chat_messages first (new schema)
+    const { data: aiChatMessage, error: aiChatError } = await supabase
+      .from('ai_chat_messages')
+      .select('used_knowledge, content')
+      .eq('id', messageId)
+      .maybeSingle();
+    
+    if (aiChatMessage?.used_knowledge && Array.isArray(aiChatMessage.used_knowledge)) {
+      usedKnowledge = aiChatMessage.used_knowledge;
+      console.log(`✅ [process-feedback] Found ${usedKnowledge.length} knowledge IDs in ai_chat_messages`);
+    } else {
+      // Step 2: Fallback to legacy chat_messages table
+      console.log(`⚠️ [process-feedback] Not found in ai_chat_messages, trying legacy chat_messages...`);
+      const { data: legacyMessage } = await supabase
+        .from('chat_messages')
+        .select('metadata, content')
+        .eq('id', messageId)
+        .maybeSingle();
+      
+      if (legacyMessage?.metadata) {
+        const metadata = legacyMessage.metadata as Record<string, unknown>;
+        usedKnowledge = Array.isArray(metadata.knowledge_ids_for_feedback) 
+          ? metadata.knowledge_ids_for_feedback as string[]
+          : (Array.isArray(metadata.usedKnowledge) ? metadata.usedKnowledge as string[] : []);
+        console.log(`✅ [process-feedback] Found ${usedKnowledge.length} knowledge IDs in legacy chat_messages`);
+      } else {
+        console.warn(`⚠️ [process-feedback] Message ${messageId} not found in either table`);
+      }
     }
 
     const isPositive = feedback === 'positive';
