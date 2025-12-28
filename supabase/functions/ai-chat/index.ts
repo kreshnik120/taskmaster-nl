@@ -10,6 +10,7 @@ import { disambiguateEntities, applyTemporalFilter, expandViaRelationships } fro
 import { softDeleteKnowledge, reinforceKnowledge, updateConfidence } from "../_shared/knowledge-crud.ts";
 import { detectPromptInjection, validateAIOutput } from "../_shared/healthcare-mappings.ts";
 import { buildSystemPrompt, type SystemPromptContext } from "../_shared/ai-chat-system-prompt.ts";
+import { logMatchKnowledgeCall, calculateAvgSimilarity, countSharedResults } from "../_shared/telemetry.ts";
 
 // ============================================
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
@@ -1989,6 +1990,21 @@ Deno.serve(async (req: Request) => {
               require_verified: true,           // ✅ Positie 8: alleen verified items
               include_shared: true              // ✅ Positie 9: shared knowledge ophalen
             });
+
+          // 📊 Log match_knowledge call metrics (fire-and-forget)
+          const searchDurationMs = Date.now() - perfTimers.start - perfTimers.embedding;
+          logMatchKnowledgeCall(supabaseServiceClient, {
+            call_type: 'primary',
+            include_shared: true,
+            threshold: matchThreshold,
+            total_results: semanticMatches?.length || 0,
+            shared_results: countSharedResults(semanticMatches),
+            avg_similarity: calculateAvgSimilarity(semanticMatches),
+            org_id: userOrgId,
+            execution_time_ms: searchDurationMs,
+            success: !matchError,
+            error_message: matchError?.message
+          }).catch(() => {}); // Non-blocking
 
           if (matchError) {
             console.error('❌ match_knowledge error:', matchError);
