@@ -354,11 +354,10 @@ Deno.serve(async (req) => {
         cv_file_path: cvFilePath,
         extracted_data: extractedData,
         pipeline_stage: "nieuw",
-        status: "new",
+        status: "nieuw",
         source_project: data.source,
         source_label: sourceLabel,
         completeness_score: cvFilePath ? 60 : 40,
-        ai_intake_status: "pending",
       })
       .select("id")
       .single();
