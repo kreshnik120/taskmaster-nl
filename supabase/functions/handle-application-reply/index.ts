@@ -1083,15 +1083,7 @@ Return JSON in dit formaat:
     
     if (analysis.new_data?.telefoonnummer) {
       const phone = analysis.new_data.telefoonnummer;
-      const placeholderPatterns = [
-        /^06[-\s]?0{6,}$/,              // 06-00000000
-        /^06[-\s]?1234567[89]?$/,       // 06-12345678
-        /^000/,                          // starts with 000
-        /^06[-\s]?9{6,}$/,              // 06-99999999
-        /^(\d)\1{7,}$/,                  // all same digit
-      ];
-      
-      const isPlaceholder = placeholderPatterns.some(p => p.test(phone.replace(/[\s-]/g, '')));
+      const isPlaceholder = isPlaceholderPhone(phone);
       if (isPlaceholder) {
         console.log(`⚠️ Placeholder telefoonnummer gedetecteerd: ${phone}`);
         
@@ -1978,16 +1970,19 @@ Return JSON in dit formaat:
           } else {
             console.log("✅ Alternative slots sent:", altResult);
             
-            // Update extracted_data met rejection info
+            // Update extracted_data met rejection info + sync missing_info
+            const updatedDataForRejection = {
+              ...mergedData,
+              interview_alternative_request_count: currentAlternativeCount + 1,
+              last_slot_rejection_reason: rejectionReason,
+              preferred_interview_times: preferredTimes,
+            };
+            
             await supabase
               .from("professional_applications")
               .update({
-                extracted_data: {
-                  ...mergedData,
-                  interview_alternative_request_count: currentAlternativeCount + 1,
-                  last_slot_rejection_reason: rejectionReason,
-                  preferred_interview_times: preferredTimes,
-                }
+                extracted_data: updatedDataForRejection,
+                missing_info: recalculateMissingInfo(updatedDataForRejection),
               })
               .eq("id", applicationId);
           }
@@ -2179,14 +2174,17 @@ Return JSON in dit formaat:
           } else {
             console.log(`✅ Created send_reply_response goal for application ${applicationId}`);
             
-            // Update follow-up count in extracted_data
+            // Update follow-up count in extracted_data + sync missing_info
+            const updatedDataForFollowup = {
+              ...mergedData,
+              followup_email_count: currentFollowupCount + 1,
+            };
+            
             await supabase
               .from("professional_applications")
               .update({
-                extracted_data: {
-                  ...mergedData,
-                  followup_email_count: currentFollowupCount + 1,
-                }
+                extracted_data: updatedDataForFollowup,
+                missing_info: recalculateMissingInfo(updatedDataForFollowup),
               })
               .eq("id", applicationId);
 
