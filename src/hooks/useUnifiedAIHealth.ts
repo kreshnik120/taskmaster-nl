@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect } from "react";
+import { LEARNING_FUNCTIONS } from "@/lib/constants/learningFunctions";
 
 export interface EdgeFunctionStatus {
   name: string;
@@ -41,17 +42,6 @@ export interface UnifiedAIHealthData {
   };
   lastUpdated: Date;
 }
-
-const LEARNING_FUNCTIONS = [
-  { name: 'unified-learner', displayName: 'Unified Learner' },
-  { name: 'feedback-processor', displayName: 'Feedback Processor' },
-  { name: 'knowledge-graph-builder', displayName: 'Knowledge Graph' },
-  { name: 'apply-meta-patterns', displayName: 'Meta Patterns' },
-  { name: 'temporal-decay', displayName: 'Temporal Decay' },
-  { name: 'data-quality-auditor', displayName: 'Data Quality' },
-  { name: 'smart-deduplicator', displayName: 'Deduplicator' },
-  { name: 'process-system-events', displayName: 'System Events' },
-];
 
 async function fetchEdgeFunctionStatus(): Promise<EdgeFunctionStatus[]> {
   const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
