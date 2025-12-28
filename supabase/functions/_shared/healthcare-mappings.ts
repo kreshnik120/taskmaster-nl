@@ -903,3 +903,194 @@ export interface IdentityValidationResult {
   ai_model?: string;
   extraction_method: 'ai_vision' | 'text_extraction' | 'not_attempted';
 }
+
+// ============================================
+// FASE 2B: EMAIL & INPUT VALIDATION HELPERS
+// ============================================
+
+/**
+ * Validates email format using RFC 5322 compliant regex
+ * @param email - Email address to validate
+ * @returns true if email format is valid
+ */
+export function isValidEmailFormat(email: string | null | undefined): boolean {
+  if (!email || typeof email !== 'string') return false;
+  
+  // Trim and check length
+  const trimmed = email.trim();
+  if (trimmed.length < 5 || trimmed.length > 254) return false;
+  
+  // RFC 5322 compliant email regex
+  const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+  
+  if (!emailRegex.test(trimmed)) return false;
+  
+  // Additional checks
+  const [local, domain] = trimmed.split('@');
+  
+  // Local part validations
+  if (!local || local.length > 64) return false;
+  if (local.startsWith('.') || local.endsWith('.')) return false;
+  if (local.includes('..')) return false;
+  
+  // Domain part validations
+  if (!domain || domain.length > 253) return false;
+  if (domain.startsWith('-') || domain.endsWith('-')) return false;
+  if (!domain.includes('.')) return false; // Must have at least one dot
+  
+  // TLD check - must be at least 2 chars
+  const tld = domain.split('.').pop();
+  if (!tld || tld.length < 2) return false;
+  
+  return true;
+}
+
+/**
+ * Sanitizes candidate name to prevent XSS and injection attacks
+ * @param name - Name to sanitize
+ * @returns Sanitized name safe for HTML display
+ */
+export function sanitizeCandidateName(name: string | null | undefined): string {
+  if (!name || typeof name !== 'string') return 'sollicitant';
+  
+  // Remove HTML tags and entities
+  let sanitized = name
+    .replace(/<[^>]*>/g, '') // Remove HTML tags
+    .replace(/&[#\w]+;/g, '') // Remove HTML entities
+    .replace(/[<>\"\'&]/g, '') // Remove dangerous characters
+    .trim();
+  
+  // Limit length
+  if (sanitized.length > 100) {
+    sanitized = sanitized.substring(0, 100);
+  }
+  
+  // If empty after sanitization, return fallback
+  if (!sanitized || sanitized.length < 2) {
+    return 'sollicitant';
+  }
+  
+  return sanitized;
+}
+
+/**
+ * Valid pipeline stages where AI actions are allowed
+ */
+export const ACTIONABLE_PIPELINE_STAGES = [
+  'nieuw',
+  'intake',
+  'screening',
+  'interview_gepland',
+  'interview',
+  'wacht_op_documenten',
+  'documenten_controle',
+  'referentie_check',
+  'goedgekeurd',
+] as const;
+
+/**
+ * Terminal pipeline stages where AI should NOT take email actions
+ */
+export const TERMINAL_PIPELINE_STAGES = [
+  'afgewezen',
+  'geplaatst',
+  'teruggetrokken',
+  'on_hold',
+  'archief',
+] as const;
+
+/**
+ * Checks if an application is in a terminal/inactive state
+ * @param stage - Current pipeline stage
+ * @returns true if application is in terminal state
+ */
+export function isTerminalPipelineStage(stage: string | null | undefined): boolean {
+  if (!stage) return false;
+  return (TERMINAL_PIPELINE_STAGES as readonly string[]).includes(stage.toLowerCase());
+}
+
+/**
+ * Result of pre-action validation
+ */
+export interface PreActionValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  blocked_reason?: string;
+}
+
+/**
+ * Validates all prerequisites before taking an action on an application
+ */
+export function validatePreActionRequirements(
+  application: {
+    id: string;
+    email: string | null;
+    pipeline_stage?: string | null;
+    extracted_data?: any;
+  } | null,
+  actionType: string
+): PreActionValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  
+  // Check application exists
+  if (!application) {
+    return {
+      valid: false,
+      errors: ['Application not found'],
+      warnings: [],
+      blocked_reason: 'APPLICATION_NOT_FOUND',
+    };
+  }
+  
+  // Check email validity
+  if (!isValidEmailFormat(application.email)) {
+    errors.push(`Invalid email format: ${application.email}`);
+  }
+  
+  // Check pipeline stage for email actions
+  const emailActions = [
+    'send_followup_question',
+    'send_welcome_and_intake',
+    'request_interview_availability',
+    'send_document_request',
+    'send_interview_email',
+    'send_general_email',
+    'send_reminder',
+    'send_emrex_invitation_email',
+    'send_emrex_reminder_email',
+  ];
+  
+  if (emailActions.includes(actionType)) {
+    if (isTerminalPipelineStage(application.pipeline_stage)) {
+      errors.push(`Application in terminal stage: ${application.pipeline_stage}`);
+    }
+  }
+  
+  // Check for document quarantine flags on interview-related actions
+  const interviewActions = [
+    'request_interview_availability',
+    'send_interview_email',
+  ];
+  
+  if (interviewActions.includes(actionType)) {
+    const extractedData = application.extracted_data || {};
+    
+    // Check for identity mismatch flags
+    if (extractedData.vog_validation_flags?.includes('name_identity_mismatch')) {
+      warnings.push('VOG has identity mismatch - HR review required');
+    }
+    
+    if (extractedData.diploma_validation_flags?.includes('name_identity_mismatch')) {
+      warnings.push('Diploma has identity mismatch - HR review required');
+    }
+  }
+  
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+    blocked_reason: errors.length > 0 ? errors[0] : undefined,
+  };
+}
