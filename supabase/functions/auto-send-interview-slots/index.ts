@@ -17,7 +17,7 @@ import { createAdminClient, corsHeaders, jsonResponse, errorResponse, handleCors
 
 interface AutoInterviewRequest {
   application_id: string;
-  trigger_source: 'initial_application' | 'reply_update' | 'manual' | 'alternative_request';
+  trigger_source: 'initial_application' | 'reply_update' | 'manual' | 'alternative_request' | 'external_api';
   force?: boolean; // Skip status checks (for alternative slots)
   alternative_attempt?: number; // Track alternative slot attempts
   include_completion_message?: boolean; // 🆕 Gecombineerde email met bevestigingsboodschap
