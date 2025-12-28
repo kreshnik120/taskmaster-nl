@@ -1,5 +1,6 @@
 // CV Data Extraction - AI-powered PDF analysis for healthcare recruitment
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
+import { isPlaceholderPhone } from '../_shared/healthcare-mappings.ts';
 
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -383,28 +384,12 @@ Belangrijk:
     }
 
     // === HR SPECIALIST POST-PROCESSING ===
-    // Detect and nullify placeholder phone numbers
-    const PLACEHOLDER_PHONE_PATTERNS = [
-      /^06[-\s]?0{6,}$/,              // 06-00000000, 06 000000
-      /^06[-\s]?1234567[89]?$/,       // 06-12345678, 06-123456789
-      /^000/,                          // starts with 000
-      /^06[-\s]?9{6,}$/,              // 06-99999999
-      /^(\d)\1{7,}$/,                  // all same digit
-      /^0612345/,                      // obvious test pattern
-    ];
-
+    // Detect and nullify placeholder phone numbers using centralized isPlaceholderPhone
     const telefoonValue = getValue(extractedData.telefoon);
-    if (telefoonValue) {
-      const cleanedPhone = String(telefoonValue).replace(/[\s-]/g, '');
-      const isPlaceholder = PLACEHOLDER_PHONE_PATTERNS.some(p => 
-        p.test(String(telefoonValue)) || p.test(cleanedPhone)
-      );
-      
-      if (isPlaceholder) {
-        console.log(`⚠️ HR Specialist: Placeholder phone detected: ${telefoonValue} → null`);
-        extractedData.telefoon = { value: null, confidence: 0 };
-        extractedData.placeholder_phone_detected = { value: true, confidence: 1.0 };
-      }
+    if (telefoonValue && isPlaceholderPhone(String(telefoonValue))) {
+      console.log(`⚠️ HR Specialist: Placeholder phone detected: ${telefoonValue} → null`);
+      extractedData.telefoon = { value: null, confidence: 0 };
+      extractedData.placeholder_phone_detected = { value: true, confidence: 1.0 };
     }
 
     console.log("CV extraction complete with per-field confidence scores");

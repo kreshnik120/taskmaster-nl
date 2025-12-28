@@ -795,20 +795,7 @@ Deno.serve(async (req) => {
       conditionalFields.push('vog');
     }
     
-    // 🔧 FASE 1 FIX: Placeholder telefoon detectie helper
-    const isPlaceholderPhone = (phone: string | null | undefined): boolean => {
-      if (!phone) return false;
-      const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
-      const placeholderPatterns = [
-        /^06[0]{6,}$/,              // 06-00000000
-        /^061234567[89]?$/,         // 06-12345678
-        /^000/,                      // starts with 000
-        /^06[9]{6,}$/,              // 06-99999999
-        /^(\d)\1{7,}$/,              // all same digit (e.g., 0666666666)
-        /^0612345/,                  // starts with 0612345
-      ];
-      return placeholderPatterns.some(p => p.test(cleanPhone));
-    };
+    // 🔧 FASE 1 FIX: Placeholder telefoon detectie - using imported isPlaceholderPhone from healthcare-mappings
     
     // Calculate which critical fields are already filled (met placeholder telefoon check)
     const filledCriticalFields = CRITICAL_INTAKE_FIELDS.filter(field => {

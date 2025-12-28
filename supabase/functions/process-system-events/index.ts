@@ -1,5 +1,6 @@
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 import { createKnowledge, reinforceKnowledge } from "../_shared/knowledge-crud.ts";
+import { isPlaceholderPhone } from '../_shared/healthcare-mappings.ts';
 
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -543,39 +544,8 @@ Return ALLEEN een JSON object (geen andere tekst):
 
 // ============================================================
 // HR SPECIALIST SMART VALIDATION FUNCTIONS
+// Note: isPlaceholderPhone is now imported from healthcare-mappings.ts
 // ============================================================
-
-// Placeholder phone patterns that indicate fake/test data
-const PLACEHOLDER_PHONE_PATTERNS = [
-  /^06[-\s]?0{6,}$/,              // 06-00000000, 06 000000
-  /^06[-\s]?1234567[89]?$/,       // 06-12345678, 06-123456789
-  /^000/,                          // starts with 000
-  /^06[-\s]?9{6,}$/,              // 06-99999999
-  /^(\d)\1{7,}$/,                  // all same digit like 00000000
-  /^0612345/,                      // obvious test pattern
-];
-
-/**
- * Validates if a phone number is a real number vs placeholder
- */
-function isValidPhone(phone: string | null | undefined): boolean {
-  if (!phone) return false;
-  
-  // Clean phone number
-  const cleaned = phone.replace(/[\s-]/g, '');
-  
-  // Must be at least 10 digits for Dutch numbers
-  if (cleaned.length < 10) return false;
-  
-  // Check against placeholder patterns
-  for (const pattern of PLACEHOLDER_PHONE_PATTERNS) {
-    if (pattern.test(phone) || pattern.test(cleaned)) {
-      return false;
-    }
-  }
-  
-  return true;
-}
 
 /**
  * Generate missing info like an HR Specialist would
@@ -590,9 +560,9 @@ function generateSmartMissingInfo(extractedData: Record<string, unknown>): strin
   if (!extractedData.werkvorm) missing.push('werkvorm');
   if (!extractedData.regio) missing.push('regio');
   
-  // 🧠 Smart phone validation - detect placeholders!
+  // 🧠 Smart phone validation - detect placeholders using centralized isPlaceholderPhone
   const phone = (extractedData.telefoonnummer || extractedData.telefoon) as string;
-  if (!isValidPhone(phone)) {
+  if (!phone || isPlaceholderPhone(phone)) {
     missing.push('telefoonnummer');
     console.log(`🔍 HR Smart: Detected invalid/placeholder phone: "${phone}"`);
   }
