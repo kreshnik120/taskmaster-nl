@@ -913,7 +913,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
           
           if (latestMessage) {
             messageId = latestMessage.id;
-            console.log('✅ Fetched messageId from DB:', messageId);
+            log.log('✅ Fetched messageId from DB:', messageId);
             
             // Update the last message with the messageId
             setMessages(prev => {
@@ -975,7 +975,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
   // ============================================
   const handleDocumentProcessing = async (base64Image: string, userMessage: string) => {
     try {
-      console.log('📄 Starting document processing via queue...');
+      log.log('📄 Starting document processing via queue...');
       
       // 1. Upload naar Storage
       const fileName = `chat-upload-${Date.now()}.png`;
@@ -993,7 +993,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
         throw new Error('Kon document niet uploaden');
       }
       
-      console.log('✅ Uploaded to storage:', filePath);
+      log.log('✅ Uploaded to storage:', filePath);
       removeImage();
       
       // 2. Queue processing job
@@ -1009,7 +1009,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
       const jobIds = queueData.job_ids as string[];
       const totalChunks = queueData.total_chunks as number;
       
-      console.log(`✅ Queued ${jobIds.length} jobs, total chunks: ${totalChunks}`);
+      log.log(`✅ Queued ${jobIds.length} jobs, total chunks: ${totalChunks}`);
       
       // 3. Voeg placeholder-bericht toe
       const placeholderMessage: Message = {
@@ -1045,7 +1045,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
   // REALTIME JOB TRACKING
   // ============================================
   const startJobProgressTracking = (jobIds: string[], totalChunks: number) => {
-    console.log('📡 Starting realtime tracking for jobs:', jobIds);
+    log.log('📡 Starting realtime tracking for jobs:', jobIds);
     
     const channel = supabase
       .channel('chat-widget-job-progress')
@@ -1058,7 +1058,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
           filter: `id=in.(${jobIds.join(',')})`
         },
         (payload) => {
-          console.log('📊 Job update:', payload.new);
+          log.log('📊 Job update:', payload.new);
           
           const job = payload.new as ProcessingJob;
           
@@ -1113,7 +1113,7 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
   };
 
   const fetchProcessedKnowledge = async (jobIds: string[]) => {
-    console.log('🧠 Fetching processed knowledge...');
+    log.log('🧠 Fetching processed knowledge...');
     
     try {
       // Haal laatste 10 knowledge items op die uit deze jobs komen

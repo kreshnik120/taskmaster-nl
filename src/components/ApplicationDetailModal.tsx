@@ -1,4 +1,5 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -343,7 +344,7 @@ export function ApplicationDetailModal({
 
       setLinkedTasks(mappedTasks);
     } catch (error) {
-      console.error('Error loading linked tasks:', error);
+      logger.error('Error loading linked tasks:', error);
     } finally {
       setLoadingTasks(false);
     }
@@ -375,7 +376,7 @@ export function ApplicationDetailModal({
       toast.success("Pipeline fase bijgewerkt");
       onApplicationUpdated();
     } catch (error) {
-      console.error("Error updating stage:", error);
+      logger.error("Error updating stage:", error);
       toast.error("Fout bij bijwerken van fase");
     } finally {
       setUpdating(false);

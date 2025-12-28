@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { logger } from "@/lib/logger";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -81,7 +82,7 @@ export const KnowledgeOverview = () => {
           table: 'ai_knowledge_base'
         },
         () => {
-          console.log('[KNOWLEDGE] Realtime update detected, refreshing...');
+          logger.log('[KNOWLEDGE] Realtime update detected, refreshing...');
           queryClient.invalidateQueries({ queryKey: ["ai-knowledge"] });
         }
       )
