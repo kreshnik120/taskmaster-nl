@@ -15,7 +15,7 @@ import { DocumentUpload } from "@/components/AITraining/DocumentUpload";
 import { ABCzorgExcelImport } from "@/components/AITraining/ABCzorgExcelImport";
 import { KnowledgeOverview } from "@/components/AITraining/KnowledgeOverview";
 import { SeedClientKnowledge } from "@/components/AITraining/SeedClientKnowledge";
-import { LearningDashboard } from "@/components/AITraining/LearningDashboard";
+
 import { SmartKnowledgeSearch } from "@/components/AITraining/SmartKnowledgeSearch";
 import { ConflictResolutionPanel } from "@/components/AITraining/ConflictResolutionPanel";
 import { ConflictMonitor } from "@/components/AITraining/ConflictMonitor";
@@ -28,7 +28,7 @@ import { KnowledgeValidator } from "@/components/AITraining/KnowledgeValidator";
 import { ValidationWorkflowGuide } from "@/components/AITraining/ValidationWorkflowGuide";
 import { ValidationOnboardingWizard } from "@/components/AITraining/ValidationOnboardingWizard";
 import { AutoResolveMonitor } from "@/components/AITraining/AutoResolveMonitor";
-import { AutoLearnedKnowledgeDashboard } from "@/components/AITraining/AutoLearnedKnowledgeDashboard";
+
 import { BudgetDashboard } from "@/components/AITraining/BudgetDashboard";
 import { BudgetConfiguration } from "@/components/AITraining/BudgetConfiguration";
 import { CleanupDeletedKnowledge } from "@/components/AITraining/CleanupDeletedKnowledge";
