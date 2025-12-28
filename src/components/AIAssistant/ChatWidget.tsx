@@ -21,6 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { SimpleChatIcon } from './SimpleChatIcon';
 import { ChatDatePicker, ChatTimePicker, ChatSelect, ChatButtonGroup } from './InteractiveChatElements';
 import { MessageFeedback } from './MessageFeedback';
+import { AIMemoryPanel } from './AIMemoryPanel';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
@@ -1533,11 +1534,16 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
                         <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                       </div>
                       {msg.role === 'assistant' && msg.content && !isLoading && (
-                        <MessageFeedback 
-                          messageContent={msg.content} 
-                          messageId={msg.messageId}
-                          usedKnowledge={msg.usedKnowledge}
-                        />
+                        <>
+                          <MessageFeedback 
+                            messageContent={msg.content} 
+                            messageId={msg.messageId}
+                            usedKnowledge={msg.usedKnowledge}
+                          />
+                          {msg.usedKnowledge && msg.usedKnowledge.length > 0 && (
+                            <AIMemoryPanel knowledgeIds={msg.usedKnowledge} />
+                          )}
+                        </>
                       )}
                     </div>
                     
