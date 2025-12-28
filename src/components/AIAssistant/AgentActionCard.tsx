@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Mail, Calendar, FileText, Loader2, Check, X, AlertCircle, Clock, User, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
@@ -46,6 +46,12 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
   const [statusMessage, setStatusMessage] = useState<string>('');
   const { toast } = useToast();
 
+  // useRef for stable status tracking in timeout callback
+  const statusRef = useRef<ActionStatus>(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
   const config = ACTION_TYPE_CONFIG[actionData.action_type] || ACTION_TYPE_CONFIG.send_email;
   const IconComponent = config.icon;
 
@@ -54,19 +60,6 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
     if (!goalId) return;
 
     console.log('🔔 Setting up realtime subscription for goal:', goalId);
-
-    // Initial status fetch
-    const fetchCurrentStatus = async () => {
-      const { data: goal } = await supabase
-        .from('agent_goals')
-        .select('status, output_data')
-        .eq('id', goalId)
-        .single();
-
-      if (goal) {
-        handleGoalStatusUpdate(goal.status, goal.output_data);
-      }
-    };
 
     const handleGoalStatusUpdate = (goalStatus: string, outputData: unknown) => {
       console.log('📡 Goal status update:', goalStatus);
@@ -93,6 +86,19 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
       }
     };
 
+    // Initial status fetch
+    const fetchCurrentStatus = async () => {
+      const { data: goal } = await supabase
+        .from('agent_goals')
+        .select('status, output_data')
+        .eq('id', goalId)
+        .single();
+
+      if (goal) {
+        handleGoalStatusUpdate(goal.status, goal.output_data);
+      }
+    };
+
     // Set up realtime subscription
     const channel = supabase
       .channel(`agent-goal-${goalId}`)
@@ -110,17 +116,20 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
           handleGoalStatusUpdate(newGoal.status, newGoal.output_data);
         }
       )
-      .subscribe((subscriptionStatus) => {
+      .subscribe((subscriptionStatus, err) => {
         console.log('📡 Subscription status:', subscriptionStatus);
         if (subscriptionStatus === 'SUBSCRIBED') {
-          // Fetch current status after subscription is active
+          fetchCurrentStatus();
+        } else if (subscriptionStatus === 'CHANNEL_ERROR') {
+          console.error('❌ Subscription error:', err);
+          // Fallback: fetch status once on error
           fetchCurrentStatus();
         }
       });
 
-    // Fallback timeout - auto-complete after 60 seconds if still processing
+    // Fallback timeout - uses ref for stable status check
     const timeoutId = setTimeout(() => {
-      if (status === 'processing' || status === 'confirming') {
+      if (statusRef.current === 'processing' || statusRef.current === 'confirming') {
         setStatus('completed');
         setStatusMessage('✅ Actie gestart (controleer email inbox)');
       }
