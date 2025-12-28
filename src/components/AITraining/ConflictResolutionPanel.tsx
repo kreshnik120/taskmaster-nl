@@ -150,7 +150,8 @@ export const ConflictResolutionPanel = () => {
         accuracy: Math.round(accuracy)
       };
     },
-    refetchInterval: 30000
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 
   const resolveConflictMutation = useMutation({

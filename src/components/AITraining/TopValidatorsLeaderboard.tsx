@@ -96,6 +96,7 @@ export function TopValidatorsLeaderboard() {
       return sortedValidators;
     },
     refetchInterval: 30000, // Auto-refresh every 30 seconds
+    refetchIntervalInBackground: false,
   });
 
   const getRankEmoji = (rank: number) => {

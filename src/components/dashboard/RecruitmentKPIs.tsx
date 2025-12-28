@@ -39,6 +39,7 @@ export function RecruitmentKPIs() {
       };
     },
     refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 
   if (isLoading || !recruitmentStats) {

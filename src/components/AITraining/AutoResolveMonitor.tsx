@@ -76,6 +76,7 @@ export function AutoResolveMonitor() {
       };
     },
     refetchInterval: 30000, // Refresh every 30 seconds
+    refetchIntervalInBackground: false,
   });
 
   return (

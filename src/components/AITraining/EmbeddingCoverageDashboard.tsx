@@ -109,7 +109,8 @@ export const EmbeddingCoverageDashboard = () => {
         criticalCategories
       };
     },
-    refetchInterval: 10000
+    refetchInterval: 10000,
+    refetchIntervalInBackground: false,
   });
 
   // Check orchestrator status
@@ -137,6 +138,7 @@ export const EmbeddingCoverageDashboard = () => {
       return data;
     },
     refetchInterval: 10000,
+    refetchIntervalInBackground: false,
   });
 
   // Realtime subscription voor embeddings

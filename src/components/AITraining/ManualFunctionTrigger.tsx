@@ -78,7 +78,8 @@ export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTr
         embeddingStats
       };
     },
-    refetchInterval: 30000
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 
   const triggerMegaForecastGenerator = async () => {

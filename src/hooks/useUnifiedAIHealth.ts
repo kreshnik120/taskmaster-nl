@@ -214,7 +214,8 @@ export function useUnifiedAIHealth() {
       };
     },
     staleTime: 30000,
-    refetchInterval: 30000
+    refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 
   // Real-time subscription for function_call_logs

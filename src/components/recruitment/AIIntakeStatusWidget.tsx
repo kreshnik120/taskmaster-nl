@@ -39,6 +39,7 @@ export function AIIntakeStatusWidget() {
       };
     },
     refetchInterval: 30000, // Refresh every 30 seconds
+    refetchIntervalInBackground: false,
   });
 
   if (isLoading) {

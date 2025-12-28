@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { withTimeout } from "@/lib/withTimeout";
@@ -138,6 +138,8 @@ const Auth = () => {
   const [demoMode, setDemoMode] = useState(false);
   const [forceLoginAttempt, setForceLoginAttempt] = useState(false);
   const navigate = useNavigate();
+  const healthCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(true);
 
   const checkBackendHealth = async () => {
     const startTime = Date.now();
@@ -210,10 +212,17 @@ const Auth = () => {
   };
 
   const scheduleNextHealthCheck = () => {
+    if (!isMountedRef.current) return;
+    
     const delay = Math.min(3000 * Math.pow(2, healthCheckAttempts), 60000);
     console.info('[AUTH][HEALTH] Next check scheduled in', { delay: `${delay / 1000}s` });
 
-    setTimeout(async () => {
+    if (healthCheckTimeoutRef.current) {
+      clearTimeout(healthCheckTimeoutRef.current);
+    }
+    
+    healthCheckTimeoutRef.current = setTimeout(async () => {
+      if (!isMountedRef.current) return;
       await checkBackendHealth();
       scheduleNextHealthCheck();
     }, delay);
@@ -236,8 +245,17 @@ const Auth = () => {
   };
 
   useEffect(() => {
+    isMountedRef.current = true;
     checkBackendHealth();
     scheduleNextHealthCheck();
+    
+    return () => {
+      isMountedRef.current = false;
+      if (healthCheckTimeoutRef.current) {
+        clearTimeout(healthCheckTimeoutRef.current);
+        healthCheckTimeoutRef.current = null;
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

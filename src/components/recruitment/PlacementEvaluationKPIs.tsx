@@ -87,6 +87,7 @@ export function PlacementEvaluationKPIs() {
       };
     },
     refetchInterval: 60000, // Refresh every minute
+    refetchIntervalInBackground: false,
   });
 
   const TrendIcon = ({ trend }: { trend: 'up' | 'down' | 'stable' }) => {

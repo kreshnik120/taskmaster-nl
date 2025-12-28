@@ -52,6 +52,7 @@ export function TodayFocusCard() {
       };
     },
     refetchInterval: 60000,
+    refetchIntervalInBackground: false,
   });
 
   if (isLoading || !focusItems) {
