@@ -145,6 +145,10 @@ verify_jwt = false
 verify_jwt = false
 # Purpose: Cross-validate CV niveau against diploma niveau
 
+[functions.receive-external-application]
+verify_jwt = false
+# Purpose: Receive applications from external Lovable projects (Citozorg, ABCzorg) - uses API key auth
+
 # -----------------------------------------------------------------------------
 # AUTHENTICATED FUNCTIONS (JWT verification required)
 # -----------------------------------------------------------------------------
