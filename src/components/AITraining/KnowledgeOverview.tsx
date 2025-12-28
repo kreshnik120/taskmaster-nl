@@ -409,6 +409,12 @@ export const KnowledgeOverview = () => {
                     {getCategoryIcon(item.category)}
                     <h3 className="font-semibold">{item.key}</h3>
                     <Badge variant="secondary">{getCategoryLabel(item.category)}</Badge>
+                    {item.is_shared && (
+                      <Badge variant="outline" className="text-blue-600 border-blue-600 bg-blue-50 dark:bg-blue-950">
+                        <Users className="h-3 w-3 mr-1" />
+                        Gedeeld
+                      </Badge>
+                    )}
                     {item.hasEmbedding ? (
                       <Badge variant="outline" className="text-green-600 border-green-600">
                         <Zap className="h-3 w-3 mr-1" />
