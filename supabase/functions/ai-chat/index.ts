@@ -5895,6 +5895,45 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
               console.log('✅ User message persisted in background');
 
               // ============================================
+              // FASE 2D: AI OUTPUT VALIDATION (Sensitive Data Leakage Prevention)
+              // ============================================
+              const outputValidation = validateAIOutput(fullResponse, { maxLength: 50000 });
+
+              if (!outputValidation.valid) {
+                console.warn(`⚠️ AI output validation failed:`, outputValidation.violations);
+                
+                // Log security event for sensitive data leakage attempts
+                const hasSensitiveViolation = outputValidation.violations.some((v: string) => 
+                  v.includes('API key') || v.includes('token') || v.includes('password') || v.includes('secret')
+                );
+                
+                if (hasSensitiveViolation) {
+                  try {
+                    await supabaseServiceClient.from('system_events').insert({
+                      event_type: 'security_alert',
+                      severity: 'high',
+                      title: '🔴 Sensitive Data Leakage Prevented in AI Output',
+                      details: {
+                        conversation_id: conversationId,
+                        user_id: userId,
+                        violations: outputValidation.violations,
+                        original_length: fullResponse.length,
+                      },
+                    });
+                    console.error('🚨 SECURITY: Sensitive data leakage attempt logged');
+                  } catch (logError) {
+                    console.error('Failed to log security event:', logError);
+                  }
+                }
+                
+                // Use sanitized version if available
+                if (outputValidation.sanitizedOutput) {
+                  fullResponse = outputValidation.sanitizedOutput;
+                  console.log('✅ AI output sanitized, removed sensitive data');
+                }
+              }
+
+              // ============================================
               // FASE 1: CACHE STORAGE (after streaming complete)
               // 🚫 EMPTY RESPONSE PROTECTION
               // ============================================
