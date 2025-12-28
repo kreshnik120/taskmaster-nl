@@ -32,7 +32,7 @@ import { AutoLearnedKnowledgeDashboard } from "@/components/AITraining/AutoLearn
 import { BudgetDashboard } from "@/components/AITraining/BudgetDashboard";
 import { BudgetConfiguration } from "@/components/AITraining/BudgetConfiguration";
 import { CleanupDeletedKnowledge } from "@/components/AITraining/CleanupDeletedKnowledge";
-import { AIHealthMetrics } from "@/components/AITraining/AIHealthMetrics";
+import { UnifiedAIHealthDashboard } from "@/components/AITraining/UnifiedAIHealthDashboard";
 
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { SystemHealthDashboard } from "@/components/AITraining/SystemHealthDashboard";
@@ -197,7 +197,7 @@ const AiTraining = () => {
                   
                   <TabsContent value="dashboard" className="mt-4">
                     <div className="space-y-6">
-                      <AIHealthMetrics />
+                      <UnifiedAIHealthDashboard />
                       <TriggerLearningButton />
                       <AutoResolveMonitor />
                       <EvaluationLearningWidget />
