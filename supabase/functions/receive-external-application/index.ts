@@ -354,7 +354,65 @@ Deno.serve(async (req) => {
     // 10. Get default org_id (ABCzorg)
     const defaultOrgId = "550e8400-e29b-41d4-a716-446655440000";
 
-    // 11. Insert into professional_applications
+    // 11. Calculate completeness score using same weights as process-application-email
+    const fieldWeights: Record<string, number> = {
+      full_name: 15,
+      email: 10,
+      telefoonnummer: 12,
+      functie_niveau: 20,
+      regio: 10,
+      werkvorm: 8,
+      skills: 5,
+      jaren_ervaring: 5,
+      ervaring_sector: 5,
+      doelgroep_ervaring: 4,
+      woonplaats: 3,
+      beschikbaarheid: 2,
+      motivatie: 3,
+      gewenst_uurloon: extractedData.werkvorm === 'ZZP' ? 6 : 1,
+      kvk_nummer: extractedData.werkvorm === 'ZZP' ? 3 : 0,
+    };
+    
+    // Map form fields to extracted_data fields for scoring
+    const fieldMapping: Record<string, unknown> = {
+      full_name: extractedData.naam,
+      email: extractedData.email,
+      telefoonnummer: extractedData.telefoon,
+      functie_niveau: extractedData.opleiding || extractedData.ervaring, // Inferred from CV/experience
+      regio: extractedData.gewenste_regio,
+      werkvorm: extractedData.werkvorm,
+      woonplaats: extractedData.gewenste_regio, // Often same as regio
+      beschikbaarheid: extractedData.beschikbaarheid,
+      motivatie: extractedData.motivatie,
+      gewenst_uurloon: null, // Not typically in initial form
+      kvk_nummer: extractedData.kvk_nummer,
+    };
+    
+    let earnedPoints = 0;
+    let totalPoints = 0;
+    
+    for (const [field, weight] of Object.entries(fieldWeights)) {
+      if (weight === 0) continue;
+      totalPoints += weight;
+      
+      const value = fieldMapping[field];
+      if (value !== null && value !== undefined && value !== '') {
+        earnedPoints += weight;
+      }
+    }
+    
+    // CV bonus: adds significant points
+    if (cvFilePath) {
+      earnedPoints += 15;
+      totalPoints += 15;
+    } else {
+      totalPoints += 15;
+    }
+    
+    const completenessScore = Math.round((earnedPoints / totalPoints) * 100);
+    console.log(`[receive-external-application] Completeness score: ${completenessScore}% (${earnedPoints}/${totalPoints} points)`);
+
+    // 12. Insert into professional_applications
     const { data: newApplication, error: insertError } = await supabase
       .from("professional_applications")
       .insert({
@@ -368,7 +426,7 @@ Deno.serve(async (req) => {
         status: "nieuw",
         source_project: data.source,
         source_label: sourceLabel,
-        completeness_score: cvFilePath ? 60 : 40,
+        completeness_score: completenessScore,
       })
       .select("id")
       .single();
@@ -403,7 +461,8 @@ Deno.serve(async (req) => {
       },
     });
 
-    // 13. Send email notification to recruitment@inbound.citozorg.nl
+    // 13. Send INTERNAL notification to recruitment team (NOT the inbound webhook!)
+    // This prevents circular email loops - recruitment@citozorg.nl is for human reading only
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     if (resendApiKey) {
       try {
@@ -424,9 +483,11 @@ Deno.serve(async (req) => {
         const safeSource = escapeHtml(data.source);
         const safeSourceLabel = escapeHtml(sourceLabel);
         
+        // CRITICAL: Send to recruitment@citozorg.nl (NOT @inbound.citozorg.nl)
+        // This prevents the notification from being processed as a new application
         await resend.emails.send({
           from: "Taskmaster <noreply@citozorg.nl>",
-          to: ["recruitment@inbound.citozorg.nl"],
+          to: ["recruitment@citozorg.nl"],
           subject: `Nieuwe ${safeSourceLabel} via ${safeSource}: ${safeName}`,
           html: `
             <!DOCTYPE html>
@@ -500,7 +561,7 @@ Deno.serve(async (req) => {
           `,
         });
         
-        console.log(`[receive-external-application] Email notification sent to recruitment@inbound.citozorg.nl`);
+        console.log(`[receive-external-application] Internal notification sent to recruitment@citozorg.nl`);
       } catch (emailError) {
         console.error("[receive-external-application] Email notification failed:", emailError);
         // Don't fail the request if email fails
@@ -524,7 +585,59 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 15. Return success response
+    // 15. Trigger welcome email via AI Agent Orchestrator (same flow as email applications)
+    // This ensures website applicants receive the same welcome email as email applicants
+    try {
+      console.log(`[receive-external-application] Triggering welcome email via orchestrator for ${newApplication.id}`);
+      
+      // Step 1: Process pending goals (creates action in queue)
+      await supabase.functions.invoke('ai-agent-orchestrator', {
+        body: { 
+          action: 'process_pending_goals',
+          filter_application_id: newApplication.id 
+        }
+      });
+      
+      // Step 2: Execute actions immediately (don't wait for cron)
+      await supabase.functions.invoke('ai-agent-orchestrator', {
+        body: { 
+          action: 'execute_actions'
+        }
+      });
+      
+      console.log(`[receive-external-application] Welcome email triggered successfully`);
+    } catch (orchestratorErr) {
+      console.warn("[receive-external-application] Orchestrator trigger failed, will retry via cron:", orchestratorErr);
+      // Non-blocking: if it fails, cron will pick it up
+    }
+
+    // 16. Auto-trigger interview slots if completeness >= threshold (same as email flow)
+    const INTERVIEW_THRESHOLD = parseInt(Deno.env.get('INTERVIEW_THRESHOLD') || '85');
+    
+    if (completenessScore >= INTERVIEW_THRESHOLD) {
+      console.log(`[receive-external-application] Completeness ${completenessScore}% >= ${INTERVIEW_THRESHOLD}%, triggering auto-send-interview-slots...`);
+      
+      try {
+        const { data: interviewResult, error: interviewError } = await supabase.functions.invoke('auto-send-interview-slots', {
+          body: {
+            application_id: newApplication.id,
+            trigger_source: 'external_api',
+          }
+        });
+        
+        if (interviewError) {
+          console.error("[receive-external-application] Auto interview slots error:", interviewError);
+        } else {
+          console.log("[receive-external-application] Auto interview slots result:", interviewResult);
+        }
+      } catch (interviewErr) {
+        console.error("[receive-external-application] Exception triggering interview slots:", interviewErr);
+      }
+    } else {
+      console.log(`[receive-external-application] Completeness ${completenessScore}% < ${INTERVIEW_THRESHOLD}%, follow-up via AI Agent Orchestrator`);
+    }
+
+    // 17. Return success response
     const processingTime = Date.now() - startTime;
     console.log(`[receive-external-application] Completed in ${processingTime}ms`);
 
@@ -536,6 +649,8 @@ Deno.serve(async (req) => {
         source_label: sourceLabel,
         cv_uploaded: !!cvFilePath,
         documents_uploaded: uploadedDocuments.length,
+        completeness_score: completenessScore,
+        interview_slots_triggered: completenessScore >= INTERVIEW_THRESHOLD,
         processing_time_ms: processingTime,
       }),
       { 
