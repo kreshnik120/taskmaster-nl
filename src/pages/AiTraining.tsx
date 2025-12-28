@@ -197,7 +197,7 @@ const AiTraining = () => {
                   
                   <TabsContent value="dashboard" className="mt-4">
                     <div className="space-y-6">
-                      <UnifiedAIHealthDashboard />
+                      <UnifiedAIHealthDashboard compact />
                       <TriggerLearningButton />
                       <AutoResolveMonitor />
                       <EvaluationLearningWidget />
@@ -218,6 +218,8 @@ const AiTraining = () => {
                   
                   <TabsContent value="health" className="mt-4">
                     <div className="space-y-6">
+                      {/* UnifiedAIHealthDashboard in expanded mode als primaire component */}
+                      <UnifiedAIHealthDashboard />
                       <EmbeddingCoverageDashboard />
                       <SystemHealthDashboard />
                     </div>

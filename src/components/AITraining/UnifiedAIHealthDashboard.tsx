@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { 
   Brain, 
   RefreshCw, 
@@ -28,6 +29,8 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Link } from "react-router-dom";
+import { LEARNING_FUNCTIONS, getLearningFunctionByName } from "@/lib/constants/learningFunctions";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 /**
  * UnifiedAIHealthDashboard - Geconsolideerde AI system health monitoring
@@ -43,16 +46,15 @@ interface UnifiedAIHealthDashboardProps {
   compact?: boolean;
 }
 
-const FUNCTION_ICONS: Record<string, React.ReactNode> = {
-  'unified-learner': <Brain className="h-4 w-4" />,
-  'feedback-processor': <MessageSquare className="h-4 w-4" />,
-  'knowledge-graph-builder': <GitBranch className="h-4 w-4" />,
-  'apply-meta-patterns': <Zap className="h-4 w-4" />,
-  'temporal-decay': <Clock className="h-4 w-4" />,
-  'data-quality-auditor': <Database className="h-4 w-4" />,
-  'smart-deduplicator': <Activity className="h-4 w-4" />,
-  'process-system-events': <RefreshCw className="h-4 w-4" />,
-};
+/**
+ * Helper om icon te krijgen voor een learning function
+ */
+function getFunctionIcon(name: string): React.ReactNode {
+  const fn = getLearningFunctionByName(name);
+  if (!fn) return <Activity className="h-4 w-4" />;
+  const IconComponent = fn.icon;
+  return <IconComponent className="h-4 w-4" />;
+}
 
 function getStatusColor(status: string) {
   switch (status) {
@@ -86,65 +88,79 @@ function EdgeFunctionCard({ fn }: { fn: EdgeFunctionStatus }) {
   const successRate = fn.successCount + fn.failureCount > 0
     ? Math.round((fn.successCount / (fn.successCount + fn.failureCount)) * 100)
     : null;
+  
+  const fnDef = getLearningFunctionByName(fn.name);
 
   return (
-    <div className={`p-3 rounded-lg border ${getStatusColor(fn.status)} transition-all hover:shadow-sm`}>
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-md bg-background/50">
-            {FUNCTION_ICONS[fn.name] || <Activity className="h-4 w-4" />}
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className={`p-3 rounded-lg border ${getStatusColor(fn.status)} transition-all hover:shadow-sm cursor-help`}>
+            <div className="flex items-start justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-background/50">
+                  {getFunctionIcon(fn.name)}
+                </div>
+                <span className="text-sm font-medium">{fn.displayName}</span>
+              </div>
+              {getStatusIcon(fn.status)}
+            </div>
+            
+            <div className="space-y-1.5">
+              {fn.lastRun ? (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Laatste run:</span>
+                  <span className="font-medium">
+                    {formatDistanceToNow(new Date(fn.lastRun), { addSuffix: true, locale: nl })}
+                  </span>
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground">Nog niet gedraaid</div>
+              )}
+              
+              {successRate !== null && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Succes rate:</span>
+                  <span className="font-medium">{successRate}%</span>
+                </div>
+              )}
+              
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Runs (24h):</span>
+                <span className="font-medium">
+                  {fn.successCount + fn.failureCount}
+                  {fn.failureCount > 0 && (
+                    <span className="text-red-500 ml-1">({fn.failureCount} ✗)</span>
+                  )}
+                </span>
+              </div>
+              
+              {fn.avgDurationMs > 0 && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Gem. duur:</span>
+                  <span className="font-medium">
+                    {fn.avgDurationMs > 1000 
+                      ? `${(fn.avgDurationMs / 1000).toFixed(1)}s`
+                      : `${fn.avgDurationMs}ms`
+                    }
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-          <span className="text-sm font-medium">{fn.displayName}</span>
-        </div>
-        {getStatusIcon(fn.status)}
-      </div>
-      
-      <div className="space-y-1.5">
-        {fn.lastRun ? (
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Laatste run:</span>
-            <span className="font-medium">
-              {formatDistanceToNow(new Date(fn.lastRun), { addSuffix: true, locale: nl })}
-            </span>
-          </div>
-        ) : (
-          <div className="text-xs text-muted-foreground">Nog niet gedraaid</div>
-        )}
-        
-        {successRate !== null && (
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Succes rate:</span>
-            <span className="font-medium">{successRate}%</span>
-          </div>
-        )}
-        
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-muted-foreground">Runs (24h):</span>
-          <span className="font-medium">
-            {fn.successCount + fn.failureCount}
-            {fn.failureCount > 0 && (
-              <span className="text-red-500 ml-1">({fn.failureCount} ✗)</span>
-            )}
-          </span>
-        </div>
-        
-        {fn.avgDurationMs > 0 && (
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Gem. duur:</span>
-            <span className="font-medium">
-              {fn.avgDurationMs > 1000 
-                ? `${(fn.avgDurationMs / 1000).toFixed(1)}s`
-                : `${fn.avgDurationMs}ms`
-              }
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs">
+          <p className="text-sm font-medium">{fn.displayName}</p>
+          <p className="text-xs text-muted-foreground">
+            {fnDef?.description || 'AI learning edge function'}
+          </p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
-export function UnifiedAIHealthDashboard({ compact = false }: UnifiedAIHealthDashboardProps) {
+function UnifiedAIHealthDashboardContent({ compact = false }: UnifiedAIHealthDashboardProps) {
   const { data, isLoading, error, refetch } = useUnifiedAIHealth();
   const [isRefetching, setIsRefetching] = useState(false);
 
@@ -542,5 +558,16 @@ export function UnifiedAIHealthDashboard({ compact = false }: UnifiedAIHealthDas
         </Tabs>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * UnifiedAIHealthDashboard met ErrorBoundary wrapper
+ */
+export function UnifiedAIHealthDashboard(props: UnifiedAIHealthDashboardProps) {
+  return (
+    <ErrorBoundary fallbackTitle="AI Health Dashboard kon niet laden">
+      <UnifiedAIHealthDashboardContent {...props} />
+    </ErrorBoundary>
   );
 }
