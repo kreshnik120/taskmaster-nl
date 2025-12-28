@@ -36,9 +36,7 @@ import { UnifiedAIHealthDashboard } from "@/components/AITraining/UnifiedAIHealt
 
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
 import { SystemHealthDashboard } from "@/components/AITraining/SystemHealthDashboard";
-import { EmbeddingCoverageDashboard } from "@/components/AITraining/EmbeddingCoverageDashboard";
 import { CleanupDuplicateFields } from "@/components/AITraining/CleanupDuplicateFields";
-import { SystemLearningDashboard } from "@/components/AITraining/SystemLearningDashboard";
 import { EvaluationLearningWidget } from "@/components/AITraining/EvaluationLearningWidget";
 import { TriggerLearningButton } from "@/components/AITraining/TriggerLearningButton";
 import { AIAgentTestPanel } from "@/components/AITraining/AIAgentTestPanel";
@@ -201,9 +199,6 @@ const AiTraining = () => {
                       <TriggerLearningButton />
                       <AutoResolveMonitor />
                       <EvaluationLearningWidget />
-                      <SystemLearningDashboard />
-                      <AutoLearnedKnowledgeDashboard />
-                      <LearningDashboard />
                     </div>
                   </TabsContent>
 
@@ -218,9 +213,7 @@ const AiTraining = () => {
                   
                   <TabsContent value="health" className="mt-4">
                     <div className="space-y-6">
-                      {/* UnifiedAIHealthDashboard in expanded mode als primaire component */}
                       <UnifiedAIHealthDashboard />
-                      <EmbeddingCoverageDashboard />
                       <SystemHealthDashboard />
                     </div>
                   </TabsContent>
