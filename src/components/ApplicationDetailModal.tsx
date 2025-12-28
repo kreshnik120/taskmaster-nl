@@ -602,7 +602,7 @@ export function ApplicationDetailModal({
 
     setCreatingAction(true);
     try {
-      console.log('[handleCreateAction] Starting action creation...', {
+      logger.log('[handleCreateAction] Starting action creation...', {
         applicationId: application.id,
         actionType,
         title,
@@ -613,7 +613,7 @@ export function ApplicationDetailModal({
 
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       
-      console.log('[handleCreateAction] Auth result:', {
+      logger.log('[handleCreateAction] Auth result:', {
         userId: user?.id,
         userEmail: user?.email,
         authError: authError ? { message: authError.message, status: authError.status } : null
@@ -626,20 +626,20 @@ export function ApplicationDetailModal({
         .select('org_id, role')
         .eq('user_id', user.id);
 
-      console.log('[handleCreateAction] Organization lookup result:', {
+      logger.log('[handleCreateAction] Organization lookup result:', {
         userId: user.id,
         orgData,
         orgError: orgError ? { message: orgError.message, code: orgError.code, details: orgError.details } : null
       });
 
       if (!orgData || orgData.length === 0) {
-        console.error('[handleCreateAction] No organization found for user:', user.id);
+        logger.error('[handleCreateAction] No organization found for user:', user.id);
         throw new Error("Je bent niet gekoppeld aan een organisatie. Neem contact op met je beheerder.");
       }
 
       // Use first organization if multiple
       const selectedOrg = orgData[0];
-      console.log('[handleCreateAction] Using organization:', selectedOrg);
+      logger.log('[handleCreateAction] Using organization:', selectedOrg);
 
       let dueAt = null;
       if (actionDueDate) {
@@ -662,14 +662,14 @@ export function ApplicationDetailModal({
         due_at: dueAt,
       };
 
-      console.log('[handleCreateAction] Inserting task with payload:', taskPayload);
+      logger.log('[handleCreateAction] Inserting task with payload:', taskPayload);
 
       const { data: insertData, error: insertError } = await supabase
         .from('tasks')
         .insert([taskPayload])
         .select();
 
-      console.log('[handleCreateAction] Insert result:', {
+      logger.log('[handleCreateAction] Insert result:', {
         data: insertData,
         error: insertError ? { 
           message: insertError.message, 
@@ -681,7 +681,7 @@ export function ApplicationDetailModal({
 
       if (insertError) throw insertError;
 
-      console.log('[handleCreateAction] Task created successfully:', insertData);
+      logger.log('[handleCreateAction] Task created successfully:', insertData);
       toast.success("Actie aangemaakt");
       
       setShowActionForm(false);
