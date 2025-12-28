@@ -942,10 +942,26 @@ async function performHealthCheck(supabase: any): Promise<Response> {
       require_verified: false,
       include_shared: false
     });
+    const duration = Date.now() - start;
+
+    // 📊 Log health check call metrics (fire-and-forget)
+    const { logMatchKnowledgeCall } = await import('../_shared/telemetry.ts');
+    logMatchKnowledgeCall(supabase, {
+      call_type: 'health_check',
+      include_shared: false,
+      threshold: 0.99,
+      total_results: data?.length || 0,
+      shared_results: 0,
+      avg_similarity: 0,
+      org_id: '550e8400-e29b-41d4-a716-446655440000',
+      execution_time_ms: duration,
+      success: !error,
+      error_message: error?.message
+    }).catch(() => {}); // Non-blocking
     
     checks.rpc_match_knowledge = error 
       ? { status: 'error', message: error.message }
-      : { status: 'ok', message: `RPC callable - ${data?.length || 0} results`, durationMs: Date.now() - start };
+      : { status: 'ok', message: `RPC callable - ${data?.length || 0} results`, durationMs: duration };
   } catch (e: any) {
     checks.rpc_match_knowledge = { status: 'error', message: e.message };
   }

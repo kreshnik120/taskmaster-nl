@@ -8,6 +8,8 @@
  * @see {@link ./docs/DATABASE_RPC_FUNCTIONS.md} for `match_knowledge` RPC documentation
  */
 
+import { logMatchKnowledgeCall, calculateAvgSimilarity, countSharedResults } from './telemetry.ts';
+
 /**
  * Configuration options for semantic knowledge retrieval.
  */
@@ -154,6 +156,7 @@ export async function semanticKnowledgeRetrieval(
 
     // 🎯 PHASE 1: Primary semantic search with standard threshold
     // Uses V3 of match_knowledge with include_shared parameter
+    const primaryStartTime = Date.now();
     const { data: primaryMatches, error } = await supabase.rpc('match_knowledge', {
       query_embedding: questionEmbedding,
       match_threshold: threshold,
@@ -163,18 +166,36 @@ export async function semanticKnowledgeRetrieval(
       require_verified: requireVerified,
       include_shared: includeShared // ✅ Include shared knowledge (wetgeving, CAO, compliance)
     });
+    const primaryDuration = Date.now() - primaryStartTime;
+
+    // 📊 Log primary search metrics (fire-and-forget)
+    logMatchKnowledgeCall(supabase, {
+      call_type: 'primary',
+      include_shared: includeShared,
+      threshold,
+      total_results: primaryMatches?.length || 0,
+      shared_results: countSharedResults(primaryMatches),
+      avg_similarity: calculateAvgSimilarity(primaryMatches),
+      org_id: orgId,
+      execution_time_ms: primaryDuration,
+      success: !error,
+      error_message: error?.message
+    }).catch(() => {}); // Non-blocking
 
     if (error) {
       console.error('❌ Semantic retrieval error:', error);
       return [];
     }
 
+    console.log(`🔍 [MATCH-KNOWLEDGE] Primary: ${primaryMatches?.length || 0} results (${countSharedResults(primaryMatches)} shared), threshold=${threshold}, includeShared=${includeShared}, ${primaryDuration}ms`);
+
     // 🎯 PHASE 2: If insufficient results, try with lower threshold (0.55)
     let allMatches = primaryMatches || [];
     if (allMatches.length < 5) {
       console.log(`⚠️ Only ${allMatches.length} primary matches, trying lower threshold (0.55)...`);
       
-      const { data: fallbackMatches } = await supabase.rpc('match_knowledge', {
+      const fallbackStartTime = Date.now();
+      const { data: fallbackMatches, error: fallbackError } = await supabase.rpc('match_knowledge', {
         query_embedding: questionEmbedding,
         match_threshold: 0.55,
         match_count: maxResults,
@@ -183,13 +204,28 @@ export async function semanticKnowledgeRetrieval(
         require_verified: false, // ⬇️ More lenient for fallback
         include_shared: includeShared // ✅ Keep shared knowledge in fallback
       });
+      const fallbackDuration = Date.now() - fallbackStartTime;
+
+      // 📊 Log fallback search metrics (fire-and-forget)
+      logMatchKnowledgeCall(supabase, {
+        call_type: 'fallback',
+        include_shared: includeShared,
+        threshold: 0.55,
+        total_results: fallbackMatches?.length || 0,
+        shared_results: countSharedResults(fallbackMatches),
+        avg_similarity: calculateAvgSimilarity(fallbackMatches),
+        org_id: orgId,
+        execution_time_ms: fallbackDuration,
+        success: !fallbackError,
+        error_message: fallbackError?.message
+      }).catch(() => {}); // Non-blocking
 
       if (fallbackMatches && fallbackMatches.length > 0) {
         // Merge and deduplicate
         const existingIds = new Set(allMatches.map((m: any) => m.knowledge_id));
         const newMatches = fallbackMatches.filter((m: any) => !existingIds.has(m.knowledge_id));
         allMatches = [...allMatches, ...newMatches];
-        console.log(`✅ Added ${newMatches.length} fallback matches (total: ${allMatches.length})`);
+        console.log(`✅ [MATCH-KNOWLEDGE] Fallback: +${newMatches.length} new matches (total: ${allMatches.length}), ${fallbackDuration}ms`);
       }
     }
 

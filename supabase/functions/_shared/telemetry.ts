@@ -279,3 +279,98 @@ export async function logFunctionCall(
     console.error('⚠️ Failed to log function call:', e);
   }
 }
+
+// ============================================
+// MATCH_KNOWLEDGE MONITORING
+// ============================================
+
+/**
+ * Metrics for match_knowledge RPC calls
+ */
+export interface MatchKnowledgeMetrics {
+  /** Type of call: primary search, fallback, or health check */
+  call_type: 'primary' | 'fallback' | 'health_check';
+  /** Whether shared knowledge was included */
+  include_shared: boolean;
+  /** Similarity threshold used */
+  threshold: number;
+  /** Total number of results returned */
+  total_results: number;
+  /** Number of shared knowledge items in results */
+  shared_results: number;
+  /** Average similarity score of results */
+  avg_similarity: number;
+  /** Organization ID */
+  org_id: string;
+  /** Execution time in milliseconds */
+  execution_time_ms: number;
+  /** Whether the call succeeded */
+  success?: boolean;
+  /** Error message if failed */
+  error_message?: string;
+}
+
+/**
+ * Log match_knowledge RPC call metrics (fire-and-forget)
+ * 
+ * @param supabase - Supabase client instance
+ * @param metrics - Match knowledge call metrics
+ * 
+ * @example
+ * ```typescript
+ * logMatchKnowledgeCall(supabase, {
+ *   call_type: 'primary',
+ *   include_shared: true,
+ *   threshold: 0.65,
+ *   total_results: 15,
+ *   shared_results: 3,
+ *   avg_similarity: 0.78,
+ *   org_id: orgId,
+ *   execution_time_ms: 45
+ * }).catch(() => {}); // Non-blocking
+ * ```
+ */
+export async function logMatchKnowledgeCall(
+  supabase: SupabaseClient,
+  metrics: MatchKnowledgeMetrics
+): Promise<void> {
+  try {
+    await supabase.from('function_call_logs').insert({
+      function_name: 'match_knowledge',
+      org_id: metrics.org_id,
+      execution_time_ms: metrics.execution_time_ms,
+      success: metrics.success ?? true,
+      error_message: metrics.error_message,
+      metadata: {
+        call_type: metrics.call_type,
+        include_shared: metrics.include_shared,
+        threshold: metrics.threshold,
+        total_results: metrics.total_results,
+        shared_results: metrics.shared_results,
+        avg_similarity: Number(metrics.avg_similarity.toFixed(4))
+      }
+    });
+    
+    console.log(`📊 [MATCH-KNOWLEDGE-LOG] ${metrics.call_type}: ${metrics.total_results} results (${metrics.shared_results} shared), threshold=${metrics.threshold}, includeShared=${metrics.include_shared}, ${metrics.execution_time_ms}ms`);
+  } catch (e) {
+    // Silent fail - monitoring should never break main flow
+    console.warn('⚠️ Failed to log match_knowledge metrics:', e);
+  }
+}
+
+/**
+ * Calculate average similarity from match results
+ */
+export function calculateAvgSimilarity(matches: Array<{ similarity?: number }> | null): number {
+  if (!matches || matches.length === 0) return 0;
+  const sum = matches.reduce((acc, m) => acc + (m.similarity || 0), 0);
+  return sum / matches.length;
+}
+
+/**
+ * Count shared results from match results
+ */
+export function countSharedResults(matches: Array<{ is_shared?: boolean }> | null): number {
+  if (!matches || matches.length === 0) return 0;
+  return matches.filter(m => m.is_shared === true).length;
+}
