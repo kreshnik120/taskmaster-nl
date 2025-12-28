@@ -955,8 +955,8 @@ async function performHealthCheck(supabase: any): Promise<Response> {
       avg_similarity: 0,
       org_id: '550e8400-e29b-41d4-a716-446655440000',
       execution_time_ms: duration,
-      success: !error,
-      error_message: error?.message
+      success: error === null || error === undefined,
+      error_message: error?.message || undefined
     }).catch(() => {}); // Non-blocking
     
     checks.rpc_match_knowledge = error 
