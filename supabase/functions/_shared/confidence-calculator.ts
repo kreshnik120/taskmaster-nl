@@ -56,6 +56,37 @@ export const CONFIDENCE_RULES = {
   auto_apply_min_confidence: 0.85,
   retroactive_apply_min: 0.80,
   retroactive_apply_max: 0.85,
+  
+  // ============================================================================
+  // TEMPORAL DECAY RULES (Phase 2: Self-Learning Reinforcement)
+  // ============================================================================
+  
+  // Decay multipliers (applied to confidence score)
+  temporal_decay_60_days: 0.92,      // 8% decay after 60 days unused
+  temporal_decay_90_days: 0.85,      // 15% decay after 90 days unverified
+  temporal_decay_180_days: 0.75,     // 25% decay after 180 days low quality
+  
+  // Soft delete threshold (after decay)
+  temporal_soft_delete_threshold: 0.30,
+  
+  // Protection thresholds - items meeting these are never decayed
+  protected_usage_threshold: 5,       // Items with 5+ uses are protected
+  protected_stability_threshold: 0.9, // Items with 0.9+ stability are protected
+  
+  // ============================================================================
+  // META-PATTERN APPLICATION RULES
+  // ============================================================================
+  
+  // Minimum requirements for pattern application
+  meta_pattern_min_confidence: 0.85,
+  meta_pattern_min_occurrences: 100,
+  
+  // Boost applied when pattern matches
+  meta_pattern_category_boost: 0.02,  // +2% confidence when pattern applied
+  
+  // Maximum patterns to process per run
+  meta_pattern_batch_size: 50,
+  meta_pattern_max_items_per_pattern: 20,
 } as const;
 
 export type ConfidenceRuleKey = keyof typeof CONFIDENCE_RULES;
