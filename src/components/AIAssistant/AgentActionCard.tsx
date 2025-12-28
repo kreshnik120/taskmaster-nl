@@ -254,17 +254,17 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
           filter: `id=eq.${goalId}`
         },
         (payload) => {
-          console.log('📡 Realtime goal update received:', payload);
+          log.log('📡 Realtime goal update received:', payload);
           const newGoal = payload.new as { status: string; output_data: unknown };
           handleGoalStatusUpdate(newGoal.status, newGoal.output_data);
         }
       )
       .subscribe((subscriptionStatus, err) => {
-        console.log('📡 Subscription status:', subscriptionStatus);
+        log.log('📡 Subscription status:', subscriptionStatus);
         if (subscriptionStatus === 'SUBSCRIBED') {
           fetchCurrentStatus();
         } else if (subscriptionStatus === 'CHANNEL_ERROR') {
-          console.error('❌ Subscription error:', err);
+          log.error('❌ Subscription error:', err);
           fetchCurrentStatus();
         }
       });

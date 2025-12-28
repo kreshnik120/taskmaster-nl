@@ -10,6 +10,9 @@ import { ConflictDiffView } from "./ConflictDiffView";
 import { ConflictEditDialog } from "./ConflictEditDialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { deepMerge, detectDuplicateFields, cleanupDuplicateFields } from "@/lib/deepMerge";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('ConflictMonitor');
 
 export const ConflictMonitor = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -79,7 +82,7 @@ export const ConflictMonitor = () => {
     // Basis waarde uit metadata.suggested_value (flat structure zonder category/key/etc)
     const baseValue = conflict.metadata?.suggested_value || {};
     
-    console.log('[ConflictMonitor] Merging edits:', {
+    log.log('Merging edits:', {
       baseValue,
       edits,
       conflictId
@@ -93,12 +96,12 @@ export const ConflictMonitor = () => {
     let finalValue = mergedValue;
     
     if (duplicates.length > 0) {
-      console.warn('[ConflictMonitor] Duplicate fields detected:', duplicates);
+      log.warn('Duplicate fields detected:', duplicates);
       finalValue = cleanupDuplicateFields({ value: mergedValue }).value || mergedValue;
       toast.warning(`Duplicate velden verwijderd: ${duplicates.join(', ')}`);
     }
 
-    console.log('[ConflictMonitor] Final value to save:', finalValue);
+    log.log('Final value to save:', finalValue);
 
     try {
       const { data, error } = await supabase.functions.invoke('update-knowledge-from-conflict', {
@@ -119,7 +122,7 @@ export const ConflictMonitor = () => {
       });
       refetch();
     } catch (error: any) {
-      console.error('Error saving edits:', error);
+      log.error('Error saving edits:', error);
       toast.error(error.message || "Fout bij opslaan wijzigingen");
     }
   };
@@ -138,14 +141,14 @@ export const ConflictMonitor = () => {
         .eq('id', conflictId);
 
       if (error) {
-        console.error('Error resolving conflict:', error);
+        log.error('Error resolving conflict:', error);
         throw error;
       }
       
       toast.success('Conflict opgelost');
       refetch();
     } catch (error) {
-      console.error('Kon conflict niet oplossen', error);
+      log.error('Kon conflict niet oplossen', error);
       toast.error('Kon conflict niet oplossen');
     }
   };
@@ -236,7 +239,7 @@ export const ConflictMonitor = () => {
         if (error) throw error;
         resolved++;
       } catch (error) {
-        console.error('Error resolving conflict:', conflict.id, error);
+        log.error('Error resolving conflict:', conflict.id, error);
         failed++;
       }
     }

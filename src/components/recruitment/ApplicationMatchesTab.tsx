@@ -15,6 +15,9 @@ import { calculateApplicationMatchScoreWithExperts, preloadExpertKnowledge, type
 import { MatchScoreBreakdown as MatchScoreBreakdownUI } from "./MatchScoreBreakdown";
 import { loadSuccessPatterns, calculateAILearningBoost, trackPatternUsage, type SuccessPattern } from "@/lib/aiLearningBoost";
 import confetti from "canvas-confetti";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('ApplicationMatchesTab');
 
 interface ApplicationMatchesTabProps {
   application: {
@@ -417,7 +420,7 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
       const data = application.extracted_data || {};
 
       const expertCount = await preloadExpertKnowledge();
-      console.log(`[ApplicationMatchesTab] Loaded ${expertCount} expert specialisms`);
+      log.log(`Loaded ${expertCount} expert specialisms`);
 
       const aiPatterns = await loadSuccessPatterns();
       setAiPatternsLoaded(aiPatterns.length);

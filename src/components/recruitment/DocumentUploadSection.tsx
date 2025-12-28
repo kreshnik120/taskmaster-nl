@@ -28,6 +28,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { logDocumentAction } from '@/lib/documentAuditLogger';
 import { DocumentAuditHistory } from './DocumentAuditHistory';
+import { logger } from '@/lib/logger';
+
+const log = logger.create('DocumentUploadSection');
 
 interface VogVerificationResponse {
   gaav_code?: number;
@@ -148,7 +151,7 @@ export function DocumentUploadSection({
         });
 
       if (uploadError) {
-        console.error('Upload error:', uploadError);
+        log.error('Upload error:', uploadError);
         toast.error(`Upload mislukt: ${uploadError.message}`);
         return;
       }
@@ -209,14 +212,14 @@ export function DocumentUploadSection({
             body: { application_id: applicationId }
           });
 
-          console.log('DUO verification result:', verifyResult);
+          log.log('DUO verification result:', verifyResult);
 
           // Determine the final status from the edge function response
           const finalStatus = verifyResult?.status;
           
           // FALLBACK: Ensure database is updated even if edge function update failed
           if (finalStatus && finalStatus !== 'received') {
-            console.log('Applying fallback database update with status:', finalStatus);
+            log.log('Applying fallback database update with status:', finalStatus);
             const { error: fallbackError } = await supabase
               .from('professional_applications')
               .update({
@@ -227,14 +230,14 @@ export function DocumentUploadSection({
               .eq('id', applicationId);
             
             if (fallbackError) {
-              console.error('Fallback update failed:', fallbackError);
+              log.error('Fallback update failed:', fallbackError);
             } else {
-              console.log('Fallback update successful');
+              log.log('Fallback update successful');
             }
           }
 
           if (verifyError) {
-            console.error('DUO verification error:', verifyError);
+            log.error('DUO verification error:', verifyError);
             toast.warning('Diploma geüpload - automatische verificatie niet beschikbaar, handmatige controle vereist');
             
             // Update status to manual_review if DUO failed
@@ -277,7 +280,7 @@ export function DocumentUploadSection({
               .eq('id', applicationId);
           }
         } catch (e) {
-          console.error('Error during diploma verification:', e);
+          log.error('Error during diploma verification:', e);
           // Set to manual_review on any error
           await supabase
             .from('professional_applications')
@@ -299,7 +302,7 @@ export function DocumentUploadSection({
       
       onUploadComplete();
     } catch (error) {
-      console.error('Upload error:', error);
+      log.error('Upload error:', error);
       toast.error(`Fout bij uploaden ${docType.toUpperCase()}`);
     } finally {
       setUploading(false);
@@ -345,7 +348,7 @@ export function DocumentUploadSection({
       
       toast.success(`${docType.toUpperCase()} gedownload`);
     } catch (error) {
-      console.error('Download error:', error);
+      log.error('Download error:', error);
       toast.error('Fout bij downloaden');
     } finally {
       setDownloading(false);
@@ -396,7 +399,7 @@ export function DocumentUploadSection({
       });
       
     } catch (error) {
-      console.error('Preview error:', error);
+      log.error('Preview error:', error);
       toast.error('Fout bij openen document');
     } finally {
       setPreviewing(false);
@@ -446,7 +449,7 @@ export function DocumentUploadSection({
       });
       
     } catch (error) {
-      console.error('Inline preview error:', error);
+      log.error('Inline preview error:', error);
       toast.error('Fout bij laden document');
     } finally {
       setLoadingInlineViewer(false);
@@ -465,7 +468,7 @@ export function DocumentUploadSection({
         .remove([filePath]);
 
       if (deleteError) {
-        console.error('Delete error:', deleteError);
+        log.error('Delete error:', deleteError);
       }
 
       if (docType === 'cv') {

@@ -35,6 +35,9 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('Dashboard');
 
 // Deployment trigger - 2025-10-03 23:21
 
@@ -114,7 +117,7 @@ const Dashboard = () => {
           table: 'tasks'
         },
         (payload) => {
-          console.log('Task change detected:', payload);
+          log.log('Task change detected:', payload);
           loadTasks();
           loadCompletedThisWeek();
         }
@@ -211,7 +214,7 @@ const Dashboard = () => {
       
       setTasks(tasksWithCounts);
     } catch (error) {
-      console.error("Error loading tasks:", error);
+      log.error("Error loading tasks:", error);
     } finally {
       setLoading(false);
     }
@@ -284,12 +287,12 @@ const Dashboard = () => {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       
       if (userError || !user) {
-        console.error("Auth error:", userError);
+        log.error("Auth error:", userError);
         toast.error("Authenticatie fout");
         return;
       }
 
-      console.log("Deleting task:", taskToDelete, "by user:", user.id);
+      log.log("Deleting task:", taskToDelete, "by user:", user.id);
       
       const { error } = await supabase
         .from("tasks")
@@ -300,14 +303,14 @@ const Dashboard = () => {
         .eq("id", taskToDelete);
 
       if (error) {
-        console.error("Delete error details:", error);
+        log.error("Delete error details:", error);
         throw error;
       }
 
       toast.success("Taak verwijderd");
       loadTasks();
     } catch (error: any) {
-      console.error("Error deleting task:", error);
+      log.error("Error deleting task:", error);
       toast.error(`Fout bij verwijderen: ${error.message || 'Onbekende fout'}`);
     } finally {
       setDeleteDialogOpen(false);
@@ -356,7 +359,7 @@ const Dashboard = () => {
 
       loadTasks();
     } catch (error) {
-      console.error("Error completing task:", error);
+      log.error("Error completing task:", error);
       toast.error("Fout bij afronden van taak");
     }
   };
@@ -387,7 +390,7 @@ const Dashboard = () => {
       
       loadTasks();
     } catch (error) {
-      console.error('Error undoing complete:', error);
+      log.error('Error undoing complete:', error);
       toast.error("Kon taak niet herstellen");
     }
   };
@@ -450,7 +453,7 @@ const Dashboard = () => {
 
       toast.success("Subtaak voltooid");
     } catch (error) {
-      console.error('Error completing subtask:', error);
+      log.error('Error completing subtask:', error);
       toast.error("Kon subtaak niet voltooien");
       // Rollback on error
       loadTasks();
@@ -488,7 +491,7 @@ const Dashboard = () => {
 
       toast.success("Subtaak overgeslagen");
     } catch (error) {
-      console.error('Error skipping subtask:', error);
+      log.error('Error skipping subtask:', error);
       toast.error("Kon subtaak niet overslaan");
       // Rollback on error
       loadTasks();

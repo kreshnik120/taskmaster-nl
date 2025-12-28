@@ -1,4 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
+
+const log = logger.create('DocumentAuditLogger');
 
 export type DocumentAction = 'upload' | 'download' | 'preview' | 'inline_preview' | 'delete';
 export type DocumentType = 'cv' | 'vog' | 'diploma' | string; // string for ZZP types
@@ -26,7 +29,7 @@ export async function logDocumentAction({
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) {
-      console.warn('Cannot log document action: no authenticated user');
+      log.warn('Cannot log document action: no authenticated user');
       return;
     }
 
@@ -46,10 +49,10 @@ export async function logDocumentAction({
       });
 
     if (error) {
-      console.error('Failed to log document action:', error);
+      log.error('Failed to log document action:', error);
     }
   } catch (error) {
     // Silently fail - audit logging should not break functionality
-    console.error('Failed to log document action:', error);
+    log.error('Failed to log document action:', error);
   }
 }

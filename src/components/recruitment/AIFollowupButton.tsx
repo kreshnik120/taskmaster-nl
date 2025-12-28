@@ -6,6 +6,9 @@ import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('AIFollowupButton');
 
 interface AIFollowupButtonProps {
   applicationId: string;
@@ -87,7 +90,7 @@ export function AIFollowupButton({
         missingInfo = criticalFields.filter(field => !extractedData[field]);
       }
 
-      console.log('🤖 AIFollowupButton: Creating goal with missing_info:', missingInfo);
+      log.log('🤖 Creating goal with missing_info:', missingInfo);
 
       // Create AI Agent goal with missing_info included
       const { error } = await supabase.from("agent_goals").insert({
@@ -114,7 +117,7 @@ export function AIFollowupButton({
 
       refetch();
     } catch (error: any) {
-      console.error("Error triggering AI followup:", error);
+      log.error("Error triggering AI followup:", error);
       toast.error("Fout bij activeren AI Agent", {
         description: error.message,
       });

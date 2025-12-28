@@ -5,6 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Mail, CheckCircle2, AlertCircle, Copy, ExternalLink, Loader2, RefreshCw, Bug, Zap } from "lucide-react";
+import { logger } from "@/lib/logger";
+
+const log = logger.create('ResendInboundSetup');
 
 interface DnsRecord {
   host: string;
@@ -58,7 +61,7 @@ export function ResendInboundSetup() {
         toast.error(data.error || "Setup mislukt");
       }
     } catch (error: any) {
-      console.error("Setup error:", error);
+      log.error("Setup error:", error);
       toast.error(error.message || "Setup mislukt");
     } finally {
       setLoading(false);
@@ -120,14 +123,14 @@ export function ResendInboundSetup() {
       });
 
       if (error) {
-        console.error("Webhook test error:", error);
+        log.error("Webhook test error:", error);
         toast.error(`Webhook test mislukt: ${error.message}`);
       } else {
-        console.log("Webhook test response:", data);
+        log.log("Webhook test response:", data);
         toast.success("Webhook test succesvol! Check de logs voor details.");
       }
     } catch (error: any) {
-      console.error("Webhook test error:", error);
+      log.error("Webhook test error:", error);
       toast.error(error.message || "Webhook test mislukt");
     } finally {
       setTestingWebhook(false);
