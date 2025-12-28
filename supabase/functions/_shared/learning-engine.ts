@@ -226,6 +226,7 @@ export async function processFeedbackLearning(
         
         // If no knowledge_ids stored, try to fetch from message metadata
         if (knowledgeIds.length === 0 && fb.message_id) {
+          // First try ai_chat_messages
           const { data: message } = await supabase
             .from('ai_chat_messages')
             .select('used_knowledge')
@@ -237,6 +238,29 @@ export async function processFeedbackLearning(
             knowledgeIds = usedKnowledge
               .map(k => typeof k === 'string' ? k : k.id)
               .filter((id): id is string => !!id);
+          }
+          
+          // Legacy fallback: try chat_messages view for older messages
+          if (knowledgeIds.length === 0) {
+            const { data: legacyMessage } = await supabase
+              .from('chat_messages')
+              .select('used_knowledge, metadata')
+              .eq('id', fb.message_id)
+              .maybeSingle();
+            
+            if (legacyMessage?.used_knowledge) {
+              const usedKnowledge = legacyMessage.used_knowledge as Array<{ id?: string } | string>;
+              knowledgeIds = usedKnowledge
+                .map(k => typeof k === 'string' ? k : k.id)
+                .filter((id): id is string => !!id);
+            } else if (legacyMessage?.metadata) {
+              // Check metadata.knowledge_ids_for_feedback
+              const meta = legacyMessage.metadata as Record<string, unknown>;
+              const metaKnowledgeIds = meta?.knowledge_ids_for_feedback as string[] | undefined;
+              if (metaKnowledgeIds && Array.isArray(metaKnowledgeIds)) {
+                knowledgeIds = metaKnowledgeIds;
+              }
+            }
           }
         }
         
