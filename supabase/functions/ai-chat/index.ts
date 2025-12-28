@@ -1790,7 +1790,7 @@ Deno.serve(async (req: Request) => {
           // 🎯 FIX 3: Verlaag threshold voor bedrijfsinformatie queries
           const matchThreshold = isCompanyInfoQuery ? 0.65 : 0.75;
           
-          // Call match_knowledge function with validation filter
+          // Call match_knowledge V3 function with validation filter AND explicit shared knowledge
           const { data: semanticMatches, error: matchError } = await supabaseClient
             .rpc('match_knowledge', {
               query_embedding: queryEmbedding,
@@ -1799,7 +1799,9 @@ Deno.serve(async (req: Request) => {
               filter_org_id: userOrgId,
               filter_role_tags: [detectedRole],
               filter_jurisdiction: 'NL',
-              require_verified: true  // ✨ NIEUW - alleen verified items voor betere kwaliteit
+              require_verified: true,  // ✨ alleen verified items voor betere kwaliteit
+              filter_customer_id: null,  // ✅ V3: geen customer filtering
+              include_shared: true       // ✅ V3: expliciet shared knowledge ophalen (wetgeving, CAO's etc.)
             });
 
           if (matchError) {
