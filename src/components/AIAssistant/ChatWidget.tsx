@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Loader2, Sparkles, Calendar, ListTodo, Clock, RotateCcw, Image as ImageIcon, X as XIcon, GripVertical, Bot } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { X, Send, Loader2, Sparkles, Calendar, ListTodo, Clock, RotateCcw, Image as ImageIcon, X as XIcon, GripVertical, Bot, MapPin, Users, Briefcase, Building2, Brain, LayoutDashboard } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -20,8 +21,111 @@ import { useToast } from '@/hooks/use-toast';
 import { SimpleChatIcon } from './SimpleChatIcon';
 import { ChatDatePicker, ChatTimePicker, ChatSelect, ChatButtonGroup } from './InteractiveChatElements';
 import { MessageFeedback } from './MessageFeedback';
+import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
+
+// Page context configuration for context-aware AI responses
+interface PageContext {
+  label: string;
+  description: string;
+  icon: React.ElementType;
+  quickActions: { icon: React.ElementType; label: string; prompt: string }[];
+}
+
+const PAGE_CONTEXTS: Record<string, PageContext> = {
+  '/': {
+    label: 'Dashboard',
+    description: 'Overzichtspagina met KPIs, taken en recruitment metrics',
+    icon: LayoutDashboard,
+    quickActions: [
+      { icon: ListTodo, label: 'Mijn prioriteiten vandaag', prompt: 'Wat zijn mijn belangrijkste taken voor vandaag?' },
+      { icon: Calendar, label: 'Planning deze week', prompt: 'Geef me een overzicht van mijn planning deze week' },
+      { icon: Briefcase, label: 'Recruitment status', prompt: 'Wat is de huidige status van mijn recruitment pipeline?' },
+    ]
+  },
+  '/sollicitaties': {
+    label: 'Sollicitaties',
+    description: 'Kandidaat pipeline en screening van nieuwe professionals',
+    icon: Users,
+    quickActions: [
+      { icon: Users, label: 'Kandidaat zoeken', prompt: 'Help me een geschikte kandidaat te vinden voor een vacature' },
+      { icon: Briefcase, label: 'Screening tips', prompt: 'Wat moet ik letten bij het screenen van een kandidaat?' },
+      { icon: Clock, label: 'Openstaande acties', prompt: 'Welke sollicitaties hebben actie nodig?' },
+    ]
+  },
+  '/professionals': {
+    label: 'Professionals',
+    description: 'Overzicht van geplaatste zorgprofessionals',
+    icon: Users,
+    quickActions: [
+      { icon: Users, label: 'Beschikbaarheid check', prompt: 'Welke professionals zijn beschikbaar voor een nieuwe plaatsing?' },
+      { icon: MapPin, label: 'Regio overzicht', prompt: 'Geef een overzicht van professionals per regio' },
+      { icon: Briefcase, label: 'Functieniveaus', prompt: 'Welke functieniveaus hebben we beschikbaar?' },
+    ]
+  },
+  '/klanten': {
+    label: 'Klanten',
+    description: 'Organisaties, locaties en vacatures van onze klanten',
+    icon: Building2,
+    quickActions: [
+      { icon: Building2, label: 'Klant informatie', prompt: 'Vertel me meer over onze klanten en hun behoeften' },
+      { icon: Users, label: 'Vacature match', prompt: 'Welke kandidaten passen bij de openstaande vacatures?' },
+      { icon: MapPin, label: 'Locatie overzicht', prompt: 'Geef een overzicht van klantlocaties per regio' },
+    ]
+  },
+  '/plaatsingen': {
+    label: 'Plaatsingen',
+    description: 'Actieve en historische plaatsingen van professionals',
+    icon: Briefcase,
+    quickActions: [
+      { icon: Briefcase, label: 'Plaatsing status', prompt: 'Wat is de status van de lopende plaatsingen?' },
+      { icon: Clock, label: 'Aflopende plaatsingen', prompt: 'Welke plaatsingen lopen binnenkort af?' },
+      { icon: Users, label: 'Evaluaties', prompt: 'Zijn er plaatsingen die geëvalueerd moeten worden?' },
+    ]
+  },
+  '/ai-training': {
+    label: 'AI Training',
+    description: 'Kennisbeheer en AI configuratie dashboard',
+    icon: Brain,
+    quickActions: [
+      { icon: Brain, label: 'Kennisbank status', prompt: 'Hoeveel kennis heb ik al geleerd en wat is de kwaliteit?' },
+      { icon: ListTodo, label: 'Conflicten', prompt: 'Zijn er conflicten in de kennisbank die ik moet oplossen?' },
+      { icon: Clock, label: 'Recente leerevents', prompt: 'Wat heb ik recent geleerd van gebruikersinteracties?' },
+    ]
+  },
+  '/kanban': {
+    label: 'Kanban',
+    description: 'Visueel takenbord voor projectbeheer',
+    icon: LayoutDashboard,
+    quickActions: [
+      { icon: ListTodo, label: 'Openstaande taken', prompt: 'Welke taken staan er open in het kanban bord?' },
+      { icon: Clock, label: 'Deadlines vandaag', prompt: 'Welke taken hebben vandaag een deadline?' },
+      { icon: Calendar, label: 'Nieuwe taak', prompt: 'Help me een nieuwe taak aan te maken' },
+    ]
+  },
+  '/kalender': {
+    label: 'Kalender',
+    description: 'Kalenderweergave van taken en afspraken',
+    icon: Calendar,
+    quickActions: [
+      { icon: Calendar, label: 'Afspraken vandaag', prompt: 'Wat staat er vandaag op de planning?' },
+      { icon: Clock, label: 'Deze week', prompt: 'Geef een overzicht van mijn week' },
+      { icon: ListTodo, label: 'Planning optimaliseren', prompt: 'Help me mijn planning te optimaliseren' },
+    ]
+  },
+};
+
+const DEFAULT_PAGE_CONTEXT: PageContext = {
+  label: 'ABCzorg',
+  description: 'Algemene pagina',
+  icon: LayoutDashboard,
+  quickActions: [
+    { icon: ListTodo, label: 'Mijn taken vandaag', prompt: 'Wat zijn mijn belangrijkste taken voor vandaag?' },
+    { icon: Calendar, label: 'Planning deze week', prompt: 'Geef me een overzicht van mijn planning deze week' },
+    { icon: Clock, label: 'Maak nieuwe taak', prompt: 'Help me een nieuwe taak aan te maken' },
+  ]
+};
 
 interface InteractiveElement {
   type: 'date_picker' | 'time_picker' | 'select' | 'button_group';
@@ -51,11 +155,7 @@ interface Message {
   jobIds?: string[]; // Processing job IDs voor realtime tracking
 }
 
-const QUICK_ACTIONS = [
-  { icon: ListTodo, label: 'Mijn taken vandaag', prompt: 'Wat zijn mijn belangrijkste taken voor vandaag?' },
-  { icon: Calendar, label: 'Planning deze week', prompt: 'Geef me een overzicht van mijn planning deze week' },
-  { icon: Clock, label: 'Maak nieuwe taak', prompt: 'Help me een nieuwe taak aan te maken' },
-];
+// Legacy static quick actions removed - now using PAGE_CONTEXTS for dynamic actions
 
 // Helper functions for conversation session management
 const getConversationId = (): string => {
@@ -81,6 +181,23 @@ interface ChatWidgetProps {
 }
 
 export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidgetProps = {}) => {
+  const location = useLocation();
+  const currentPath = location.pathname;
+  
+  // Get page context based on current route
+  const currentPageContext = useMemo(() => {
+    // Check for exact match first
+    if (PAGE_CONTEXTS[currentPath]) {
+      return PAGE_CONTEXTS[currentPath];
+    }
+    // Check for partial match (e.g., /sollicitaties/123 → /sollicitaties)
+    const basePath = '/' + currentPath.split('/')[1];
+    if (PAGE_CONTEXTS[basePath]) {
+      return PAGE_CONTEXTS[basePath];
+    }
+    return DEFAULT_PAGE_CONTEXT;
+  }, [currentPath]);
+  
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -589,6 +706,11 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
               return { role: m.role, content: m.content };
             }),
             conversation_id: conversationId, // ✅ Stuur conversation_id mee
+            pageContext: {
+              path: currentPath,
+              label: currentPageContext.label,
+              description: currentPageContext.description,
+            }, // ✅ Stuur page context mee voor relevantere antwoorden
           }),
         }
       );
@@ -1241,9 +1363,14 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
               <div className={`shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center border border-primary/30 transition-all ${isLoading ? 'animate-pulse' : ''}`}>
                 <Bot className="w-5 h-5 text-primary" />
               </div>
-              <div>
-                <h3 className="font-semibold text-sm">TaskFlow Assistent</h3>
-                <p className="text-xs text-muted-foreground">Altijd klaar om te helpen</p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-sm">ABCzorg Assistent</h3>
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                    {currentPageContext.label}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground truncate">{currentPageContext.description}</p>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -1279,23 +1406,23 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
                   </Avatar>
                   <div className="bg-muted rounded-lg px-4 py-3 max-w-[85%]">
                     <p className="text-sm mb-3">
-                      👋 Hallo! Ik ben je persoonlijke TaskFlow assistent. Ik kan je helpen met:
+                      👋 Hallo! Ik ben de <strong>ABCzorg Assistent</strong>. 
+                      {currentPageContext.label !== 'ABCzorg' && (
+                        <> Je bent nu op <strong>{currentPageContext.label}</strong>.</>
+                      )}
                     </p>
-                    <ul className="text-sm space-y-1.5 mb-3">
-                      <li>• 📋 Taken aanmaken en organiseren</li>
-                      <li>• 📅 Je planning optimaliseren</li>
-                      <li>• 🎯 Prioriteiten stellen</li>
-                      <li>• ⏰ Deadlines beheren</li>
-                    </ul>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      {currentPageContext.description}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       Kies een snelle actie of stel je eigen vraag!
                     </p>
                   </div>
                 </div>
 
-                {/* Quick Actions */}
+                {/* Dynamic Quick Actions based on current page */}
                 <div className="space-y-2 pl-11">
-                  {QUICK_ACTIONS.map((action, idx) => {
+                  {currentPageContext.quickActions.map((action, idx) => {
                     const Icon = action.icon;
                     return (
                       <Button

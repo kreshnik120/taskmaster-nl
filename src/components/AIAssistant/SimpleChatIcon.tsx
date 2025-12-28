@@ -115,7 +115,7 @@ export const SimpleChatIcon = ({ onClick, isActive }: SimpleChatIconProps) => {
           </motion.button>
         </TooltipTrigger>
         <TooltipContent side="left" className="bg-popover text-popover-foreground">
-          <p className="font-medium">AI Assistent</p>
+          <p className="font-medium">ABCzorg Assistent</p>
           <p className="text-xs text-muted-foreground">Ctrl+K om te openen • Sleep om te verplaatsen</p>
         </TooltipContent>
       </Tooltip>
