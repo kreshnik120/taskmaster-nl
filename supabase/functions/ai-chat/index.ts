@@ -5745,6 +5745,28 @@ Gebruik deze rijke context om intelligente, context-aware antwoorden te geven di
                             break;
                           }
                           
+                          // ANTI-SPAM CHECK: Max 1 follow-up per 24 hours per candidate
+                          const { data: recentFollowups } = await supabaseClient
+                            .from('agent_goals')
+                            .select('created_at')
+                            .eq('goal_type', 'chat_triggered_followup')
+                            .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+                            .filter('input_data->>application_id', 'eq', args.application_id)
+                            .order('created_at', { ascending: false })
+                            .limit(1);
+                          
+                          if (recentFollowups && recentFollowups.length > 0) {
+                            const lastSent = new Date(recentFollowups[0].created_at);
+                            const hoursAgo = Math.round((Date.now() - lastSent.getTime()) / (1000 * 60 * 60));
+                            result = {
+                              success: false,
+                              message: `⚠️ Er is ${hoursAgo} uur geleden al een follow-up verstuurd naar deze kandidaat. Wacht minimaal 24 uur voordat je opnieuw een follow-up stuurt om spam te voorkomen.`,
+                              too_recent: true,
+                              last_sent_at: lastSent.toISOString()
+                            };
+                            break;
+                          }
+                          
                           // Get application details
                           const { data: followupAppData, error: followupAppError } = await supabaseClient
                             .from('professional_applications')

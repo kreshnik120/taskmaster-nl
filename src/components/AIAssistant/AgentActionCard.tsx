@@ -113,11 +113,21 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
         throw new Error('Niet ingelogd');
       }
 
+      // Get user's org_id dynamically
+      const { data: userOrg } = await supabase
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', session.user.id)
+        .limit(1)
+        .single();
+
+      const orgId = userOrg?.org_id || '550e8400-e29b-41d4-a716-446655440000'; // Fallback to ABCzorg
+
       // Create agent goal for chat-triggered followup
       const { data: goal, error } = await supabase
         .from('agent_goals')
         .insert({
-          org_id: '550e8400-e29b-41d4-a716-446655440000', // ABCzorg org_id
+          org_id: orgId,
           goal_type: 'chat_triggered_followup',
           goal_description: `Chat-triggered follow-up naar ${actionData.candidate_name}`,
           status: 'pending',

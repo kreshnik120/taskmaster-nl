@@ -22,6 +22,7 @@ import { SimpleChatIcon } from './SimpleChatIcon';
 import { ChatDatePicker, ChatTimePicker, ChatSelect, ChatButtonGroup } from './InteractiveChatElements';
 import { MessageFeedback } from './MessageFeedback';
 import { AIMemoryPanel } from './AIMemoryPanel';
+import { AgentActionCard, AgentActionData } from './AgentActionCard';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
@@ -194,6 +195,7 @@ interface Message {
   messageId?: string; // UUID from chat_messages table for feedback persistence
   isProcessing?: boolean; // Document verwerking actief
   jobIds?: string[]; // Processing job IDs voor realtime tracking
+  agentAction?: AgentActionData; // Agent action card data for confirmation flow
 }
 
 // Legacy static quick actions removed - now using PAGE_CONTEXTS for dynamic actions
@@ -448,7 +450,19 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
     streamChat(formattedValue);
   };
 
-  const parseAssistantResponse = (content: string): { content: string; interactive?: InteractiveElement } => {
+  const parseAssistantResponse = (content: string): { content: string; interactive?: InteractiveElement; agentAction?: AgentActionData } => {
+    // Check for agent action card markers FIRST
+    const agentActionMatch = content.match(/\[AGENT_ACTION_CARD\]([\s\S]*?)\[\/AGENT_ACTION_CARD\]/);
+    if (agentActionMatch) {
+      try {
+        const actionData = JSON.parse(agentActionMatch[1]) as AgentActionData;
+        const cleanedContent = content.replace(/\[AGENT_ACTION_CARD\][\s\S]*?\[\/AGENT_ACTION_CARD\]/, '').trim();
+        return { content: cleanedContent, agentAction: actionData };
+      } catch (e) {
+        console.error('Failed to parse agent action card:', e);
+      }
+    }
+    
     const lowerContent = content.toLowerCase();
     
     // Detect date requests
@@ -855,11 +869,12 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
                   const updated = [...prev];
                   updated[updated.length - 1] = {
                     role: 'assistant',
-                    content: assistantMessage,
+                    content: parsedResponse.content, // Use cleaned content (without markers)
                     interactive: parsedResponse.interactive,
                     showInteractive: !!parsedResponse.interactive,
                     usedKnowledge: usedKnowledge.length > 0 ? usedKnowledge : [],
                     messageId: messageId || undefined,
+                    agentAction: parsedResponse.agentAction,
                   };
                   return updated;
                 });
@@ -1495,6 +1510,22 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
                       </div>
                     )}
                     <div>
+                      {/* Agent Action Card for confirmation flow */}
+                      {msg.agentAction && (
+                        <AgentActionCard
+                          actionData={msg.agentAction}
+                          onConfirm={(goalId) => {
+                            console.log('✅ Agent action confirmed:', goalId);
+                          }}
+                          onCancel={() => {
+                            console.log('❌ Agent action cancelled');
+                            setMessages(prev => prev.map((m, i) => 
+                              i === idx ? { ...m, agentAction: undefined } : m
+                            ));
+                          }}
+                        />
+                      )}
+                      
                       <div
                         className={`rounded-lg px-4 py-2.5 ${
                           msg.role === 'user'
