@@ -1,31 +1,69 @@
 /**
- * Semantic Knowledge Retrieval
- * Uses embeddings for semantic matching instead of keyword-based matching
+ * Semantic Knowledge Retrieval Module
+ * 
+ * Uses vector embeddings for semantic matching instead of keyword-based matching.
+ * Provides a two-phase search with automatic fallback for sparse results.
+ * 
+ * @module semantic-retrieval
+ * @see {@link ./docs/DATABASE_RPC_FUNCTIONS.md} for `match_knowledge` RPC documentation
  */
 
+/**
+ * Configuration options for semantic knowledge retrieval.
+ */
 interface SemanticRetrievalOptions {
+  /** Organization UUID to filter results */
   orgId: string;
+  /** Minimum similarity score (0.0-1.0), default 0.65 */
   threshold?: number;
+  /** Maximum items to return, default 20 */
   maxResults?: number;
+  /** Array of role tags to filter by (e.g., ['recruiter', 'planner']) */
   roleFilter?: string[];
+  /** Only return verified knowledge items, default false */
   requireVerified?: boolean;
-  includeShared?: boolean; // Include shared knowledge from other orgs
+  /** 
+   * Include shared knowledge from other organizations (wetgeving, CAO, compliance).
+   * 
+   * **IMPORTANT:** Should be `true` for all user-facing AI responses to ensure
+   * compliance-critical knowledge is included. Set to `false` only for health
+   * checks or organization-specific analytics.
+   * 
+   * @default true
+   */
+  includeShared?: boolean;
 }
 
+/**
+ * Represents a knowledge item matched via semantic search.
+ */
 interface SemanticMatch {
+  /** Unique identifier of the knowledge item */
   knowledge_id: string;
+  /** Knowledge category (e.g., 'wetgeving', 'cao', 'bedrijfsinfo') */
   category: string;
+  /** Knowledge key/title */
   key: string;
+  /** Full knowledge content as JSONB */
   value: any;
+  /** Source confidence score (0.0-1.0) */
   confidence_score: number;
+  /** Cosine similarity to query (0.0-1.0) */
   similarity: number;
+  /** Applicable roles for this knowledge */
   role_tags?: string[];
+  /** Verification status ('verified', 'pending', 'rejected') */
   validation_status?: string;
+  /** Whether this is shared cross-organization knowledge */
   is_shared?: boolean;
 }
 
 /**
- * Generate embedding for a text query
+ * Generate embedding for a text query using Lovable AI gateway.
+ * 
+ * @param text - The text to generate an embedding for
+ * @returns 1536-dimensional embedding vector
+ * @throws Error if the embedding API call fails
  */
 async function generateQueryEmbedding(text: string): Promise<number[]> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -51,7 +89,48 @@ async function generateQueryEmbedding(text: string): Promise<number[]> {
 }
 
 /**
- * Retrieve knowledge using semantic search
+ * Retrieve knowledge using semantic search via the `match_knowledge` RPC function.
+ * 
+ * @description
+ * Performs a two-phase semantic search:
+ * 1. Primary search with configured threshold (default 0.65)
+ * 2. Fallback search at 0.55 if primary returns < 5 results
+ * 
+ * The function uses the V3 (9-parameter) version of `match_knowledge` which
+ * supports verified-only filtering and shared knowledge control.
+ * 
+ * @param question - The user's question or query text
+ * @param supabase - Supabase client instance
+ * @param options - Search configuration options
+ * 
+ * @returns Promise<SemanticMatch[]> - Array of matching knowledge items sorted by similarity
+ * 
+ * @example
+ * ```typescript
+ * // Standard user-facing query (includes shared knowledge)
+ * const matches = await semanticKnowledgeRetrieval(
+ *   "Wat is de CAO-verhoging voor 2024?",
+ *   supabase,
+ *   { 
+ *     orgId: "550e8400-e29b-41d4-a716-446655440000",
+ *     includeShared: true // Default, ensures wetgeving/CAO is included
+ *   }
+ * );
+ * 
+ * // Health check (excludes shared for speed)
+ * const healthCheck = await semanticKnowledgeRetrieval(
+ *   "test",
+ *   supabase,
+ *   { 
+ *     orgId: orgId,
+ *     threshold: 0.99,
+ *     maxResults: 1,
+ *     includeShared: false // Faster, org-specific only
+ *   }
+ * );
+ * ```
+ * 
+ * @see {@link ./docs/DATABASE_RPC_FUNCTIONS.md} for `match_knowledge` parameter details
  */
 export async function semanticKnowledgeRetrieval(
   question: string,
@@ -182,8 +261,31 @@ export async function semanticKnowledgeRetrieval(
 }
 
 /**
- * Calculate semantic confidence score for an answer
- * Replaces keyword-based calculateAnswerConfidence
+ * Calculate semantic confidence score for an AI-generated answer.
+ * 
+ * Evaluates answer quality based on:
+ * - Average semantic similarity of knowledge used (40% weight)
+ * - Source confidence scores (30% weight)
+ * - Verification status ratio (20% weight)
+ * - Answer completeness/length (10% weight)
+ * 
+ * @param question - The original user question
+ * @param answer - The AI-generated answer
+ * @param knowledgeUsed - Array of knowledge items used to generate the answer
+ * 
+ * @returns Object containing confidence score (0.0-1.0), reasoning, and identified gaps
+ * 
+ * @example
+ * ```typescript
+ * const { confidence, reasoning, gaps } = calculateSemanticConfidence(
+ *   "Wat is de opzegtermijn?",
+ *   "De opzegtermijn is 1 maand volgens de CAO.",
+ *   matchedKnowledge
+ * );
+ * // confidence: 0.85
+ * // reasoning: "High confidence: Strong semantic matches with verified sources"
+ * // gaps: []
+ * ```
  */
 export function calculateSemanticConfidence(
   question: string,
@@ -263,8 +365,24 @@ export function calculateSemanticConfidence(
 }
 
 /**
- * Merge semantic results with category-based results
- * Deduplicates and prioritizes by similarity score
+ * Merge semantic search results with category-based results.
+ * 
+ * Deduplicates by knowledge_id and prioritizes semantic matches over
+ * category-only matches. Final results are sorted by match score.
+ * 
+ * @param semanticMatches - Results from semantic search
+ * @param categoryMatches - Results from category-based search
+ * 
+ * @returns Merged and deduplicated results sorted by match score
+ * 
+ * @example
+ * ```typescript
+ * const merged = mergeSemanticAndCategoryResults(
+ *   semanticResults,  // From semanticKnowledgeRetrieval()
+ *   categoryResults   // From traditional category lookup
+ * );
+ * // Returns combined results with semantic matches prioritized
+ * ```
  */
 export function mergeSemanticAndCategoryResults(
   semanticMatches: SemanticMatch[],

@@ -64,6 +64,28 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
+## Database API Documentation
+
+For backend developers working with the knowledge base and AI functions:
+
+- **[RPC Functions Reference](supabase/functions/_shared/docs/DATABASE_RPC_FUNCTIONS.md)** - Comprehensive documentation for:
+  - `match_knowledge()` - Semantic search for knowledge items (3 versions)
+  - `increment_usage_count()` - Track knowledge usage
+  - Helper functions (`is_knowledge_valid`, `has_acl_access`)
+
+## Running Tests
+
+```sh
+# Run all unit tests
+deno test supabase/functions/_shared/tests/ --allow-env --allow-net
+
+# Run with coverage
+deno test supabase/functions/_shared/tests/ --allow-env --allow-net --coverage=coverage/
+
+# Run specific test file
+deno test supabase/functions/_shared/tests/semantic-retrieval.test.ts --allow-env --allow-net
+```
+
 ## How can I deploy this project?
 
 Simply open [Lovable](https://lovable.dev/projects/bc97bfa3-1514-4c8d-8774-09483112d367) and click on Share -> Publish.
