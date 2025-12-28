@@ -23,9 +23,9 @@ console.log(`
 ║  • confidence-calculator.test.ts  (~45 tests)                 ║
 ║  • knowledge-crud.test.ts         (~30 tests)                 ║
 ║  • learning-engine.test.ts        (~25 tests)                 ║
+║  • semantic-retrieval.test.ts     (~12 tests)                 ║
 ║                                                               ║
-║  Total: ~100 test cases                                       ║
-║                                                               ║
+║  Total: ~112 test cases                                       ║
 ╠═══════════════════════════════════════════════════════════════╣
 ║  Usage:                                                       ║
 ║                                                               ║
@@ -46,3 +46,4 @@ console.log(`
 import './confidence-calculator.test.ts';
 import './knowledge-crud.test.ts';
 import './learning-engine.test.ts';
+import './semantic-retrieval.test.ts';
