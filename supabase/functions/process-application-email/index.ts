@@ -713,10 +713,11 @@ Belangrijk:
 
     console.log("Application created:", application.id);
 
-    // 🔄 Welkomstmail wordt getriggerd via database trigger + master-scheduler cron
+    // 🔄 Welkomstmail wordt getriggerd via database trigger + pg_cron jobs
     // Dit zorgt voor consistentie met receive-external-application flow
     // De consolidated_welcome_intake_trigger maakt automatisch een agent_goal aan
-    console.log("📋 [process-application-email] Goal wordt aangemaakt via database trigger, verwerking door master-scheduler cron");
+    // Verwerking: pg_cron roept ai-agent-orchestrator elke 5 minuten aan
+    console.log("📋 [process-application-email] Goal aangemaakt via database trigger, verwerking door pg_cron (elke 5 min)");
 
     // =====================================================
     // 🎯 AUTOMATISCHE INTERVIEW SLOTS BIJ >= 85% COMPLETENESS

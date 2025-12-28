@@ -588,10 +588,10 @@ Deno.serve(async (req) => {
     // 15. Welcome email handling
     // NOTE: Directe orchestrator calls zijn verwijderd om race conditions te voorkomen.
     // De database trigger maakt automatisch een 'send_welcome_and_intake' goal aan.
-    // De master-scheduler cron (elke minuut) roept ai-agent-orchestrator aan met de juiste service role key.
+    // De pg_cron jobs (elke 5 minuten) roepen ai-agent-orchestrator aan met de juiste service role key.
     // Dit garandeert dat de database transactie is gecommit voordat het goal wordt verwerkt.
     console.log(`[receive-external-application] Goal 'send_welcome_and_intake' is aangemaakt via database trigger.`);
-    console.log(`[receive-external-application] Welkomstmail wordt binnen 1-2 minuten verzonden via master-scheduler cron.`);
+    console.log(`[receive-external-application] Welkomstmail wordt binnen 5 minuten verzonden via pg_cron jobs.`);
 
     // 16. Auto-trigger interview slots if completeness >= threshold (same as email flow)
     const INTERVIEW_THRESHOLD = parseInt(Deno.env.get('INTERVIEW_THRESHOLD') || '85');
