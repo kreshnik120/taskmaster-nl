@@ -163,8 +163,9 @@ schedule = "0 */12 * * *"
 # Purpose: Score tasks using AI (runs every 12 hours)
 
 [functions.ai-chat]
-verify_jwt = true
+verify_jwt = false
 # Purpose: Main AI chat endpoint
+# Note: verify_jwt = false to allow health-check. Auth is validated in-code for chat requests.
 
 [functions.ai-chat.env]
 ENABLE_SAFE_PERSISTENCE = "true"
