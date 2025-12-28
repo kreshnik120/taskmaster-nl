@@ -401,3 +401,261 @@ export const PIPELINE_STAGE_PROGRESSION: Record<string, string> = {
 export function getNextPipelineStage(currentStage: string): string | null {
   return PIPELINE_STAGE_PROGRESSION[currentStage] || null;
 }
+
+// ============================================
+// DOCUMENT VALIDATION HELPERS
+// ============================================
+
+/**
+ * PDF magic bytes signature
+ */
+const PDF_MAGIC_BYTES = [0x25, 0x50, 0x44, 0x46]; // %PDF
+
+/**
+ * Validates if content is a valid PDF by checking magic bytes
+ */
+export function isValidPdf(content: Uint8Array): boolean {
+  if (content.length < 4) return false;
+  
+  return content[0] === PDF_MAGIC_BYTES[0] &&
+         content[1] === PDF_MAGIC_BYTES[1] &&
+         content[2] === PDF_MAGIC_BYTES[2] &&
+         content[3] === PDF_MAGIC_BYTES[3];
+}
+
+/**
+ * VOG required keywords that must appear in a valid VOG document
+ */
+const VOG_REQUIRED_KEYWORDS = [
+  'verklaring omtrent het gedrag',
+  'vog',
+  'ministerie',
+  'justitie',
+  'justis',
+  'screeningsautoriteit',
+];
+
+/**
+ * VOG optional keywords that increase confidence
+ */
+const VOG_OPTIONAL_KEYWORDS = [
+  'geen bezwaar',
+  'afgegeven',
+  'aanvraagnummer',
+  'functieomschrijving',
+];
+
+/**
+ * Validates if text content appears to be from a VOG document
+ * Returns a score 0-100 indicating confidence
+ */
+export function validateVogContent(textContent: string): {
+  isValid: boolean;
+  score: number;
+  foundKeywords: string[];
+  missingRequired: string[];
+} {
+  const lowerText = textContent.toLowerCase();
+  const foundKeywords: string[] = [];
+  const missingRequired: string[] = [];
+  
+  // Check required keywords
+  let requiredScore = 0;
+  for (const keyword of VOG_REQUIRED_KEYWORDS) {
+    if (lowerText.includes(keyword)) {
+      foundKeywords.push(keyword);
+      requiredScore += 20; // Each required keyword = 20 points
+    } else {
+      missingRequired.push(keyword);
+    }
+  }
+  
+  // Check optional keywords
+  let optionalScore = 0;
+  for (const keyword of VOG_OPTIONAL_KEYWORDS) {
+    if (lowerText.includes(keyword)) {
+      foundKeywords.push(keyword);
+      optionalScore += 5; // Each optional keyword = 5 points
+    }
+  }
+  
+  // Cap at 100
+  const score = Math.min(100, requiredScore + optionalScore);
+  
+  // Valid if score >= 40 (at least 2 required keywords)
+  const isValid = score >= 40;
+  
+  return { isValid, score, foundKeywords, missingRequired };
+}
+
+/**
+ * Diploma required keywords
+ */
+const DIPLOMA_KEYWORDS = [
+  'diploma',
+  'getuigschrift', 
+  'certificaat',
+  'mbo',
+  'hbo',
+  'opleiding',
+  'geslaagd',
+  'examen',
+  'kwalificatie',
+];
+
+/**
+ * Healthcare-specific diploma keywords
+ */
+const HEALTHCARE_DIPLOMA_KEYWORDS = [
+  'verpleegkund',
+  'verzorgend',
+  'helpende',
+  'zorg',
+  'ggz',
+  'gehandicaptenzorg',
+  'welzijn',
+  'maatschappelijk',
+];
+
+/**
+ * Validates if text content appears to be from a diploma document
+ */
+export function validateDiplomaContent(textContent: string): {
+  isValid: boolean;
+  score: number;
+  foundKeywords: string[];
+  isHealthcareRelated: boolean;
+} {
+  const lowerText = textContent.toLowerCase();
+  const foundKeywords: string[] = [];
+  let isHealthcareRelated = false;
+  
+  // Check diploma keywords
+  let diplomaScore = 0;
+  for (const keyword of DIPLOMA_KEYWORDS) {
+    if (lowerText.includes(keyword)) {
+      foundKeywords.push(keyword);
+      diplomaScore += 15;
+    }
+  }
+  
+  // Check healthcare keywords
+  for (const keyword of HEALTHCARE_DIPLOMA_KEYWORDS) {
+    if (lowerText.includes(keyword)) {
+      foundKeywords.push(keyword);
+      diplomaScore += 10;
+      isHealthcareRelated = true;
+    }
+  }
+  
+  const score = Math.min(100, diplomaScore);
+  const isValid = score >= 30;
+  
+  return { isValid, score, foundKeywords, isHealthcareRelated };
+}
+
+/**
+ * Calculates SHA256 hash of content for duplicate detection
+ */
+export async function calculateContentHash(content: Uint8Array): Promise<string> {
+  const buffer = new Uint8Array(content).buffer as ArrayBuffer;
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Document validation result interface
+ */
+export interface DocumentValidationResult {
+  isValidFormat: boolean;
+  formatError?: string;
+  contentValidation?: {
+    isValid: boolean;
+    score: number;
+    foundKeywords: string[];
+    warnings: string[];
+  };
+  isDuplicate: boolean;
+  duplicateOf?: {
+    applicationId: string;
+    filename: string;
+    uploadedAt: string;
+  };
+  contentHash?: string;
+  validationFlags: string[];
+  requiresManualReview: boolean;
+}
+
+/**
+ * Placeholder email patterns (expanded from phone)
+ */
+const PLACEHOLDER_EMAIL_PATTERNS = [
+  /^test@/i,
+  /^example@/i,
+  /^noreply@/i,
+  /^no-reply@/i,
+  /^nobody@/i,
+  /^null@/i,
+  /^fake@/i,
+  /@example\.(com|org|net)$/i,
+  /@test\.(com|org|net)$/i,
+  /^user@/i,
+  /^admin@admin/i,
+  /^info@info/i,
+];
+
+/**
+ * Detects if an email is a placeholder/test value
+ */
+export function isPlaceholderEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  
+  const cleaned = email.toLowerCase().trim();
+  return PLACEHOLDER_EMAIL_PATTERNS.some(p => p.test(cleaned));
+}
+
+/**
+ * Simple text extraction from PDF (for validation purposes)
+ * This is a basic implementation - for full extraction use AI Vision
+ */
+export function extractBasicTextFromPdf(pdfBytes: Uint8Array): string {
+  // Convert to string for text extraction
+  const decoder = new TextDecoder('latin1');
+  const pdfString = decoder.decode(pdfBytes);
+  
+  // Extract text between stream markers (basic approach)
+  const textParts: string[] = [];
+  
+  // Look for text in parentheses (PDF text objects)
+  const textRegex = /\(([^)]+)\)/g;
+  let match;
+  while ((match = textRegex.exec(pdfString)) !== null) {
+    const text = match[1]
+      .replace(/\\n/g, ' ')
+      .replace(/\\r/g, '')
+      .replace(/\\\(/g, '(')
+      .replace(/\\\)/g, ')')
+      .replace(/\\\\/g, '\\');
+    if (text.length > 2) {
+      textParts.push(text);
+    }
+  }
+  
+  // Also look for BT...ET text blocks with Tj/TJ operators
+  const btEtRegex = /BT\s*([\s\S]*?)\s*ET/g;
+  while ((match = btEtRegex.exec(pdfString)) !== null) {
+    const block = match[1];
+    // Extract Tj content
+    const tjRegex = /\(([^)]*)\)\s*Tj/g;
+    let tjMatch;
+    while ((tjMatch = tjRegex.exec(block)) !== null) {
+      const text = tjMatch[1].replace(/\\./g, '');
+      if (text.length > 2) {
+        textParts.push(text);
+      }
+    }
+  }
+  
+  return textParts.join(' ').toLowerCase();
+}
