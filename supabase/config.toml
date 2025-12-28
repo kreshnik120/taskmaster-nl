@@ -364,3 +364,14 @@ schedule = "0 5 * * 0"
 [functions.cleanup-test-data]
 verify_jwt = false
 # Purpose: Clean up test data for fresh E2E testing
+
+# -----------------------------------------------------------------------------
+# HEALTH MONITORING
+# -----------------------------------------------------------------------------
+
+[functions.ai-chat-health-monitor]
+verify_jwt = false
+schedule = "*/5 * * * *"
+# Purpose: Monitor AI Chat health and send email alerts on failures
+# Frequency: 288 executions/day (every 5 minutes)
+# Dependencies: Calls ai-chat?health=true, logs to system_health_log, alerts via Resend
