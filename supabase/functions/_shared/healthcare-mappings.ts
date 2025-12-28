@@ -301,8 +301,11 @@ export const FOLLOWUP_COOLDOWN_HOURS = 24;
 
 /**
  * Critical fields that determine application completeness
+ * NOTE: naam and email are essential for identification
  */
 export const CRITICAL_FIELDS = [
+  'naam',           // Essential: candidate identification
+  'email',          // Essential: contact & matching
   'functie_niveau',
   'werkvorm', 
   'regio',
@@ -310,6 +313,46 @@ export const CRITICAL_FIELDS = [
   'telefoonnummer',
   'diploma'
 ] as const;
+
+/**
+ * Field aliases for consistent checking across different data formats
+ * Maps canonical field names to their common aliases in extracted_data
+ */
+export const FIELD_ALIASES: Record<string, string[]> = {
+  'naam': ['naam', 'full_name', 'name'],
+  'email': ['email', 'email_from', 'e-mail'],
+  'telefoonnummer': ['telefoonnummer', 'phone', 'telefoon', 'tel'],
+  'diploma': ['diploma', 'diploma_type', 'opleiding'],
+  'regio': ['regio', 'woonplaats', 'stad', 'plaats'],
+  'beschikbaarheid': ['beschikbaarheid', 'availability', 'uren_per_week'],
+} as const;
+
+/**
+ * Checks if a field has a valid value, using aliases and placeholder detection
+ * @param data - The extracted_data object to check
+ * @param field - The canonical field name to check
+ * @returns true if field has a valid (non-placeholder) value
+ */
+export function hasField(
+  data: Record<string, unknown>, 
+  field: string
+): boolean {
+  const aliasesToCheck = FIELD_ALIASES[field] || [field];
+  
+  for (const alias of aliasesToCheck) {
+    const value = data[alias];
+    if (value === null || value === undefined || value === '') continue;
+    
+    // Special case: telefoonnummer must not be placeholder
+    if (field === 'telefoonnummer' && typeof value === 'string') {
+      if (isPlaceholderPhone(value)) continue;
+    }
+    
+    return true; // Valid value found
+  }
+  
+  return false;
+}
 
 /**
  * All goal types related to application intake
@@ -332,20 +375,14 @@ export const ACTIVE_GOAL_STATUSES = [
 ] as const;
 
 /**
- * Recalculates missing_info based on extracted_data
+ * Recalculates missing_info based on extracted_data using aliases and placeholder detection
  */
 export function recalculateMissingInfo(
   extractedData: Record<string, unknown> | null
 ): string[] {
   if (!extractedData) return [...CRITICAL_FIELDS];
   
-  return CRITICAL_FIELDS.filter(field => {
-    const value = extractedData[field];
-    // Field is missing if null, undefined, empty string, or placeholder
-    if (value === null || value === undefined || value === '') return true;
-    if (typeof value === 'string' && isPlaceholderPhone(value)) return true;
-    return false;
-  });
+  return CRITICAL_FIELDS.filter(field => !hasField(extractedData, field));
 }
 
 /**
