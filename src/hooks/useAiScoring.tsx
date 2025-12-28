@@ -183,7 +183,7 @@ export const useAiScoring = (tasks: Task[], enableAutoScoring: boolean = false) 
   useEffect(() => {
     if (enableAutoScoring && tasks.length > 0) {
       const taskIds = tasks.map(t => t.id).join(',');
-      console.log(`🔄 Auto-scoring triggered for ${tasks.length} tasks`);
+      logger.log(`🔄 Auto-scoring triggered for ${tasks.length} tasks`);
       calculateScores(tasks);
     }
   }, [enableAutoScoring, tasks.map(t => t.id).join(',')]); // Re-score when task IDs change

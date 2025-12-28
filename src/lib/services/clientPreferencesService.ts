@@ -6,6 +6,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 
 // ============= INTERFACES =============
 
@@ -156,10 +157,10 @@ export async function loadClientPreferences(orgId?: string): Promise<ClientExper
     cacheLoaded = true;
     cacheTimestamp = now;
     
-    console.log(`[loadClientPreferences] Loaded ${preferencesCache.size} preferences`);
+    logger.log(`[loadClientPreferences] Loaded ${preferencesCache.size} preferences`);
     return Array.from(preferencesCache.values());
   } catch (err) {
-    console.error('[loadClientPreferences] Error:', err);
+    logger.error('[loadClientPreferences] Error:', err);
     return [];
   }
 }

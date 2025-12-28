@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { logger } from "@/lib/logger";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
@@ -208,7 +209,7 @@ const Sollicitaties = () => {
       setApplications(data || []);
       setLoading(false);
     } catch (error) {
-      console.error('Error loading applications:', error);
+      logger.error('Error loading applications:', error);
       setLoading(false);
       toast.error("Er is een fout opgetreden bij het laden van sollicitaties");
     }
@@ -222,7 +223,7 @@ const Sollicitaties = () => {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'professional_applications' },
         (payload) => {
-          console.log('Realtime update:', payload);
+          logger.log('Realtime update:', payload);
           // Reload applications on any change
           loadApplications();
         }
@@ -389,7 +390,7 @@ const Sollicitaties = () => {
         return; // Stop here, wait for client selection
       }
     } catch (err: any) {
-      console.error("Error moving application:", err);
+      logger.error("Error moving application:", err);
       toast.error("Fout bij verplaatsen sollicitatie");
     }
   };
@@ -457,7 +458,7 @@ const Sollicitaties = () => {
         if (syncResult.success && syncResult.fieldsUpdated > 0) {
           dataSynced = true;
           syncedFieldsCount = syncResult.fieldsUpdated;
-          console.log(`[Sync] ${syncResult.fieldsUpdated} velden gesynct:`, syncResult.fieldsSynced);
+          logger.log(`[Sync] ${syncResult.fieldsUpdated} velden gesynct:`, syncResult.fieldsSynced);
         }
       }
 
