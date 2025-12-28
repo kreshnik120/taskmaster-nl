@@ -1,5 +1,5 @@
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
-import { isUrlAllowedForScraping } from '../_shared/healthcare-mappings.ts';
+import { isUrlAllowedForScraping, logSecurityEvent } from '../_shared/healthcare-mappings.ts';
 
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -103,6 +103,18 @@ Deno.serve(async (req) => {
           
           if (!urlValidation.allowed) {
             console.warn(`🚫 [fetch-organization-logos] SSRF Protection: Blocked for ${org.name} - ${websiteUrl} - ${urlValidation.reason}`);
+            
+            // Log security event
+            await logSecurityEvent(supabase, 'ssrf_blocked', 'medium', {
+              function_name: 'fetch-organization-logos',
+              blocked_url: websiteUrl,
+              blocked_reason: urlValidation.reason,
+              additional_context: {
+                org_name: org.name,
+                org_id: org.id,
+              }
+            });
+            
             results.skipped++;
             results.details.push({ name: org.name, status: 'skipped', error: `Blocked URL: ${urlValidation.reason}` });
             continue;

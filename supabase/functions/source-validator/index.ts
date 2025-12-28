@@ -1,4 +1,5 @@
 import { handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
+import { isUrlAllowedForScraping, logSecurityEvent } from '../_shared/healthcare-mappings.ts';
 
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -42,15 +43,66 @@ Deno.serve(async (req) => {
 
     let validatedCount = 0;
     let brokenCount = 0;
+    let ssrfBlockedCount = 0;
     const brokenSources: any[] = [];
 
     for (const item of itemsWithSources) {
       const value = item.value as any;
       const sourceUrl = value.source_url;
 
+      // === SSRF PROTECTION ===
+      const urlValidation = isUrlAllowedForScraping(sourceUrl, { 
+        allowAnyDutchDomain: true,
+        strictMode: false 
+      });
+
+      if (!urlValidation.allowed) {
+        console.warn(`🚫 SSRF Protection: Blocked source validation for ${sourceUrl} - ${urlValidation.reason}`);
+        ssrfBlockedCount++;
+        brokenCount++;
+        brokenSources.push({
+          item_id: item.id,
+          key: item.key,
+          category: item.category,
+          source: sourceUrl,
+          error: `SSRF blocked: ${urlValidation.reason}`
+        });
+
+        // Log security event
+        await logSecurityEvent(supabase, 'ssrf_blocked', 'medium', {
+          function_name: 'source-validator',
+          blocked_url: sourceUrl,
+          blocked_reason: urlValidation.reason,
+          org_id: orgId,
+          additional_context: {
+            item_id: item.id,
+            item_key: item.key,
+            item_category: item.category,
+          }
+        });
+
+        // Mark for review
+        await supabase
+          .from('ai_knowledge_base')
+          .update({
+            needs_review: true,
+            last_validation_error: `SSRF blocked: ${urlValidation.reason}`,
+            value: {
+              ...value,
+              last_verified: new Date().toISOString(),
+              validation_status: 'ssrf_blocked'
+            }
+          })
+          .eq('id', item.id);
+
+        continue;
+      }
+
+      const safeUrl = urlValidation.sanitizedUrl || sourceUrl;
+
       try {
         // Check if source is accessible
-        const response = await fetch(sourceUrl, {
+        const response = await fetch(safeUrl, {
           method: 'HEAD',
           signal: AbortSignal.timeout(5000) // 5s timeout
         });
@@ -235,13 +287,14 @@ Deno.serve(async (req) => {
       model_used: 'autonomous'
     });
 
-    console.log(`✅ Source validation complete: ${validatedCount} valid, ${brokenCount} broken`);
+    console.log(`✅ Source validation complete: ${validatedCount} valid, ${brokenCount} broken (${ssrfBlockedCount} SSRF blocked)`);
 
     return jsonResponse({
       success: true,
       sources_validated: itemsWithSources.length,
       valid_sources: validatedCount,
       broken_sources: brokenCount,
+      ssrf_blocked: ssrfBlockedCount,
       broken_details: brokenSources
     });
 
