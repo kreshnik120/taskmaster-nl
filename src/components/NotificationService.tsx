@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { ReminderNotification } from "./ReminderNotification";
+import { logger } from "@/lib/logger";
 
 interface Reminder {
   id: string;
@@ -37,7 +38,7 @@ export const NotificationService = () => {
           .in("channel", ["IN_APP", "EMAIL"]);
 
         if (error) {
-          console.error("⚠️ Error fetching reminders:", error.code, error.message);
+          logger.error("⚠️ Error fetching reminders:", error.code, error.message);
           return;
         }
 
@@ -92,7 +93,7 @@ export const NotificationService = () => {
               // Get user email
               const { data: { user } } = await supabase.auth.getUser();
               if (!user?.email) {
-                console.error("No user email found for reminder:", reminder.id);
+                logger.error("No user email found for reminder:", reminder.id);
                 continue;
               }
 
@@ -112,9 +113,9 @@ export const NotificationService = () => {
               );
 
               if (emailSendError) {
-                console.error("Error sending reminder email:", emailSendError);
+                logger.error("Error sending reminder email:", emailSendError);
               } else {
-                console.log("✅ Reminder email sent:", reminder.id);
+                logger.log("✅ Reminder email sent:", reminder.id);
                 
                 // Mark reminder as shown
                 await supabase
@@ -123,12 +124,12 @@ export const NotificationService = () => {
                   .eq("id", reminder.id);
               }
             } catch (error) {
-              console.error("⚠️ Error processing EMAIL reminder:", error);
+              logger.error("⚠️ Error processing EMAIL reminder:", error);
             }
           }
         }
       } catch (error) {
-        console.error("⚠️ Reminder check failed:", error);
+        logger.error("⚠️ Reminder check failed:", error);
       }
     };
 

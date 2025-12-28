@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Loader2, CheckCircle, Target, TrendingUp, BarChart3, Coins, Settings, Database, MessageSquare } from "lucide-react";
@@ -78,13 +79,13 @@ const AiTraining = () => {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError || !session) {
-        console.error('❌ No active session:', sessionError);
+        logger.error('❌ No active session:', sessionError);
         toast.error('Niet ingelogd. Log opnieuw in.');
         setSeedLoading(false);
         return;
       }
 
-      console.log('🌱 Starting org-profile seed with auth token...');
+      logger.log('🌱 Starting org-profile seed with auth token...');
       
       // ✅ Expliciet Authorization header meesturen
       const { data, error } = await supabase.functions.invoke('seed-org-profile-knowledge', {
@@ -94,18 +95,18 @@ const AiTraining = () => {
       });
       
       if (error) {
-        console.error('❌ Seed error:', error);
+        logger.error('❌ Seed error:', error);
         toast.error(`Seed mislukt: ${error.message}`);
         return;
       }
       
-      console.log('✅ Seed success:', data);
+      logger.log('✅ Seed success:', data);
       toast.success(`✅ ${data.created || 0} org-profiles gemigreerd. ${data.errors?.length || 0} fouten.`);
       
       // Refresh validation stats
       refetchStats();
     } catch (err: any) {
-      console.error('❌ Unexpected seed error:', err);
+      logger.error('❌ Unexpected seed error:', err);
       toast.error(`Onverwachte fout: ${err.message}`);
     } finally {
       setSeedLoading(false);
@@ -115,7 +116,7 @@ const AiTraining = () => {
   useEffect(() => {
     // ⚡ AUTH FALLBACK: Prevent infinite spinner on slow auth
     const fallbackTimer = setTimeout(() => {
-      console.warn("⚠️ Auth check timeout - showing page anyway");
+      logger.warn("⚠️ Auth check timeout - showing page anyway");
       setLoading(false);
     }, 10000);
 

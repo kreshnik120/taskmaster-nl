@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 
 export interface PriorityScore {
   task_id: string;
@@ -48,7 +49,7 @@ const loadCacheFromStorage = (): Map<string, CachedScore> => {
       return new Map(Object.entries(parsed));
     }
   } catch (error) {
-    console.error('Error loading cache from sessionStorage:', error);
+    logger.error('Error loading cache from sessionStorage:', error);
   }
   return new Map();
 };
@@ -59,7 +60,7 @@ const saveCacheToStorage = (cache: Map<string, CachedScore>) => {
     const obj = Object.fromEntries(cache);
     sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(obj));
   } catch (error) {
-    console.error('Error saving cache to sessionStorage:', error);
+    logger.error('Error saving cache to sessionStorage:', error);
   }
 };
 
@@ -80,7 +81,7 @@ export const useAiScoring = (tasks: Task[], enableAutoScoring: boolean = false) 
     });
     
     if (cachedScores.size > 0) {
-      console.log(`✅ Loaded ${cachedScores.size} cached AI scores from sessionStorage`);
+      logger.log(`✅ Loaded ${cachedScores.size} cached AI scores from sessionStorage`);
       setPriorityScores(cachedScores);
     }
   }, []); // Only run on mount
@@ -107,7 +108,7 @@ export const useAiScoring = (tasks: Task[], enableAutoScoring: boolean = false) 
       });
 
       if (uncachedTasks.length > 0) {
-        console.log(`🤖 AI Scoring ${uncachedTasks.length} tasks (dit kan 30-60 seconden duren)...`);
+        logger.log(`🤖 AI Scoring ${uncachedTasks.length} tasks (dit kan 30-60 seconden duren)...`);
         
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 second timeout
@@ -120,7 +121,7 @@ export const useAiScoring = (tasks: Task[], enableAutoScoring: boolean = false) 
           clearTimeout(timeoutId);
 
           if (error) {
-            console.error('AI scoring error:', error);
+            logger.error('AI scoring error:', error);
             
             // Check for specific error types
             if (error.message?.includes('429')) {
@@ -140,7 +141,7 @@ export const useAiScoring = (tasks: Task[], enableAutoScoring: boolean = false) 
           }
 
           if (data?.error) {
-            console.error('AI scoring backend error:', data.error);
+            logger.error('AI scoring backend error:', data.error);
             toast.error(`AI scoring fout: ${data.error}`);
             return;
           }
@@ -153,25 +154,25 @@ export const useAiScoring = (tasks: Task[], enableAutoScoring: boolean = false) 
             });
             setCache(newCache);
             saveCacheToStorage(newCache);
-            console.log(`✅ AI scoring completed for ${data.results.length} tasks`);
+            logger.log(`✅ AI scoring completed for ${data.results.length} tasks`);
             toast.success(`✅ ${data.results.length} taken gescoord door AI`);
           }
         } catch (abortError) {
           clearTimeout(timeoutId);
           if (abortError instanceof Error && abortError.name === 'AbortError') {
-            console.error('AI scoring timeout after 90s');
+            logger.error('AI scoring timeout after 90s');
             toast.error('AI scoring timeout. Probeer met minder taken.');
           } else {
             throw abortError;
           }
         }
       } else {
-        console.log(`✅ Using cached scores for all ${tasksToScore.length} tasks`);
+        logger.log(`✅ Using cached scores for all ${tasksToScore.length} tasks`);
       }
 
       setPriorityScores(newScores);
     } catch (error: any) {
-      console.error('Error calculating AI scores:', error);
+      logger.error('Error calculating AI scores:', error);
       toast.error('AI scoring tijdelijk niet beschikbaar');
     } finally {
       setLoading(false);

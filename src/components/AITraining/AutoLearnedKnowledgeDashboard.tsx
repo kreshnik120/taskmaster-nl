@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertTriangle, CheckCircle, Eye, Edit, TrendingUp, Calendar, AlertCircle, XCircle, Scan, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 import { useState, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -108,7 +109,7 @@ export const AutoLearnedKnowledgeDashboard = () => {
           filter: "source_reference=ilike.%continuous-learner%",
         },
         (payload) => {
-          console.log("🆕 New auto-learned knowledge!", payload);
+          logger.log("🆕 New auto-learned knowledge!", payload);
           queryClient.invalidateQueries({ queryKey: ["auto-learned-knowledge"] });
           toast.success("Nieuwe kennis geleerd! 🎓", {
             description: `${payload.new.key} (${payload.new.category})`,
@@ -187,7 +188,7 @@ export const AutoLearnedKnowledgeDashboard = () => {
         toast.success("✓ Geen verouderde items gevonden!");
       }
     } catch (error) {
-      console.error("Scan error:", error);
+      logger.error("Scan error:", error);
       toast.error("Scan mislukt", {
         description: error instanceof Error ? error.message : "Onbekende fout",
       });

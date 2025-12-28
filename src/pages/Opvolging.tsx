@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { logger } from "@/lib/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -105,7 +106,7 @@ export default function Opvolging() {
               clearTimeout(debounceTimerRef.current);
             }
             debounceTimerRef.current = setTimeout(() => {
-              console.log('🔄 Real-time update detected, refetching tasks');
+              logger.log('🔄 Real-time update detected, refetching tasks');
               fetchTasks();
             }, 300);
           }
@@ -158,7 +159,7 @@ export default function Opvolging() {
       
       // useAiScoring hook will automatically handle scoring
     } catch (error) {
-      console.error("Error fetching tasks:", error);
+      logger.error("Error fetching tasks:", error);
       toast({
         title: "Fout bij ophalen taken",
         description: "Er is een fout opgetreden bij het ophalen van de taken.",

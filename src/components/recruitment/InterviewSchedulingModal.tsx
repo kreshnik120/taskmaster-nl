@@ -16,6 +16,7 @@ import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 
 interface InterviewSchedulingModalProps {
   open: boolean;
@@ -242,13 +243,13 @@ END:VCALENDAR`;
             });
 
           if (goalError) {
-            console.error('Goal creation error:', goalError);
+            logger.error('Goal creation error:', goalError);
             toast.warning("Interview gepland, maar email taak kon niet worden aangemaakt");
           } else {
-            console.log('Interview email goal created - AI Agent will process');
+            logger.log('Interview email goal created - AI Agent will process');
           }
         } catch (emailError) {
-          console.error('Goal creation error:', emailError);
+          logger.error('Goal creation error:', emailError);
           toast.warning("Interview gepland, maar email kon niet worden verzonden");
         }
       }
@@ -270,7 +271,7 @@ END:VCALENDAR`;
       setLocationDetails("");
       setNotes("");
     } catch (error: any) {
-      console.error('Error scheduling interview:', error);
+      logger.error('Error scheduling interview:', error);
       toast.error(error.message || "Fout bij inplannen interview");
     } finally {
       setSending(false);
