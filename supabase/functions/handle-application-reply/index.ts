@@ -17,11 +17,144 @@ import {
   calculateContentHash,
   extractBasicTextFromPdf,
   type DocumentValidationResult,
+  // Phase 2a: Name cross-validation
+  fuzzyNameMatch,
+  type NameMatchResult,
+  type IdentityValidationResult,
 } from '../_shared/healthcare-mappings.ts';
 // Fase 1: Quick Wins - Modulaire detection & audit
 import { stripQuotedContent, detectSlotWithRegex, detectInterviewSlot, type SlotDetectionInput } from '../_shared/slot-detection.ts';
 import { classifyEmailIntent, shouldBypassCooldown } from '../_shared/intent-classifier.ts';
 import { checkIdempotency, markProcessingComplete, releaseLock, type ProcessingResult } from '../_shared/idempotency-guard.ts';
+
+// =====================================================
+// PHASE 2A: AI VISION NAME EXTRACTION FROM DOCUMENTS
+// =====================================================
+
+/**
+ * Extracts the name from a document using AI Vision (Gemini 2.5 Flash)
+ * Works with VOG, Diploma, and Certificate documents
+ */
+async function extractNameFromDocumentVision(
+  pdfBase64: string,
+  documentType: 'vog' | 'diploma' | 'certificate' | 'cv' | 'id' | 'other',
+  lovableApiKey: string
+): Promise<{ name: string | null; confidence: number; error?: string }> {
+  // Build specific prompt based on document type
+  let extractionPrompt: string;
+  
+  switch (documentType) {
+    case 'vog':
+      extractionPrompt = `This is a Dutch "Verklaring Omtrent het Gedrag" (VOG) - Certificate of Good Conduct.
+Extract the FULL NAME of the person for whom this VOG was issued.
+
+Look for:
+- "Betrokkene" or "Subject" section
+- Name fields like "Naam:", "Geslachtsnaam:", "Voornamen:"
+- The name is typically a Dutch name with possible particles like "van", "de", "van der"
+
+Return ONLY the full name, nothing else. If you cannot extract the name with confidence, return "NOT_FOUND".`;
+      break;
+      
+    case 'diploma':
+    case 'certificate':
+      extractionPrompt = `This is a Dutch diploma or educational certificate.
+Extract the FULL NAME of the person to whom this diploma/certificate was issued.
+
+Look for:
+- Graduation name or "uitgereikt aan" (issued to)
+- Student name fields
+- Name at the top or in the main body
+
+Return ONLY the full name, nothing else. If you cannot extract the name with confidence, return "NOT_FOUND".`;
+      break;
+      
+    case 'id':
+      extractionPrompt = `This is an identity document.
+Extract the FULL NAME of the person shown on this document.
+
+Look for surname and given names fields.
+
+Return ONLY the full name (given names + surname), nothing else. If you cannot extract the name with confidence, return "NOT_FOUND".`;
+      break;
+      
+    default:
+      extractionPrompt = `Extract the FULL NAME of the primary person mentioned in this document.
+Return ONLY the full name, nothing else. If you cannot extract a clear name, return "NOT_FOUND".`;
+  }
+
+  try {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${lovableApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: extractionPrompt,
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:application/pdf;base64,${pdfBase64}`,
+                },
+              },
+            ],
+          },
+        ],
+        max_tokens: 100,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ AI Vision API error: ${response.status} - ${errorText}`);
+      return { name: null, confidence: 0, error: `API error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    const extractedText = data.choices?.[0]?.message?.content?.trim() || '';
+    
+    console.log(`🔍 AI Vision extracted text: "${extractedText}"`);
+    
+    // Check if extraction failed
+    if (!extractedText || extractedText === 'NOT_FOUND' || extractedText.length < 2) {
+      return { name: null, confidence: 0, error: 'Name not found in document' };
+    }
+    
+    // Clean up the extracted name
+    const cleanedName = extractedText
+      .replace(/^(naam:|name:|betrokkene:|uitgereikt aan:)/i, '')
+      .replace(/\n/g, ' ')
+      .trim();
+    
+    // Basic validation: should look like a name (2-100 chars, contains letters)
+    if (cleanedName.length < 2 || cleanedName.length > 100 || !/[a-zA-Z]/.test(cleanedName)) {
+      return { name: null, confidence: 0, error: 'Extracted text does not appear to be a valid name' };
+    }
+    
+    // Estimate confidence based on document type and extraction quality
+    let confidence = 0.85; // Base confidence for successful extraction
+    
+    // Lower confidence if name seems unusual
+    if (cleanedName.split(' ').length === 1) confidence -= 0.15; // Single word names less confident
+    if (cleanedName.length < 5) confidence -= 0.10; // Very short names
+    if (/\d/.test(cleanedName)) confidence -= 0.20; // Contains numbers
+    
+    return { name: cleanedName, confidence: Math.max(0.3, confidence) };
+    
+  } catch (error) {
+    console.error(`❌ AI Vision extraction error:`, error);
+    return { name: null, confidence: 0, error: `Exception: ${error instanceof Error ? error.message : 'Unknown'}` };
+  }
+}
 
 interface AttachmentData {
   id?: string; // Resend attachment ID for fetching via API
@@ -1367,10 +1500,137 @@ Return JSON in dit formaat:
             console.error(`❌ Failed to calculate content hash:`, hashError);
           }
           
+          // =====================================================
+          // PHASE 2A: NAME CROSS-VALIDATION
+          // Uses AI Vision to extract name from document and
+          // compares with applicant name using fuzzy matching
+          // =====================================================
+          let identityValidation: IdentityValidationResult | undefined;
+          
+          // Only validate VOG, diploma, certificate, ID documents
+          const shouldValidateIdentity = ['vog', 'diploma', 'certificate', 'id'].includes(documentType);
+          
+          if (shouldValidateIdentity && isPdfFile && isValidPdf(fileBuffer)) {
+            console.log(`🔍 PHASE 2A: Starting name cross-validation for ${documentType} document...`);
+            
+            // Get applicant name from extracted_data
+            const applicantName = (application.extracted_data as any)?.naam || 
+                                 (application.extracted_data as any)?.full_name ||
+                                 (application.extracted_data as any)?.name ||
+                                 '';
+            
+            console.log(`👤 Applicant name from extracted_data: "${applicantName}"`);
+            
+            if (applicantName) {
+              try {
+                // Extract name from document using AI Vision
+                const nameExtraction = await extractNameFromDocumentVision(
+                  attachment.content,
+                  documentType,
+                  lovableApiKey
+                );
+                
+                console.log(`📄 AI Vision extraction result:`, {
+                  name: nameExtraction.name,
+                  confidence: nameExtraction.confidence,
+                  error: nameExtraction.error,
+                });
+                
+                // Perform fuzzy name matching
+                const nameMatch = fuzzyNameMatch(nameExtraction.name, applicantName);
+                
+                console.log(`🔍 Name match result:`, {
+                  score: nameMatch.score,
+                  matchType: nameMatch.matchType,
+                  details: nameMatch.details,
+                });
+                
+                // Build identity validation result
+                identityValidation = {
+                  document_name: nameExtraction.name,
+                  applicant_name: applicantName,
+                  match_score: nameMatch.score,
+                  match_type: nameMatch.matchType,
+                  confidence: nameExtraction.confidence,
+                  validated_at: new Date().toISOString(),
+                  ai_model: 'google/gemini-2.5-flash',
+                  extraction_method: nameExtraction.name ? 'ai_vision' : 'not_attempted',
+                };
+                
+                // Apply validation logic based on match score
+                if (nameMatch.matchType === 'not_extractable') {
+                  // Name couldn't be extracted - flag for review
+                  validationFlags.push('name_extraction_failed');
+                  console.log(`⚠️ Could not extract name from ${documentType} document - flagged for review`);
+                  requiresManualReview = true;
+                } else if (nameMatch.score >= 85) {
+                  // High match - accept
+                  console.log(`✅ Name match ACCEPTED (score: ${nameMatch.score}, type: ${nameMatch.matchType})`);
+                } else if (nameMatch.score >= 50) {
+                  // Partial match - accept with warning
+                  validationFlags.push('name_partial_match');
+                  console.log(`⚠️ Name partial match (score: ${nameMatch.score}) - accepted with warning`);
+                  // Don't set requiresManualReview for partial matches - just flag
+                } else {
+                  // Low match - MISMATCH - critical security issue
+                  validationFlags.push('name_identity_mismatch');
+                  console.warn(`🚨 NAME MISMATCH DETECTED!`);
+                  console.warn(`   Document name: "${nameExtraction.name}"`);
+                  console.warn(`   Applicant name: "${applicantName}"`);
+                  console.warn(`   Match score: ${nameMatch.score}`);
+                  requiresManualReview = true;
+                  
+                  // For VOG documents, this is especially critical
+                  if (documentType === 'vog') {
+                    // Log high-severity alert
+                    await supabase.from('system_events').insert({
+                      event_type: 'security_alert',
+                      severity: 'high',
+                      source: 'handle-application-reply',
+                      org_id: application.org_id,
+                      title: '🚨 VOG Identity Mismatch Detected',
+                      description: `VOG document name "${nameExtraction.name}" does not match applicant "${applicantName}" (score: ${nameMatch.score})`,
+                      metadata: {
+                        application_id: applicationId,
+                        document_filename: attachment.filename,
+                        document_name: nameExtraction.name,
+                        applicant_name: applicantName,
+                        match_score: nameMatch.score,
+                        match_type: nameMatch.matchType,
+                        action_required: 'HR must verify document belongs to correct applicant',
+                      },
+                    });
+                    
+                    console.log(`📝 High-severity security alert logged for VOG identity mismatch`);
+                  }
+                }
+                
+              } catch (validationError) {
+                console.error(`❌ Name cross-validation failed:`, validationError);
+                validationFlags.push('name_validation_error');
+                identityValidation = {
+                  document_name: null,
+                  applicant_name: applicantName,
+                  match_score: 0,
+                  match_type: 'not_extractable',
+                  confidence: 0,
+                  validated_at: new Date().toISOString(),
+                  extraction_method: 'not_attempted',
+                };
+              }
+            } else {
+              console.log(`⚠️ No applicant name available for cross-validation`);
+              validationFlags.push('applicant_name_missing');
+            }
+          }
+          
           // Log validation result
           console.log(`📋 Validation result for ${attachment.filename}:`);
           console.log(`   Flags: ${validationFlags.length > 0 ? validationFlags.join(', ') : 'none'}`);
           console.log(`   Requires review: ${requiresManualReview}`);
+          if (identityValidation) {
+            console.log(`   Identity validation: score=${identityValidation.match_score}, type=${identityValidation.match_type}`);
+          }
           
           // Upload to Storage (always upload, even if flagged - for HR review)
           const { error: uploadError } = await supabase.storage
@@ -1473,6 +1733,8 @@ Return JSON in dit formaat:
                 requires_manual_review: requiresManualReview,
                 content_validation: contentValidationResult,
                 duplicate_info: duplicateInfo,
+                // Phase 2a: Identity validation data
+                identity_validation: identityValidation,
                 validated_at: new Date().toISOString(),
               }
             });
