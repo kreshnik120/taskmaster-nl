@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { useState } from "react";
+import { logger } from "@/lib/logger";
 
 export function SystemHealthDashboard() {
   const { toast } = useToast();
@@ -148,7 +149,7 @@ export function SystemHealthDashboard() {
       }, 2000);
       
     } catch (error: any) {
-      console.error('Backfill start error:', error);
+      logger.error('Backfill start error:', error);
       toast({
         title: "Fout bij starten backfill",
         description: error.message || 'Er is iets misgegaan',
@@ -192,7 +193,7 @@ export function SystemHealthDashboard() {
       }, 1000);
       
     } catch (error: any) {
-      console.error('Stop backfill error:', error);
+      logger.error('Stop backfill error:', error);
       toast({
         title: "Fout bij stoppen",
         description: error.message || 'Er is iets misgegaan',
@@ -238,7 +239,7 @@ export function SystemHealthDashboard() {
       }, 2000);
       
     } catch (error: any) {
-      console.error('Force restart error:', error);
+      logger.error('Force restart error:', error);
       toast({
         title: "Fout bij force restart",
         description: error.message || 'Er is iets misgegaan',
@@ -327,7 +328,7 @@ export function SystemHealthDashboard() {
 
       queryClient.invalidateQueries({ queryKey: ['validation-stats'] });
     } catch (error: any) {
-      console.error('Error triggering auto-validate:', error);
+      logger.error('Error triggering auto-validate:', error);
       toast({
         title: "Error",
         description: error.message || "Kon auto-validatie niet starten",
@@ -364,7 +365,7 @@ export function SystemHealthDashboard() {
 
       queryClient.invalidateQueries({ queryKey: ['ai-knowledge-stats'] });
     } catch (error: any) {
-      console.error('Error triggering meta-orchestrator:', error);
+      logger.error('Error triggering meta-orchestrator:', error);
       toast({
         title: "Error",
         description: error.message || "Kon categorieën update niet starten",
@@ -396,7 +397,7 @@ export function SystemHealthDashboard() {
         return;
       }
 
-      console.log(`🔄 Starting chunked validation: ${totalUnverified} items`);
+      logger.log(`🔄 Starting chunked validation: ${totalUnverified} items`);
 
       toast({
         title: "Bulk Validatie Gestart",
@@ -410,7 +411,7 @@ export function SystemHealthDashboard() {
       let totalValidated = 0;
 
       for (let i = 0; i < totalChunks; i++) {
-        console.log(`📦 Processing chunk ${i + 1}/${totalChunks}...`);
+        logger.log(`📦 Processing chunk ${i + 1}/${totalChunks}...`);
         
         // Call edge function for this chunk
         const { data, error } = await supabase.functions.invoke(
@@ -424,7 +425,7 @@ export function SystemHealthDashboard() {
         );
 
         if (error) {
-          console.error(`❌ Chunk ${i + 1} failed:`, error);
+          logger.error(`❌ Chunk ${i + 1} failed:`, error);
           toast({
             title: 'Chunk fout',
             description: `Chunk ${i + 1}/${totalChunks} mislukt. Al ${totalValidated} items gevalideerd.`,
@@ -478,7 +479,7 @@ export function SystemHealthDashboard() {
       queryClient.invalidateQueries({ queryKey: ['validation-stats'] });
 
     } catch (error: any) {
-      console.error('Bulk validate error:', error);
+      logger.error('Bulk validate error:', error);
       toast({
         title: 'Fout',
         description: error instanceof Error ? error.message : 'Onbekende fout tijdens bulk validatie',

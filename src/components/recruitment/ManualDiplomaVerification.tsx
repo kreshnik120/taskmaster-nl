@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ExternalLink, CheckCircle2, XCircle, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 
 interface ManualDiplomaVerificationProps {
   applicationId: string;
@@ -43,7 +44,7 @@ export function ManualDiplomaVerification({
       );
       onStatusUpdate?.();
     } catch (error) {
-      console.error('Manual verification error:', error);
+      logger.error('Manual verification error:', error);
       toast.error('Fout bij opslaan van verificatie');
     } finally {
       setIsVerifying(false);

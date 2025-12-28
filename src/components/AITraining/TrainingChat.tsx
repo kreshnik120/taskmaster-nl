@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Send, Loader2, FileText, CheckCircle2, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { logger } from "@/lib/logger";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
@@ -89,7 +90,7 @@ export const TrainingChat = () => {
 
       // 🔄 Trigger embedding generation voor nieuwe knowledge items
       if (data.knowledgeIds && Array.isArray(data.knowledgeIds) && data.knowledgeIds.length > 0) {
-        console.log(`🔄 Generating embeddings for ${data.knowledgeIds.length} items...`);
+        logger.log(`🔄 Generating embeddings for ${data.knowledgeIds.length} items...`);
         setCurrentStatus(`Embeddings genereren (${data.knowledgeIds.length} items)...`);
         
         // Parallel embedding generation (max 5 concurrent)
@@ -108,13 +109,13 @@ export const TrainingChat = () => {
                 });
                 
                 if (error) {
-                  console.error(`❌ Embedding failed for ${knowledgeId}:`, error);
+                  logger.error(`❌ Embedding failed for ${knowledgeId}:`, error);
                   throw error;
                 } else {
-                  console.log(`✅ Embedding voor ${knowledgeId} gegenereerd`);
+                  logger.log(`✅ Embedding voor ${knowledgeId} gegenereerd`);
                 }
               } catch (err) {
-                console.error(`❌ Embedding error for ${knowledgeId}:`, err);
+                logger.error(`❌ Embedding error for ${knowledgeId}:`, err);
                 throw err;
               }
             })
@@ -166,7 +167,7 @@ export const TrainingChat = () => {
         setTimeout(() => setCurrentStatus(""), 3000);
       }
     } catch (error: any) {
-      console.error("Training chat error:", error);
+      logger.error("Training chat error:", error);
       setCurrentStatus("");
       toast({
         title: "❌ Fout bij training chat",
@@ -216,7 +217,7 @@ export const TrainingChat = () => {
         });
 
         if (error) {
-          console.error(`Chunk ${i + 1} error:`, error);
+          logger.error(`Chunk ${i + 1} error:`, error);
         } else if (data.savedCount) {
           totalSaved += data.savedCount;
           
@@ -229,7 +230,7 @@ export const TrainingChat = () => {
 
           // 🔄 Trigger embedding generation voor chunk knowledge items
           if (data.knowledgeIds && Array.isArray(data.knowledgeIds) && data.knowledgeIds.length > 0) {
-            console.log(`🔄 Chunk ${i + 1}: Generating ${data.knowledgeIds.length} embeddings...`);
+            logger.log(`🔄 Chunk ${i + 1}: Generating ${data.knowledgeIds.length} embeddings...`);
             
             // Parallel embedding generation (max 5 concurrent)
             const batchSize = 5;
@@ -244,12 +245,12 @@ export const TrainingChat = () => {
                     });
                     
                     if (error) {
-                      console.error(`❌ Embedding failed for ${knowledgeId}:`, error);
+                      logger.error(`❌ Embedding failed for ${knowledgeId}:`, error);
                     } else {
-                      console.log(`✅ Embedding voor ${knowledgeId} gegenereerd`);
+                      logger.log(`✅ Embedding voor ${knowledgeId} gegenereerd`);
                     }
                   } catch (err) {
-                    console.error(`❌ Embedding error for ${knowledgeId}:`, err);
+                    logger.error(`❌ Embedding error for ${knowledgeId}:`, err);
                   }
                 })
               );
@@ -294,7 +295,7 @@ export const TrainingChat = () => {
       setShowSuccessDialog(true);
       setTimeout(() => setCurrentStatus(""), 3000);
     } catch (error: any) {
-      console.error("Batch processing error:", error);
+      logger.error("Batch processing error:", error);
       setCurrentStatus("");
       toast({
         title: "❌ Fout bij verwerking",

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { X, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 
 interface Vacancy {
   id: string;
@@ -117,7 +118,7 @@ export function VacancyEditDialog({
       onOpenChange(false);
       onSuccess?.();
     } catch (error: any) {
-      console.error("Error updating vacancy:", error);
+      logger.error("Error updating vacancy:", error);
       toast.error("Fout bij bijwerken vacature");
     } finally {
       setLoading(false);

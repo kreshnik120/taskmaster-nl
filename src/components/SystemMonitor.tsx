@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Clock, Database, TrendingUp } from "lucide-react";
+import { logger } from "@/lib/logger";
 
 interface CronJob {
   jobname: string;
@@ -41,7 +42,7 @@ export const SystemMonitor = () => {
       ]);
 
     } catch (error) {
-      console.error('Error loading monitoring data:', error);
+      logger.error('Error loading monitoring data:', error);
     } finally {
       setLoading(false);
     }

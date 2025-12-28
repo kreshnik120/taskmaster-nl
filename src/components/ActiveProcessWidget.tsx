@@ -6,6 +6,7 @@ import { format, parseISO, isPast, differenceInDays } from "date-fns";
 import { nl } from "date-fns/locale";
 import { ProcessTimeline } from "./ProcessTimeline";
 import { useToast } from "@/hooks/use-toast";
+import { logger } from "@/lib/logger";
 
 interface Subtask {
   id: string;
@@ -78,7 +79,7 @@ export function ActiveProcessWidget() {
       if (error) throw error;
       setActiveSubtasks(data || []);
     } catch (error) {
-      console.error('Error loading active subtasks:', error);
+      logger.error('Error loading active subtasks:', error);
     } finally {
       setLoading(false);
     }
@@ -98,7 +99,7 @@ export function ActiveProcessWidget() {
         description: "Processtap is afgerond"
       });
     } catch (error) {
-      console.error('Error completing step:', error);
+      logger.error('Error completing step:', error);
       toast({
         title: "Fout",
         description: "Kon stap niet voltooien",
@@ -121,7 +122,7 @@ export function ActiveProcessWidget() {
         description: "Processtap is overgeslagen"
       });
     } catch (error) {
-      console.error('Error skipping step:', error);
+      logger.error('Error skipping step:', error);
       toast({
         title: "Fout",
         description: "Kon stap niet overslaan",

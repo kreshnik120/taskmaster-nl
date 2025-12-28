@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect } from "react";
 import { LEARNING_FUNCTIONS } from "@/lib/constants/learningFunctions";
+import { logger } from "@/lib/logger";
 
 export interface EdgeFunctionStatus {
   name: string;
@@ -54,7 +55,7 @@ async function fetchEdgeFunctionStatus(): Promise<EdgeFunctionStatus[]> {
     .limit(1000);
 
   if (error) {
-    console.warn('Could not fetch function logs:', error.message);
+    logger.warn('Could not fetch function logs:', error.message);
   }
 
   return LEARNING_FUNCTIONS.map(fn => {

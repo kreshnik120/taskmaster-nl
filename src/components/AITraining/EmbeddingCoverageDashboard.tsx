@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, Clock, AlertCircle, TrendingUp, Database, Zap, Activity, Play, RefreshCw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 import { CATEGORY_GROUPS, getCoverageColor, getCoverageIcon } from "@/lib/constants/knowledgeCategoryHierarchy";
 
 interface CategoryCoverage {
@@ -175,7 +176,7 @@ export const EmbeddingCoverageDashboard = () => {
       toast.success('High-priority embedding gestart');
       refetch();
     } catch (error) {
-      console.error('Error triggering embedding:', error);
+      logger.error('Error triggering embedding:', error);
       toast.error('Kon embedding niet starten');
     } finally {
       setIsTriggering(false);
