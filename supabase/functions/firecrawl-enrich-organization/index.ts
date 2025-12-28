@@ -1,4 +1,5 @@
 import { corsHeaders, handleCors, jsonResponse, errorResponse, createAdminClient } from "../_shared/core.ts";
+import { isUrlAllowedForScraping } from "../_shared/healthcare-mappings.ts";
 
 interface EnrichRequest {
   organizationId?: string;
@@ -349,6 +350,19 @@ function extractQualityDescription(content: string): string | null {
  */
 async function scrapeUrl(apiKey: string, url: string, timeout = 30000): Promise<{ markdown: string; html: string } | null> {
   try {
+    // === SSRF PROTECTION ===
+    const urlValidation = isUrlAllowedForScraping(url, { 
+      allowAnyDutchDomain: true,
+      strictMode: false 
+    });
+
+    if (!urlValidation.allowed) {
+      console.warn(`🚫 SSRF Protection in enrichment: Blocked ${url} - ${urlValidation.reason}`);
+      return null;
+    }
+
+    const safeUrl = urlValidation.sanitizedUrl || url;
+    
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     
@@ -359,7 +373,7 @@ async function scrapeUrl(apiKey: string, url: string, timeout = 30000): Promise<
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        url,
+        url: safeUrl,
         formats: ['markdown', 'html'],
         onlyMainContent: false,
         waitFor: 2000,

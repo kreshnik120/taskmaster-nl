@@ -1584,3 +1584,251 @@ export function validateAIOutput(
     sanitizedOutput: violations.length > 0 ? sanitizedOutput : undefined,
   };
 }
+
+// =============================================================================
+// SSRF PROTECTION - URL WHITELIST FOR FIRECRAWL
+// =============================================================================
+
+/**
+ * IP patterns that should be blocked (private networks, localhost, cloud metadata)
+ */
+const BLOCKED_IP_PATTERNS: RegExp[] = [
+  /^10\./,                            // Private 10.0.0.0/8
+  /^172\.(1[6-9]|2[0-9]|3[01])\./,    // Private 172.16.0.0/12
+  /^192\.168\./,                      // Private 192.168.0.0/16
+  /^127\./,                           // Localhost 127.0.0.0/8
+  /^169\.254\./,                      // Link-local / AWS metadata
+  /^0\./,                             // Reserved 0.0.0.0/8
+  /^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./, // Carrier-grade NAT
+  /^198\.51\.100\./,                  // TEST-NET-2
+  /^203\.0\.113\./,                   // TEST-NET-3
+  /^::1$/,                            // IPv6 localhost
+  /^fc00:/i,                          // IPv6 unique local
+  /^fe80:/i,                          // IPv6 link-local
+];
+
+/**
+ * Blocked hostnames
+ */
+const BLOCKED_HOSTNAMES: string[] = [
+  'localhost',
+  'metadata.google.internal',
+  'metadata.goog',
+  'instance-data',
+  '169.254.169.254',
+];
+
+/**
+ * Allowed TLDs for scraping (focused on Netherlands and common business domains)
+ */
+const ALLOWED_TLDS: string[] = [
+  '.nl',   // Netherlands
+  '.com',  // Commercial
+  '.org',  // Organizations
+  '.eu',   // European Union
+  '.be',   // Belgium
+  '.de',   // Germany
+  '.net',  // Network
+  '.info', // Information
+];
+
+/**
+ * Explicitly whitelisted domains (healthcare organizations, recruitment platforms)
+ */
+const WHITELISTED_DOMAINS: string[] = [
+  // Nederlandse zorgorganisaties
+  'sheerenloo.nl',
+  'pluryn.nl',
+  'propersona.nl',
+  'amarant.nl',
+  'legerdesheils.nl',
+  'humanitas.nl',
+  'lunetzorg.nl',
+  'siza.nl',
+  'philadelphia.nl',
+  'cordaan.nl',
+  'abrona.nl',
+  'middin.nl',
+  'reinaerde.nl',
+  'trajectum.nl',
+  'prismanet.nl',
+  'swzzorg.nl',
+  'fokuswonen.nl',
+  'dedriestroom.nl',
+  'cello.nl',
+  'dichterbij.nl',
+  'onstweedethuis.nl',
+  'gemiva-svg.nl',
+  'esdege-reigersdaal.nl',
+  // Recruitment platforms
+  'linkedin.com',
+  'indeed.nl',
+  'indeed.com',
+  'werkzoeken.nl',
+  'nationalevacaturebank.nl',
+  'monsterboard.nl',
+  // Government
+  'rijksoverheid.nl',
+  'kvk.nl',
+  'overheid.nl',
+];
+
+/**
+ * Domain patterns that are always allowed (regex patterns)
+ */
+const ALLOWED_DOMAIN_PATTERNS: RegExp[] = [
+  /.*zorg\.nl$/i,        // Any *zorg.nl domain
+  /.*care\.nl$/i,        // Any *care.nl domain
+  /.*stichting\.nl$/i,   // Any *stichting.nl domain
+  /.*gezondheid\.nl$/i,  // Any *gezondheid.nl domain
+];
+
+/**
+ * Result of URL validation for SSRF protection
+ */
+export interface UrlValidationResult {
+  allowed: boolean;
+  reason?: string;
+  sanitizedUrl?: string;
+}
+
+/**
+ * Validates a URL for SSRF protection before scraping
+ * Blocks private IPs, localhost, cloud metadata, and non-whitelisted domains
+ */
+export function isUrlAllowedForScraping(
+  url: string,
+  options?: { 
+    allowAnyDutchDomain?: boolean;
+    strictMode?: boolean;
+  }
+): UrlValidationResult {
+  if (!url || typeof url !== 'string') {
+    return { allowed: false, reason: 'URL is required' };
+  }
+
+  try {
+    // Normalize URL
+    let normalizedUrl = url.trim();
+    if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+      normalizedUrl = `https://${normalizedUrl}`;
+    }
+
+    const parsedUrl = new URL(normalizedUrl);
+    const hostname = parsedUrl.hostname.toLowerCase();
+    const protocol = parsedUrl.protocol.toLowerCase();
+
+    // 1. Block non-HTTP(S) protocols
+    if (protocol !== 'http:' && protocol !== 'https:') {
+      return { 
+        allowed: false, 
+        reason: `Protocol not allowed: ${protocol}. Only HTTP(S) is permitted.` 
+      };
+    }
+
+    // 2. Block localhost and blocked hostnames
+    for (const blocked of BLOCKED_HOSTNAMES) {
+      if (hostname === blocked || hostname.endsWith(`.${blocked}`)) {
+        return { 
+          allowed: false, 
+          reason: `Blocked hostname: ${hostname}` 
+        };
+      }
+    }
+
+    // 3. Block private/internal IP ranges
+    for (const pattern of BLOCKED_IP_PATTERNS) {
+      if (pattern.test(hostname)) {
+        return { 
+          allowed: false, 
+          reason: `Private/internal IP not allowed: ${hostname}` 
+        };
+      }
+    }
+
+    // 4. Check if it looks like an IP address (not a domain name)
+    const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (ipv4Pattern.test(hostname)) {
+      // Only allow if it's not in any blocked range (double-check)
+      const octets = hostname.split('.').map(Number);
+      if (octets[0] === 10 || 
+          (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+          (octets[0] === 192 && octets[1] === 168) ||
+          octets[0] === 127 ||
+          octets[0] === 169) {
+        return { 
+          allowed: false, 
+          reason: `IP address not allowed for security reasons: ${hostname}` 
+        };
+      }
+      // In strict mode, block all IP addresses
+      if (options?.strictMode) {
+        return { 
+          allowed: false, 
+          reason: `Direct IP addresses not allowed in strict mode: ${hostname}` 
+        };
+      }
+    }
+
+    // 5. Check explicitly whitelisted domains
+    for (const domain of WHITELISTED_DOMAINS) {
+      if (hostname === domain || hostname.endsWith(`.${domain}`)) {
+        return { 
+          allowed: true, 
+          sanitizedUrl: normalizedUrl 
+        };
+      }
+    }
+
+    // 6. Check allowed domain patterns
+    for (const pattern of ALLOWED_DOMAIN_PATTERNS) {
+      if (pattern.test(hostname)) {
+        return { 
+          allowed: true, 
+          sanitizedUrl: normalizedUrl 
+        };
+      }
+    }
+
+    // 7. Check allowed TLDs
+    const hasAllowedTld = ALLOWED_TLDS.some(tld => hostname.endsWith(tld));
+    if (hasAllowedTld) {
+      // Allow any .nl domain by default (Dutch focus)
+      if (hostname.endsWith('.nl') || options?.allowAnyDutchDomain) {
+        return { 
+          allowed: true, 
+          sanitizedUrl: normalizedUrl 
+        };
+      }
+      
+      // For other TLDs in non-strict mode, allow
+      if (!options?.strictMode) {
+        return { 
+          allowed: true, 
+          sanitizedUrl: normalizedUrl 
+        };
+      }
+    }
+
+    // 8. Block everything else in strict mode
+    if (options?.strictMode) {
+      return { 
+        allowed: false, 
+        reason: `Domain not in whitelist: ${hostname}` 
+      };
+    }
+
+    // Default: allow with warning (non-strict mode)
+    return { 
+      allowed: true, 
+      sanitizedUrl: normalizedUrl,
+      reason: `Domain allowed but not explicitly whitelisted: ${hostname}`
+    };
+
+  } catch (error) {
+    return { 
+      allowed: false, 
+      reason: `Invalid URL format: ${error instanceof Error ? error.message : 'Unknown error'}` 
+    };
+  }
+}
