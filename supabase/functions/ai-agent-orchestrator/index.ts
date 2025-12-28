@@ -1,5 +1,11 @@
 import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
-
+import { 
+  isValidEmailFormat, 
+  sanitizeCandidateName, 
+  isTerminalPipelineStage,
+  validatePreActionRequirements,
+  type PreActionValidationResult 
+} from '../_shared/healthcare-mappings.ts';
 interface AgentGoal {
   id: string;
   org_id: string;
@@ -906,6 +912,147 @@ async function planAndQueueGoal(supabase: any, goal: AgentGoal) {
     }
   }
 
+  // =====================================================
+  // PHASE 2B: PRE-PLANNING VALIDATION
+  // Validates application state and email before planning
+  // =====================================================
+  const applicationId = goal.input_data.application_id;
+  const candidateEmail = goal.input_data.candidate_email || goal.input_data.email;
+  
+  // Check if this goal type requires email sending
+  const emailGoalTypes = [
+    'send_welcome_and_intake',
+    'application_intake_completion',
+    'send_reply_response',
+    'schedule_interview',
+    'send_interview_email',
+    'request_documents',
+    'professional_document_collection',
+    'send_general_email',
+    'request_additional_diploma',
+    'emrex_diploma_verification',
+    'send_vog_rejection',
+  ];
+  
+  if (emailGoalTypes.includes(goal.goal_type)) {
+    console.log(`🔒 [Phase 2B] Validating pre-planning requirements for ${goal.goal_type}...`);
+    
+    // 1. Validate email format
+    if (!isValidEmailFormat(candidateEmail)) {
+      console.error(`❌ [Phase 2B] BLOCKED: Invalid email format: ${candidateEmail}`);
+      
+      // Log security event
+      await supabase.from('system_events').insert({
+        event_type: 'security_block',
+        severity: 'high',
+        source: 'ai-agent-orchestrator',
+        org_id: goal.org_id,
+        title: '🛡️ Goal Blocked: Invalid Email Format',
+        description: `Goal ${goal.goal_type} blocked due to invalid email format: "${candidateEmail}"`,
+        metadata: {
+          goal_id: goal.id,
+          goal_type: goal.goal_type,
+          invalid_email: candidateEmail,
+          application_id: applicationId,
+          blocked_at: new Date().toISOString(),
+        },
+      });
+      
+      throw new Error(`Invalid email format: ${candidateEmail}`);
+    }
+    
+    // 2. Check application state if application_id is present
+    if (applicationId) {
+      const { data: application, error: appError } = await supabase
+        .from('professional_applications')
+        .select('id, email, pipeline_stage, extracted_data')
+        .eq('id', applicationId)
+        .single();
+      
+      if (appError || !application) {
+        console.error(`❌ [Phase 2B] Application ${applicationId} not found`);
+        throw new Error(`Application not found: ${applicationId}`);
+      }
+      
+      // 3. Check if application is in terminal state
+      if (isTerminalPipelineStage(application.pipeline_stage)) {
+        console.warn(`⚠️ [Phase 2B] BLOCKED: Application in terminal stage: ${application.pipeline_stage}`);
+        
+        // Log as warning, not error - this is expected for rejected/placed candidates
+        await supabase.from('system_events').insert({
+          event_type: 'goal_blocked',
+          severity: 'low',
+          source: 'ai-agent-orchestrator',
+          org_id: goal.org_id,
+          title: '🛑 Goal Blocked: Application in Terminal State',
+          description: `Goal ${goal.goal_type} skipped - application in ${application.pipeline_stage} stage`,
+          metadata: {
+            goal_id: goal.id,
+            goal_type: goal.goal_type,
+            application_id: applicationId,
+            pipeline_stage: application.pipeline_stage,
+            blocked_at: new Date().toISOString(),
+          },
+        });
+        
+        // Mark goal as skipped instead of failed
+        await supabase
+          .from('agent_goals')
+          .update({ 
+            status: 'skipped',
+            output_data: { 
+              reason: `Application in terminal stage: ${application.pipeline_stage}`,
+              blocked_at: new Date().toISOString()
+            }
+          })
+          .eq('id', goal.id);
+        
+        return { goal_id: goal.id, actions_created: 0, skipped: true, reason: `Application in terminal stage` };
+      }
+      
+      // 4. Run full pre-action validation
+      const validation = validatePreActionRequirements(application, goal.goal_type);
+      
+      if (!validation.valid) {
+        console.error(`❌ [Phase 2B] Pre-action validation failed:`, validation.errors);
+        
+        await supabase.from('system_events').insert({
+          event_type: 'validation_failed',
+          severity: 'medium',
+          source: 'ai-agent-orchestrator',
+          org_id: goal.org_id,
+          title: '⚠️ Goal Blocked: Validation Failed',
+          description: `Goal ${goal.goal_type} blocked: ${validation.errors.join(', ')}`,
+          metadata: {
+            goal_id: goal.id,
+            goal_type: goal.goal_type,
+            application_id: applicationId,
+            validation_errors: validation.errors,
+            blocked_reason: validation.blocked_reason,
+          },
+        });
+        
+        throw new Error(`Pre-action validation failed: ${validation.errors.join(', ')}`);
+      }
+      
+      // Log warnings but continue
+      if (validation.warnings.length > 0) {
+        console.warn(`⚠️ [Phase 2B] Validation warnings:`, validation.warnings);
+      }
+    }
+    
+    // 5. Sanitize candidate name if present
+    if (goal.input_data.candidate_name) {
+      const sanitized = sanitizeCandidateName(goal.input_data.candidate_name);
+      if (sanitized !== goal.input_data.candidate_name) {
+        console.log(`🧹 [Phase 2B] Sanitized candidate name: "${goal.input_data.candidate_name}" → "${sanitized}"`);
+        goal.input_data.candidate_name = sanitized;
+      }
+    }
+    
+    console.log(`✅ [Phase 2B] Pre-planning validation passed for ${goal.goal_type}`);
+  }
+
   // Update goal status to planning
   await supabase
     .from('agent_goals')
@@ -1202,6 +1349,99 @@ async function executeTask(supabase: any, task: any) {
   }
 
   console.log(`📧 [Execute Task] Action type: ${action.action_type}`);
+
+  // =====================================================
+  // PHASE 2B: PRE-ACTION VALIDATION
+  // Validate email and application state before executing email actions
+  // =====================================================
+  const emailActionTypes = [
+    'send_welcome_and_intake',
+    'send_followup_question',
+    'request_interview_availability',
+    'send_interview_email',
+    'send_document_request',
+    'send_general_email',
+    'send_reminder',
+    'send_welcome',
+    'send_vog_rejection_email',
+    'send_emrex_invitation_email',
+    'send_emrex_reminder_email',
+    'send_rejection_email',
+  ];
+
+  if (emailActionTypes.includes(action.action_type)) {
+    const candidateEmail = action.input_data?.candidate_email || 
+                          action.input_data?.recipient_email ||
+                          action.input_data?.candidateEmail;
+    const applicationId = action.input_data?.application_id || action.input_data?.applicationId;
+    
+    // Validate email format
+    if (candidateEmail && !isValidEmailFormat(candidateEmail)) {
+      console.error(`❌ [Phase 2B] ACTION BLOCKED: Invalid email format: ${candidateEmail}`);
+      
+      await supabase.from('system_events').insert({
+        event_type: 'action_blocked',
+        severity: 'high',
+        source: 'ai-agent-orchestrator',
+        org_id: action.agent_goals?.org_id,
+        title: '🛡️ Email Action Blocked: Invalid Email',
+        description: `Action ${action.action_type} blocked - invalid email: "${candidateEmail}"`,
+        metadata: {
+          action_id: action.id,
+          action_type: action.action_type,
+          invalid_email: candidateEmail,
+          application_id: applicationId,
+        },
+      });
+      
+      throw new Error(`Action blocked: Invalid email format - ${candidateEmail}`);
+    }
+    
+    // Check application state if present
+    if (applicationId) {
+      const { data: app } = await supabase
+        .from('professional_applications')
+        .select('id, email, pipeline_stage, extracted_data')
+        .eq('id', applicationId)
+        .single();
+      
+      if (app && isTerminalPipelineStage(app.pipeline_stage)) {
+        console.warn(`⚠️ [Phase 2B] ACTION SKIPPED: Application ${applicationId} in terminal stage ${app.pipeline_stage}`);
+        
+        return {
+          executed_via: 'skipped',
+          reason: `Application in terminal stage: ${app.pipeline_stage}`,
+          skipped_at: new Date().toISOString(),
+        };
+      }
+      
+      // Run full validation
+      const validation = validatePreActionRequirements(app, action.action_type);
+      
+      if (!validation.valid) {
+        console.error(`❌ [Phase 2B] Pre-action validation failed:`, validation.errors);
+        throw new Error(`Pre-action validation failed: ${validation.errors.join(', ')}`);
+      }
+      
+      if (validation.warnings.length > 0) {
+        console.warn(`⚠️ [Phase 2B] Action warnings:`, validation.warnings);
+      }
+    }
+    
+    // Sanitize candidate name if present
+    const nameFields = ['candidate_name', 'recipient_name', 'candidateName'];
+    for (const field of nameFields) {
+      if (action.input_data?.[field]) {
+        const sanitized = sanitizeCandidateName(action.input_data[field]);
+        if (sanitized !== action.input_data[field]) {
+          console.log(`🧹 [Phase 2B] Sanitized ${field}: "${action.input_data[field]}" → "${sanitized}"`);
+          action.input_data[field] = sanitized;
+        }
+      }
+    }
+    
+    console.log(`✅ [Phase 2B] Pre-action validation passed for ${action.action_type}`);
+  }
 
   // Update action status
   await supabase
