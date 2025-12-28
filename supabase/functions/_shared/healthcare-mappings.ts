@@ -1094,3 +1094,493 @@ export function validatePreActionRequirements(
     blocked_reason: errors.length > 0 ? errors[0] : undefined,
   };
 }
+
+// ============================================
+// FASE 2C: AI HALLUCINATION DETECTION HELPERS
+// ============================================
+
+/**
+ * Validates BIG (Beroepen in de Individuele Gezondheidszorg) registration number
+ * BIG numbers are 11 digits with a checksum
+ */
+export function validateBIGNumber(bigNumber: string | null | undefined): {
+  valid: boolean;
+  reason?: string;
+  confidence_penalty: number;
+} {
+  if (!bigNumber) {
+    return { valid: true, confidence_penalty: 0 }; // Null is acceptable
+  }
+  
+  // Clean the input - remove spaces, dots, dashes
+  const cleaned = String(bigNumber).replace(/[\s.\-]/g, '');
+  
+  // BIG numbers must be exactly 11 digits (or 9-digit variant)
+  if (!/^\d{9,11}$/.test(cleaned)) {
+    return { 
+      valid: false, 
+      reason: 'BIG nummer moet 9-11 cijfers bevatten',
+      confidence_penalty: 0.9 // Severe penalty - likely hallucinated
+    };
+  }
+  
+  // Check for obvious fake patterns
+  const fakePatterns = [
+    /^0{9,11}$/,           // All zeros
+    /^1{9,11}$/,           // All ones
+    /^(\d)\1{8,10}$/,      // All same digit
+    /^12345678/,           // Sequential
+    /^98765432/,           // Reverse sequential
+    /^1234567890/,         // Test pattern
+  ];
+  
+  for (const pattern of fakePatterns) {
+    if (pattern.test(cleaned)) {
+      return {
+        valid: false,
+        reason: `BIG nummer lijkt een placeholder/test waarde: ${cleaned}`,
+        confidence_penalty: 1.0 // Full penalty - definitely fake
+      };
+    }
+  }
+  
+  // For 11-digit numbers, validate checksum (Modulus 11 check)
+  if (cleaned.length === 11) {
+    const weights = [9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1]; // Standard BIG weights
+    let sum = 0;
+    for (let i = 0; i < 11; i++) {
+      sum += parseInt(cleaned[i], 10) * weights[i];
+    }
+    
+    // Simple modulus check (not perfect but catches obvious fakes)
+    if (sum % 11 !== 0 && sum % 11 !== 1) {
+      // Don't fail but add uncertainty
+      return {
+        valid: true, // May still be valid - checksum algorithm varies
+        reason: 'BIG nummer checksum onzeker - handmatige verificatie aanbevolen',
+        confidence_penalty: 0.2
+      };
+    }
+  }
+  
+  return { valid: true, confidence_penalty: 0 };
+}
+
+/**
+ * Common placeholder/hallucination value patterns by field type
+ */
+const PLACEHOLDER_PATTERNS: Record<string, RegExp[]> = {
+  geboortedatum: [
+    /^1970-01-01$/,           // Unix epoch
+    /^2000-01-01$/,           // Y2K
+    /^1990-01-01$/,           // Round date
+    /^0000-00-00$/,           // Null date
+    /^1234-12-12$/,           // Pattern
+  ],
+  postcode: [
+    /^1234\s?AB$/i,           // Example format
+    /^0000\s?[A-Z]{2}$/i,     // Null postcode
+    /^1111\s?AA$/i,           // Repeated
+  ],
+  jaren_ervaring: [
+    /^99$/,                   // Unrealistic (99 years)
+    /^100$/,                  // Impossible
+    /^0$/,                    // If specified as 0, likely missing
+  ],
+  naam: [
+    /^test\s/i,               // Test name
+    /^voornaam\s/i,           // Placeholder label
+    /^naam\s/i,               // Generic
+    /^xxx/i,                  // Placeholder
+    /^N\.?V\.?T\.?$/i,        // "Niet van toepassing"
+    /^onbekend$/i,            // Unknown
+  ],
+};
+
+/**
+ * Detects if a value appears to be a placeholder or hallucinated
+ */
+export function isPlaceholderValue(
+  value: any, 
+  fieldType: string
+): boolean {
+  if (value === null || value === undefined) return false;
+  
+  const stringValue = String(value).trim();
+  if (!stringValue) return false;
+  
+  // Check field-specific patterns
+  const patterns = PLACEHOLDER_PATTERNS[fieldType];
+  if (patterns) {
+    for (const pattern of patterns) {
+      if (pattern.test(stringValue)) {
+        return true;
+      }
+    }
+  }
+  
+  // Check phone patterns (reuse existing)
+  if (fieldType === 'telefoon' || fieldType === 'telefoonnummer') {
+    return isPlaceholderPhone(stringValue);
+  }
+  
+  // Check email patterns
+  if (fieldType === 'email') {
+    return isPlaceholderEmail(stringValue);
+  }
+  
+  return false;
+}
+
+/**
+ * Validates extracted CV field values and returns validation result with confidence adjustments
+ */
+export interface FieldValidationResult {
+  valid: boolean;
+  reason?: string;
+  confidence_penalty: number;
+  value_override?: any; // Null if value should be removed
+}
+
+/**
+ * Validates a single extracted field value
+ */
+export function validateExtractedValue(
+  field: string, 
+  value: any
+): FieldValidationResult {
+  // Handle null/undefined - generally acceptable
+  if (value === null || value === undefined) {
+    return { valid: true, confidence_penalty: 0 };
+  }
+  
+  // Get the actual value (support nested { value, confidence } format)
+  const actualValue = typeof value === 'object' && 'value' in value 
+    ? value.value 
+    : value;
+  
+  if (actualValue === null || actualValue === undefined) {
+    return { valid: true, confidence_penalty: 0 };
+  }
+  
+  // Field-specific validations
+  switch (field.toLowerCase()) {
+    case 'big_nummer':
+    case 'bignummer':
+      return validateBIGNumber(actualValue);
+    
+    case 'jaren_ervaring':
+      const years = Number(actualValue);
+      if (isNaN(years) || years < 0) {
+        return { valid: false, reason: 'Jaren ervaring moet positief getal zijn', confidence_penalty: 0.8 };
+      }
+      if (years > 50) {
+        return { valid: false, reason: `Onrealistische jaren ervaring: ${years}`, confidence_penalty: 0.9, value_override: null };
+      }
+      if (years > 40) {
+        return { valid: true, reason: 'Hoge maar mogelijke jaren ervaring', confidence_penalty: 0.2 };
+      }
+      return { valid: true, confidence_penalty: 0 };
+    
+    case 'geboortedatum':
+      if (isPlaceholderValue(actualValue, 'geboortedatum')) {
+        return { valid: false, reason: 'Placeholder geboortedatum gedetecteerd', confidence_penalty: 1.0, value_override: null };
+      }
+      // Check realistic age range (18-80 for healthcare workers)
+      const birthDate = new Date(actualValue);
+      const age = (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+      if (age < 16 || age > 85) {
+        return { valid: false, reason: `Onrealistische leeftijd: ${Math.round(age)} jaar`, confidence_penalty: 0.8, value_override: null };
+      }
+      return { valid: true, confidence_penalty: 0 };
+    
+    case 'telefoon':
+    case 'telefoonnummer':
+      if (isPlaceholderPhone(String(actualValue))) {
+        return { valid: false, reason: 'Placeholder telefoonnummer', confidence_penalty: 1.0, value_override: null };
+      }
+      return { valid: true, confidence_penalty: 0 };
+    
+    case 'email':
+      if (isPlaceholderEmail(String(actualValue))) {
+        return { valid: false, reason: 'Placeholder email', confidence_penalty: 1.0, value_override: null };
+      }
+      if (!isValidEmailFormat(String(actualValue))) {
+        return { valid: false, reason: 'Ongeldig email formaat', confidence_penalty: 0.7 };
+      }
+      return { valid: true, confidence_penalty: 0 };
+    
+    case 'naam':
+      if (isPlaceholderValue(actualValue, 'naam')) {
+        return { valid: false, reason: 'Placeholder naam', confidence_penalty: 1.0, value_override: null };
+      }
+      // Name should be at least 2 characters and contain a space (full name)
+      const nameStr = String(actualValue).trim();
+      if (nameStr.length < 2) {
+        return { valid: false, reason: 'Naam te kort', confidence_penalty: 0.8, value_override: null };
+      }
+      return { valid: true, confidence_penalty: 0 };
+    
+    case 'postcode':
+      if (isPlaceholderValue(actualValue, 'postcode')) {
+        return { valid: false, reason: 'Placeholder postcode', confidence_penalty: 1.0, value_override: null };
+      }
+      // Dutch postcode format: 1234 AB
+      if (!/^\d{4}\s?[A-Z]{2}$/i.test(String(actualValue))) {
+        return { valid: true, reason: 'Ongebruikelijk postcode formaat', confidence_penalty: 0.3 };
+      }
+      return { valid: true, confidence_penalty: 0 };
+    
+    default:
+      // Check generic placeholder patterns
+      if (typeof actualValue === 'string' && isPlaceholderValue(actualValue, field)) {
+        return { valid: false, reason: `Placeholder waarde voor ${field}`, confidence_penalty: 0.8 };
+      }
+      return { valid: true, confidence_penalty: 0 };
+  }
+}
+
+/**
+ * Validates all critical fields in extracted CV data
+ * Returns validation results and adjusted global confidence
+ */
+export interface CVValidationResult {
+  fieldResults: Record<string, FieldValidationResult>;
+  hasHallucinationFlags: boolean;
+  adjustedConfidence: number;
+  warnings: string[];
+  nullifiedFields: string[];
+}
+
+export function validateAllExtractedFields(
+  extractedData: Record<string, any>
+): CVValidationResult {
+  const fieldResults: Record<string, FieldValidationResult> = {};
+  const warnings: string[] = [];
+  const nullifiedFields: string[] = [];
+  let totalPenalty = 0;
+  let fieldsChecked = 0;
+  let hasHallucinationFlags = false;
+  
+  // Critical fields to validate
+  const criticalFields = [
+    'naam', 'email', 'telefoon', 'telefoonnummer',
+    'geboortedatum', 'postcode', 'BIG_nummer', 
+    'jaren_ervaring', 'ervaring_sinds'
+  ];
+  
+  for (const field of criticalFields) {
+    const value = extractedData[field];
+    if (value === undefined) continue;
+    
+    const result = validateExtractedValue(field, value);
+    fieldResults[field] = result;
+    fieldsChecked++;
+    
+    if (!result.valid) {
+      warnings.push(`⚠️ ${field}: ${result.reason}`);
+      hasHallucinationFlags = true;
+      
+      if (result.value_override === null) {
+        nullifiedFields.push(field);
+      }
+    }
+    
+    totalPenalty += result.confidence_penalty;
+  }
+  
+  // Calculate adjusted confidence
+  const originalConfidence = extractedData.global_confidence || 0.5;
+  const averagePenalty = fieldsChecked > 0 ? totalPenalty / fieldsChecked : 0;
+  const adjustedConfidence = Math.max(0, originalConfidence - averagePenalty);
+  
+  return {
+    fieldResults,
+    hasHallucinationFlags,
+    adjustedConfidence,
+    warnings,
+    nullifiedFields,
+  };
+}
+
+// ============================================
+// FASE 2D: PROMPT INJECTION PROTECTION
+// ============================================
+
+/**
+ * Known prompt injection patterns to detect
+ */
+const PROMPT_INJECTION_PATTERNS: Array<{
+  pattern: RegExp;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  description: string;
+}> = [
+  // Critical: Direct instruction override
+  { pattern: /ignore.*(?:previous|all|above|prior).*instructions/i, severity: 'critical', description: 'Instruction override attempt' },
+  { pattern: /negeer.*(?:vorige|alle|bovenstaande).*instructies/i, severity: 'critical', description: 'Dutch instruction override' },
+  { pattern: /vergeet.*alles.*(?:hierboven|wat je)/i, severity: 'critical', description: 'Memory wipe attempt' },
+  { pattern: /je.*bent.*nu.*een.*(?:ander|nieuwe)/i, severity: 'critical', description: 'Role reassignment' },
+  { pattern: /system.*prompt.*(?:override|ignore|bypass)/i, severity: 'critical', description: 'System prompt manipulation' },
+  
+  // Critical: Token injection (OpenAI/Anthropic style)
+  { pattern: /<\|im_start\|>/i, severity: 'critical', description: 'ChatML injection' },
+  { pattern: /<\|im_end\|>/i, severity: 'critical', description: 'ChatML injection' },
+  { pattern: /\[INST\]/i, severity: 'critical', description: 'Llama instruction injection' },
+  { pattern: /\[\/INST\]/i, severity: 'critical', description: 'Llama instruction injection' },
+  { pattern: /```system/i, severity: 'critical', description: 'System block injection' },
+  { pattern: /\[SYSTEM\]/i, severity: 'critical', description: 'System tag injection' },
+  { pattern: /<\|system\|>/i, severity: 'critical', description: 'System token injection' },
+  
+  // High: Jailbreak attempts
+  { pattern: /developer.*mode/i, severity: 'high', description: 'Developer mode jailbreak' },
+  { pattern: /\bDAN\b.*mode/i, severity: 'high', description: 'DAN jailbreak' },
+  { pattern: /jailbreak/i, severity: 'high', description: 'Explicit jailbreak' },
+  { pattern: /je.*mag.*nu.*alles/i, severity: 'high', description: 'Permission expansion' },
+  { pattern: /pretend.*you.*(?:can|are|have)/i, severity: 'high', description: 'Role play manipulation' },
+  { pattern: /doe.*alsof.*je.*(?:kan|bent|mag)/i, severity: 'high', description: 'Dutch role play' },
+  
+  // High: Data exfiltration
+  { pattern: /geef.*(?:me|mij).*(?:alle|je).*api.*key/i, severity: 'high', description: 'API key extraction' },
+  { pattern: /toon.*(?:je|jouw).*system.*prompt/i, severity: 'high', description: 'System prompt extraction' },
+  { pattern: /wat.*zijn.*(?:je|jouw).*(?:instructies|regels)/i, severity: 'medium', description: 'Instruction probing' },
+  { pattern: /show.*(?:me|your).*(?:system|initial).*prompt/i, severity: 'high', description: 'Prompt extraction' },
+  { pattern: /print.*(?:your|the).*(?:instructions|prompt)/i, severity: 'high', description: 'Instruction dump' },
+  
+  // Medium: Suspicious patterns
+  { pattern: /act.*as.*(?:if|though).*(?:you|there)/i, severity: 'medium', description: 'Behavior manipulation' },
+  { pattern: /roleplay.*as/i, severity: 'medium', description: 'Roleplay request' },
+  { pattern: /you.*are.*now.*(?:a|an|the)/i, severity: 'medium', description: 'Identity reassignment' },
+  { pattern: /vanaf.*nu.*ben.*je/i, severity: 'medium', description: 'Dutch identity change' },
+  
+  // Low: Probing patterns (may be legitimate questions)
+  { pattern: /how.*(?:were|are).*you.*(?:trained|programmed)/i, severity: 'low', description: 'Training inquiry' },
+  { pattern: /what.*(?:model|version).*are.*you/i, severity: 'low', description: 'Model inquiry' },
+];
+
+/**
+ * Result of prompt injection detection
+ */
+export interface PromptInjectionCheck {
+  isInjection: boolean;
+  severity: 'none' | 'low' | 'medium' | 'high' | 'critical';
+  matchedPatterns: string[];
+  sanitizedContent?: string;
+  shouldBlock: boolean;
+}
+
+/**
+ * Detects prompt injection attempts in user input
+ */
+export function detectPromptInjection(content: string): PromptInjectionCheck {
+  if (!content || typeof content !== 'string') {
+    return { isInjection: false, severity: 'none', matchedPatterns: [], shouldBlock: false };
+  }
+  
+  const matchedPatterns: string[] = [];
+  let highestSeverity: 'none' | 'low' | 'medium' | 'high' | 'critical' = 'none';
+  const severityOrder = ['none', 'low', 'medium', 'high', 'critical'];
+  
+  // Check each pattern
+  for (const { pattern, severity, description } of PROMPT_INJECTION_PATTERNS) {
+    if (pattern.test(content)) {
+      matchedPatterns.push(description);
+      
+      // Update highest severity
+      if (severityOrder.indexOf(severity) > severityOrder.indexOf(highestSeverity)) {
+        highestSeverity = severity;
+      }
+    }
+  }
+  
+  const isInjection = matchedPatterns.length > 0;
+  const shouldBlock = highestSeverity === 'critical' || 
+    (highestSeverity === 'high' && matchedPatterns.length >= 2);
+  
+  // For medium/high severity, create sanitized version
+  let sanitizedContent: string | undefined;
+  if (isInjection && !shouldBlock) {
+    // Remove suspicious patterns
+    sanitizedContent = content;
+    for (const { pattern } of PROMPT_INJECTION_PATTERNS) {
+      sanitizedContent = sanitizedContent.replace(pattern, '[REMOVED]');
+    }
+  }
+  
+  return {
+    isInjection,
+    severity: highestSeverity,
+    matchedPatterns,
+    sanitizedContent,
+    shouldBlock,
+  };
+}
+
+/**
+ * Patterns that should never appear in AI output (sensitive data leakage)
+ */
+const FORBIDDEN_OUTPUT_PATTERNS: Array<{
+  pattern: RegExp;
+  description: string;
+}> = [
+  // API keys and secrets
+  { pattern: /LOVABLE_API_KEY/i, description: 'Lovable API key reference' },
+  { pattern: /SUPABASE_SERVICE_ROLE/i, description: 'Supabase service role key' },
+  { pattern: /OPENAI_API_KEY/i, description: 'OpenAI API key reference' },
+  { pattern: /Bearer\s+[A-Za-z0-9\-_]{50,}/i, description: 'Bearer token' },
+  { pattern: /sk-[A-Za-z0-9]{20,}/i, description: 'OpenAI key format' },
+  { pattern: /eyJ[A-Za-z0-9\-_]{100,}/i, description: 'JWT token' },
+  
+  // Database credentials
+  { pattern: /password\s*[:=]\s*["']?[^\s"']{8,}/i, description: 'Password in output' },
+  { pattern: /postgresql:\/\/[^:]+:[^@]+@/i, description: 'Database connection string' },
+  
+  // Internal references
+  { pattern: /Deno\.env\.get\s*\(/i, description: 'Environment variable access' },
+  { pattern: /process\.env\./i, description: 'Node env access' },
+];
+
+/**
+ * Result of AI output validation
+ */
+export interface AIOutputValidationResult {
+  valid: boolean;
+  violations: string[];
+  sanitizedOutput?: string;
+}
+
+/**
+ * Validates AI output for sensitive data leakage
+ */
+export function validateAIOutput(
+  output: string,
+  options?: { maxLength?: number }
+): AIOutputValidationResult {
+  if (!output || typeof output !== 'string') {
+    return { valid: true, violations: [] };
+  }
+  
+  const violations: string[] = [];
+  let sanitizedOutput = output;
+  
+  // Check for forbidden patterns
+  for (const { pattern, description } of FORBIDDEN_OUTPUT_PATTERNS) {
+    if (pattern.test(output)) {
+      violations.push(description);
+      // Mask the sensitive content
+      sanitizedOutput = sanitizedOutput.replace(pattern, '[REDACTED]');
+    }
+  }
+  
+  // Check length
+  const maxLength = options?.maxLength || 50000;
+  if (output.length > maxLength) {
+    violations.push(`Output exceeds max length (${output.length} > ${maxLength})`);
+    sanitizedOutput = sanitizedOutput.substring(0, maxLength) + '... [TRUNCATED]';
+  }
+  
+  return {
+    valid: violations.length === 0,
+    violations,
+    sanitizedOutput: violations.length > 0 ? sanitizedOutput : undefined,
+  };
+}

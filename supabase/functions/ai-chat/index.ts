@@ -8,6 +8,7 @@ import { semanticKnowledgeRetrieval, calculateSemanticConfidence, mergeSemanticA
 import { validateResponse, addValidationContext } from "../_shared/response-validator.ts";
 import { disambiguateEntities, applyTemporalFilter, expandViaRelationships } from "../_shared/entity-resolver.ts";
 import { softDeleteKnowledge, reinforceKnowledge, updateConfidence } from "../_shared/knowledge-crud.ts";
+import { detectPromptInjection, validateAIOutput } from "../_shared/healthcare-mappings.ts";
 
 // ============================================
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
@@ -865,6 +866,55 @@ Deno.serve(async (req: Request) => {
     const { messages, conversation_id } = validation.data;
     console.log(`🔑 Processing conversation: ${conversation_id}`);
     
+    // === FASE 2D: PROMPT INJECTION PROTECTION ===
+    const lastUserMessage = messages[messages.length - 1]?.content || '';
+    const injectionCheck = detectPromptInjection(lastUserMessage);
+    
+    if (injectionCheck.isInjection) {
+      console.warn(`⚠️ Prompt injection detected - Severity: ${injectionCheck.severity}`, {
+        patterns: injectionCheck.matchedPatterns,
+        shouldBlock: injectionCheck.shouldBlock,
+      });
+      
+      // Log security event for critical/high severity
+      if (injectionCheck.severity === 'critical' || injectionCheck.severity === 'high') {
+        const supabaseServiceClient = createAdminClient();
+        await supabaseServiceClient.from('system_events').insert({
+          event_type: 'security_alert',
+          severity: injectionCheck.severity === 'critical' ? 'critical' : 'high',
+          title: `🔴 Prompt Injection Attempt - ${injectionCheck.severity.toUpperCase()}`,
+          details: {
+            conversation_id,
+            matched_patterns: injectionCheck.matchedPatterns,
+            content_preview: lastUserMessage.substring(0, 200),
+            blocked: injectionCheck.shouldBlock,
+          },
+        }).then(({ error }) => {
+          if (error) console.error('Failed to log injection attempt:', error);
+        });
+      }
+      
+      // Block critical injections
+      if (injectionCheck.shouldBlock) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Je bericht bevat ongeldige inhoud. Probeer het opnieuw met een normale vraag.',
+            code: 'INJECTION_BLOCKED'
+          }),
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+      
+      // For medium severity, use sanitized content
+      if (injectionCheck.sanitizedContent && injectionCheck.severity !== 'low') {
+        console.log('📝 Using sanitized input for medium severity injection');
+        messages[messages.length - 1].content = injectionCheck.sanitizedContent;
+      }
+    }
+    
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       console.error('No authorization header provided');
@@ -1332,16 +1382,16 @@ Deno.serve(async (req: Request) => {
     const revenueImpactTasks = activeTasks.filter(t => t.revenue_impact_eur && t.revenue_impact_eur > 0);
     
     // 🤖 FASE 3: Smart Context Builder - Gebruik Meta-Orchestrator categorieën
-    const lastUserMessage = messages[messages.length - 1]?.content?.toLowerCase() || '';
-    const messageKeywords = lastUserMessage.split(' ').filter((w: string) => w.length > 3); // Voor confidence calc
+    const lastUserMessageLowerContext = messages[messages.length - 1]?.content?.toLowerCase() || '';
+    const messageKeywords = lastUserMessageLowerContext.split(' ').filter((w: string) => w.length > 3); // Voor confidence calc
     
     console.log('🤖 Smart Context Builder: Zoek relevante categorieën...');
     
     // Detect user's role from the question for role-based knowledge filtering
-    const detectedRole = detectRoleFromQuestion(lastUserMessage);
+    const detectedRole = detectRoleFromQuestion(lastUserMessageLowerContext);
     
     // 🎯 CLIENT-VRAAG DETECTIE
-    const isClientQuestion = /\b(klant|client|opdrachtgever|customer|organisatie)\b/i.test(lastUserMessage);
+    const isClientQuestion = /\b(klant|client|opdrachtgever|customer|organisatie)\b/i.test(lastUserMessageLowerContext);
     
     // Guardrail verwijderd - volledig AI model altijd actief
     let answerSource = 'ai_knowledge_base';
@@ -1350,7 +1400,7 @@ Deno.serve(async (req: Request) => {
     // Haal relevante AI categorieën op via Meta-Orchestrator
     const { data: relevantCategories } = await supabaseClient
       .rpc('get_relevant_categories', { 
-        user_question: lastUserMessage,
+        user_question: lastUserMessageLowerContext,
         org_id_param: userOrgId 
       });
 
