@@ -2854,40 +2854,63 @@ export type Database = {
       message_feedback: {
         Row: {
           created_at: string | null
+          fast_path_log_id: string | null
           feedback_type: string
           id: string
+          is_fast_path: boolean | null
           knowledge_ids: string[] | null
           message_id: string
+          pattern_id: string | null
           processed_at: string | null
           processed_by: string | null
           user_id: string
         }
         Insert: {
           created_at?: string | null
+          fast_path_log_id?: string | null
           feedback_type: string
           id?: string
+          is_fast_path?: boolean | null
           knowledge_ids?: string[] | null
           message_id: string
+          pattern_id?: string | null
           processed_at?: string | null
           processed_by?: string | null
           user_id: string
         }
         Update: {
           created_at?: string | null
+          fast_path_log_id?: string | null
           feedback_type?: string
           id?: string
+          is_fast_path?: boolean | null
           knowledge_ids?: string[] | null
           message_id?: string
+          pattern_id?: string | null
           processed_at?: string | null
           processed_by?: string | null
           user_id?: string
         }
         Relationships: [
           {
+            foreignKeyName: "message_feedback_fast_path_log_id_fkey"
+            columns: ["fast_path_log_id"]
+            isOneToOne: false
+            referencedRelation: "fast_path_usage_log"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "message_feedback_message_id_fkey"
             columns: ["message_id"]
             isOneToOne: false
             referencedRelation: "chat_messages_old_backup"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_feedback_pattern_id_fkey"
+            columns: ["pattern_id"]
+            isOneToOne: false
+            referencedRelation: "fast_path_patterns"
             referencedColumns: ["id"]
           },
         ]
