@@ -2815,13 +2815,21 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
         type: "function",
         function: {
           name: "query_clients",
-          description: "Doorzoek klanten/opdrachtgevers database om vragen te beantwoorden over welke klanten bij welk bureau horen (ABCzorg/CitoZorg), klantinfo, contactgegevens, regio's, etc. Gebruik dit wanneer gebruikers vragen stellen over klanten, opdrachtgevers, of organisaties waar professionals worden geplaatst.",
+          description: "Doorzoek de VOLLEDIGE klant-hiërarchie: organisaties → locaties → sublocaties (930+ werklocaties). Gebruik voor telefoonnummers, adressen, contactpersonen, werklocaties. Dit is de primaire bron voor klantinformatie zoals Prisma, Lunet, SWZ, Amarant, etc.",
           parameters: {
             type: "object",
             properties: {
               filter: {
                 type: "object",
                 properties: {
+                  organization_name: { 
+                    type: "string",
+                    description: "Zoek op organisatienaam (bijv. 'Prisma', 'Lunet', 'SWZ', 'Amarant')"
+                  },
+                  sublocation_name: { 
+                    type: "string",
+                    description: "Zoek op specifieke werklocatie/sublocation naam"
+                  },
                   bureau: { 
                     type: "string", 
                     enum: ["ABCzorg", "CitoZorg"],
@@ -2831,32 +2839,28 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
                     type: "string",
                     description: "Filter op sector (bijv. 'GHZ', 'GGZ', 'VVT', 'Jeugdzorg')"
                   },
-                  regio: { 
+                  plaats: { 
                     type: "string",
-                    description: "Filter op regio/locatie (bijv. 'Utrecht', 'Nijmegen')"
-                  },
-                  name: { 
-                    type: "string",
-                    description: "Zoek op (deel van) klantnaam"
+                    description: "Filter op stad/plaats (bijv. 'Eindhoven', 'Tilburg', 'Waalwijk')"
                   },
                   is_active: {
                     type: "boolean",
-                    description: "Filter op actieve (true) of inactieve (false) klanten"
+                    description: "Filter op actieve (true) of inactieve (false) locaties"
                   }
                 }
               },
               include: {
                 type: "array",
-                description: "Welke gerelateerde data moet worden meegenomen",
+                description: "Welke extra data moet worden meegenomen",
                 items: { 
                   type: "string", 
-                  enum: ["contact", "address", "organization"]
+                  enum: ["telefoon", "adres", "contactpersoon", "sublocaties", "sector", "doelgroep"]
                 }
               },
               limit: {
                 type: "number",
-                description: "Maximum aantal resultaten",
-                default: 50
+                description: "Maximum aantal organisaties (default 15, sublocaties worden per org getoond)",
+                default: 15
               }
             }
           }
@@ -3955,164 +3959,181 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
                           break;
 
                         case "query_clients":
-                          console.log("🔍 Querying clients...", args);
+                          console.log("🔍 Querying clients (full hierarchy)...", args);
                           
-                          // Build count query (without LIMIT) for total
-                          let countQuery = supabaseClient
-                            .from('clients')
-                            .select('*', { count: 'exact', head: true });
-                          
-                          // Build main query with joins
-                          let clientQuery = supabaseClient
-                            .from('clients')
+                          // Query the FULL hierarchy: organizations → locations → sublocations
+                          let orgQuery = supabaseClient
+                            .from('client_organizations')
                             .select(`
-                              *,
-                              client_org:client_organizations(id, name, kvk_nummer, btw_nummer, centrale_facturatie_email, website)
+                              id, name, org_id, kvk_nummer, btw_nummer, website,
+                              locations:client_locations(
+                                id, naam, telefoon, contactpersoon_naam, contactpersoon_email, factuur_email, plaats, adres, postcode,
+                                sublocations:client_sublocations(
+                                  id, naam, telefoon, adres, postcode, plaats, sector, doelgroep, gezochte_functies, is_active
+                                )
+                              )
                             `);
                           
-                          // Apply same filters to both queries
+                          // Apply filters
                           if (args.filter) {
+                            if (args.filter.organization_name) {
+                              orgQuery = orgQuery.ilike('name', `%${args.filter.organization_name}%`);
+                            }
+                            
                             if (args.filter.bureau) {
                               const bureauOrgId = args.filter.bureau === "ABCzorg" 
-                                ? "550e8400-e29b-41d4-a716-446655440000"  // ABCzorg UUID
-                                : "650e8400-e29b-41d4-a716-446655440001";  // CitoZorg UUID
-                              
-                              clientQuery = clientQuery.eq('org_id', bureauOrgId);
-                              countQuery = countQuery.eq('org_id', bureauOrgId);
-                            }
-                            
-                            if (args.filter.sector) {
-                              clientQuery = clientQuery.contains('sector', [args.filter.sector]);
-                              countQuery = countQuery.contains('sector', [args.filter.sector]);
-                            }
-                            
-                            if (args.filter.regio) {
-                              clientQuery = clientQuery.contains('regio', [args.filter.regio]);
-                              countQuery = countQuery.contains('regio', [args.filter.regio]);
-                            }
-                            
-                            if (args.filter.name) {
-                              const nameFilter = `name.ilike.%${args.filter.name}%,company.ilike.%${args.filter.name}%`;
-                              clientQuery = clientQuery.or(nameFilter);
-                              countQuery = countQuery.or(nameFilter);
-                            }
-                            
-                            if (args.filter.is_active !== undefined) {
-                              clientQuery = clientQuery.eq('is_active', args.filter.is_active);
-                              countQuery = countQuery.eq('is_active', args.filter.is_active);
+                                ? "550e8400-e29b-41d4-a716-446655440000"
+                                : "650e8400-e29b-41d4-a716-446655440001";
+                              orgQuery = orgQuery.eq('org_id', bureauOrgId);
                             }
                           }
                           
-                          // Limit to top 25 to prevent context overflow
-                          clientQuery = clientQuery
-                            .order('name', { ascending: true })
-                            .limit(25);
+                          // Limit organizations
+                          const orgLimit = args.limit || 15;
+                          orgQuery = orgQuery.order('name', { ascending: true }).limit(orgLimit);
                           
-                          // Execute both queries
-                          const [{ data: clientsData, error: clientsQueryError }, { count: totalCount, error: countError }] = await Promise.all([
-                            clientQuery,
-                            countQuery
-                          ]);
+                          const { data: orgsData, error: orgsError } = await orgQuery;
                           
-                          
-                          if (clientsQueryError || countError) {
-                            console.error("Clients query error:", clientsQueryError || countError);
+                          if (orgsError) {
+                            console.error("Client hierarchy query error:", orgsError);
                             result = {
                               success: false,
-                              message: `❌ Fout bij ophalen klanten: ${(clientsQueryError || countError)?.message}`
+                              message: `❌ Fout bij ophalen klanten: ${orgsError.message}`
                             };
-                          } else if (!clientsData || clientsData.length === 0) {
+                          } else if (!orgsData || orgsData.length === 0) {
                             result = {
                               success: true,
-                              clients: [],
-                              summary: { total: totalCount || 0, by_bureau: {}, by_sector: {}, by_regio: {} },
-                              message: `ℹ️ Geen klanten gevonden met deze filters. Probeer filters te verruimen.`
+                              organizations: [],
+                              message: `ℹ️ Geen organisaties gevonden. Probeer met een andere zoekterm.`
                             };
                           } else {
-                            // Format client list
-                            const clientList = clientsData
-                              .map((client: any, i: number) => {
-                                const bureau = client.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : 
-                                               client.org_id === "650e8400-e29b-41d4-a716-446655440001" ? "CitoZorg" : "Onbekend";
-                                const sector = client.sector && client.sector.length > 0 ? client.sector.join(', ') : 'n/a';
-                                const regio = client.regio && client.regio.length > 0 ? client.regio.join(', ') : 'n/a';
-                                const contactInfo = args.include?.includes('contact') 
-                                  ? `\n   ├─ Contact: ${client.name} (${client.email || 'geen email'}, ${client.phone || 'geen telefoon'})`
-                                  : '';
-                                const addressInfo = args.include?.includes('address')
-                                  ? `\n   ├─ Adres: ${client.address || 'niet opgegeven'}`
-                                  : '';
-                                const orgInfo = args.include?.includes('organization') && client.client_org
-                                  ? `\n   ├─ Organisatie: ${client.client_org.name} (KvK: ${client.client_org.kvk_nummer || 'n/a'})`
-                                  : '';
+                            // Post-filter on sublocation criteria if specified
+                            let filteredOrgs = orgsData;
+                            
+                            if (args.filter?.sublocation_name || args.filter?.plaats || args.filter?.sector) {
+                              filteredOrgs = orgsData.map((org: any) => {
+                                const filteredLocations = (org.locations || []).map((loc: any) => {
+                                  let subs = loc.sublocations || [];
+                                  
+                                  if (args.filter?.sublocation_name) {
+                                    subs = subs.filter((s: any) => 
+                                      s.naam?.toLowerCase().includes(args.filter.sublocation_name.toLowerCase())
+                                    );
+                                  }
+                                  if (args.filter?.plaats) {
+                                    subs = subs.filter((s: any) => 
+                                      s.plaats?.toLowerCase().includes(args.filter.plaats.toLowerCase()) ||
+                                      loc.plaats?.toLowerCase().includes(args.filter.plaats.toLowerCase())
+                                    );
+                                  }
+                                  if (args.filter?.sector) {
+                                    subs = subs.filter((s: any) => 
+                                      s.sector?.some((sec: string) => sec.toLowerCase().includes(args.filter.sector.toLowerCase()))
+                                    );
+                                  }
+                                  if (args.filter?.is_active !== undefined) {
+                                    subs = subs.filter((s: any) => s.is_active === args.filter.is_active);
+                                  }
+                                  
+                                  return { ...loc, sublocations: subs };
+                                }).filter((loc: any) => loc.sublocations.length > 0);
                                 
-                                return `${i + 1}. **${client.name || client.company}**\n` +
-                                  `   ├─ Bureau: ${bureau}\n` +
-                                  `   ├─ Sector: ${sector}\n` +
-                                  `   ├─ Regio: ${regio}${contactInfo}${addressInfo}${orgInfo}`;
-                              })
-                              .join('\n\n');
+                                return { ...org, locations: filteredLocations };
+                              }).filter((org: any) => org.locations.length > 0);
+                            }
                             
-                            // Calculate summary stats
-                            const byBureau: any = {};
-                            const bySector: any = {};
-                            const byRegio: any = {};
+                            // Format output with full hierarchy
+                            const includePhone = args.include?.includes('telefoon') !== false; // default true
+                            const includeAddress = args.include?.includes('adres');
+                            const includeContact = args.include?.includes('contactpersoon');
+                            const includeSublocations = args.include?.includes('sublocaties') !== false; // default true
+                            const includeSector = args.include?.includes('sector');
+                            const includeDoelgroep = args.include?.includes('doelgroep');
                             
-                            clientsData.forEach((client: any) => {
-                              const bureau = client.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : 
-                                             client.org_id === "650e8400-e29b-41d4-a716-446655440001" ? "CitoZorg" : "Onbekend";
-                              byBureau[bureau] = (byBureau[bureau] || 0) + 1;
+                            let totalSublocations = 0;
+                            let totalPhones = 0;
+                            
+                            const orgList = filteredOrgs.map((org: any, i: number) => {
+                              const bureau = org.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : 
+                                             org.org_id === "650e8400-e29b-41d4-a716-446655440001" ? "CitoZorg" : "Onbekend";
                               
-                              if (client.sector) {
-                                client.sector.forEach((s: string) => {
-                                  bySector[s] = (bySector[s] || 0) + 1;
-                                });
-                              }
+                              let output = `${i + 1}. **${org.name}** (${bureau})`;
+                              if (org.kvk_nummer) output += `\n   KvK: ${org.kvk_nummer}`;
+                              if (org.website) output += ` | Website: ${org.website}`;
                               
-                              if (client.regio) {
-                                client.regio.forEach((r: string) => {
-                                  byRegio[r] = (byRegio[r] || 0) + 1;
-                                });
-                              }
-                            });
+                              // Process locations and sublocations
+                              const locations = org.locations || [];
+                              locations.forEach((loc: any) => {
+                                const locPhone = loc.telefoon ? ` - Tel: ${loc.telefoon}` : '';
+                                if (loc.telefoon) totalPhones++;
+                                
+                                output += `\n   📍 **${loc.naam}**${loc.plaats ? ` (${loc.plaats})` : ''}${includePhone ? locPhone : ''}`;
+                                
+                                if (includeContact && loc.contactpersoon_naam) {
+                                  output += `\n      Contact: ${loc.contactpersoon_naam}${loc.contactpersoon_email ? ` <${loc.contactpersoon_email}>` : ''}`;
+                                }
+                                
+                                if (includeSublocations && loc.sublocations?.length > 0) {
+                                  const sublocs = loc.sublocations.slice(0, 10); // Max 10 per location
+                                  const moreCount = loc.sublocations.length - sublocs.length;
+                                  
+                                  sublocs.forEach((sub: any) => {
+                                    totalSublocations++;
+                                    const subPhone = sub.telefoon ? ` - 📞 ${sub.telefoon}` : '';
+                                    if (sub.telefoon) totalPhones++;
+                                    
+                                    let subLine = `\n      └─ ${sub.naam}`;
+                                    if (sub.plaats) subLine += `, ${sub.plaats}`;
+                                    if (includePhone && sub.telefoon) subLine += subPhone;
+                                    if (includeAddress && sub.adres) subLine += `\n         Adres: ${sub.adres}, ${sub.postcode || ''} ${sub.plaats || ''}`;
+                                    if (includeSector && sub.sector?.length > 0) subLine += ` [${sub.sector.join(', ')}]`;
+                                    if (includeDoelgroep && sub.doelgroep?.length > 0) subLine += ` (${sub.doelgroep.join(', ')})`;
+                                    
+                                    output += subLine;
+                                  });
+                                  
+                                  if (moreCount > 0) {
+                                    output += `\n      └─ ... en ${moreCount} meer sublocaties`;
+                                  }
+                                }
+                              });
+                              
+                              return output;
+                            }).join('\n\n');
                             
-                            // Add "... en X meer" if there are more clients than shown
-                            const hasMore = (totalCount || 0) > clientsData.length;
-                            const moreCount = (totalCount || 0) - clientsData.length;
-                            const moreSuffix = hasMore ? `\n\n... **en ${moreCount} klanten meer**` : '';
-                            
-                            const summaryParts = [
-                              `📊 **${totalCount || clientsData.length} klanten totaal** (${clientsData.length} getoond)`,
-                              Object.keys(byBureau).length > 0 ? `Bureau: ${Object.entries(byBureau).map(([k, v]) => `${k} (${v})`).join(', ')}` : null,
-                              Object.keys(bySector).length > 0 ? `Top sectoren: ${Object.entries(bySector).slice(0, 3).map(([k, v]) => `${k} (${v})`).join(', ')}` : null
-                            ].filter(Boolean).join(' | ');
-                            
-                            // Add graceful completion tip
-                            const completionTip = `\n\n💡 **Tip:** Vraag naar specifieke regio of sector voor gedetailleerde resultaten.`;
+                            const summary = `📊 **${filteredOrgs.length} organisaties** gevonden met **${totalSublocations} werklocaties** en **${totalPhones} telefoonnummers**`;
                             
                             result = {
                               success: true,
-                              clients: clientsData.map((c: any) => ({
-                                id: c.id,
-                                name: c.name || c.company,
-                                bureau: c.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : 
-                                        c.org_id === "650e8400-e29b-41d4-a716-446655440001" ? "CitoZorg" : "Onbekend",
-                                sector: c.sector || [],
-                                regio: c.regio || [],
-                                contact: c.name,
-                                email: c.email,
-                                phone: c.phone,
-                                address: c.address,
-                                is_active: c.is_active
+                              organizations: filteredOrgs.map((org: any) => ({
+                                id: org.id,
+                                name: org.name,
+                                bureau: org.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : "CitoZorg",
+                                kvk_nummer: org.kvk_nummer,
+                                website: org.website,
+                                locations: (org.locations || []).map((loc: any) => ({
+                                  id: loc.id,
+                                  naam: loc.naam,
+                                  telefoon: loc.telefoon,
+                                  plaats: loc.plaats,
+                                  contactpersoon: loc.contactpersoon_naam,
+                                  sublocations: (loc.sublocations || []).map((sub: any) => ({
+                                    id: sub.id,
+                                    naam: sub.naam,
+                                    telefoon: sub.telefoon,
+                                    adres: sub.adres,
+                                    plaats: sub.plaats,
+                                    sector: sub.sector,
+                                    doelgroep: sub.doelgroep
+                                  }))
+                                }))
                               })),
                               summary: {
-                                total: totalCount || clientsData.length,
-                                shown: clientsData.length,
-                                by_bureau: byBureau,
-                                by_sector: bySector,
-                                by_regio: byRegio
+                                total_organizations: filteredOrgs.length,
+                                total_sublocations: totalSublocations,
+                                total_phones: totalPhones
                               },
-                              message: `${summaryParts}\n\n${clientList}${moreSuffix}${completionTip}`
+                              message: `${summary}\n\n${orgList}\n\n💡 **Tip:** Vraag naar een specifieke organisatie (bijv. "telefoonnummer Prisma") voor gedetailleerde contactinfo.`
                             };
                           }
                           break;
