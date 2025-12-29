@@ -575,15 +575,16 @@ function runValidation(response: string, validation: Validation, responseTimeMs?
     case "min_length":
       return validateMinLength(response, validation.min || 0);
     case "fast_path":
-      // Fast Path validation: check X-Fast-Path header OR response < 500ms
-      const hasHeader = lastFastPathHeader === 'count-query';
+      // Fast Path validation: check X-Fast-Path header (any valid value) OR response < 500ms
+      const validFastPathHeaders = ['count-query', 'count-query-filtered', 'dynamic-pattern'];
+      const hasHeader = lastFastPathHeader !== null && validFastPathHeaders.includes(lastFastPathHeader);
       const isFast = responseTimeMs !== undefined && responseTimeMs < 500;
       const passed = hasHeader || isFast;
       return {
         passed,
         details: passed 
-          ? `Fast Path success: ${hasHeader ? 'X-Fast-Path header present' : `${responseTimeMs}ms (< 500ms)`}`
-          : `Fast Path failed: no X-Fast-Path header and ${responseTimeMs || 'unknown'}ms (expected < 500ms or header)`
+          ? `Fast Path success: ${hasHeader ? `X-Fast-Path header present (${lastFastPathHeader})` : `${responseTimeMs}ms (< 500ms)`}`
+          : `Fast Path failed: no valid X-Fast-Path header (got: ${lastFastPathHeader || 'none'}) and ${responseTimeMs || 'unknown'}ms (expected < 500ms or header)`
       };
     default:
       return { passed: false, details: `Onbekend validatie type: ${validation.type}` };
