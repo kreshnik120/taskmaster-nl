@@ -551,13 +551,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "ai_knowledge_base_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "ai_knowledge_base_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
@@ -1128,6 +1121,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "application_sublocation_matches_sublocation_id_fkey"
+            columns: ["sublocation_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "application_sublocation_matches_vacancy_id_fkey"
             columns: ["vacancy_id"]
             isOneToOne: false
@@ -1279,6 +1279,13 @@ export type Database = {
             columns: ["sublocation_id"]
             isOneToOne: false
             referencedRelation: "client_sublocations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_sublocation_id_fkey"
+            columns: ["sublocation_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]
@@ -1533,10 +1540,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "client_expert_preferences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["organization_id"]
+          },
+          {
             foreignKeyName: "client_expert_preferences_sublocation_id_fkey"
             columns: ["sublocation_id"]
             isOneToOne: false
             referencedRelation: "client_sublocations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_expert_preferences_sublocation_id_fkey"
+            columns: ["sublocation_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]
@@ -1603,6 +1624,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "client_organizations"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_locations_client_org_id_fkey"
+            columns: ["client_org_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["organization_id"]
           },
         ]
       }
@@ -1750,89 +1778,12 @@ export type Database = {
             referencedRelation: "client_locations"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      clients: {
-        Row: {
-          address: string | null
-          client_org_id: string | null
-          company: string
-          created_at: string
-          doelgroep: string[] | null
-          email: string | null
-          gezochte_functies: string[] | null
-          id: string
-          is_active: boolean | null
-          logo_url: string | null
-          name: string
-          notes: string | null
-          org_id: string
-          phone: string | null
-          regio: string[] | null
-          revenue_per_hour: number | null
-          sector: string[] | null
-          tier: number
-          updated_at: string
-          weekly_hours: number | null
-        }
-        Insert: {
-          address?: string | null
-          client_org_id?: string | null
-          company: string
-          created_at?: string
-          doelgroep?: string[] | null
-          email?: string | null
-          gezochte_functies?: string[] | null
-          id?: string
-          is_active?: boolean | null
-          logo_url?: string | null
-          name: string
-          notes?: string | null
-          org_id: string
-          phone?: string | null
-          regio?: string[] | null
-          revenue_per_hour?: number | null
-          sector?: string[] | null
-          tier?: number
-          updated_at?: string
-          weekly_hours?: number | null
-        }
-        Update: {
-          address?: string | null
-          client_org_id?: string | null
-          company?: string
-          created_at?: string
-          doelgroep?: string[] | null
-          email?: string | null
-          gezochte_functies?: string[] | null
-          id?: string
-          is_active?: boolean | null
-          logo_url?: string | null
-          name?: string
-          notes?: string | null
-          org_id?: string
-          phone?: string | null
-          regio?: string[] | null
-          revenue_per_hour?: number | null
-          sector?: string[] | null
-          tier?: number
-          updated_at?: string
-          weekly_hours?: number | null
-        }
-        Relationships: [
           {
-            foreignKeyName: "clients_client_org_id_fkey"
-            columns: ["client_org_id"]
+            foreignKeyName: "client_sublocations_location_id_fkey"
+            columns: ["location_id"]
             isOneToOne: false
-            referencedRelation: "client_organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "clients_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
+            referencedRelation: "clients"
+            referencedColumns: ["location_id"]
           },
         ]
       }
@@ -2360,6 +2311,13 @@ export type Database = {
             columns: ["sublocation_id"]
             isOneToOne: false
             referencedRelation: "client_sublocations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hourly_rates_sublocation_id_fkey"
+            columns: ["sublocation_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]
@@ -3346,13 +3304,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "professional_client_matches_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "professional_client_matches_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
@@ -3417,13 +3368,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "professional_clients_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "professional_clients_professional_id_fkey"
             columns: ["professional_id"]
@@ -4594,13 +4538,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "tasks_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "tasks_column_id_fkey"
             columns: ["column_id"]
             isOneToOne: false
@@ -4878,6 +4815,13 @@ export type Database = {
             referencedRelation: "client_sublocations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "vacancies_sublocation_id_fkey"
+            columns: ["sublocation_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
         ]
       }
       vacancy_applications: {
@@ -5066,6 +5010,13 @@ export type Database = {
             referencedRelation: "client_sublocations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "werkvorm_tarieven_sublocation_id_fkey"
+            columns: ["sublocation_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
         ]
       }
       wtt_rules: {
@@ -5186,6 +5137,13 @@ export type Database = {
             referencedRelation: "client_sublocations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "assignments_sublocation_id_fkey"
+            columns: ["sublocation_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
         ]
       }
       autonomous_system_status: {
@@ -5240,6 +5198,37 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "ai_chat_messages_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clients: {
+        Row: {
+          address: string | null
+          company: string | null
+          created_at: string | null
+          doelgroep: string[] | null
+          email: string | null
+          id: string | null
+          is_active: boolean | null
+          location_id: string | null
+          logo_url: string | null
+          name: string | null
+          org_id: string | null
+          organization_id: string | null
+          phone: string | null
+          plaats: string | null
+          regio: string[] | null
+          sector: string[] | null
+          tier: number | null
+          weekly_hours: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_organizations_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
