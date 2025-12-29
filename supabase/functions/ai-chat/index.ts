@@ -1876,14 +1876,14 @@ Deno.serve(async (req: Request) => {
         return false;
       }
       
-      // 🔧 FIX: For patterns with sector/doelgroep filters, the filter VALUE must appear in query
-      // This prevents VVT pattern from matching GGZ queries
+      // 🔧 FIX: For patterns with sector/doelgroep/plaats/provincie filters, the filter VALUE must appear in query
+      // This prevents Amsterdam pattern from matching Almere queries
       for (const filterDef of pattern.filters || []) {
-        if (filterDef.column === 'sector' || filterDef.column === 'doelgroep') {
+        if (['sector', 'doelgroep', 'plaats', 'provincie'].includes(filterDef.column)) {
           const filterValue = (filterDef as any).value; // Direct value in filter definition
           if (filterValue && typeof filterValue === 'string') {
             if (!normalizedQuery.includes(filterValue.toLowerCase())) {
-              return false; // Query doesn't contain the required sector/doelgroep
+              return false; // Query doesn't contain the required filter value
             }
           }
         }
