@@ -6,13 +6,19 @@ import { Search, Building2, MapPin } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 
-interface Client {
+interface Sublocation {
   id: string;
-  name: string;
-  company: string;
-  tier: number;
-  regio: string[] | null;
+  naam: string;
   sector: string[] | null;
+  provincie: string | null;
+  location: {
+    naam: string;
+    client_org: {
+      id: string;
+      name: string;
+      org_id: string;
+    } | null;
+  } | null;
 }
 
 interface ClientSelectionDialogProps {
@@ -21,15 +27,15 @@ interface ClientSelectionDialogProps {
 }
 
 export const ClientSelectionDialog = ({ onSelect, onCancel }: ClientSelectionDialogProps) => {
-  const [clients, setClients] = useState<Client[]>([]);
+  const [sublocations, setSublocations] = useState<Sublocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    loadClients();
+    loadSublocations();
   }, []);
 
-  const loadClients = async () => {
+  const loadSublocations = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -41,25 +47,40 @@ export const ClientSelectionDialog = ({ onSelect, onCancel }: ClientSelectionDia
 
       if (!userOrgs || userOrgs.length === 0) return;
 
+      const orgIds = userOrgs.map(uo => uo.org_id);
+
       const { data, error } = await supabase
-        .from('clients')
-        .select('id, name, company, tier, regio, sector')
-        .in('org_id', userOrgs.map(uo => uo.org_id))
+        .from('client_sublocations')
+        .select(`
+          id, naam, sector, provincie,
+          location:client_locations!location_id (
+            naam,
+            client_org:client_organizations!client_org_id (
+              id, name, org_id
+            )
+          )
+        `)
         .eq('is_active', true)
-        .order('name');
+        .order('naam');
 
       if (error) throw error;
-      setClients(data || []);
+      
+      // Filter by user's organizations
+      const filtered = (data || []).filter(sub => 
+        sub.location?.client_org?.org_id && orgIds.includes(sub.location.client_org.org_id)
+      );
+      
+      setSublocations(filtered);
     } catch (error) {
-      console.error('Error loading clients:', error);
+      console.error('Error loading sublocations:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredClients = clients.filter(client => 
-    client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    client.company.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredSublocations = sublocations.filter(sub => 
+    sub.naam.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (sub.location?.client_org?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -68,7 +89,7 @@ export const ClientSelectionDialog = ({ onSelect, onCancel }: ClientSelectionDia
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           type="search"
-          placeholder="Zoek klant..."
+          placeholder="Zoek werklocatie..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="pl-9"
@@ -78,50 +99,48 @@ export const ClientSelectionDialog = ({ onSelect, onCancel }: ClientSelectionDia
       <ScrollArea className="h-[400px] pr-4">
         {loading ? (
           <div className="text-center py-8 text-muted-foreground">
-            Klanten laden...
+            Werklocaties laden...
           </div>
-        ) : filteredClients.length === 0 ? (
+        ) : filteredSublocations.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            {searchQuery ? "Geen klanten gevonden" : "Geen actieve klanten"}
+            {searchQuery ? "Geen werklocaties gevonden" : "Geen actieve werklocaties"}
           </div>
         ) : (
           <div className="space-y-2">
-            {filteredClients.map((client) => (
+            {filteredSublocations.map((sub) => (
               <button
-                key={client.id}
-                onClick={() => onSelect(client.id)}
+                key={sub.id}
+                onClick={() => onSelect(sub.id)}
                 className="w-full text-left p-4 rounded-lg border hover:border-primary hover:bg-accent/50 transition-all"
               >
                 <div className="space-y-2">
                   <div className="flex items-start justify-between">
                     <div>
-                      <div className="font-medium">{client.name}</div>
+                      <div className="font-medium">{sub.naam}</div>
                       <div className="text-sm text-muted-foreground flex items-center gap-1">
                         <Building2 className="h-3 w-3" />
-                        {client.company}
+                        {sub.location?.client_org?.name || 'Onbekende organisatie'}
                       </div>
                     </div>
-                    <Badge variant="outline">Tier {client.tier}</Badge>
                   </div>
                   
-                  {client.regio && client.regio.length > 0 && (
+                  {sub.provincie && (
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                       <MapPin className="h-3 w-3" />
-                      {client.regio.slice(0, 3).join(", ")}
-                      {client.regio.length > 3 && ` +${client.regio.length - 3}`}
+                      {sub.provincie}
                     </div>
                   )}
                   
-                  {client.sector && client.sector.length > 0 && (
+                  {sub.sector && sub.sector.length > 0 && (
                     <div className="flex gap-1 flex-wrap">
-                      {client.sector.slice(0, 3).map((s) => (
+                      {sub.sector.slice(0, 3).map((s) => (
                         <Badge key={s} variant="secondary" className="text-xs">
                           {s}
                         </Badge>
                       ))}
-                      {client.sector.length > 3 && (
+                      {sub.sector.length > 3 && (
                         <Badge variant="secondary" className="text-xs">
-                          +{client.sector.length - 3}
+                          +{sub.sector.length - 3}
                         </Badge>
                       )}
                     </div>
