@@ -265,6 +265,12 @@ schedule = "*/15 * * * *"
 # Purpose: Clean up stale/stuck jobs
 # Frequency: 96 executions/day
 
+[functions.cleanup-stuck-test-runs]
+verify_jwt = false
+schedule = "*/15 * * * *"
+# Purpose: Clean up stuck AI chat test runs (running > 5 minutes)
+# Frequency: 96 executions/day
+
 # --- Every 30 Minutes ---
 [functions.auto-resolve-alerts]
 verify_jwt = false
