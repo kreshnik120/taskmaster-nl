@@ -269,6 +269,64 @@ const TEST_SCENARIOS: TestScenario[] = [
       { type: "fast_path", description: "Moet via Fast Path verwerkt zijn (< 500ms)" }
     ]
   },
+  // ═══════════════════════════════════════════════════════════════════
+  // 🆕 GEAVANCEERDE FAST PATH TESTS - MET FILTERS
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    id: "fast_path_locaties_in_almere",
+    question: "Hoeveel werklocaties in Almere",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 0, description: "Moet een getal bevatten" },
+      { type: "mentions", keywords: ["Almere", "werklocatie", "locatie"], description: "Moet Almere en locatie vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn" }
+    ]
+  },
+  {
+    id: "fast_path_ggz_sector",
+    question: "Hoeveel GGZ werklocaties",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 0, description: "Moet een getal bevatten" },
+      { type: "mentions", keywords: ["GGZ", "werklocatie", "locatie"], description: "Moet GGZ en locatie vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn" }
+    ]
+  },
+  {
+    id: "fast_path_lvb_doelgroep",
+    question: "Hoeveel locaties met doelgroep LVB",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 0, description: "Moet een getal bevatten" },
+      { type: "mentions", keywords: ["LVB", "werklocatie", "locatie", "doelgroep"], description: "Moet LVB en locatie vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn" }
+    ]
+  },
+  {
+    id: "fast_path_begeleiders_zoeken",
+    question: "Hoeveel locaties zoeken Begeleiders",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 0, description: "Moet een getal bevatten" },
+      { type: "mentions", keywords: ["Begeleider", "werklocatie", "locatie"], description: "Moet Begeleider en locatie vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn" }
+    ]
+  },
+  {
+    id: "fast_path_vvt_sector",
+    question: "Aantal VVT locaties",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 0, description: "Moet een getal bevatten" },
+      { type: "mentions", keywords: ["VVT", "werklocatie", "locatie"], description: "Moet VVT en locatie vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn" }
+    ]
+  },
   {
     id: "phone_lookup_prisma",
     question: "Wat is het telefoonnummer van een Prisma werklocatie?",

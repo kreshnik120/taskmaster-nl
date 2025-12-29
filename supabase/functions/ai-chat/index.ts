@@ -28,12 +28,22 @@ const CACHE_TTL_MINUTES = 5; // Short TTL for development/testing (was 24 hours)
 // ============================================
 // Pattern: Direct database count for simple "hoeveel" questions
 // Goal: 30+ seconds → <100ms response time
+type FilterOperator = 'eq' | 'ilike' | 'contains';
+
+interface FastPathFilter {
+  column: string;
+  value: string;
+  operator: FilterOperator;
+}
+
 interface FastPathPattern {
   pattern: RegExp;
   table: string;
   countColumn: string;
   activeFilter?: boolean;
-  responseTemplate: (count: number) => string;
+  responseTemplate: (count: number, filterContext?: string) => string;
+  // Advanced filter support
+  extractFilter?: (match: RegExpMatchArray) => FastPathFilter | null;
 }
 
 // ============================================
@@ -228,6 +238,139 @@ const FAST_PATH_COUNT_PATTERNS: FastPathPattern[] = [
     countColumn: 'id',
     activeFilter: false,
     responseTemplate: (count: number) => `✅ Er zijn **${count}** plaatsingen in het systeem.`
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🆕 GEAVANCEERDE FILTERS: GEOGRAFISCH (PLAATS)
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    // "hoeveel werklocaties in Amsterdam", "aantal locaties in Rotterdam"
+    pattern: /^(hoeveel|tel|aantal)\s+(werklocaties|locaties|vestigingen|plaatsen)\s+in\s+(\w+)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    extractFilter: (match: RegExpMatchArray) => ({
+      column: 'plaats',
+      value: match[3],
+      operator: 'ilike' as FilterOperator
+    }),
+    responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve werklocaties in ${ctx || 'deze plaats'}.`
+  },
+  {
+    // "werklocaties in Utrecht", "locaties in Arnhem"
+    pattern: /^(werklocaties|locaties|vestigingen)\s+in\s+(\w+)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    extractFilter: (match: RegExpMatchArray) => ({
+      column: 'plaats',
+      value: match[2],
+      operator: 'ilike' as FilterOperator
+    }),
+    responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve werklocaties in ${ctx || 'deze plaats'}.`
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🆕 GEAVANCEERDE FILTERS: SECTOR (GGZ, GHZ, VVT, etc.)
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    // "hoeveel GGZ locaties", "aantal GHZ werklocaties"
+    pattern: /^(hoeveel|tel|aantal)\s+(GGZ|GHZ|VVT|Jeugdzorg|Ouderenzorg|Gehandicaptenzorg)\s+(werklocaties|locaties|vestigingen)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    extractFilter: (match: RegExpMatchArray) => ({
+      column: 'sector',
+      value: match[2],
+      operator: 'contains' as FilterOperator
+    }),
+    responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve ${ctx || 'sector'} werklocaties.`
+  },
+  {
+    // "GGZ locaties", "VVT werklocaties"
+    pattern: /^(GGZ|GHZ|VVT|Jeugdzorg|Ouderenzorg|Gehandicaptenzorg)\s+(werklocaties|locaties|vestigingen)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    extractFilter: (match: RegExpMatchArray) => ({
+      column: 'sector',
+      value: match[1],
+      operator: 'contains' as FilterOperator
+    }),
+    responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve ${ctx || 'sector'} werklocaties.`
+  },
+  {
+    // "hoeveel locaties in sector GGZ", "werklocaties in sector VVT"
+    pattern: /^(hoeveel|tel|aantal)?\s*(werklocaties|locaties|vestigingen)\s+in\s+sector\s+(GGZ|GHZ|VVT|Jeugdzorg|Ouderenzorg|Gehandicaptenzorg)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    extractFilter: (match: RegExpMatchArray) => ({
+      column: 'sector',
+      value: match[3],
+      operator: 'contains' as FilterOperator
+    }),
+    responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve werklocaties in sector ${ctx || ''}.`
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🆕 GEAVANCEERDE FILTERS: DOELGROEP (LVB, Autisme, NAH, etc.)
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    // "hoeveel locaties met doelgroep LVB", "aantal werklocaties voor Autisme"
+    pattern: /^(hoeveel|tel|aantal)\s+(werklocaties|locaties|vestigingen)\s+(met|voor)\s+(doelgroep\s+)?(LVB|Autisme|Psychiatrie|Ouderen|NAH|EMB|Verslaving|Dementie)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    extractFilter: (match: RegExpMatchArray) => ({
+      column: 'doelgroep',
+      value: match[5],
+      operator: 'contains' as FilterOperator
+    }),
+    responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve werklocaties met doelgroep ${ctx || ''}.`
+  },
+  {
+    // "LVB locaties", "Autisme werklocaties"
+    pattern: /^(LVB|Autisme|Psychiatrie|Ouderen|NAH|EMB|Verslaving|Dementie)\s+(werklocaties|locaties|vestigingen)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    extractFilter: (match: RegExpMatchArray) => ({
+      column: 'doelgroep',
+      value: match[1],
+      operator: 'contains' as FilterOperator
+    }),
+    responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve ${ctx || 'doelgroep'} werklocaties.`
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🆕 GEAVANCEERDE FILTERS: GEZOCHTE FUNCTIES
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    // "hoeveel locaties zoeken Begeleiders", "aantal werklocaties voor VIG"
+    pattern: /^(hoeveel|tel|aantal)\s+(werklocaties|locaties|vestigingen)\s+(zoeken|voor|met)\s+(Begeleider|VIG|Activiteitenbegeleider|Persoonlijk\s*begeleider|Verpleegkundige|Verzorgende|EVV)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    extractFilter: (match: RegExpMatchArray) => ({
+      column: 'gezochte_functies',
+      value: match[4].replace(/\s+/g, ' ').trim(),
+      operator: 'contains' as FilterOperator
+    }),
+    responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve werklocaties die ${ctx || 'deze functie'}s zoeken.`
+  },
+  {
+    // "locaties die Begeleiders zoeken"
+    pattern: /^(werklocaties|locaties|vestigingen)\s+die\s+(Begeleider|VIG|Activiteitenbegeleider|Persoonlijk\s*begeleider|Verpleegkundige|Verzorgende|EVV)s?\s+zoeken/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    extractFilter: (match: RegExpMatchArray) => ({
+      column: 'gezochte_functies',
+      value: match[2].replace(/\s+/g, ' ').trim(),
+      operator: 'contains' as FilterOperator
+    }),
+    responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve werklocaties die ${ctx || 'deze functie'}s zoeken.`
   }
 ];
 
@@ -1520,7 +1663,8 @@ Deno.serve(async (req: Request) => {
     const lastUserMessageForFastPath = messages[messages.length - 1]?.content || '';
     
     for (const fastPattern of FAST_PATH_COUNT_PATTERNS) {
-      if (fastPattern.pattern.test(lastUserMessageForFastPath)) {
+      const match = lastUserMessageForFastPath.match(fastPattern.pattern);
+      if (match) {
         console.log(`⚡ [ULTRA FAST PATH] Count query detected: ${fastPattern.table}`);
         const fastPathStart = Date.now();
         
@@ -1540,16 +1684,39 @@ Deno.serve(async (req: Request) => {
             countQuery = countQuery.is('deleted_at', null);
           }
           
+          // 🆕 GEAVANCEERDE FILTERS: Dynamisch filter op basis van regex match
+          let filterContext = '';
+          if (fastPattern.extractFilter && match) {
+            const filter = fastPattern.extractFilter(match);
+            if (filter) {
+              filterContext = filter.value;
+              console.log(`⚡ [ULTRA FAST PATH] Applying advanced filter: ${filter.column} ${filter.operator} "${filter.value}"`);
+              
+              switch (filter.operator) {
+                case 'eq':
+                  countQuery = countQuery.eq(filter.column, filter.value);
+                  break;
+                case 'ilike':
+                  countQuery = countQuery.ilike(filter.column, `%${filter.value}%`);
+                  break;
+                case 'contains':
+                  // For array columns like sector[], doelgroep[], gezochte_functies[]
+                  countQuery = countQuery.contains(filter.column, [filter.value]);
+                  break;
+              }
+            }
+          }
+          
           const { count, error: countError } = await countQuery;
           
           if (countError) {
             console.error(`⚡ [ULTRA FAST PATH] Count error:`, countError);
             // Fall through to normal processing
           } else {
-            const responseContent = fastPattern.responseTemplate(count || 0);
+            const responseContent = fastPattern.responseTemplate(count || 0, filterContext);
             const fastPathDuration = Date.now() - fastPathStart;
             
-            console.log(`⚡ [ULTRA FAST PATH] SUCCESS: ${count} items, ${fastPathDuration}ms (vs ~30s with AI)`);
+            console.log(`⚡ [ULTRA FAST PATH] SUCCESS: ${count} items, ${fastPathDuration}ms (vs ~30s with AI)${filterContext ? ` [filter: ${filterContext}]` : ''}`);
             
             // Persist messages in background
             persistMessage(supabaseServiceClient, {
@@ -1566,7 +1733,7 @@ Deno.serve(async (req: Request) => {
               conversation_id: conversation_id,
               role: 'assistant',
               content: responseContent,
-              metadata: { fast_path: true, duration_ms: fastPathDuration }
+              metadata: { fast_path: true, duration_ms: fastPathDuration, filter: filterContext || null }
             }).catch(() => {});
             
             // Return SSE stream directly
@@ -1579,7 +1746,8 @@ Deno.serve(async (req: Request) => {
                 'Content-Type': 'text/event-stream',
                 'Cache-Control': 'no-cache',
                 'Connection': 'keep-alive',
-                'X-Fast-Path': 'count-query',
+                'X-Fast-Path': filterContext ? 'count-query-filtered' : 'count-query',
+                'X-Fast-Path-Filter': filterContext || '',
                 'X-Response-Time-Ms': String(fastPathDuration)
               }
             });
