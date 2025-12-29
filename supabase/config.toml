@@ -403,3 +403,8 @@ schedule = "0 5 * * *"
 verify_jwt = false
 schedule = "0 6 * * *"
 # Purpose: Cleanup underperforming Fast Path patterns and apply temporal decay (daily at 06:00)
+
+[functions.monitor-document-expiry]
+verify_jwt = false
+schedule = "0 7 * * *"
+# Purpose: Monitor document expiry dates and create renewal goals (daily at 07:00)
