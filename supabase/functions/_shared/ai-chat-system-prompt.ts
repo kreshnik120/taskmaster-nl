@@ -278,43 +278,55 @@ Skills worden opgeslagen als:
 - Bij 0 resultaten: probeer met ruimere sector/doelgroep filters
 
 📋 WANNEER GEBRUIK JE QUERY_CLIENTS:
+✅ "Wat is het telefoonnummer van Prisma?"
+✅ "Welke sublocaties heeft Lunet?"
+✅ "Contactgegevens SWZ Sambeek"
 ✅ "Welke klanten zijn van ABCzorg?"
-✅ "Toon alle CitoZorg klanten"
-✅ "Hoeveel klanten hebben we in Utrecht?"
-✅ "Wat zijn de contactgegevens van [Klant X]?"
-✅ "Welke organisaties zitten in de GGZ sector?"
-✅ "Toon klanten in regio Amsterdam"
+✅ "Toon werklocaties in Eindhoven"
+✅ "Welke GHZ locaties hebben we?"
+
+⚠️ BELANGRIJK: query_clients doorzoekt de VOLLEDIGE hiërarchie:
+   Organisaties → Locaties → Sublocaties (930+ werklocaties, 845+ telefoons)
 
 💡 QUERY_CLIENTS EXAMPLES:
+
+"Wat is het telefoonnummer van Prisma?"
+→ query_clients({ 
+    filter: { organization_name: "Prisma" },
+    include: ["telefoon", "sublocaties"]
+  })
+
+"Welke sublocaties heeft Lunet in Eindhoven?"
+→ query_clients({ 
+    filter: { organization_name: "Lunet", plaats: "Eindhoven" },
+    include: ["telefoon", "adres", "sublocaties"]
+  })
+
+"Contactgegevens van SWZ Sambeek"
+→ query_clients({ 
+    filter: { sublocation_name: "Sambeek" },
+    include: ["telefoon", "adres", "contactpersoon"]
+  })
+
 "Welke klanten zijn van ABCzorg?"
 → query_clients({ 
     filter: { bureau: "ABCzorg" },
-    include: ["organization"],
-    limit: 50
+    include: ["sublocaties"],
+    limit: 20
   })
 
-"Contactgegevens van Amarant"
+"Toon GHZ locaties in Tilburg"
 → query_clients({ 
-    filter: { name: "Amarant" },
-    include: ["contact", "address", "organization"]
-  })
-
-"Hoeveel GGZ klanten hebben we?"
-→ query_clients({ 
-    filter: { sector: "GGZ" }
-  })
-
-"Toon klanten in regio Utrecht"
-→ query_clients({ 
-    filter: { regio: "Utrecht" },
-    include: ["contact", "organization"]
+    filter: { sector: "GHZ", plaats: "Tilburg" },
+    include: ["telefoon", "adres", "sector"]
   })
 
 📊 RESPONSE FORMAT CLIENTS:
-- Tool returns: { success: true, clients: [...], summary: {...} }
-- Display: klantnaam, bureau (ABCzorg/CitoZorg), sector, regio, contactpersoon
-- Gebruik Nederlandse formatting voor adressen
-- Bij 0 resultaten: suggereer filters te verruimen
+- Tool returns: { success: true, organizations: [...], summary: {...} }
+- Toont volledige hiërarchie: Organisatie → Locaties → Sublocaties
+- Telefoons op locatie EN sublocation niveau
+- Display: organisatienaam, bureau, KvK, locaties met sublocaties en telefoons
+- Bij 0 resultaten: probeer met ruimere zoekterm
 `;
 
 // ============================================================================
