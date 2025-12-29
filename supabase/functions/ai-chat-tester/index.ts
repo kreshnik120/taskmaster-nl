@@ -189,14 +189,83 @@ const TEST_SCENARIOS: TestScenario[] = [
       { type: "mentions", keywords: ["organisatie", "klant"], description: "Moet organisatie of klant vermelden" }
     ]
   },
+  // ═══════════════════════════════════════════════════════════════════
+  // FAST PATH TEST SCENARIOS - Alle Nederlandse variaties
+  // ═══════════════════════════════════════════════════════════════════
   {
-    id: "count_sublocations_fast_path",
-    question: "Hoeveel werklocaties zijn er?", // Simplified for Fast Path detection
-    expected_tool: null, // Fast Path bypasses tools entirely
-    timeout_ms: 5000, // Fast Path should respond in <100ms, 5s is safety margin
+    id: "fast_path_hoeveel_werklocaties",
+    question: "Hoeveel werklocaties zijn er?",
+    expected_tool: null,
+    timeout_ms: 5000,
     validations: [
       { type: "contains_number", min: 800, max: 1100, description: "Moet een getal tussen 800-1100 bevatten" },
-      { type: "mentions", keywords: ["werklocatie", "sublocatie", "locatie"], description: "Moet locatie vermelden" },
+      { type: "mentions", keywords: ["werklocatie", "locatie"], description: "Moet locatie vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn (< 500ms)" }
+    ]
+  },
+  {
+    id: "fast_path_tel_werklocaties",
+    question: "Tel de werklocaties",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 800, max: 1100, description: "Moet een getal tussen 800-1100 bevatten" },
+      { type: "mentions", keywords: ["werklocatie", "locatie"], description: "Moet locatie vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn (< 500ms)" }
+    ]
+  },
+  {
+    id: "fast_path_aantal_locaties",
+    question: "Wat is het aantal locaties totaal?",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 800, max: 1100, description: "Moet een getal tussen 800-1100 bevatten" },
+      { type: "mentions", keywords: ["werklocatie", "locatie"], description: "Moet locatie vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn (< 500ms)" }
+    ]
+  },
+  {
+    id: "fast_path_hoeveel_plaatsen",
+    question: "Hoeveel plaatsen hebben we?",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 800, max: 1100, description: "Moet een getal tussen 800-1100 bevatten" },
+      { type: "mentions", keywords: ["werklocatie", "locatie"], description: "Moet locatie vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn (< 500ms)" }
+    ]
+  },
+  {
+    id: "fast_path_totaal_vestigingen",
+    question: "Totaal aantal vestigingen",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 800, max: 1100, description: "Moet een getal tussen 800-1100 bevatten" },
+      { type: "mentions", keywords: ["werklocatie", "locatie"], description: "Moet locatie vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn (< 500ms)" }
+    ]
+  },
+  {
+    id: "fast_path_tel_professionals",
+    question: "Tel de professionals",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 1, description: "Moet een getal bevatten" },
+      { type: "mentions", keywords: ["professional"], description: "Moet professional vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn (< 500ms)" }
+    ]
+  },
+  {
+    id: "fast_path_aantal_klanten",
+    question: "Aantal klanten totaal",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 1, description: "Moet een getal bevatten" },
+      { type: "mentions", keywords: ["klant", "organisatie"], description: "Moet klant of organisatie vermelden" },
       { type: "fast_path", description: "Moet via Fast Path verwerkt zijn (< 500ms)" }
     ]
   },

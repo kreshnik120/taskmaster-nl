@@ -36,37 +36,194 @@ interface FastPathPattern {
   responseTemplate: (count: number) => string;
 }
 
+// ============================================
+// UITGEBREIDE FAST PATH PATTERNS - ALLE NEDERLANDSE VARIATIES
+// ============================================
+// Synoniemen voor count-prefixes: hoeveel, tel, aantal, wat is het aantal, totaal, geef, count
+// Dit voorkomt dat gebruikers specifieke formulering moeten gebruiken
+
 const FAST_PATH_COUNT_PATTERNS: FastPathPattern[] = [
+  // ═══════════════════════════════════════════════════════════════════
+  // WERKLOCATIES / SUBLOCATIES / LOCATIES / PLAATSEN / VESTIGINGEN
+  // ═══════════════════════════════════════════════════════════════════
   {
-    pattern: /^hoeveel\s+(werklocaties|sublocaties|locaties)\s*(zijn er|hebben we|totaal|in totaal)?/i,
+    // "hoeveel werklocaties", "hoeveel locaties zijn er", "hoeveel plaatsen hebben we"
+    pattern: /^hoeveel\s+(actieve\s+)?(werklocaties|sublocaties|locaties|plaatsen|vestigingen|werkplekken)\s*(zijn\s*er|hebben\s*we|totaal|in\s*totaal)?/i,
     table: 'client_sublocations',
     countColumn: 'id',
     activeFilter: true,
     responseTemplate: (count: number) => `📍 Er zijn **${count}** actieve werklocaties in het systeem.`
   },
   {
-    pattern: /^hoeveel\s+(professionals|zzp.?ers|uitzendkrachten)/i,
+    // "tel de werklocaties", "tel alle locaties", "tel het aantal vestigingen"
+    pattern: /^tel\s+(de\s+|het\s+|alle\s+)?(actieve\s+)?(werklocaties|sublocaties|locaties|plaatsen|vestigingen|werkplekken)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    responseTemplate: (count: number) => `📍 Er zijn **${count}** actieve werklocaties in het systeem.`
+  },
+  {
+    // "aantal locaties", "het aantal werklocaties", "aantal plaatsen totaal"
+    pattern: /^(het\s+)?aantal\s+(actieve\s+)?(werklocaties|sublocaties|locaties|plaatsen|vestigingen|werkplekken)\s*(totaal)?/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    responseTemplate: (count: number) => `📍 Er zijn **${count}** actieve werklocaties in het systeem.`
+  },
+  {
+    // "wat is het aantal werklocaties", "wat is het totaal aantal locaties"
+    pattern: /^wat\s+is\s+(het\s+)?(totaal\s+)?(aantal\s+)?(actieve\s+)?(werklocaties|sublocaties|locaties|plaatsen|vestigingen|werkplekken)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    responseTemplate: (count: number) => `📍 Er zijn **${count}** actieve werklocaties in het systeem.`
+  },
+  {
+    // "totaal werklocaties", "totaal aantal locaties"
+    pattern: /^totaal\s+(aantal\s+)?(actieve\s+)?(werklocaties|sublocaties|locaties|plaatsen|vestigingen|werkplekken)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    responseTemplate: (count: number) => `📍 Er zijn **${count}** actieve werklocaties in het systeem.`
+  },
+  {
+    // "geef me het aantal werklocaties", "geef het totaal locaties"
+    pattern: /^geef\s+.{0,20}(aantal|totaal)\s*(actieve\s+)?(werklocaties|sublocaties|locaties|plaatsen|vestigingen|werkplekken)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    responseTemplate: (count: number) => `📍 Er zijn **${count}** actieve werklocaties in het systeem.`
+  },
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // PROFESSIONALS / ZZP'ERS / UITZENDKRACHTEN / MEDEWERKERS
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    pattern: /^hoeveel\s+(professionals|zzp.?ers?|uitzendkrachten|medewerkers|zorgprofessionals)\s*(zijn\s*er|hebben\s*we|totaal)?/i,
     table: 'professionals',
     countColumn: 'id',
     activeFilter: false,
     responseTemplate: (count: number) => `👥 Er zijn **${count}** professionals geregistreerd in het systeem.`
   },
   {
-    pattern: /^hoeveel\s+(sollicitaties|kandidaten|aanmeldingen)/i,
+    pattern: /^tel\s+(de\s+|het\s+|alle\s+)?(professionals|zzp.?ers?|uitzendkrachten|medewerkers|zorgprofessionals)/i,
+    table: 'professionals',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `👥 Er zijn **${count}** professionals geregistreerd in het systeem.`
+  },
+  {
+    pattern: /^(het\s+)?aantal\s+(professionals|zzp.?ers?|uitzendkrachten|medewerkers|zorgprofessionals)\s*(totaal)?/i,
+    table: 'professionals',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `👥 Er zijn **${count}** professionals geregistreerd in het systeem.`
+  },
+  {
+    pattern: /^wat\s+is\s+(het\s+)?(totaal\s+)?(aantal\s+)?(professionals|zzp.?ers?|uitzendkrachten|medewerkers|zorgprofessionals)/i,
+    table: 'professionals',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `👥 Er zijn **${count}** professionals geregistreerd in het systeem.`
+  },
+  {
+    pattern: /^totaal\s+(aantal\s+)?(professionals|zzp.?ers?|uitzendkrachten|medewerkers|zorgprofessionals)/i,
+    table: 'professionals',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `👥 Er zijn **${count}** professionals geregistreerd in het systeem.`
+  },
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // SOLLICITATIES / KANDIDATEN / AANMELDINGEN
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    pattern: /^hoeveel\s+(sollicitaties|kandidaten|aanmeldingen|applicaties)\s*(zijn\s*er|hebben\s*we|totaal)?/i,
     table: 'professional_applications',
     countColumn: 'id',
     activeFilter: false,
     responseTemplate: (count: number) => `📋 Er zijn **${count}** sollicitaties in het systeem.`
   },
   {
-    pattern: /^hoeveel\s+(klanten|cliënten|organisaties|opdrachtgevers)/i,
+    pattern: /^tel\s+(de\s+|het\s+|alle\s+)?(sollicitaties|kandidaten|aanmeldingen|applicaties)/i,
+    table: 'professional_applications',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `📋 Er zijn **${count}** sollicitaties in het systeem.`
+  },
+  {
+    pattern: /^(het\s+)?aantal\s+(sollicitaties|kandidaten|aanmeldingen|applicaties)\s*(totaal)?/i,
+    table: 'professional_applications',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `📋 Er zijn **${count}** sollicitaties in het systeem.`
+  },
+  {
+    pattern: /^wat\s+is\s+(het\s+)?(totaal\s+)?(aantal\s+)?(sollicitaties|kandidaten|aanmeldingen|applicaties)/i,
+    table: 'professional_applications',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `📋 Er zijn **${count}** sollicitaties in het systeem.`
+  },
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // KLANTEN / ORGANISATIES / OPDRACHTGEVERS
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    pattern: /^hoeveel\s+(klanten|cliënten|organisaties|opdrachtgevers|zorginstellingen)\s*(zijn\s*er|hebben\s*we|totaal)?/i,
     table: 'client_organizations',
     countColumn: 'id',
     activeFilter: false,
     responseTemplate: (count: number) => `🏢 Er zijn **${count}** klantorganisaties geregistreerd.`
   },
   {
-    pattern: /^hoeveel\s+(plaatsingen|opdrachten)/i,
+    pattern: /^tel\s+(de\s+|het\s+|alle\s+)?(klanten|cliënten|organisaties|opdrachtgevers|zorginstellingen)/i,
+    table: 'client_organizations',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `🏢 Er zijn **${count}** klantorganisaties geregistreerd.`
+  },
+  {
+    pattern: /^(het\s+)?aantal\s+(klanten|cliënten|organisaties|opdrachtgevers|zorginstellingen)\s*(totaal)?/i,
+    table: 'client_organizations',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `🏢 Er zijn **${count}** klantorganisaties geregistreerd.`
+  },
+  {
+    pattern: /^wat\s+is\s+(het\s+)?(totaal\s+)?(aantal\s+)?(klanten|cliënten|organisaties|opdrachtgevers|zorginstellingen)/i,
+    table: 'client_organizations',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `🏢 Er zijn **${count}** klantorganisaties geregistreerd.`
+  },
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // PLAATSINGEN / OPDRACHTEN / ASSIGNMENTS
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    pattern: /^hoeveel\s+(plaatsingen|opdrachten|assignments|matches)\s*(zijn\s*er|hebben\s*we|totaal)?/i,
+    table: 'assignments',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `✅ Er zijn **${count}** plaatsingen in het systeem.`
+  },
+  {
+    pattern: /^tel\s+(de\s+|het\s+|alle\s+)?(plaatsingen|opdrachten|assignments|matches)/i,
+    table: 'assignments',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `✅ Er zijn **${count}** plaatsingen in het systeem.`
+  },
+  {
+    pattern: /^(het\s+)?aantal\s+(plaatsingen|opdrachten|assignments|matches)\s*(totaal)?/i,
+    table: 'assignments',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `✅ Er zijn **${count}** plaatsingen in het systeem.`
+  },
+  {
+    pattern: /^wat\s+is\s+(het\s+)?(totaal\s+)?(aantal\s+)?(plaatsingen|opdrachten|assignments|matches)/i,
     table: 'assignments',
     countColumn: 'id',
     activeFilter: false,
