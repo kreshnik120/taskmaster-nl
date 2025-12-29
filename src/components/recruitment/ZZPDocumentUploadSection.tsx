@@ -31,6 +31,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { logDocumentAction } from '@/lib/documentAuditLogger';
+import { registerDocument, calculateExpiryDate } from '@/lib/services/documentService';
 import { DocumentAuditHistory } from './DocumentAuditHistory';
 
 // ZZP Document types
@@ -232,6 +233,20 @@ export function ZZPDocumentUploadSection({
         .eq('id', applicationId);
 
       if (updateError) throw updateError;
+
+      // Register in centralized application_documents table
+      const expiryDate = calculateExpiryDate(docType);
+      await registerDocument({
+        applicationId,
+        documentType: docType,
+        filename: file.name,
+        filePath,
+        category: 'zzp',
+        source: 'manual_upload',
+        expiryDate: expiryDate?.toISOString().split('T')[0] || null,
+        contentType: file.type,
+        metadata: { fileSize: file.size }
+      });
 
       // Log audit event for upload
       await logDocumentAction({

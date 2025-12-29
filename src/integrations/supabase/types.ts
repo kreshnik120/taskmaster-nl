@@ -1034,14 +1034,18 @@ export type Database = {
       application_documents: {
         Row: {
           application_id: string
+          category: string | null
           content_type: string | null
           created_at: string | null
           document_type: string | null
+          expiry_date: string | null
           file_path: string
           filename: string
           id: string
           is_verified: boolean | null
           metadata: Json | null
+          reminder_sent_at: string | null
+          source: string | null
           verified_at: string | null
           verified_by: string | null
           vog_expiry_status: string | null
@@ -1049,14 +1053,18 @@ export type Database = {
         }
         Insert: {
           application_id: string
+          category?: string | null
           content_type?: string | null
           created_at?: string | null
           document_type?: string | null
+          expiry_date?: string | null
           file_path: string
           filename: string
           id?: string
           is_verified?: boolean | null
           metadata?: Json | null
+          reminder_sent_at?: string | null
+          source?: string | null
           verified_at?: string | null
           verified_by?: string | null
           vog_expiry_status?: string | null
@@ -1064,14 +1072,18 @@ export type Database = {
         }
         Update: {
           application_id?: string
+          category?: string | null
           content_type?: string | null
           created_at?: string | null
           document_type?: string | null
+          expiry_date?: string | null
           file_path?: string
           filename?: string
           id?: string
           is_verified?: boolean | null
           metadata?: Json | null
+          reminder_sent_at?: string | null
+          source?: string | null
           verified_at?: string | null
           verified_by?: string | null
           vog_expiry_status?: string | null
