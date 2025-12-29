@@ -20,8 +20,9 @@ export function RecruitmentKPIs() {
           .select("id", { count: "exact" })
           .is("deleted_at", null),
         supabase
-          .from("clients")
-          .select("id", { count: "exact" }),
+          .from("client_sublocations")
+          .select("id", { count: "exact" })
+          .eq("is_active", true),
         supabase
           .from("professional_clients")
           .select("id", { count: "exact" })

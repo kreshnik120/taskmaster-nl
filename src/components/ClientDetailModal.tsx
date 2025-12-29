@@ -270,31 +270,29 @@ export default function ClientDetailModal({ open, onOpenChange, client, onUpdate
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Update client_sublocations directly (not the VIEW)
       const { error } = await supabase
-        .from("clients")
+        .from("client_sublocations")
         .update({
-          name,
-          company,
-          email: email || null,
-          phone: phone || null,
-          address: address || null,
-          notes: notes || null,
-          logo_url: logoUrl || null,
-          regio: regios.length > 0 ? regios : null,
+          naam: name,
+          telefoon: phone || null,
+          adres: address || null,
+          provincie: regios.length > 0 ? regios[0] : null,
           sector: sectoren.length > 0 ? sectoren : null,
           doelgroep: doelgroepen.length > 0 ? doelgroepen : null,
           gezochte_functies: functies.length > 0 ? functies : null,
+          publieke_opmerking: notes || null,
         })
         .eq("id", client.id);
 
       if (error) throw error;
 
-      toast.success("Klant bijgewerkt");
+      toast.success("Werklocatie bijgewerkt");
       setIsEditing(false);
       onUpdate();
     } catch (error: any) {
-      console.error("Error updating client:", error);
-      toast.error("Kon klant niet bijwerken");
+      console.error("Error updating sublocation:", error);
+      toast.error("Kon werklocatie niet bijwerken");
     } finally {
       setSaving(false);
     }

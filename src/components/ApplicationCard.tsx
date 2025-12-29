@@ -54,17 +54,35 @@ interface ApplicationCardProps {
 export function ApplicationCard({ application, onClick, searchQuery = "", isSelected = false, onSelect }: ApplicationCardProps) {
   const { toast } = useToast();
 
-  // Fetch clients for matching
+  // Fetch sublocations for matching
   const { data: clients } = useQuery({
-    queryKey: ["clients-for-matching"],
+    queryKey: ["sublocations-for-matching"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("clients")
-        .select("id, name, company, regio, sector, doelgroep, gezochte_functies, client_org_id")
+        .from("client_sublocations")
+        .select(`
+          id, naam, sector, doelgroep, gezochte_functies, provincie,
+          location:client_locations!location_id (
+            client_org:client_organizations!client_org_id (
+              id, name
+            )
+          )
+        `)
         .eq("is_active", true);
       
       if (error) throw error;
-      return data || [];
+      
+      // Map to expected format
+      return (data || []).map(sub => ({
+        id: sub.id,
+        name: sub.naam,
+        company: sub.location?.client_org?.name || '',
+        regio: sub.provincie ? [sub.provincie] : [],
+        sector: sub.sector,
+        doelgroep: sub.doelgroep,
+        gezochte_functies: sub.gezochte_functies,
+        client_org_id: sub.location?.client_org?.id
+      }));
     },
   });
 

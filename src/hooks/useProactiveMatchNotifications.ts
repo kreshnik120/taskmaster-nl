@@ -11,6 +11,21 @@ interface Application {
   pipeline_stage: string;
 }
 
+interface Sublocation {
+  id: string;
+  naam: string;
+  sector: string[] | null;
+  doelgroep: string[] | null;
+  gezochte_functies: string[] | null;
+  provincie: string | null;
+  location: {
+    client_org: {
+      name: string;
+      org_id: string;
+    } | null;
+  } | null;
+}
+
 interface Client {
   id: string;
   name: string;
@@ -80,16 +95,33 @@ export function useProactiveMatchNotifications(
   const clientsCache = useRef<Client[]>([]);
   const notifiedApplicationIds = useRef<Set<string>>(new Set());
 
-  // Load clients once
+  // Load sublocations once and map to Client interface
   useEffect(() => {
     const loadClients = async () => {
       const { data } = await supabase
-        .from("clients")
-        .select("id, name, company, regio, sector, doelgroep, gezochte_functies, org_id")
+        .from("client_sublocations")
+        .select(`
+          id, naam, sector, doelgroep, gezochte_functies, provincie,
+          location:client_locations!location_id (
+            client_org:client_organizations!client_org_id (
+              name, org_id
+            )
+          )
+        `)
         .eq("is_active", true);
       
       if (data) {
-        clientsCache.current = data;
+        // Map sublocations to Client interface
+        clientsCache.current = (data as Sublocation[]).map(sub => ({
+          id: sub.id,
+          name: sub.naam,
+          company: sub.location?.client_org?.name || '',
+          regio: sub.provincie ? [sub.provincie] : null,
+          sector: sub.sector,
+          doelgroep: sub.doelgroep,
+          gezochte_functies: sub.gezochte_functies,
+          org_id: sub.location?.client_org?.org_id || ''
+        }));
       }
     };
     loadClients();
