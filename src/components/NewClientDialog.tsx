@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, X, ChevronRight, ChevronLeft, Building2 } from "lucide-react";
+import { Loader2, X, ChevronRight, ChevronLeft, Building2, ShieldAlert } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BUREAU_IDS,
@@ -76,6 +76,41 @@ export default function NewClientDialog({
   const [sectors, setSectors] = useState<string[]>([]);
   const [doelgroepen, setDoelgroepen] = useState<string[]>([]);
   const [functies, setFuncties] = useState<string[]>([]);
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [checkingPermission, setCheckingPermission] = useState(true);
+
+  // Check user role on dialog open
+  useEffect(() => {
+    const checkUserRole = async () => {
+      if (!open) return;
+      
+      setCheckingPermission(true);
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        if (!session?.session) {
+          setHasPermission(false);
+          return;
+        }
+
+        const { data: userRoles } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', session.session.user.id);
+
+        const hasAdminOrManager = userRoles?.some(
+          r => r.role === 'admin' || r.role === 'manager'
+        );
+        setHasPermission(hasAdminOrManager ?? false);
+      } catch (error) {
+        console.error('Error checking user role:', error);
+        setHasPermission(false);
+      } finally {
+        setCheckingPermission(false);
+      }
+    };
+
+    checkUserRole();
+  }, [open]);
 
   const {
     register,
@@ -141,7 +176,27 @@ export default function NewClientDialog({
     try {
       const { data: session } = await supabase.auth.getSession();
       if (!session?.session) {
-        toast.error("Niet ingelogd");
+        toast.error("Niet ingelogd", {
+          description: "Log in om organisaties toe te voegen",
+        });
+        return;
+      }
+
+      // Pre-check user role before attempting insert
+      const { data: userRoles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', session.session.user.id);
+
+      const hasAdminOrManager = userRoles?.some(
+        r => r.role === 'admin' || r.role === 'manager'
+      );
+
+      if (!hasAdminOrManager) {
+        toast.error("Geen toegang", {
+          description: "Je hebt admin of manager rechten nodig om organisaties toe te voegen",
+        });
+        setHasPermission(false);
         return;
       }
 
@@ -214,9 +269,22 @@ export default function NewClientDialog({
       onOpenChange(false);
     } catch (error: any) {
       console.error("Error creating organization:", error);
-      toast.error("Kon organisatie niet toevoegen", {
-        description: error.message,
-      });
+      
+      // Check for RLS-related errors
+      if (
+        error.message?.includes('row-level security') ||
+        error.code === '42501' ||
+        error.message?.includes('permission denied')
+      ) {
+        toast.error("Geen toegang", {
+          description: "Je hebt geen rechten om organisaties aan te maken. Neem contact op met een administrator.",
+        });
+        setHasPermission(false);
+      } else {
+        toast.error("Kon organisatie niet toevoegen", {
+          description: error.message || "Er is een onbekende fout opgetreden",
+        });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -238,6 +306,37 @@ export default function NewClientDialog({
             </div>
           </div>
         </DialogHeader>
+
+        {/* Permission check loading/error state */}
+        {checkingPermission && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-sm text-muted-foreground">Rechten controleren...</span>
+          </div>
+        )}
+
+        {!checkingPermission && hasPermission === false && (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <div className="p-3 rounded-full bg-destructive/10 mb-4">
+              <ShieldAlert className="h-8 w-8 text-destructive" />
+            </div>
+            <h3 className="font-semibold text-lg mb-2">Geen toegang</h3>
+            <p className="text-sm text-muted-foreground max-w-sm">
+              Je hebt admin of manager rechten nodig om nieuwe organisaties toe te voegen.
+              Neem contact op met een administrator.
+            </p>
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => onOpenChange(false)}
+            >
+              Sluiten
+            </Button>
+          </div>
+        )}
+
+        {!checkingPermission && hasPermission && (
+          <>
 
         {/* Progress Indicator */}
         <div className="flex items-center justify-center gap-2 my-4">
@@ -585,6 +684,8 @@ export default function NewClientDialog({
             </div>
           </DialogFooter>
         </form>
+        </>
+        )}
       </DialogContent>
     </Dialog>
   );
