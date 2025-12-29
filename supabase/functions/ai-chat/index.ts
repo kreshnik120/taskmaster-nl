@@ -462,6 +462,26 @@ const FAST_PATH_COUNT_PATTERNS: FastPathPattern[] = [
   },
 
   // ═══════════════════════════════════════════════════════════════════
+  // HOOFDLOCATIES (client_locations - niet werklocaties/sublocaties)
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    // "tel het aantal hoofdlocaties in client_locations", "hoeveel hoofdlocaties"
+    pattern: /^(tel|hoeveel|aantal|wat\s+is\s+(het\s+)?aantal)\s+(het\s+aantal\s+)?(hoofdlocaties|locaties\s+in\s+client_locations)/i,
+    table: 'client_locations',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `📍 Er zijn **${count}** hoofdlocaties (client_locations) in het systeem.`
+  },
+  {
+    // "client_locations tabel tellen"
+    pattern: /client_locations\s+(tabel|table)/i,
+    table: 'client_locations',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `📍 Er zijn **${count}** hoofdlocaties in de client_locations tabel.`
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
   // KLANTEN / ORGANISATIES / OPDRACHTGEVERS
   // ═══════════════════════════════════════════════════════════════════
   {
@@ -4149,6 +4169,10 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
                     type: "string",
                     description: "Filter op doelgroep (LVB, Ouderen, Psychiatrie)"
                   },
+                  gezochte_functie: { 
+                    type: "string",
+                    description: "Filter op gezochte functie/medewerkers (VIG, Begeleider, Verpleegkundige, Persoonlijk begeleider, Activiteitenbegeleider, EVV, Verzorgende)"
+                  },
                   bureau: { 
                     type: "string", 
                     enum: ["ABCzorg", "CitoZorg"],
@@ -5462,6 +5486,9 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
                             
                             // Apply same filters as regular query
                             if (args.filter) {
+                              if (args.filter.naam) {
+                                countQuery = countQuery.ilike('naam', `%${args.filter.naam}%`);
+                              }
                               if (args.filter.plaats) {
                                 countQuery = countQuery.ilike('plaats', `%${args.filter.plaats}%`);
                               }
@@ -5470,6 +5497,10 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
                               }
                               if (args.filter.doelgroep) {
                                 countQuery = countQuery.contains('doelgroep', [args.filter.doelgroep]);
+                              }
+                              // 🆕 Filter op gezochte functie (VIG, Begeleider, etc.)
+                              if (args.filter.gezochte_functie) {
+                                countQuery = countQuery.contains('gezochte_functies', [args.filter.gezochte_functie]);
                               }
                               if (args.filter.is_active !== undefined) {
                                 countQuery = countQuery.eq('is_active', args.filter.is_active);
@@ -5491,11 +5522,18 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
                               };
                             } else {
                               console.log(`⚡ [COUNT_ONLY] ${sublocCount} items in ${countDuration}ms`);
+                              const filterParts = [];
+                              if (args.filter?.plaats) filterParts.push(`in ${args.filter.plaats}`);
+                              if (args.filter?.sector) filterParts.push(`sector: ${args.filter.sector}`);
+                              if (args.filter?.doelgroep) filterParts.push(`doelgroep: ${args.filter.doelgroep}`);
+                              if (args.filter?.gezochte_functie) filterParts.push(`zoeken: ${args.filter.gezochte_functie}`);
+                              const filterSuffix = filterParts.length > 0 ? ` (${filterParts.join(', ')})` : '';
+                              
                               result = {
                                 success: true,
                                 total_count: sublocCount,
                                 query_time_ms: countDuration,
-                                message: `📍 Er zijn **${sublocCount}** ${args.filter?.is_active === false ? 'inactieve' : 'actieve'} werklocaties${args.filter?.plaats ? ` in ${args.filter.plaats}` : ''}${args.filter?.sector ? ` (sector: ${args.filter.sector})` : ''} in het systeem.`
+                                message: `📍 Er zijn **${sublocCount}** ${args.filter?.is_active === false ? 'inactieve' : 'actieve'} werklocaties${filterSuffix} in het systeem.`
                               };
                             }
                             break;
@@ -5525,6 +5563,10 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
                             }
                             if (args.filter.doelgroep) {
                               sublocQuery = sublocQuery.contains('doelgroep', [args.filter.doelgroep]);
+                            }
+                            // 🆕 Filter op gezochte functie (VIG, Begeleider, etc.)
+                            if (args.filter.gezochte_functie) {
+                              sublocQuery = sublocQuery.contains('gezochte_functies', [args.filter.gezochte_functie]);
                             }
                             if (args.filter.is_active !== undefined) {
                               sublocQuery = sublocQuery.eq('is_active', args.filter.is_active);

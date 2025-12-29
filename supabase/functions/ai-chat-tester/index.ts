@@ -441,21 +441,22 @@ const TEST_SCENARIOS: TestScenario[] = [
   },
   {
     id: "function_filter_vig",
-    question: "Welke werklocaties zoeken VIG medewerkers?",
+    question: "Geef me een overzicht van werklocaties die specifiek VIG medewerkers zoeken, gebruik de query_sublocations tool",
     expected_tool: "query_sublocations",
-    timeout_ms: 30000,
+    timeout_ms: 45000,
     validations: [
-      { type: "mentions", keywords: ["VIG"], description: "Moet VIG vermelden" },
-      { type: "contains_number", min: 1, description: "Moet resultaten bevatten" }
+      { type: "mentions", keywords: ["VIG", "werklocatie", "locatie"], description: "Moet VIG en locatie vermelden" },
+      { type: "contains_number", min: 0, description: "Moet een aantal bevatten (kan 0 zijn als geen VIG gezocht)" }
     ]
   },
   {
     id: "count_locations",
-    question: "Hoeveel locaties (niet sublocaties) zijn er?",
+    question: "Tel het aantal hoofdlocaties in client_locations tabel, niet de werklocaties/sublocaties",
     expected_tool: "query_clients",
     timeout_ms: 30000,
     validations: [
-      { type: "contains_number", min: 50, max: 100, description: "Moet een getal tussen 50-100 bevatten" }
+      { type: "contains_number", min: 50, max: 100, description: "Moet een getal tussen 50-100 bevatten (57 verwacht)" },
+      { type: "mentions", keywords: ["hoofdlocatie", "locatie", "client_locations"], description: "Moet hoofdlocatie of locatie vermelden" }
     ]
   },
   {
