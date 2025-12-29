@@ -338,6 +338,20 @@ Skills worden opgeslagen als:
 ⚡ QUERY_SUBLOCATIONS is SNELLER voor directe sublocation zoekopdrachten!
    Gebruik query_clients als je de volledige organisatie-hiërarchie nodig hebt.
 
+⚡⚡ PERFORMANCE TIP VOOR TELVRAGEN:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Bij vragen als "hoeveel werklocaties" of "aantal sublocaties":
+→ Gebruik ALTIJD: query_sublocations({ count_only: true })
+→ Dit is 100x SNELLER dan data ophalen (~3ms vs 30+ seconden)
+→ Retourneert alleen het totaal aantal, geen individuele records
+
+VOORBEELDEN count_only:
+"Hoeveel werklocaties zijn er?"
+→ query_sublocations({ count_only: true })
+
+"Hoeveel GHZ locaties in Tilburg?"
+→ query_sublocations({ count_only: true, filter: { sector: "GHZ", plaats: "Tilburg" } })
+
 💡 QUERY_SUBLOCATIONS EXAMPLES:
 
 "Werklocaties in Tilburg met telefoonnummer"
