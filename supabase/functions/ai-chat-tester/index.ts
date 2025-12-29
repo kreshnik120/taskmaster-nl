@@ -31,6 +31,22 @@ const RETRYABLE_ERRORS = [
   'socket hang up'
 ];
 
+// Circuit Breaker configuration
+const DEFAULT_FAILURE_THRESHOLD = 3;      // Open circuit after 3 consecutive failures
+const DEFAULT_RECOVERY_TIMEOUT_MS = 30000; // Wait 30s before trying HALF_OPEN
+const HALF_OPEN_MAX_ATTEMPTS = 1;         // Try 1 test in HALF_OPEN state
+
+type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
+
+interface CircuitBreaker {
+  state: CircuitState;
+  consecutiveFailures: number;
+  lastFailureTime: number | null;
+  openedAt: number | null;
+  totalTripped: number;
+  halfOpenAttempts: number;
+}
+
 // Calculate delay with exponential backoff and jitter
 function calculateBackoffDelay(attempt: number): number {
   const exponentialDelay = Math.min(
@@ -53,6 +69,79 @@ function isRetryableError(error: string): boolean {
 // Sleep helper for delays
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Circuit Breaker helper functions
+function createCircuitBreaker(): CircuitBreaker {
+  return {
+    state: 'CLOSED',
+    consecutiveFailures: 0,
+    lastFailureTime: null,
+    openedAt: null,
+    totalTripped: 0,
+    halfOpenAttempts: 0
+  };
+}
+
+function recordSuccess(breaker: CircuitBreaker): void {
+  breaker.consecutiveFailures = 0;
+  if (breaker.state === 'HALF_OPEN') {
+    console.log('[circuit-breaker] Recovered - closing circuit');
+    breaker.state = 'CLOSED';
+    breaker.halfOpenAttempts = 0;
+  }
+}
+
+function recordFailure(breaker: CircuitBreaker, error: string, failureThreshold: number): void {
+  // Only count retryable errors (network/timeout issues, not validation failures)
+  if (!isRetryableError(error)) {
+    return; // Validation failures don't trip the circuit
+  }
+  
+  breaker.consecutiveFailures++;
+  breaker.lastFailureTime = Date.now();
+  
+  if (breaker.state === 'HALF_OPEN') {
+    // Failed during recovery attempt - reopen
+    console.log('[circuit-breaker] HALF_OPEN test failed - reopening circuit');
+    breaker.state = 'OPEN';
+    breaker.openedAt = Date.now();
+    breaker.halfOpenAttempts = 0;
+    return;
+  }
+  
+  if (breaker.consecutiveFailures >= failureThreshold) {
+    if (breaker.state !== 'OPEN') {
+      console.log(`[circuit-breaker] OPENING - ${breaker.consecutiveFailures} consecutive failures`);
+      breaker.state = 'OPEN';
+      breaker.openedAt = Date.now();
+      breaker.totalTripped++;
+    }
+  }
+}
+
+function canExecute(breaker: CircuitBreaker, recoveryTimeout: number): boolean {
+  if (breaker.state === 'CLOSED') return true;
+  
+  if (breaker.state === 'OPEN') {
+    // Check if recovery timeout has passed
+    const timeSinceOpen = Date.now() - (breaker.openedAt || 0);
+    if (timeSinceOpen >= recoveryTimeout) {
+      console.log('[circuit-breaker] Entering HALF_OPEN state');
+      breaker.state = 'HALF_OPEN';
+      breaker.halfOpenAttempts = 0;
+      return true;
+    }
+    return false;
+  }
+  
+  // HALF_OPEN - allow limited tests through
+  if (breaker.halfOpenAttempts < HALF_OPEN_MAX_ATTEMPTS) {
+    breaker.halfOpenAttempts++;
+    return true;
+  }
+  
+  return false;
 }
 
 // Helper function to read from stream with timeout
@@ -281,6 +370,7 @@ interface ScenarioResult {
   attempts: number;      // Number of attempts made
   retried: boolean;      // Was this test retried?
   retry_errors?: string[]; // Errors from failed attempts
+  skipped_by_circuit_breaker?: boolean; // Was this test skipped due to circuit breaker?
 }
 
 // Execute a single test scenario
@@ -525,8 +615,10 @@ Deno.serve(async (req) => {
       deployment_id?: string; 
       deployment_source?: string; 
       scenarios?: string[];
-      max_concurrent?: number; // Configurable parallelism (1-10)
-      max_retries?: number;    // Configurable retries (0-5)
+      max_concurrent?: number;      // Configurable parallelism (1-10)
+      max_retries?: number;         // Configurable retries (0-5)
+      failure_threshold?: number;   // Circuit breaker: consecutive failures to open (1-10)
+      recovery_timeout_ms?: number; // Circuit breaker: wait time before HALF_OPEN (5000-60000)
     } = {};
     try {
       body = await req.json();
@@ -540,11 +632,13 @@ Deno.serve(async (req) => {
     const scenariosToRun = body.scenarios || TEST_SCENARIOS.map(s => s.id);
     const maxConcurrent = Math.min(Math.max(body.max_concurrent || DEFAULT_MAX_CONCURRENT, 1), 10);
     const maxRetries = Math.min(Math.max(body.max_retries ?? DEFAULT_MAX_RETRIES, 0), 5);
+    const failureThreshold = Math.min(Math.max(body.failure_threshold ?? DEFAULT_FAILURE_THRESHOLD, 1), 10);
+    const recoveryTimeout = Math.min(Math.max(body.recovery_timeout_ms ?? DEFAULT_RECOVERY_TIMEOUT_MS, 5000), 60000);
     
     // Filter scenarios if specific ones requested
     const scenarios = TEST_SCENARIOS.filter(s => scenariosToRun.includes(s.id));
     
-    console.log(`[ai-chat-tester] Starting test run ${testRunId} with ${scenarios.length} scenarios (max concurrent: ${maxConcurrent}, max retries: ${maxRetries})`);
+    console.log(`[ai-chat-tester] Starting test run ${testRunId} with ${scenarios.length} scenarios (max concurrent: ${maxConcurrent}, max retries: ${maxRetries}, circuit breaker: threshold=${failureThreshold}, recovery=${recoveryTimeout}ms)`);
     
     // Create test run record
     const { error: runError } = await supabase
@@ -562,26 +656,20 @@ Deno.serve(async (req) => {
       console.error("[ai-chat-tester] Failed to create test run:", runError);
     }
     
-    // Execute scenarios in parallel batches using Promise.allSettled
+    // Execute scenarios in parallel batches using Promise.allSettled with circuit breaker
     const scenarioChunks = chunkArray(scenarios, maxConcurrent);
     const allResults: ScenarioResult[] = [];
+    const circuitBreaker = createCircuitBreaker();
+    const skippedDueToCircuit: string[] = [];
     
     for (const chunk of scenarioChunks) {
-      console.log(`[ai-chat-tester] Running batch of ${chunk.length} tests in parallel`);
-      
-      const chunkResults = await Promise.allSettled(
-        chunk.map(scenario => executeScenarioWithRetry(scenario, supabaseUrl, serviceRoleKey, maxRetries))
-      );
-      
-      // Process settled results
-      for (let i = 0; i < chunkResults.length; i++) {
-        const settledResult = chunkResults[i];
-        const scenario = chunk[i];
+      // Check circuit breaker before each batch
+      if (!canExecute(circuitBreaker, recoveryTimeout)) {
+        console.log(`[ai-chat-tester] Circuit OPEN - skipping ${chunk.length} tests`);
         
-        if (settledResult.status === 'fulfilled') {
-          allResults.push(settledResult.value);
-        } else {
-          // Handle rejected promise (unexpected error)
+        // Mark all in this chunk as skipped
+        for (const scenario of chunk) {
+          skippedDueToCircuit.push(scenario.id);
           allResults.push({
             scenario_id: scenario.id,
             question: scenario.question,
@@ -591,10 +679,53 @@ Deno.serve(async (req) => {
             passed: false,
             validation_details: [],
             response_time_ms: 0,
-            error_message: `Unexpected error: ${settledResult.reason}`,
+            error_message: 'Skipped: Circuit breaker OPEN - te veel opeenvolgende AI fouten',
+            attempts: 0,
+            retried: false,
+            skipped_by_circuit_breaker: true
+          });
+        }
+        continue;
+      }
+      
+      console.log(`[ai-chat-tester] Running batch of ${chunk.length} tests in parallel (circuit: ${circuitBreaker.state})`);
+      
+      const chunkResults = await Promise.allSettled(
+        chunk.map(scenario => executeScenarioWithRetry(scenario, supabaseUrl, serviceRoleKey, maxRetries))
+      );
+      
+      // Process settled results and update circuit breaker
+      for (let i = 0; i < chunkResults.length; i++) {
+        const settledResult = chunkResults[i];
+        const scenario = chunk[i];
+        
+        if (settledResult.status === 'fulfilled') {
+          const result = settledResult.value;
+          allResults.push(result);
+          
+          // Update circuit breaker based on result
+          if (result.passed) {
+            recordSuccess(circuitBreaker);
+          } else if (result.error_message) {
+            recordFailure(circuitBreaker, result.error_message, failureThreshold);
+          }
+        } else {
+          // Handle rejected promise (unexpected error)
+          const errorMessage = `Unexpected error: ${settledResult.reason}`;
+          allResults.push({
+            scenario_id: scenario.id,
+            question: scenario.question,
+            response: null,
+            expected_tool: scenario.expected_tool,
+            actual_tool_used: null,
+            passed: false,
+            validation_details: [],
+            response_time_ms: 0,
+            error_message: errorMessage,
             attempts: 1,
             retried: false
           });
+          recordFailure(circuitBreaker, errorMessage, failureThreshold);
         }
       }
     }
@@ -638,6 +769,9 @@ Deno.serve(async (req) => {
     const totalAttempts = allResults.reduce((sum, r) => sum + r.attempts, 0);
     const retryRate = scenarios.length > 0 ? Math.round((retriedTests / scenarios.length) * 100) : 0;
     
+    // Calculate circuit breaker metrics
+    const skippedByCircuit = allResults.filter(r => r.skipped_by_circuit_breaker).length;
+    
     // Update test run with summary
     await supabase
       .from("ai_chat_test_runs")
@@ -650,7 +784,7 @@ Deno.serve(async (req) => {
       })
       .eq("id", testRunId);
     
-    console.log(`[ai-chat-tester] Test run completed: ${passedTests}/${scenarios.length} passed in ${totalTime}ms (${speedupFactor}x speedup, ${retriedTests} retried)`);
+    console.log(`[ai-chat-tester] Test run completed: ${passedTests}/${scenarios.length} passed in ${totalTime}ms (${speedupFactor}x speedup, ${retriedTests} retried, ${skippedByCircuit} skipped by circuit breaker)`);
     
     return new Response(
       JSON.stringify({
@@ -670,6 +804,15 @@ Deno.serve(async (req) => {
         retried_tests: retriedTests,
         total_attempts: totalAttempts,
         retry_rate: retryRate,
+        circuit_breaker: {
+          final_state: circuitBreaker.state,
+          times_tripped: circuitBreaker.totalTripped,
+          consecutive_failures: circuitBreaker.consecutiveFailures,
+          tests_skipped: skippedByCircuit,
+          skipped_scenarios: skippedDueToCircuit,
+          failure_threshold_used: failureThreshold,
+          recovery_timeout_used: recoveryTimeout
+        },
         status: failedTests > 0 ? "failed" : "passed",
         results: allResults
       }),
