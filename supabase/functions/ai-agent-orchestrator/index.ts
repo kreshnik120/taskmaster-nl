@@ -438,6 +438,9 @@ const GOAL_CONFIGS: Record<string, {
             urgency: urgency,
             days_remaining: daysRemaining,
             expiry_date: goal.input_data.expiry_date,
+            subject: urgency === 'high' 
+              ? `Actie vereist: Je ${documentLabel} verloopt over ${daysRemaining} dagen`
+              : `Herinnering: Je ${documentLabel} verloopt binnenkort`,
             context: urgency === 'high' 
               ? `Je ${documentLabel} verloopt over ${daysRemaining} dagen. Upload zo snel mogelijk een vernieuwde versie om je profiel actief te houden.`
               : `Je ${documentLabel} verloopt binnenkort (over ${daysRemaining} dagen). Kun je alvast een vernieuwde versie uploaden?`,
