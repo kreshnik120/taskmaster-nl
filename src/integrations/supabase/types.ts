@@ -2900,13 +2900,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "message_feedback_message_id_fkey"
-            columns: ["message_id"]
-            isOneToOne: false
-            referencedRelation: "chat_messages_old_backup"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "message_feedback_pattern_id_fkey"
             columns: ["pattern_id"]
             isOneToOne: false
