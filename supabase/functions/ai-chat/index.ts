@@ -2031,7 +2031,15 @@ Deno.serve(async (req: Request) => {
               response_time_ms: fastPathDuration
             })).catch(() => {});
             
-            // Update pattern error count (fire and forget)
+            // Update pattern error metrics via RPC (fire and forget)
+            Promise.resolve(supabaseServiceClient.rpc('update_pattern_metrics', {
+              p_pattern_id: dynPattern.id,
+              p_response_time_ms: fastPathDuration,
+              p_was_successful: false,
+              p_reset_errors: false
+            })).catch(() => {});
+            
+            // Also store error message
             Promise.resolve(supabaseServiceClient.from('fast_path_patterns')
               .update({ 
                 last_error: countError.message,
@@ -2060,13 +2068,13 @@ Deno.serve(async (req: Request) => {
               response_time_ms: fastPathDuration
             })).catch(() => {});
             
-            // Update pattern success metrics (fire and forget)
-            Promise.resolve(supabaseServiceClient.from('fast_path_patterns')
-              .update({ 
-                last_used_at: new Date().toISOString(),
-                last_success_at: new Date().toISOString()
-              })
-              .eq('id', dynPattern.id)).catch(() => {});
+            // Update pattern success metrics via RPC (fire and forget)
+            Promise.resolve(supabaseServiceClient.rpc('update_pattern_metrics', {
+              p_pattern_id: dynPattern.id,
+              p_response_time_ms: fastPathDuration,
+              p_was_successful: true,
+              p_reset_errors: true
+            })).catch(() => {});
             
             // Persist messages and get message ID for feedback
             persistMessage(supabaseServiceClient, {
@@ -2230,6 +2238,16 @@ Deno.serve(async (req: Request) => {
               response_time_ms: fastPathDuration,
               pattern_id: matchedPatternId // 🆕 Link to database pattern for feedback
             })).catch(() => {});
+            
+            // 🆕 Update pattern metrics via RPC if we have a matched pattern
+            if (matchedPatternId) {
+              Promise.resolve(supabaseServiceClient.rpc('update_pattern_metrics', {
+                p_pattern_id: matchedPatternId,
+                p_response_time_ms: fastPathDuration,
+                p_was_successful: true,
+                p_reset_errors: true
+              })).catch(() => {});
+            }
             
             // Persist messages in background
             persistMessage(supabaseServiceClient, {
