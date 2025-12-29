@@ -46,6 +46,7 @@ import { N8nIntegrationTestPanel } from "@/components/AITraining/N8nIntegrationT
 import { ResendInboundSetup } from "@/components/AITraining/ResendInboundSetup";
 import { EmailReplyTestPanel } from "@/components/AITraining/EmailReplyTestPanel";
 import { AIChatTestDashboard } from "@/components/AITraining/AIChatTestDashboard";
+import { PatternOptimizationMonitor } from "@/components/AITraining/PatternOptimizationMonitor";
 import { toast } from "sonner";
 
 const AiTraining = () => {
@@ -222,6 +223,7 @@ const AiTraining = () => {
                   <TabsContent value="health" className="mt-4">
                     <div className="space-y-6">
                       <UnifiedAIHealthDashboard />
+                      <PatternOptimizationMonitor />
                       <LearningDashboard />
                       <SystemHealthDashboard />
                     </div>

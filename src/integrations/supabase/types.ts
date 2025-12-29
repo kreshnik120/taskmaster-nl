@@ -2279,10 +2279,14 @@ export type Database = {
       fast_path_patterns: {
         Row: {
           active_filter: boolean | null
+          auto_reactivation_eligible: boolean | null
           avg_response_time_ms: number | null
           confidence_score: number | null
+          consecutive_errors: number | null
           count_column: string | null
           created_at: string | null
+          deactivated_at: string | null
+          deactivation_reason: string | null
           deleted_at: string | null
           deleted_reason: string | null
           emoji: string | null
@@ -2310,10 +2314,14 @@ export type Database = {
         }
         Insert: {
           active_filter?: boolean | null
+          auto_reactivation_eligible?: boolean | null
           avg_response_time_ms?: number | null
           confidence_score?: number | null
+          consecutive_errors?: number | null
           count_column?: string | null
           created_at?: string | null
+          deactivated_at?: string | null
+          deactivation_reason?: string | null
           deleted_at?: string | null
           deleted_reason?: string | null
           emoji?: string | null
@@ -2341,10 +2349,14 @@ export type Database = {
         }
         Update: {
           active_filter?: boolean | null
+          auto_reactivation_eligible?: boolean | null
           avg_response_time_ms?: number | null
           confidence_score?: number | null
+          consecutive_errors?: number | null
           count_column?: string | null
           created_at?: string | null
+          deactivated_at?: string | null
+          deactivation_reason?: string | null
           deleted_at?: string | null
           deleted_reason?: string | null
           emoji?: string | null
@@ -5736,6 +5748,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_pattern_counter: {
+        Args: { counter_name: string; delta?: number; pattern_id: string }
+        Returns: undefined
+      }
       increment_usage_count: {
         Args: { knowledge_id: string }
         Returns: undefined
@@ -5828,6 +5844,15 @@ export type Database = {
             }
             Returns: Json
           }
+      update_pattern_metrics: {
+        Args: {
+          p_pattern_id: string
+          p_reset_errors?: boolean
+          p_response_time_ms: number
+          p_was_successful: boolean
+        }
+        Returns: undefined
+      }
       user_is_org_member: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
