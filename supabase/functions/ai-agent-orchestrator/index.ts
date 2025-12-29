@@ -402,6 +402,54 @@ const GOAL_CONFIGS: Record<string, {
   },
 
   // =====================================================
+  // Request Document Renewal - Expiring documents (VOG, BIG, etc.)
+  // =====================================================
+  'request_document_renewal': {
+    requiredFields: ['application_id', 'candidate_email', 'document_type'],
+    planGenerator: (goal, context) => {
+      const daysRemaining = goal.input_data.days_remaining || 14;
+      const urgency = daysRemaining <= 7 ? 'high' : 'normal';
+      
+      // Human-readable document names
+      const documentLabels: Record<string, string> = {
+        'vog': 'VOG (Verklaring Omtrent Gedrag)',
+        'big_registratie': 'BIG-registratie',
+        'diploma': 'Diploma/Certificaat',
+        'beroepsaansprakelijkheid': 'Beroepsaansprakelijkheidsverzekering',
+        'kvk_uittreksel': 'KVK-uittreksel',
+        'bhv_certificaat': 'BHV-certificaat',
+        'tillift_certificaat': 'Tillift-certificaat'
+      };
+      
+      const documentLabel = documentLabels[goal.input_data.document_type] || goal.input_data.document_type;
+      
+      return [
+        {
+          action_type: 'send_document_request',
+          action_order: 1,
+          action_description: `Vraag vernieuwde ${documentLabel} aan ${goal.input_data.candidate_name || 'kandidaat'} (verloopt over ${daysRemaining} dagen)`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            application_id: goal.input_data.application_id,
+            candidate_email: goal.input_data.candidate_email,
+            candidate_name: goal.input_data.candidate_name,
+            documents: [documentLabel],
+            email_type: 'document_renewal_request',
+            urgency: urgency,
+            days_remaining: daysRemaining,
+            expiry_date: goal.input_data.expiry_date,
+            context: urgency === 'high' 
+              ? `Je ${documentLabel} verloopt over ${daysRemaining} dagen. Upload zo snel mogelijk een vernieuwde versie om je profiel actief te houden.`
+              : `Je ${documentLabel} verloopt binnenkort (over ${daysRemaining} dagen). Kun je alvast een vernieuwde versie uploaden?`,
+            deadline: goal.input_data.expiry_date,
+            urgent: urgency === 'high'
+          }
+        }
+      ];
+    }
+  },
+
+  // =====================================================
   // Request Additional Diploma - When CV niveau > diploma niveau
   // =====================================================
   'request_additional_diploma': {

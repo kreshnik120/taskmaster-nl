@@ -36,6 +36,7 @@ import { CleanupDeletedKnowledge } from "@/components/AITraining/CleanupDeletedK
 import { UnifiedAIHealthDashboard } from "@/components/AITraining/UnifiedAIHealthDashboard";
 
 import { ManualFunctionTrigger } from "@/components/AITraining/ManualFunctionTrigger";
+import { ManualDocumentMonitorTrigger } from "@/components/AITraining/ManualDocumentMonitorTrigger";
 import { SystemHealthDashboard } from "@/components/AITraining/SystemHealthDashboard";
 import { LearningDashboard } from "@/components/AITraining/LearningDashboard";
 import { CleanupDuplicateFields } from "@/components/AITraining/CleanupDuplicateFields";
@@ -423,6 +424,7 @@ const AiTraining = () => {
                     </Card>
                     
                     <ManualFunctionTrigger hideBackfill />
+                    <ManualDocumentMonitorTrigger />
                   </AdminOnly>
                 </div>
               </TabsContent>
