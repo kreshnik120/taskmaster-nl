@@ -1582,7 +1582,9 @@ Deno.serve(async (req: Request) => {
         path: z.string(),
         label: z.string(),
         description: z.string()
-      }).optional()
+      }).optional(),
+      // 🧪 TEST MODE: Error simulation for pattern metrics testing
+      simulate_error: z.enum(['dynamic_pattern', 'hardcoded_pattern', 'hardcoded_count_error']).optional()
     });
 
     const rawBody = await req.json();
@@ -1604,7 +1606,10 @@ Deno.serve(async (req: Request) => {
       );
     }
     
-    const { messages, conversation_id, pageContext } = validation.data;
+    const { messages, conversation_id, pageContext, simulate_error } = validation.data;
+    if (simulate_error) {
+      console.log(`🧪 [TEST MODE] Error simulation enabled: ${simulate_error}`);
+    }
     console.log(`🔑 Processing conversation: ${conversation_id}${pageContext ? ` (page: ${pageContext.label})` : ''}`);
     
     // === FASE 2D: PROMPT INJECTION PROTECTION ===
@@ -2011,6 +2016,12 @@ Deno.serve(async (req: Request) => {
             }
           }
           
+          // 🧪 TEST MODE: Simulate dynamic pattern error
+          if (simulate_error === 'dynamic_pattern') {
+            console.log('🧪 [TEST MODE] Simulating dynamic pattern error');
+            throw new Error('Simulated dynamic pattern error for testing error_count and consecutive_errors');
+          }
+          
           const { count, error: countError } = await countQuery;
           const fastPathDuration = Date.now() - fastPathStart;
           
@@ -2120,6 +2131,44 @@ Deno.serve(async (req: Request) => {
           }
         } catch (dynamicFastPathError) {
           console.error(`⚡ [DYNAMIC FAST PATH] Error:`, dynamicFastPathError);
+          
+          // 🆕 Update error metrics if we have a pattern ID
+          if (dynPattern?.id) {
+            const fastPathDuration = Date.now() - fastPathStart;
+            const errorMessage = dynamicFastPathError instanceof Error ? dynamicFastPathError.message : 'Unknown error';
+            
+            // Log error to usage log (fire and forget)
+            Promise.resolve(supabaseServiceClient.from('fast_path_usage_log').insert({
+              org_id: userOrgId,
+              user_query: lastUserMessageForFastPath,
+              normalized_query: lastUserMessageForFastPath.toLowerCase().trim(),
+              query_hash: await sha256Hash(lastUserMessageForFastPath.toLowerCase().trim()),
+              pattern_id: dynPattern.id,
+              table_name: dynPattern.table_name,
+              filters_applied: extractedFilters || [],
+              success: false,
+              error_message: errorMessage,
+              response_time_ms: fastPathDuration
+            })).catch(() => {});
+            
+            // Update pattern error metrics via RPC (fire and forget)
+            Promise.resolve(supabaseServiceClient.rpc('update_pattern_metrics', {
+              p_pattern_id: dynPattern.id,
+              p_response_time_ms: fastPathDuration,
+              p_was_successful: false,
+              p_reset_errors: false
+            })).catch(() => {});
+            
+            // Store last error details
+            Promise.resolve(supabaseServiceClient.from('fast_path_patterns')
+              .update({ 
+                last_error: errorMessage,
+                last_error_at: new Date().toISOString()
+              })
+              .eq('id', dynPattern.id)).catch(() => {});
+            
+            console.log(`⚡ [DYNAMIC FAST PATH] Error metrics updated for pattern ${dynPattern.id}`);
+          }
         }
     }
     
@@ -2177,10 +2226,86 @@ Deno.serve(async (req: Request) => {
             }
           }
           
-          const { count, error: countError } = await countQuery;
+          // 🧪 TEST MODE: Simulate hardcoded pattern exception
+          if (simulate_error === 'hardcoded_pattern') {
+            console.log('🧪 [TEST MODE] Simulating hardcoded pattern exception');
+            throw new Error('Simulated hardcoded pattern error for testing error_count and consecutive_errors');
+          }
+          
+          // 🧪 TEST MODE: Simulate hardcoded count error
+          let countError: any = null;
+          let count: number | null = null;
+          
+          if (simulate_error === 'hardcoded_count_error') {
+            console.log('🧪 [TEST MODE] Simulating hardcoded count error');
+            countError = { message: 'Simulated count error for testing error metrics' };
+          } else {
+            const result = await countQuery;
+            count = result.count;
+            countError = result.error;
+          }
           
           if (countError) {
             console.error(`⚡ [ULTRA FAST PATH] Count error:`, countError);
+            const fastPathDuration = Date.now() - fastPathStart;
+            
+            // 🆕 Find matching pattern for error tracking (fuzzy keyword match)
+            const queryWords = lastUserMessageForFastPath.toLowerCase().trim().split(/\s+/);
+            const queryWordsSet = new Set(queryWords);
+            
+            const { data: patternsForErrorTable } = await supabaseServiceClient
+              .from('fast_path_patterns')
+              .select('id, keywords')
+              .eq('table_name', fastPattern.table)
+              .eq('is_active', true);
+            
+            let errorPatternMatch: { id: string; score: number } | null = null;
+            for (const pattern of patternsForErrorTable || []) {
+              const patternKeywords = pattern.keywords as string[];
+              const matchingKeywords = patternKeywords.filter(k => queryWordsSet.has(k));
+              const matchCount = matchingKeywords.length;
+              const score = matchCount / patternKeywords.length;
+              if (matchCount >= 1 && score >= 0.5 && (!errorPatternMatch || score > errorPatternMatch.score)) {
+                errorPatternMatch = { id: pattern.id, score };
+              }
+            }
+            
+            if (errorPatternMatch) {
+              console.log(`⚡ [ULTRA FAST PATH] Error tracking for pattern ${errorPatternMatch.id}`);
+              
+              // Log error to usage log
+              Promise.resolve(supabaseServiceClient.from('fast_path_usage_log').insert({
+                org_id: userOrgId,
+                user_query: lastUserMessageForFastPath,
+                normalized_query: lastUserMessageForFastPath.toLowerCase().trim(),
+                query_hash: await sha256Hash(lastUserMessageForFastPath.toLowerCase().trim()),
+                pattern_id: errorPatternMatch.id,
+                matched_hardcoded: true,
+                hardcoded_pattern_name: fastPattern.table,
+                table_name: fastPattern.table,
+                filters_applied: filters,
+                success: false,
+                error_message: countError.message,
+                response_time_ms: fastPathDuration
+              })).catch(() => {});
+              
+              // Update pattern error metrics via RPC
+              Promise.resolve(supabaseServiceClient.rpc('update_pattern_metrics', {
+                p_pattern_id: errorPatternMatch.id,
+                p_response_time_ms: fastPathDuration,
+                p_was_successful: false,
+                p_reset_errors: false
+              })).catch(() => {});
+              
+              // Store last error details
+              Promise.resolve(supabaseServiceClient.from('fast_path_patterns')
+                .update({ 
+                  last_error: countError.message,
+                  last_error_at: new Date().toISOString()
+                })
+                .eq('id', errorPatternMatch.id)).catch(() => {});
+            }
+            
             // Fall through to normal processing
           } else {
             const responseContent = fastPattern.responseTemplate(count || 0, filterContext);
@@ -2292,6 +2417,69 @@ Deno.serve(async (req: Request) => {
           }
         } catch (fastPathError) {
           console.error(`⚡ [ULTRA FAST PATH] Error, falling back to normal:`, fastPathError);
+          const fastPathDuration = Date.now() - fastPathStart;
+          const errorMessage = fastPathError instanceof Error ? fastPathError.message : 'Unknown error';
+          
+          // 🆕 Best-effort pattern lookup for error tracking
+          try {
+            const queryWords = lastUserMessageForFastPath.toLowerCase().trim().split(/\s+/);
+            const queryWordsSet = new Set(queryWords);
+            
+            const { data: patternsForCatchTable } = await supabaseServiceClient
+              .from('fast_path_patterns')
+              .select('id, keywords')
+              .eq('table_name', fastPattern.table)
+              .eq('is_active', true);
+            
+            let catchPatternMatch: { id: string; score: number } | null = null;
+            for (const pattern of patternsForCatchTable || []) {
+              const patternKeywords = pattern.keywords as string[];
+              const matchingKeywords = patternKeywords.filter(k => queryWordsSet.has(k));
+              const matchCount = matchingKeywords.length;
+              const score = matchCount / patternKeywords.length;
+              if (matchCount >= 1 && score >= 0.5 && (!catchPatternMatch || score > catchPatternMatch.score)) {
+                catchPatternMatch = { id: pattern.id, score };
+              }
+            }
+            
+            if (catchPatternMatch) {
+              console.log(`⚡ [ULTRA FAST PATH] Exception tracking for pattern ${catchPatternMatch.id}`);
+              
+              // Log error to usage log
+              await supabaseServiceClient.from('fast_path_usage_log').insert({
+                org_id: userOrgId,
+                user_query: lastUserMessageForFastPath,
+                normalized_query: lastUserMessageForFastPath.toLowerCase().trim(),
+                query_hash: await sha256Hash(lastUserMessageForFastPath.toLowerCase().trim()),
+                pattern_id: catchPatternMatch.id,
+                matched_hardcoded: true,
+                hardcoded_pattern_name: fastPattern.table,
+                table_name: fastPattern.table,
+                success: false,
+                error_message: errorMessage,
+                response_time_ms: fastPathDuration
+              });
+              
+              // Update pattern error metrics via RPC
+              await supabaseServiceClient.rpc('update_pattern_metrics', {
+                p_pattern_id: catchPatternMatch.id,
+                p_response_time_ms: fastPathDuration,
+                p_was_successful: false,
+                p_reset_errors: false
+              });
+              
+              // Store last error details
+              await supabaseServiceClient.from('fast_path_patterns')
+                .update({ 
+                  last_error: errorMessage,
+                  last_error_at: new Date().toISOString()
+                })
+                .eq('id', catchPatternMatch.id);
+            }
+          } catch (metricsError) {
+            console.error('⚡ [ULTRA FAST PATH] Failed to update error metrics:', metricsError);
+          }
+          
           // Fall through to normal processing
         }
       }
