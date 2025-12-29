@@ -1,7 +1,10 @@
 // Master Scheduler - central cron job orchestration
+// Version 2.0.0 - Pattern Optimization Support
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-// Active scheduled functions (10 schedules for 5 learning loops + 5 support + 3 fast path optimization)
+const VERSION = '2.0.0-pattern-optimization';
+
+// Active scheduled functions (13 schedules for 5 learning loops + 5 support + 3 fast path optimization)
 const SCHEDULES = {
   'auto-resolve-alerts': '*/30 * * * *',        // Every 30 minutes (ACE Alert Resolution)
   'smart-deduplicator': '30 * * * *',           // Every hour at :30 (Learning Loop 5)
@@ -79,7 +82,7 @@ Deno.serve(async (req) => {
   const startTime = Date.now();
   const now = new Date();
   
-  console.log('🕐 Master Scheduler triggered at:', now.toISOString());
+  console.log(`🕐 Master Scheduler v${VERSION} triggered at:`, now.toISOString());
 
   try {
     const supabase = createAdminClient();
