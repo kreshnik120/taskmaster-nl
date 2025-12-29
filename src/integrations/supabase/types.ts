@@ -1038,12 +1038,15 @@ export type Database = {
           content_type: string | null
           created_at: string | null
           document_type: string | null
+          escalated_at: string | null
+          escalation_level: number | null
           expiry_date: string | null
           file_path: string
           filename: string
           id: string
           is_verified: boolean | null
           metadata: Json | null
+          recruiter_notified_at: string | null
           reminder_sent_at: string | null
           source: string | null
           verified_at: string | null
@@ -1057,12 +1060,15 @@ export type Database = {
           content_type?: string | null
           created_at?: string | null
           document_type?: string | null
+          escalated_at?: string | null
+          escalation_level?: number | null
           expiry_date?: string | null
           file_path: string
           filename: string
           id?: string
           is_verified?: boolean | null
           metadata?: Json | null
+          recruiter_notified_at?: string | null
           reminder_sent_at?: string | null
           source?: string | null
           verified_at?: string | null
@@ -1076,12 +1082,15 @@ export type Database = {
           content_type?: string | null
           created_at?: string | null
           document_type?: string | null
+          escalated_at?: string | null
+          escalation_level?: number | null
           expiry_date?: string | null
           file_path?: string
           filename?: string
           id?: string
           is_verified?: boolean | null
           metadata?: Json | null
+          recruiter_notified_at?: string | null
           reminder_sent_at?: string | null
           source?: string | null
           verified_at?: string | null

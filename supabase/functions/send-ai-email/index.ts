@@ -7,6 +7,8 @@ type EmailType =
   | 'followup_question'           // Vraag ontbrekende info aan kandidaat
   | 'document_request'            // Vraag VOG, diploma's, certificaten
   | 'document_renewal_request'    // Herinnering verlopen documenten met urgentie
+  | 'document_renewal_escalation' // Tweede urgente herinnering (na 7 dagen)
+  | 'recruiter_document_alert'    // Notificatie naar recruiter (na 14 dagen)
   | 'interview_confirmation'      // Bevestig interview afspraak
   | 'appointment_confirmation'    // Algemene afspraak bevestiging
   | 'general'                     // Algemene communicatie
@@ -552,6 +554,129 @@ function generateEmailTemplate(
         <p style="margin: 25px 0 0 0; color: #4a5568;">
           Met vriendelijke groet,<br>
           <strong>Het ${orgName} Recruitment Team</strong>
+        </p>`;
+      break;
+
+    // =====================================================
+    // NEW: Document Renewal Escalation (7-dagen tweede herinnering)
+    // =====================================================
+    case 'document_renewal_escalation':
+      const escDocType = data.document_type || 'document';
+      const escDaysRemaining = data.days_remaining ?? 7;
+      const escExpiryDate = data.expiry_date 
+        ? new Date(data.expiry_date).toLocaleDateString('nl-NL', { 
+            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' 
+          })
+        : null;
+      const daysSinceFirst = data.days_since_first_reminder || 7;
+      
+      content = `
+        <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName},</h2>
+        
+        <div style="background-color: #fef2f2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 5px solid #dc2626;">
+          <p style="margin: 0; color: #991b1b; font-weight: 700; font-size: 16px;">
+            🚨 Tweede Herinnering - Urgente Actie Vereist
+          </p>
+          <p style="margin: 12px 0 0 0; color: #991b1b; font-size: 15px; line-height: 1.5;">
+            ${daysSinceFirst} dagen geleden hebben we je gevraagd je <strong>${escDocType}</strong> te vernieuwen. 
+            We hebben nog geen nieuw document ontvangen.
+          </p>
+        </div>
+        
+        <div style="background-color: #fef3c7; padding: 15px; border-radius: 6px; margin: 20px 0;">
+          <p style="margin: 0; color: #92400e; font-size: 14px;">
+            ⏰ <strong>Je document ${escDaysRemaining <= 0 ? 'is verlopen' : `verloopt over ${escDaysRemaining} ${escDaysRemaining === 1 ? 'dag' : 'dagen'}`}</strong>
+            ${escExpiryDate ? ` (op ${escExpiryDate})` : ''}
+          </p>
+        </div>
+        
+        <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 25px 0;">
+          <p style="margin: 0 0 15px 0; color: #1a1a1a; font-weight: 600; font-size: 15px;">⚠️ Waarom is dit belangrijk?</p>
+          <ul style="color: #4a5568; font-size: 14px; line-height: 1.8; padding-left: 20px; margin: 0;">
+            <li>Zonder geldig ${escDocType} kunnen we je niet inzetten bij opdrachtgevers</li>
+            <li>Dit kan gevolgen hebben voor je huidige en toekomstige plaatsingen</li>
+            <li>Je profiel wordt automatisch op 'inactief' gezet na de vervaldatum</li>
+          </ul>
+        </div>
+        
+        <div style="text-align: center; margin: 25px 0; padding: 20px; background-color: #e0f2fe; border-radius: 8px;">
+          <p style="margin: 0 0 10px 0; color: #0369a1; font-weight: 600;">📧 Antwoord op deze email met je vernieuwde document</p>
+          <p style="margin: 0; color: #0c4a6e; font-size: 13px;">Of stuur het als bijlage naar personeel@${organization}.nl</p>
+        </div>
+        
+        <p style="color: #dc2626; font-weight: 600; font-size: 14px; margin: 20px 0; text-align: center;">
+          Let op: Als we binnen 7 dagen geen nieuw document ontvangen, wordt je dossier doorgestuurd naar een recruiter voor handmatige opvolging.
+        </p>
+        
+        <p style="margin: 25px 0 0 0; color: #4a5568;">
+          Met vriendelijke groet,<br>
+          <strong>Het ${orgName} Recruitment Team</strong>
+        </p>`;
+      break;
+
+    // =====================================================
+    // NEW: Recruiter Document Alert (14-dagen escalatie naar recruiter)
+    // =====================================================
+    case 'recruiter_document_alert':
+      const alertDocType = data.document_type || 'document';
+      const alertCandidateName = data.candidate_name || 'Onbekende kandidaat';
+      const alertCandidateEmail = data.candidate_email || 'onbekend';
+      const alertExpiryDate = data.expiry_date 
+        ? new Date(data.expiry_date).toLocaleDateString('nl-NL')
+        : 'onbekend';
+      const totalDaysWaiting = data.total_days_waiting || 14;
+      const applicationId = data.application_id || '';
+      
+      content = `
+        <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">🚨 Handmatige Opvolging Vereist</h2>
+        
+        <div style="background-color: #fef2f2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 5px solid #dc2626;">
+          <p style="margin: 0; color: #991b1b; font-weight: 700; font-size: 16px;">
+            Geen reactie na ${totalDaysWaiting} dagen
+          </p>
+          <p style="margin: 12px 0 0 0; color: #b91c1c; font-size: 14px; line-height: 1.5;">
+            De kandidaat heeft niet gereageerd op automatische herinneringen voor document vernieuwing.
+          </p>
+        </div>
+        
+        <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 25px 0;">
+          <p style="margin: 0 0 15px 0; color: #1a1a1a; font-weight: 600; font-size: 15px;">📋 Kandidaat Gegevens</p>
+          <table style="width: 100%; font-size: 14px; color: #4a5568;">
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Naam:</strong></td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">${alertCandidateName}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Email:</strong></td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><a href="mailto:${alertCandidateEmail}" style="color: ${orgColor};">${alertCandidateEmail}</a></td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Document:</strong></td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">${alertDocType}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Vervaldatum:</strong></td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">${alertExpiryDate}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0;"><strong>Wachtdagen:</strong></td>
+              <td style="padding: 8px 0;">${totalDaysWaiting} dagen sinds eerste herinnering</td>
+            </tr>
+          </table>
+        </div>
+        
+        <div style="background-color: #fef3c7; padding: 15px; border-radius: 6px; margin: 20px 0;">
+          <p style="margin: 0; color: #92400e; font-weight: 600; font-size: 14px;">💡 Aanbevolen Acties:</p>
+          <ol style="color: #78350f; font-size: 13px; line-height: 1.8; padding-left: 20px; margin: 10px 0 0 0;">
+            <li>Neem telefonisch contact op met de kandidaat</li>
+            <li>Controleer of de kandidaat nog actief wil blijven</li>
+            <li>Bied aan om te helpen bij het aanvragen van een nieuw document</li>
+            <li>Overweeg het profiel tijdelijk te deactiveren als er geen reactie komt</li>
+          </ol>
+        </div>
+        
+        <p style="margin: 25px 0 0 0; color: #4a5568; font-size: 13px;">
+          <em>Dit bericht is automatisch gegenereerd door de ${orgName} AI Agent.</em>
         </p>`;
       break;
 
