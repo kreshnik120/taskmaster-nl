@@ -8,6 +8,53 @@ const corsHeaders = {
 // Default timeout per test scenario (30 seconds)
 const DEFAULT_TIMEOUT_MS = 30000;
 
+// Retry configuration
+const DEFAULT_MAX_RETRIES = 3;
+const BASE_DELAY_MS = 1000; // Start with 1 second delay
+const MAX_DELAY_MS = 10000; // Max 10 seconds delay
+const JITTER_FACTOR = 0.2;  // 20% random jitter to prevent thundering herd
+
+// Errors that should trigger a retry
+const RETRYABLE_ERRORS = [
+  'timeout',
+  'AbortError', 
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'rate limit',
+  '429',           // Too Many Requests
+  '503',           // Service Unavailable
+  '502',           // Bad Gateway
+  '504',           // Gateway Timeout
+  'network error',
+  'fetch failed',
+  'connection refused',
+  'socket hang up'
+];
+
+// Calculate delay with exponential backoff and jitter
+function calculateBackoffDelay(attempt: number): number {
+  const exponentialDelay = Math.min(
+    BASE_DELAY_MS * Math.pow(2, attempt),
+    MAX_DELAY_MS
+  );
+  // Add random jitter to prevent thundering herd
+  const jitter = exponentialDelay * JITTER_FACTOR * Math.random();
+  return Math.round(exponentialDelay + jitter);
+}
+
+// Check if an error should trigger a retry
+function isRetryableError(error: string): boolean {
+  const lowerError = error.toLowerCase();
+  return RETRYABLE_ERRORS.some(retryable => 
+    lowerError.includes(retryable.toLowerCase())
+  );
+}
+
+// Sleep helper for delays
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // Helper function to read from stream with timeout
 async function readWithTimeout(
   reader: ReadableStreamDefaultReader<Uint8Array>,
@@ -231,6 +278,9 @@ interface ScenarioResult {
   validation_details: Array<{ validation: string; passed: boolean; details: string }>;
   response_time_ms: number;
   error_message: string | null;
+  attempts: number;      // Number of attempts made
+  retried: boolean;      // Was this test retried?
+  retry_errors?: string[]; // Errors from failed attempts
 }
 
 // Execute a single test scenario
@@ -384,7 +434,66 @@ async function executeScenario(
     passed: allValidationsPassed,
     validation_details: validationResults,
     response_time_ms: responseTime,
-    error_message: errorMessage
+    error_message: errorMessage,
+    attempts: 1,
+    retried: false
+  };
+}
+
+// Execute scenario with retry logic
+async function executeScenarioWithRetry(
+  scenario: TestScenario,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  maxRetries: number
+): Promise<ScenarioResult> {
+  const retryErrors: string[] = [];
+  let lastResult: ScenarioResult | null = null;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    // Wait before retry (not on first attempt)
+    if (attempt > 0) {
+      const delay = calculateBackoffDelay(attempt - 1);
+      console.log(`[ai-chat-tester] Scenario ${scenario.id} retry ${attempt}/${maxRetries} after ${delay}ms`);
+      await sleep(delay);
+    }
+    
+    // Execute the scenario
+    const result = await executeScenario(scenario, supabaseUrl, serviceRoleKey);
+    lastResult = result;
+    
+    // If passed, return immediately with retry info
+    if (result.passed) {
+      return { 
+        ...result, 
+        attempts: attempt + 1, 
+        retried: attempt > 0,
+        retry_errors: retryErrors.length > 0 ? retryErrors : undefined
+      };
+    }
+    
+    // Check if error is retryable
+    if (result.error_message && isRetryableError(result.error_message)) {
+      console.log(`[ai-chat-tester] Scenario ${scenario.id} failed with retryable error: ${result.error_message}`);
+      retryErrors.push(`Attempt ${attempt + 1}: ${result.error_message}`);
+      continue; // Try again
+    }
+    
+    // Non-retryable error or validation failure - stop trying
+    if (result.error_message) {
+      console.log(`[ai-chat-tester] Scenario ${scenario.id} failed with permanent error: ${result.error_message}`);
+    } else {
+      console.log(`[ai-chat-tester] Scenario ${scenario.id} failed validation, not retrying`);
+    }
+    break;
+  }
+  
+  // Return last result with retry info
+  return {
+    ...lastResult!,
+    attempts: retryErrors.length + 1,
+    retried: retryErrors.length > 0,
+    retry_errors: retryErrors.length > 0 ? retryErrors : undefined
   };
 }
 
@@ -416,7 +525,8 @@ Deno.serve(async (req) => {
       deployment_id?: string; 
       deployment_source?: string; 
       scenarios?: string[];
-      max_concurrent?: number; // NEW: configurable parallelism (1-10)
+      max_concurrent?: number; // Configurable parallelism (1-10)
+      max_retries?: number;    // Configurable retries (0-5)
     } = {};
     try {
       body = await req.json();
@@ -429,11 +539,12 @@ Deno.serve(async (req) => {
     const deploymentSource = body.deployment_source || "manual";
     const scenariosToRun = body.scenarios || TEST_SCENARIOS.map(s => s.id);
     const maxConcurrent = Math.min(Math.max(body.max_concurrent || DEFAULT_MAX_CONCURRENT, 1), 10);
+    const maxRetries = Math.min(Math.max(body.max_retries ?? DEFAULT_MAX_RETRIES, 0), 5);
     
     // Filter scenarios if specific ones requested
     const scenarios = TEST_SCENARIOS.filter(s => scenariosToRun.includes(s.id));
     
-    console.log(`[ai-chat-tester] Starting test run ${testRunId} with ${scenarios.length} scenarios (max concurrent: ${maxConcurrent})`);
+    console.log(`[ai-chat-tester] Starting test run ${testRunId} with ${scenarios.length} scenarios (max concurrent: ${maxConcurrent}, max retries: ${maxRetries})`);
     
     // Create test run record
     const { error: runError } = await supabase
@@ -459,7 +570,7 @@ Deno.serve(async (req) => {
       console.log(`[ai-chat-tester] Running batch of ${chunk.length} tests in parallel`);
       
       const chunkResults = await Promise.allSettled(
-        chunk.map(scenario => executeScenario(scenario, supabaseUrl, serviceRoleKey))
+        chunk.map(scenario => executeScenarioWithRetry(scenario, supabaseUrl, serviceRoleKey, maxRetries))
       );
       
       // Process settled results
@@ -480,7 +591,9 @@ Deno.serve(async (req) => {
             passed: false,
             validation_details: [],
             response_time_ms: 0,
-            error_message: `Unexpected error: ${settledResult.reason}`
+            error_message: `Unexpected error: ${settledResult.reason}`,
+            attempts: 1,
+            retried: false
           });
         }
       }
@@ -520,6 +633,11 @@ Deno.serve(async (req) => {
     const sequentialEstimate = sumResponseTimes; // If run sequentially
     const speedupFactor = sequentialEstimate > 0 ? Math.round((sequentialEstimate / totalTime) * 10) / 10 : 1;
     
+    // Calculate retry metrics
+    const retriedTests = allResults.filter(r => r.retried).length;
+    const totalAttempts = allResults.reduce((sum, r) => sum + r.attempts, 0);
+    const retryRate = scenarios.length > 0 ? Math.round((retriedTests / scenarios.length) * 100) : 0;
+    
     // Update test run with summary
     await supabase
       .from("ai_chat_test_runs")
@@ -532,7 +650,7 @@ Deno.serve(async (req) => {
       })
       .eq("id", testRunId);
     
-    console.log(`[ai-chat-tester] Test run completed: ${passedTests}/${scenarios.length} passed in ${totalTime}ms (${speedupFactor}x speedup)`);
+    console.log(`[ai-chat-tester] Test run completed: ${passedTests}/${scenarios.length} passed in ${totalTime}ms (${speedupFactor}x speedup, ${retriedTests} retried)`);
     
     return new Response(
       JSON.stringify({
@@ -548,6 +666,10 @@ Deno.serve(async (req) => {
         sequential_estimate_ms: sequentialEstimate,
         speedup_factor: speedupFactor,
         max_concurrent_used: maxConcurrent,
+        max_retries_used: maxRetries,
+        retried_tests: retriedTests,
+        total_attempts: totalAttempts,
+        retry_rate: retryRate,
         status: failedTests > 0 ? "failed" : "passed",
         results: allResults
       }),
