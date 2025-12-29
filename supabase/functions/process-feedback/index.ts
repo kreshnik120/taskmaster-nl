@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
         }
       }
       
-      // Save to message_feedback for consistency (ignore errors/duplicates)
+      // Save to message_feedback with Fast Path metadata for consistency
       const { error: msgFeedbackError } = await supabase
         .from('message_feedback')
         .insert({
@@ -129,6 +129,9 @@ Deno.serve(async (req) => {
           message_id: messageId,
           feedback_type: feedback,
           knowledge_ids: [], // Fast Path doesn't use knowledge base
+          is_fast_path: true,
+          fast_path_log_id: fastPathLogId,
+          pattern_id: patternId || null
         });
       
       if (msgFeedbackError && !msgFeedbackError.message?.includes('duplicate')) {
