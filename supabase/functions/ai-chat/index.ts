@@ -1535,8 +1535,8 @@ Deno.serve(async (req: Request) => {
             countQuery = countQuery.eq('is_active', true);
           }
           
-          // Add deleted_at filter for applications
-          if (fastPattern.table === 'professional_applications') {
+          // Add deleted_at filter for applications and professionals
+          if (fastPattern.table === 'professional_applications' || fastPattern.table === 'professionals') {
             countQuery = countQuery.is('deleted_at', null);
           }
           
