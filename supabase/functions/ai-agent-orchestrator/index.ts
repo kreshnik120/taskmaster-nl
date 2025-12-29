@@ -2125,7 +2125,8 @@ async function executeSendAiEmail(supabase: any, action: any) {
     'send_emrex_reminder': 'emrex_reminder'
   };
 
-  const emailType = emailTypeMap[action.action_type] || 'general';
+  // Prioritize explicit email_type from input_data (e.g., document_renewal_request from goals)
+  const emailType = action.input_data?.email_type || emailTypeMap[action.action_type] || 'general';
 
   console.log(`📧 [AI Email] Sending ${emailType} email via send-ai-email for ${organization}`);
 
