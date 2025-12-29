@@ -2103,6 +2103,21 @@ Deno.serve(async (req: Request) => {
             
             console.log(`⚡ [ULTRA FAST PATH] SUCCESS: ${count} items, ${fastPathDuration}ms (vs ~30s with AI)${filterContext ? ` [filter: ${filterContext}]` : ''}`);
             
+            // 🆕 Lookup database pattern_id for feedback loop integration
+            // Extract keywords from the matched pattern for database lookup
+            const queryWords = lastUserMessageForFastPath.toLowerCase().trim().split(/\s+/);
+            const patternLookup = await supabaseServiceClient
+              .from('fast_path_patterns')
+              .select('id')
+              .eq('source', 'hardcoded_backup')
+              .eq('table_name', fastPattern.table)
+              .eq('is_active', true)
+              .contains('keywords', queryWords.slice(0, 3)) // Match first 3 keywords
+              .limit(1)
+              .maybeSingle();
+            
+            const matchedPatternId = patternLookup?.data?.id || null;
+            
             // 🆕 Log hardcoded pattern usage for learning and GET ID for feedback
             const hardcodedLogId = crypto.randomUUID();
             Promise.resolve(supabaseServiceClient.from('fast_path_usage_log').insert({
@@ -2117,7 +2132,8 @@ Deno.serve(async (req: Request) => {
               filters_applied: filters,
               result_count: count || 0,
               success: true,
-              response_time_ms: fastPathDuration
+              response_time_ms: fastPathDuration,
+              pattern_id: matchedPatternId // 🆕 Link to database pattern for feedback
             })).catch(() => {});
             
             // Persist messages in background
@@ -2143,6 +2159,7 @@ Deno.serve(async (req: Request) => {
             const hardcodedFastPathMetadata: FastPathSSEMetadata = {
               fastPathLogId: hardcodedLogId,
               messageId: hardcodedAssistantPersist.messageId,
+              patternId: matchedPatternId || undefined, // 🆕 Include patternId for feedback loop
               isFastPath: true
             };
             const stream = buildFastPathSSEResponse(responseContent, encoder, hardcodedFastPathMetadata);

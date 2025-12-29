@@ -27,7 +27,7 @@ De Fast Path is een optimalisatie in de AI Chat die simpele count-queries direct
 
 ## Pattern Types
 
-### 1. Hardcoded Patterns
+### 1. Hardcoded Patterns (Code)
 Ingebouwde patterns in `ai-chat/index.ts` voor bekende query-structuren:
 
 ```typescript
@@ -39,11 +39,26 @@ const FAST_PATH_PATTERNS = [
 ```
 
 **Kenmerken:**
-- Geen `patternId` in metadata
-- Worden niet geoptimaliseerd via feedback
-- Altijd actief
+- Altijd actief (fallback)
+- Worden opgezocht in database voor `patternId` matching
+- Als database entry gevonden → feedback wordt verwerkt
 
-### 2. Learned Patterns (Dynamic)
+### 2. Hardcoded Patterns (Migrated to Database)
+Alle hardcoded patterns zijn gemigreerd naar de `fast_path_patterns` tabel met `source = 'hardcoded_backup'`.
+
+**Voordelen:**
+- ✅ Profiteren nu van de feedback loop (confidence updates)
+- ✅ Popularity tracking via `usage_count`, `helpful_count`, `harmful_count`
+- ✅ Kunnen gedeactiveerd worden via database zonder code deploy
+- ✅ Unified analytics over alle Fast Path patterns
+
+**Matching logica:**
+1. Hardcoded pattern matcht in code
+2. Database lookup voor corresponderende `hardcoded_backup` entry
+3. Als gevonden → `patternId` wordt meegestuurd in metadata
+4. Feedback verwerkt confidence scores in database
+
+### 3. Learned Patterns (Dynamic)
 Automatisch geleerd via `learn-fast-path-patterns` edge function:
 
 **Database tabel:** `fast_path_patterns`
@@ -293,3 +308,4 @@ ORDER BY usage_count DESC;
 | 1.0.0 | 2025-12-29 | Initiële implementatie met hardcoded patterns |
 | 1.1.0 | 2025-12-29 | Learned patterns en feedback loop toegevoegd |
 | 1.2.0 | 2025-12-29 | Fast Path metadata in message_feedback |
+| 1.3.0 | 2025-12-29 | Hardcoded patterns gemigreerd naar database (source=hardcoded_backup), nu met patternId matching |
