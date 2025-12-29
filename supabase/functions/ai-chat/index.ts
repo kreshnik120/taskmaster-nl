@@ -2869,6 +2869,60 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
       {
         type: "function",
         function: {
+          name: "query_sublocations",
+          description: "Zoek DIRECT in werklocaties/sublocaties (930+ locaties). Gebruik voor specifieke locaties, telefoonnummers, adressen. Sneller dan query_clients voor directe sublocation zoekopdrachten.",
+          parameters: {
+            type: "object",
+            properties: {
+              filter: {
+                type: "object",
+                properties: {
+                  naam: { 
+                    type: "string",
+                    description: "Zoek op (deel van) sublocation naam"
+                  },
+                  plaats: { 
+                    type: "string",
+                    description: "Filter op stad/plaats (bijv. 'Tilburg', 'Eindhoven')"
+                  },
+                  sector: { 
+                    type: "string",
+                    description: "Filter op sector (GHZ, GGZ, VVT, Jeugdzorg)"
+                  },
+                  doelgroep: { 
+                    type: "string",
+                    description: "Filter op doelgroep (LVB, Ouderen, Psychiatrie)"
+                  },
+                  bureau: { 
+                    type: "string", 
+                    enum: ["ABCzorg", "CitoZorg"],
+                    description: "Filter op bemiddelingsbureau" 
+                  },
+                  is_active: {
+                    type: "boolean",
+                    description: "Filter op actieve locaties (default: true)"
+                  }
+                }
+              },
+              include: {
+                type: "array",
+                items: { 
+                  type: "string", 
+                  enum: ["telefoon", "adres", "sector", "doelgroep", "organisatie", "gezochte_functies"]
+                }
+              },
+              limit: {
+                type: "number",
+                description: "Maximum aantal resultaten (default: 25)",
+                default: 25
+              }
+            }
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
           name: "query_professionals",
           description: "Doorzoek professionals/ZZP'ers/uitzendkrachten database om vragen te beantwoorden over beschikbare professionals, hun functieniveau, werkvorm, regio, skills, etc. Gebruik dit wanneer gebruikers vragen stellen over professionals, zzp'ers, beschikbare arbeidskrachten, of wie er kan worden ingezet.",
           parameters: {
@@ -4134,6 +4188,132 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
                                 total_phones: totalPhones
                               },
                               message: `${summary}\n\n${orgList}\n\n💡 **Tip:** Vraag naar een specifieke organisatie (bijv. "telefoonnummer Prisma") voor gedetailleerde contactinfo.`
+                            };
+                          }
+                          break;
+
+                        case "query_sublocations":
+                          console.log("🔍 Querying sublocations directly...", args);
+                          
+                          // Direct query on client_sublocations with joins
+                          let sublocQuery = supabaseClient
+                            .from('client_sublocations')
+                            .select(`
+                              id, naam, telefoon, adres, postcode, plaats, sector, doelgroep, gezochte_functies, is_active,
+                              location:client_locations!inner(
+                                id, naam, telefoon, plaats,
+                                organization:client_organizations!inner(id, name, org_id)
+                              )
+                            `);
+                          
+                          // Apply filters
+                          if (args.filter) {
+                            if (args.filter.naam) {
+                              sublocQuery = sublocQuery.ilike('naam', `%${args.filter.naam}%`);
+                            }
+                            if (args.filter.plaats) {
+                              sublocQuery = sublocQuery.ilike('plaats', `%${args.filter.plaats}%`);
+                            }
+                            if (args.filter.sector) {
+                              sublocQuery = sublocQuery.contains('sector', [args.filter.sector]);
+                            }
+                            if (args.filter.doelgroep) {
+                              sublocQuery = sublocQuery.contains('doelgroep', [args.filter.doelgroep]);
+                            }
+                            if (args.filter.is_active !== undefined) {
+                              sublocQuery = sublocQuery.eq('is_active', args.filter.is_active);
+                            } else {
+                              // Default to active only
+                              sublocQuery = sublocQuery.eq('is_active', true);
+                            }
+                            if (args.filter.bureau) {
+                              const bureauOrgId = args.filter.bureau === "ABCzorg" 
+                                ? "550e8400-e29b-41d4-a716-446655440000"
+                                : "650e8400-e29b-41d4-a716-446655440001";
+                              sublocQuery = sublocQuery.eq('location.organization.org_id', bureauOrgId);
+                            }
+                          } else {
+                            // Default to active only
+                            sublocQuery = sublocQuery.eq('is_active', true);
+                          }
+                          
+                          const subLimit = args.limit || 25;
+                          sublocQuery = sublocQuery.order('naam', { ascending: true }).limit(subLimit);
+                          
+                          const { data: sublocsData, error: sublocsError } = await sublocQuery;
+                          
+                          if (sublocsError) {
+                            console.error("Sublocations query error:", sublocsError);
+                            result = {
+                              success: false,
+                              message: `❌ Fout bij ophalen werklocaties: ${sublocsError.message}`
+                            };
+                          } else if (!sublocsData || sublocsData.length === 0) {
+                            result = {
+                              success: true,
+                              sublocations: [],
+                              message: `ℹ️ Geen werklocaties gevonden met deze zoekcriteria.`
+                            };
+                          } else {
+                            // Format output
+                            const includePhone = args.include?.includes('telefoon') !== false;
+                            const includeAddress = args.include?.includes('adres');
+                            const includeSector = args.include?.includes('sector');
+                            const includeDoelgroep = args.include?.includes('doelgroep');
+                            const includeOrg = args.include?.includes('organisatie');
+                            const includeFuncties = args.include?.includes('gezochte_functies');
+                            
+                            const sublocList = sublocsData.map((sub: any, i: number) => {
+                              const org = sub.location?.organization;
+                              const bureau = org?.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : 
+                                             org?.org_id === "650e8400-e29b-41d4-a716-446655440001" ? "CitoZorg" : "";
+                              
+                              let line = `${i + 1}. **${sub.naam}**`;
+                              if (sub.plaats) line += ` (${sub.plaats})`;
+                              if (includePhone && sub.telefoon) line += ` - 📞 ${sub.telefoon}`;
+                              
+                              if (includeOrg && org) {
+                                line += `\n   └─ Organisatie: ${org.name}${bureau ? ` [${bureau}]` : ''}`;
+                              }
+                              if (includeAddress && sub.adres) {
+                                line += `\n   └─ Adres: ${sub.adres}, ${sub.postcode || ''} ${sub.plaats || ''}`;
+                              }
+                              if (includeSector && sub.sector?.length > 0) {
+                                line += `\n   └─ Sector: ${sub.sector.join(', ')}`;
+                              }
+                              if (includeDoelgroep && sub.doelgroep?.length > 0) {
+                                line += `\n   └─ Doelgroep: ${sub.doelgroep.join(', ')}`;
+                              }
+                              if (includeFuncties && sub.gezochte_functies?.length > 0) {
+                                line += `\n   └─ Gezochte functies: ${sub.gezochte_functies.join(', ')}`;
+                              }
+                              
+                              return line;
+                            }).join('\n\n');
+                            
+                            const phonesFound = sublocsData.filter((s: any) => s.telefoon).length;
+                            const summary = `📍 **${sublocsData.length} werklocaties** gevonden (${phonesFound} met telefoonnummer)`;
+                            
+                            result = {
+                              success: true,
+                              sublocations: sublocsData.map((sub: any) => ({
+                                id: sub.id,
+                                naam: sub.naam,
+                                telefoon: sub.telefoon,
+                                adres: sub.adres,
+                                postcode: sub.postcode,
+                                plaats: sub.plaats,
+                                sector: sub.sector,
+                                doelgroep: sub.doelgroep,
+                                gezochte_functies: sub.gezochte_functies,
+                                organization: sub.location?.organization?.name,
+                                bureau: sub.location?.organization?.org_id === "550e8400-e29b-41d4-a716-446655440000" ? "ABCzorg" : "CitoZorg"
+                              })),
+                              summary: {
+                                total: sublocsData.length,
+                                with_phone: phonesFound
+                              },
+                              message: `${summary}\n\n${sublocList}`
                             };
                           }
                           break;

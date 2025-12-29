@@ -327,6 +327,41 @@ Skills worden opgeslagen als:
 - Telefoons op locatie EN sublocation niveau
 - Display: organisatienaam, bureau, KvK, locaties met sublocaties en telefoons
 - Bij 0 resultaten: probeer met ruimere zoekterm
+
+📋 WANNEER GEBRUIK JE QUERY_SUBLOCATIONS (NIEUW!):
+✅ "Zoek werklocaties in Tilburg"
+✅ "Welke GHZ locaties zijn er?"
+✅ "Toon locaties voor doelgroep LVB"
+✅ "Telefoonnummer van [specifieke locatienaam]"
+✅ "Welke functies zoekt men in Eindhoven?"
+
+⚡ QUERY_SUBLOCATIONS is SNELLER voor directe sublocation zoekopdrachten!
+   Gebruik query_clients als je de volledige organisatie-hiërarchie nodig hebt.
+
+💡 QUERY_SUBLOCATIONS EXAMPLES:
+
+"Werklocaties in Tilburg met telefoonnummer"
+→ query_sublocations({ 
+    filter: { plaats: "Tilburg" },
+    include: ["telefoon", "organisatie"]
+  })
+
+"GHZ locaties voor doelgroep LVB"
+→ query_sublocations({ 
+    filter: { sector: "GHZ", doelgroep: "LVB" },
+    include: ["telefoon", "sector", "doelgroep"]
+  })
+
+"Welke functies zoekt men in Eindhoven?"
+→ query_sublocations({ 
+    filter: { plaats: "Eindhoven" },
+    include: ["gezochte_functies", "organisatie"]
+  })
+
+📊 RESPONSE FORMAT SUBLOCATIONS:
+- Tool returns: { success: true, sublocations: [...], summary: {...} }
+- Display: naam, plaats, telefoon, organisatie, sector, doelgroep
+- Snelle directe zoekopdrachten zonder organisatie-hiërarchie
 `;
 
 // ============================================================================
