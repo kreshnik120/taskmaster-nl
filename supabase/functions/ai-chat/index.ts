@@ -1923,29 +1923,57 @@ Deno.serve(async (req: Request) => {
     };
     
     // 🆕 First check dynamic patterns from database
-    // 🔧 IMPROVED: Find the MOST SPECIFIC matching pattern (most filters) instead of first match
+    // 🔧 FIX A+B+C: Find the MOST SPECIFIC matching pattern with validated filter extraction
     let dynamicPatternMatched = false;
     
-    // Score and rank all matching patterns
-    const matchingPatterns: Array<{ pattern: typeof dynamicPatterns[0]; score: number }> = [];
+    // Score and rank all matching patterns, but ONLY if filters can be extracted
+    const matchingPatterns: Array<{ pattern: typeof dynamicPatterns[0]; score: number; extractedFilters: FastPathFilter[] }> = [];
+    
     for (const dynPattern of dynamicPatterns) {
-      if (matchesDynamicPattern(lastUserMessageForFastPath, dynPattern)) {
-        // Score = number of filters (more specific = higher score)
-        const filterCount = Array.isArray(dynPattern.filters) ? dynPattern.filters.length : 0;
-        matchingPatterns.push({ pattern: dynPattern, score: filterCount });
+      if (!matchesDynamicPattern(lastUserMessageForFastPath, dynPattern)) {
+        continue;
       }
+      
+      // 🔧 FIX B: Extract filters BEFORE scoring - if pattern has filters but extraction fails, skip it
+      const expectedFilterCount = Array.isArray(dynPattern.filters) ? dynPattern.filters.length : 0;
+      const extractedFilters = extractDynamicFilters(lastUserMessageForFastPath, dynPattern);
+      
+      // If pattern expects filters but we couldn't extract them, this is NOT a valid match
+      if (expectedFilterCount > 0 && extractedFilters.length === 0) {
+        console.log(`⚡ [DYNAMIC PATTERNS] Skipping pattern ${dynPattern.id}: expected ${expectedFilterCount} filters but extracted 0`);
+        continue;
+      }
+      
+      // 🔧 FIX A: Score based on:
+      // 1. Number of successfully extracted filters (highest weight)
+      // 2. Keyword match quality
+      const normalizedQuery = lastUserMessageForFastPath.toLowerCase().trim();
+      const matchedKeywords = dynPattern.keywords.filter(kw => normalizedQuery.includes(kw.toLowerCase()));
+      const keywordScore = matchedKeywords.length / dynPattern.keywords.length;
+      
+      // Composite score: filters * 10 + keyword ratio
+      const score = (extractedFilters.length * 10) + keywordScore;
+      
+      matchingPatterns.push({ 
+        pattern: dynPattern, 
+        score, 
+        extractedFilters 
+      });
+      
+      console.log(`⚡ [DYNAMIC PATTERNS] Pattern ${dynPattern.id} scored ${score.toFixed(2)} (filters: ${extractedFilters.length}, keywords: ${matchedKeywords.length}/${dynPattern.keywords.length})`);
     }
     
     // Sort by score (descending) - patterns with more filters come first
+    // 🔧 FIX C: Generic patterns (score 0-1) will naturally fall to bottom
     matchingPatterns.sort((a, b) => b.score - a.score);
     
     if (matchingPatterns.length > 0) {
-      console.log(`⚡ [DYNAMIC PATTERNS] ${matchingPatterns.length} patterns matched, selecting most specific (score: ${matchingPatterns[0].score})`);
+      console.log(`⚡ [DYNAMIC PATTERNS] ${matchingPatterns.length} patterns matched, selecting best: ${matchingPatterns[0].pattern.id} (score: ${matchingPatterns[0].score.toFixed(2)})`);
     }
     
-    // Process the most specific matching pattern
-    for (const { pattern: dynPattern, score } of matchingPatterns.slice(0, 1)) {
-      console.log(`⚡ [DYNAMIC FAST PATH] Pattern selected: ${dynPattern.id} (confidence: ${dynPattern.confidence_score}, filters: ${score})`);
+    // Process the most specific matching pattern (using pre-extracted filters)
+    for (const { pattern: dynPattern, score, extractedFilters } of matchingPatterns.slice(0, 1)) {
+      console.log(`⚡ [DYNAMIC FAST PATH] Pattern selected: ${dynPattern.id} (confidence: ${dynPattern.confidence_score}, score: ${score.toFixed(2)})`);
       const fastPathStart = Date.now();
         
         try {
@@ -1963,11 +1991,10 @@ Deno.serve(async (req: Request) => {
             countQuery = countQuery.is('deleted_at', null);
           }
           
-          // Apply dynamic filters
-          const filters = extractDynamicFilters(lastUserMessageForFastPath, dynPattern);
+          // 🔧 Use pre-extracted filters (from scoring phase) instead of re-extracting
           let filterContext = '';
           
-          for (const filter of filters) {
+          for (const filter of extractedFilters) {
             console.log(`⚡ [DYNAMIC FAST PATH] Applying filter: ${filter.column} ${filter.operator} "${filter.value}"`);
             filterContext += (filterContext ? ' + ' : '') + filter.value;
             
@@ -1998,7 +2025,7 @@ Deno.serve(async (req: Request) => {
               query_hash: await sha256Hash(lastUserMessageForFastPath.toLowerCase().trim()),
               pattern_id: dynPattern.id,
               table_name: dynPattern.table_name,
-              filters_applied: filters,
+              filters_applied: extractedFilters,
               success: false,
               error_message: countError.message,
               response_time_ms: fastPathDuration
@@ -2027,7 +2054,7 @@ Deno.serve(async (req: Request) => {
               query_hash: await sha256Hash(lastUserMessageForFastPath.toLowerCase().trim()),
               pattern_id: dynPattern.id,
               table_name: dynPattern.table_name,
-              filters_applied: filters,
+              filters_applied: extractedFilters,
               result_count: count || 0,
               success: true,
               response_time_ms: fastPathDuration
