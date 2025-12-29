@@ -2103,20 +2103,38 @@ Deno.serve(async (req: Request) => {
             
             console.log(`⚡ [ULTRA FAST PATH] SUCCESS: ${count} items, ${fastPathDuration}ms (vs ~30s with AI)${filterContext ? ` [filter: ${filterContext}]` : ''}`);
             
-            // 🆕 Lookup database pattern_id for feedback loop integration
-            // Extract keywords from the matched pattern for database lookup
+            // 🆕 Fuzzy overlap matching for pattern_id lookup (feedback loop integration)
             const queryWords = lastUserMessageForFastPath.toLowerCase().trim().split(/\s+/);
-            const patternLookup = await supabaseServiceClient
+            const queryWordsSet = new Set(queryWords);
+            
+            // Fetch all active patterns for this table
+            const { data: patternsForTable } = await supabaseServiceClient
               .from('fast_path_patterns')
-              .select('id')
+              .select('id, keywords')
               .eq('source', 'hardcoded_backup')
               .eq('table_name', fastPattern.table)
-              .eq('is_active', true)
-              .contains('keywords', queryWords.slice(0, 3)) // Match first 3 keywords
-              .limit(1)
-              .maybeSingle();
+              .eq('is_active', true);
             
-            const matchedPatternId = patternLookup?.data?.id || null;
+            // Score patterns by keyword overlap - find best match
+            let bestMatch: { id: string; score: number } | null = null;
+            for (const pattern of patternsForTable || []) {
+              const patternKeywords = pattern.keywords as string[];
+              const matchingKeywords = patternKeywords.filter(k => queryWordsSet.has(k));
+              const matchCount = matchingKeywords.length;
+              
+              // Score = percentage of pattern keywords that match
+              const score = matchCount / patternKeywords.length;
+              
+              // Require at least 1 keyword match AND 50% overlap
+              if (matchCount >= 1 && score >= 0.5 && (!bestMatch || score > bestMatch.score)) {
+                bestMatch = { id: pattern.id, score };
+              }
+            }
+            
+            const matchedPatternId = bestMatch?.id || null;
+            if (matchedPatternId) {
+              console.log(`⚡ [FAST PATH] Pattern matched: ${matchedPatternId} (score: ${bestMatch?.score.toFixed(2)})`);
+            }
             
             // 🆕 Log hardcoded pattern usage for learning and GET ID for feedback
             const hardcodedLogId = crypto.randomUUID();
