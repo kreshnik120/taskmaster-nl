@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { ThumbsUp, ThumbsDown, Sparkles, Flame } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Sparkles, Flame, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { logger } from "@/lib/logger";
 import { useFeedbackStats } from "@/hooks/useFeedbackStats";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 const log = logger.create('MessageFeedback');
 
@@ -13,14 +13,21 @@ interface MessageFeedbackProps {
   messageContent: string;
   messageId?: string;
   usedKnowledge?: string[];
-  isNewMessage?: boolean; // For pulse animation on new messages
+  isNewMessage?: boolean;
+  // 🆕 Fast Path feedback support
+  isFastPath?: boolean;
+  fastPathLogId?: string;
+  patternId?: string;
 }
 
 export const MessageFeedback = ({ 
   messageContent, 
   messageId, 
   usedKnowledge,
-  isNewMessage = false 
+  isNewMessage = false,
+  isFastPath = false,
+  fastPathLogId,
+  patternId
 }: MessageFeedbackProps) => {
   const [feedback, setFeedback] = useState<'positive' | 'negative' | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -50,6 +57,7 @@ export const MessageFeedback = ({
       if (!messageId) return;
       
       try {
+        // Check regular message feedback
         const { data, error } = await supabase
           .from('message_feedback')
           .select('feedback_type')
@@ -58,6 +66,20 @@ export const MessageFeedback = ({
         
         if (!error && data) {
           setFeedback(data.feedback_type as 'positive' | 'negative');
+          return;
+        }
+        
+        // 🆕 Also check Fast Path feedback if applicable
+        if (isFastPath && fastPathLogId) {
+          const { data: fpData } = await supabase
+            .from('fast_path_usage_log')
+            .select('feedback_type')
+            .eq('id', fastPathLogId)
+            .maybeSingle();
+          
+          if (fpData?.feedback_type) {
+            setFeedback(fpData.feedback_type === 'helpful' ? 'positive' : 'negative');
+          }
         }
       } catch (error) {
         log.error('Error checking existing feedback:', error);
@@ -65,24 +87,29 @@ export const MessageFeedback = ({
     };
     
     checkExistingFeedback();
-  }, [messageId]);
+  }, [messageId, isFastPath, fastPathLogId]);
 
   const handleFeedback = async (type: 'positive' | 'negative') => {
     if (feedback || isLoading) return;
     
-    log.log('Submitting feedback:', { type, messageId, hasAuth: !!supabase.auth });
+    log.log('Submitting feedback:', { type, messageId, isFastPath, fastPathLogId, patternId });
     
     setIsLoading(true);
     setFeedback(type);
 
     try {
+      // 🆕 Include Fast Path metadata in feedback call
       const { data, error } = await supabase.functions.invoke('process-feedback', {
         body: {
           messageId: messageId,
           feedback: type,
           context: {
             message: messageContent,
-            usedKnowledge: usedKnowledge || []
+            usedKnowledge: usedKnowledge || [],
+            // Fast Path specific fields
+            isFastPath: isFastPath,
+            fastPathLogId: fastPathLogId,
+            patternId: patternId
           }
         }
       });
@@ -94,7 +121,7 @@ export const MessageFeedback = ({
 
       log.log('Feedback saved successfully:', data);
       setShowThankYou(true);
-      refreshStats(); // Update stats after feedback
+      refreshStats();
       
       // Hide thank you after 5 seconds
       setTimeout(() => setShowThankYou(false), 5000);
@@ -126,6 +153,13 @@ export const MessageFeedback = ({
           <span className="font-medium text-foreground">
             {feedback === 'positive' ? 'Bedankt voor je positieve feedback!' : 'Bedankt voor je feedback!'}
           </span>
+          {/* 🆕 Show Fast Path indicator */}
+          {isFastPath && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
+              <Zap className="h-3 w-3 text-yellow-500" />
+              Fast Path
+            </span>
+          )}
         </div>
         <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
@@ -140,7 +174,9 @@ export const MessageFeedback = ({
           )}
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          Jouw feedback helpt de AI om beter te worden.
+          {isFastPath 
+            ? 'Jouw feedback verbetert snelle antwoorden direct.'
+            : 'Jouw feedback helpt de AI om beter te worden.'}
         </p>
       </motion.div>
     );
@@ -158,6 +194,11 @@ export const MessageFeedback = ({
           )}
           Feedback gegeven
         </span>
+        {isFastPath && (
+          <span className="flex items-center gap-1 text-xs bg-muted/50 px-1.5 py-0.5 rounded">
+            <Zap className="h-3 w-3 text-yellow-500" />
+          </span>
+        )}
       </div>
     );
   }
@@ -175,6 +216,13 @@ export const MessageFeedback = ({
     >
       <p className="text-sm text-muted-foreground mb-2 flex items-center gap-1">
         💬 Was dit antwoord nuttig?
+        {/* 🆕 Fast Path indicator */}
+        {isFastPath && (
+          <span className="ml-1 flex items-center gap-1 text-xs bg-yellow-500/10 text-yellow-600 px-1.5 py-0.5 rounded">
+            <Zap className="h-3 w-3" />
+            Snel antwoord
+          </span>
+        )}
       </p>
       <div className="flex gap-2">
         <Button
