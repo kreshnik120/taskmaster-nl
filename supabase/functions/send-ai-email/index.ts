@@ -4,17 +4,18 @@ import { getOrganizationById, getEmailConfig } from '../_shared/healthcare-mappi
 
 // Email types supported by this function
 type EmailType = 
-  | 'followup_question'     // Vraag ontbrekende info aan kandidaat
-  | 'document_request'      // Vraag VOG, diploma's, certificaten
-  | 'interview_confirmation' // Bevestig interview afspraak
-  | 'appointment_confirmation' // Algemene afspraak bevestiging
-  | 'general'               // Algemene communicatie
-  | 'welcome'               // Welkomstmail nieuwe kandidaat
-  | 'status_update'         // Status update (goedgekeurd, afgewezen, etc.)
-  | 'vog_rejection'         // VOG verificatie mislukt, vraag nieuw VOG
-  | 'rejection'             // Afwijzing sollicitatie (geen diploma, etc.)
-  | 'emrex_invitation'      // EMREX diploma verificatie uitnodiging
-  | 'emrex_reminder';       // EMREX herinnering na 48 uur
+  | 'followup_question'           // Vraag ontbrekende info aan kandidaat
+  | 'document_request'            // Vraag VOG, diploma's, certificaten
+  | 'document_renewal_request'    // Herinnering verlopen documenten met urgentie
+  | 'interview_confirmation'      // Bevestig interview afspraak
+  | 'appointment_confirmation'    // Algemene afspraak bevestiging
+  | 'general'                     // Algemene communicatie
+  | 'welcome'                     // Welkomstmail nieuwe kandidaat
+  | 'status_update'               // Status update (goedgekeurd, afgewezen, etc.)
+  | 'vog_rejection'               // VOG verificatie mislukt, vraag nieuw VOG
+  | 'rejection'                   // Afwijzing sollicitatie (geen diploma, etc.)
+  | 'emrex_invitation'            // EMREX diploma verificatie uitnodiging
+  | 'emrex_reminder';             // EMREX herinnering na 48 uur
 
 interface SendEmailRequest {
   email_type: EmailType;
@@ -37,6 +38,12 @@ interface SendEmailRequest {
     documents?: string[];
     deadline?: string;
     urgent?: boolean;
+    
+    // For document_renewal_request
+    document_type?: string;
+    days_remaining?: number;
+    expiry_date?: string;
+    renewal_context?: string;
     
     // For interview/appointment
     scheduled_at?: string;
@@ -280,6 +287,84 @@ function generateEmailTemplate(
         <p style="color: #4a5568; font-size: 15px; line-height: 1.6;">
           Je kunt de documenten als bijlage naar deze email sturen.
         </p>
+        <p style="margin: 25px 0 0 0; color: #4a5568;">
+          Met vriendelijke groet,<br>
+          <strong>Het ${orgName} Recruitment Team</strong>
+        </p>`;
+      break;
+
+    case 'document_renewal_request':
+      // Specifieke template voor verlopen documenten met urgentie
+      const renewalDocType = data.document_type || data.documents?.[0] || 'document';
+      const daysRemaining = data.days_remaining ?? 14;
+      const expiryDateRenewal = data.expiry_date 
+        ? new Date(data.expiry_date).toLocaleDateString('nl-NL', { 
+            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' 
+          })
+        : null;
+      const isUrgent = daysRemaining <= 7;
+      const renewalContext = data.context || data.renewal_context || '';
+      
+      // Urgentie-gebaseerde styling
+      const urgencyBgColor = isUrgent ? '#fef2f2' : '#fef3c7';
+      const urgencyBorderColor = isUrgent ? '#dc2626' : '#f59e0b';
+      const urgencyTextColor = isUrgent ? '#991b1b' : '#92400e';
+      const urgencyIcon = isUrgent ? '🚨' : '⏰';
+      const urgencyLabel = isUrgent ? 'Dringend: Actie Vereist' : 'Herinnering: Document Verloopt Binnenkort';
+      
+      // Document-specifieke instructies
+      const renewalInstructions: Record<string, { where: string; tip: string }> = {
+        'VOG': { 
+          where: 'Je kunt een nieuwe VOG aanvragen via <a href="https://www.justis.nl/producten/vog" style="color: ' + orgColor + ';">justis.nl</a>.', 
+          tip: 'Let op: een VOG mag maximaal 3 maanden oud zijn.' 
+        },
+        'BIG-registratie': { 
+          where: 'Controleer je BIG-registratie via <a href="https://www.bigregister.nl" style="color: ' + orgColor + ';">bigregister.nl</a>.', 
+          tip: 'Na herregistratie ontvang je een nieuw certificaat.' 
+        },
+        'Diploma': { 
+          where: 'Neem contact op met je onderwijsinstelling voor een gewaarmerkte kopie.', 
+          tip: 'Zorg dat het een officieel document met stempel is.' 
+        }
+      };
+      const docInstructions = renewalInstructions[renewalDocType] || { 
+        where: 'Neem contact op met de juiste instantie om een vernieuwd document aan te vragen.', 
+        tip: '' 
+      };
+      
+      content = `
+        <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName},</h2>
+        
+        <div style="background-color: ${urgencyBgColor}; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 5px solid ${urgencyBorderColor};">
+          <p style="margin: 0; color: ${urgencyTextColor}; font-weight: 700; font-size: 16px;">
+            ${urgencyIcon} ${urgencyLabel}
+          </p>
+          <p style="margin: 12px 0 0 0; color: ${urgencyTextColor}; font-size: 15px; line-height: 1.5;">
+            Je <strong>${renewalDocType}</strong> ${daysRemaining <= 0 ? 'is verlopen' : `verloopt over <strong>${daysRemaining} ${daysRemaining === 1 ? 'dag' : 'dagen'}</strong>`}${expiryDateRenewal ? ` (op ${expiryDateRenewal})` : ''}.
+          </p>
+        </div>
+        
+        ${renewalContext ? `<p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">${renewalContext}</p>` : ''}
+        
+        <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 25px 0;">
+          <p style="margin: 0 0 15px 0; color: #1a1a1a; font-weight: 600; font-size: 15px;">📋 Wat moet je doen?</p>
+          <ol style="color: #4a5568; font-size: 14px; line-height: 1.8; padding-left: 20px; margin: 0;">
+            <li>Vraag een vernieuwd ${renewalDocType} aan bij de juiste instantie</li>
+            <li>Upload het nieuwe document door te antwoorden op deze email</li>
+            <li>Zorg dat het document vóór de vervaldatum is ontvangen</li>
+          </ol>
+          ${docInstructions.where ? `<p style="margin: 15px 0 0 0; color: #4a5568; font-size: 14px;">${docInstructions.where}</p>` : ''}
+          ${docInstructions.tip ? `<p style="margin: 8px 0 0 0; color: #6b7280; font-size: 13px; font-style: italic;">💡 ${docInstructions.tip}</p>` : ''}
+        </div>
+        
+        ${isUrgent ? `
+        <div style="background-color: #fef2f2; padding: 15px; border-radius: 6px; margin: 20px 0; text-align: center;">
+          <p style="margin: 0; color: #dc2626; font-weight: 600; font-size: 14px;">
+            ⚠️ Zonder geldig ${renewalDocType} kunnen we je huidige plaatsing(en) mogelijk niet voortzetten.
+          </p>
+        </div>
+        ` : ''}
+        
         <p style="margin: 25px 0 0 0; color: #4a5568;">
           Met vriendelijke groet,<br>
           <strong>Het ${orgName} Recruitment Team</strong>
