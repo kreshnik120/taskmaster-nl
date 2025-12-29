@@ -45,6 +45,7 @@ import { AIAgentTestPanel } from "@/components/AITraining/AIAgentTestPanel";
 import { N8nIntegrationTestPanel } from "@/components/AITraining/N8nIntegrationTestPanel";
 import { ResendInboundSetup } from "@/components/AITraining/ResendInboundSetup";
 import { EmailReplyTestPanel } from "@/components/AITraining/EmailReplyTestPanel";
+import { AIChatTestDashboard } from "@/components/AITraining/AIChatTestDashboard";
 import { toast } from "sonner";
 
 const AiTraining = () => {
@@ -189,8 +190,9 @@ const AiTraining = () => {
               {/* 📊 OVERZICHT */}
               <TabsContent value="overview" className="mt-6">
                 <Tabs defaultValue="dashboard" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+                    <TabsTrigger value="test-suite">Test Suite</TabsTrigger>
                     <TabsTrigger value="ai-agent">AI Agent</TabsTrigger>
                     <TabsTrigger value="health">Systeem Health</TabsTrigger>
                   </TabsList>
@@ -202,6 +204,10 @@ const AiTraining = () => {
                       <AutoResolveMonitor />
                       <EvaluationLearningWidget />
                     </div>
+                  </TabsContent>
+
+                  <TabsContent value="test-suite" className="mt-4">
+                    <AIChatTestDashboard />
                   </TabsContent>
 
                   <TabsContent value="ai-agent" className="mt-4">
