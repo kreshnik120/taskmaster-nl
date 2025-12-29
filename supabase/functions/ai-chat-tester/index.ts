@@ -217,6 +217,186 @@ function runValidation(response: string, validation: Validation): { passed: bool
   }
 }
 
+// Default concurrency for parallel test execution
+const DEFAULT_MAX_CONCURRENT = 5;
+
+// Scenario result interface
+interface ScenarioResult {
+  scenario_id: string;
+  question: string;
+  response: string | null;
+  expected_tool: string | null;
+  actual_tool_used: string | null;
+  passed: boolean;
+  validation_details: Array<{ validation: string; passed: boolean; details: string }>;
+  response_time_ms: number;
+  error_message: string | null;
+}
+
+// Execute a single test scenario
+async function executeScenario(
+  scenario: TestScenario,
+  supabaseUrl: string,
+  serviceRoleKey: string
+): Promise<ScenarioResult> {
+  const scenarioStart = Date.now();
+  let response = "";
+  let actualToolUsed: string | null = null;
+  let errorMessage: string | null = null;
+  const validationResults: Array<{ validation: string; passed: boolean; details: string }> = [];
+  
+  // Get scenario-specific timeout or use default
+  const scenarioTimeout = scenario.timeout_ms || DEFAULT_TIMEOUT_MS;
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), scenarioTimeout);
+  
+  try {
+    console.log(`[ai-chat-tester] Testing scenario: ${scenario.id} (timeout: ${scenarioTimeout}ms)`);
+    
+    // Generate a valid UUID for conversation_id
+    const conversationId = crypto.randomUUID();
+    
+    // Call ai-chat function with abort signal for timeout
+    const chatResponse = await fetch(`${supabaseUrl}/functions/v1/ai-chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({
+        messages: [
+          { role: "user", content: scenario.question }
+        ],
+        conversation_id: conversationId
+      }),
+      signal: abortController.signal,
+    });
+    
+    if (!chatResponse.ok) {
+      throw new Error(`ai-chat returned ${chatResponse.status}: ${await chatResponse.text()}`);
+    }
+    
+    // Parse SSE streaming response from ai-chat with timeout
+    const reader = chatResponse.body?.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let fullResponse = "";
+    let detectedTool: string | null = null;
+    
+    if (reader) {
+      while (true) {
+        // Calculate remaining time for this scenario
+        const elapsedTime = Date.now() - scenarioStart;
+        const remainingTime = scenarioTimeout - elapsedTime;
+        
+        if (remainingTime <= 0) {
+          reader.cancel();
+          throw new Error(`Scenario timeout: response duurde langer dan ${scenarioTimeout}ms`);
+        }
+        
+        // Read with timeout
+        const { done, value } = await readWithTimeout(reader, remainingTime);
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]" || !jsonStr) continue;
+          
+          try {
+            const parsed = JSON.parse(jsonStr);
+            
+            // Extract content from delta (OpenAI streaming format)
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) fullResponse += content;
+            
+            // Detect tool calls from stream
+            const toolCalls = parsed.choices?.[0]?.delta?.tool_calls;
+            if (toolCalls?.[0]?.function?.name) {
+              detectedTool = toolCalls[0].function.name;
+            }
+            
+            // Also check for finished tool calls
+            if (parsed.choices?.[0]?.message?.tool_calls?.[0]?.function?.name) {
+              detectedTool = parsed.choices[0].message.tool_calls[0].function.name;
+            }
+            
+            // Handle our custom chunk format (if ai-chat sends different format)
+            if (parsed.chunk) fullResponse += parsed.chunk;
+            if (parsed.content) fullResponse += parsed.content;
+            if (parsed.tool_used) detectedTool = parsed.tool_used;
+            if (parsed.tool_calls?.[0]?.name) detectedTool = parsed.tool_calls[0].name;
+            
+          } catch {
+            // Ignore invalid JSON chunks - normal in SSE streaming
+          }
+        }
+      }
+    }
+    
+    response = fullResponse;
+    actualToolUsed = detectedTool;
+    
+    console.log(`[ai-chat-tester] Scenario ${scenario.id} response length: ${response.length}, tool: ${actualToolUsed || 'none'}`);
+    
+    // Run validations
+    for (const validation of scenario.validations) {
+      const result = runValidation(response, validation);
+      validationResults.push({
+        validation: validation.description,
+        passed: result.passed,
+        details: result.details
+      });
+    }
+    
+  } catch (error) {
+    // Handle specific abort/timeout errors
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        errorMessage = `Timeout: AI response duurde langer dan ${scenarioTimeout}ms`;
+      } else if (error.message.includes('timeout')) {
+        errorMessage = error.message;
+      } else {
+        errorMessage = error.message;
+      }
+    } else {
+      errorMessage = String(error);
+    }
+    console.error(`[ai-chat-tester] Scenario ${scenario.id} failed:`, errorMessage);
+  } finally {
+    // Always clear the timeout to prevent memory leaks
+    clearTimeout(timeoutId);
+  }
+  
+  const responseTime = Date.now() - scenarioStart;
+  const allValidationsPassed = validationResults.every(v => v.passed) && !errorMessage;
+  
+  return {
+    scenario_id: scenario.id,
+    question: scenario.question,
+    response: response.substring(0, 5000), // Limit response size
+    expected_tool: scenario.expected_tool,
+    actual_tool_used: actualToolUsed,
+    passed: allValidationsPassed,
+    validation_details: validationResults,
+    response_time_ms: responseTime,
+    error_message: errorMessage
+  };
+}
+
+// Helper to chunk array into batches
+function chunkArray<T>(array: T[], chunkSize: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < array.length; i += chunkSize) {
+    chunks.push(array.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -231,7 +411,13 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     
     // Parse request body for optional parameters
-    let body: { test_run_id?: string; deployment_id?: string; deployment_source?: string; scenarios?: string[] } = {};
+    let body: { 
+      test_run_id?: string; 
+      deployment_id?: string; 
+      deployment_source?: string; 
+      scenarios?: string[];
+      max_concurrent?: number; // NEW: configurable parallelism (1-10)
+    } = {};
     try {
       body = await req.json();
     } catch {
@@ -242,11 +428,12 @@ Deno.serve(async (req) => {
     const deploymentId = body.deployment_id || null;
     const deploymentSource = body.deployment_source || "manual";
     const scenariosToRun = body.scenarios || TEST_SCENARIOS.map(s => s.id);
+    const maxConcurrent = Math.min(Math.max(body.max_concurrent || DEFAULT_MAX_CONCURRENT, 1), 10);
     
     // Filter scenarios if specific ones requested
     const scenarios = TEST_SCENARIOS.filter(s => scenariosToRun.includes(s.id));
     
-    console.log(`[ai-chat-tester] Starting test run ${testRunId} with ${scenarios.length} scenarios`);
+    console.log(`[ai-chat-tester] Starting test run ${testRunId} with ${scenarios.length} scenarios (max concurrent: ${maxConcurrent})`);
     
     // Create test run record
     const { error: runError } = await supabase
@@ -264,191 +451,74 @@ Deno.serve(async (req) => {
       console.error("[ai-chat-tester] Failed to create test run:", runError);
     }
     
-    const results: Array<{
-      scenario_id: string;
-      question: string;
-      response: string | null;
-      expected_tool: string | null;
-      actual_tool_used: string | null;
-      passed: boolean;
-      validation_details: Array<{ validation: string; passed: boolean; details: string }>;
-      response_time_ms: number;
-      error_message: string | null;
-    }> = [];
+    // Execute scenarios in parallel batches using Promise.allSettled
+    const scenarioChunks = chunkArray(scenarios, maxConcurrent);
+    const allResults: ScenarioResult[] = [];
     
-    // Run each test scenario
-    for (const scenario of scenarios) {
-      const scenarioStart = Date.now();
-      let response = "";
-      let actualToolUsed: string | null = null;
-      let errorMessage: string | null = null;
-      const validationResults: Array<{ validation: string; passed: boolean; details: string }> = [];
+    for (const chunk of scenarioChunks) {
+      console.log(`[ai-chat-tester] Running batch of ${chunk.length} tests in parallel`);
       
-      // Get scenario-specific timeout or use default
-      const scenarioTimeout = scenario.timeout_ms || DEFAULT_TIMEOUT_MS;
-      const abortController = new AbortController();
-      const timeoutId = setTimeout(() => abortController.abort(), scenarioTimeout);
+      const chunkResults = await Promise.allSettled(
+        chunk.map(scenario => executeScenario(scenario, supabaseUrl, serviceRoleKey))
+      );
       
-      try {
-        console.log(`[ai-chat-tester] Testing scenario: ${scenario.id} (timeout: ${scenarioTimeout}ms)`);
+      // Process settled results
+      for (let i = 0; i < chunkResults.length; i++) {
+        const settledResult = chunkResults[i];
+        const scenario = chunk[i];
         
-        // Generate a valid UUID for conversation_id
-        const conversationId = crypto.randomUUID();
-        
-        // Call ai-chat function with abort signal for timeout
-        const chatResponse = await fetch(`${supabaseUrl}/functions/v1/ai-chat`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${serviceRoleKey}`,
-          },
-          body: JSON.stringify({
-            messages: [
-              { role: "user", content: scenario.question }
-            ],
-            conversation_id: conversationId
-          }),
-          signal: abortController.signal,
-        });
-        
-        if (!chatResponse.ok) {
-          throw new Error(`ai-chat returned ${chatResponse.status}: ${await chatResponse.text()}`);
-        }
-        
-        // Parse SSE streaming response from ai-chat with timeout
-        const reader = chatResponse.body?.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let fullResponse = "";
-        let detectedTool: string | null = null;
-        
-        if (reader) {
-          while (true) {
-            // Calculate remaining time for this scenario
-            const elapsedTime = Date.now() - scenarioStart;
-            const remainingTime = scenarioTimeout - elapsedTime;
-            
-            if (remainingTime <= 0) {
-              reader.cancel();
-              throw new Error(`Scenario timeout: response duurde langer dan ${scenarioTimeout}ms`);
-            }
-            
-            // Read with timeout
-            const { done, value } = await readWithTimeout(reader, remainingTime);
-            if (done) break;
-            
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-            
-            for (const line of lines) {
-              if (!line.startsWith("data: ")) continue;
-              const jsonStr = line.slice(6).trim();
-              if (jsonStr === "[DONE]" || !jsonStr) continue;
-              
-              try {
-                const parsed = JSON.parse(jsonStr);
-                
-                // Extract content from delta (OpenAI streaming format)
-                const content = parsed.choices?.[0]?.delta?.content;
-                if (content) fullResponse += content;
-                
-                // Detect tool calls from stream
-                const toolCalls = parsed.choices?.[0]?.delta?.tool_calls;
-                if (toolCalls?.[0]?.function?.name) {
-                  detectedTool = toolCalls[0].function.name;
-                }
-                
-                // Also check for finished tool calls
-                if (parsed.choices?.[0]?.message?.tool_calls?.[0]?.function?.name) {
-                  detectedTool = parsed.choices[0].message.tool_calls[0].function.name;
-                }
-                
-                // Handle our custom chunk format (if ai-chat sends different format)
-                if (parsed.chunk) fullResponse += parsed.chunk;
-                if (parsed.content) fullResponse += parsed.content;
-                if (parsed.tool_used) detectedTool = parsed.tool_used;
-                if (parsed.tool_calls?.[0]?.name) detectedTool = parsed.tool_calls[0].name;
-                
-              } catch {
-                // Ignore invalid JSON chunks - normal in SSE streaming
-              }
-            }
-          }
-        }
-        
-        response = fullResponse;
-        actualToolUsed = detectedTool;
-        
-        console.log(`[ai-chat-tester] Scenario ${scenario.id} response length: ${response.length}, tool: ${actualToolUsed || 'none'}`)
-        
-        // Run validations
-        for (const validation of scenario.validations) {
-          const result = runValidation(response, validation);
-          validationResults.push({
-            validation: validation.description,
-            passed: result.passed,
-            details: result.details
+        if (settledResult.status === 'fulfilled') {
+          allResults.push(settledResult.value);
+        } else {
+          // Handle rejected promise (unexpected error)
+          allResults.push({
+            scenario_id: scenario.id,
+            question: scenario.question,
+            response: null,
+            expected_tool: scenario.expected_tool,
+            actual_tool_used: null,
+            passed: false,
+            validation_details: [],
+            response_time_ms: 0,
+            error_message: `Unexpected error: ${settledResult.reason}`
           });
         }
-        
-      } catch (error) {
-        // Handle specific abort/timeout errors
-        if (error instanceof Error) {
-          if (error.name === 'AbortError') {
-            errorMessage = `Timeout: AI response duurde langer dan ${scenarioTimeout}ms`;
-          } else if (error.message.includes('timeout')) {
-            errorMessage = error.message;
-          } else {
-            errorMessage = error.message;
-          }
-        } else {
-          errorMessage = String(error);
-        }
-        console.error(`[ai-chat-tester] Scenario ${scenario.id} failed:`, errorMessage);
-      } finally {
-        // Always clear the timeout to prevent memory leaks
-        clearTimeout(timeoutId);
       }
-      
-      const responseTime = Date.now() - scenarioStart;
-      const allValidationsPassed = validationResults.every(v => v.passed) && !errorMessage;
-      
-      results.push({
-        scenario_id: scenario.id,
-        question: scenario.question,
-        response: response.substring(0, 5000), // Limit response size
-        expected_tool: scenario.expected_tool,
-        actual_tool_used: actualToolUsed,
-        passed: allValidationsPassed,
-        validation_details: validationResults,
-        response_time_ms: responseTime,
-        error_message: errorMessage
-      });
-      
-      // Store individual result
+    }
+    
+    // Store all results in database
+    for (const result of allResults) {
       await supabase
         .from("ai_chat_test_results")
         .insert({
           test_run_id: testRunId,
           deployment_id: deploymentId,
           deployment_source: deploymentSource,
-          scenario_id: scenario.id,
-          question: scenario.question,
-          response: response.substring(0, 5000),
-          expected_tool: scenario.expected_tool,
-          actual_tool_used: actualToolUsed,
-          passed: allValidationsPassed,
-          validation_details: validationResults,
-          response_time_ms: responseTime,
-          error_message: errorMessage
+          scenario_id: result.scenario_id,
+          question: result.question,
+          response: result.response,
+          expected_tool: result.expected_tool,
+          actual_tool_used: result.actual_tool_used,
+          passed: result.passed,
+          validation_details: result.validation_details,
+          response_time_ms: result.response_time_ms,
+          error_message: result.error_message
         });
     }
     
     // Calculate summary
-    const passedTests = results.filter(r => r.passed).length;
-    const failedTests = results.filter(r => !r.passed).length;
-    const avgResponseTime = Math.round(results.reduce((sum, r) => sum + r.response_time_ms, 0) / results.length);
+    const passedTests = allResults.filter(r => r.passed).length;
+    const failedTests = allResults.filter(r => !r.passed).length;
+    const avgResponseTime = allResults.length > 0 
+      ? Math.round(allResults.reduce((sum, r) => sum + r.response_time_ms, 0) / allResults.length)
+      : 0;
+    
+    const totalTime = Date.now() - startTime;
+    
+    // Calculate speedup metrics
+    const sumResponseTimes = allResults.reduce((sum, r) => sum + r.response_time_ms, 0);
+    const sequentialEstimate = sumResponseTimes; // If run sequentially
+    const speedupFactor = sequentialEstimate > 0 ? Math.round((sequentialEstimate / totalTime) * 10) / 10 : 1;
     
     // Update test run with summary
     await supabase
@@ -462,9 +532,7 @@ Deno.serve(async (req) => {
       })
       .eq("id", testRunId);
     
-    const totalTime = Date.now() - startTime;
-    
-    console.log(`[ai-chat-tester] Test run completed: ${passedTests}/${scenarios.length} passed in ${totalTime}ms`);
+    console.log(`[ai-chat-tester] Test run completed: ${passedTests}/${scenarios.length} passed in ${totalTime}ms (${speedupFactor}x speedup)`);
     
     return new Response(
       JSON.stringify({
@@ -477,18 +545,18 @@ Deno.serve(async (req) => {
         pass_rate: Math.round((passedTests / scenarios.length) * 100),
         avg_response_time_ms: avgResponseTime,
         total_time_ms: totalTime,
+        sequential_estimate_ms: sequentialEstimate,
+        speedup_factor: speedupFactor,
+        max_concurrent_used: maxConcurrent,
         status: failedTests > 0 ? "failed" : "passed",
-        results: results
+        results: allResults
       }),
       { 
-        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       }
     );
-    
   } catch (error) {
     console.error("[ai-chat-tester] Fatal error:", error);
-    
     return new Response(
       JSON.stringify({
         success: false,
