@@ -453,8 +453,78 @@ const GOAL_CONFIGS: Record<string, {
   },
 
   // =====================================================
-  // Request Additional Diploma - When CV niveau > diploma niveau
+  // Document Renewal Escalation - Tweede herinnering na 7 dagen
   // =====================================================
+  'document_renewal_escalation': {
+    requiredFields: ['application_id', 'candidate_email', 'document_type'],
+    planGenerator: (goal, context) => {
+      const documentLabels: Record<string, string> = {
+        'vog': 'VOG (Verklaring Omtrent Gedrag)',
+        'big_registratie': 'BIG-registratie',
+        'diploma': 'Diploma/Certificaat',
+        'beroepsaansprakelijkheid': 'Beroepsaansprakelijkheidsverzekering',
+      };
+      
+      const documentLabel = goal.input_data.document_label || documentLabels[goal.input_data.document_type] || goal.input_data.document_type;
+      
+      return [
+        {
+          action_type: 'send_escalation_email',
+          action_order: 1,
+          action_description: `Stuur tweede herinnering voor ${documentLabel} aan ${goal.input_data.candidate_name || 'kandidaat'}`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            application_id: goal.input_data.application_id,
+            candidate_email: goal.input_data.candidate_email,
+            candidate_name: goal.input_data.candidate_name,
+            document_type: documentLabel,
+            email_type: 'document_renewal_escalation',
+            days_remaining: goal.input_data.days_remaining,
+            days_since_first_reminder: goal.input_data.days_since_first_reminder || 7,
+            expiry_date: goal.input_data.expiry_date,
+            subject: `Tweede herinnering: Je ${documentLabel} verloopt binnenkort`,
+          }
+        }
+      ];
+    }
+  },
+
+  // =====================================================
+  // Notify Recruiter Document Issue - Na 14 dagen non-response
+  // =====================================================
+  'notify_recruiter_document_issue': {
+    requiredFields: ['application_id', 'candidate_name', 'document_type'],
+    planGenerator: (goal, context) => {
+      const documentLabels: Record<string, string> = {
+        'vog': 'VOG (Verklaring Omtrent Gedrag)',
+        'big_registratie': 'BIG-registratie',
+        'diploma': 'Diploma/Certificaat',
+        'beroepsaansprakelijkheid': 'Beroepsaansprakelijkheidsverzekering',
+      };
+      
+      const documentLabel = goal.input_data.document_label || documentLabels[goal.input_data.document_type] || goal.input_data.document_type;
+      
+      return [
+        {
+          action_type: 'send_recruiter_alert',
+          action_order: 1,
+          action_description: `Notificeer recruiter over non-response van ${goal.input_data.candidate_name}`,
+          scheduled_at: new Date().toISOString(),
+          input_data: {
+            application_id: goal.input_data.application_id,
+            recruiter_email: goal.input_data.recruiter_email || 'personeel@citozorg.nl',
+            candidate_name: goal.input_data.candidate_name,
+            candidate_email: goal.input_data.candidate_email,
+            document_type: documentLabel,
+            email_type: 'recruiter_document_alert',
+            total_days_waiting: goal.input_data.total_days_waiting || 14,
+            expiry_date: goal.input_data.expiry_date,
+            subject: `Handmatige opvolging vereist: ${goal.input_data.candidate_name} - ${documentLabel}`,
+          }
+        }
+      ];
+    }
+  },
   'request_additional_diploma': {
     requiredFields: ['application_id', 'candidate_email'],
     planGenerator: (goal, context) => {
@@ -1590,6 +1660,8 @@ async function executeTask(supabase: any, task: any) {
     case 'send_reminder': // Reminders via send-ai-email
     case 'send_welcome': // Welcome email via send-ai-email
     case 'send_vog_rejection_email': // VOG rejection notification via send-ai-email
+    case 'send_escalation_email': // Document renewal escalation (7-day reminder)
+    case 'send_recruiter_alert': // Recruiter notification (14-day non-response)
       result = await executeSendAiEmail(supabase, action);
       break;
     
