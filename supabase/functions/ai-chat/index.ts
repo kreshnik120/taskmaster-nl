@@ -465,16 +465,24 @@ const FAST_PATH_COUNT_PATTERNS: FastPathPattern[] = [
   // HOOFDLOCATIES (client_locations - niet werklocaties/sublocaties)
   // ═══════════════════════════════════════════════════════════════════
   {
-    // "tel het aantal hoofdlocaties in client_locations", "hoeveel hoofdlocaties"
-    pattern: /^(tel|hoeveel|aantal|wat\s+is\s+(het\s+)?aantal)\s+(het\s+aantal\s+)?(hoofdlocaties|locaties\s+in\s+client_locations)/i,
+    // "tel het aantal hoofdlocaties in client_locations tabel, niet de werklocaties"
+    pattern: /hoofdlocaties.*client_locations|client_locations.*hoofdlocaties|hoofdlocaties.*niet.*(werk|sub)locaties/i,
+    table: 'client_locations',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `📍 Er zijn **${count}** hoofdlocaties in de client_locations tabel (geen werklocaties/sublocaties).`
+  },
+  {
+    // "tel het aantal hoofdlocaties", "hoeveel hoofdlocaties"
+    pattern: /^(tel|hoeveel|aantal|wat\s+is\s+(het\s+)?aantal)\s+(het\s+aantal\s+)?hoofdlocaties/i,
     table: 'client_locations',
     countColumn: 'id',
     activeFilter: false,
     responseTemplate: (count: number) => `📍 Er zijn **${count}** hoofdlocaties (client_locations) in het systeem.`
   },
   {
-    // "client_locations tabel tellen"
-    pattern: /client_locations\s+(tabel|table)/i,
+    // "client_locations tabel tellen", "locaties in client_locations"
+    pattern: /client_locations\s+(tabel|table)|locaties\s+in\s+client_locations/i,
     table: 'client_locations',
     countColumn: 'id',
     activeFilter: false,
@@ -1901,10 +1909,10 @@ Deno.serve(async (req: Request) => {
         return false;
       }
       
-      // 🔧 FIX: For patterns with sector/doelgroep/plaats/provincie/woonplaats filters, the filter VALUE must appear in query
-      // This prevents Amsterdam pattern from matching Almere queries or "Tel de professionals" matching Amsterdam-only patterns
+      // 🔧 FIX: For patterns with sector/doelgroep/plaats/provincie/woonplaats/functie filters, the filter VALUE must appear in query
+      // This prevents Amsterdam pattern from matching Almere queries or "Begeleider" pattern matching non-begeleider queries
       for (const filterDef of pattern.filters || []) {
-        if (['sector', 'doelgroep', 'plaats', 'provincie', 'woonplaats'].includes(filterDef.column)) {
+        if (['sector', 'doelgroep', 'plaats', 'provincie', 'woonplaats', 'gezochte_functies', 'functie'].includes(filterDef.column)) {
           const filterValue = (filterDef as any).value; // Direct value in filter definition
           if (filterValue && typeof filterValue === 'string') {
             if (!normalizedQuery.includes(filterValue.toLowerCase())) {
