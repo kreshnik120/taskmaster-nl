@@ -365,6 +365,110 @@ export type Database = {
           },
         ]
       }
+      ai_chat_test_results: {
+        Row: {
+          actual_tool_used: string | null
+          created_at: string | null
+          deployment_id: string | null
+          deployment_source: string | null
+          error_message: string | null
+          expected_tool: string | null
+          id: string
+          passed: boolean
+          question: string
+          response: string | null
+          response_time_ms: number | null
+          scenario_id: string
+          test_run_id: string
+          validation_details: Json | null
+        }
+        Insert: {
+          actual_tool_used?: string | null
+          created_at?: string | null
+          deployment_id?: string | null
+          deployment_source?: string | null
+          error_message?: string | null
+          expected_tool?: string | null
+          id?: string
+          passed?: boolean
+          question: string
+          response?: string | null
+          response_time_ms?: number | null
+          scenario_id: string
+          test_run_id: string
+          validation_details?: Json | null
+        }
+        Update: {
+          actual_tool_used?: string | null
+          created_at?: string | null
+          deployment_id?: string | null
+          deployment_source?: string | null
+          error_message?: string | null
+          expected_tool?: string | null
+          id?: string
+          passed?: boolean
+          question?: string
+          response?: string | null
+          response_time_ms?: number | null
+          scenario_id?: string
+          test_run_id?: string
+          validation_details?: Json | null
+        }
+        Relationships: []
+      }
+      ai_chat_test_runs: {
+        Row: {
+          alert_sent: boolean | null
+          avg_response_time_ms: number | null
+          completed_at: string | null
+          deployment_id: string | null
+          deployment_source: string | null
+          failed_tests: number
+          id: string
+          org_id: string | null
+          passed_tests: number
+          started_at: string | null
+          status: string
+          total_tests: number
+        }
+        Insert: {
+          alert_sent?: boolean | null
+          avg_response_time_ms?: number | null
+          completed_at?: string | null
+          deployment_id?: string | null
+          deployment_source?: string | null
+          failed_tests?: number
+          id?: string
+          org_id?: string | null
+          passed_tests?: number
+          started_at?: string | null
+          status?: string
+          total_tests?: number
+        }
+        Update: {
+          alert_sent?: boolean | null
+          avg_response_time_ms?: number | null
+          completed_at?: string | null
+          deployment_id?: string | null
+          deployment_source?: string | null
+          failed_tests?: number
+          id?: string
+          org_id?: string | null
+          passed_tests?: number
+          started_at?: string | null
+          status?: string
+          total_tests?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_chat_test_runs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_knowledge_base: {
         Row: {
           acl: Json | null
