@@ -133,10 +133,10 @@ const FAST_PATH_COUNT_PATTERNS: FastPathPattern[] = [
   // SIMPELE FILTERS (sector, doelgroep, plaats, provincie - NA gecombineerde)
   // ═══════════════════════════════════════════════════════════════════
 
-  // --- SECTOR FILTER ---
+  // --- SECTOR FILTER (met negative lookahead voor "in [woord]") ---
   {
-    // "hoeveel GGZ locaties", "aantal GHZ werklocaties"
-    pattern: /^(hoeveel|tel|aantal)\s+(GGZ|GHZ|VVT|Jeugdzorg|Ouderenzorg|Gehandicaptenzorg)\s+(werklocaties|locaties|vestigingen)/i,
+    // "hoeveel GGZ locaties", "aantal GHZ werklocaties" - NIET "hoeveel GGZ locaties in Amsterdam"
+    pattern: /^(hoeveel|tel|aantal)\s+(GGZ|GHZ|VVT|Jeugdzorg|Ouderenzorg|Gehandicaptenzorg)\s+(werklocaties|locaties|vestigingen)(?!\s+in\s)/i,
     table: 'client_sublocations',
     countColumn: 'id',
     activeFilter: true,
@@ -148,8 +148,8 @@ const FAST_PATH_COUNT_PATTERNS: FastPathPattern[] = [
     responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve ${ctx || 'sector'} werklocaties.`
   },
   {
-    // "GGZ locaties", "VVT werklocaties"
-    pattern: /^(GGZ|GHZ|VVT|Jeugdzorg|Ouderenzorg|Gehandicaptenzorg)\s+(werklocaties|locaties|vestigingen)/i,
+    // "GGZ locaties", "VVT werklocaties" - NIET "GGZ locaties in Amsterdam"
+    pattern: /^(GGZ|GHZ|VVT|Jeugdzorg|Ouderenzorg|Gehandicaptenzorg)\s+(werklocaties|locaties|vestigingen)(?!\s+in\s)/i,
     table: 'client_sublocations',
     countColumn: 'id',
     activeFilter: true,
@@ -174,10 +174,10 @@ const FAST_PATH_COUNT_PATTERNS: FastPathPattern[] = [
     responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve werklocaties in sector ${ctx || ''}.`
   },
 
-  // --- DOELGROEP FILTER ---
+  // --- DOELGROEP FILTER (met negative lookahead voor "in [woord]") ---
   {
     // "hoeveel locaties met doelgroep LVB", "aantal werklocaties voor Autisme"
-    pattern: /^(hoeveel|tel|aantal)\s+(werklocaties|locaties|vestigingen)\s+(met|voor)\s+(doelgroep\s+)?(LVB|Autisme|Psychiatrie|Ouderen|NAH|EMB|Verslaving|Dementie)/i,
+    pattern: /^(hoeveel|tel|aantal)\s+(werklocaties|locaties|vestigingen)\s+(met|voor)\s+(doelgroep\s+)?(LVB|Autisme|Psychiatrie|Ouderen|NAH|EMB|Verslaving|Dementie)(?!\s+in\s)/i,
     table: 'client_sublocations',
     countColumn: 'id',
     activeFilter: true,
@@ -189,8 +189,8 @@ const FAST_PATH_COUNT_PATTERNS: FastPathPattern[] = [
     responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve werklocaties met doelgroep ${ctx || ''}.`
   },
   {
-    // "LVB locaties", "Autisme werklocaties"
-    pattern: /^(LVB|Autisme|Psychiatrie|Ouderen|NAH|EMB|Verslaving|Dementie)\s+(werklocaties|locaties|vestigingen)/i,
+    // "LVB locaties", "Autisme werklocaties" - NIET "LVB locaties in Amsterdam"
+    pattern: /^(LVB|Autisme|Psychiatrie|Ouderen|NAH|EMB|Verslaving|Dementie)\s+(werklocaties|locaties|vestigingen)(?!\s+in\s)/i,
     table: 'client_sublocations',
     countColumn: 'id',
     activeFilter: true,
