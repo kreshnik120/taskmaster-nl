@@ -389,3 +389,17 @@ schedule = "*/5 * * * *"
 # Purpose: Monitor AI Chat health and send email alerts on failures
 # Frequency: 288 executions/day (every 5 minutes)
 # Dependencies: Calls ai-chat?health=true, logs to system_health_log, alerts via Resend
+
+# -----------------------------------------------------------------------------
+# SELF-LEARNING FAST PATH FUNCTIONS
+# -----------------------------------------------------------------------------
+
+[functions.learn-fast-path-patterns]
+verify_jwt = false
+schedule = "0 5 * * *"
+# Purpose: Learn new Fast Path patterns from successful count queries (daily at 05:00)
+
+[functions.cleanup-fast-path-patterns]
+verify_jwt = false
+schedule = "0 6 * * *"
+# Purpose: Cleanup underperforming Fast Path patterns and apply temporal decay (daily at 06:00)
