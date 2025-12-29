@@ -252,7 +252,12 @@ Deno.serve(async (req) => {
       try {
         console.log(`[ai-chat-tester] Testing scenario: ${scenario.id}`);
         
-        // Call ai-chat function
+        // Generate a valid UUID for conversation_id
+        const conversationId = crypto.randomUUID();
+        
+        // Call ai-chat function with correct schema:
+        // - messages: array of {role, content}
+        // - conversation_id: valid UUID
         const chatResponse = await fetch(`${supabaseUrl}/functions/v1/ai-chat`, {
           method: "POST",
           headers: {
@@ -260,11 +265,10 @@ Deno.serve(async (req) => {
             "Authorization": `Bearer ${serviceRoleKey}`,
           },
           body: JSON.stringify({
-            message: scenario.question,
-            org_id: "550e8400-e29b-41d4-a716-446655440000",
-            user_id: "test-orchestrator",
-            conversation_id: `test-${testRunId}-${scenario.id}`,
-            _test_mode: true
+            messages: [
+              { role: "user", content: scenario.question }
+            ],
+            conversation_id: conversationId
           }),
         });
         

@@ -1119,12 +1119,16 @@ Deno.serve(async (req: Request) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
     if (!supabaseUrl || !supabaseAnonKey) {
       console.error('Missing Supabase environment variables');
       throw new Error('Server configuration error');
     }
 
+    // 🧪 TEST MODE: Allow service_role key for internal test calls (ai-chat-tester)
+    const isServiceRoleAuth = serviceRoleKey && accessToken === serviceRoleKey;
+    
     const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { 
         headers: { 
@@ -1149,52 +1153,67 @@ Deno.serve(async (req: Request) => {
       }
     );
 
-    // Get user context with timeout protection (5 seconds)
-    let authResult;
-    try {
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Auth timeout')), 5000)
-      );
+    // 🧪 TEST MODE: Skip user auth for service_role authenticated requests
+    let user: { id: string; email?: string } | null = null;
+    let userOrgId: string | null = null;
+    
+    if (isServiceRoleAuth) {
+      // Service role test mode - use synthetic test user
+      console.log('🧪 Service role test mode detected - using test user context');
+      user = { 
+        id: 'test-orchestrator-service-role', 
+        email: 'test@abczorg.nl' 
+      };
+      userOrgId = '550e8400-e29b-41d4-a716-446655440000'; // ABCzorg default org
+    } else {
+      // Normal user authentication flow
+      let authResult;
+      try {
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Auth timeout')), 5000)
+        );
+        
+        const authPromise = supabaseClient.auth.getUser(accessToken);
+        
+        authResult = await Promise.race([
+          authPromise,
+          timeoutPromise
+        ]);
+      } catch (authTimeoutError) {
+        console.error('⚠️ Auth timeout na 5 seconden - mogelijk netwerk probleem');
+        return new Response(
+          JSON.stringify({ 
+            error: 'Authenticatie timeout - probeer het opnieuw',
+            details: 'De authenticatie service reageert niet binnen 5 seconden'
+          }), 
+          {
+            status: 408, // Request Timeout
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+
+      const { data: { user: authUser }, error: userError } = authResult;
       
-      const authPromise = supabaseClient.auth.getUser(accessToken);
-      
-      authResult = await Promise.race([
-        authPromise,
-        timeoutPromise
-      ]);
-    } catch (authTimeoutError) {
-      console.error('⚠️ Auth timeout na 5 seconden - mogelijk netwerk probleem');
-      return new Response(
-        JSON.stringify({ 
-          error: 'Authenticatie timeout - probeer het opnieuw',
-          details: 'De authenticatie service reageert niet binnen 5 seconden'
-        }), 
-        {
-          status: 408, // Request Timeout
+      if (userError) {
+        console.error('Auth error:', userError);
+        return new Response(JSON.stringify({ error: 'Authenticatie gefaald' }), {
+          status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+        });
+      }
+      
+      if (!authUser) {
+        console.error('No user found');
+        return new Response(JSON.stringify({ error: 'Gebruiker niet gevonden' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      user = authUser;
+      console.log('User authenticated:', user.id);
     }
-
-    const { data: { user }, error: userError } = authResult;
-    
-    if (userError) {
-      console.error('Auth error:', userError);
-      return new Response(JSON.stringify({ error: 'Authenticatie gefaald' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    
-    if (!user) {
-      console.error('No user found');
-      return new Response(JSON.stringify({ error: 'Gebruiker niet gevonden' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    console.log('User authenticated:', user.id);
 
     // ⏱️ Performance tracking
     const perfTimers = {
@@ -1206,21 +1225,23 @@ Deno.serve(async (req: Request) => {
       total: 0
     };
 
-    // Get user's org_id
-    const { data: userOrg } = await supabaseClient
-      .from('user_organizations')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
-    
-    let userOrgId = userOrg?.org_id;
-    
-    // 🔧 FIX: Email-based org_id mapping voor ABCzorg/CitoZorg users
-    if (!userOrgId && user.email) {
-      const emailDomain = user.email.toLowerCase();
-      if (emailDomain.endsWith('@abczorg.nl') || emailDomain.endsWith('@citozorg.nl')) {
-        userOrgId = '550e8400-e29b-41d4-a716-446655440000'; // ABCzorg org_id
-        console.log(`✅ Email-based org mapping: ${user.email} → ABCzorg org`);
+    // Get user's org_id (skip if already set in test mode)
+    if (!userOrgId) {
+      const { data: userOrg } = await supabaseClient
+        .from('user_organizations')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .single();
+      
+      userOrgId = userOrg?.org_id || null;
+      
+      // 🔧 FIX: Email-based org_id mapping voor ABCzorg/CitoZorg users
+      if (!userOrgId && user.email) {
+        const emailDomain = user.email.toLowerCase();
+        if (emailDomain.endsWith('@abczorg.nl') || emailDomain.endsWith('@citozorg.nl')) {
+          userOrgId = '550e8400-e29b-41d4-a716-446655440000'; // ABCzorg org_id
+          console.log(`✅ Email-based org mapping: ${user.email} → ABCzorg org`);
+        }
       }
     }
     
