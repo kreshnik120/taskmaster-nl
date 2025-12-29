@@ -1876,10 +1876,10 @@ Deno.serve(async (req: Request) => {
         return false;
       }
       
-      // 🔧 FIX: For patterns with sector/doelgroep/plaats/provincie filters, the filter VALUE must appear in query
-      // This prevents Amsterdam pattern from matching Almere queries
+      // 🔧 FIX: For patterns with sector/doelgroep/plaats/provincie/woonplaats filters, the filter VALUE must appear in query
+      // This prevents Amsterdam pattern from matching Almere queries or "Tel de professionals" matching Amsterdam-only patterns
       for (const filterDef of pattern.filters || []) {
-        if (['sector', 'doelgroep', 'plaats', 'provincie'].includes(filterDef.column)) {
+        if (['sector', 'doelgroep', 'plaats', 'provincie', 'woonplaats'].includes(filterDef.column)) {
           const filterValue = (filterDef as any).value; // Direct value in filter definition
           if (filterValue && typeof filterValue === 'string') {
             if (!normalizedQuery.includes(filterValue.toLowerCase())) {
