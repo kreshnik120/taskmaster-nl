@@ -3,6 +3,14 @@ project_id = "oelmsmcgryeoryhonexw"
 [functions.test-webhook-receiver]
 verify_jwt = false
 
+[functions.deploy-test-webhook]
+verify_jwt = false
+# Purpose: CI/CD webhook that triggers AI chat test suite after deployments
+
+[functions.ai-chat-tester]
+verify_jwt = false
+# Purpose: AI chat test orchestrator that runs test scenarios and validates responses
+
 # =============================================================================
 # EDGE FUNCTION CONFIGURATION
 # =============================================================================
