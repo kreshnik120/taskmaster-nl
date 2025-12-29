@@ -1866,19 +1866,51 @@ Deno.serve(async (req: Request) => {
     }
     
     // Helper function to check if query matches dynamic pattern keywords
+    // 🔧 IMPROVED: Require sector/doelgroep keywords to match for filtered patterns
     const matchesDynamicPattern = (query: string, pattern: typeof dynamicPatterns[0]): boolean => {
       const normalizedQuery = query.toLowerCase().trim();
       const matchedKeywords = pattern.keywords.filter(kw => normalizedQuery.includes(kw.toLowerCase()));
-      return matchedKeywords.length >= Math.min(2, pattern.keywords.length);
+      
+      // Basic threshold: need at least 2 keywords
+      if (matchedKeywords.length < Math.min(2, pattern.keywords.length)) {
+        return false;
+      }
+      
+      // 🔧 FIX: For patterns with sector/doelgroep filters, the filter VALUE must appear in query
+      // This prevents VVT pattern from matching GGZ queries
+      for (const filterDef of pattern.filters || []) {
+        if (filterDef.column === 'sector' || filterDef.column === 'doelgroep') {
+          const filterValue = (filterDef as any).value; // Direct value in filter definition
+          if (filterValue && typeof filterValue === 'string') {
+            if (!normalizedQuery.includes(filterValue.toLowerCase())) {
+              return false; // Query doesn't contain the required sector/doelgroep
+            }
+          }
+        }
+      }
+      
+      return true;
     };
     
     // Helper function to extract filter values from query based on pattern
+    // 🔧 IMPROVED: Support both direct 'value' and 'value_index' formats
     const extractDynamicFilters = (query: string, pattern: typeof dynamicPatterns[0]): FastPathFilter[] => {
       const filters: FastPathFilter[] = [];
       const words = query.toLowerCase().split(/\s+/);
       
       for (const filterDef of pattern.filters || []) {
-        if (filterDef.value_index >= 0 && filterDef.value_index < words.length) {
+        const directValue = (filterDef as any).value;
+        
+        // 🔧 FIX: If filter has a direct 'value', use it (hardcoded_backup patterns)
+        if (directValue && typeof directValue === 'string') {
+          filters.push({
+            column: filterDef.column,
+            operator: filterDef.operator as FilterOperator,
+            value: directValue
+          });
+        }
+        // Otherwise use value_index (learned patterns with dynamic extraction)
+        else if (filterDef.value_index !== undefined && filterDef.value_index >= 0 && filterDef.value_index < words.length) {
           filters.push({
             column: filterDef.column,
             operator: filterDef.operator as FilterOperator,
@@ -1891,11 +1923,30 @@ Deno.serve(async (req: Request) => {
     };
     
     // 🆕 First check dynamic patterns from database
+    // 🔧 IMPROVED: Find the MOST SPECIFIC matching pattern (most filters) instead of first match
     let dynamicPatternMatched = false;
+    
+    // Score and rank all matching patterns
+    const matchingPatterns: Array<{ pattern: typeof dynamicPatterns[0]; score: number }> = [];
     for (const dynPattern of dynamicPatterns) {
       if (matchesDynamicPattern(lastUserMessageForFastPath, dynPattern)) {
-        console.log(`⚡ [DYNAMIC FAST PATH] Pattern matched: ${dynPattern.id} (confidence: ${dynPattern.confidence_score})`);
-        const fastPathStart = Date.now();
+        // Score = number of filters (more specific = higher score)
+        const filterCount = Array.isArray(dynPattern.filters) ? dynPattern.filters.length : 0;
+        matchingPatterns.push({ pattern: dynPattern, score: filterCount });
+      }
+    }
+    
+    // Sort by score (descending) - patterns with more filters come first
+    matchingPatterns.sort((a, b) => b.score - a.score);
+    
+    if (matchingPatterns.length > 0) {
+      console.log(`⚡ [DYNAMIC PATTERNS] ${matchingPatterns.length} patterns matched, selecting most specific (score: ${matchingPatterns[0].score})`);
+    }
+    
+    // Process the most specific matching pattern
+    for (const { pattern: dynPattern, score } of matchingPatterns.slice(0, 1)) {
+      console.log(`⚡ [DYNAMIC FAST PATH] Pattern selected: ${dynPattern.id} (confidence: ${dynPattern.confidence_score}, filters: ${score})`);
+      const fastPathStart = Date.now();
         
         try {
           let countQuery = supabaseClient
@@ -2035,7 +2086,6 @@ Deno.serve(async (req: Request) => {
         } catch (dynamicFastPathError) {
           console.error(`⚡ [DYNAMIC FAST PATH] Error:`, dynamicFastPathError);
         }
-      }
     }
     
     // 🔧 HARDCODED PATTERNS: Check static patterns if dynamic didn't match
