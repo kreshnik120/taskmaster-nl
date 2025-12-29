@@ -276,15 +276,62 @@ Deno.serve(async (req) => {
           throw new Error(`ai-chat returned ${chatResponse.status}: ${await chatResponse.text()}`);
         }
         
-        const chatResult = await chatResponse.json();
-        response = chatResult.response || chatResult.message || JSON.stringify(chatResult);
+        // Parse SSE streaming response from ai-chat
+        const reader = chatResponse.body?.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let fullResponse = "";
+        let detectedTool: string | null = null;
         
-        // Extract tool used from response metadata if available
-        if (chatResult.tool_calls && chatResult.tool_calls.length > 0) {
-          actualToolUsed = chatResult.tool_calls[0].name;
-        } else if (chatResult.metadata?.tool_used) {
-          actualToolUsed = chatResult.metadata.tool_used;
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+            
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+              const jsonStr = line.slice(6).trim();
+              if (jsonStr === "[DONE]" || !jsonStr) continue;
+              
+              try {
+                const parsed = JSON.parse(jsonStr);
+                
+                // Extract content from delta (OpenAI streaming format)
+                const content = parsed.choices?.[0]?.delta?.content;
+                if (content) fullResponse += content;
+                
+                // Detect tool calls from stream
+                const toolCalls = parsed.choices?.[0]?.delta?.tool_calls;
+                if (toolCalls?.[0]?.function?.name) {
+                  detectedTool = toolCalls[0].function.name;
+                }
+                
+                // Also check for finished tool calls
+                if (parsed.choices?.[0]?.message?.tool_calls?.[0]?.function?.name) {
+                  detectedTool = parsed.choices[0].message.tool_calls[0].function.name;
+                }
+                
+                // Handle our custom chunk format (if ai-chat sends different format)
+                if (parsed.chunk) fullResponse += parsed.chunk;
+                if (parsed.content) fullResponse += parsed.content;
+                if (parsed.tool_used) detectedTool = parsed.tool_used;
+                if (parsed.tool_calls?.[0]?.name) detectedTool = parsed.tool_calls[0].name;
+                
+              } catch {
+                // Ignore invalid JSON chunks - normal in SSE streaming
+              }
+            }
+          }
         }
+        
+        response = fullResponse;
+        actualToolUsed = detectedTool;
+        
+        console.log(`[ai-chat-tester] Scenario ${scenario.id} response length: ${response.length}, tool: ${actualToolUsed || 'none'}`)
         
         // Run validations
         for (const validation of scenario.validations) {
