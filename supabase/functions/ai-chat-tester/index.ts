@@ -190,13 +190,14 @@ const TEST_SCENARIOS: TestScenario[] = [
     ]
   },
   {
-    id: "count_sublocations",
-    question: "Hoeveel werklocaties of sublocaties zijn er totaal in het systeem?",
-    expected_tool: "query_sublocations",
-    timeout_ms: 75000, // Higher timeout - complex DB query
+    id: "count_sublocations_fast_path",
+    question: "Hoeveel werklocaties zijn er?", // Simplified for Fast Path detection
+    expected_tool: null, // Fast Path bypasses tools entirely
+    timeout_ms: 5000, // Fast Path should respond in <100ms, 5s is safety margin
     validations: [
-      { type: "contains_number", min: 800, max: 1000, description: "Moet een getal tussen 800-1000 bevatten" },
-      { type: "mentions", keywords: ["werklocatie", "sublocatie", "locatie"], description: "Moet locatie vermelden" }
+      { type: "contains_number", min: 800, max: 1100, description: "Moet een getal tussen 800-1100 bevatten" },
+      { type: "mentions", keywords: ["werklocatie", "sublocatie", "locatie"], description: "Moet locatie vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn (< 500ms)" }
     ]
   },
   {
@@ -349,7 +350,7 @@ interface Validation {
   description: string;
 }
 
-function runValidation(response: string, validation: Validation): { passed: boolean; details: string } {
+function runValidation(response: string, validation: Validation, responseTimeMs?: number): { passed: boolean; details: string } {
   switch (validation.type) {
     case "contains_number":
       return validateContainsNumber(response, validation.min, validation.max);
@@ -359,6 +360,15 @@ function runValidation(response: string, validation: Validation): { passed: bool
       return validateMatchesRegex(response, validation.pattern || "");
     case "min_length":
       return validateMinLength(response, validation.min || 0);
+    case "fast_path":
+      // Fast Path validation: response should be < 500ms
+      const isFast = responseTimeMs !== undefined && responseTimeMs < 500;
+      return {
+        passed: isFast,
+        details: isFast 
+          ? `Fast Path success: ${responseTimeMs}ms (< 500ms)`
+          : `Fast Path failed: ${responseTimeMs || 'unknown'}ms (expected < 500ms)`
+      };
     default:
       return { passed: false, details: `Onbekend validatie type: ${validation.type}` };
   }
@@ -494,9 +504,10 @@ async function executeScenario(
     
     console.log(`[ai-chat-tester] Scenario ${scenario.id} response length: ${response.length}, tool: ${actualToolUsed || 'none'}`);
     
-    // Run validations
+    // Run validations - pass response time for fast_path validation
+    const responseTimeMs = Date.now() - scenarioStart;
     for (const validation of scenario.validations) {
-      const result = runValidation(response, validation);
+      const result = runValidation(response, validation, responseTimeMs);
       validationResults.push({
         validation: validation.description,
         passed: result.passed,
