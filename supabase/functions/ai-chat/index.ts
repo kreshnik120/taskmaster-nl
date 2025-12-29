@@ -42,8 +42,10 @@ interface FastPathPattern {
   countColumn: string;
   activeFilter?: boolean;
   responseTemplate: (count: number, filterContext?: string) => string;
-  // Advanced filter support
+  // Advanced filter support - single filter
   extractFilter?: (match: RegExpMatchArray) => FastPathFilter | null;
+  // 🆕 GECOMBINEERDE FILTERS: meerdere filters tegelijk (sector+plaats, doelgroep+plaats, etc.)
+  extractFilters?: (match: RegExpMatchArray) => FastPathFilter[];
 }
 
 // ============================================
@@ -371,6 +373,176 @@ const FAST_PATH_COUNT_PATTERNS: FastPathPattern[] = [
       operator: 'contains' as FilterOperator
     }),
     responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve werklocaties die ${ctx || 'deze functie'}s zoeken.`
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🆕 PROFESSIONALS MET WOONPLAATS FILTER
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    // "hoeveel professionals in Amsterdam", "aantal ZZP'ers in Rotterdam"
+    pattern: /^(hoeveel|tel|aantal)\s+(professionals|zzp.?ers?|uitzendkrachten|medewerkers|zorgprofessionals)\s+in\s+(?!sector|provincie|regio|Gelderland|Noord-Holland|Zuid-Holland|Utrecht|Brabant|Noord-Brabant|Limburg|Overijssel|Flevoland|Friesland|Groningen|Drenthe|Zeeland)(\w+)/i,
+    table: 'professionals',
+    countColumn: 'id',
+    activeFilter: false,
+    extractFilter: (match: RegExpMatchArray) => ({
+      column: 'woonplaats',
+      value: match[3],
+      operator: 'ilike' as FilterOperator
+    }),
+    responseTemplate: (count: number, ctx?: string) => `👥 Er zijn **${count}** professionals woonachtig in ${ctx || 'deze plaats'}.`
+  },
+  {
+    // "professionals in Utrecht stad", "zzp'ers in Arnhem"
+    pattern: /^(professionals|zzp.?ers?|uitzendkrachten)\s+in\s+(?!sector|provincie|regio|Gelderland|Noord-Holland|Zuid-Holland|Utrecht|Brabant|Noord-Brabant|Limburg|Overijssel|Flevoland|Friesland|Groningen|Drenthe|Zeeland)(\w+)/i,
+    table: 'professionals',
+    countColumn: 'id',
+    activeFilter: false,
+    extractFilter: (match: RegExpMatchArray) => ({
+      column: 'woonplaats',
+      value: match[2],
+      operator: 'ilike' as FilterOperator
+    }),
+    responseTemplate: (count: number, ctx?: string) => `👥 Er zijn **${count}** professionals woonachtig in ${ctx || 'deze plaats'}.`
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🆕 PROFESSIONALS MET PROVINCIE/REGIO FILTER
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    // "hoeveel professionals in Gelderland", "aantal zzp'ers in Noord-Holland"
+    pattern: /^(hoeveel|tel|aantal)\s+(professionals|zzp.?ers?|uitzendkrachten|medewerkers)\s+in\s+(provincie\s+)?(Gelderland|Noord-Holland|Zuid-Holland|Utrecht|Brabant|Noord-Brabant|Limburg|Overijssel|Flevoland|Friesland|Groningen|Drenthe|Zeeland)/i,
+    table: 'professionals',
+    countColumn: 'id',
+    activeFilter: false,
+    extractFilter: (match: RegExpMatchArray) => ({
+      column: 'provincie',
+      value: match[4],
+      operator: 'ilike' as FilterOperator
+    }),
+    responseTemplate: (count: number, ctx?: string) => `👥 Er zijn **${count}** professionals in provincie ${ctx || 'deze regio'}.`
+  },
+  {
+    // "professionals in regio Gelderland"
+    pattern: /^(professionals|zzp.?ers?|uitzendkrachten)\s+in\s+(regio|provincie)\s+(Gelderland|Noord-Holland|Zuid-Holland|Utrecht|Brabant|Noord-Brabant|Limburg|Overijssel|Flevoland|Friesland|Groningen|Drenthe|Zeeland)/i,
+    table: 'professionals',
+    countColumn: 'id',
+    activeFilter: false,
+    extractFilter: (match: RegExpMatchArray) => ({
+      column: 'provincie',
+      value: match[3],
+      operator: 'ilike' as FilterOperator
+    }),
+    responseTemplate: (count: number, ctx?: string) => `👥 Er zijn **${count}** professionals in provincie ${ctx || 'deze regio'}.`
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🆕 PROFESSIONALS MET WERKVORM FILTER (ZZP, Uitzend, Detachering)
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    // "hoeveel ZZP professionals", "aantal ZZP'ers"
+    pattern: /^(hoeveel|tel|aantal)\s+(ZZP|zzp)\s*(professionals|.?ers?|medewerkers)?/i,
+    table: 'professionals',
+    countColumn: 'id',
+    activeFilter: false,
+    extractFilter: () => ({
+      column: 'werkvorm',
+      value: 'ZZP',
+      operator: 'ilike' as FilterOperator
+    }),
+    responseTemplate: (count: number) => `👥 Er zijn **${count}** ZZP professionals geregistreerd.`
+  },
+  {
+    // "hoeveel uitzendkracht professionals", "aantal uitzendkrachten"
+    pattern: /^(hoeveel|tel|aantal)\s+(uitzend|detacherings?)\s*(krachten?|professionals|medewerkers)?/i,
+    table: 'professionals',
+    countColumn: 'id',
+    activeFilter: false,
+    extractFilter: () => ({
+      column: 'werkvorm',
+      value: 'Uitzend',
+      operator: 'ilike' as FilterOperator
+    }),
+    responseTemplate: (count: number) => `👥 Er zijn **${count}** uitzendkracht professionals geregistreerd.`
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🆕 GECOMBINEERDE FILTERS: SECTOR + PROVINCIE (MOET EERST VOOR PLAATS)
+  // ═══════════════════════════════════════════════════════════════════════
+  {
+    // "hoeveel GGZ locaties in Gelderland", "aantal VVT werklocaties in Noord-Holland"
+    pattern: /^(hoeveel|tel|aantal)\s+(GGZ|GHZ|VVT|Jeugdzorg|Ouderenzorg|Gehandicaptenzorg)\s+(werklocaties|locaties|vestigingen)\s+in\s+(Gelderland|Noord-Holland|Zuid-Holland|Utrecht|Brabant|Noord-Brabant|Limburg|Overijssel|Flevoland|Friesland|Groningen|Drenthe|Zeeland)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    extractFilters: (match: RegExpMatchArray) => [
+      { column: 'sector', value: match[2], operator: 'contains' as FilterOperator },
+      { column: 'provincie', value: match[4], operator: 'ilike' as FilterOperator }
+    ],
+    responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve ${ctx || 'gefilterde'} werklocaties.`
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🆕 GECOMBINEERDE FILTERS: DOELGROEP + PROVINCIE (MOET EERST VOOR PLAATS)
+  // ═══════════════════════════════════════════════════════════════════════
+  {
+    // "hoeveel LVB locaties in Gelderland", "aantal Autisme werklocaties in Noord-Holland"
+    pattern: /^(hoeveel|tel|aantal)\s+(LVB|Autisme|Psychiatrie|NAH|EMB|Verslaving|Dementie|Ouderen)\s+(werklocaties|locaties|vestigingen)\s+in\s+(Gelderland|Noord-Holland|Zuid-Holland|Utrecht|Brabant|Noord-Brabant|Limburg|Overijssel|Flevoland|Friesland|Groningen|Drenthe|Zeeland)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    extractFilters: (match: RegExpMatchArray) => [
+      { column: 'doelgroep', value: match[2], operator: 'contains' as FilterOperator },
+      { column: 'provincie', value: match[4], operator: 'ilike' as FilterOperator }
+    ],
+    responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve ${ctx || 'gefilterde'} werklocaties.`
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🆕 GECOMBINEERDE FILTERS: SECTOR + PLAATS (NA PROVINCIE PATTERNS)
+  // ═══════════════════════════════════════════════════════════════════════
+  {
+    // "hoeveel GGZ locaties in Amsterdam", "aantal VVT werklocaties in Rotterdam"
+    pattern: /^(hoeveel|tel|aantal)\s+(GGZ|GHZ|VVT|Jeugdzorg|Ouderenzorg|Gehandicaptenzorg)\s+(werklocaties|locaties|vestigingen)\s+in\s+(\w+)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    extractFilters: (match: RegExpMatchArray) => [
+      { column: 'sector', value: match[2], operator: 'contains' as FilterOperator },
+      { column: 'plaats', value: match[4], operator: 'ilike' as FilterOperator }
+    ],
+    responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve ${ctx || 'gefilterde'} werklocaties.`
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🆕 GECOMBINEERDE FILTERS: DOELGROEP + PLAATS (NA PROVINCIE PATTERNS)
+  // ═══════════════════════════════════════════════════════════════════════
+  {
+    // "hoeveel LVB locaties in Amsterdam", "aantal Autisme werklocaties in Rotterdam"
+    pattern: /^(hoeveel|tel|aantal)\s+(LVB|Autisme|Psychiatrie|NAH|EMB|Verslaving|Dementie|Ouderen)\s+(werklocaties|locaties|vestigingen)\s+in\s+(\w+)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    extractFilters: (match: RegExpMatchArray) => [
+      { column: 'doelgroep', value: match[2], operator: 'contains' as FilterOperator },
+      { column: 'plaats', value: match[4], operator: 'ilike' as FilterOperator }
+    ],
+    responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve ${ctx || 'gefilterde'} werklocaties.`
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 🆕 GECOMBINEERDE FILTERS: SECTOR + DOELGROEP
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    // "hoeveel GGZ LVB locaties", "aantal VVT Autisme werklocaties"
+    pattern: /^(hoeveel|tel|aantal)\s+(GGZ|GHZ|VVT|Jeugdzorg)\s+(LVB|Autisme|Psychiatrie|NAH|EMB|Verslaving|Dementie)\s+(werklocaties|locaties|vestigingen)/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    extractFilters: (match: RegExpMatchArray) => [
+      { column: 'sector', value: match[2], operator: 'contains' as FilterOperator },
+      { column: 'doelgroep', value: match[3], operator: 'contains' as FilterOperator }
+    ],
+    responseTemplate: (count: number, ctx?: string) => `📍 Er zijn **${count}** actieve ${ctx || 'gefilterde'} werklocaties.`
   }
 ];
 
@@ -1686,24 +1858,32 @@ Deno.serve(async (req: Request) => {
           
           // 🆕 GEAVANCEERDE FILTERS: Dynamisch filter op basis van regex match
           let filterContext = '';
-          if (fastPattern.extractFilter && match) {
-            const filter = fastPattern.extractFilter(match);
-            if (filter) {
-              filterContext = filter.value;
-              console.log(`⚡ [ULTRA FAST PATH] Applying advanced filter: ${filter.column} ${filter.operator} "${filter.value}"`);
-              
-              switch (filter.operator) {
-                case 'eq':
-                  countQuery = countQuery.eq(filter.column, filter.value);
-                  break;
-                case 'ilike':
-                  countQuery = countQuery.ilike(filter.column, `%${filter.value}%`);
-                  break;
-                case 'contains':
-                  // For array columns like sector[], doelgroep[], gezochte_functies[]
-                  countQuery = countQuery.contains(filter.column, [filter.value]);
-                  break;
-              }
+          let filters: FastPathFilter[] = [];
+          
+          // Collect all filters (supports both single and multiple filters)
+          if (fastPattern.extractFilters && match) {
+            filters = fastPattern.extractFilters(match);
+          } else if (fastPattern.extractFilter && match) {
+            const singleFilter = fastPattern.extractFilter(match);
+            if (singleFilter) filters = [singleFilter];
+          }
+          
+          // Apply all filters
+          for (const filter of filters) {
+            console.log(`⚡ [ULTRA FAST PATH] Applying filter: ${filter.column} ${filter.operator} "${filter.value}"`);
+            filterContext += (filterContext ? ' + ' : '') + filter.value;
+            
+            switch (filter.operator) {
+              case 'eq':
+                countQuery = countQuery.eq(filter.column, filter.value);
+                break;
+              case 'ilike':
+                countQuery = countQuery.ilike(filter.column, `%${filter.value}%`);
+                break;
+              case 'contains':
+                // For array columns like sector[], doelgroep[], gezochte_functies[]
+                countQuery = countQuery.contains(filter.column, [filter.value]);
+                break;
             }
           }
           
