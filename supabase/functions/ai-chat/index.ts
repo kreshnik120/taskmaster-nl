@@ -1458,11 +1458,32 @@ Deno.serve(async (req: Request) => {
         .eq('id', user.id)
         .single(),
       
-      // Top 10 clients
-      supabaseClient
-        .from('clients')
-        .select('id, name, company, tier, weekly_hours, revenue_per_hour')
-        .limit(10),
+      // Top 10 werklocaties (sublocations) - map to flat structure
+      (async () => {
+        const { data: subs } = await supabaseClient
+          .from('client_sublocations')
+          .select(`
+            id, naam, sector, doelgroep, plaats,
+            location:client_locations!inner(
+              naam,
+              organization:client_organizations!inner(name)
+            )
+          `)
+          .eq('is_active', true)
+          .limit(10);
+        
+        // Map to expected format
+        return { 
+          data: subs?.map((s: any) => ({
+            id: s.id,
+            naam: s.naam,
+            sector: s.sector,
+            doelgroep: s.doelgroep,
+            plaats: s.plaats,
+            organization_name: s.location?.organization?.name || ''
+          })) || null 
+        };
+      })(),
       
       // Top 5 projecten
       supabaseClient
@@ -2212,8 +2233,8 @@ ${activeTimeEntry ? `🟢 Bezig: Taak ${activeTimeEntry.task_id}` : ''}
 ⚠️ BELANGRIJK: Dit is NIET de volledige takenlijst!
 → Voor taken queries: gebruik ALTIJD de query_tasks tool voor actuele, complete data
 
-CLIENTS (${clients?.length || 0}):
-${clients?.map(c => `${c.company}: ${c.weekly_hours || 0}h/week, €${c.revenue_per_hour || 0}/u`).join(' | ') || 'Geen'}
+WERKLOCATIES (${clients?.length || 0}):
+${clients?.map(c => `${c.organization_name || ''} - ${c.naam}${c.plaats ? ` (${c.plaats})` : ''}`).join(' | ') || 'Geen'}
 
 TOP 5 ACTIEVE TAKEN (ter referentie):
 ${activeTasks.slice(0, 5).map((t, i) => `${i + 1}. [${t.priority}] ${t.title}${t.due_at ? ` (${new Date(t.due_at).toLocaleDateString('nl-NL')})` : ''}`).join('\n')}
@@ -4523,25 +4544,43 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
                             break;
                           }
                           
-                          // Query active clients
-                          const clientFilter: any = {};
+                          // Query active sublocations (werklocaties) from hierarchy
+                          let sublocationQuery = supabaseClient
+                            .from('client_sublocations')
+                            .select(`
+                              id, naam, sector, doelgroep, gezochte_functies, plaats, is_active,
+                              location:client_locations!inner(
+                                id, naam,
+                                organization:client_organizations!inner(id, name, org_id)
+                              )
+                            `)
+                            .eq('is_active', true);
+                          
                           if (args.client_id) {
-                            clientFilter.id = args.client_id;
+                            sublocationQuery = sublocationQuery.eq('id', args.client_id);
                           }
                           
-                          const { data: activeClients, error: clientError } = await supabaseClient
-                            .from('clients')
-                            .select('*')
-                            .match(clientFilter)
-                            .limit(50);
+                          const { data: sublocations, error: clientError } = await sublocationQuery.limit(50);
                           
-                          if (clientError || !activeClients?.length) {
+                          if (clientError || !sublocations?.length) {
                             result = {
                               success: false,
-                              message: `❌ Geen actieve clients gevonden${clientError ? `: ${clientError.message}` : ''}`
+                              message: `❌ Geen actieve werklocaties gevonden${clientError ? `: ${clientError.message}` : ''}`
                             };
                             break;
                           }
+                          
+                          // Map sublocations to client format for matching
+                          const activeClients = sublocations.map((sub: any) => ({
+                            id: sub.id,
+                            name: sub.naam,
+                            company: sub.location?.organization?.name || '',
+                            sector: sub.sector,
+                            doelgroep: sub.doelgroep,
+                            gezochte_functies: sub.gezochte_functies,
+                            plaats: sub.plaats,
+                            org_id: sub.location?.organization?.org_id
+                          }));
                           
                           // Calculate match scores (weighted criteria)
                           const WEIGHTS = {
@@ -4583,10 +4622,8 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
                               totalScore += beschikScore * WEIGHTS.beschikbaarheid;
                               reasoning.beschikbaarheid = { score: beschikScore, weight: WEIGHTS.beschikbaarheid };
                               
-                              // Tarief compatibiliteit
-                              const tariefScore = prof.gewenst_uurloon && client.revenue_per_hour 
-                                ? Math.max(0, 100 - Math.abs(prof.gewenst_uurloon - client.revenue_per_hour) / client.revenue_per_hour * 100)
-                                : 70;
+                              // Tarief compatibiliteit (vaste score zonder revenue_per_hour in sublocations)
+                              const tariefScore = prof.gewenst_uurloon ? 80 : 70;
                               totalScore += tariefScore * WEIGHTS.tarief;
                               reasoning.tarief = { score: tariefScore, weight: WEIGHTS.tarief };
                               

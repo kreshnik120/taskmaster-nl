@@ -531,13 +531,14 @@ export interface SystemPromptContext {
   pageContext: { label: string; path: string; description?: string } | null | undefined;
   /** Context summary from loaded data */
   contextSummary: string;
-  /** List of active clients */
+  /** List of active werklocaties (sublocations) */
   clients: Array<{
-    name: string;
-    company: string;
-    tier: number;
-    weekly_hours?: number;
-    revenue_per_hour?: number;
+    id: string;
+    naam: string;
+    sector?: string[] | null;
+    doelgroep?: string[] | null;
+    plaats?: string | null;
+    organization_name?: string;
   }> | null;
   /** Full knowledge base items */
   fullKnowledgeBase: Array<any>;
@@ -628,8 +629,8 @@ ${contextSummary}
 ⚠️ WAARSCHUWING: De bovenstaande context bevat NIET alle taken!
 Voor complete taak informatie → gebruik query_tasks tool!
 
-📋 **KLANTEN DATABASE** (${clients?.length || 0} actieve klanten):
-${clients?.map(c => `- **${c.name}** (${c.company}) - Tier ${c.tier}${c.weekly_hours ? `, ${c.weekly_hours}u/week` : ''}${c.revenue_per_hour ? `, €${c.revenue_per_hour}/u` : ''}`).join('\n') || 'Geen klanten'}
+📋 **WERKLOCATIES DATABASE** (${clients?.length || 0} actieve werklocaties):
+${clients?.map(c => `- **${c.naam}**${c.organization_name ? ` (${c.organization_name})` : ''}${c.plaats ? ` - ${c.plaats}` : ''}${c.sector?.length ? ` [${c.sector.join(', ')}]` : ''}`).join('\n') || 'Geen werklocaties'}
 
 📚 KENNISBANK (${fullKnowledgeBase.length} relevante items voor jouw rol: ${detectedRole}):
 ${formatKnowledgeBase()}

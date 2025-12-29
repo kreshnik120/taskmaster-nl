@@ -42,48 +42,69 @@ Deno.serve(async (req) => {
     let archivedCount = 0;
     let boostedCount = 0;
 
-    // Get all clients for lookup during auto-fix (use clients table for FK compliance)
-    // Also get client_organizations for better name matching
-    const [{ data: allClients }, { data: clientOrgs }] = await Promise.all([
-      supabase.from('clients').select('id, name, company, client_org_id').eq('org_id', orgId),
+    // Get all sublocations and organizations for lookup during auto-fix
+    const [{ data: allSublocations }, { data: clientOrgs }] = await Promise.all([
+      supabase
+        .from('client_sublocations')
+        .select(`
+          id, naam,
+          location:client_locations!inner(
+            id, naam,
+            organization:client_organizations!inner(id, name, org_id)
+          )
+        `)
+        .eq('is_active', true),
       supabase.from('client_organizations').select('id, name').eq('org_id', orgId)
     ]);
     
-    // Build comprehensive lookup: name variants → clients.id (FK-compliant)
+    // Build comprehensive lookup: name variants → sublocation.id (FK-compliant)
     const clientLookup = new Map<string, string>();
     
-    // Map client_organizations names to their linked clients.id
-    const orgToClientId = new Map<string, string>();
-    allClients?.forEach(client => {
-      if (client.client_org_id) {
-        orgToClientId.set(client.client_org_id, client.id);
+    // Add sublocation names
+    allSublocations?.forEach((sub: any) => {
+      const normalizedName = sub.naam.toLowerCase().replace(/\s+/g, '');
+      clientLookup.set(normalizedName, sub.id);
+      
+      // Add partial matches
+      sub.naam.toLowerCase().split(/[\s-]+/).forEach((word: string) => {
+        if (word.length > 2) clientLookup.set(word, sub.id);
+      });
+      
+      // Add location name mapping to first sublocation
+      if (sub.location?.naam) {
+        const normalizedLocation = sub.location.naam.toLowerCase().replace(/\s+/g, '');
+        if (!clientLookup.has(normalizedLocation)) {
+          clientLookup.set(normalizedLocation, sub.id);
+        }
       }
     });
     
-    // Add client_organizations names pointing to correct clients.id
+    // Add client_organizations names pointing to first sublocation under them
+    const orgToSublocationId = new Map<string, string>();
+    allSublocations?.forEach((sub: any) => {
+      const orgId = sub.location?.organization?.id;
+      if (orgId && !orgToSublocationId.has(orgId)) {
+        orgToSublocationId.set(orgId, sub.id);
+      }
+    });
+    
     clientOrgs?.forEach(org => {
-      const clientId = orgToClientId.get(org.id);
-      if (clientId) {
+      const sublocationId = orgToSublocationId.get(org.id);
+      if (sublocationId) {
         const normalizedName = org.name.toLowerCase().replace(/\s+/g, '');
-        clientLookup.set(normalizedName, clientId);
+        if (!clientLookup.has(normalizedName)) {
+          clientLookup.set(normalizedName, sublocationId);
+        }
         // Add partial matches for organization names
         org.name.toLowerCase().split(/[\s-]+/).forEach((word: string) => {
-          if (word.length > 2) clientLookup.set(word, clientId);
+          if (word.length > 2 && !clientLookup.has(word)) {
+            clientLookup.set(word, sublocationId);
+          }
         });
       }
     });
     
-    // Add legacy clients table names
-    allClients?.forEach(client => {
-      const normalizedName = client.name.toLowerCase().replace(/\s+/g, '');
-      clientLookup.set(normalizedName, client.id);
-      if (client.company) {
-        const normalizedCompany = client.company.toLowerCase().replace(/\s+/g, '');
-        clientLookup.set(normalizedCompany, client.id);
-      }
-    });
-    
-    console.log(`[data-quality-auditor] Client lookup built with ${clientLookup.size} name variants`);
+    console.log(`[data-quality-auditor] Client lookup built with ${clientLookup.size} name variants from sublocations/organizations`);
 
     // SCAN 1: Outdated information (> 12 months) + AUTO-ARCHIVE
     const { data: outdated } = await supabase

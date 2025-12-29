@@ -1266,18 +1266,48 @@ ALLEEN professionals die EXPLICIET gekoppeld zijn aan een client!`;
 
       const professional = professionals[0];
 
-      const { data: clients } = await supabase
-        .from('clients')
-        .select('id, name')
-        .eq('org_id', orgId)
-        .or(`name.ilike.%${rel.client_name}%,company.ilike.%${rel.client_name}%`);
+      // Search in client_sublocations hierarchy
+      const { data: sublocations } = await supabase
+        .from('client_sublocations')
+        .select(`
+          id, naam,
+          location:client_locations!inner(
+            naam,
+            organization:client_organizations!inner(id, name, org_id)
+          )
+        `)
+        .eq('is_active', true)
+        .or(`naam.ilike.%${rel.client_name}%`);
+      
+      // Also search by organization name
+      const { data: orgMatches } = await supabase
+        .from('client_sublocations')
+        .select(`
+          id, naam,
+          location:client_locations!inner(
+            naam,
+            organization:client_organizations!inner(id, name, org_id)
+          )
+        `)
+        .eq('is_active', true);
+      
+      // Filter by org name match
+      const orgFilteredMatches = (orgMatches || []).filter((sub: any) => 
+        sub.location?.organization?.name?.toLowerCase().includes(rel.client_name.toLowerCase())
+      );
+      
+      const allMatches = [...(sublocations || []), ...orgFilteredMatches];
+      const uniqueMatches = allMatches.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
 
-      if (!clients || clients.length === 0) {
+      if (uniqueMatches.length === 0) {
         console.log(`[DETECT] Client not found: ${rel.client_name}`);
         continue;
       }
 
-      const client = clients[0];
+      const client = {
+        id: uniqueMatches[0].id,
+        name: uniqueMatches[0].naam
+      };
 
       const { data: existing } = await supabase
         .from('professional_clients')

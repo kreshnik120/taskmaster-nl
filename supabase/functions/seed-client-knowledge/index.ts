@@ -38,17 +38,37 @@ Deno.serve(async (req) => {
 
     const userOrgId = userOrg.org_id;
 
-    // Fetch all clients
-    const { data: clients, error: clientsError } = await supabaseClient
-      .from('clients')
-      .select('*');
+    // Fetch all sublocations with hierarchy
+    const { data: sublocations, error: sublocationsError } = await supabaseClient
+      .from('client_sublocations')
+      .select(`
+        id, naam, sector, doelgroep, gezochte_functies, plaats, is_active,
+        location:client_locations!inner(
+          id, naam,
+          organization:client_organizations!inner(id, name, org_id)
+        )
+      `)
+      .eq('is_active', true);
 
-    if (clientsError) {
-      console.error('Error fetching clients:', clientsError);
-      throw clientsError;
+    if (sublocationsError) {
+      console.error('Error fetching sublocations:', sublocationsError);
+      throw sublocationsError;
     }
 
-    console.log(`Found ${clients?.length || 0} clients to process`);
+    // Map sublocations to client format for knowledge base
+    const clients = (sublocations || []).map((sub: any) => ({
+      id: sub.id,
+      name: sub.naam,
+      company: sub.location?.organization?.name || '',
+      sector: sub.sector,
+      doelgroep: sub.doelgroep,
+      gezochte_functies: sub.gezochte_functies,
+      plaats: sub.plaats,
+      org_id: sub.location?.organization?.org_id,
+      location_name: sub.location?.naam
+    }));
+
+    console.log(`Found ${clients?.length || 0} werklocaties to process`);
 
     let seedCount = 0;
     const errors: string[] = [];
@@ -57,17 +77,16 @@ Deno.serve(async (req) => {
     // Process each client and add to knowledge base
     for (const client of clients || []) {
       try {
-        // Create a comprehensive knowledge entry for this client
+        // Create a comprehensive knowledge entry for this sublocation (werklocatie)
         const clientKnowledge = {
           id: client.id,
           name: client.name,
           company: client.company,
-          tier: client.tier,
-          weekly_hours: client.weekly_hours,
-          revenue_per_hour: client.revenue_per_hour,
-          monthly_value: client.weekly_hours && client.revenue_per_hour 
-            ? (client.weekly_hours * client.revenue_per_hour * 4) 
-            : null,
+          sector: client.sector,
+          doelgroep: client.doelgroep,
+          gezochte_functies: client.gezochte_functies,
+          plaats: client.plaats,
+          location_name: client.location_name,
         };
 
         // Insert into knowledge base
@@ -114,11 +133,11 @@ Deno.serve(async (req) => {
             category: 'business_rule',
             key: 'all_clients_summary',
             value: {
-              total_clients: clients.length,
-              clients: clients.map(c => ({
+              total_werklocaties: clients.length,
+              werklocaties: clients.map(c => ({
                 company: c.company,
                 name: c.name,
-                tier: c.tier,
+                sector: c.sector,
                 id: c.id
               }))
             },
