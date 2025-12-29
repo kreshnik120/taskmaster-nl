@@ -327,6 +327,89 @@ const TEST_SCENARIOS: TestScenario[] = [
       { type: "fast_path", description: "Moet via Fast Path verwerkt zijn" }
     ]
   },
+  // ═══════════════════════════════════════════════════════════════════
+  // 🆕 PROFESSIONALS MET FILTERS
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    id: "fast_path_zzp_professionals",
+    question: "Hoeveel ZZP professionals",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 0, description: "Moet een getal bevatten" },
+      { type: "mentions", keywords: ["ZZP", "professional"], description: "Moet ZZP en professional vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn" }
+    ]
+  },
+  {
+    id: "fast_path_professionals_in_amsterdam",
+    question: "Hoeveel professionals in Amsterdam",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 0, description: "Moet een getal bevatten" },
+      { type: "mentions", keywords: ["Amsterdam", "professional"], description: "Moet Amsterdam en professional vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn" }
+    ]
+  },
+  {
+    id: "fast_path_professionals_in_gelderland",
+    question: "Hoeveel professionals in Gelderland",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 0, description: "Moet een getal bevatten" },
+      { type: "mentions", keywords: ["Gelderland", "professional", "provincie"], description: "Moet Gelderland en professional vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn" }
+    ]
+  },
+  // ═══════════════════════════════════════════════════════════════════
+  // 🆕 GECOMBINEERDE FILTERS
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    id: "fast_path_ggz_in_amsterdam",
+    question: "Hoeveel GGZ locaties in Amsterdam",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 0, description: "Moet een getal bevatten" },
+      { type: "mentions", keywords: ["GGZ", "Amsterdam"], description: "Moet GGZ en Amsterdam vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn" }
+    ]
+  },
+  {
+    id: "fast_path_lvb_in_almere",
+    question: "Hoeveel LVB locaties in Almere",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 0, description: "Moet een getal bevatten" },
+      { type: "mentions", keywords: ["LVB", "Almere"], description: "Moet LVB en Almere vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn" }
+    ]
+  },
+  {
+    id: "fast_path_vvt_autisme",
+    question: "Hoeveel VVT Autisme locaties",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 0, description: "Moet een getal bevatten" },
+      { type: "mentions", keywords: ["VVT", "Autisme"], description: "Moet VVT en Autisme vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn" }
+    ]
+  },
+  {
+    id: "fast_path_ggz_in_gelderland",
+    question: "Hoeveel GGZ locaties in Gelderland",
+    expected_tool: null,
+    timeout_ms: 5000,
+    validations: [
+      { type: "contains_number", min: 0, description: "Moet een getal bevatten" },
+      { type: "mentions", keywords: ["GGZ", "Gelderland"], description: "Moet GGZ en Gelderland vermelden" },
+      { type: "fast_path", description: "Moet via Fast Path verwerkt zijn" }
+    ]
+  },
   {
     id: "phone_lookup_prisma",
     question: "Wat is het telefoonnummer van een Prisma werklocatie?",
