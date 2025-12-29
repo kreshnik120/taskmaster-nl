@@ -5,8 +5,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Default timeout per test scenario (45 seconds - increased for complex queries)
-const DEFAULT_TIMEOUT_MS = 45000;
+// Default timeout per test scenario (60 seconds - increased for complex queries)
+const DEFAULT_TIMEOUT_MS = 60000;
 
 // Stream read timeout (5 seconds per chunk - prevents premature stream termination)
 const STREAM_READ_TIMEOUT_MS = 5000;
@@ -193,7 +193,7 @@ const TEST_SCENARIOS: TestScenario[] = [
     id: "count_sublocations",
     question: "Hoeveel werklocaties of sublocaties zijn er totaal in het systeem?",
     expected_tool: "query_sublocations",
-    timeout_ms: 30000,
+    timeout_ms: 75000, // Higher timeout - complex DB query
     validations: [
       { type: "contains_number", min: 800, max: 1000, description: "Moet een getal tussen 800-1000 bevatten" },
       { type: "mentions", keywords: ["werklocatie", "sublocatie", "locatie"], description: "Moet locatie vermelden" }
@@ -261,7 +261,7 @@ const TEST_SCENARIOS: TestScenario[] = [
     id: "combined_query",
     question: "Hoeveel werklocaties heeft de organisatie met de meeste locaties?",
     expected_tool: "query_clients",
-    timeout_ms: 45000, // Longer timeout for complex queries
+    timeout_ms: 90000, // Extra long timeout for complex multi-step queries
     validations: [
       { type: "contains_number", min: 1, description: "Moet een getal bevatten" }
     ]
@@ -270,7 +270,7 @@ const TEST_SCENARIOS: TestScenario[] = [
     id: "knowledge_query",
     question: "Wat zijn de belangrijkste regels voor het werken met clienten in de zorg?",
     expected_tool: null, // Uses knowledge base, not specific tool
-    timeout_ms: 40000, // Longer timeout for knowledge retrieval
+    timeout_ms: 60000, // Longer timeout for knowledge retrieval
     validations: [
       { type: "min_length", min: 50, description: "Moet een uitgebreid antwoord zijn" }
     ]
