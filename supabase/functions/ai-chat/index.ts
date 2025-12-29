@@ -1834,6 +1834,203 @@ Deno.serve(async (req: Request) => {
     // Check if this is a simple count query that can be answered directly
     const lastUserMessageForFastPath = messages[messages.length - 1]?.content || '';
     
+    // 🆕 DYNAMIC PATTERNS: Load learned patterns from database
+    let dynamicPatterns: Array<{
+      id: string;
+      pattern_type: string;
+      table_name: string;
+      count_column: string;
+      keywords: string[];
+      regex_pattern: string | null;
+      filters: Array<{ column: string; operator: string; value_index: number }>;
+      active_filter: boolean;
+      response_template: string;
+      confidence_score: number;
+    }> = [];
+    
+    try {
+      const { data: dbPatterns } = await supabaseServiceClient
+        .from('fast_path_patterns')
+        .select('id, pattern_type, table_name, count_column, keywords, regex_pattern, filters, active_filter, response_template, confidence_score')
+        .eq('org_id', userOrgId)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .order('confidence_score', { ascending: false })
+        .limit(50);
+      
+      if (dbPatterns && dbPatterns.length > 0) {
+        dynamicPatterns = dbPatterns;
+        console.log(`⚡ [DYNAMIC PATTERNS] Loaded ${dynamicPatterns.length} active patterns from database`);
+      }
+    } catch (dynamicError) {
+      console.error('⚡ [DYNAMIC PATTERNS] Failed to load, using hardcoded only:', dynamicError);
+    }
+    
+    // Helper function to check if query matches dynamic pattern keywords
+    const matchesDynamicPattern = (query: string, pattern: typeof dynamicPatterns[0]): boolean => {
+      const normalizedQuery = query.toLowerCase().trim();
+      const matchedKeywords = pattern.keywords.filter(kw => normalizedQuery.includes(kw.toLowerCase()));
+      return matchedKeywords.length >= Math.min(2, pattern.keywords.length);
+    };
+    
+    // Helper function to extract filter values from query based on pattern
+    const extractDynamicFilters = (query: string, pattern: typeof dynamicPatterns[0]): FastPathFilter[] => {
+      const filters: FastPathFilter[] = [];
+      const words = query.toLowerCase().split(/\s+/);
+      
+      for (const filterDef of pattern.filters || []) {
+        if (filterDef.value_index >= 0 && filterDef.value_index < words.length) {
+          filters.push({
+            column: filterDef.column,
+            operator: filterDef.operator as FilterOperator,
+            value: words[filterDef.value_index]
+          });
+        }
+      }
+      
+      return filters;
+    };
+    
+    // 🆕 First check dynamic patterns from database
+    let dynamicPatternMatched = false;
+    for (const dynPattern of dynamicPatterns) {
+      if (matchesDynamicPattern(lastUserMessageForFastPath, dynPattern)) {
+        console.log(`⚡ [DYNAMIC FAST PATH] Pattern matched: ${dynPattern.id} (confidence: ${dynPattern.confidence_score})`);
+        const fastPathStart = Date.now();
+        
+        try {
+          let countQuery = supabaseClient
+            .from(dynPattern.table_name)
+            .select(dynPattern.count_column || 'id', { count: 'exact', head: true });
+          
+          // Add is_active filter if configured
+          if (dynPattern.active_filter && dynPattern.table_name === 'client_sublocations') {
+            countQuery = countQuery.eq('is_active', true);
+          }
+          
+          // Add deleted_at filter
+          if (['professional_applications', 'professionals'].includes(dynPattern.table_name)) {
+            countQuery = countQuery.is('deleted_at', null);
+          }
+          
+          // Apply dynamic filters
+          const filters = extractDynamicFilters(lastUserMessageForFastPath, dynPattern);
+          let filterContext = '';
+          
+          for (const filter of filters) {
+            console.log(`⚡ [DYNAMIC FAST PATH] Applying filter: ${filter.column} ${filter.operator} "${filter.value}"`);
+            filterContext += (filterContext ? ' + ' : '') + filter.value;
+            
+            switch (filter.operator) {
+              case 'eq':
+                countQuery = countQuery.eq(filter.column, filter.value);
+                break;
+              case 'ilike':
+                countQuery = countQuery.ilike(filter.column, `%${filter.value}%`);
+                break;
+              case 'contains':
+                countQuery = countQuery.contains(filter.column, [filter.value]);
+                break;
+            }
+          }
+          
+          const { count, error: countError } = await countQuery;
+          const fastPathDuration = Date.now() - fastPathStart;
+          
+          if (countError) {
+            console.error(`⚡ [DYNAMIC FAST PATH] Count error:`, countError);
+            
+            // Log error to usage log (fire and forget)
+            Promise.resolve(supabaseServiceClient.from('fast_path_usage_log').insert({
+              org_id: userOrgId,
+              user_query: lastUserMessageForFastPath,
+              normalized_query: lastUserMessageForFastPath.toLowerCase().trim(),
+              query_hash: await sha256Hash(lastUserMessageForFastPath.toLowerCase().trim()),
+              pattern_id: dynPattern.id,
+              table_name: dynPattern.table_name,
+              filters_applied: filters,
+              success: false,
+              error_message: countError.message,
+              response_time_ms: fastPathDuration
+            })).catch(() => {});
+            
+            // Update pattern error count (fire and forget)
+            Promise.resolve(supabaseServiceClient.from('fast_path_patterns')
+              .update({ 
+                last_error: countError.message,
+                last_error_at: new Date().toISOString()
+              })
+              .eq('id', dynPattern.id)).catch(() => {});
+          } else {
+            // Build response from template
+            const responseContent = dynPattern.response_template.replace('{{count}}', String(count || 0));
+            
+            console.log(`⚡ [DYNAMIC FAST PATH] SUCCESS: ${count} items, ${fastPathDuration}ms`);
+            
+            // Log success to usage log (fire and forget)
+            Promise.resolve(supabaseServiceClient.from('fast_path_usage_log').insert({
+              org_id: userOrgId,
+              user_query: lastUserMessageForFastPath,
+              normalized_query: lastUserMessageForFastPath.toLowerCase().trim(),
+              query_hash: await sha256Hash(lastUserMessageForFastPath.toLowerCase().trim()),
+              pattern_id: dynPattern.id,
+              table_name: dynPattern.table_name,
+              filters_applied: filters,
+              result_count: count || 0,
+              success: true,
+              response_time_ms: fastPathDuration
+            })).catch(() => {});
+            
+            // Update pattern success metrics (fire and forget)
+            Promise.resolve(supabaseServiceClient.from('fast_path_patterns')
+              .update({ 
+                last_used_at: new Date().toISOString(),
+                last_success_at: new Date().toISOString()
+              })
+              .eq('id', dynPattern.id)).catch(() => {});
+            
+            // Persist messages
+            persistMessage(supabaseServiceClient, {
+              user_id: user.id,
+              org_id: userOrgId,
+              conversation_id: conversation_id,
+              role: 'user',
+              content: lastUserMessageForFastPath
+            }).catch(() => {});
+            
+            persistMessage(supabaseServiceClient, {
+              user_id: user.id,
+              org_id: userOrgId,
+              conversation_id: conversation_id,
+              role: 'assistant',
+              content: responseContent,
+              metadata: { fast_path: true, dynamic_pattern: true, pattern_id: dynPattern.id, duration_ms: fastPathDuration }
+            }).catch(() => {});
+            
+            // Return SSE stream
+            const encoder = new TextEncoder();
+            const stream = buildFastPathSSEResponse(responseContent, encoder);
+            
+            dynamicPatternMatched = true;
+            return new Response(stream, {
+              headers: {
+                ...corsHeaders,
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'X-Fast-Path': 'dynamic-pattern',
+                'X-Pattern-Id': dynPattern.id,
+                'X-Response-Time-Ms': String(fastPathDuration)
+              }
+            });
+          }
+        } catch (dynamicFastPathError) {
+          console.error(`⚡ [DYNAMIC FAST PATH] Error:`, dynamicFastPathError);
+        }
+      }
+    }
+    
+    // 🔧 HARDCODED PATTERNS: Check static patterns if dynamic didn't match
     for (const fastPattern of FAST_PATH_COUNT_PATTERNS) {
       const match = lastUserMessageForFastPath.match(fastPattern.pattern);
       if (match) {
@@ -1897,6 +2094,21 @@ Deno.serve(async (req: Request) => {
             const fastPathDuration = Date.now() - fastPathStart;
             
             console.log(`⚡ [ULTRA FAST PATH] SUCCESS: ${count} items, ${fastPathDuration}ms (vs ~30s with AI)${filterContext ? ` [filter: ${filterContext}]` : ''}`);
+            
+            // 🆕 Log hardcoded pattern usage for learning (fire and forget)
+            Promise.resolve(supabaseServiceClient.from('fast_path_usage_log').insert({
+              org_id: userOrgId,
+              user_query: lastUserMessageForFastPath,
+              normalized_query: lastUserMessageForFastPath.toLowerCase().trim(),
+              query_hash: await sha256Hash(lastUserMessageForFastPath.toLowerCase().trim()),
+              matched_hardcoded: true,
+              hardcoded_pattern_name: fastPattern.table,
+              table_name: fastPattern.table,
+              filters_applied: filters,
+              result_count: count || 0,
+              success: true,
+              response_time_ms: fastPathDuration
+            })).catch(() => {});
             
             // Persist messages in background
             persistMessage(supabaseServiceClient, {

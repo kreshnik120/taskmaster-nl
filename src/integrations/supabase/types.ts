@@ -2276,6 +2276,185 @@ export type Database = {
           },
         ]
       }
+      fast_path_patterns: {
+        Row: {
+          active_filter: boolean | null
+          avg_response_time_ms: number | null
+          confidence_score: number | null
+          count_column: string | null
+          created_at: string | null
+          deleted_at: string | null
+          deleted_reason: string | null
+          emoji: string | null
+          error_count: number | null
+          filters: Json | null
+          harmful_count: number | null
+          helpful_count: number | null
+          id: string
+          is_active: boolean | null
+          keywords: string[]
+          last_error: string | null
+          last_error_at: string | null
+          last_success_at: string | null
+          last_used_at: string | null
+          learned_from_query: string | null
+          org_id: string
+          pattern_type: string
+          regex_pattern: string | null
+          response_template: string
+          source: string | null
+          success_count: number | null
+          table_name: string
+          updated_at: string | null
+          usage_count: number | null
+        }
+        Insert: {
+          active_filter?: boolean | null
+          avg_response_time_ms?: number | null
+          confidence_score?: number | null
+          count_column?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          deleted_reason?: string | null
+          emoji?: string | null
+          error_count?: number | null
+          filters?: Json | null
+          harmful_count?: number | null
+          helpful_count?: number | null
+          id?: string
+          is_active?: boolean | null
+          keywords: string[]
+          last_error?: string | null
+          last_error_at?: string | null
+          last_success_at?: string | null
+          last_used_at?: string | null
+          learned_from_query?: string | null
+          org_id: string
+          pattern_type?: string
+          regex_pattern?: string | null
+          response_template: string
+          source?: string | null
+          success_count?: number | null
+          table_name: string
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Update: {
+          active_filter?: boolean | null
+          avg_response_time_ms?: number | null
+          confidence_score?: number | null
+          count_column?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          deleted_reason?: string | null
+          emoji?: string | null
+          error_count?: number | null
+          filters?: Json | null
+          harmful_count?: number | null
+          helpful_count?: number | null
+          id?: string
+          is_active?: boolean | null
+          keywords?: string[]
+          last_error?: string | null
+          last_error_at?: string | null
+          last_success_at?: string | null
+          last_used_at?: string | null
+          learned_from_query?: string | null
+          org_id?: string
+          pattern_type?: string
+          regex_pattern?: string | null
+          response_template?: string
+          source?: string | null
+          success_count?: number | null
+          table_name?: string
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fast_path_patterns_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fast_path_usage_log: {
+        Row: {
+          created_at: string | null
+          error_message: string | null
+          feedback_at: string | null
+          feedback_type: string | null
+          filters_applied: Json | null
+          hardcoded_pattern_name: string | null
+          id: string
+          matched_hardcoded: boolean | null
+          normalized_query: string | null
+          org_id: string
+          pattern_id: string | null
+          query_hash: string | null
+          response_time_ms: number | null
+          result_count: number | null
+          success: boolean | null
+          table_name: string | null
+          user_query: string
+        }
+        Insert: {
+          created_at?: string | null
+          error_message?: string | null
+          feedback_at?: string | null
+          feedback_type?: string | null
+          filters_applied?: Json | null
+          hardcoded_pattern_name?: string | null
+          id?: string
+          matched_hardcoded?: boolean | null
+          normalized_query?: string | null
+          org_id: string
+          pattern_id?: string | null
+          query_hash?: string | null
+          response_time_ms?: number | null
+          result_count?: number | null
+          success?: boolean | null
+          table_name?: string | null
+          user_query: string
+        }
+        Update: {
+          created_at?: string | null
+          error_message?: string | null
+          feedback_at?: string | null
+          feedback_type?: string | null
+          filters_applied?: Json | null
+          hardcoded_pattern_name?: string | null
+          id?: string
+          matched_hardcoded?: boolean | null
+          normalized_query?: string | null
+          org_id?: string
+          pattern_id?: string | null
+          query_hash?: string | null
+          response_time_ms?: number | null
+          result_count?: number | null
+          success?: boolean | null
+          table_name?: string | null
+          user_query?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fast_path_usage_log_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fast_path_usage_log_pattern_id_fkey"
+            columns: ["pattern_id"]
+            isOneToOne: false
+            referencedRelation: "fast_path_patterns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       function_call_logs: {
         Row: {
           created_at: string | null
