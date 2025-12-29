@@ -1,8 +1,9 @@
 /**
- * PROCESS FEEDBACK - Shim
+ * PROCESS FEEDBACK - Shim with Fast Path Support
  * 
  * This function is now a shim that routes to unified-learner.
  * Handles single feedback events from UI (thumbs up/down).
+ * 🆕 ENHANCED: Now supports Fast Path feedback for pattern confidence updates.
  * Maintains backward compatibility with existing callers.
  */
 
@@ -46,13 +47,107 @@ Deno.serve(async (req) => {
 
     const orgId = userOrg?.org_id || '550e8400-e29b-41d4-a716-446655440000';
 
-    // ✅ FIX: Query ai_chat_messages (correct table) with fallback to legacy chat_messages
+    const isPositive = feedback === 'positive';
+    const feedbackType = isPositive ? 'helpful' : 'harmful';
+
+    // 🆕 FAST PATH FEEDBACK HANDLING
+    const isFastPath = context?.isFastPath === true;
+    const fastPathLogId = context?.fastPathLogId;
+    const patternId = context?.patternId;
+
+    if (isFastPath && fastPathLogId) {
+      console.log(`⚡ [process-feedback] Fast Path feedback detected: ${feedbackType} for log ${fastPathLogId}`);
+      
+      // Update fast_path_usage_log with feedback
+      const { error: fpLogError } = await supabase
+        .from('fast_path_usage_log')
+        .update({
+          feedback_type: feedbackType,
+          feedback_at: new Date().toISOString()
+        })
+        .eq('id', fastPathLogId);
+      
+      if (fpLogError) {
+        console.error(`❌ [process-feedback] Error updating fast_path_usage_log:`, fpLogError);
+      } else {
+        console.log(`✅ [process-feedback] Updated fast_path_usage_log with ${feedbackType} feedback`);
+      }
+      
+      // 🆕 Update pattern confidence if patternId is available
+      if (patternId) {
+        // Get current pattern stats
+        const { data: pattern } = await supabase
+          .from('fast_path_patterns')
+          .select('confidence_score, usage_count')
+          .eq('id', patternId)
+          .single();
+        
+        if (pattern) {
+          // Calculate new confidence: positive increases, negative decreases
+          // Use exponential moving average approach
+          const currentConfidence = pattern.confidence_score || 0.5;
+          const learningRate = 0.1; // How much each feedback affects confidence
+          
+          let newConfidence: number;
+          if (isPositive) {
+            // Increase confidence, max 1.0
+            newConfidence = Math.min(1.0, currentConfidence + learningRate * (1 - currentConfidence));
+          } else {
+            // Decrease confidence, min 0.0
+            newConfidence = Math.max(0.0, currentConfidence - learningRate * currentConfidence);
+          }
+          
+          const { error: patternUpdateError } = await supabase
+            .from('fast_path_patterns')
+            .update({
+              confidence_score: newConfidence,
+              last_feedback_at: new Date().toISOString()
+            })
+            .eq('id', patternId);
+          
+          if (patternUpdateError) {
+            console.error(`❌ [process-feedback] Error updating pattern confidence:`, patternUpdateError);
+          } else {
+            console.log(`✅ [process-feedback] Updated pattern ${patternId} confidence: ${currentConfidence.toFixed(3)} → ${newConfidence.toFixed(3)} (${feedbackType})`);
+          }
+        }
+      }
+      
+      // Save to message_feedback for consistency (ignore errors/duplicates)
+      const { error: msgFeedbackError } = await supabase
+        .from('message_feedback')
+        .insert({
+          user_id: user.id,
+          message_id: messageId,
+          feedback_type: feedback,
+          knowledge_ids: [], // Fast Path doesn't use knowledge base
+        });
+      
+      if (msgFeedbackError && !msgFeedbackError.message?.includes('duplicate')) {
+        console.warn('[process-feedback] Message feedback insert error:', msgFeedbackError.message);
+      }
+      
+      const executionTime = Date.now() - startTime;
+      console.log(`✅ [process-feedback] Fast Path feedback processed in ${executionTime}ms`);
+      
+      return jsonResponse({
+        success: true,
+        message: 'Fast Path feedback verwerkt',
+        fast_path: true,
+        pattern_updated: !!patternId,
+        _execution_time_ms: executionTime
+      });
+    }
+
+    // ============================================
+    // REGULAR FEEDBACK FLOW (Non-Fast Path)
+    // ============================================
     console.log(`🔍 [process-feedback] Looking up message ${messageId}...`);
     
     let usedKnowledge: string[] = [];
     
     // Step 1: Try ai_chat_messages first (new schema)
-    const { data: aiChatMessage, error: aiChatError } = await supabase
+    const { data: aiChatMessage } = await supabase
       .from('ai_chat_messages')
       .select('used_knowledge, content')
       .eq('id', messageId)
@@ -81,9 +176,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    const isPositive = feedback === 'positive';
-    const feedbackType = isPositive ? 'helpful' : 'harmful';
-
     // Save to message_feedback table with knowledge_ids (prevents duplicate feedback)
     const { error: feedbackError } = await supabase
       .from('message_feedback')
@@ -91,7 +183,7 @@ Deno.serve(async (req) => {
         user_id: user.id,
         message_id: messageId,
         feedback_type: feedback,
-        knowledge_ids: usedKnowledge, // FIX: Store knowledge_ids for batch processing
+        knowledge_ids: usedKnowledge,
       });
 
     // Ignore duplicate key errors
@@ -118,8 +210,6 @@ Deno.serve(async (req) => {
       console.error('❌ [process-feedback shim] unified-learner error:', error);
       // Don't fail the request - feedback was saved
     }
-
-    // NOTE: Removed duplicate continuous-learner call - unified-learner now handles all learning
 
     // Create business intelligence insight on negative feedback (legacy behavior)
     if (!isPositive && context?.message) {

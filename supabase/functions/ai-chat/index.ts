@@ -527,9 +527,26 @@ const FAST_PATH_COUNT_PATTERNS: FastPathPattern[] = [
 ];
 
 // Helper: Build SSE response for fast path (no AI streaming needed)
-function buildFastPathSSEResponse(content: string, encoder: TextEncoder): ReadableStream {
+// 🆕 Added metadata support for feedback integration (fastPathLogId, messageId)
+interface FastPathSSEMetadata {
+  fastPathLogId?: string;
+  messageId?: string;
+  patternId?: string;
+  isFastPath: boolean;
+}
+
+function buildFastPathSSEResponse(content: string, encoder: TextEncoder, metadata?: FastPathSSEMetadata): ReadableStream {
   return new ReadableStream({
     start(controller) {
+      // 🆕 Send metadata event FIRST so client can capture it for feedback
+      if (metadata) {
+        const metadataEvent = JSON.stringify({
+          type: 'fast_path_metadata',
+          data: metadata
+        });
+        controller.enqueue(encoder.encode(`data: ${metadataEvent}\n\n`));
+      }
+      
       // Send content as single SSE chunk
       const sseData = JSON.stringify({
         choices: [{
@@ -540,13 +557,15 @@ function buildFastPathSSEResponse(content: string, encoder: TextEncoder): Readab
       });
       controller.enqueue(encoder.encode(`data: ${sseData}\n\n`));
       
-      // Send finish chunk
+      // Send finish chunk with metadata
       const finishData = JSON.stringify({
         choices: [{
           delta: {},
           index: 0,
           finish_reason: 'stop'
-        }]
+        }],
+        // 🆕 Include metadata in finish for clients that process end-to-end
+        fast_path_metadata: metadata
       });
       controller.enqueue(encoder.encode(`data: ${finishData}\n\n`));
       controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
@@ -1947,8 +1966,10 @@ Deno.serve(async (req: Request) => {
             
             console.log(`⚡ [DYNAMIC FAST PATH] SUCCESS: ${count} items, ${fastPathDuration}ms`);
             
-            // Log success to usage log (fire and forget)
+            // 🆕 Log success to usage log and GET the ID for feedback integration
+            const usageLogId = crypto.randomUUID();
             Promise.resolve(supabaseServiceClient.from('fast_path_usage_log').insert({
+              id: usageLogId,
               org_id: userOrgId,
               user_query: lastUserMessageForFastPath,
               normalized_query: lastUserMessageForFastPath.toLowerCase().trim(),
@@ -1969,7 +1990,7 @@ Deno.serve(async (req: Request) => {
               })
               .eq('id', dynPattern.id)).catch(() => {});
             
-            // Persist messages
+            // Persist messages and get message ID for feedback
             persistMessage(supabaseServiceClient, {
               user_id: user.id,
               org_id: userOrgId,
@@ -1978,18 +1999,24 @@ Deno.serve(async (req: Request) => {
               content: lastUserMessageForFastPath
             }).catch(() => {});
             
-            persistMessage(supabaseServiceClient, {
+            const assistantPersist = await persistMessage(supabaseServiceClient, {
               user_id: user.id,
               org_id: userOrgId,
               conversation_id: conversation_id,
               role: 'assistant',
               content: responseContent,
-              metadata: { fast_path: true, dynamic_pattern: true, pattern_id: dynPattern.id, duration_ms: fastPathDuration }
-            }).catch(() => {});
+              metadata: { fast_path: true, dynamic_pattern: true, pattern_id: dynPattern.id, duration_ms: fastPathDuration, fast_path_log_id: usageLogId }
+            });
             
-            // Return SSE stream
+            // 🆕 Return SSE stream WITH metadata for feedback
             const encoder = new TextEncoder();
-            const stream = buildFastPathSSEResponse(responseContent, encoder);
+            const fastPathMetadata: FastPathSSEMetadata = {
+              fastPathLogId: usageLogId,
+              messageId: assistantPersist.messageId,
+              patternId: dynPattern.id,
+              isFastPath: true
+            };
+            const stream = buildFastPathSSEResponse(responseContent, encoder, fastPathMetadata);
             
             dynamicPatternMatched = true;
             return new Response(stream, {
@@ -2000,6 +2027,7 @@ Deno.serve(async (req: Request) => {
                 'Connection': 'keep-alive',
                 'X-Fast-Path': 'dynamic-pattern',
                 'X-Pattern-Id': dynPattern.id,
+                'X-Fast-Path-Log-Id': usageLogId,
                 'X-Response-Time-Ms': String(fastPathDuration)
               }
             });
@@ -2075,8 +2103,10 @@ Deno.serve(async (req: Request) => {
             
             console.log(`⚡ [ULTRA FAST PATH] SUCCESS: ${count} items, ${fastPathDuration}ms (vs ~30s with AI)${filterContext ? ` [filter: ${filterContext}]` : ''}`);
             
-            // 🆕 Log hardcoded pattern usage for learning (fire and forget)
+            // 🆕 Log hardcoded pattern usage for learning and GET ID for feedback
+            const hardcodedLogId = crypto.randomUUID();
             Promise.resolve(supabaseServiceClient.from('fast_path_usage_log').insert({
+              id: hardcodedLogId,
               org_id: userOrgId,
               user_query: lastUserMessageForFastPath,
               normalized_query: lastUserMessageForFastPath.toLowerCase().trim(),
@@ -2099,18 +2129,23 @@ Deno.serve(async (req: Request) => {
               content: lastUserMessageForFastPath
             }).catch(() => {});
             
-            persistMessage(supabaseServiceClient, {
+            const hardcodedAssistantPersist = await persistMessage(supabaseServiceClient, {
               user_id: user.id,
               org_id: userOrgId,
               conversation_id: conversation_id,
               role: 'assistant',
               content: responseContent,
-              metadata: { fast_path: true, duration_ms: fastPathDuration, filter: filterContext || null }
-            }).catch(() => {});
+              metadata: { fast_path: true, duration_ms: fastPathDuration, filter: filterContext || null, fast_path_log_id: hardcodedLogId }
+            });
             
-            // Return SSE stream directly
+            // 🆕 Return SSE stream WITH metadata for feedback integration
             const encoder = new TextEncoder();
-            const stream = buildFastPathSSEResponse(responseContent, encoder);
+            const hardcodedFastPathMetadata: FastPathSSEMetadata = {
+              fastPathLogId: hardcodedLogId,
+              messageId: hardcodedAssistantPersist.messageId,
+              isFastPath: true
+            };
+            const stream = buildFastPathSSEResponse(responseContent, encoder, hardcodedFastPathMetadata);
             
             return new Response(stream, {
               headers: {
@@ -2120,6 +2155,7 @@ Deno.serve(async (req: Request) => {
                 'Connection': 'keep-alive',
                 'X-Fast-Path': filterContext ? 'count-query-filtered' : 'count-query',
                 'X-Fast-Path-Filter': filterContext || '',
+                'X-Fast-Path-Log-Id': hardcodedLogId,
                 'X-Response-Time-Ms': String(fastPathDuration)
               }
             });
