@@ -277,7 +277,7 @@ Deno.serve(async (req) => {
         updated++;
         console.log(`🔄 Reinforced pattern ${existing.id} (confidence: ${newConfidence.toFixed(2)})`);
       } else {
-        // Create new pattern candidate
+        // Create new pattern candidate with higher initial confidence (0.70)
         const { data: newPattern, error: createError } = await supabase
           .from('fast_path_patterns')
           .insert({
@@ -289,9 +289,11 @@ Deno.serve(async (req) => {
             filters: candidate.filters,
             active_filter: ['client_sublocations', 'professionals'].includes(candidate.table_name),
             response_template: candidate.response_template,
-            confidence_score: 0.60, // Start at 0.60
+            confidence_score: 0.70, // 🆕 Verhoogd naar 0.70 (was 0.60) - 2-3 positieve feedbacks kunnen activeren
             usage_count: candidate.occurrence_count,
             success_count: candidate.occurrence_count,
+            helpful_count: 0,
+            harmful_count: 0,
             is_active: false, // Not active until confidence >= 0.85
             source: 'auto_learned',
             learned_from_query: candidate.learned_from_query

@@ -75,10 +75,10 @@ Deno.serve(async (req) => {
       
       // 🆕 Update pattern confidence if patternId is available
       if (patternId) {
-        // Get current pattern stats
+        // Get current pattern stats including feedback counts
         const { data: pattern } = await supabase
           .from('fast_path_patterns')
-          .select('confidence_score, usage_count')
+          .select('confidence_score, usage_count, helpful_count, harmful_count, is_active')
           .eq('id', patternId)
           .single();
         
@@ -97,10 +97,17 @@ Deno.serve(async (req) => {
             newConfidence = Math.max(0.0, currentConfidence - learningRate * currentConfidence);
           }
           
+          // 🆕 Automatic activation when confidence >= 0.85
+          const shouldActivate = newConfidence >= 0.85;
+          
+          // 🆕 Update with feedback counts AND automatic activation
           const { error: patternUpdateError } = await supabase
             .from('fast_path_patterns')
             .update({
               confidence_score: newConfidence,
+              helpful_count: isPositive ? (pattern.helpful_count || 0) + 1 : (pattern.helpful_count || 0),
+              harmful_count: !isPositive ? (pattern.harmful_count || 0) + 1 : (pattern.harmful_count || 0),
+              is_active: shouldActivate || pattern.is_active, // Activate if threshold reached, never deactivate here
               updated_at: new Date().toISOString()
             })
             .eq('id', patternId);
@@ -108,7 +115,8 @@ Deno.serve(async (req) => {
           if (patternUpdateError) {
             console.error(`❌ [process-feedback] Error updating pattern confidence:`, patternUpdateError);
           } else {
-            console.log(`✅ [process-feedback] Updated pattern ${patternId} confidence: ${currentConfidence.toFixed(3)} → ${newConfidence.toFixed(3)} (${feedbackType})`);
+            const activationNote = shouldActivate && !pattern.is_active ? ' [ACTIVATED]' : '';
+            console.log(`✅ [process-feedback] Updated pattern ${patternId} confidence: ${currentConfidence.toFixed(3)} → ${newConfidence.toFixed(3)} (${feedbackType})${activationNote}`);
           }
         }
       }
