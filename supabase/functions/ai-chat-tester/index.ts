@@ -5,8 +5,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Default timeout per test scenario (30 seconds)
-const DEFAULT_TIMEOUT_MS = 30000;
+// Default timeout per test scenario (45 seconds - increased for complex queries)
+const DEFAULT_TIMEOUT_MS = 45000;
+
+// Stream read timeout (5 seconds per chunk - prevents premature stream termination)
+const STREAM_READ_TIMEOUT_MS = 5000;
+
+// Maximum run time before graceful shutdown (150s to leave buffer before 180s hard limit)
+const DEFAULT_MAX_RUN_TIME_MS = 150000;
 
 // Retry configuration
 const DEFAULT_MAX_RETRIES = 3;
@@ -147,13 +153,18 @@ function canExecute(breaker: CircuitBreaker, recoveryTimeout: number): boolean {
 // Helper function to read from stream with timeout
 async function readWithTimeout(
   reader: ReadableStreamDefaultReader<Uint8Array>,
-  timeoutMs: number
+  remainingScenarioTime: number,
+  streamReadTimeout: number = STREAM_READ_TIMEOUT_MS
 ): Promise<ReadableStreamReadResult<Uint8Array>> {
-  if (timeoutMs <= 0) {
+  // Use the smaller of: per-chunk timeout OR remaining scenario time
+  const effectiveTimeout = Math.min(streamReadTimeout, remainingScenarioTime);
+  
+  if (effectiveTimeout <= 0) {
     throw new Error("Stream read timeout - remaining time exceeded");
   }
+  
   const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error(`Stream read timeout after ${timeoutMs}ms`)), timeoutMs)
+    setTimeout(() => reject(new Error(`Stream read timeout after ${effectiveTimeout}ms`)), effectiveTimeout)
   );
   return Promise.race([reader.read(), timeoutPromise]);
 }
@@ -434,8 +445,8 @@ async function executeScenario(
           throw new Error(`Scenario timeout: response duurde langer dan ${scenarioTimeout}ms`);
         }
         
-        // Read with timeout
-        const { done, value } = await readWithTimeout(reader, remainingTime);
+        // Read with timeout (5s per chunk, bounded by remaining scenario time)
+        const { done, value } = await readWithTimeout(reader, remainingTime, STREAM_READ_TIMEOUT_MS);
         if (done) break;
         
         buffer += decoder.decode(value, { stream: true });
@@ -602,12 +613,13 @@ Deno.serve(async (req) => {
   }
 
   const startTime = Date.now();
+  let testRunId: string | null = null;
+  
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabase = createClient(supabaseUrl, serviceRoleKey);
   
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
     
     // Parse request body for optional parameters
     let body: { 
@@ -619,6 +631,7 @@ Deno.serve(async (req) => {
       max_retries?: number;         // Configurable retries (0-5)
       failure_threshold?: number;   // Circuit breaker: consecutive failures to open (1-10)
       recovery_timeout_ms?: number; // Circuit breaker: wait time before HALF_OPEN (5000-60000)
+      max_run_time_ms?: number;     // Max total run time for graceful shutdown (default 150s)
     } = {};
     try {
       body = await req.json();
@@ -626,19 +639,20 @@ Deno.serve(async (req) => {
       // Empty body is OK
     }
     
-    const testRunId = body.test_run_id || crypto.randomUUID();
+    testRunId = body.test_run_id || crypto.randomUUID();
     const deploymentId = body.deployment_id || null;
     const deploymentSource = body.deployment_source || "manual";
     const scenariosToRun = body.scenarios || TEST_SCENARIOS.map(s => s.id);
-    const maxConcurrent = Math.min(Math.max(body.max_concurrent || DEFAULT_MAX_CONCURRENT, 1), 10);
+    const maxConcurrent = Math.min(Math.max(body.max_concurrent || 2, 1), 10); // Default reduced to 2 for stability
     const maxRetries = Math.min(Math.max(body.max_retries ?? DEFAULT_MAX_RETRIES, 0), 5);
     const failureThreshold = Math.min(Math.max(body.failure_threshold ?? DEFAULT_FAILURE_THRESHOLD, 1), 10);
     const recoveryTimeout = Math.min(Math.max(body.recovery_timeout_ms ?? DEFAULT_RECOVERY_TIMEOUT_MS, 5000), 60000);
+    const maxRunTime = Math.min(Math.max(body.max_run_time_ms ?? DEFAULT_MAX_RUN_TIME_MS, 30000), 170000);
     
     // Filter scenarios if specific ones requested
     const scenarios = TEST_SCENARIOS.filter(s => scenariosToRun.includes(s.id));
     
-    console.log(`[ai-chat-tester] Starting test run ${testRunId} with ${scenarios.length} scenarios (max concurrent: ${maxConcurrent}, max retries: ${maxRetries}, circuit breaker: threshold=${failureThreshold}, recovery=${recoveryTimeout}ms)`);
+    console.log(`[ai-chat-tester] Starting test run ${testRunId} with ${scenarios.length} scenarios (max concurrent: ${maxConcurrent}, max retries: ${maxRetries}, max run time: ${maxRunTime}ms, circuit breaker: threshold=${failureThreshold}, recovery=${recoveryTimeout}ms)`);
     
     // Create test run record
     const { error: runError } = await supabase
@@ -661,8 +675,36 @@ Deno.serve(async (req) => {
     const allResults: ScenarioResult[] = [];
     const circuitBreaker = createCircuitBreaker();
     const skippedDueToCircuit: string[] = [];
+    const skippedDueToTimeout: string[] = [];
+    let gracefulShutdownTriggered = false;
     
     for (const chunk of scenarioChunks) {
+      // Check graceful shutdown - if we're running out of time, skip remaining tests
+      const elapsedRunTime = Date.now() - startTime;
+      if (elapsedRunTime > maxRunTime) {
+        console.log(`[ai-chat-tester] Graceful shutdown: ${elapsedRunTime}ms elapsed (max: ${maxRunTime}ms) - skipping remaining ${chunk.length} tests`);
+        gracefulShutdownTriggered = true;
+        
+        for (const scenario of chunk) {
+          skippedDueToTimeout.push(scenario.id);
+          allResults.push({
+            scenario_id: scenario.id,
+            question: scenario.question,
+            response: null,
+            expected_tool: scenario.expected_tool,
+            actual_tool_used: null,
+            passed: false,
+            validation_details: [],
+            response_time_ms: 0,
+            error_message: `Skipped: Graceful shutdown - run time exceeded ${maxRunTime}ms`,
+            attempts: 0,
+            retried: false,
+            skipped_by_circuit_breaker: false
+          });
+        }
+        continue;
+      }
+      
       // Check circuit breaker before each batch
       if (!canExecute(circuitBreaker, recoveryTimeout)) {
         console.log(`[ai-chat-tester] Circuit OPEN - skipping ${chunk.length} tests`);
@@ -772,6 +814,17 @@ Deno.serve(async (req) => {
     // Calculate circuit breaker metrics
     const skippedByCircuit = allResults.filter(r => r.skipped_by_circuit_breaker).length;
     
+    // Calculate skipped by timeout
+    const skippedByTimeout = skippedDueToTimeout.length;
+    
+    // Determine final status
+    let finalStatus = "passed";
+    if (gracefulShutdownTriggered) {
+      finalStatus = "partial"; // Some tests were skipped due to timeout
+    } else if (failedTests > 0) {
+      finalStatus = "failed";
+    }
+    
     // Update test run with summary
     await supabase
       .from("ai_chat_test_runs")
@@ -779,12 +832,12 @@ Deno.serve(async (req) => {
         passed_tests: passedTests,
         failed_tests: failedTests,
         avg_response_time_ms: avgResponseTime,
-        status: failedTests > 0 ? "failed" : "passed",
+        status: finalStatus,
         completed_at: new Date().toISOString()
       })
       .eq("id", testRunId);
     
-    console.log(`[ai-chat-tester] Test run completed: ${passedTests}/${scenarios.length} passed in ${totalTime}ms (${speedupFactor}x speedup, ${retriedTests} retried, ${skippedByCircuit} skipped by circuit breaker)`);
+    console.log(`[ai-chat-tester] Test run completed: ${passedTests}/${scenarios.length} passed in ${totalTime}ms (${speedupFactor}x speedup, ${retriedTests} retried, ${skippedByCircuit} skipped by circuit, ${skippedByTimeout} skipped by timeout)`);
     
     return new Response(
       JSON.stringify({
@@ -794,16 +847,18 @@ Deno.serve(async (req) => {
         total_tests: scenarios.length,
         passed_tests: passedTests,
         failed_tests: failedTests,
-        pass_rate: Math.round((passedTests / scenarios.length) * 100),
+        pass_rate: scenarios.length > 0 ? Math.round((passedTests / scenarios.length) * 100) : 0,
         avg_response_time_ms: avgResponseTime,
         total_time_ms: totalTime,
         sequential_estimate_ms: sequentialEstimate,
         speedup_factor: speedupFactor,
         max_concurrent_used: maxConcurrent,
         max_retries_used: maxRetries,
+        max_run_time_used: maxRunTime,
         retried_tests: retriedTests,
         total_attempts: totalAttempts,
         retry_rate: retryRate,
+        graceful_shutdown_triggered: gracefulShutdownTriggered,
         circuit_breaker: {
           final_state: circuitBreaker.state,
           times_tripped: circuitBreaker.totalTripped,
@@ -813,7 +868,11 @@ Deno.serve(async (req) => {
           failure_threshold_used: failureThreshold,
           recovery_timeout_used: recoveryTimeout
         },
-        status: failedTests > 0 ? "failed" : "passed",
+        timeout_info: {
+          tests_skipped: skippedByTimeout,
+          skipped_scenarios: skippedDueToTimeout
+        },
+        status: finalStatus,
         results: allResults
       }),
       { 
@@ -822,10 +881,31 @@ Deno.serve(async (req) => {
     );
   } catch (error) {
     console.error("[ai-chat-tester] Fatal error:", error);
+    
+    // Cleanup: Mark test run as crashed if we have the context
+    if (testRunId) {
+      try {
+        await supabase
+          .from("ai_chat_test_runs")
+          .update({
+            status: "crashed",
+            completed_at: new Date().toISOString()
+          })
+          .eq("id", testRunId)
+          .eq("status", "running"); // Only update if still running
+        
+        console.log(`[ai-chat-tester] Marked test run ${testRunId} as crashed`);
+      } catch (cleanupError) {
+        console.error("[ai-chat-tester] Failed to mark run as crashed:", cleanupError);
+      }
+    }
+    
     return new Response(
       JSON.stringify({
         success: false,
-        error: error instanceof Error ? error.message : String(error)
+        test_run_id: testRunId,
+        error: error instanceof Error ? error.message : String(error),
+        crashed: true
       }),
       { 
         status: 500,
