@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
             .from('fast_path_patterns')
             .update({
               confidence_score: newConfidence,
-              last_feedback_at: new Date().toISOString()
+              updated_at: new Date().toISOString()
             })
             .eq('id', patternId);
           

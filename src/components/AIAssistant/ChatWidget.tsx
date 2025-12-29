@@ -200,6 +200,10 @@ interface Message {
   isProcessing?: boolean; // Document verwerking actief
   jobIds?: string[]; // Processing job IDs voor realtime tracking
   agentAction?: AgentActionData; // Agent action card data for confirmation flow
+  // Fast Path metadata for feedback
+  isFastPath?: boolean;
+  fastPathLogId?: string;
+  patternId?: string;
 }
 
 // Legacy static quick actions removed - now using PAGE_CONTEXTS for dynamic actions
@@ -841,6 +845,10 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
       let chunkCount = 0;
       let usedKnowledge: string[] = [];
       let messageId: string | undefined;
+      // Fast Path metadata
+      let isFastPath = false;
+      let fastPathLogId: string | undefined;
+      let patternId: string | undefined;
 
       // Add empty assistant message that we'll update
       setMessages(prev => [...prev, { role: 'assistant', content: '', showInteractive: false, usedKnowledge: [] }]);
@@ -872,6 +880,17 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
 
             try {
               const parsed = JSON.parse(jsonStr);
+              
+              // 🆕 Handle Fast Path metadata event
+              if (parsed.type === 'fast_path_metadata' && parsed.data) {
+                const fpMeta = parsed.data;
+                isFastPath = fpMeta.isFastPath === true;
+                fastPathLogId = fpMeta.fastPathLogId;
+                patternId = fpMeta.patternId;
+                if (fpMeta.messageId) messageId = fpMeta.messageId;
+                log.log('⚡ Fast Path metadata:', { isFastPath, fastPathLogId, patternId });
+              }
+              
               const content = parsed.choices?.[0]?.delta?.content;
               const metadata = parsed.choices?.[0]?.delta?.metadata;
               
@@ -901,6 +920,10 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
                     usedKnowledge: usedKnowledge.length > 0 ? usedKnowledge : [],
                     messageId: messageId || undefined,
                     agentAction: parsedResponse.agentAction,
+                    // Fast Path metadata
+                    isFastPath,
+                    fastPathLogId,
+                    patternId,
                   };
                   return updated;
                 });
@@ -1575,6 +1598,9 @@ export const ChatWidget = ({ embedded = false, trainingMode = false }: ChatWidge
                             messageId={msg.messageId}
                             usedKnowledge={msg.usedKnowledge}
                             isNewMessage={idx === lastMessageIndex}
+                            isFastPath={msg.isFastPath}
+                            fastPathLogId={msg.fastPathLogId}
+                            patternId={msg.patternId}
                           />
                           {msg.usedKnowledge && msg.usedKnowledge.length > 0 && (
                             <AIMemoryPanel knowledgeIds={msg.usedKnowledge} />
