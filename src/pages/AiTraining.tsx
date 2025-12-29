@@ -47,6 +47,7 @@ import { ResendInboundSetup } from "@/components/AITraining/ResendInboundSetup";
 import { EmailReplyTestPanel } from "@/components/AITraining/EmailReplyTestPanel";
 import { AIChatTestDashboard } from "@/components/AITraining/AIChatTestDashboard";
 import { PatternOptimizationMonitor } from "@/components/AITraining/PatternOptimizationMonitor";
+import { ErrorSimulationTest } from "@/components/AITraining/ErrorSimulationTest";
 import { toast } from "sonner";
 
 const AiTraining = () => {
@@ -224,6 +225,7 @@ const AiTraining = () => {
                     <div className="space-y-6">
                       <UnifiedAIHealthDashboard />
                       <PatternOptimizationMonitor />
+                      <ErrorSimulationTest />
                       <LearningDashboard />
                       <SystemHealthDashboard />
                     </div>
