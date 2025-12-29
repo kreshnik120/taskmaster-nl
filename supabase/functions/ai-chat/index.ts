@@ -16,12 +16,92 @@ import { logMatchKnowledgeCall, calculateAvgSimilarity, countSharedResults } fro
 // SYSTEM PROMPT VERSION FOR CACHE INVALIDATION
 // ============================================
 // Increment this version when system prompt changes to invalidate old cached responses
-const SYSTEM_PROMPT_VERSION = "v2.12.0-learning-stats-tool";
+const SYSTEM_PROMPT_VERSION = "v2.13.0-count-fast-path";
 
 // ============================================
 // CACHE CONFIGURATION
 // ============================================
 const CACHE_TTL_MINUTES = 5; // Short TTL for development/testing (was 24 hours)
+
+// ============================================
+// ⚡ ULTRA FAST PATH: COUNT QUERIES (NO AI NEEDED)
+// ============================================
+// Pattern: Direct database count for simple "hoeveel" questions
+// Goal: 30+ seconds → <100ms response time
+interface FastPathPattern {
+  pattern: RegExp;
+  table: string;
+  countColumn: string;
+  activeFilter?: boolean;
+  responseTemplate: (count: number) => string;
+}
+
+const FAST_PATH_COUNT_PATTERNS: FastPathPattern[] = [
+  {
+    pattern: /^hoeveel\s+(werklocaties|sublocaties|locaties)\s*(zijn er|hebben we|totaal|in totaal)?/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    responseTemplate: (count: number) => `📍 Er zijn **${count}** actieve werklocaties in het systeem.`
+  },
+  {
+    pattern: /^hoeveel\s+(professionals|zzp.?ers|uitzendkrachten)/i,
+    table: 'professionals',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `👥 Er zijn **${count}** professionals geregistreerd in het systeem.`
+  },
+  {
+    pattern: /^hoeveel\s+(sollicitaties|kandidaten|aanmeldingen)/i,
+    table: 'professional_applications',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `📋 Er zijn **${count}** sollicitaties in het systeem.`
+  },
+  {
+    pattern: /^hoeveel\s+(klanten|cliënten|organisaties|opdrachtgevers)/i,
+    table: 'client_organizations',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `🏢 Er zijn **${count}** klantorganisaties geregistreerd.`
+  },
+  {
+    pattern: /^hoeveel\s+(plaatsingen|opdrachten)/i,
+    table: 'assignments',
+    countColumn: 'id',
+    activeFilter: false,
+    responseTemplate: (count: number) => `✅ Er zijn **${count}** plaatsingen in het systeem.`
+  }
+];
+
+// Helper: Build SSE response for fast path (no AI streaming needed)
+function buildFastPathSSEResponse(content: string, encoder: TextEncoder): ReadableStream {
+  return new ReadableStream({
+    start(controller) {
+      // Send content as single SSE chunk
+      const sseData = JSON.stringify({
+        choices: [{
+          delta: { content },
+          index: 0,
+          finish_reason: null
+        }]
+      });
+      controller.enqueue(encoder.encode(`data: ${sseData}\n\n`));
+      
+      // Send finish chunk
+      const finishData = JSON.stringify({
+        choices: [{
+          delta: {},
+          index: 0,
+          finish_reason: 'stop'
+        }]
+      });
+      controller.enqueue(encoder.encode(`data: ${finishData}\n\n`));
+      controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+      controller.close();
+    }
+  });
+}
 
 // ============================================
 // SHA256 HASH HELPER FOR CACHE KEYS
@@ -1277,6 +1357,84 @@ Deno.serve(async (req: Request) => {
     }
 
     // ============================================
+    // ⚡ ULTRA FAST PATH: COUNT QUERIES (NO AI NEEDED)
+    // ============================================
+    // Check if this is a simple count query that can be answered directly
+    const lastUserMessageForFastPath = messages[messages.length - 1]?.content || '';
+    
+    for (const fastPattern of FAST_PATH_COUNT_PATTERNS) {
+      if (fastPattern.pattern.test(lastUserMessageForFastPath)) {
+        console.log(`⚡ [ULTRA FAST PATH] Count query detected: ${fastPattern.table}`);
+        const fastPathStart = Date.now();
+        
+        try {
+          // Direct database count - NO AI needed!
+          let countQuery = supabaseClient
+            .from(fastPattern.table)
+            .select(fastPattern.countColumn, { count: 'exact', head: true });
+          
+          // Add is_active filter for sublocations
+          if (fastPattern.activeFilter && fastPattern.table === 'client_sublocations') {
+            countQuery = countQuery.eq('is_active', true);
+          }
+          
+          // Add deleted_at filter for applications
+          if (fastPattern.table === 'professional_applications') {
+            countQuery = countQuery.is('deleted_at', null);
+          }
+          
+          const { count, error: countError } = await countQuery;
+          
+          if (countError) {
+            console.error(`⚡ [ULTRA FAST PATH] Count error:`, countError);
+            // Fall through to normal processing
+          } else {
+            const responseContent = fastPattern.responseTemplate(count || 0);
+            const fastPathDuration = Date.now() - fastPathStart;
+            
+            console.log(`⚡ [ULTRA FAST PATH] SUCCESS: ${count} items, ${fastPathDuration}ms (vs ~30s with AI)`);
+            
+            // Persist messages in background
+            persistMessage(supabaseServiceClient, {
+              user_id: user.id,
+              org_id: userOrgId,
+              conversation_id: conversation_id,
+              role: 'user',
+              content: lastUserMessageForFastPath
+            }).catch(() => {});
+            
+            persistMessage(supabaseServiceClient, {
+              user_id: user.id,
+              org_id: userOrgId,
+              conversation_id: conversation_id,
+              role: 'assistant',
+              content: responseContent,
+              metadata: { fast_path: true, duration_ms: fastPathDuration }
+            }).catch(() => {});
+            
+            // Return SSE stream directly
+            const encoder = new TextEncoder();
+            const stream = buildFastPathSSEResponse(responseContent, encoder);
+            
+            return new Response(stream, {
+              headers: {
+                ...corsHeaders,
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'X-Fast-Path': 'count-query',
+                'X-Response-Time-Ms': String(fastPathDuration)
+              }
+            });
+          }
+        } catch (fastPathError) {
+          console.error(`⚡ [ULTRA FAST PATH] Error, falling back to normal:`, fastPathError);
+          // Fall through to normal processing
+        }
+      }
+    }
+
+    // ============================================
     // 🚀 FAST PATH DETECTION FOR SIMPLE DATA QUERIES
     // ============================================
     const lastUserMessageForCache = messages[messages.length - 1]?.content || '';
@@ -1286,7 +1444,7 @@ Deno.serve(async (req: Request) => {
     const isSimpleDataQuery = /^(hoeveel|wie|welke|wanneer|aantal|lijst van|overzicht|toon|geef|laat.*zien)/i.test(lastUserMessageForCache);
     
     // Detect recruitment queries (professionals, clients, placements)
-    const isRecruitmentQuery = /(professional|sollicitant|klant|client|plaatsing|bureau|abczorg|citozorg)/i.test(lastUserMessageLower);
+    const isRecruitmentQuery = /(professional|sollicitant|klant|client|plaatsing|bureau|abczorg|citozorg|werklocatie|sublocatie|locatie)/i.test(lastUserMessageLower);
     
     // Fast path: simple data queries about recruitment data
     const useFastPath = isSimpleDataQuery && isRecruitmentQuery;
@@ -2912,10 +3070,15 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
         type: "function",
         function: {
           name: "query_sublocations",
-          description: "Zoek DIRECT in werklocaties/sublocaties (930+ locaties). Gebruik voor specifieke locaties, telefoonnummers, adressen. Sneller dan query_clients voor directe sublocation zoekopdrachten.",
+          description: "Zoek DIRECT in werklocaties/sublocaties (930+ locaties). Gebruik voor specifieke locaties, telefoonnummers, adressen. Sneller dan query_clients voor directe sublocation zoekopdrachten. ⚡ TIP: Gebruik count_only=true voor telvragen (hoeveel werklocaties) - VEEL sneller!",
           parameters: {
             type: "object",
             properties: {
+              count_only: {
+                type: "boolean",
+                description: "⚡ SNELLE TELLING: Als true, retourneer alleen het totaal aantal (geen data ophalen). Gebruik dit voor 'hoeveel' vragen - 100x sneller!",
+                default: false
+              },
               filter: {
                 type: "object",
                 properties: {
@@ -4237,7 +4400,57 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
                         case "query_sublocations":
                           console.log("🔍 Querying sublocations directly...", args);
                           
-                          // Direct query on client_sublocations with joins
+                          // ⚡ FAST COUNT PATH: No data retrieval needed
+                          if (args.count_only === true) {
+                            console.log("⚡ [COUNT_ONLY] Fast count query - no data retrieval");
+                            const countStart = Date.now();
+                            
+                            let countQuery = supabaseClient
+                              .from('client_sublocations')
+                              .select('id', { count: 'exact', head: true });
+                            
+                            // Apply same filters as regular query
+                            if (args.filter) {
+                              if (args.filter.plaats) {
+                                countQuery = countQuery.ilike('plaats', `%${args.filter.plaats}%`);
+                              }
+                              if (args.filter.sector) {
+                                countQuery = countQuery.contains('sector', [args.filter.sector]);
+                              }
+                              if (args.filter.doelgroep) {
+                                countQuery = countQuery.contains('doelgroep', [args.filter.doelgroep]);
+                              }
+                              if (args.filter.is_active !== undefined) {
+                                countQuery = countQuery.eq('is_active', args.filter.is_active);
+                              } else {
+                                countQuery = countQuery.eq('is_active', true);
+                              }
+                            } else {
+                              countQuery = countQuery.eq('is_active', true);
+                            }
+                            
+                            const { count: sublocCount, error: countError } = await countQuery;
+                            const countDuration = Date.now() - countStart;
+                            
+                            if (countError) {
+                              console.error("Count query error:", countError);
+                              result = {
+                                success: false,
+                                message: `❌ Fout bij tellen werklocaties: ${countError.message}`
+                              };
+                            } else {
+                              console.log(`⚡ [COUNT_ONLY] ${sublocCount} items in ${countDuration}ms`);
+                              result = {
+                                success: true,
+                                total_count: sublocCount,
+                                query_time_ms: countDuration,
+                                message: `📍 Er zijn **${sublocCount}** ${args.filter?.is_active === false ? 'inactieve' : 'actieve'} werklocaties${args.filter?.plaats ? ` in ${args.filter.plaats}` : ''}${args.filter?.sector ? ` (sector: ${args.filter.sector})` : ''} in het systeem.`
+                              };
+                            }
+                            break;
+                          }
+                          
+                          // Regular query with full data retrieval
                           let sublocQuery = supabaseClient
                             .from('client_sublocations')
                             .select(`
