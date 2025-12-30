@@ -1,9 +1,9 @@
 // Cleanup Orphan Documents - Scheduled background job
-// Version 1.0.0
+// Version 1.1.0 - Added overige_certificeringen_paths array handling
 // Purpose: Scans for database references to files that don't exist in storage and cleans them up
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 
 // Document field mapping for professional_applications table
 const DOCUMENT_FIELD_MAP: Record<string, {
@@ -78,6 +78,8 @@ interface OrphanStats {
   applicationDocumentsScanned: number;
   orphansDetected: number;
   orphansCleaned: number;
+  arrayOrphansDetected: number;
+  arrayOrphansCleaned: number;
   errors: string[];
   details: Array<{
     applicationId: string;
@@ -279,12 +281,20 @@ async function scanApplicationDocuments(
   stats.applicationDocumentsScanned = documents.length;
   console.log(`📊 Found ${documents.length} document records`);
   
-  // Determine bucket based on document_type
+  // Determine bucket based on document_type using DOCUMENT_FIELD_MAP for consistency
   const getBucket = (docType: string | null): string => {
-    if (docType === 'cv') return 'application-cvs';
-    if (docType?.startsWith('zzp_') || ['beroepsaansprakelijkheid', 'kvk_uittreksel', 'klachtenportaal_wkkgz', 'identiteitsbewijs', 'bhv_certificaat', 'tillift_certificaat'].includes(docType || '')) {
+    if (!docType) return 'application-documents';
+    
+    // Check DOCUMENT_FIELD_MAP first for consistency
+    if (DOCUMENT_FIELD_MAP[docType]) {
+      return DOCUMENT_FIELD_MAP[docType].bucket;
+    }
+    
+    // Fallback logic for zzp documents
+    if (docType.startsWith('zzp_') || ['beroepsaansprakelijkheid', 'kvk_uittreksel', 'klachtenportaal_wkkgz', 'identiteitsbewijs', 'bhv_certificaat', 'tillift_certificaat', 'overige_certificeringen'].includes(docType)) {
       return 'zzp-documents';
     }
+    
     return 'application-documents';
   };
   
@@ -338,6 +348,103 @@ async function scanApplicationDocuments(
   }
 }
 
+// Scan and cleanup overige_certificeringen_paths JSONB array
+async function scanOverigeCertificeringen(
+  supabase: ReturnType<typeof createAdminClient>,
+  stats: OrphanStats
+): Promise<void> {
+  console.log('📋 Scanning overige_certificeringen_paths arrays for orphan files...');
+  
+  const { data: applications, error } = await supabase
+    .from('professional_applications')
+    .select('id, email_from, overige_certificeringen_paths')
+    .not('overige_certificeringen_paths', 'is', null)
+    .is('deleted_at', null)
+    .limit(MAX_APPLICATIONS_PER_RUN);
+  
+  if (error) {
+    console.error('❌ Error fetching applications with overige_certificeringen:', error);
+    stats.errors.push(`Failed to fetch overige_certificeringen: ${error.message}`);
+    return;
+  }
+  
+  if (!applications || applications.length === 0) {
+    console.log('✅ No applications with overige_certificeringen_paths found');
+    return;
+  }
+  
+  console.log(`📊 Found ${applications.length} applications with overige_certificeringen_paths`);
+  
+  for (const app of applications) {
+    const paths = app.overige_certificeringen_paths as string[] | null;
+    
+    if (!paths || !Array.isArray(paths) || paths.length === 0) {
+      continue;
+    }
+    
+    // Check each path in the array
+    const validPaths: string[] = [];
+    const orphanPaths: string[] = [];
+    
+    for (const path of paths) {
+      if (typeof path !== 'string' || !path) {
+        continue;
+      }
+      
+      const exists = await checkFileExists(supabase, 'zzp-documents', path);
+      
+      if (exists) {
+        validPaths.push(path);
+      } else {
+        orphanPaths.push(path);
+        stats.arrayOrphansDetected++;
+        console.log(`🗑️ Array orphan detected: ${path} for application ${app.id}`);
+      }
+    }
+    
+    // Update if orphans were found
+    if (orphanPaths.length > 0) {
+      const newValue = validPaths.length > 0 ? validPaths : null;
+      
+      const { error: updateError } = await supabase
+        .from('professional_applications')
+        .update({ overige_certificeringen_paths: newValue })
+        .eq('id', app.id);
+      
+      if (updateError) {
+        console.error(`❌ Failed to cleanup array for ${app.id}:`, updateError);
+        stats.errors.push(`Failed to cleanup array for ${app.id}: ${updateError.message}`);
+        
+        for (const path of orphanPaths) {
+          stats.details.push({
+            applicationId: app.id,
+            documentType: 'overige_certificeringen',
+            filePath: path,
+            action: 'error',
+            error: updateError.message
+          });
+        }
+      } else {
+        stats.arrayOrphansCleaned += orphanPaths.length;
+        
+        for (const path of orphanPaths) {
+          stats.details.push({
+            applicationId: app.id,
+            documentType: 'overige_certificeringen',
+            filePath: path,
+            action: 'cleaned'
+          });
+        }
+        
+        console.log(`✅ Cleaned ${orphanPaths.length} array orphan(s) for application ${app.id}`);
+      }
+    }
+    
+    // Rate limiting between applications
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+}
+
 // Log cleanup results to system_events
 async function logCleanupResults(
   supabase: ReturnType<typeof createAdminClient>,
@@ -356,6 +463,8 @@ async function logCleanupResults(
         application_documents_scanned: stats.applicationDocumentsScanned,
         orphans_detected: stats.orphansDetected,
         orphans_cleaned: stats.orphansCleaned,
+        array_orphans_detected: stats.arrayOrphansDetected,
+        array_orphans_cleaned: stats.arrayOrphansCleaned,
         errors_count: stats.errors.length,
         duration_ms: durationMs
       },
@@ -387,21 +496,27 @@ Deno.serve(async (req) => {
       applicationDocumentsScanned: 0,
       orphansDetected: 0,
       orphansCleaned: 0,
+      arrayOrphansDetected: 0,
+      arrayOrphansCleaned: 0,
       errors: [],
       details: []
     };
 
-    // Scan both tables
+    // Scan all document sources
     await scanProfessionalApplications(supabase, stats);
     await scanApplicationDocuments(supabase, stats);
+    await scanOverigeCertificeringen(supabase, stats);
 
     const durationMs = Date.now() - startTime;
 
     // Log results
     await logCleanupResults(supabase, stats, durationMs);
 
+    const totalOrphans = stats.orphansDetected + stats.arrayOrphansDetected;
+    const totalCleaned = stats.orphansCleaned + stats.arrayOrphansCleaned;
+
     console.log(`✅ Cleanup completed in ${durationMs}ms`);
-    console.log(`📊 Summary: ${stats.orphansDetected} orphans detected, ${stats.orphansCleaned} cleaned`);
+    console.log(`📊 Summary: ${totalOrphans} orphans detected, ${totalCleaned} cleaned`);
 
     return jsonResponse({
       success: true,
@@ -411,6 +526,8 @@ Deno.serve(async (req) => {
         applicationDocumentsScanned: stats.applicationDocumentsScanned,
         orphansDetected: stats.orphansDetected,
         orphansCleaned: stats.orphansCleaned,
+        arrayOrphansDetected: stats.arrayOrphansDetected,
+        arrayOrphansCleaned: stats.arrayOrphansCleaned,
         errorsCount: stats.errors.length
       },
       durationMs
