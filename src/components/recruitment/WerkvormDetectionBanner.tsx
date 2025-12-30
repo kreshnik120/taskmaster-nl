@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { calculateHRCompletenessScore, detectMissingInfoHR } from '@/lib/hrValidation';
 
 interface WerkvormDetectionBannerProps {
   applicationId: string;
@@ -48,16 +49,22 @@ export function WerkvormDetectionBanner({
         werkvorm: selectedWerkvorm
       };
 
+      // Recalculate missing info and completeness score with new werkvorm
+      const newMissingInfo = detectMissingInfoHR(updatedExtractedData);
+      const newScore = calculateHRCompletenessScore(updatedExtractedData);
+
       const { error: updateError } = await supabase
         .from('professional_applications')
         .update({ 
-          extracted_data: updatedExtractedData as any
+          extracted_data: updatedExtractedData as any,
+          missing_info: newMissingInfo,
+          completeness_score: Math.max(0, Math.min(100, newScore))
         })
         .eq('id', applicationId);
 
       if (updateError) throw updateError;
 
-      toast.success(`Werkvorm ingesteld op ${selectedWerkvorm}`);
+      toast.success(`Werkvorm ingesteld op ${selectedWerkvorm} (${newScore}% compleet)`);
       onWerkvormUpdated();
     } catch (error) {
       console.error('Error saving werkvorm:', error);
