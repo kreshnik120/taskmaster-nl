@@ -35,8 +35,9 @@ interface SignatureInfo {
 // ============= DUO WEBSITE BROWSER VERIFICATION (PRIMARY) =============
 
 const DUO_CHECK_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
-const DEPLOYMENT_VERSION = 'v2.1.0-2025-12-30T12:30:00Z';
-const MAX_DUO_RETRIES = 2;
+const DUO_HOME_URL = 'https://zakelijk.duo.nl/';
+const DEPLOYMENT_VERSION = 'v2.2.0-antibot-2025-12-30';
+const MAX_DUO_RETRIES = 3;
 
 /**
  * ECHTE DUO verificatie via browser automation (Browserless)
@@ -102,10 +103,77 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
     
     console.log('✅ Connected to Browserless');
 
-    // Step 3: Open DUO diplomacontrole page
+    // Step 3: Open DUO diplomacontrole page with ANTI-BOT DETECTION
     const page = await browser.newPage();
     
-    // Set realistic browser headers to avoid bot detection
+    // ============= ANTI-BOT DETECTION: Puppeteer Stealth =============
+    // Apply stealth BEFORE any navigation using raw JS string
+    await page.evaluateOnNewDocument(`
+      // 1. Mask webdriver property (most important!)
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined,
+      });
+      
+      // 2. Add Chrome runtime object (missing in headless)
+      window.chrome = {
+        runtime: {},
+        loadTimes: function() {},
+        csi: function() {},
+        app: {},
+      };
+      
+      // 3. Override permissions query
+      const originalQuery = window.navigator.permissions?.query;
+      if (originalQuery) {
+        window.navigator.permissions.query = (parameters) => (
+          parameters.name === 'notifications'
+            ? Promise.resolve({ state: Notification?.permission || 'denied' })
+            : originalQuery.call(navigator.permissions, parameters)
+        );
+      }
+      
+      // 4. Set proper plugins array (headless has empty)
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [
+          { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
+          { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
+          { name: 'Native Client', filename: 'internal-nacl-plugin' },
+        ],
+      });
+      
+      // 5. Set proper languages
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['nl-NL', 'nl', 'en-US', 'en'],
+      });
+      
+      // 6. Override platform (Linux in some Docker = suspicious)
+      Object.defineProperty(navigator, 'platform', {
+        get: () => 'Win32',
+      });
+      
+      // 7. Mask headless Chrome in user agent data
+      if (navigator.userAgentData) {
+        Object.defineProperty(navigator.userAgentData, 'brands', {
+          get: () => [
+            { brand: 'Google Chrome', version: '120' },
+            { brand: 'Chromium', version: '120' },
+            { brand: 'Not?A_Brand', version: '24' },
+          ],
+        });
+      }
+      
+      // 8. Override WebGL vendor/renderer (headless shows "Google SwiftShader")
+      const getParameter = WebGLRenderingContext.prototype.getParameter;
+      WebGLRenderingContext.prototype.getParameter = function(parameter) {
+        if (parameter === 37445) return 'Intel Inc.';
+        if (parameter === 37446) return 'Intel Iris OpenGL Engine';
+        return getParameter.call(this, parameter);
+      };
+    `);
+    
+    console.log('🛡️ Anti-bot stealth scripts injected');
+    
+    // Set realistic browser headers
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     await page.setExtraHTTPHeaders({
       'Accept-Language': 'nl-NL,nl;q=0.9,en;q=0.8',
@@ -114,7 +182,21 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
       'DNT': '1',
       'Connection': 'keep-alive',
       'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
     });
+    
+    // Step 3b: Pre-load cookies by visiting homepage first
+    console.log('🍪 Pre-loading cookies from DUO homepage...');
+    try {
+      await page.goto(DUO_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await new Promise(r => setTimeout(r, 1500)); // Let cookies set
+      console.log('✅ Homepage cookies loaded');
+    } catch (e) {
+      console.log('⚠️ Homepage pre-load failed, continuing directly to diplomacontrole...');
+    }
     
     console.log(`📄 Navigating to ${DUO_CHECK_URL}...`);
     
@@ -189,13 +271,38 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
       };
     }
     
-    if (pageUrl.includes('inloggen') || pageUrl.includes('login')) {
-      console.log('⚠️ Redirected to login page - this shouldn\'t happen for diplomacontrole');
+    // Check for login page redirect (bot detection or wrong page)
+    const pageTextLower = (await page.evaluate(`document.body.innerText.substring(0, 2000)`) as string).toLowerCase();
+    const isLoginPage = 
+      pageUrl.includes('inloggen') || 
+      pageUrl.includes('login') ||
+      pageUrl.includes('mijn-duo') ||
+      pageTextLower.includes('inloggen') ||
+      pageTextLower.includes('eherkenning') ||
+      pageTextLower.includes('digid');
+    
+    if (isLoginPage && !pageTextLower.includes('diplomacontrole')) {
+      console.log('⚠️ Bot detection triggered - redirected to login page');
+      console.log('Page URL:', pageUrl);
+      console.log('Page content preview:', pageTextLower.substring(0, 300));
+      
+      // Take screenshot for debugging
+      let debugScreenshot = '';
+      try {
+        debugScreenshot = await page.screenshot({ encoding: 'base64' }) || '';
+      } catch (e) {}
+      
       return {
         status: 'manual_review',
         method: 'duo_browser',
-        message: 'DUO portal vereist onverwacht inloggen - gebruik handmatige verificatie',
-        details: { redirect_url: pageUrl },
+        message: 'DUO website detecteerde automatisering - gebruik handmatige verificatie via zakelijk.duo.nl',
+        details: { 
+          redirect_url: pageUrl,
+          bot_detected: true,
+          page_preview: pageTextLower.substring(0, 500),
+          screenshot_preview: debugScreenshot.substring(0, 100) + '...',
+          version: DEPLOYMENT_VERSION,
+        },
       };
     }
 
