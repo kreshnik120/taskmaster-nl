@@ -412,11 +412,11 @@ const TEST_SCENARIOS: TestScenario[] = [
   },
   {
     id: "phone_lookup_prisma",
-    question: "Wat is het telefoonnummer van een Prisma werklocatie?",
+    question: "Wat is het telefoonnummer van Prisma Zuringveld in Teteringen?",
     expected_tool: "query_sublocations",
     timeout_ms: 30000,
     validations: [
-      { type: "matches_regex", pattern: "\\d{2,4}[-\\s]?\\d{6,7}", description: "Moet een geldig telefoonnummer bevatten" },
+      { type: "matches_regex", pattern: "088[-\\s]?770", description: "Moet Prisma telefoonnummer bevatten (088-770...)" },
       { type: "mentions", keywords: ["Prisma"], description: "Moet Prisma vermelden" }
     ]
   },

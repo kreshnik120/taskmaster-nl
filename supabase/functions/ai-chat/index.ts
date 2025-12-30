@@ -281,7 +281,8 @@ const FAST_PATH_COUNT_PATTERNS: FastPathPattern[] = [
   },
   {
     // Generic "locaties" or "plaatsen" -> werklocaties (sublocations) by default
-    pattern: /^(hoeveel|tel)\s+(de\s+|het\s+|alle\s+)?(actieve\s+)?(locaties|plaatsen)\s*(zijn\s*er|hebben\s*we|totaal)?$/i,
+    // Fixed: allow "hebben we" at the end with optional question mark and flexible word order
+    pattern: /^(hoeveel|tel)\s+(de\s+|het\s+|alle\s+)?(actieve\s+)?(locaties|plaatsen)(\s+(zijn\s*er|hebben\s*we|totaal|in\s*totaal))?(\s*\?)?$/i,
     table: 'client_sublocations',
     countColumn: 'id',
     activeFilter: true,
