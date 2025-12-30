@@ -1,10 +1,10 @@
 // Master Scheduler - central cron job orchestration
-// Version 2.0.0 - Pattern Optimization Support
+// Version 2.0.1 - Orphan Cleanup Support
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const VERSION = '2.0.0-pattern-optimization';
+const VERSION = '2.0.1-orphan-cleanup';
 
-// Active scheduled functions (13 schedules for 5 learning loops + 5 support + 3 fast path optimization)
+// Active scheduled functions (14 schedules for 5 learning loops + 5 support + 3 fast path optimization + 1 orphan cleanup)
 const SCHEDULES = {
   'auto-resolve-alerts': '*/30 * * * *',        // Every 30 minutes (ACE Alert Resolution)
   'smart-deduplicator': '30 * * * *',           // Every hour at :30 (Learning Loop 5)
@@ -24,6 +24,8 @@ const SCHEDULES = {
   'pattern-health-monitor': '*/15 * * * *',     // Every 15 minutes (Real-time health detection)
   'learn-fast-path-patterns': '0 5 * * *',      // Daily at 05:00 (Learn new patterns from usage)
   'cleanup-fast-path-patterns': '0 */4 * * *',  // Every 4 hours (Stricter cleanup cycle)
+  // 🆕 Document Orphan Cleanup
+  'cleanup-orphan-documents': '30 6 * * *',     // Daily at 06:30 (Cleanup orphan document references)
   // Note: continuous-learner (Loop 1) runs via database trigger, not scheduler
 };
 
