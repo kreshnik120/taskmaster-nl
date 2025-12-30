@@ -498,7 +498,7 @@ export function DocumentUploadSection({
 
         if (updateError) throw updateError;
       } else {
-        // VOG/Diploma stored in extracted_data
+        // VOG/Diploma stored in extracted_data AND separate columns
         const fieldName = docType === 'vog' ? 'vog_file_path' : 'diploma_file_path';
         
         const { data: currentApp, error: fetchError } = await supabase
@@ -521,7 +521,12 @@ export function DocumentUploadSection({
           updateData.vog_validation_status = 'missing';
           updateData.vog_verification_response = null;
         } else {
+          // FIX: Ook de diploma_file_path kolom op null zetten zodat upload weer mogelijk is
+          updateData.diploma_file_path = null;
           updateData.diploma_validation_status = 'missing';
+          updateData.diploma_verification_response = null;
+          updateData.duo_verification_result = null;
+          updateData.duo_verified_at = null;
         }
 
         const { error: updateError } = await supabase
