@@ -103,20 +103,49 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
     // Step 3: Open DUO diplomacontrole page
     const page = await browser.newPage();
     
-    // Set Dutch language headers
+    // Set realistic browser headers to avoid bot detection
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     await page.setExtraHTTPHeaders({
       'Accept-Language': 'nl-NL,nl;q=0.9,en;q=0.8',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'DNT': '1',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
     });
     
     console.log(`📄 Navigating to ${DUO_CHECK_URL}...`);
-    await page.goto(DUO_CHECK_URL, { 
-      waitUntil: 'networkidle2',
-      timeout: 30000,
+    
+    // Use domcontentloaded instead of networkidle2 for faster loading
+    const response = await page.goto(DUO_CHECK_URL, { 
+      waitUntil: 'domcontentloaded',
+      timeout: 45000,
     });
+    
+    const httpStatus = response?.status() || 0;
+    console.log(`HTTP Status: ${httpStatus}`);
     
     // Check if we landed on the right page
     const pageUrl = page.url();
     console.log(`Current URL: ${pageUrl}`);
+    
+    // Check for error page FIRST (before looking for file input)
+    if (pageUrl.includes('fout') || pageUrl.includes('error') || pageUrl.includes('500') || httpStatus >= 400) {
+      console.error(`❌ DUO website returned error page: ${pageUrl} (HTTP ${httpStatus})`);
+      const errorHtml = await page.evaluate(`document.body.innerText.substring(0, 500)`) as string;
+      console.log('Error page content:', errorHtml);
+      return {
+        status: 'manual_review',
+        method: 'duo_browser',
+        message: 'DUO website is tijdelijk niet beschikbaar - probeer later opnieuw of gebruik handmatige verificatie',
+        details: { 
+          error: 'duo_website_error',
+          page_url: pageUrl,
+          http_status: httpStatus,
+          error_content: errorHtml,
+        },
+      };
+    }
     
     if (pageUrl.includes('inloggen') || pageUrl.includes('login')) {
       console.log('⚠️ Redirected to login page - this shouldn\'t happen for diplomacontrole');
@@ -129,13 +158,38 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
     }
 
     // Step 4: Wait for Angular app to fully load
-    console.log('⏳ Waiting for Angular app to load...');
+    console.log('⏳ Waiting for Angular app to fully initialize...');
+    
+    // Wait for network to settle
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
     try {
-      // Wait for the Angular diploma-controle component
-      await page.waitForSelector('app-diploma-controle, app-root', { timeout: 15000 });
-      console.log('✅ Angular app loaded');
+      // Wait for the Angular diploma-controle component specifically
+      await page.waitForSelector('app-diploma-controle, uno-ng-input-file, .diploma-controle', { timeout: 20000 });
+      console.log('✅ Angular app fully loaded');
     } catch (e) {
-      console.log('Warning: Could not detect Angular app, continuing anyway...');
+      // Check page content to see what's actually there
+      const bodyText = await page.evaluate(`document.body.innerText.substring(0, 1000)`) as string;
+      console.log('Page content after wait:', bodyText);
+      
+      // If page has "diplomacontrole" text, Angular might just be slow
+      if (bodyText.toLowerCase().includes('diploma')) {
+        console.log('Page contains diploma content, continuing...');
+      } else {
+        console.log('Warning: Angular app not detected, page may not have loaded correctly');
+      }
+    }
+    
+    // Handle cookie consent if present
+    try {
+      const cookieButton = await page.$('button[id*="cookie"], button[class*="cookie"], .cookie-accept, #accept-cookies');
+      if (cookieButton) {
+        await cookieButton.click();
+        console.log('✅ Accepted cookie consent');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } catch (e) {
+      // Cookie consent not present or already accepted
     }
 
     // Step 5: Find file input with correct DUO Angular selectors
