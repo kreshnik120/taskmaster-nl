@@ -35,13 +35,15 @@ interface SignatureInfo {
 // ============= DUO WEBSITE BROWSER VERIFICATION (PRIMARY) =============
 
 const DUO_CHECK_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
+const DEPLOYMENT_VERSION = 'v2.1.0-2025-12-30T12:30:00Z';
+const MAX_DUO_RETRIES = 2;
 
 /**
  * ECHTE DUO verificatie via browser automation (Browserless)
- * Fixed: Uses signed URL + in-browser fetch for file upload (remote browser compatible)
+ * v2.1: Added retry logic, improved 500 error detection, deployment versioning
  */
 async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, storagePath?: string): Promise<VerificationResult> {
-  console.log('🌐 Starting REAL DUO browser verification via Browserless...');
+  console.log(`🌐 Starting REAL DUO browser verification [${DEPLOYMENT_VERSION}]...`);
   
   const browserlessApiKey = Deno.env.get('BROWSERLESS_API_KEY');
   
@@ -51,7 +53,7 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
       status: 'manual_review',
       method: 'duo_browser',
       message: 'Browser automatisering niet geconfigureerd - handmatige verificatie nodig',
-      details: { error: 'BROWSERLESS_API_KEY missing' },
+      details: { error: 'BROWSERLESS_API_KEY missing', version: DEPLOYMENT_VERSION },
     };
   }
 
@@ -116,24 +118,62 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
     
     console.log(`📄 Navigating to ${DUO_CHECK_URL}...`);
     
-    // Use domcontentloaded instead of networkidle2 for faster loading
-    const response = await page.goto(DUO_CHECK_URL, { 
-      waitUntil: 'domcontentloaded',
-      timeout: 45000,
-    });
+    // Retry logic for DUO website (sometimes returns 500 errors)
+    let response = null;
+    let pageUrl = '';
+    let httpStatus = 0;
+    let duoAccessSuccess = false;
     
-    const httpStatus = response?.status() || 0;
-    console.log(`HTTP Status: ${httpStatus}`);
+    for (let attempt = 1; attempt <= MAX_DUO_RETRIES; attempt++) {
+      console.log(`🔄 DUO navigation attempt ${attempt}/${MAX_DUO_RETRIES}...`);
+      
+      try {
+        response = await page.goto(DUO_CHECK_URL, { 
+          waitUntil: 'domcontentloaded',
+          timeout: 45000,
+        });
+        
+        httpStatus = response?.status() || 0;
+        pageUrl = page.url();
+        
+        console.log(`Attempt ${attempt}: HTTP ${httpStatus}, URL: ${pageUrl}`);
+        
+        // Check page content for 500 error (even if URL doesn't show it)
+        const bodyContent = await page.evaluate(`document.body.innerText.substring(0, 500)`) as string;
+        const is500Error = 
+          pageUrl.includes('fout') || 
+          pageUrl.includes('error') || 
+          pageUrl.includes('500') ||
+          pageUrl.includes('ErIsIetsMisgegaan') ||
+          bodyContent.includes('Er is iets misgegaan') ||
+          bodyContent.includes('500') ||
+          httpStatus >= 400;
+        
+        if (!is500Error) {
+          console.log(`✅ DUO website accessible on attempt ${attempt}`);
+          duoAccessSuccess = true;
+          break;
+        }
+        
+        console.log(`⚠️ DUO returned error on attempt ${attempt}:`, bodyContent.substring(0, 200));
+        
+        if (attempt < MAX_DUO_RETRIES) {
+          console.log(`⏳ Waiting 3 seconds before retry...`);
+          await new Promise(r => setTimeout(r, 3000));
+          await page.reload({ waitUntil: 'domcontentloaded' });
+        }
+      } catch (navError) {
+        console.error(`Navigation error on attempt ${attempt}:`, navError);
+        if (attempt < MAX_DUO_RETRIES) {
+          await new Promise(r => setTimeout(r, 3000));
+        }
+      }
+    }
     
-    // Check if we landed on the right page
-    const pageUrl = page.url();
-    console.log(`Current URL: ${pageUrl}`);
-    
-    // Check for error page FIRST (before looking for file input)
-    if (pageUrl.includes('fout') || pageUrl.includes('error') || pageUrl.includes('500') || httpStatus >= 400) {
-      console.error(`❌ DUO website returned error page: ${pageUrl} (HTTP ${httpStatus})`);
+    // If all retries failed, return manual_review
+    if (!duoAccessSuccess) {
+      console.error(`❌ DUO website failed after ${MAX_DUO_RETRIES} attempts`);
       const errorHtml = await page.evaluate(`document.body.innerText.substring(0, 500)`) as string;
-      console.log('Error page content:', errorHtml);
       return {
         status: 'manual_review',
         method: 'duo_browser',
@@ -142,7 +182,9 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
           error: 'duo_website_error',
           page_url: pageUrl,
           http_status: httpStatus,
+          attempts: MAX_DUO_RETRIES,
           error_content: errorHtml,
+          version: DEPLOYMENT_VERSION,
         },
       };
     }
