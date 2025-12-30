@@ -557,8 +557,8 @@ export function DocumentVerificationStatus({
           </div>
         )}
 
-        {/* DUO Verification Details for non-verified statuses - use fallback data */}
-        {diplomaStatus !== 'verified_duo' && duoVerificationResult && Object.keys(duoVerificationResult).length > 0 && (
+        {/* DUO Verification Details for non-verified statuses - hide when signature_valid to prevent confusing old error messages */}
+        {!['verified_duo', 'signature_valid'].includes(diplomaStatus) && duoVerificationResult && Object.keys(duoVerificationResult).length > 0 && (
           <div className="p-2 rounded border bg-muted/30">
             <p className="text-xs font-medium text-muted-foreground mb-1">DUO Verificatie Details</p>
             <div className="text-xs space-y-0.5">
