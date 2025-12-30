@@ -6,20 +6,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { calculateHRCompletenessScore, detectMissingInfoHR } from '@/lib/hrValidation';
+import { ZZPDocumentWizard } from './ZZPDocumentWizard';
 
 interface WerkvormDetectionBannerProps {
   applicationId: string;
   currentWerkvorm: string | null | undefined;
   onWerkvormUpdated: () => void;
+  extractedData?: Record<string, unknown>;
 }
 
 export function WerkvormDetectionBanner({
   applicationId,
   currentWerkvorm,
-  onWerkvormUpdated
+  onWerkvormUpdated,
+  extractedData
 }: WerkvormDetectionBannerProps) {
   const [selectedWerkvorm, setSelectedWerkvorm] = useState<string>('');
   const [saving, setSaving] = useState(false);
+  const [showZZPWizard, setShowZZPWizard] = useState(false);
 
   // Don't show if werkvorm is already set
   if (currentWerkvorm && currentWerkvorm !== '' && currentWerkvorm !== 'Onbekend') {
@@ -65,7 +69,13 @@ export function WerkvormDetectionBanner({
       if (updateError) throw updateError;
 
       toast.success(`Werkvorm ingesteld op ${selectedWerkvorm} (${newScore}% compleet)`);
-      onWerkvormUpdated();
+      
+      // If ZZP selected, open the document wizard
+      if (selectedWerkvorm === 'ZZP') {
+        setShowZZPWizard(true);
+      } else {
+        onWerkvormUpdated();
+      }
     } catch (error) {
       console.error('Error saving werkvorm:', error);
       toast.error('Fout bij opslaan werkvorm');
@@ -74,46 +84,64 @@ export function WerkvormDetectionBanner({
     }
   };
 
+  const handleWizardComplete = () => {
+    setShowZZPWizard(false);
+    onWerkvormUpdated();
+  };
+
   return (
-    <Alert variant="destructive" className="mb-4 border-amber-500 bg-amber-50 dark:bg-amber-950/30">
-      <AlertTriangle className="h-5 w-5 text-amber-600" />
-      <AlertTitle className="text-amber-800 dark:text-amber-400 font-semibold">
-        Werkvorm onbekend
-      </AlertTitle>
-      <AlertDescription className="text-amber-700 dark:text-amber-300">
-        <p className="mb-3">
-          Het is niet duidelijk of deze sollicitant een ZZP'er of uitzendkracht is. 
-          Selecteer de juiste werkvorm om de correcte documenten uit te vragen.
-        </p>
-        <div className="flex items-center gap-3">
-          <Select value={selectedWerkvorm} onValueChange={setSelectedWerkvorm}>
-            <SelectTrigger className="w-[200px] bg-background">
-              <SelectValue placeholder="Selecteer werkvorm..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ZZP">
-                <div className="flex items-center gap-2">
-                  <Briefcase className="h-4 w-4" />
-                  <span>ZZP'er (Freelance)</span>
-                </div>
-              </SelectItem>
-              <SelectItem value="Uitzendkracht">
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  <span>Uitzendkracht</span>
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <Button 
-            onClick={handleSaveWerkvorm} 
-            disabled={!selectedWerkvorm || saving}
-            size="sm"
-          >
-            {saving ? 'Opslaan...' : 'Bevestigen'}
-          </Button>
-        </div>
-      </AlertDescription>
-    </Alert>
+    <>
+      <Alert variant="destructive" className="mb-4 border-amber-500 bg-amber-50 dark:bg-amber-950/30">
+        <AlertTriangle className="h-5 w-5 text-amber-600" />
+        <AlertTitle className="text-amber-800 dark:text-amber-400 font-semibold">
+          Werkvorm onbekend
+        </AlertTitle>
+        <AlertDescription className="text-amber-700 dark:text-amber-300">
+          <p className="mb-3">
+            Het is niet duidelijk of deze sollicitant een ZZP'er of uitzendkracht is. 
+            Selecteer de juiste werkvorm om de correcte documenten uit te vragen.
+          </p>
+          <div className="flex items-center gap-3">
+            <Select value={selectedWerkvorm} onValueChange={setSelectedWerkvorm}>
+              <SelectTrigger className="w-[200px] bg-background">
+                <SelectValue placeholder="Selecteer werkvorm..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ZZP">
+                  <div className="flex items-center gap-2">
+                    <Briefcase className="h-4 w-4" />
+                    <span>ZZP'er (Freelance)</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="Uitzendkracht">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    <span>Uitzendkracht</span>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Button 
+              onClick={handleSaveWerkvorm} 
+              disabled={!selectedWerkvorm || saving}
+              size="sm"
+            >
+              {saving ? 'Opslaan...' : 'Bevestigen'}
+            </Button>
+          </div>
+        </AlertDescription>
+      </Alert>
+
+      <ZZPDocumentWizard
+        applicationId={applicationId}
+        isOpen={showZZPWizard}
+        onClose={() => setShowZZPWizard(false)}
+        onComplete={handleWizardComplete}
+        initialBedrijfsnaam={extractedData?.bedrijfsnaam as string}
+        initialKvkNummer={extractedData?.kvk_nummer as string}
+        initialIban={extractedData?.iban as string}
+        initialExtractedData={extractedData}
+      />
+    </>
   );
 }
