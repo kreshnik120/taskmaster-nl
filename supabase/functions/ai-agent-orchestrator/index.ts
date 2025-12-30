@@ -1151,13 +1151,31 @@ async function planAndQueueGoal(supabase: any, goal: AgentGoal) {
     if (applicationId) {
       const { data: application, error: appError } = await supabase
         .from('professional_applications')
-        .select('id, email_from, pipeline_stage, extracted_data')
+        .select('id, email_from, pipeline_stage, extracted_data, is_test_data')
         .eq('id', applicationId)
         .single();
       
       if (appError || !application) {
         console.error(`❌ [Phase 2B] Application ${applicationId} not found`);
         throw new Error(`Application not found: ${applicationId}`);
+      }
+      
+      // 2b. Skip test data applications
+      if (application.is_test_data === true) {
+        console.log(`🧪 [Phase 2B] SKIPPED: Application is marked as test data`);
+        
+        await supabase
+          .from('agent_goals')
+          .update({ 
+            status: 'skipped',
+            output_data: { 
+              reason: 'Application is test data',
+              blocked_at: new Date().toISOString()
+            }
+          })
+          .eq('id', goal.id);
+        
+        return { goal_id: goal.id, actions_created: 0, skipped: true, reason: 'Test data excluded' };
       }
       
       // 3. Check if application is in terminal state
