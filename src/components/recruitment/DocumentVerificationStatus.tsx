@@ -86,7 +86,10 @@ const VOG_STATUS_CONFIG: Record<VogStatus, { icon: React.ElementType; label: str
   },
 };
 
-const DIPLOMA_STATUS_CONFIG: Record<DiplomaStatus, { icon: React.ElementType; label: string; color: string; description: string }> = {
+// Add new status for signature-only verification
+type ExtendedDiplomaStatus = DiplomaStatus | 'signature_valid';
+
+const DIPLOMA_STATUS_CONFIG: Record<ExtendedDiplomaStatus, { icon: React.ElementType; label: string; color: string; description: string }> = {
   missing: { 
     icon: FileWarning, 
     label: 'Ontbreekt', 
@@ -103,49 +106,55 @@ const DIPLOMA_STATUS_CONFIG: Record<DiplomaStatus, { icon: React.ElementType; la
     icon: Loader2, 
     label: 'DUO Verificatie...', 
     color: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
-    description: 'DUO Online Diplomacontrole wordt uitgevoerd'
+    description: 'DUO Online Diplomacontrole wordt uitgevoerd via browser'
   },
   verified_duo: { 
     icon: ShieldCheck, 
-    label: 'DUO Geverifieerd', 
+    label: '✓ DUO Website Geverifieerd', 
     color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
-    description: 'Diploma geverifieerd via DUO Online Diplomacontrole'
+    description: 'Echtheidskenmerk aanwezig - geverifieerd door DUO overheidswebsite'
+  },
+  signature_valid: { 
+    icon: ShieldAlert, 
+    label: 'Handtekening OK', 
+    color: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+    description: 'Lokale handtekening gevonden - DUO website verificatie aanbevolen'
   },
   duo_invalid: { 
     icon: ShieldX, 
     label: 'DUO Ongeldig', 
     color: 'bg-destructive/10 text-destructive border-destructive/20',
-    description: 'Diploma niet gevonden in DUO register'
+    description: 'Diploma niet gevonden of ongeldig volgens DUO website'
   },
   duo_not_digital: { 
     icon: ShieldAlert, 
     label: 'Niet Digitaal', 
     color: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-    description: 'Diploma van voor 1996 of niet digitaal geregistreerd'
+    description: 'Diploma van voor 1996 of niet digitaal geregistreerd bij DUO'
   },
   duo_error: { 
     icon: XCircle, 
     label: 'DUO Fout', 
     color: 'bg-destructive/10 text-destructive border-destructive/20',
-    description: 'Fout bij DUO verificatie, probeer opnieuw'
+    description: 'Fout bij DUO website verificatie, probeer opnieuw'
   },
   verified_emrex: { 
     icon: CheckCircle2, 
     label: 'EMREX Verified', 
     color: 'bg-green-500/10 text-green-600 border-green-500/20',
-    description: 'Diploma geverifieerd via DUO EMREX'
+    description: 'Diploma geverifieerd via DUO EMREX (DigiD)'
   },
   verified_manual: { 
     icon: CheckCircle2, 
     label: 'Handmatig Verified', 
     color: 'bg-green-500/10 text-green-600 border-green-500/20',
-    description: 'Diploma handmatig geverifieerd'
+    description: 'Diploma handmatig geverifieerd door recruiter'
   },
   manual_review: { 
     icon: AlertCircle, 
     label: 'Controle Nodig', 
     color: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-    description: 'Handmatige controle vereist'
+    description: 'Browser verificatie niet mogelijk - handmatige controle vereist'
   },
 };
 
