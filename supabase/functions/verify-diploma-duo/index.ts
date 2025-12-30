@@ -38,9 +38,9 @@ const DUO_CHECK_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
 
 /**
  * ECHTE DUO verificatie via browser automation (Browserless)
- * Dit opent de DUO website, uploadt de PDF, en parseert het echte resultaat
+ * Fixed: Uses signed URL + in-browser fetch for file upload (remote browser compatible)
  */
-async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string): Promise<VerificationResult> {
+async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, storagePath?: string): Promise<VerificationResult> {
   console.log('🌐 Starting REAL DUO browser verification via Browserless...');
   
   const browserlessApiKey = Deno.env.get('BROWSERLESS_API_KEY');
@@ -56,15 +56,38 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string): Prom
   }
 
   let browser = null;
-  let tempDir: string | null = null;
+  const supabase = createAdminClient();
   
   try {
-    // Step 1: Save PDF to temp file for upload
-    console.log('📁 Creating temp file for PDF upload...');
-    tempDir = await Deno.makeTempDir({ prefix: 'diploma_verify_' });
-    const tempPdfPath = `${tempDir}/${filename}`;
-    await Deno.writeFile(tempPdfPath, pdfBytes);
-    console.log(`PDF saved to: ${tempPdfPath} (${pdfBytes.length} bytes)`);
+    // Step 1: Generate signed URL for PDF (for remote browser to fetch)
+    let signedUrl: string | null = null;
+    
+    if (storagePath) {
+      console.log('📎 Generating signed URL for PDF...');
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+        .from('application-documents')
+        .createSignedUrl(storagePath, 120); // 2 minutes valid
+      
+      if (signedUrlError) {
+        console.error('Failed to create signed URL:', signedUrlError);
+      } else {
+        signedUrl = signedUrlData?.signedUrl || null;
+        console.log('✅ Signed URL generated');
+      }
+    }
+    
+    // If no signed URL, create base64 fallback
+    let pdfBase64: string | null = null;
+    if (!signedUrl) {
+      console.log('📦 No signed URL available, using base64 encoding...');
+      // Convert Uint8Array to base64 manually
+      let binary = '';
+      for (let i = 0; i < pdfBytes.length; i++) {
+        binary += String.fromCharCode(pdfBytes[i]);
+      }
+      pdfBase64 = btoa(binary);
+      console.log(`PDF encoded to base64: ${pdfBase64.length} chars`);
+    }
 
     // Step 2: Connect to Browserless
     console.log('🔌 Connecting to Browserless...');
@@ -72,7 +95,7 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string): Prom
     
     browser = await puppeteer.connect({
       browserWSEndpoint,
-      defaultViewport: { width: 1280, height: 800 },
+      defaultViewport: { width: 1280, height: 900 },
     });
     
     console.log('✅ Connected to Browserless');
@@ -105,19 +128,46 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string): Prom
       };
     }
 
-    // Step 4: Find and click on file upload
-    console.log('🔍 Looking for file upload input...');
+    // Step 4: Wait for Angular app to fully load
+    console.log('⏳ Waiting for Angular app to load...');
+    try {
+      // Wait for the Angular diploma-controle component
+      await page.waitForSelector('app-diploma-controle, app-root', { timeout: 15000 });
+      console.log('✅ Angular app loaded');
+    } catch (e) {
+      console.log('Warning: Could not detect Angular app, continuing anyway...');
+    }
+
+    // Step 5: Find file input with correct DUO Angular selectors
+    console.log('🔍 Looking for file upload input (DUO Angular selectors)...');
     
-    // Wait for page to be fully loaded
-    await page.waitForSelector('input[type="file"], .upload-area, #file, [name="file"]', { timeout: 10000 });
+    // DUO uses uno-ng-input-file Angular component
+    const fileInputSelectors = [
+      'uno-ng-input-file input[type="file"]',
+      'input.input__control--file',
+      'input[type="file"][accept*="pdf"]',
+      '.upload-component input[type="file"]',
+      'input[type="file"]',
+    ];
     
-    // Find file input (might be hidden)
-    const fileInput = await page.$('input[type="file"]');
+    let fileInput = null;
+    for (const selector of fileInputSelectors) {
+      try {
+        await page.waitForSelector(selector, { timeout: 5000 });
+        fileInput = await page.$(selector);
+        if (fileInput) {
+          console.log(`✅ Found file input with selector: ${selector}`);
+          break;
+        }
+      } catch (e) {
+        console.log(`Selector not found: ${selector}`);
+      }
+    }
     
     if (!fileInput) {
       console.error('Could not find file input on page');
-      // Take screenshot for debugging
       const screenshot = await page.screenshot({ encoding: 'base64' });
+      const pageHtml = await page.evaluate(`document.body.innerHTML.substring(0, 2000)`) as string;
       return {
         status: 'manual_review',
         method: 'duo_browser',
@@ -125,29 +175,104 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string): Prom
         details: { 
           error: 'file_input_not_found',
           page_url: pageUrl,
+          html_preview: pageHtml?.substring(0, 500),
           screenshot_base64: screenshot?.substring(0, 200) + '...',
         },
       };
     }
 
-    // Step 5: Upload the PDF file
-    console.log('📤 Uploading PDF to DUO...');
-    await fileInput.uploadFile(tempPdfPath);
+    // Step 6: Upload PDF using in-browser fetch (works with remote browser!)
+    console.log('📤 Uploading PDF to DUO via in-browser injection...');
     
-    // Wait a moment for upload to process
+    const uploadScript = signedUrl 
+      ? `
+        (async () => {
+          try {
+            // Fetch PDF from signed URL
+            const response = await fetch('${signedUrl}');
+            if (!response.ok) throw new Error('Failed to fetch PDF: ' + response.status);
+            const blob = await response.blob();
+            const file = new File([blob], '${filename}', { type: 'application/pdf' });
+            
+            // Find file input and inject file
+            const fileInput = document.querySelector('uno-ng-input-file input[type="file"]') 
+              || document.querySelector('input.input__control--file')
+              || document.querySelector('input[type="file"]');
+            
+            if (!fileInput) throw new Error('File input not found');
+            
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            fileInput.files = dataTransfer.files;
+            
+            // Dispatch change event for Angular
+            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+            fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+            
+            return { success: true, filename: file.name, size: file.size };
+          } catch (e) {
+            return { success: false, error: e.message };
+          }
+        })()
+      `
+      : `
+        (async () => {
+          try {
+            // Decode base64 PDF
+            const base64 = '${pdfBase64}';
+            const binaryString = atob(base64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            const blob = new Blob([bytes], { type: 'application/pdf' });
+            const file = new File([blob], '${filename}', { type: 'application/pdf' });
+            
+            // Find file input and inject file
+            const fileInput = document.querySelector('uno-ng-input-file input[type="file"]') 
+              || document.querySelector('input.input__control--file')
+              || document.querySelector('input[type="file"]');
+            
+            if (!fileInput) throw new Error('File input not found');
+            
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            fileInput.files = dataTransfer.files;
+            
+            // Dispatch change event for Angular
+            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+            fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+            
+            return { success: true, filename: file.name, size: file.size };
+          } catch (e) {
+            return { success: false, error: e.message };
+          }
+        })()
+      `;
+    
+    const uploadResult = await page.evaluate(uploadScript) as { success: boolean; error?: string; filename?: string; size?: number };
+    console.log('Upload result:', uploadResult);
+    
+    if (!uploadResult?.success) {
+      return {
+        status: 'duo_error',
+        method: 'duo_browser',
+        message: `Kon PDF niet uploaden naar DUO: ${uploadResult?.error || 'onbekende fout'}`,
+        details: { upload_error: uploadResult?.error },
+      };
+    }
+    
+    // Wait for upload to process
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // Step 6: Click the "Controleer" button
+    // Step 7: Click the "Controleer" button (correct DUO selector)
     console.log('🖱️ Looking for Controleer button...');
     
-    // Try various button selectors
     const buttonSelectors = [
+      'button[data-test="controleer-knop"]',
+      'button.btn--primary',
       'button[type="submit"]',
-      'button:contains("Controleer")',
-      '.btn-primary',
-      'input[type="submit"]',
-      '[data-action="verify"]',
-      'button.verify-button',
+      '.controleer-btn',
     ];
     
     let buttonClicked = false;
@@ -161,47 +286,41 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string): Prom
           break;
         }
       } catch (e) {
-        // Try next selector
+        console.log(`Button selector failed: ${selector}`);
       }
     }
     
-    // Alternative: click button by text content
+    // Fallback: click by text content
     if (!buttonClicked) {
-      try {
-        // Use page.evaluate with explicit return type
-        const clicked = await page.evaluate(`
-          (() => {
-            const buttons = Array.from(document.querySelectorAll('button, input[type="submit"]'));
-            const controleerBtn = buttons.find(btn => 
-              btn.textContent?.toLowerCase().includes('controleer') ||
-              btn.textContent?.toLowerCase().includes('check') ||
-              btn.textContent?.toLowerCase().includes('verificeer')
-            );
-            if (controleerBtn) {
-              controleerBtn.click();
-              return true;
-            }
-            return false;
-          })()
-        `);
-        if (clicked) {
-          buttonClicked = true;
-          console.log('✅ Clicked button via text content search');
-        }
-      } catch (e) {
-        console.log('Could not find button by text:', e);
+      const clicked = await page.evaluate(`
+        (() => {
+          const buttons = Array.from(document.querySelectorAll('button'));
+          const controleerBtn = buttons.find(btn => 
+            btn.textContent?.toLowerCase().includes('controleer') ||
+            btn.textContent?.toLowerCase().includes('check')
+          );
+          if (controleerBtn && !controleerBtn.disabled) {
+            controleerBtn.click();
+            return true;
+          }
+          return false;
+        })()
+      `) as boolean;
+      
+      if (clicked) {
+        buttonClicked = true;
+        console.log('✅ Clicked button via text content search');
       }
     }
 
     if (!buttonClicked) {
-      console.log('⚠️ Could not find Controleer button - form might auto-submit');
+      console.log('⚠️ Could not find Controleer button');
     }
 
-    // Step 7: Wait for result
+    // Step 8: Wait for DUO verification result
     console.log('⏳ Waiting for DUO verification result...');
     await new Promise(resolve => setTimeout(resolve, 5000));
     
-    // Wait for result elements using string-based evaluate
     try {
       await page.waitForFunction(`
         (() => {
@@ -211,22 +330,21 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string): Prom
                  body.includes('niet gevonden') ||
                  body.includes('ongeldig') ||
                  body.includes('fout') ||
-                 body.includes('error');
+                 body.includes('resultaat');
         })()
       `, { timeout: 30000 });
     } catch (e) {
       console.log('Timeout waiting for result, checking page content anyway...');
     }
 
-    // Step 8: Parse the DUO response
+    // Step 9: Parse DUO response
     console.log('📋 Parsing DUO response...');
-    // Use string-based evaluate to get page content
     const pageContent = await page.evaluate(`document.body.innerText`) as string;
     const pageContentLower = pageContent.toLowerCase();
     
     console.log('Page content preview:', pageContent.substring(0, 500));
 
-    // Check for positive verification - exact phrases from DUO
+    // Check for positive verification
     const isVerified = 
       (pageContentLower.includes('echtheidskenmerk is aanwezig') || pageContentLower.includes('echtheidskenmerk aanwezig')) &&
       (pageContentLower.includes('document origineel') || pageContentLower.includes('origineel is'));
@@ -237,18 +355,15 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string): Prom
     const isInvalid = 
       pageContentLower.includes('niet gevonden') ||
       pageContentLower.includes('ongeldig') ||
-      pageContentLower.includes('niet authentiek') ||
-      pageContentLower.includes('niet origineel');
+      pageContentLower.includes('niet authentiek');
     
     const isNotDigital = 
       pageContentLower.includes('niet digitaal') ||
-      pageContentLower.includes('voor 1996') ||
-      pageContentLower.includes('geen digitaal diploma');
+      pageContentLower.includes('voor 1996');
     
     const hasError = 
       pageContentLower.includes('fout') ||
-      pageContentLower.includes('error') ||
-      pageContentLower.includes('probleem');
+      pageContentLower.includes('error');
 
     // Take screenshot for audit
     let screenshotBase64 = '';
@@ -270,7 +385,6 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string): Prom
           verified_by_government: true,
           duo_response: 'Het echtheidskenmerk is aanwezig - document origineel',
           page_url: page.url(),
-          screenshot_base64: screenshotBase64.substring(0, 100) + '...',
         },
         verified_at: new Date().toISOString(),
       };
@@ -284,7 +398,6 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string): Prom
         message: 'Diploma niet gevonden of ongeldig volgens DUO Online Diplomacontrole',
         details: {
           verification_source: 'duo_website_browser',
-          duo_response: 'Document niet gevonden of ongeldig',
           page_content_preview: pageContent.substring(0, 300),
         },
       };
@@ -296,10 +409,7 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string): Prom
         status: 'duo_not_digital',
         method: 'duo_browser',
         message: 'Diploma niet digitaal geregistreerd bij DUO (mogelijk van voor 1996)',
-        details: {
-          verification_source: 'duo_website_browser',
-          duo_response: 'Niet digitaal geregistreerd',
-        },
+        details: { verification_source: 'duo_website_browser' },
       };
     }
     
@@ -309,10 +419,7 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string): Prom
         status: 'duo_error',
         method: 'duo_browser',
         message: 'Fout bij DUO verificatie - probeer opnieuw',
-        details: {
-          verification_source: 'duo_website_browser',
-          page_content_preview: pageContent.substring(0, 300),
-        },
+        details: { page_content_preview: pageContent.substring(0, 300) },
       };
     }
 
@@ -325,7 +432,6 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string): Prom
       details: {
         verification_source: 'duo_website_browser',
         page_content_preview: pageContent.substring(0, 500),
-        screenshot_base64: screenshotBase64.substring(0, 100) + '...',
       },
     };
 
@@ -335,28 +441,15 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string): Prom
       status: 'duo_error',
       method: 'duo_browser',
       message: `DUO browser verificatie fout: ${error instanceof Error ? error.message : 'Onbekende fout'}`,
-      details: { 
-        error: String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      },
+      details: { error: String(error) },
     };
   } finally {
-    // Cleanup
     if (browser) {
       try {
         await browser.close();
         console.log('Browser closed');
       } catch (e) {
         console.log('Error closing browser:', e);
-      }
-    }
-    
-    if (tempDir) {
-      try {
-        await Deno.remove(tempDir, { recursive: true });
-        console.log('Temp dir cleaned up');
-      } catch (e) {
-        console.log('Error cleaning temp dir:', e);
       }
     }
   }
@@ -495,13 +588,13 @@ function validatePdfSignatureFallback(pdfBytes: Uint8Array): VerificationResult 
  * Primary: DUO website via browser automation
  * Fallback: PDF signature analysis
  */
-async function verifyDiploma(pdfBytes: Uint8Array, filename: string): Promise<VerificationResult> {
+async function verifyDiploma(pdfBytes: Uint8Array, filename: string, storagePath?: string): Promise<VerificationResult> {
   console.log('🎓 Starting diploma verification...');
-  console.log(`PDF size: ${pdfBytes.length} bytes, filename: ${filename}`);
+  console.log(`PDF size: ${pdfBytes.length} bytes, filename: ${filename}, storagePath: ${storagePath}`);
   
   // PRIMARY: Try DUO website verification via browser
   console.log('Attempting primary method: DUO website browser verification...');
-  const browserResult = await verifyViaDuoBrowser(pdfBytes, filename);
+  const browserResult = await verifyViaDuoBrowser(pdfBytes, filename, storagePath);
   
   // If browser verification was successful or gave definitive result
   if (browserResult.status === 'verified_duo' || browserResult.status === 'duo_invalid') {
@@ -615,8 +708,8 @@ Deno.serve(async (req: Request) => {
     
     console.log('🎓 Verifying diploma:', filename, 'size:', pdfBytes.length);
     
-    // Run verification
-    const result = await verifyDiploma(pdfBytes, filename);
+    // Run verification with storage path for signed URL generation
+    const result = await verifyDiploma(pdfBytes, filename, app.diploma_file_path);
     
     console.log('Verification result:', JSON.stringify(result, null, 2));
     
