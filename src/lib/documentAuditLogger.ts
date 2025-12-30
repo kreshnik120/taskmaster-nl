@@ -3,7 +3,7 @@ import { logger } from '@/lib/logger';
 
 const log = logger.create('DocumentAuditLogger');
 
-export type DocumentAction = 'upload' | 'download' | 'preview' | 'inline_preview' | 'delete';
+export type DocumentAction = 'upload' | 'download' | 'preview' | 'inline_preview' | 'delete' | 'orphan_detected';
 export type DocumentType = 'cv' | 'vog' | 'diploma' | string; // string for ZZP types
 
 interface AuditLogParams {

@@ -304,6 +304,109 @@ export async function markDocumentVerified(
 }
 
 /**
+ * Check if a document file actually exists in storage
+ * If not found, optionally cleanup the orphan reference in the database
+ */
+export async function checkDocumentExistsInStorage(params: {
+  applicationId: string;
+  documentType: 'cv' | 'vog' | 'diploma';
+  filePath: string | null;
+  autoCleanupOrphan?: boolean;
+}): Promise<{
+  exists: boolean;
+  wasOrphan: boolean;
+  cleanedUp: boolean;
+}> {
+  if (!params.filePath) {
+    return { exists: false, wasOrphan: false, cleanedUp: false };
+  }
+
+  const bucket = params.documentType === 'cv' ? 'application-cvs' : 'application-documents';
+  
+  try {
+    // Try to get a signed URL - this validates file existence without downloading
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(params.filePath, 1);
+
+    if (error) {
+      log.warn(`Document not found in storage: ${params.documentType}`, params.filePath, error.message);
+      
+      if (params.autoCleanupOrphan) {
+        await cleanupOrphanDocument(params.applicationId, params.documentType);
+        return { exists: false, wasOrphan: true, cleanedUp: true };
+      }
+      
+      return { exists: false, wasOrphan: true, cleanedUp: false };
+    }
+
+    return { exists: true, wasOrphan: false, cleanedUp: false };
+  } catch (e) {
+    log.error('Error checking document storage:', e);
+    return { exists: false, wasOrphan: false, cleanedUp: false };
+  }
+}
+
+/**
+ * Cleanup orphan document reference from database when file is missing in storage
+ */
+async function cleanupOrphanDocument(applicationId: string, documentType: string): Promise<void> {
+  const fieldMap: Record<string, { 
+    path: string; 
+    status: string | null; 
+    extras: string[];
+  }> = {
+    diploma: { 
+      path: 'diploma_file_path', 
+      status: 'diploma_validation_status',
+      extras: ['diploma_verification_response', 'duo_verification_result', 'duo_verified_at']
+    },
+    vog: { 
+      path: 'vog_file_path',
+      status: 'vog_validation_status',
+      extras: ['vog_verification_response']
+    },
+    cv: { 
+      path: 'cv_file_path', 
+      status: null, 
+      extras: ['cv_file_name'] 
+    }
+  };
+
+  const config = fieldMap[documentType];
+  if (!config) return;
+
+  const updateData: Record<string, unknown> = { [config.path]: null };
+  if (config.status) updateData[config.status] = 'missing';
+  config.extras.forEach(field => updateData[field] = null);
+
+  const { error } = await supabase
+    .from('professional_applications')
+    .update(updateData)
+    .eq('id', applicationId);
+
+  if (error) {
+    log.error('Error cleaning up orphan document:', error);
+    return;
+  }
+
+  log.debug(`Orphan document cleaned up: ${documentType} for application ${applicationId}`);
+  
+  // Log the orphan detection in audit trail
+  try {
+    const { logDocumentAction } = await import('@/lib/documentAuditLogger');
+    await logDocumentAction({
+      applicationId,
+      documentType,
+      action: 'orphan_detected',
+      metadata: { reason: 'file_not_in_storage', auto_cleanup: true }
+    });
+  } catch (e) {
+    log.warn('Could not log orphan detection:', e);
+  }
+}
+
+/**
  * Get documents summary for dashboard/widgets
  */
 export async function getDocumentsSummary(orgId?: string): Promise<{
