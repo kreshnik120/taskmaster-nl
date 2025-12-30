@@ -303,13 +303,78 @@ export async function markDocumentVerified(
   }
 }
 
+// Complete document field mapping for orphan detection and cleanup
+const DOCUMENT_FIELD_MAP: Record<string, { 
+  path: string; 
+  status: string | null; 
+  extras: string[];
+  bucket: 'application-cvs' | 'application-documents' | 'zzp-documents';
+}> = {
+  // Basis documents
+  cv: { 
+    path: 'cv_file_path', 
+    status: null, 
+    extras: ['cv_file_name'],
+    bucket: 'application-cvs'
+  },
+  vog: { 
+    path: 'vog_file_path',
+    status: 'vog_validation_status',
+    extras: ['vog_verification_response'],
+    bucket: 'application-documents'
+  },
+  diploma: { 
+    path: 'diploma_file_path', 
+    status: 'diploma_validation_status',
+    extras: ['diploma_verification_response', 'duo_verification_result', 'duo_verified_at'],
+    bucket: 'application-documents'
+  },
+  // ZZP documents
+  beroepsaansprakelijkheid: {
+    path: 'beroepsaansprakelijkheid_path',
+    status: null,
+    extras: [],
+    bucket: 'zzp-documents'
+  },
+  kvk_uittreksel: {
+    path: 'kvk_uittreksel_path',
+    status: null,
+    extras: [],
+    bucket: 'zzp-documents'
+  },
+  klachtenportaal_wkkgz: {
+    path: 'klachtenportaal_wkkgz_path',
+    status: null,
+    extras: [],
+    bucket: 'zzp-documents'
+  },
+  identiteitsbewijs: {
+    path: 'identiteitsbewijs_path',
+    status: null,
+    extras: [],
+    bucket: 'zzp-documents'
+  },
+  bhv_certificaat: {
+    path: 'bhv_certificaat_path',
+    status: null,
+    extras: [],
+    bucket: 'zzp-documents'
+  },
+  tillift_certificaat: {
+    path: 'tillift_certificaat_path',
+    status: null,
+    extras: [],
+    bucket: 'zzp-documents'
+  }
+};
+
 /**
  * Check if a document file actually exists in storage
  * If not found, optionally cleanup the orphan reference in the database
  */
 export async function checkDocumentExistsInStorage(params: {
   applicationId: string;
-  documentType: 'cv' | 'vog' | 'diploma';
+  documentType: string;
   filePath: string | null;
   autoCleanupOrphan?: boolean;
 }): Promise<{
@@ -321,12 +386,16 @@ export async function checkDocumentExistsInStorage(params: {
     return { exists: false, wasOrphan: false, cleanedUp: false };
   }
 
-  const bucket = params.documentType === 'cv' ? 'application-cvs' : 'application-documents';
+  const config = DOCUMENT_FIELD_MAP[params.documentType];
+  if (!config) {
+    log.warn(`Unknown document type for storage check: ${params.documentType}`);
+    return { exists: false, wasOrphan: false, cleanedUp: false };
+  }
   
   try {
     // Try to get a signed URL - this validates file existence without downloading
     const { data, error } = await supabase.storage
-      .from(bucket)
+      .from(config.bucket)
       .createSignedUrl(params.filePath, 1);
 
     if (error) {
@@ -348,33 +417,44 @@ export async function checkDocumentExistsInStorage(params: {
 }
 
 /**
+ * Batch check multiple documents in storage for an application
+ * Uses Promise.all for parallel checking - much more efficient than sequential
+ */
+export async function batchCheckDocumentsInStorage(params: {
+  applicationId: string;
+  documents: { type: string; filePath: string | null }[];
+  autoCleanupOrphans?: boolean;
+}): Promise<Record<string, { exists: boolean; wasOrphan: boolean; cleanedUp: boolean }>> {
+  const results: Record<string, { exists: boolean; wasOrphan: boolean; cleanedUp: boolean }> = {};
+  
+  await Promise.all(
+    params.documents.map(async (doc) => {
+      if (!doc.filePath) {
+        results[doc.type] = { exists: false, wasOrphan: false, cleanedUp: false };
+        return;
+      }
+      
+      results[doc.type] = await checkDocumentExistsInStorage({
+        applicationId: params.applicationId,
+        documentType: doc.type,
+        filePath: doc.filePath,
+        autoCleanupOrphan: params.autoCleanupOrphans
+      });
+    })
+  );
+  
+  return results;
+}
+
+/**
  * Cleanup orphan document reference from database when file is missing in storage
  */
 async function cleanupOrphanDocument(applicationId: string, documentType: string): Promise<void> {
-  const fieldMap: Record<string, { 
-    path: string; 
-    status: string | null; 
-    extras: string[];
-  }> = {
-    diploma: { 
-      path: 'diploma_file_path', 
-      status: 'diploma_validation_status',
-      extras: ['diploma_verification_response', 'duo_verification_result', 'duo_verified_at']
-    },
-    vog: { 
-      path: 'vog_file_path',
-      status: 'vog_validation_status',
-      extras: ['vog_verification_response']
-    },
-    cv: { 
-      path: 'cv_file_path', 
-      status: null, 
-      extras: ['cv_file_name'] 
-    }
-  };
-
-  const config = fieldMap[documentType];
-  if (!config) return;
+  const config = DOCUMENT_FIELD_MAP[documentType];
+  if (!config) {
+    log.warn(`Unknown document type for cleanup: ${documentType}`);
+    return;
+  }
 
   const updateData: Record<string, unknown> = { [config.path]: null };
   if (config.status) updateData[config.status] = 'missing';

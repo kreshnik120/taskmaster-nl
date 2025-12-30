@@ -27,7 +27,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { logDocumentAction } from '@/lib/documentAuditLogger';
-import { registerDocument, calculateExpiryDate, checkDocumentExistsInStorage } from '@/lib/services/documentService';
+import { registerDocument, calculateExpiryDate, batchCheckDocumentsInStorage } from '@/lib/services/documentService';
 import { DocumentAuditHistory } from './DocumentAuditHistory';
 import { logger } from '@/lib/logger';
 
@@ -116,43 +116,51 @@ export function DocumentUploadSection({
   const diplomaInputRef = useRef<HTMLInputElement>(null);
   const cvInputRef = useRef<HTMLInputElement>(null);
 
-  // Storage existence check states
-  const [diplomaExistsInStorage, setDiplomaExistsInStorage] = useState<boolean | null>(null);
-  const [checkingDiplomaStorage, setCheckingDiplomaStorage] = useState(false);
+  // Storage existence check states - all basis documents
+  const [storageStatus, setStorageStatus] = useState<Record<string, boolean>>({});
+  const [checkingStorage, setCheckingStorage] = useState(true);
 
-  // Check if diploma file actually exists in storage on mount
+  // Check if document files actually exist in storage on mount
   useEffect(() => {
-    const checkDiplomaInStorage = async () => {
-      if (!diplomaFilePath) {
-        setDiplomaExistsInStorage(false);
-        return;
-      }
-
-      setCheckingDiplomaStorage(true);
+    const checkAllDocumentsInStorage = async () => {
+      setCheckingStorage(true);
       try {
-        const result = await checkDocumentExistsInStorage({
+        const result = await batchCheckDocumentsInStorage({
           applicationId,
-          documentType: 'diploma',
-          filePath: diplomaFilePath,
-          autoCleanupOrphan: true
+          documents: [
+            { type: 'cv', filePath: cvFilePath || null },
+            { type: 'vog', filePath: vogFilePath || null },
+            { type: 'diploma', filePath: diplomaFilePath || null }
+          ],
+          autoCleanupOrphans: true
         });
 
-        setDiplomaExistsInStorage(result.exists);
+        setStorageStatus({
+          cv: result.cv?.exists ?? false,
+          vog: result.vog?.exists ?? false,
+          diploma: result.diploma?.exists ?? false
+        });
 
-        if (result.wasOrphan && result.cleanedUp) {
-          toast.info('Diploma bestand niet gevonden in storage - upload optie beschikbaar');
+        // Notify if any orphans were cleaned up
+        const orphansFound = Object.entries(result)
+          .filter(([_, r]) => r.wasOrphan && r.cleanedUp);
+        
+        if (orphansFound.length > 0) {
+          const docNames = orphansFound.map(([type]) => type.toUpperCase()).join(', ');
+          toast.info(`${docNames} bestand(en) niet gevonden in storage - upload opties beschikbaar`);
           onUploadComplete(); // Trigger refresh to get updated data
         }
       } catch (e) {
-        log.error('Error checking diploma storage:', e);
-        setDiplomaExistsInStorage(false);
+        log.error('Error checking documents in storage:', e);
+        // Default to false on error
+        setStorageStatus({ cv: false, vog: false, diploma: false });
       } finally {
-        setCheckingDiplomaStorage(false);
+        setCheckingStorage(false);
       }
     };
 
-    checkDiplomaInStorage();
-  }, [diplomaFilePath, applicationId, onUploadComplete]);
+    checkAllDocumentsInStorage();
+  }, [applicationId, cvFilePath, vogFilePath, diplomaFilePath]);
 
   const handleFileUpload = async (
     file: File,
@@ -793,7 +801,7 @@ export function DocumentUploadSection({
                 <FileText className="h-4 w-4 text-muted-foreground" />
                 <CardTitle className="text-sm font-medium">CV (Curriculum Vitae)</CardTitle>
               </div>
-              {cvFilePath ? (
+              {cvFilePath && storageStatus.cv ? (
                 <Badge variant="outline" className="text-green-600 border-green-300">Aanwezig</Badge>
               ) : (
                 <Badge variant="outline" className="text-destructive border-destructive/30">Ontbreekt</Badge>
@@ -801,7 +809,12 @@ export function DocumentUploadSection({
             </div>
           </CardHeader>
           <CardContent className="py-2 px-4">
-            {cvFilePath ? (
+            {checkingStorage ? (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Bestand controleren...</span>
+              </div>
+            ) : cvFilePath && storageStatus.cv ? (
               <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
                 <div className="flex items-center gap-2">
                   <FileText className="h-4 w-4 text-muted-foreground" />
@@ -924,7 +937,7 @@ export function DocumentUploadSection({
                   {isNieuwStage ? 'Tijdelijke VOG (Huidige/Oude VOG)' : 'VOG (Verklaring Omtrent Gedrag)'}
                 </CardTitle>
               </div>
-              {vogFilePath ? (
+              {vogFilePath && storageStatus.vog ? (
                 <Badge variant="outline" className="text-amber-600 border-amber-300">
                   {isNieuwStage ? 'Tijdelijk ontvangen' : 'Ontvangen'}
                 </Badge>
@@ -939,7 +952,12 @@ export function DocumentUploadSection({
             )}
           </CardHeader>
           <CardContent className="py-2 px-4">
-            {vogFilePath ? (
+            {checkingStorage ? (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Bestand controleren...</span>
+              </div>
+            ) : vogFilePath && storageStatus.vog ? (
               <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
                 <div className="flex items-center gap-2">
                   <FileText className="h-4 w-4 text-muted-foreground" />
@@ -1239,14 +1257,14 @@ export function DocumentUploadSection({
               </div>
             )}
 
-            {checkingDiplomaStorage && (
+            {checkingStorage && (
               <div className="flex items-center gap-2 p-3 mb-3 rounded-lg bg-muted/50">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Bestand controleren...</span>
               </div>
             )}
 
-            {diplomaFilePath && diplomaExistsInStorage ? (
+            {diplomaFilePath && storageStatus.diploma ? (
               <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
                 <div className="flex items-center gap-2">
                   <FileText className="h-4 w-4 text-muted-foreground" />
