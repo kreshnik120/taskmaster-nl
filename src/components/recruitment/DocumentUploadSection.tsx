@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,7 +27,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { logDocumentAction } from '@/lib/documentAuditLogger';
-import { registerDocument, calculateExpiryDate } from '@/lib/services/documentService';
+import { registerDocument, calculateExpiryDate, checkDocumentExistsInStorage } from '@/lib/services/documentService';
 import { DocumentAuditHistory } from './DocumentAuditHistory';
 import { logger } from '@/lib/logger';
 
@@ -115,6 +115,44 @@ export function DocumentUploadSection({
   const vogInputRef = useRef<HTMLInputElement>(null);
   const diplomaInputRef = useRef<HTMLInputElement>(null);
   const cvInputRef = useRef<HTMLInputElement>(null);
+
+  // Storage existence check states
+  const [diplomaExistsInStorage, setDiplomaExistsInStorage] = useState<boolean | null>(null);
+  const [checkingDiplomaStorage, setCheckingDiplomaStorage] = useState(false);
+
+  // Check if diploma file actually exists in storage on mount
+  useEffect(() => {
+    const checkDiplomaInStorage = async () => {
+      if (!diplomaFilePath) {
+        setDiplomaExistsInStorage(false);
+        return;
+      }
+
+      setCheckingDiplomaStorage(true);
+      try {
+        const result = await checkDocumentExistsInStorage({
+          applicationId,
+          documentType: 'diploma',
+          filePath: diplomaFilePath,
+          autoCleanupOrphan: true
+        });
+
+        setDiplomaExistsInStorage(result.exists);
+
+        if (result.wasOrphan && result.cleanedUp) {
+          toast.info('Diploma bestand niet gevonden in storage - upload optie beschikbaar');
+          onUploadComplete(); // Trigger refresh to get updated data
+        }
+      } catch (e) {
+        log.error('Error checking diploma storage:', e);
+        setDiplomaExistsInStorage(false);
+      } finally {
+        setCheckingDiplomaStorage(false);
+      }
+    };
+
+    checkDiplomaInStorage();
+  }, [diplomaFilePath, applicationId, onUploadComplete]);
 
   const handleFileUpload = async (
     file: File,
@@ -1201,7 +1239,14 @@ export function DocumentUploadSection({
               </div>
             )}
 
-            {diplomaFilePath ? (
+            {checkingDiplomaStorage && (
+              <div className="flex items-center gap-2 p-3 mb-3 rounded-lg bg-muted/50">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Bestand controleren...</span>
+              </div>
+            )}
+
+            {diplomaFilePath && diplomaExistsInStorage ? (
               <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
                 <div className="flex items-center gap-2">
                   <FileText className="h-4 w-4 text-muted-foreground" />
