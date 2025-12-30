@@ -408,3 +408,15 @@ schedule = "0 6 * * *"
 verify_jwt = false
 schedule = "0 7 * * *"
 # Purpose: Monitor document expiry dates and create renewal goals (daily at 07:00)
+
+# -----------------------------------------------------------------------------
+# DOCUMENT ORPHAN CLEANUP
+# -----------------------------------------------------------------------------
+
+[functions.cleanup-orphan-documents]
+verify_jwt = false
+schedule = "30 6 * * *"
+timeout = 300
+# Purpose: Cleanup orphan document references (files missing in storage)
+# Frequency: Daily at 06:30 UTC
+# Scope: professional_applications + application_documents tables
