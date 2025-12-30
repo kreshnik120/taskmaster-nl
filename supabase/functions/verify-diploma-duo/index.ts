@@ -1,6 +1,9 @@
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 import puppeteer from 'https://deno.land/x/puppeteer@16.2.0/mod.ts';
 
+// Boot log to verify deployment - this runs when worker starts
+console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v2.2.1-antibot-force-2025-12-30 loaded`);
+
 // Types
 type DiplomaStatus = 
   | 'not_verified' 
@@ -36,7 +39,7 @@ interface SignatureInfo {
 
 const DUO_CHECK_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
 const DUO_HOME_URL = 'https://zakelijk.duo.nl/';
-const DEPLOYMENT_VERSION = 'v2.2.0-antibot-2025-12-30';
+const DEPLOYMENT_VERSION = 'v2.2.1-antibot-force-2025-12-30';
 const MAX_DUO_RETRIES = 3;
 
 /**
