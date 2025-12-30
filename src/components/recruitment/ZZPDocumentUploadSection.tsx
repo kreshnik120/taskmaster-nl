@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,7 +31,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { logDocumentAction } from '@/lib/documentAuditLogger';
-import { registerDocument, calculateExpiryDate } from '@/lib/services/documentService';
+import { registerDocument, calculateExpiryDate, batchCheckDocumentsInStorage } from '@/lib/services/documentService';
 import { DocumentAuditHistory } from './DocumentAuditHistory';
 
 // ZZP Document types
@@ -159,10 +159,57 @@ export function ZZPDocumentUploadSection({
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const overigInputRef = useRef<HTMLInputElement>(null);
 
+  // Storage existence check states
+  const [storageStatus, setStorageStatus] = useState<Record<string, boolean>>({});
+  const [checkingStorage, setCheckingStorage] = useState(true);
+
   // Only show for ZZP werkvorm
   if (werkvorm?.toLowerCase() !== 'zzp') {
     return null;
   }
+
+  // Check if ZZP document files actually exist in storage on mount
+  useEffect(() => {
+    const checkZZPDocumentsInStorage = async () => {
+      setCheckingStorage(true);
+      try {
+        const result = await batchCheckDocumentsInStorage({
+          applicationId,
+          documents: [
+            { type: 'beroepsaansprakelijkheid', filePath: beroepsaansprakelijkheidPath || null },
+            { type: 'kvk_uittreksel', filePath: kvkUittrekselPath || null },
+            { type: 'klachtenportaal_wkkgz', filePath: klachtenportaalWkkgzPath || null },
+            { type: 'identiteitsbewijs', filePath: identiteitsbewijsPath || null },
+            { type: 'bhv_certificaat', filePath: bhvCertificaatPath || null },
+            { type: 'tillift_certificaat', filePath: tilliftCertificaatPath || null }
+          ],
+          autoCleanupOrphans: true
+        });
+
+        setStorageStatus(
+          Object.fromEntries(
+            Object.entries(result).map(([key, val]) => [key, val.exists])
+          )
+        );
+
+        // Notify if any orphans were cleaned up
+        const orphansFound = Object.entries(result)
+          .filter(([_, r]) => r.wasOrphan && r.cleanedUp);
+        
+        if (orphansFound.length > 0) {
+          toast.info(`${orphansFound.length} ZZP document(en) niet gevonden - upload opties beschikbaar`);
+          onUploadComplete();
+        }
+      } catch (e) {
+        console.error('Error checking ZZP documents in storage:', e);
+        setStorageStatus({});
+      } finally {
+        setCheckingStorage(false);
+      }
+    };
+
+    checkZZPDocumentsInStorage();
+  }, [applicationId, beroepsaansprakelijkheidPath, kvkUittrekselPath, klachtenportaalWkkgzPath, identiteitsbewijsPath, bhvCertificaatPath, tilliftCertificaatPath]);
 
   // Map document type to current path
   const getDocumentPath = (docType: ZZPDocumentType): string | null => {
@@ -713,7 +760,9 @@ export function ZZPDocumentUploadSection({
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {filePath ? (
+                          {checkingStorage ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          ) : filePath && storageStatus[doc.type] ? (
                             <>
                               <Badge variant="outline" className="text-green-600 border-green-300">
                                 <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -850,7 +899,9 @@ export function ZZPDocumentUploadSection({
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {filePath ? (
+                          {checkingStorage ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          ) : filePath && storageStatus[doc.type] ? (
                             <>
                               <Badge variant="outline" className="text-green-600 border-green-300">
                                 <CheckCircle2 className="h-3 w-3 mr-1" />
