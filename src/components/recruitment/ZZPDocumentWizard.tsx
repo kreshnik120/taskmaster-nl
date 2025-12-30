@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,9 +20,28 @@ import {
   Loader2,
   Eye,
   X,
-  PartyPopper
+  PartyPopper,
+  AlertCircle
 } from 'lucide-react';
 import { calculateHRCompletenessScore, detectMissingInfoHR } from '@/lib/hrValidation';
+
+// Validation helpers
+const isValidKvK = (kvk: string): boolean => {
+  const cleaned = kvk.replace(/[\s-]/g, '');
+  return /^\d{8}$/.test(cleaned);
+};
+
+const isValidDutchIBAN = (iban: string): boolean => {
+  const cleaned = iban.replace(/\s/g, '').toUpperCase();
+  // Dutch IBAN: NL + 2 digits + 4 letters (bank code) + 10 digits
+  return /^NL\d{2}[A-Z]{4}\d{10}$/.test(cleaned);
+};
+
+const formatIBAN = (iban: string): string => {
+  const cleaned = iban.replace(/\s/g, '').toUpperCase();
+  // Add spaces every 4 characters for readability
+  return cleaned.match(/.{1,4}/g)?.join(' ') || cleaned;
+};
 
 interface ZZPDocumentWizardProps {
   applicationId: string;
@@ -102,6 +121,10 @@ export function ZZPDocumentWizard({
   const [kvkNummer, setKvkNummer] = useState(initialKvkNummer || '');
   const [iban, setIban] = useState(initialIban || '');
   
+  // Validation error states
+  const [kvkError, setKvkError] = useState<string | null>(null);
+  const [ibanError, setIbanError] = useState<string | null>(null);
+  
   // Document paths state
   const [uploadedDocs, setUploadedDocs] = useState<Record<DocType, string | null>>({
     identiteitsbewijs: (initialExtractedData?.identiteitsbewijs_path as string) || null,
@@ -120,6 +143,89 @@ export function ZZPDocumentWizard({
     bhv_certificaat: null,
     tillift_certificaat: null
   });
+
+  // Calculate highest completed step for state persistence
+  const calculateInitialStep = useMemo(() => {
+    // Step 0: Bedrijfsgegevens
+    const hasStep0 = !!(initialBedrijfsnaam && initialKvkNummer && initialIban);
+    if (!hasStep0) return 0;
+    
+    // Step 1: Identiteitsbewijs
+    const hasStep1 = !!initialExtractedData?.identiteitsbewijs_path;
+    if (!hasStep1) return 1;
+    
+    // Step 2: Zakelijke documenten
+    const hasStep2 = !!(initialExtractedData?.kvk_uittreksel_path && initialExtractedData?.beroepsaansprakelijkheid_path);
+    if (!hasStep2) return 2;
+    
+    // Step 3: Zorg compliance
+    const hasStep3 = !!initialExtractedData?.klachtenportaal_wkkgz_path;
+    if (!hasStep3) return 3;
+    
+    // All required steps complete, go to optional or stay at last required
+    return 4;
+  }, [initialBedrijfsnaam, initialKvkNummer, initialIban, initialExtractedData]);
+
+  // Navigate to highest incomplete step when dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      setCurrentStep(calculateInitialStep);
+    }
+  }, [isOpen, calculateInitialStep]);
+
+  // Validate KvK on change
+  const handleKvkChange = (value: string) => {
+    const cleaned = value.replace(/[^\d]/g, '').slice(0, 8);
+    setKvkNummer(cleaned);
+    
+    if (cleaned.length > 0 && cleaned.length !== 8) {
+      setKvkError('KvK nummer moet exact 8 cijfers zijn');
+    } else if (cleaned.length === 8 && !isValidKvK(cleaned)) {
+      setKvkError('Ongeldig KvK nummer');
+    } else {
+      setKvkError(null);
+    }
+  };
+
+  // Validate IBAN on change
+  const handleIbanChange = (value: string) => {
+    const cleaned = value.replace(/\s/g, '').toUpperCase();
+    setIban(cleaned);
+    
+    if (cleaned.length > 0) {
+      if (!cleaned.startsWith('NL')) {
+        setIbanError('Alleen Nederlandse IBAN\'s (NL) worden geaccepteerd');
+      } else if (cleaned.length > 2 && cleaned.length < 18) {
+        setIbanError('IBAN moet 18 karakters zijn');
+      } else if (cleaned.length === 18 && !isValidDutchIBAN(cleaned)) {
+        setIbanError('Ongeldig IBAN formaat (NL00BANK0123456789)');
+      } else if (cleaned.length > 18) {
+        setIbanError('IBAN is te lang');
+      } else {
+        setIbanError(null);
+      }
+    } else {
+      setIbanError(null);
+    }
+  };
+
+  // Check if step is completed (for step indicators)
+  const isStepCompleted = (stepIndex: number): boolean => {
+    switch (stepIndex) {
+      case 0:
+        return !!(bedrijfsnaam && kvkNummer && iban && isValidKvK(kvkNummer) && isValidDutchIBAN(iban));
+      case 1:
+        return !!uploadedDocs.identiteitsbewijs;
+      case 2:
+        return !!(uploadedDocs.kvk_uittreksel && uploadedDocs.beroepsaansprakelijkheid);
+      case 3:
+        return !!uploadedDocs.klachtenportaal_wkkgz;
+      case 4:
+        return true; // Optional step
+      default:
+        return false;
+    }
+  };
 
   const progressPercentage = ((currentStep + 1) / WIZARD_STEPS.length) * 100;
 
@@ -210,8 +316,16 @@ export function ZZPDocumentWizard({
 
   const canProceed = (): boolean => {
     switch (currentStep) {
-      case 0: // Bedrijfsgegevens
-        return !!(bedrijfsnaam && kvkNummer && iban);
+      case 0: // Bedrijfsgegevens - with validation
+        return !!(
+          bedrijfsnaam && 
+          kvkNummer && 
+          iban && 
+          isValidKvK(kvkNummer) && 
+          isValidDutchIBAN(iban) &&
+          !kvkError &&
+          !ibanError
+        );
       case 1: // Identiteitsbewijs
         return !!uploadedDocs.identiteitsbewijs;
       case 2: // Zakelijke documenten
@@ -374,19 +488,46 @@ export function ZZPDocumentWizard({
               <Input
                 id="kvk"
                 value={kvkNummer}
-                onChange={(e) => setKvkNummer(e.target.value)}
+                onChange={(e) => handleKvkChange(e.target.value)}
                 placeholder="12345678"
                 maxLength={8}
+                className={kvkError ? 'border-destructive' : kvkNummer.length === 8 && isValidKvK(kvkNummer) ? 'border-emerald-500' : ''}
               />
+              {kvkError && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {kvkError}
+                </p>
+              )}
+              {!kvkError && kvkNummer.length === 8 && (
+                <p className="text-xs text-emerald-600 flex items-center gap-1">
+                  <Check className="h-3 w-3" />
+                  Geldig KvK nummer
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="iban">IBAN *</Label>
               <Input
                 id="iban"
-                value={iban}
-                onChange={(e) => setIban(e.target.value.toUpperCase())}
-                placeholder="NL00BANK0123456789"
+                value={formatIBAN(iban)}
+                onChange={(e) => handleIbanChange(e.target.value)}
+                placeholder="NL00 BANK 0123 4567 89"
+                maxLength={22}
+                className={ibanError ? 'border-destructive' : iban.length === 18 && isValidDutchIBAN(iban) ? 'border-emerald-500' : ''}
               />
+              {ibanError && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {ibanError}
+                </p>
+              )}
+              {!ibanError && iban.length === 18 && isValidDutchIBAN(iban) && (
+                <p className="text-xs text-emerald-600 flex items-center gap-1">
+                  <Check className="h-3 w-3" />
+                  Geldig IBAN
+                </p>
+              )}
             </div>
           </div>
         );
@@ -482,18 +623,19 @@ export function ZZPDocumentWizard({
           {renderStepContent()}
         </div>
 
-        {/* Step indicators */}
+        {/* Step indicators with completion status */}
         <div className="flex justify-center gap-2 py-2">
           {WIZARD_STEPS.map((step, index) => (
             <div
               key={step.id}
               className={`w-2 h-2 rounded-full transition-colors ${
                 index === currentStep
-                  ? 'bg-primary'
-                  : index < currentStep
+                  ? 'bg-primary ring-2 ring-primary/30'
+                  : isStepCompleted(index)
                   ? 'bg-emerald-500'
                   : 'bg-muted'
               }`}
+              title={`${step.title}${isStepCompleted(index) ? ' ✓' : ''}`}
             />
           ))}
         </div>
