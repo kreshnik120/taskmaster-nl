@@ -262,18 +262,26 @@ const FAST_PATH_COUNT_PATTERNS: FastPathPattern[] = [
   // BASIS COUNT PATTERNS (geen filters, totalen)
   // ═══════════════════════════════════════════════════════════════════
 
-  // --- WERKLOCATIES BASIS ---
+  // --- WERKLOCATIES BASIS (PRIORITEIT - vóór client_locations) ---
   {
-    // "hoeveel werklocaties", "hoeveel locaties zijn er", "hoeveel plaatsen hebben we"
-    pattern: /^hoeveel\s+(actieve\s+)?(werklocaties|sublocaties|locaties|plaatsen|vestigingen|werkplekken)\s*(zijn\s*er|hebben\s*we|totaal|in\s*totaal)?/i,
+    // "tel de werklocaties" - MUST match before any client_locations pattern
+    pattern: /^tel\s+(de\s+|het\s+|alle\s+)?(actieve\s+)?(werklocaties|sublocaties|vestigingen|werkplekken)/i,
     table: 'client_sublocations',
     countColumn: 'id',
     activeFilter: true,
     responseTemplate: (count: number) => `📍 Er zijn **${count}** actieve werklocaties in het systeem.`
   },
   {
-    // "tel de werklocaties", "tel alle locaties", "tel het aantal vestigingen"
-    pattern: /^tel\s+(de\s+|het\s+|alle\s+)?(actieve\s+)?(werklocaties|sublocaties|locaties|plaatsen|vestigingen|werkplekken)/i,
+    // "hoeveel werklocaties", "hoeveel sublocaties zijn er"
+    pattern: /^hoeveel\s+(actieve\s+)?(werklocaties|sublocaties|vestigingen|werkplekken)\s*(zijn\s*er|hebben\s*we|totaal|in\s*totaal)?/i,
+    table: 'client_sublocations',
+    countColumn: 'id',
+    activeFilter: true,
+    responseTemplate: (count: number) => `📍 Er zijn **${count}** actieve werklocaties in het systeem.`
+  },
+  {
+    // Generic "locaties" or "plaatsen" -> werklocaties (sublocations) by default
+    pattern: /^(hoeveel|tel)\s+(de\s+|het\s+|alle\s+)?(actieve\s+)?(locaties|plaatsen)\s*(zijn\s*er|hebben\s*we|totaal)?$/i,
     table: 'client_sublocations',
     countColumn: 'id',
     activeFilter: true,
