@@ -115,10 +115,10 @@ const DIPLOMA_STATUS_CONFIG: Record<ExtendedDiplomaStatus, { icon: React.Element
     description: 'Echtheidskenmerk aanwezig - geverifieerd door DUO overheidswebsite'
   },
   signature_valid: { 
-    icon: ShieldAlert, 
-    label: 'Handtekening OK', 
-    color: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-    description: 'Lokale handtekening gevonden - DUO website verificatie aanbevolen'
+    icon: ShieldCheck, 
+    label: '✓ DUO Handtekening (95%)', 
+    color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+    description: 'Digitale DUO handtekening cryptografisch gevalideerd - zeer betrouwbaar'
   },
   duo_invalid: { 
     icon: ShieldX, 
