@@ -1,4 +1,5 @@
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
+import puppeteer from 'https://deno.land/x/puppeteer@16.2.0/mod.ts';
 
 // Types
 type DiplomaStatus = 
@@ -12,7 +13,7 @@ type DiplomaStatus =
 
 interface VerificationResult {
   status: DiplomaStatus;
-  method: 'signature' | 'duo_http' | 'manual';
+  method: 'duo_browser' | 'signature' | 'manual';
   message: string;
   details: Record<string, unknown>;
   verified_at?: string;
@@ -31,11 +32,341 @@ interface SignatureInfo {
   isEducationCertificate: boolean;
 }
 
-// ============= PDF SIGNATURE VALIDATION (PRIMARY) =============
+// ============= DUO WEBSITE BROWSER VERIFICATION (PRIMARY) =============
+
+const DUO_CHECK_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
+
+/**
+ * ECHTE DUO verificatie via browser automation (Browserless)
+ * Dit opent de DUO website, uploadt de PDF, en parseert het echte resultaat
+ */
+async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string): Promise<VerificationResult> {
+  console.log('🌐 Starting REAL DUO browser verification via Browserless...');
+  
+  const browserlessApiKey = Deno.env.get('BROWSERLESS_API_KEY');
+  
+  if (!browserlessApiKey) {
+    console.error('BROWSERLESS_API_KEY not configured');
+    return {
+      status: 'manual_review',
+      method: 'duo_browser',
+      message: 'Browser automatisering niet geconfigureerd - handmatige verificatie nodig',
+      details: { error: 'BROWSERLESS_API_KEY missing' },
+    };
+  }
+
+  let browser = null;
+  let tempDir: string | null = null;
+  
+  try {
+    // Step 1: Save PDF to temp file for upload
+    console.log('📁 Creating temp file for PDF upload...');
+    tempDir = await Deno.makeTempDir({ prefix: 'diploma_verify_' });
+    const tempPdfPath = `${tempDir}/${filename}`;
+    await Deno.writeFile(tempPdfPath, pdfBytes);
+    console.log(`PDF saved to: ${tempPdfPath} (${pdfBytes.length} bytes)`);
+
+    // Step 2: Connect to Browserless
+    console.log('🔌 Connecting to Browserless...');
+    const browserWSEndpoint = `wss://chrome.browserless.io?token=${browserlessApiKey}`;
+    
+    browser = await puppeteer.connect({
+      browserWSEndpoint,
+      defaultViewport: { width: 1280, height: 800 },
+    });
+    
+    console.log('✅ Connected to Browserless');
+
+    // Step 3: Open DUO diplomacontrole page
+    const page = await browser.newPage();
+    
+    // Set Dutch language headers
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'nl-NL,nl;q=0.9,en;q=0.8',
+    });
+    
+    console.log(`📄 Navigating to ${DUO_CHECK_URL}...`);
+    await page.goto(DUO_CHECK_URL, { 
+      waitUntil: 'networkidle2',
+      timeout: 30000,
+    });
+    
+    // Check if we landed on the right page
+    const pageUrl = page.url();
+    console.log(`Current URL: ${pageUrl}`);
+    
+    if (pageUrl.includes('inloggen') || pageUrl.includes('login')) {
+      console.log('⚠️ Redirected to login page - this shouldn\'t happen for diplomacontrole');
+      return {
+        status: 'manual_review',
+        method: 'duo_browser',
+        message: 'DUO portal vereist onverwacht inloggen - gebruik handmatige verificatie',
+        details: { redirect_url: pageUrl },
+      };
+    }
+
+    // Step 4: Find and click on file upload
+    console.log('🔍 Looking for file upload input...');
+    
+    // Wait for page to be fully loaded
+    await page.waitForSelector('input[type="file"], .upload-area, #file, [name="file"]', { timeout: 10000 });
+    
+    // Find file input (might be hidden)
+    const fileInput = await page.$('input[type="file"]');
+    
+    if (!fileInput) {
+      console.error('Could not find file input on page');
+      // Take screenshot for debugging
+      const screenshot = await page.screenshot({ encoding: 'base64' });
+      return {
+        status: 'manual_review',
+        method: 'duo_browser',
+        message: 'Kon upload veld niet vinden op DUO website - website structuur mogelijk gewijzigd',
+        details: { 
+          error: 'file_input_not_found',
+          page_url: pageUrl,
+          screenshot_base64: screenshot?.substring(0, 200) + '...',
+        },
+      };
+    }
+
+    // Step 5: Upload the PDF file
+    console.log('📤 Uploading PDF to DUO...');
+    await fileInput.uploadFile(tempPdfPath);
+    
+    // Wait a moment for upload to process
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Step 6: Click the "Controleer" button
+    console.log('🖱️ Looking for Controleer button...');
+    
+    // Try various button selectors
+    const buttonSelectors = [
+      'button[type="submit"]',
+      'button:contains("Controleer")',
+      '.btn-primary',
+      'input[type="submit"]',
+      '[data-action="verify"]',
+      'button.verify-button',
+    ];
+    
+    let buttonClicked = false;
+    for (const selector of buttonSelectors) {
+      try {
+        const button = await page.$(selector);
+        if (button) {
+          await button.click();
+          buttonClicked = true;
+          console.log(`✅ Clicked button with selector: ${selector}`);
+          break;
+        }
+      } catch (e) {
+        // Try next selector
+      }
+    }
+    
+    // Alternative: click button by text content
+    if (!buttonClicked) {
+      try {
+        // Use page.evaluate with explicit return type
+        const clicked = await page.evaluate(`
+          (() => {
+            const buttons = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+            const controleerBtn = buttons.find(btn => 
+              btn.textContent?.toLowerCase().includes('controleer') ||
+              btn.textContent?.toLowerCase().includes('check') ||
+              btn.textContent?.toLowerCase().includes('verificeer')
+            );
+            if (controleerBtn) {
+              controleerBtn.click();
+              return true;
+            }
+            return false;
+          })()
+        `);
+        if (clicked) {
+          buttonClicked = true;
+          console.log('✅ Clicked button via text content search');
+        }
+      } catch (e) {
+        console.log('Could not find button by text:', e);
+      }
+    }
+
+    if (!buttonClicked) {
+      console.log('⚠️ Could not find Controleer button - form might auto-submit');
+    }
+
+    // Step 7: Wait for result
+    console.log('⏳ Waiting for DUO verification result...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    // Wait for result elements using string-based evaluate
+    try {
+      await page.waitForFunction(`
+        (() => {
+          const body = document.body.innerText.toLowerCase();
+          return body.includes('echtheidskenmerk') || 
+                 body.includes('gecontroleerd') ||
+                 body.includes('niet gevonden') ||
+                 body.includes('ongeldig') ||
+                 body.includes('fout') ||
+                 body.includes('error');
+        })()
+      `, { timeout: 30000 });
+    } catch (e) {
+      console.log('Timeout waiting for result, checking page content anyway...');
+    }
+
+    // Step 8: Parse the DUO response
+    console.log('📋 Parsing DUO response...');
+    // Use string-based evaluate to get page content
+    const pageContent = await page.evaluate(`document.body.innerText`) as string;
+    const pageContentLower = pageContent.toLowerCase();
+    
+    console.log('Page content preview:', pageContent.substring(0, 500));
+
+    // Check for positive verification - exact phrases from DUO
+    const isVerified = 
+      (pageContentLower.includes('echtheidskenmerk is aanwezig') || pageContentLower.includes('echtheidskenmerk aanwezig')) &&
+      (pageContentLower.includes('document origineel') || pageContentLower.includes('origineel is'));
+    
+    const isChecked = pageContentLower.includes('gecontroleerd') || pageContentLower.includes('door duo gecontroleerd');
+    
+    // Negative indicators
+    const isInvalid = 
+      pageContentLower.includes('niet gevonden') ||
+      pageContentLower.includes('ongeldig') ||
+      pageContentLower.includes('niet authentiek') ||
+      pageContentLower.includes('niet origineel');
+    
+    const isNotDigital = 
+      pageContentLower.includes('niet digitaal') ||
+      pageContentLower.includes('voor 1996') ||
+      pageContentLower.includes('geen digitaal diploma');
+    
+    const hasError = 
+      pageContentLower.includes('fout') ||
+      pageContentLower.includes('error') ||
+      pageContentLower.includes('probleem');
+
+    // Take screenshot for audit
+    let screenshotBase64 = '';
+    try {
+      screenshotBase64 = await page.screenshot({ encoding: 'base64' }) || '';
+    } catch (e) {
+      console.log('Could not take screenshot');
+    }
+
+    // Determine result
+    if (isVerified && isChecked && !isInvalid) {
+      console.log('✅ DIPLOMA VERIFIED BY DUO WEBSITE!');
+      return {
+        status: 'verified_duo',
+        method: 'duo_browser',
+        message: 'Diploma geverifieerd door DUO Online Diplomacontrole - echtheidskenmerk aanwezig, document is origineel',
+        details: {
+          verification_source: 'duo_website_browser',
+          verified_by_government: true,
+          duo_response: 'Het echtheidskenmerk is aanwezig - document origineel',
+          page_url: page.url(),
+          screenshot_base64: screenshotBase64.substring(0, 100) + '...',
+        },
+        verified_at: new Date().toISOString(),
+      };
+    }
+    
+    if (isInvalid) {
+      console.log('❌ Diploma NOT VALID according to DUO');
+      return {
+        status: 'duo_invalid',
+        method: 'duo_browser',
+        message: 'Diploma niet gevonden of ongeldig volgens DUO Online Diplomacontrole',
+        details: {
+          verification_source: 'duo_website_browser',
+          duo_response: 'Document niet gevonden of ongeldig',
+          page_content_preview: pageContent.substring(0, 300),
+        },
+      };
+    }
+    
+    if (isNotDigital) {
+      console.log('⚠️ Diploma not digitally registered');
+      return {
+        status: 'duo_not_digital',
+        method: 'duo_browser',
+        message: 'Diploma niet digitaal geregistreerd bij DUO (mogelijk van voor 1996)',
+        details: {
+          verification_source: 'duo_website_browser',
+          duo_response: 'Niet digitaal geregistreerd',
+        },
+      };
+    }
+    
+    if (hasError) {
+      console.log('❌ DUO website returned error');
+      return {
+        status: 'duo_error',
+        method: 'duo_browser',
+        message: 'Fout bij DUO verificatie - probeer opnieuw',
+        details: {
+          verification_source: 'duo_website_browser',
+          page_content_preview: pageContent.substring(0, 300),
+        },
+      };
+    }
+
+    // Could not determine result
+    console.log('⚠️ Could not determine DUO result - manual review needed');
+    return {
+      status: 'manual_review',
+      method: 'duo_browser',
+      message: 'DUO resultaat onduidelijk - handmatige verificatie aanbevolen',
+      details: {
+        verification_source: 'duo_website_browser',
+        page_content_preview: pageContent.substring(0, 500),
+        screenshot_base64: screenshotBase64.substring(0, 100) + '...',
+      },
+    };
+
+  } catch (error) {
+    console.error('DUO browser verification error:', error);
+    return {
+      status: 'duo_error',
+      method: 'duo_browser',
+      message: `DUO browser verificatie fout: ${error instanceof Error ? error.message : 'Onbekende fout'}`,
+      details: { 
+        error: String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      },
+    };
+  } finally {
+    // Cleanup
+    if (browser) {
+      try {
+        await browser.close();
+        console.log('Browser closed');
+      } catch (e) {
+        console.log('Error closing browser:', e);
+      }
+    }
+    
+    if (tempDir) {
+      try {
+        await Deno.remove(tempDir, { recursive: true });
+        console.log('Temp dir cleaned up');
+      } catch (e) {
+        console.log('Error cleaning temp dir:', e);
+      }
+    }
+  }
+}
+
+// ============= PDF SIGNATURE VALIDATION (FALLBACK) =============
 
 /**
  * Analyze PDF binary for digital signatures
- * This checks for PKCS#7/CMS signatures embedded in the PDF
+ * This is a FALLBACK method when browser verification is not available
  */
 function analyzePdfSignature(pdfBytes: Uint8Array): SignatureInfo {
   const pdfString = new TextDecoder('latin1').decode(pdfBytes);
@@ -85,7 +416,6 @@ function analyzePdfSignature(pdfBytes: Uint8Array): SignatureInfo {
   
   // Try to extract signer info from signature dictionary
   if (result.hasSignature) {
-    // Look for /Name field in signature
     const nameMatch = pdfString.match(/\/Name\s*\(([^)]+)\)/);
     const reasonMatch = pdfString.match(/\/Reason\s*\(([^)]+)\)/);
     const dateMatch = pdfString.match(/\/M\s*\(D:(\d{14})/);
@@ -103,10 +433,11 @@ function analyzePdfSignature(pdfBytes: Uint8Array): SignatureInfo {
 }
 
 /**
- * Validate PDF signature and determine if it's a legitimate Dutch diploma
+ * Validate PDF signature as fallback method
+ * NOTE: This is NOT as reliable as DUO website verification
  */
-function validatePdfSignature(pdfBytes: Uint8Array): VerificationResult {
-  console.log('🔐 Analyzing PDF for digital signatures...');
+function validatePdfSignatureFallback(pdfBytes: Uint8Array): VerificationResult {
+  console.log('🔐 Analyzing PDF for digital signatures (fallback method)...');
   
   const signatureInfo = analyzePdfSignature(pdfBytes);
   
@@ -117,24 +448,24 @@ function validatePdfSignature(pdfBytes: Uint8Array): VerificationResult {
     return {
       status: 'signature_valid',
       method: 'signature',
-      message: 'Diploma bevat een geldige digitale handtekening van een erkende Nederlandse onderwijsinstantie',
+      message: 'Diploma bevat een digitale handtekening - DUO website verificatie aanbevolen voor 100% zekerheid',
       details: {
         signature_type: 'PKCS7/CMS',
         has_byte_range: true,
         is_duo_certificate: true,
         is_education_document: signatureInfo.isEducationCertificate,
         signer_info: signatureInfo.signerInfo,
+        warning: 'Dit is lokale analyse, niet echte DUO verificatie',
       },
-      verified_at: new Date().toISOString(),
     };
   }
   
-  // Moderate validation: has signature but not DUO specific
+  // Has signature but not DUO specific
   if (signatureInfo.hasSignature && signatureInfo.hasByteRange) {
     return {
       status: 'manual_review',
       method: 'signature',
-      message: 'Diploma bevat een digitale handtekening, maar niet van een bekende Nederlandse onderwijsinstantie. Handmatige verificatie aanbevolen.',
+      message: 'Diploma bevat een digitale handtekening, maar niet van DUO. Handmatige verificatie aanbevolen.',
       details: {
         has_signature: true,
         signature_type: signatureInfo.hasPkcs7 ? 'PKCS7/CMS' : 'Other',
@@ -149,7 +480,7 @@ function validatePdfSignature(pdfBytes: Uint8Array): VerificationResult {
   return {
     status: 'duo_not_digital',
     method: 'signature',
-    message: 'Geen digitale handtekening gevonden in het diploma. Dit kan een gescand document zijn of een diploma van voor 1996.',
+    message: 'Geen digitale handtekening gevonden. Dit kan een gescand document zijn of een diploma van voor 1996.',
     details: {
       has_signature: false,
       is_education_document: signatureInfo.isEducationCertificate,
@@ -157,258 +488,46 @@ function validatePdfSignature(pdfBytes: Uint8Array): VerificationResult {
   };
 }
 
-// ============= DUO HTTP API VERIFICATION (SECONDARY) =============
-
-const DUO_CHECK_PAGE = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-
-/**
- * Attempt to verify diploma via DUO HTTP API
- * This replicates what the browser does when uploading a PDF
- */
-async function verifyViaDuoHttp(pdfBytes: Uint8Array, filename: string): Promise<VerificationResult> {
-  console.log('🌐 Attempting DUO HTTP verification...');
-  
-  try {
-    // Step 1: Fetch the main page to get cookies and CSRF token
-    console.log('Fetching DUO diplomacontrole page...');
-    const pageResponse = await fetch(DUO_CHECK_PAGE, {
-      method: 'GET',
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'nl-NL,nl;q=0.9,en;q=0.8',
-        'Cache-Control': 'no-cache',
-      },
-    });
-    
-    if (!pageResponse.ok) {
-      console.log(`DUO page returned status ${pageResponse.status}`);
-      return {
-        status: 'duo_error',
-        method: 'duo_http',
-        message: `DUO portal niet bereikbaar (HTTP ${pageResponse.status})`,
-        details: { http_status: pageResponse.status },
-      };
-    }
-    
-    // Check for redirect to login
-    const finalUrl = pageResponse.url;
-    if (finalUrl.includes('inloggen') || finalUrl.includes('login') || finalUrl.includes('mijn.duo.nl')) {
-      console.log('⚠️ Redirected to login - falling back to manual review');
-      return {
-        status: 'manual_review',
-        method: 'duo_http',
-        message: 'DUO portal vereist login - handmatige verificatie nodig',
-        details: { redirect_url: finalUrl },
-      };
-    }
-    
-    const pageHtml = await pageResponse.text();
-    
-    // Extract CSRF token if present
-    let csrfToken: string | null = null;
-    const csrfMatch = pageHtml.match(/name="csrf[_-]?token"\s+value="([^"]+)"/i) ||
-                      pageHtml.match(/name="_token"\s+value="([^"]+)"/i) ||
-                      pageHtml.match(/data-csrf="([^"]+)"/i);
-    
-    if (csrfMatch) {
-      csrfToken = csrfMatch[1];
-      console.log('Found CSRF token');
-    }
-    
-    // Extract cookies
-    const cookies = pageResponse.headers.get('set-cookie') || '';
-    console.log('Got cookies:', cookies ? 'yes' : 'no');
-    
-    // Find the form action URL
-    const formMatch = pageHtml.match(/<form[^>]+action="([^"]+)"[^>]*>/i);
-    const formAction = formMatch ? formMatch[1] : DUO_CHECK_PAGE;
-    const uploadUrl = formAction.startsWith('http') ? formAction : new URL(formAction, DUO_CHECK_PAGE).toString();
-    
-    console.log('Upload URL:', uploadUrl);
-    
-    // Step 2: Prepare multipart form data
-    const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
-    
-    let formBody = '';
-    
-    // Add CSRF token if found
-    if (csrfToken) {
-      formBody += `--${boundary}\r\n`;
-      formBody += `Content-Disposition: form-data; name="csrf_token"\r\n\r\n`;
-      formBody += `${csrfToken}\r\n`;
-    }
-    
-    // Add the file
-    formBody += `--${boundary}\r\n`;
-    formBody += `Content-Disposition: form-data; name="diploma"; filename="${filename}"\r\n`;
-    formBody += `Content-Type: application/pdf\r\n\r\n`;
-    
-    // Convert to bytes for proper handling
-    const formPrefix = new TextEncoder().encode(formBody);
-    const formSuffix = new TextEncoder().encode(`\r\n--${boundary}--\r\n`);
-    
-    const fullBody = new Uint8Array(formPrefix.length + pdfBytes.length + formSuffix.length);
-    fullBody.set(formPrefix, 0);
-    fullBody.set(pdfBytes, formPrefix.length);
-    fullBody.set(formSuffix, formPrefix.length + pdfBytes.length);
-    
-    // Step 3: Submit the form
-    console.log('Submitting PDF to DUO...');
-    const uploadResponse = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'nl-NL,nl;q=0.9,en;q=0.8',
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        'Origin': 'https://zakelijk.duo.nl',
-        'Referer': DUO_CHECK_PAGE,
-        ...(cookies ? { 'Cookie': cookies } : {}),
-      },
-      body: fullBody,
-    });
-    
-    console.log(`Upload response status: ${uploadResponse.status}`);
-    
-    if (!uploadResponse.ok) {
-      // Check for WAF/bot detection
-      if (uploadResponse.status === 403 || uploadResponse.status === 429) {
-        return {
-          status: 'manual_review',
-          method: 'duo_http',
-          message: 'DUO portal blokkeert automatische verificatie - handmatige verificatie nodig',
-          details: { http_status: uploadResponse.status, reason: 'WAF/rate_limit' },
-        };
-      }
-      
-      return {
-        status: 'duo_error',
-        method: 'duo_http',
-        message: `DUO verificatie mislukt (HTTP ${uploadResponse.status})`,
-        details: { http_status: uploadResponse.status },
-      };
-    }
-    
-    // Step 4: Parse the response
-    const responseHtml = await uploadResponse.text();
-    const responseLower = responseHtml.toLowerCase();
-    
-    // Check for positive verification indicators
-    const positiveIndicators = ['geldig', 'geverifieerd', 'authentiek', 'valid', 'correct', 'erkend'];
-    const negativeIndicators = ['ongeldig', 'niet gevonden', 'invalid', 'fout', 'niet bekend', 'niet geregistreerd'];
-    const notDigitalIndicators = ['niet digitaal', 'voor 1996', 'niet beschikbaar', 'handmatig'];
-    
-    const hasPositive = positiveIndicators.some(ind => responseLower.includes(ind));
-    const hasNegative = negativeIndicators.some(ind => responseLower.includes(ind));
-    const hasNotDigital = notDigitalIndicators.some(ind => responseLower.includes(ind));
-    
-    if (hasPositive && !hasNegative) {
-      return {
-        status: 'verified_duo',
-        method: 'duo_http',
-        message: 'Diploma geverifieerd via DUO Online Diplomacontrole',
-        details: { 
-          verification_source: 'duo_http',
-          response_indicators: positiveIndicators.filter(ind => responseLower.includes(ind)),
-        },
-        verified_at: new Date().toISOString(),
-      };
-    }
-    
-    if (hasNegative) {
-      return {
-        status: 'duo_invalid',
-        method: 'duo_http',
-        message: 'Diploma niet gevonden of ongeldig volgens DUO',
-        details: {
-          verification_source: 'duo_http',
-          response_indicators: negativeIndicators.filter(ind => responseLower.includes(ind)),
-        },
-      };
-    }
-    
-    if (hasNotDigital) {
-      return {
-        status: 'duo_not_digital',
-        method: 'duo_http',
-        message: 'Diploma niet digitaal geregistreerd bij DUO',
-        details: {
-          verification_source: 'duo_http',
-          response_indicators: notDigitalIndicators.filter(ind => responseLower.includes(ind)),
-        },
-      };
-    }
-    
-    // Could not parse response - fall back to manual
-    return {
-      status: 'manual_review',
-      method: 'duo_http',
-      message: 'DUO response kon niet worden geparsed - handmatige verificatie nodig',
-      details: {
-        response_length: responseHtml.length,
-        contains_form: responseHtml.includes('<form'),
-      },
-    };
-    
-  } catch (error) {
-    console.error('DUO HTTP verification error:', error);
-    return {
-      status: 'duo_error',
-      method: 'duo_http',
-      message: `DUO verificatie fout: ${error instanceof Error ? error.message : 'Onbekende fout'}`,
-      details: { error: String(error) },
-    };
-  }
-}
-
 // ============= MAIN VERIFICATION ORCHESTRATOR =============
 
 /**
- * Main verification function that tries multiple methods
+ * Main verification function
+ * Primary: DUO website via browser automation
+ * Fallback: PDF signature analysis
  */
 async function verifyDiploma(pdfBytes: Uint8Array, filename: string): Promise<VerificationResult> {
   console.log('🎓 Starting diploma verification...');
   console.log(`PDF size: ${pdfBytes.length} bytes, filename: ${filename}`);
   
-  // Step 1: Try PDF signature validation (fastest, most reliable)
-  const signatureResult = validatePdfSignature(pdfBytes);
+  // PRIMARY: Try DUO website verification via browser
+  console.log('Attempting primary method: DUO website browser verification...');
+  const browserResult = await verifyViaDuoBrowser(pdfBytes, filename);
   
-  if (signatureResult.status === 'signature_valid') {
-    console.log('✅ Signature validation successful');
-    return signatureResult;
+  // If browser verification was successful or gave definitive result
+  if (browserResult.status === 'verified_duo' || browserResult.status === 'duo_invalid') {
+    console.log(`✅ Browser verification complete: ${browserResult.status}`);
+    return browserResult;
   }
   
-  console.log(`Signature check result: ${signatureResult.status}, trying DUO HTTP...`);
-  
-  // Step 2: Try DUO HTTP API (fallback)
-  const duoResult = await verifyViaDuoHttp(pdfBytes, filename);
-  
-  if (duoResult.status === 'verified_duo') {
-    console.log('✅ DUO HTTP verification successful');
-    return duoResult;
-  }
-  
-  // Step 3: Combine results for manual review
-  console.log(`DUO HTTP result: ${duoResult.status}, recommending manual review`);
-  
-  // Return the most informative result
-  if (signatureResult.status === 'duo_not_digital') {
-    // No signature = likely needs manual verification
+  // If browser had error or couldn't determine, try signature fallback
+  if (browserResult.status === 'duo_error' || browserResult.status === 'manual_review') {
+    console.log(`Browser verification inconclusive (${browserResult.status}), trying signature fallback...`);
+    
+    const signatureResult = validatePdfSignatureFallback(pdfBytes);
+    
+    // Combine info from both methods
     return {
-      status: 'manual_review',
-      method: 'manual',
-      message: 'Automatische verificatie niet mogelijk - handmatige verificatie via DUO portaal aanbevolen',
+      ...signatureResult,
       details: {
-        signature_check: signatureResult.details,
-        duo_http_check: duoResult.details,
-        recommendation: 'Gebruik https://zakelijk.duo.nl/portaal/diplomacontrole/ voor handmatige verificatie',
+        ...signatureResult.details,
+        browser_attempt: browserResult.details,
+        browser_error: browserResult.message,
       },
     };
   }
   
-  return duoResult;
+  // Return browser result (duo_not_digital, etc.)
+  return browserResult;
 }
 
 // ============= EDGE FUNCTION HANDLER =============
@@ -459,282 +578,115 @@ Deno.serve(async (req: Request) => {
       });
     }
     
-    // Handle retry action - re-verify existing diploma
-    if (action === 'retry') {
-      console.log('🔄 Retry verification requested for application:', application_id);
-      
-      // Get application with diploma file
-      const { data: app, error: appFetchError } = await supabase
-        .from('professional_applications')
-        .select('id, diploma_file_path, diploma_validation_status')
-        .eq('id', application_id)
-        .single();
-      
-      if (appFetchError || !app) {
-        console.error('Application fetch error:', appFetchError);
-        return errorResponse('Application not found', 404);
-      }
-      
-      if (!app.diploma_file_path) {
-        return errorResponse('Geen diploma bestand gevonden', 400);
-      }
-      
-      console.log('📥 Downloading diploma for retry:', app.diploma_file_path);
-      
-      // Download diploma from storage
-      const { data: fileData, error: fileDownloadError } = await supabase.storage
-        .from('application-documents')
-        .download(app.diploma_file_path);
-      
-      if (fileDownloadError || !fileData) {
-        console.error('File download error:', fileDownloadError);
-        return errorResponse('Failed to download diploma file', 500);
-      }
-      
-      // Convert to bytes
-      const pdfBytes = new Uint8Array(await fileData.arrayBuffer());
-      const filename = app.diploma_file_path.split('/').pop() || 'diploma.pdf';
-      
-      console.log('🎓 Re-verifying diploma:', filename, 'size:', pdfBytes.length);
-      
-      // Run verification
-      const result = await verifyDiploma(pdfBytes, filename);
-      
-      // Map result to database status
-      const dbStatus = result.status === 'signature_valid' ? 'verified_duo' : result.status;
-      
-      console.log('📝 Retry result - updating application with status:', dbStatus);
-      
-      // Update application
-      const { data: updateData, error: updateError } = await supabase
-        .from('professional_applications')
-        .update({
-          diploma_validation_status: dbStatus,
-          diploma_verification_response: {
-            ...result.details,
-            method: result.method,
-            message: result.message,
-            verified_at: result.verified_at,
-            retry: true,
-          },
-          duo_verified_at: result.verified_at || new Date().toISOString(),
-        })
-        .eq('id', application_id)
-        .select('id, diploma_validation_status')
-        .single();
-      
-      if (updateError) {
-        console.error('❌ Retry update FAILED:', updateError);
-      } else {
-        console.log('✅ Retry update SUCCESS:', updateData?.diploma_validation_status);
-      }
-      
-      // Log for AI learning
-      await supabase.from('ai_learning_events').insert({
-        event_type: 'diploma_verification_retry',
-        org_id: '550e8400-e29b-41d4-a716-446655440000',
-        context: {
-          application_id,
-          verification_method: result.method,
-          status: result.status,
-          filename,
-          pdf_size: pdfBytes.length,
-          previous_status: app.diploma_validation_status,
-        },
-        outcome: result.status,
-        confidence_score: result.status === 'signature_valid' || result.status === 'verified_duo' ? 0.95 : 0.5,
-      });
-      
-      return jsonResponse({
-        success: true,
-        status: dbStatus,
-        method: result.method,
-        message: result.message,
-        details: result.details,
-        verified_at: result.verified_at,
-        retry: true,
-      });
-    }
+    // Handle retry/verify action
+    console.log('🔄 DUO verification requested for application:', application_id);
     
-    // Handle check_status action
-    if (action === 'check_status') {
-      const { data: appData, error: appError } = await supabase
-        .from('professional_applications')
-        .select('diploma_validation_status, diploma_verification_response, duo_verified_at')
-        .eq('id', application_id)
-        .single();
-      
-      if (appError) {
-        return errorResponse('Application not found', 404);
-      }
-      
-      return jsonResponse({
-        success: true,
-        status: appData.diploma_validation_status,
-        verification_response: appData.diploma_verification_response,
-        verified_at: appData.duo_verified_at,
-      });
-    }
-    
-    // Default action: verify
     // Get application with diploma file
-    const { data: application, error: appError } = await supabase
+    const { data: app, error: appFetchError } = await supabase
       .from('professional_applications')
-      .select('id, diploma_file_path, diploma_validation_status')
+      .select('id, diploma_file_path, diploma_validation_status, org_id')
       .eq('id', application_id)
       .single();
     
-    if (appError || !application) {
+    if (appFetchError || !app) {
+      console.error('Application fetch error:', appFetchError);
       return errorResponse('Application not found', 404);
     }
     
-    if (!application.diploma_file_path) {
-      return errorResponse('No diploma file found for this application', 400);
+    if (!app.diploma_file_path) {
+      return errorResponse('Geen diploma bestand gevonden', 400);
     }
     
-    // Download PDF from storage
-    console.log('Downloading diploma from:', application.diploma_file_path);
-    const { data: fileData, error: fileError } = await supabase.storage
-      .from('application-documents')
-      .download(application.diploma_file_path);
+    console.log('📥 Downloading diploma:', app.diploma_file_path);
     
-    if (fileError || !fileData) {
-      console.error('File download error:', fileError);
+    // Download diploma from storage
+    const { data: fileData, error: fileDownloadError } = await supabase.storage
+      .from('application-documents')
+      .download(app.diploma_file_path);
+    
+    if (fileDownloadError || !fileData) {
+      console.error('File download error:', fileDownloadError);
       return errorResponse('Failed to download diploma file', 500);
     }
     
     // Convert to bytes
     const pdfBytes = new Uint8Array(await fileData.arrayBuffer());
-    const filename = application.diploma_file_path.split('/').pop() || 'diploma.pdf';
+    const filename = app.diploma_file_path.split('/').pop() || 'diploma.pdf';
+    
+    console.log('🎓 Verifying diploma:', filename, 'size:', pdfBytes.length);
     
     // Run verification
     const result = await verifyDiploma(pdfBytes, filename);
     
-    // Map result to database status
-    const dbStatus = result.status === 'signature_valid' ? 'verified_duo' : result.status;
+    console.log('Verification result:', JSON.stringify(result, null, 2));
     
-    console.log('📝 Updating application with status:', dbStatus);
-    console.log('📝 Application ID:', application_id);
+    // Map result status to diploma_validation_status
+    let dbStatus: string;
+    switch (result.status) {
+      case 'verified_duo':
+        dbStatus = 'verified_duo';
+        break;
+      case 'signature_valid':
+        dbStatus = 'signature_valid';
+        break;
+      case 'duo_invalid':
+        dbStatus = 'duo_invalid';
+        break;
+      case 'duo_not_digital':
+        dbStatus = 'duo_not_digital';
+        break;
+      case 'duo_error':
+        dbStatus = 'duo_error';
+        break;
+      default:
+        dbStatus = 'manual_review';
+    }
     
-    // Update application with .select() to confirm what was updated
-    const { data: updateData, error: updateError } = await supabase
+    // Update application
+    const { error: updateError } = await supabase
       .from('professional_applications')
       .update({
         diploma_validation_status: dbStatus,
         diploma_verification_response: {
           ...result.details,
+          status: result.status,
           method: result.method,
           message: result.message,
-          verified_at: result.verified_at,
+          verified_at: result.verified_at || new Date().toISOString(),
         },
-        duo_verified_at: result.verified_at || new Date().toISOString(),
+        duo_verified_at: result.verified_at || null,
       })
-      .eq('id', application_id)
-      .select('id, diploma_validation_status')
-      .single();
+      .eq('id', application_id);
     
     if (updateError) {
-      console.error('❌ Database update FAILED:', updateError);
-      console.error('❌ Error details:', JSON.stringify(updateError));
-    } else {
-      console.log('✅ Database update SUCCESS:', updateData?.diploma_validation_status);
+      console.error('Update error:', updateError);
+      return errorResponse('Failed to update verification status', 500);
     }
     
     // Log for AI learning
-    await supabase.from('ai_learning_events').insert({
-      event_type: 'diploma_verification',
-      org_id: '550e8400-e29b-41d4-a716-446655440000', // ABCzorg
-      context: {
-        application_id,
-        verification_method: result.method,
-        status: result.status,
-        filename,
-        pdf_size: pdfBytes.length,
-      },
-      outcome: result.status,
-      confidence_score: result.status === 'signature_valid' || result.status === 'verified_duo' ? 0.95 : 0.5,
-    });
-    
-    // Extra logging voor fraude detectie bij duo_invalid
-    if (dbStatus === 'duo_invalid') {
-      console.log('🚨 FRAUDE ALERT: Diploma ongeldig bevonden via DUO verificatie');
+    try {
       await supabase.from('ai_learning_events').insert({
-        event_type: 'diploma_fraud_alert',
-        org_id: '550e8400-e29b-41d4-a716-446655440000',
+        org_id: app.org_id,
+        event_type: 'diploma_verification',
         context: {
           application_id,
-          alert_type: 'potential_fraud',
           filename,
-          pdf_size: pdfBytes.length,
+          file_size: pdfBytes.length,
           verification_method: result.method,
-          indicators: result.details,
         },
-        outcome: 'flagged_for_review',
-        confidence_score: 0.8,
+        outcome: result.status,
+        confidence_score: result.status === 'verified_duo' ? 1.0 : 
+                         result.status === 'signature_valid' ? 0.7 :
+                         result.status === 'manual_review' ? 0.3 : 0.5,
+        ai_response: result.details,
       });
-      
-      // 🆕 Trigger AI agent goal to request valid diploma from candidate
-      const { data: appData } = await supabase
-        .from('professional_applications')
-        .select('org_id, email_from, extracted_data')
-        .eq('id', application_id)
-        .single();
-      
-      if (appData) {
-        const candidateName = (appData.extracted_data as any)?.naam || 'Kandidaat';
-        console.log('📧 Creating AI agent goal to request valid diploma from:', candidateName);
-        
-        await supabase.from('agent_goals').insert({
-          org_id: appData.org_id,
-          goal_type: 'request_documents',
-          goal_description: `Vraag geldig diploma aan na DUO verificatie failure voor ${candidateName}`,
-          input_data: {
-            application_id,
-            candidate_email: appData.email_from,
-            candidate_name: candidateName,
-            documents: ['Officieel diploma met digitale handtekening van DUO'],
-            urgent: true,
-            reason: 'DUO verificatie kon diploma niet valideren - mogelijk ongeldig of niet-digitaal document',
-            verification_result: result.details,
-          },
-          status: 'pending',
-          priority: 10,
-        });
-      }
-    }
-    
-    // 🆕 Recruiter notification for successful verification
-    if (dbStatus === 'verified_duo') {
-      console.log('✅ Logging successful diploma verification for recruiter notification');
-      
-      const { data: appData } = await supabase
-        .from('professional_applications')
-        .select('org_id, extracted_data')
-        .eq('id', application_id)
-        .single();
-      
-      if (appData) {
-        const candidateName = (appData.extracted_data as any)?.naam || 'Kandidaat';
-        
-        await supabase.from('system_events').insert({
-          event_type: 'diploma_verification_success',
-          entity_type: 'application',
-          entity_id: application_id,
-          org_id: appData.org_id,
-          event_data: {
-            verification_method: result.method,
-            is_duo_certificate: result.details?.is_duo_certificate || false,
-            candidate_name: candidateName,
-            verified_at: result.verified_at,
-            message: result.message,
-          },
-        });
-      }
+    } catch (logError) {
+      console.error('AI learning log error (non-fatal):', logError);
     }
     
     return jsonResponse({
       success: true,
-      status: dbStatus,
+      status: result.status,
       method: result.method,
       message: result.message,
       details: result.details,
@@ -742,7 +694,7 @@ Deno.serve(async (req: Request) => {
     });
     
   } catch (error) {
-    console.error('Verification error:', error);
+    console.error('Edge function error:', error);
     return errorResponse(`Verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 500);
   }
 });
