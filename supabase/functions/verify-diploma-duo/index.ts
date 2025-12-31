@@ -49,14 +49,19 @@ const MAX_DUO_RETRIES = 3;
  * Format: wss://{auth}@brd.superproxy.io:9222
  */
 function buildBrightDataUrl(): string | null {
-  const auth = Deno.env.get('BRIGHTDATA_SBR_AUTH');
+  let auth = Deno.env.get('BRIGHTDATA_SBR_AUTH');
   if (!auth) {
     console.error('BRIGHTDATA_SBR_AUTH not configured');
     return null;
   }
   
+  // Sanitize: strip wss:// prefix and @brd.superproxy.io:9222 suffix if user pasted full URL
+  auth = auth.replace(/^wss?:\/\//i, '').replace(/@brd\.superproxy\.io:\d+$/i, '');
+  
   // Format: brd-customer-XXXXX-zone-YYYYY:password
-  return `wss://${auth}@brd.superproxy.io:9222`;
+  const url = `wss://${auth}@brd.superproxy.io:9222`;
+  console.log('[BRIGHT-DATA] WebSocket URL constructed (auth length:', auth.length, ')');
+  return url;
 }
 
 /**
