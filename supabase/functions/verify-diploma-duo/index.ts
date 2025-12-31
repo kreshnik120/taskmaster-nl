@@ -2,7 +2,7 @@ import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse
 import puppeteer from 'https://deno.land/x/puppeteer@16.2.0/mod.ts';
 
 // Boot log to verify deployment
-console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v3.0.0-ultimate-antibot-2025-12-30 loaded`);
+console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v4.0.0-brightdata-sbr-2025-12-31 loaded`);
 
 // Types
 type DiplomaStatus = 
@@ -39,289 +39,53 @@ interface SignatureInfo {
 
 const DUO_CHECK_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
 const DUO_HOME_URL = 'https://zakelijk.duo.nl/';
-const DEPLOYMENT_VERSION = 'v3.0.0-ultimate-antibot-2025-12-30';
+const DEPLOYMENT_VERSION = 'v4.0.0-brightdata-sbr-2025-12-31';
 const MAX_DUO_RETRIES = 3;
 
-// ============= ULTIMATE ANTI-BOT EVASION SYSTEM v3.0 =============
+// ============= BRIGHT DATA SCRAPING BROWSER =============
 
 /**
- * Generate comprehensive 2024/2025 anti-bot stealth scripts
- * These scripts are injected before any navigation to evade detection
+ * Build Bright Data Scraping Browser WebSocket URL
+ * Format: wss://{auth}@brd.superproxy.io:9222
  */
-function getUltimateStealthScripts(): string {
-  return `
-    // ============= ULTIMATE ANTI-BOT EVASION v3.0 =============
-    
-    // 1. CRITICAL: Mask webdriver property (most important detection!)
-    Object.defineProperty(navigator, 'webdriver', {
-      get: () => undefined,
-      configurable: true,
-    });
-    
-    // Also delete it from prototype
-    delete Navigator.prototype.webdriver;
-    
-    // 2. Chrome runtime object (missing in headless = major red flag)
-    if (!window.chrome) {
-      window.chrome = {};
-    }
-    window.chrome.runtime = {
-      id: 'gpgaabhdcbfnanjdpnjnnaoglgpdalgo',
-      connect: function() { return { onMessage: { addListener: function() {} }, postMessage: function() {} }; },
-      sendMessage: function() {},
-      onMessage: { addListener: function() {}, removeListener: function() {} },
-      onConnect: { addListener: function() {}, removeListener: function() {} },
-    };
-    window.chrome.loadTimes = function() { return {}; };
-    window.chrome.csi = function() { return {}; };
-    window.chrome.app = { isInstalled: false, InstallState: {}, RunningState: {} };
-    
-    // 3. CDP (Chrome DevTools Protocol) detection bypass
-    Object.defineProperty(navigator, 'plugins', {
-      get: () => {
-        const plugins = [
-          { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-          { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
-          { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' },
-        ];
-        plugins.length = 3;
-        plugins.item = function(i) { return this[i] || null; };
-        plugins.namedItem = function(n) { return this.find(p => p.name === n) || null; };
-        plugins.refresh = function() {};
-        return plugins;
-      },
-      configurable: true,
-    });
-    
-    // 4. Languages (Dutch primary for DUO)
-    Object.defineProperty(navigator, 'languages', {
-      get: () => ['nl-NL', 'nl', 'en-US', 'en'],
-      configurable: true,
-    });
-    
-    Object.defineProperty(navigator, 'language', {
-      get: () => 'nl-NL',
-      configurable: true,
-    });
-    
-    // 5. Platform spoofing (Linux in Docker = suspicious)
-    Object.defineProperty(navigator, 'platform', {
-      get: () => 'Win32',
-      configurable: true,
-    });
-    
-    // 6. Hardware concurrency (realistic desktop value)
-    Object.defineProperty(navigator, 'hardwareConcurrency', {
-      get: () => 8,
-      configurable: true,
-    });
-    
-    // 7. Device memory (realistic value)
-    Object.defineProperty(navigator, 'deviceMemory', {
-      get: () => 8,
-      configurable: true,
-    });
-    
-    // 8. Max touch points (0 for desktop, non-zero is suspicious for Windows)
-    Object.defineProperty(navigator, 'maxTouchPoints', {
-      get: () => 0,
-      configurable: true,
-    });
-    
-    // 9. User Agent Data API (Chrome 90+)
-    if (navigator.userAgentData) {
-      Object.defineProperty(navigator.userAgentData, 'brands', {
-        get: () => [
-          { brand: 'Google Chrome', version: '120' },
-          { brand: 'Chromium', version: '120' },
-          { brand: 'Not_A Brand', version: '24' },
-        ],
-        configurable: true,
-      });
-      Object.defineProperty(navigator.userAgentData, 'mobile', {
-        get: () => false,
-        configurable: true,
-      });
-      Object.defineProperty(navigator.userAgentData, 'platform', {
-        get: () => 'Windows',
-        configurable: true,
-      });
-    }
-    
-    // 10. Permissions query override
-    const originalPermissionsQuery = navigator.permissions?.query;
-    if (originalPermissionsQuery) {
-      navigator.permissions.query = function(descriptor) {
-        if (descriptor.name === 'notifications') {
-          return Promise.resolve({ state: 'denied', onchange: null });
-        }
-        return originalPermissionsQuery.call(navigator.permissions, descriptor);
-      };
-    }
-    
-    // 11. WebGL fingerprint randomization
-    const getParameterOrig = WebGLRenderingContext.prototype.getParameter;
-    WebGLRenderingContext.prototype.getParameter = function(param) {
-      // VENDOR (37445) and RENDERER (37446)
-      if (param === 37445) return 'Google Inc. (Intel)';
-      if (param === 37446) return 'ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)';
-      return getParameterOrig.call(this, param);
-    };
-    
-    const getParameter2Orig = WebGL2RenderingContext?.prototype?.getParameter;
-    if (getParameter2Orig) {
-      WebGL2RenderingContext.prototype.getParameter = function(param) {
-        if (param === 37445) return 'Google Inc. (Intel)';
-        if (param === 37446) return 'ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)';
-        return getParameter2Orig.call(this, param);
-      };
-    }
-    
-    // 12. Canvas fingerprint randomization (subtle noise)
-    const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
-    HTMLCanvasElement.prototype.toDataURL = function(type, quality) {
-      const result = originalToDataURL.call(this, type, quality);
-      // Add minimal noise to prevent fingerprinting
-      if (this.width > 0 && this.height > 0 && result.length > 100) {
-        // Return original but flag as processed
-        return result;
-      }
-      return result;
-    };
-    
-    // 13. Screen dimensions (realistic desktop)
-    Object.defineProperty(screen, 'width', { get: () => 1920 });
-    Object.defineProperty(screen, 'height', { get: () => 1080 });
-    Object.defineProperty(screen, 'availWidth', { get: () => 1920 });
-    Object.defineProperty(screen, 'availHeight', { get: () => 1040 });
-    Object.defineProperty(screen, 'colorDepth', { get: () => 24 });
-    Object.defineProperty(screen, 'pixelDepth', { get: () => 24 });
-    
-    // 14. Automation properties removal
-    delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
-    delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
-    delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
-    delete window.__webdriver_evaluate;
-    delete window.__selenium_evaluate;
-    delete window.__webdriver_script_function;
-    delete window.__webdriver_script_func;
-    delete window.__webdriver_script_fn;
-    delete window.__fxdriver_evaluate;
-    delete window.__driver_unwrapped;
-    delete window.__webdriver_unwrapped;
-    delete window.__driver_evaluate;
-    delete window.__selenium_unwrapped;
-    delete window.__fxdriver_unwrapped;
-    delete window._Selenium_IDE_Recorder;
-    delete window._selenium;
-    delete window.calledSelenium;
-    delete window.$cdc_asdjflasutopfhvcZLmcfl_;
-    delete window.$chrome_asyncScriptInfo;
-    delete window.__$webdriverAsyncExecutor;
-    delete window.webdriver;
-    delete window.domAutomation;
-    delete window.domAutomationController;
-    
-    // 15. Media devices (realistic desktop)
-    if (navigator.mediaDevices) {
-      navigator.mediaDevices.enumerateDevices = function() {
-        return Promise.resolve([
-          { deviceId: 'default', kind: 'audioinput', label: 'Default - Microphone (Realtek High Definition Audio)', groupId: 'audio1' },
-          { deviceId: 'communications', kind: 'audioinput', label: 'Communications - Microphone (Realtek High Definition Audio)', groupId: 'audio1' },
-          { deviceId: 'default', kind: 'audiooutput', label: 'Default - Speakers (Realtek High Definition Audio)', groupId: 'audio2' },
-          { deviceId: 'default', kind: 'videoinput', label: 'Integrated Webcam (0bda:5520)', groupId: 'video1' },
-        ]);
-      };
-    }
-    
-    // 16. Connection API (realistic values)
-    if (navigator.connection) {
-      Object.defineProperties(navigator.connection, {
-        effectiveType: { get: () => '4g' },
-        rtt: { get: () => 50 },
-        downlink: { get: () => 10 },
-        saveData: { get: () => false },
-      });
-    }
-    
-    // 17. Battery API (disabled in modern Chrome for fingerprinting protection)
-    navigator.getBattery = undefined;
-    
-    // 18. Iframe detection bypass
-    Object.defineProperty(window, 'frameElement', { get: () => null });
-    
-    // 19. History length (realistic browsing session)
-    Object.defineProperty(history, 'length', { get: () => 5 + Math.floor(Math.random() * 10) });
-    
-    // 20. Timing attack prevention
-    const originalGetTime = Date.prototype.getTime;
-    let timeOffset = Math.floor(Math.random() * 100);
-    Date.prototype.getTime = function() {
-      return originalGetTime.call(this) + timeOffset;
-    };
-    
-    console.log('🛡️ Ultimate Anti-Bot Stealth v3.0 activated');
-  `;
+function buildBrightDataUrl(): string | null {
+  const auth = Deno.env.get('BRIGHTDATA_SBR_AUTH');
+  if (!auth) {
+    console.error('BRIGHTDATA_SBR_AUTH not configured');
+    return null;
+  }
+  
+  // Format: brd-customer-XXXXX-zone-YYYYY:password
+  return `wss://${auth}@brd.superproxy.io:9222`;
 }
 
 /**
- * Add human-like delays and behaviors
+ * Human-like delay
  */
 function randomDelay(min: number, max: number): Promise<void> {
   const delay = min + Math.random() * (max - min);
   return new Promise(resolve => setTimeout(resolve, delay));
 }
 
-/**
- * Build Browserless connection URL with residential proxy and stealth options
- */
-function buildBrowserlessUrl(apiKey: string): string {
-  // Check for residential proxy (Scale plan feature)
-  const useResidential = Deno.env.get('BROWSERLESS_RESIDENTIAL') === 'true';
-  
-  // Base URL with stealth mode
-  let url = `wss://chrome.browserless.io?token=${apiKey}`;
-  
-  // Add stealth options
-  url += '&stealth=true';  // Enable native stealth mode
-  url += '&headless=new';  // Chrome's new headless mode (less detectable)
-  
-  // If residential proxy is enabled (Scale plan)
-  if (useResidential) {
-    url += '&proxy=residential';
-    url += '&proxyCountry=nl';  // Dutch IP for DUO
-    console.log('🏠 Using residential proxy (Netherlands)');
-  }
-  
-  // Add external proxy if configured
-  const externalProxy = Deno.env.get('RESIDENTIAL_PROXY_URL');
-  if (externalProxy && !useResidential) {
-    // External proxy via connect options (handled in puppeteer.connect)
-    console.log('🌐 External residential proxy configured');
-  }
-  
-  return url;
-}
-
-// ============= DUO WEBSITE BROWSER VERIFICATION (PRIMARY) =============
+// ============= DUO VERIFICATION VIA BRIGHT DATA SCRAPING BROWSER =============
 
 /**
- * ECHTE DUO verificatie via browser automation (Browserless)
- * v3.0: Ultimate Anti-Bot Evasion with Residential Proxy support
+ * Verify diploma via DUO website using Bright Data Scraping Browser
+ * No anti-bot code needed - Bright Data handles all unlocking
  */
 async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, storagePath?: string): Promise<VerificationResult> {
-  console.log(`🌐 Starting REAL DUO browser verification [${DEPLOYMENT_VERSION}]...`);
+  console.log(`🌐 Starting DUO verification via Bright Data Scraping Browser [${DEPLOYMENT_VERSION}]...`);
   
-  const browserlessApiKey = Deno.env.get('BROWSERLESS_API_KEY');
+  const browserWSEndpoint = buildBrightDataUrl();
   
-  if (!browserlessApiKey) {
-    console.error('BROWSERLESS_API_KEY not configured');
+  if (!browserWSEndpoint) {
+    console.error('Bright Data credentials not configured');
     return {
       status: 'manual_review',
       method: 'duo_browser',
       message: 'Browser automatisering niet geconfigureerd - gebruik handmatige verificatie via zakelijk.duo.nl',
       details: { 
-        error: 'BROWSERLESS_API_KEY missing', 
+        error: 'BRIGHTDATA_SBR_AUTH missing', 
         version: DEPLOYMENT_VERSION,
         manual_verification_url: DUO_CHECK_URL,
       },
@@ -360,9 +124,8 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
       pdfBase64 = btoa(binary);
     }
 
-    // Step 2: Connect to Browserless with stealth options
-    console.log('🔌 Connecting to Browserless with Ultimate Anti-Bot...');
-    const browserWSEndpoint = buildBrowserlessUrl(browserlessApiKey);
+    // Step 2: Connect to Bright Data Scraping Browser
+    console.log('🔌 Connecting to Bright Data Scraping Browser...');
     
     browser = await puppeteer.connect({
       browserWSEndpoint,
@@ -375,64 +138,17 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
       },
     });
     
-    console.log('✅ Connected to Browserless');
+    console.log('✅ Connected to Bright Data Scraping Browser');
 
-    // Step 3: Create page with Ultimate Stealth
+    // Step 3: Create page (no stealth injection needed - Bright Data handles it)
     const page = await browser.newPage();
     
-    // Inject comprehensive stealth scripts BEFORE any navigation
-    await page.evaluateOnNewDocument(getUltimateStealthScripts());
-    console.log('🛡️ Ultimate stealth scripts injected');
-    
-    // Set realistic browser headers
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-    
+    // Set Dutch language preference
     await page.setExtraHTTPHeaders({
       'Accept-Language': 'nl-NL,nl;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-      'Accept-Encoding': 'gzip, deflate, br',
-      'Cache-Control': 'max-age=0',
-      'DNT': '1',
-      'Connection': 'keep-alive',
-      'Upgrade-Insecure-Requests': '1',
-      'Sec-Fetch-Dest': 'document',
-      'Sec-Fetch-Mode': 'navigate',
-      'Sec-Fetch-Site': 'none',
-      'Sec-Fetch-User': '?1',
-      'Sec-CH-UA': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-      'Sec-CH-UA-Mobile': '?0',
-      'Sec-CH-UA-Platform': '"Windows"',
     });
 
-    // Step 4: Human-like navigation pattern
-    console.log('🧑 Simulating human-like browsing behavior...');
-    
-    // First visit Google briefly (creates referrer chain)
-    try {
-      await page.goto('https://www.google.nl', { waitUntil: 'domcontentloaded', timeout: 10000 });
-      await randomDelay(800, 1500);
-      console.log('✅ Google visited (referrer chain)');
-    } catch {
-      console.log('⚠️ Google pre-visit skipped');
-    }
-    
-    // Then visit DUO homepage
-    console.log('🍪 Pre-loading cookies from DUO homepage...');
-    try {
-      await page.goto(DUO_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await randomDelay(1500, 2500);
-      
-      // Simulate mouse movement
-      await page.mouse.move(400, 300);
-      await randomDelay(200, 400);
-      await page.mouse.move(600, 400);
-      
-      console.log('✅ Homepage cookies loaded');
-    } catch {
-      console.log('⚠️ Homepage pre-load failed, continuing...');
-    }
-    
-    // Navigate to diplomacontrole with human-like timing
+    // Navigate to DUO with human-like timing
     console.log(`📄 Navigating to ${DUO_CHECK_URL}...`);
     await randomDelay(500, 1000);
     
@@ -448,7 +164,7 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
       try {
         response = await page.goto(DUO_CHECK_URL, { 
           waitUntil: 'networkidle2',
-          timeout: 45000,
+          timeout: 60000, // Longer timeout for Bright Data unlocking
         });
         
         httpStatus = response?.status() || 0;
@@ -503,12 +219,11 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
           error_content: errorHtml,
           version: DEPLOYMENT_VERSION,
           manual_verification_url: DUO_CHECK_URL,
-          detection_layer: 'network_error',
         },
       };
     }
     
-    // Check for login page redirect (bot detection)
+    // Check for login page redirect (bot detection - should not happen with Bright Data)
     const pageTextLower = (await page.evaluate('document.body.innerText.substring(0, 2000)') as string).toLowerCase();
     const isLoginPage = 
       pageUrl.includes('inloggen') || 
@@ -519,42 +234,25 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
       (pageTextLower.includes('eherkenning') && !pageTextLower.includes('diplomacontrole'));
     
     if (isLoginPage && !pageTextLower.includes('diplomacontrole')) {
-      console.log('⚠️ Bot detection triggered - redirected to login page');
+      console.log('⚠️ Redirected to login page - unusual for Bright Data');
       console.log('Page URL:', pageUrl);
-      console.log('Page content preview:', pageTextLower.substring(0, 300));
-      
-      // Take screenshot for debugging
-      let debugScreenshot = '';
-      try {
-        debugScreenshot = await page.screenshot({ encoding: 'base64' }) || '';
-      } catch {
-        // Ignore screenshot errors
-      }
       
       return {
         status: 'manual_review',
         method: 'duo_browser',
-        message: 'DUO website detecteerde automatisering - gebruik handmatige verificatie via zakelijk.duo.nl/portaal/diplomacontrole/',
+        message: 'DUO website redirected to login - gebruik handmatige verificatie via zakelijk.duo.nl/portaal/diplomacontrole/',
         details: { 
           redirect_url: pageUrl,
-          bot_detected: true,
           page_preview: pageTextLower.substring(0, 500),
-          screenshot_preview: debugScreenshot ? debugScreenshot.substring(0, 100) + '...' : 'none',
           version: DEPLOYMENT_VERSION,
           manual_verification_url: DUO_CHECK_URL,
-          detection_layer: 'server_side_bot_detection',
-          suggestion: 'DUO heeft server-side bot detectie - handmatige verificatie via browser is betrouwbaar alternatief',
         },
       };
     }
 
-    // Step 5: Wait for Angular app with human-like behavior
+    // Step 4: Wait for Angular app
     console.log('⏳ Waiting for Angular app...');
     await randomDelay(2000, 3500);
-    
-    // Simulate looking around
-    await page.mouse.move(800, 400);
-    await randomDelay(300, 600);
     
     try {
       await page.waitForSelector('app-diploma-controle, uno-ng-input-file, .diploma-controle, input[type="file"]', { timeout: 20000 });
@@ -570,7 +268,7 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
     
     // Handle cookie consent
     try {
-      const cookieButton = await page.$('button[id*="cookie"], button[class*="cookie"], .cookie-accept, #accept-cookies, button:has-text("Accepteren")');
+      const cookieButton = await page.$('button[id*="cookie"], button[class*="cookie"], .cookie-accept, #accept-cookies');
       if (cookieButton) {
         await randomDelay(500, 1000);
         await cookieButton.click();
@@ -581,7 +279,7 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
       // Cookie consent not present
     }
 
-    // Step 6: Find and interact with file input
+    // Step 5: Find and interact with file input
     console.log('🔍 Looking for file upload input...');
     await randomDelay(500, 1000);
     
@@ -623,7 +321,7 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
       };
     }
 
-    // Step 7: Upload PDF with human-like timing
+    // Step 6: Upload PDF
     console.log('📤 Uploading PDF...');
     await randomDelay(500, 1000);
     
@@ -699,13 +397,10 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
       };
     }
     
-    // Wait with human-like timing
     await randomDelay(1500, 2500);
 
-    // Step 8: Click Controleer button with human behavior
+    // Step 7: Click Controleer button
     console.log('🖱️ Looking for Controleer button...');
-    await page.mouse.move(960, 540);
-    await randomDelay(300, 600);
     
     const buttonSelectors = [
       'button[data-test="controleer-knop"]',
@@ -753,7 +448,7 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
       }
     }
 
-    // Step 9: Wait for result
+    // Step 8: Wait for result
     console.log('⏳ Waiting for verification result...');
     await randomDelay(4000, 6000);
     
@@ -773,7 +468,7 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
       console.log('Timeout waiting for result, checking anyway...');
     }
 
-    // Step 10: Parse result
+    // Step 9: Parse result
     console.log('📋 Parsing DUO response...');
     const pageContent = await page.evaluate('document.body.innerText') as string;
     const pageContentLower = pageContent.toLowerCase();
@@ -807,7 +502,7 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
         method: 'duo_browser',
         message: 'Diploma geverifieerd door DUO Online Diplomacontrole - echtheidskenmerk aanwezig, document is origineel',
         details: {
-          verification_source: 'duo_website_browser',
+          verification_source: 'duo_website_brightdata',
           verified_by_government: true,
           duo_response: 'Het echtheidskenmerk is aanwezig - document origineel',
           page_url: page.url(),
@@ -824,7 +519,7 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
         method: 'duo_browser',
         message: 'Diploma niet gevonden of ongeldig volgens DUO Online Diplomacontrole',
         details: {
-          verification_source: 'duo_website_browser',
+          verification_source: 'duo_website_brightdata',
           page_content_preview: pageContent.substring(0, 300),
         },
       };
@@ -836,7 +531,7 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
         status: 'duo_not_digital',
         method: 'duo_browser',
         message: 'Diploma niet digitaal geregistreerd bij DUO (mogelijk van voor 1996)',
-        details: { verification_source: 'duo_website_browser' },
+        details: { verification_source: 'duo_website_brightdata' },
       };
     }
     
@@ -859,7 +554,7 @@ async function verifyViaDuoBrowser(pdfBytes: Uint8Array, filename: string, stora
       method: 'duo_browser',
       message: 'DUO resultaat onduidelijk - gebruik handmatige verificatie via zakelijk.duo.nl/portaal/diplomacontrole/',
       details: {
-        verification_source: 'duo_website_browser',
+        verification_source: 'duo_website_brightdata',
         page_content_preview: pageContent.substring(0, 500),
         manual_verification_url: DUO_CHECK_URL,
       },
@@ -953,7 +648,7 @@ function analyzePdfSignature(pdfBytes: Uint8Array): SignatureInfo {
 }
 
 /**
- * Enhanced PDF signature fallback with clearer messaging
+ * PDF signature fallback verification
  */
 function validatePdfSignatureFallback(pdfBytes: Uint8Array): VerificationResult {
   console.log('🔐 Analyzing PDF for digital signatures (fallback method)...');
@@ -976,7 +671,7 @@ function validatePdfSignatureFallback(pdfBytes: Uint8Array): VerificationResult 
         signer_info: signatureInfo.signerInfo,
         reliability_score: 0.95,
         manual_verification_url: DUO_CHECK_URL,
-        explanation: 'De digitale handtekening is cryptografisch gevalideerd en bevat DUO/overheid markers. Dit is zeer betrouwbaar, maar browser verificatie was niet mogelijk door bot-detectie.',
+        explanation: 'De digitale handtekening is cryptografisch gevalideerd en bevat DUO/overheid markers.',
       },
     };
   }
@@ -1017,8 +712,8 @@ async function verifyDiploma(pdfBytes: Uint8Array, filename: string, storagePath
   console.log('🎓 Starting diploma verification...');
   console.log(`PDF size: ${pdfBytes.length} bytes, filename: ${filename}, storagePath: ${storagePath}`);
   
-  // PRIMARY: Try DUO website verification via browser
-  console.log('Attempting primary method: DUO website browser verification...');
+  // PRIMARY: Try DUO website verification via Bright Data Scraping Browser
+  console.log('Attempting primary method: DUO website via Bright Data Scraping Browser...');
   const browserResult = await verifyViaDuoBrowser(pdfBytes, filename, storagePath);
   
   // If browser verification gave definitive result
