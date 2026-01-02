@@ -1,10 +1,10 @@
 // Master Scheduler - central cron job orchestration
-// Version 2.0.1 - Orphan Cleanup Support
+// Version 2.0.2 - Diploma Re-Verification Support
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const VERSION = '2.0.1-orphan-cleanup';
+const VERSION = '2.0.2-diploma-reverify';
 
-// Active scheduled functions (14 schedules for 5 learning loops + 5 support + 3 fast path optimization + 1 orphan cleanup)
+// Active scheduled functions (15 schedules for 5 learning loops + 5 support + 3 fast path optimization + 1 orphan cleanup + 1 diploma reverify)
 const SCHEDULES = {
   'auto-resolve-alerts': '*/30 * * * *',        // Every 30 minutes (ACE Alert Resolution)
   'smart-deduplicator': '30 * * * *',           // Every hour at :30 (Learning Loop 5)
@@ -26,6 +26,8 @@ const SCHEDULES = {
   'cleanup-fast-path-patterns': '0 */4 * * *',  // Every 4 hours (Stricter cleanup cycle)
   // 🆕 Document Orphan Cleanup
   'cleanup-orphan-documents': '30 6 * * *',     // Daily at 06:30 (Cleanup orphan document references)
+  // 🆕 Diploma Re-Verification (signature_valid → verified_duo)
+  'reverify-diploma-signatures': '0 2 * * 0',   // Weekly Sunday 02:00 (Re-verify signature_valid diplomas)
   // Note: continuous-learner (Loop 1) runs via database trigger, not scheduler
 };
 
