@@ -1026,6 +1026,13 @@ export type Database = {
             foreignKeyName: "application_conversations_application_id_fkey"
             columns: ["application_id"]
             isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
+          {
+            foreignKeyName: "application_conversations_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
             referencedRelation: "professional_applications"
             referencedColumns: ["id"]
           },
@@ -1103,6 +1110,13 @@ export type Database = {
             foreignKeyName: "application_documents_application_id_fkey"
             columns: ["application_id"]
             isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
+          {
+            foreignKeyName: "application_documents_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
             referencedRelation: "professional_applications"
             referencedColumns: ["id"]
           },
@@ -1137,6 +1151,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "application_notes_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
           {
             foreignKeyName: "application_notes_application_id_fkey"
             columns: ["application_id"]
@@ -1178,6 +1199,13 @@ export type Database = {
           to_stage?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "application_stage_audit_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
           {
             foreignKeyName: "application_stage_audit_application_id_fkey"
             columns: ["application_id"]
@@ -1231,6 +1259,13 @@ export type Database = {
           voorgesteld_aan_klant_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "application_sublocation_matches_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
           {
             foreignKeyName: "application_sublocation_matches_application_id_fkey"
             columns: ["application_id"]
@@ -2261,6 +2296,13 @@ export type Database = {
             foreignKeyName: "document_audit_logs_application_id_fkey"
             columns: ["application_id"]
             isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
+          {
+            foreignKeyName: "document_audit_logs_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
             referencedRelation: "professional_applications"
             referencedColumns: ["id"]
           },
@@ -2709,6 +2751,13 @@ export type Database = {
             foreignKeyName: "human_review_queue_application_id_fkey"
             columns: ["application_id"]
             isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
+          {
+            foreignKeyName: "human_review_queue_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
             referencedRelation: "professional_applications"
             referencedColumns: ["id"]
           },
@@ -2778,6 +2827,13 @@ export type Database = {
             foreignKeyName: "intent_classification_audit_application_id_fkey"
             columns: ["application_id"]
             isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
+          {
+            foreignKeyName: "intent_classification_audit_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
             referencedRelation: "professional_applications"
             referencedColumns: ["id"]
           },
@@ -2843,6 +2899,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "interview_appointments_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
           {
             foreignKeyName: "interview_appointments_application_id_fkey"
             columns: ["application_id"]
@@ -3358,6 +3421,13 @@ export type Database = {
             foreignKeyName: "processed_emails_application_id_fkey"
             columns: ["application_id"]
             isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
+          {
+            foreignKeyName: "processed_emails_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
             referencedRelation: "professional_applications"
             referencedColumns: ["id"]
           },
@@ -3497,6 +3567,7 @@ export type Database = {
           source_label: string | null
           source_project: string | null
           status: string
+          target_vacancy_id: string | null
           tillift_certificaat_path: string | null
           updated_at: string | null
           vog_issue_date: string | null
@@ -3555,6 +3626,7 @@ export type Database = {
           source_label?: string | null
           source_project?: string | null
           status?: string
+          target_vacancy_id?: string | null
           tillift_certificaat_path?: string | null
           updated_at?: string | null
           vog_issue_date?: string | null
@@ -3613,6 +3685,7 @@ export type Database = {
           source_label?: string | null
           source_project?: string | null
           status?: string
+          target_vacancy_id?: string | null
           tillift_certificaat_path?: string | null
           updated_at?: string | null
           vog_issue_date?: string | null
@@ -3642,6 +3715,13 @@ export type Database = {
             columns: ["professional_id"]
             isOneToOne: false
             referencedRelation: "professionals_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "professional_applications_target_vacancy_id_fkey"
+            columns: ["target_vacancy_id"]
+            isOneToOne: false
+            referencedRelation: "vacancies"
             referencedColumns: ["id"]
           },
         ]
@@ -3862,6 +3942,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "professional_interviews_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
           {
             foreignKeyName: "professional_interviews_application_id_fkey"
             columns: ["application_id"]
@@ -4099,6 +4186,82 @@ export type Database = {
           },
         ]
       }
+      profile_fact_sources: {
+        Row: {
+          application_id: string
+          confidence: number | null
+          created_at: string
+          extracted_at: string
+          extracted_by: string | null
+          extraction_method: string | null
+          field_name: string
+          field_value: string | null
+          id: string
+          org_id: string
+          source_detail: string | null
+          source_reference: string | null
+          source_type: string
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          application_id: string
+          confidence?: number | null
+          created_at?: string
+          extracted_at?: string
+          extracted_by?: string | null
+          extraction_method?: string | null
+          field_name: string
+          field_value?: string | null
+          id?: string
+          org_id: string
+          source_detail?: string | null
+          source_reference?: string | null
+          source_type: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          application_id?: string
+          confidence?: number | null
+          created_at?: string
+          extracted_at?: string
+          extracted_by?: string | null
+          extraction_method?: string | null
+          field_name?: string
+          field_value?: string | null
+          id?: string
+          org_id?: string
+          source_detail?: string | null
+          source_reference?: string | null
+          source_type?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_fact_sources_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
+          {
+            foreignKeyName: "profile_fact_sources_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profile_fact_sources_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -4208,6 +4371,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "recruiter_notifications_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
           {
             foreignKeyName: "recruiter_notifications_application_id_fkey"
             columns: ["application_id"]
@@ -4507,6 +4677,13 @@ export type Database = {
           user_confirmed?: boolean | null
         }
         Relationships: [
+          {
+            foreignKeyName: "slot_detection_audit_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
           {
             foreignKeyName: "slot_detection_audit_application_id_fkey"
             columns: ["application_id"]
@@ -5041,6 +5218,13 @@ export type Database = {
             foreignKeyName: "tasks_application_id_fkey"
             columns: ["application_id"]
             isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
+          {
+            foreignKeyName: "tasks_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
             referencedRelation: "professional_applications"
             referencedColumns: ["id"]
           },
@@ -5373,6 +5557,13 @@ export type Database = {
             foreignKeyName: "vacancy_applications_application_id_fkey"
             columns: ["application_id"]
             isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
+          {
+            foreignKeyName: "vacancy_applications_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
             referencedRelation: "professional_applications"
             referencedColumns: ["id"]
           },
@@ -5571,6 +5762,19 @@ export type Database = {
       }
     }
     Views: {
+      application_evidence_summary: {
+        Row: {
+          application_id: string | null
+          avg_confidence: number | null
+          candidate_name: string | null
+          facts_from_cv: number | null
+          facts_from_email: number | null
+          facts_from_manual: number | null
+          total_facts: number | null
+          verified_facts: number | null
+        }
+        Relationships: []
+      }
       assignment_details: {
         Row: {
           ai_match_reasoning: Json | null
@@ -5761,6 +5965,13 @@ export type Database = {
           updated_at: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "human_review_queue_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
           {
             foreignKeyName: "human_review_queue_application_id_fkey"
             columns: ["application_id"]
@@ -6066,6 +6277,20 @@ export type Database = {
       is_knowledge_valid: {
         Args: { _valid_from: string; _valid_to: string }
         Returns: boolean
+      }
+      log_profile_fact_source: {
+        Args: {
+          p_application_id: string
+          p_confidence?: number
+          p_extracted_by?: string
+          p_extraction_method?: string
+          p_field_name: string
+          p_field_value: string
+          p_source_detail?: string
+          p_source_reference?: string
+          p_source_type: string
+        }
+        Returns: string
       }
       match_knowledge:
         | {

@@ -2266,3 +2266,233 @@ export async function preloadExpertKnowledge(): Promise<number> {
   const experts = await loadExpertKnowledge();
   return experts.length;
 }
+
+// ============= FASE 3: MUST-HAVE / NICE-TO-HAVE FIT ANALYSE =============
+
+/**
+ * Requirement check result for HR-style fit analysis
+ */
+export interface RequirementCheck {
+  requirement: string;
+  met: boolean;
+  evidence: string;
+  source?: string;
+  confidence?: number;
+}
+
+/**
+ * Dealbreaker check - hard requirements that must be met
+ */
+export interface DealbreakCheck {
+  check: string;
+  passed: boolean;
+  reason?: string;
+  blocking: boolean;
+}
+
+/**
+ * Complete Fit Analysis following HR specialist pattern
+ * Provides structured decision support rather than just a score
+ */
+export interface FitAnalysis {
+  // Requirements breakdown
+  mustHaves: RequirementCheck[];
+  niceToHaves: RequirementCheck[];
+  dealbreakers: DealbreakCheck[];
+  
+  // Overall decision
+  overallFit: 'proceed' | 'needs_info' | 'review_required' | 'reject';
+  confidence: number; // 0-1
+  
+  // Decision reasoning
+  recommendation: string;
+  nextSteps: string[];
+  
+  // Underlying score for ranking
+  matchScore: MatchScoreBreakdown;
+}
+
+/**
+ * Analyze fit between candidate and target with HR-style must-have/nice-to-have breakdown
+ * This provides decision support for recruiters, not just a numeric score
+ */
+export function analyzeFitWithEvidence(
+  application: ApplicationMatchSource,
+  target: MatchTarget,
+  matchScore?: MatchScoreBreakdown
+): FitAnalysis {
+  // Calculate score if not provided
+  const score = matchScore || calculateApplicationMatchScore(application, target);
+  
+  const mustHaves: RequirementCheck[] = [];
+  const niceToHaves: RequirementCheck[] = [];
+  const dealbreakers: DealbreakCheck[] = [];
+  
+  // ======= MUST-HAVES (Hard requirements) =======
+  
+  // 1. Functie niveau match
+  const functieMatch = score.details.functie;
+  mustHaves.push({
+    requirement: 'Juiste functieniveau',
+    met: functieMatch?.match ?? false,
+    evidence: functieMatch?.reason || 'Geen functie informatie',
+    confidence: functieMatch?.match ? 0.9 : 0.3
+  });
+  
+  // 2. Regio/locatie bereikbaar
+  const regioMatch = score.details.regio;
+  mustHaves.push({
+    requirement: 'Regio bereikbaar',
+    met: regioMatch?.match ?? false,
+    evidence: regioMatch?.reason || 'Geen locatie informatie',
+    confidence: regioMatch?.matchType === 'exact' ? 0.95 : regioMatch?.matchType === 'province' ? 0.8 : 0.5
+  });
+  
+  // 3. Relevante sector ervaring
+  const sectorMatch = score.details.sector;
+  const hasSectorMatch = (sectorMatch?.directMatches?.length || 0) > 0;
+  mustHaves.push({
+    requirement: 'Sector ervaring',
+    met: hasSectorMatch,
+    evidence: hasSectorMatch 
+      ? `Match op: ${sectorMatch?.directMatches?.join(', ')}`
+      : sectorMatch?.reason || 'Geen sector ervaring gevonden',
+    confidence: hasSectorMatch ? 0.85 : 0.4
+  });
+  
+  // ======= NICE-TO-HAVES (Preferred but not blocking) =======
+  
+  // 1. Doelgroep ervaring
+  const doelgroepMatch = score.details.doelgroep;
+  const hasDoelgroepMatch = (doelgroepMatch?.directMatches?.length || 0) > 0;
+  niceToHaves.push({
+    requirement: 'Doelgroep ervaring',
+    met: hasDoelgroepMatch,
+    evidence: hasDoelgroepMatch 
+      ? `Ervaring met: ${doelgroepMatch?.directMatches?.join(', ')}`
+      : doelgroepMatch?.reason || 'Geen specifieke doelgroep ervaring',
+    confidence: hasDoelgroepMatch ? 0.8 : 0.5
+  });
+  
+  // 2. Mobiliteit (eigen vervoer)
+  const mobiliteitMatch = score.details.mobiliteit;
+  niceToHaves.push({
+    requirement: 'Mobiliteit/eigen vervoer',
+    met: mobiliteitMatch?.match ?? false,
+    evidence: mobiliteitMatch?.reason || 'Onbekend',
+    confidence: 0.7
+  });
+  
+  // 3. Beschikbaarheid
+  const beschikbaarheidMatch = score.details.beschikbaarheid;
+  niceToHaves.push({
+    requirement: 'Beschikbaarheid passend',
+    met: beschikbaarheidMatch?.match ?? false,
+    evidence: beschikbaarheidMatch?.reason || 'Beschikbaarheid onbekend',
+    confidence: 0.6
+  });
+  
+  // 4. Werkvorm match (ZZP/Uitzend/etc)
+  const werkvormMatch = score.details.werkvorm;
+  niceToHaves.push({
+    requirement: 'Werkvorm past',
+    met: werkvormMatch?.match ?? false,
+    evidence: werkvormMatch?.reason || 'Werkvorm onbekend',
+    confidence: 0.7
+  });
+  
+  // 5. Expert/specialisme match
+  if (score.hasExpertAdvies && score.expertAdvies.length > 0) {
+    const topExpert = score.expertAdvies[0];
+    niceToHaves.push({
+      requirement: `Specialisme: ${topExpert.specialisme}`,
+      met: topExpert.score > 0,
+      evidence: topExpert.advies,
+      confidence: topExpert.confidence === 'high' ? 0.9 : topExpert.confidence === 'medium' ? 0.7 : 0.5
+    });
+  }
+  
+  // ======= DEALBREAKERS =======
+  
+  // 1. Functie niveau is echt kritiek
+  dealbreakers.push({
+    check: 'Functieniveau voldoende',
+    passed: score.functieMatch >= 15, // Minimaal 60% van de 25 punten
+    reason: score.functieMatch < 15 ? 'Functieniveau matcht niet voldoende' : undefined,
+    blocking: true
+  });
+  
+  // 2. Totale score minimaal acceptabel
+  dealbreakers.push({
+    check: 'Minimale match score',
+    passed: score.normalizedScore >= 40,
+    reason: score.normalizedScore < 40 ? `Score ${score.normalizedScore}% is te laag voor plaatsing` : undefined,
+    blocking: true
+  });
+  
+  // ======= OVERALL FIT DECISION =======
+  
+  const mustHavesMet = mustHaves.filter(m => m.met).length;
+  const mustHavesTotal = mustHaves.length;
+  const mustHavePercentage = mustHavesTotal > 0 ? mustHavesMet / mustHavesTotal : 0;
+  
+  const niceToHavesMet = niceToHaves.filter(n => n.met).length;
+  const niceToHavesTotal = niceToHaves.length;
+  
+  const dealbreakersBlocking = dealbreakers.filter(d => !d.passed && d.blocking);
+  
+  // Calculate confidence
+  const avgMustHaveConfidence = mustHaves.reduce((sum, m) => sum + (m.confidence || 0.5), 0) / mustHaves.length;
+  const avgNiceToHaveConfidence = niceToHaves.reduce((sum, n) => sum + (n.confidence || 0.5), 0) / niceToHaves.length;
+  const confidence = (avgMustHaveConfidence * 0.7) + (avgNiceToHaveConfidence * 0.3);
+  
+  // Determine overall fit
+  let overallFit: FitAnalysis['overallFit'];
+  let recommendation: string;
+  let nextSteps: string[] = [];
+  
+  if (dealbreakersBlocking.length > 0) {
+    overallFit = 'reject';
+    recommendation = `Afwijzen: ${dealbreakersBlocking.map(d => d.reason).join(', ')}`;
+    nextSteps = ['Kandidaat informeren over mismatch', 'Eventueel talentpool overweegen'];
+  } else if (mustHavePercentage < 0.5) {
+    overallFit = 'review_required';
+    recommendation = `Human review nodig: slechts ${mustHavesMet}/${mustHavesTotal} must-haves voldaan`;
+    nextSteps = ['Handmatige beoordeling door recruiter', 'Verificatie van ontbrekende informatie'];
+  } else if (mustHavePercentage < 0.75 || confidence < 0.6) {
+    overallFit = 'needs_info';
+    recommendation = `Meer informatie nodig: ${mustHaves.filter(m => !m.met).map(m => m.requirement).join(', ')}`;
+    nextSteps = ['Gerichte uitvraag naar ontbrekende informatie', 'CV verificatie'];
+  } else {
+    overallFit = 'proceed';
+    recommendation = `Geschikt: ${mustHavesMet}/${mustHavesTotal} must-haves + ${niceToHavesMet}/${niceToHavesTotal} nice-to-haves`;
+    nextSteps = ['Voorstellen aan klant', 'Interview inplannen'];
+  }
+  
+  return {
+    mustHaves,
+    niceToHaves,
+    dealbreakers,
+    overallFit,
+    confidence,
+    recommendation,
+    nextSteps,
+    matchScore: score
+  };
+}
+
+/**
+ * Async version with expert knowledge preloading
+ */
+export async function analyzeFitWithEvidenceAsync(
+  application: ApplicationMatchSource,
+  target: MatchTarget
+): Promise<FitAnalysis> {
+  // Ensure expert knowledge is loaded
+  await preloadExpertKnowledge();
+  
+  // Calculate score with experts
+  const score = await calculateApplicationMatchScoreWithExperts(application, target);
+  
+  return analyzeFitWithEvidence(application, target, score);
+}
