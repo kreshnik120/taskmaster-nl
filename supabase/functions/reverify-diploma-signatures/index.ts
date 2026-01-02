@@ -1,8 +1,8 @@
 // Reverify Diploma Signatures - Automatic re-verification for signature_valid diplomas
-// Version 1.1.0 - Concurrency lock with heartbeat
+// Version 1.2.0 - Atomic lock acquisition (INSERT ON CONFLICT via partial unique index)
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const COMPONENT_NAME = 'reverify-diploma-signatures';
 const HEARTBEAT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -45,62 +45,59 @@ interface LockMetadata {
   error_at?: string;
 }
 
-async function acquireLock(supabase: ReturnType<typeof createAdminClient>, triggeredBy: string, candidatesCount: number) {
-  // Check for existing running lock
-  const { data: existingRun } = await supabase
+/**
+ * Atomic lock acquisition using INSERT with unique constraint violation detection.
+ * Leverages partial unique index: idx_orchestrator_single_running 
+ * ON (org_id, metadata->>'component') WHERE status = 'running'
+ */
+async function acquireLock(
+  supabase: ReturnType<typeof createAdminClient>, 
+  triggeredBy: string, 
+  candidatesCount: number
+): Promise<{
+  acquired: boolean;
+  lockId: string | null;
+  existingLock: any;
+  lockAgeSeconds: number;
+}> {
+  const now = new Date();
+  const staleThreshold = new Date(now.getTime() - HEARTBEAT_TIMEOUT_MS);
+
+  // STEP 1: Cleanup stale locks (heartbeat > 5 min old)
+  const { data: staleLocks } = await supabase
     .from('orchestrator_state')
-    .select('*')
+    .select('id, metadata')
     .eq('status', 'running')
-    .filter('metadata->component', 'eq', COMPONENT_NAME)
-    .maybeSingle();
+    .filter('metadata->>component', 'eq', COMPONENT_NAME);
 
-  if (existingRun) {
-    const metadata = existingRun.metadata as LockMetadata | null;
-    const lastHeartbeat = metadata?.last_heartbeat;
-    const timeSinceHeartbeat = lastHeartbeat 
-      ? Date.now() - new Date(lastHeartbeat).getTime()
-      : Infinity;
-
-    if (timeSinceHeartbeat < HEARTBEAT_TIMEOUT_MS) {
-      // Lock is active - block new run
-      return {
-        acquired: false,
-        lockId: null,
-        existingLock: existingRun,
-        lockAgeSeconds: Math.round(timeSinceHeartbeat / 1000),
-      };
-    }
+  for (const stale of staleLocks || []) {
+    const metadata = stale.metadata as LockMetadata;
+    const lastHeartbeat = new Date(metadata?.last_heartbeat || 0);
     
-    // Stale lock - mark as timeout
-    console.log(`⚠️ Stale lock detected (${Math.round(timeSinceHeartbeat / 1000)}s), marking as timeout`);
-    await supabase
-      .from('orchestrator_state')
-      .update({ 
-        status: 'timeout',
-        metadata: { 
-          ...metadata,
-          timeout_at: new Date().toISOString() 
-        }
-      })
-      .eq('id', existingRun.id);
+    if (now.getTime() - lastHeartbeat.getTime() > HEARTBEAT_TIMEOUT_MS) {
+      await supabase
+        .from('orchestrator_state')
+        .update({
+          status: 'timeout',
+          metadata: { ...metadata, timeout_at: now.toISOString() }
+        })
+        .eq('id', stale.id);
+      
+      console.log(`⚠️ Marked stale lock ${stale.id} as timeout (age: ${Math.round((now.getTime() - lastHeartbeat.getTime()) / 1000)}s)`);
+    }
   }
 
-  // Create new lock
+  // STEP 2: ATOMIC INSERT - partial unique index prevents duplicates
   const lockMetadata: LockMetadata = {
     component: COMPONENT_NAME,
-    started_at: new Date().toISOString(),
-    last_heartbeat: new Date().toISOString(),
+    started_at: now.toISOString(),
+    last_heartbeat: now.toISOString(),
     triggered_by: triggeredBy,
     candidates_count: candidatesCount,
-    progress: {
-      current: 0,
-      total: candidatesCount,
-      upgraded: 0,
-      errors: 0,
-    },
+    progress: { current: 0, total: candidatesCount, upgraded: 0, errors: 0 },
   };
 
-  const { data: lockRecord, error: lockError } = await supabase
+  const { data: insertedLock, error: insertError } = await supabase
     .from('orchestrator_state')
     .insert({
       org_id: '550e8400-e29b-41d4-a716-446655440000', // ABCzorg
@@ -110,15 +107,54 @@ async function acquireLock(supabase: ReturnType<typeof createAdminClient>, trigg
       metadata: lockMetadata,
     })
     .select()
-    .single();
+    .maybeSingle();
 
-  if (lockError) {
-    console.error('❌ Failed to acquire lock:', lockError);
-    return { acquired: false, lockId: null, existingLock: null, lockAgeSeconds: 0 };
+  // STEP 3: Handle result
+  if (insertError) {
+    // Check for unique constraint violation (PostgreSQL error code 23505)
+    if (insertError.code === '23505') {
+      console.log('🔒 Lock conflict detected (unique violation) - another run is active');
+      
+      // Fetch existing lock for response details
+      const { data: existingLock } = await supabase
+        .from('orchestrator_state')
+        .select('*')
+        .eq('status', 'running')
+        .filter('metadata->>component', 'eq', COMPONENT_NAME)
+        .maybeSingle();
+
+      const metadata = existingLock?.metadata as LockMetadata | null;
+      const lastHeartbeat = metadata?.last_heartbeat;
+      const lockAge = lastHeartbeat 
+        ? Math.round((now.getTime() - new Date(lastHeartbeat).getTime()) / 1000)
+        : 0;
+
+      return {
+        acquired: false,
+        lockId: null,
+        existingLock,
+        lockAgeSeconds: lockAge,
+      };
+    }
+    
+    // Other database error - throw to trigger error handling
+    console.error('❌ Database error during lock acquisition:', insertError);
+    throw new Error(`Lock acquisition failed: ${insertError.message}`);
   }
 
-  console.log(`🔒 Lock acquired: ${lockRecord.id}`);
-  return { acquired: true, lockId: lockRecord.id, existingLock: null, lockAgeSeconds: 0 };
+  if (!insertedLock) {
+    // Unexpected: no error but no data
+    console.error('❌ Insert returned no data and no error');
+    throw new Error('Lock acquisition failed: no data returned');
+  }
+
+  console.log(`🔒 Lock acquired atomically: ${insertedLock.id}`);
+  return { 
+    acquired: true, 
+    lockId: insertedLock.id, 
+    existingLock: null, 
+    lockAgeSeconds: 0 
+  };
 }
 
 async function updateHeartbeat(
