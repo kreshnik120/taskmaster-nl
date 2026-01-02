@@ -3418,6 +3418,7 @@ export type Database = {
           vog_validation_source: string | null
           vog_validation_status: string | null
           vog_verification_response: Json | null
+          welcome_email_sent_at: string | null
         }
         Insert: {
           ai_response_count?: number | null
@@ -3473,6 +3474,7 @@ export type Database = {
           vog_validation_source?: string | null
           vog_validation_status?: string | null
           vog_verification_response?: Json | null
+          welcome_email_sent_at?: string | null
         }
         Update: {
           ai_response_count?: number | null
@@ -3528,6 +3530,7 @@ export type Database = {
           vog_validation_source?: string | null
           vog_validation_status?: string | null
           vog_verification_response?: Json | null
+          welcome_email_sent_at?: string | null
         }
         Relationships: [
           {
