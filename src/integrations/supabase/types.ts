@@ -4068,6 +4068,90 @@ export type Database = {
           },
         ]
       }
+      recruiter_notifications: {
+        Row: {
+          application_id: string | null
+          created_at: string
+          dismissed_at: string | null
+          email_sent_at: string | null
+          id: string
+          message: string
+          metadata: Json | null
+          notification_type: string
+          org_id: string | null
+          professional_id: string | null
+          read_at: string | null
+          title: string
+          user_id: string | null
+        }
+        Insert: {
+          application_id?: string | null
+          created_at?: string
+          dismissed_at?: string | null
+          email_sent_at?: string | null
+          id?: string
+          message: string
+          metadata?: Json | null
+          notification_type: string
+          org_id?: string | null
+          professional_id?: string | null
+          read_at?: string | null
+          title: string
+          user_id?: string | null
+        }
+        Update: {
+          application_id?: string | null
+          created_at?: string
+          dismissed_at?: string | null
+          email_sent_at?: string | null
+          id?: string
+          message?: string
+          metadata?: Json | null
+          notification_type?: string
+          org_id?: string | null
+          professional_id?: string | null
+          read_at?: string | null
+          title?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recruiter_notifications_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recruiter_notifications_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recruiter_notifications_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recruiter_notifications_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_admin_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recruiter_notifications_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reminders: {
         Row: {
           at: string

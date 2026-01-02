@@ -36,6 +36,7 @@ import { SublocationSelectionDialog } from "@/components/SublocationSelectionDia
 import { SmartSublocationPicker } from "@/components/SmartSublocationPicker";
 import { KPICard } from "@/components/ui/kpi-card";
 import { useProactiveMatchNotifications } from "@/hooks/useProactiveMatchNotifications";
+import { useDiplomaUpgradeNotifications } from "@/hooks/useDiplomaUpgradeNotifications";
 import { checkExistingActivePlacement } from "@/lib/checkExistingPlacement";
 
 interface Application {
@@ -117,13 +118,18 @@ const Sollicitaties = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Proactive AI match notifications - shows toast when new high-match applications arrive
-  useProactiveMatchNotifications((applicationId) => {
+  const handleNotificationClick = (applicationId: string) => {
     const app = applications.find(a => a.id === applicationId);
     if (app) {
       setSelectedApplication(app);
       setDetailModalOpen(true);
     }
-  });
+  };
+  
+  useProactiveMatchNotifications(handleNotificationClick);
+  
+  // Diploma upgrade notifications - shows toast with confetti when diploma is verified via DUO
+  useDiplomaUpgradeNotifications(handleNotificationClick);
 
   // Keyboard shortcuts
   useEffect(() => {
