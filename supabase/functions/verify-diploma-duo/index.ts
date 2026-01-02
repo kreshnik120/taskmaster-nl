@@ -55,12 +55,15 @@ function buildBrightDataUrl(): string | null {
     return null;
   }
   
+  // CRITICAL: Trim whitespace first (fixes %20 encoded space in URL bug)
+  auth = auth.trim();
+  
   // Sanitize: strip wss:// prefix and @brd.superproxy.io:9222 suffix if user pasted full URL
   auth = auth.replace(/^wss?:\/\//i, '').replace(/@brd\.superproxy\.io:\d+$/i, '');
   
   // Format: brd-customer-XXXXX-zone-YYYYY:password
   const url = `wss://${auth}@brd.superproxy.io:9222`;
-  console.log('[BRIGHT-DATA] WebSocket URL constructed (auth length:', auth.length, ')');
+  console.log('[BRIGHT-DATA] Auth sanitized, length:', auth.length, 'preview:', auth.substring(0, 25) + '...');
   return url;
 }
 
