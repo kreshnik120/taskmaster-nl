@@ -2637,6 +2637,90 @@ export type Database = {
           },
         ]
       }
+      human_review_queue: {
+        Row: {
+          ai_confidence: number | null
+          ai_reasoning: Json | null
+          ai_recommendation: string | null
+          application_id: string
+          assigned_at: string | null
+          assigned_to: string | null
+          created_at: string
+          decision: string | null
+          due_date: string | null
+          escalation_reason: string
+          id: string
+          org_id: string
+          override_reason: string | null
+          priority: number | null
+          review_notes: string | null
+          review_type: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          ai_confidence?: number | null
+          ai_reasoning?: Json | null
+          ai_recommendation?: string | null
+          application_id: string
+          assigned_at?: string | null
+          assigned_to?: string | null
+          created_at?: string
+          decision?: string | null
+          due_date?: string | null
+          escalation_reason: string
+          id?: string
+          org_id: string
+          override_reason?: string | null
+          priority?: number | null
+          review_notes?: string | null
+          review_type: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          ai_confidence?: number | null
+          ai_reasoning?: Json | null
+          ai_recommendation?: string | null
+          application_id?: string
+          assigned_at?: string | null
+          assigned_to?: string | null
+          created_at?: string
+          decision?: string | null
+          due_date?: string | null
+          escalation_reason?: string
+          id?: string
+          org_id?: string
+          override_reason?: string | null
+          priority?: number | null
+          review_notes?: string | null
+          review_type?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "human_review_queue_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "human_review_queue_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       intent_classification_audit: {
         Row: {
           application_id: string | null
@@ -3399,9 +3483,11 @@ export type Database = {
           kvk_uittreksel_path: string | null
           last_ai_response_at: string | null
           last_reverification_at: string | null
+          last_review_id: string | null
           missing_info: Json | null
           org_id: string | null
           overige_certificeringen_paths: Json | null
+          pending_human_review: boolean | null
           pipeline_stage: string | null
           professional_id: string | null
           profile_photo_url: string | null
@@ -3455,9 +3541,11 @@ export type Database = {
           kvk_uittreksel_path?: string | null
           last_ai_response_at?: string | null
           last_reverification_at?: string | null
+          last_review_id?: string | null
           missing_info?: Json | null
           org_id?: string | null
           overige_certificeringen_paths?: Json | null
+          pending_human_review?: boolean | null
           pipeline_stage?: string | null
           professional_id?: string | null
           profile_photo_url?: string | null
@@ -3511,9 +3599,11 @@ export type Database = {
           kvk_uittreksel_path?: string | null
           last_ai_response_at?: string | null
           last_reverification_at?: string | null
+          last_review_id?: string | null
           missing_info?: Json | null
           org_id?: string | null
           overige_certificeringen_paths?: Json | null
+          pending_human_review?: boolean | null
           pipeline_stage?: string | null
           professional_id?: string | null
           profile_photo_url?: string | null
@@ -5641,6 +5731,52 @@ export type Database = {
         }
         Relationships: []
       }
+      pending_reviews_with_details: {
+        Row: {
+          ai_confidence: number | null
+          ai_reasoning: Json | null
+          ai_recommendation: string | null
+          application_created_at: string | null
+          application_id: string | null
+          assigned_at: string | null
+          assigned_to: string | null
+          candidate_email: string | null
+          candidate_name: string | null
+          completeness_score: number | null
+          created_at: string | null
+          current_stage: string | null
+          decision: string | null
+          due_date: string | null
+          escalation_reason: string | null
+          functie_niveau: string | null
+          id: string | null
+          org_id: string | null
+          override_reason: string | null
+          priority: number | null
+          review_notes: string | null
+          review_type: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "human_review_queue_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "human_review_queue_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       professionals_admin_view: {
         Row: {
           adres: string | null
@@ -5851,6 +5987,15 @@ export type Database = {
       }
       check_emrex_reminders: { Args: never; Returns: undefined }
       cleanup_old_logs: { Args: never; Returns: undefined }
+      complete_human_review: {
+        Args: {
+          p_decision: string
+          p_notes?: string
+          p_override_reason?: string
+          p_review_id: string
+        }
+        Returns: Json
+      }
       create_interview_task:
         | {
             Args: {
