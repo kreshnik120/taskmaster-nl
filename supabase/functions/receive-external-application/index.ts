@@ -306,7 +306,12 @@ Deno.serve(async (req) => {
 
     // 6. Upload CV to storage if provided
     let cvFilePath: string | null = null;
+    let cvBase64Content: string | null = null;
+    let cvFilename: string | null = null;
     if (data.cv_base64 && data.cv_filename && data.cv_content_type) {
+      // Bewaar originele base64 content voor extract-cv-data
+      cvBase64Content = data.cv_base64;
+      cvFilename = data.cv_filename;
       try {
         const cvBytes = Uint8Array.from(atob(data.cv_base64), c => c.charCodeAt(0));
         const timestamp = Date.now();
@@ -607,15 +612,17 @@ Deno.serve(async (req) => {
     }
 
     // 14. Trigger CV extraction if CV was uploaded
-    if (cvFilePath) {
+    if (cvFilePath && cvBase64Content) {
       try {
         await supabase.functions.invoke("extract-cv-data", {
           body: {
-            application_id: newApplication.id,
-            file_path: cvFilePath,
+            pdfBase64: cvBase64Content,
+            filename: cvFilename,
+            applicationId: newApplication.id,
+            orgId: data.source,
           },
         });
-        console.log(`[receive-external-application] CV extraction triggered for ${newApplication.id}`);
+        console.log(`[receive-external-application] CV extraction triggered for ${newApplication.id} with pdfBase64 (${Math.round(cvBase64Content.length / 1024)}KB)`);
       } catch (e) {
         console.error("[receive-external-application] CV extraction trigger failed:", e);
       }
