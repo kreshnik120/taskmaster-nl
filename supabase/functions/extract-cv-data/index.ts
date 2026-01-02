@@ -564,6 +564,46 @@ Do NOT include any text, logos, or other elements - just the person's face.`
       }
     }
 
+    // === FASE 4: EVIDENCE SOURCE LOGGING ===
+    if (applicationId) {
+      console.log('📋 Logging profile fact sources for application:', applicationId);
+      
+      const fieldsToLog = [
+        { field: 'naam', value: getValue(extractedData.naam), confidence: extractedData.naam?.confidence },
+        { field: 'telefoon', value: getValue(extractedData.telefoon), confidence: extractedData.telefoon?.confidence },
+        { field: 'email', value: getValue(extractedData.email), confidence: extractedData.email?.confidence },
+        { field: 'functie_niveau', value: getValue(extractedData.functie_niveau), confidence: extractedData.functie_niveau?.confidence },
+        { field: 'werkvorm', value: getValue(extractedData.werkvorm), confidence: extractedData.werkvorm?.confidence },
+        { field: 'regio', value: getValue(extractedData.regio), confidence: extractedData.regio?.confidence },
+        { field: 'jaren_ervaring', value: getValue(extractedData.jaren_ervaring), confidence: extractedData.jaren_ervaring?.confidence },
+        { field: 'hoogste_opleiding', value: getValue(extractedData.hoogste_opleiding), confidence: extractedData.hoogste_opleiding?.confidence },
+        { field: 'BIG_nummer', value: getValue(extractedData.BIG_nummer), confidence: extractedData.BIG_nummer?.confidence },
+      ];
+      
+      let loggedCount = 0;
+      for (const { field, value, confidence } of fieldsToLog) {
+        if (value !== null && value !== undefined && value !== '') {
+          try {
+            await supabase.rpc('log_profile_fact_source', {
+              p_application_id: applicationId,
+              p_field_name: field,
+              p_field_value: typeof value === 'string' ? value : JSON.stringify(value),
+              p_source_type: 'cv_extraction',
+              p_source_reference: filename || 'uploaded_cv.pdf',
+              p_confidence: confidence || 0.5,
+              p_extracted_by: 'gemini-2.5-flash-vision',
+              p_extraction_method: 'ai_vision'
+            });
+            loggedCount++;
+          } catch (logError) {
+            console.warn(`Failed to log fact source for ${field}:`, logError);
+          }
+        }
+      }
+      
+      console.log(`✅ Logged ${loggedCount} profile fact sources`);
+    }
+
     // 🆕 Create searchable knowledge items if orgId is provided
     // === FASE 2C: SKIP KNOWLEDGE CREATION FOR LOW-CONFIDENCE/HALLUCINATED DATA ===
     const minConfidenceForKnowledge = 0.5; // Minimum confidence to create knowledge items
