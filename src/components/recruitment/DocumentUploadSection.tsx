@@ -203,7 +203,7 @@ export function DocumentUploadSection({
         return;
       }
 
-      // CV is stored differently than VOG/Diploma
+      // CV and Diploma stored in dedicated columns, VOG in extracted_data
       if (docType === 'cv') {
         const { error: updateError } = await supabase
           .from('professional_applications')
@@ -214,10 +214,19 @@ export function DocumentUploadSection({
           .eq('id', applicationId);
 
         if (updateError) throw updateError;
+      } else if (docType === 'diploma') {
+        // Diploma: store in dedicated column (not extracted_data) for edge function access
+        const { error: updateError } = await supabase
+          .from('professional_applications')
+          .update({ 
+            diploma_file_path: filePath,
+            diploma_validation_status: 'received' as const
+          })
+          .eq('id', applicationId);
+
+        if (updateError) throw updateError;
       } else {
-        // Update extracted_data with file path for VOG/Diploma
-        const fieldName = docType === 'vog' ? 'vog_file_path' : 'diploma_file_path';
-        
+        // VOG: store in extracted_data
         const { data: currentApp, error: fetchError } = await supabase
           .from('professional_applications')
           .select('extracted_data')
@@ -229,15 +238,12 @@ export function DocumentUploadSection({
         const currentExtracted = (currentApp?.extracted_data as Record<string, unknown>) || {};
         const updatedExtractedData = {
           ...currentExtracted,
-          [fieldName]: filePath
+          vog_file_path: filePath
         };
 
         const { error: updateError } = await supabase
           .from('professional_applications')
-          .update({ 
-            extracted_data: updatedExtractedData as any,
-            ...(docType === 'diploma' ? { diploma_validation_status: 'received' as const } : {})
-          })
+          .update({ extracted_data: updatedExtractedData as any })
           .eq('id', applicationId);
 
         if (updateError) throw updateError;
