@@ -653,7 +653,10 @@ Deno.serve(async (req) => {
             return flattened;
           };
           
-          const flattenedCV = flattenCVData(cvResult.data);
+          // cvResult.data is het response object van extract-cv-data
+          // De geëxtraheerde velden zitten in cvResult.data.data (geneste structuur)
+          const extractedCVData = cvResult.data?.data || cvResult.data;
+          const flattenedCV = flattenCVData(extractedCVData);
           
           if (Object.keys(flattenedCV).length > 0) {
             // Merge met bestaande extracted_data (gebruik extractedData variabele)
