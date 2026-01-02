@@ -665,12 +665,12 @@ Deno.serve(async (req) => {
             };
             
             // Update de application met gemerged data
+            // NOTE: completeness_score wordt NIET geüpdatet - de CV upload bonus (+15) is al toegepast
+            // bij de initiële insert. Hier voegen we alleen de extracted data toe.
             const { error: updateError } = await supabase
               .from('professional_applications')
               .update({ 
                 extracted_data: mergedData,
-                // Herbereken completeness met CV velden
-                completeness_score: Math.min(100, completenessScore + 15), // +15% voor CV extractie
               })
               .eq('id', newApplication.id);
             
