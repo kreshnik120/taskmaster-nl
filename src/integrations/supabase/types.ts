@@ -3350,6 +3350,7 @@ export type Database = {
           klachtenportaal_wkkgz_path: string | null
           kvk_uittreksel_path: string | null
           last_ai_response_at: string | null
+          last_reverification_at: string | null
           missing_info: Json | null
           org_id: string | null
           overige_certificeringen_paths: Json | null
@@ -3358,6 +3359,7 @@ export type Database = {
           profile_photo_url: string | null
           rejected_at: string | null
           rejection_reason: string | null
+          reverification_attempts: number | null
           source_label: string | null
           source_project: string | null
           status: string
@@ -3403,6 +3405,7 @@ export type Database = {
           klachtenportaal_wkkgz_path?: string | null
           kvk_uittreksel_path?: string | null
           last_ai_response_at?: string | null
+          last_reverification_at?: string | null
           missing_info?: Json | null
           org_id?: string | null
           overige_certificeringen_paths?: Json | null
@@ -3411,6 +3414,7 @@ export type Database = {
           profile_photo_url?: string | null
           rejected_at?: string | null
           rejection_reason?: string | null
+          reverification_attempts?: number | null
           source_label?: string | null
           source_project?: string | null
           status?: string
@@ -3456,6 +3460,7 @@ export type Database = {
           klachtenportaal_wkkgz_path?: string | null
           kvk_uittreksel_path?: string | null
           last_ai_response_at?: string | null
+          last_reverification_at?: string | null
           missing_info?: Json | null
           org_id?: string | null
           overige_certificeringen_paths?: Json | null
@@ -3464,6 +3469,7 @@ export type Database = {
           profile_photo_url?: string | null
           rejected_at?: string | null
           rejection_reason?: string | null
+          reverification_attempts?: number | null
           source_label?: string | null
           source_project?: string | null
           status?: string
