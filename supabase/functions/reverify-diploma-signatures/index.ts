@@ -1,8 +1,8 @@
 // Reverify Diploma Signatures - Automatic re-verification for signature_valid diplomas
-// Version 1.2.0 - Atomic lock acquisition (INSERT ON CONFLICT via partial unique index)
+// Version 1.3.0 - Exponential backoff for verify-diploma-duo calls
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const COMPONENT_NAME = 'reverify-diploma-signatures';
 const HEARTBEAT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -18,6 +18,28 @@ const RE_VERIFIABLE_STATUSES = [
 const MAX_BATCH_SIZE = 10;           // Max diplomas per run (cost control)
 const COOLDOWN_HOURS = 168;          // 7 days between attempts
 const MAX_RETRIES = 3;               // Stop after 3 failed attempts
+const INTER_CANDIDATE_DELAY_MS = 500; // Delay between candidates to prevent rate limiting
+
+// Retry configuration for external service calls
+const VERIFY_RETRY_CONFIG = {
+  maxRetries: 3,
+  baseDelayMs: 2000,         // Start with 2 seconds
+  maxDelayMs: 30000,         // Max 30 seconds
+  retryableErrors: [
+    'rate limit',
+    'too many requests',
+    '429',
+    '503',
+    '502',
+    'timeout',
+    'etimedout',
+    'econnreset',
+    'service unavailable',
+    'browserless',
+    'socket hang up',
+    'network error',
+  ],
+};
 
 interface ReverificationResult {
   application_id: string;
@@ -210,6 +232,75 @@ async function releaseLock(
   console.log(`🔓 Lock released: ${lockId} (status: ${status})`);
 }
 
+/**
+ * Invoke verify-diploma-duo with exponential backoff for rate limiting
+ * and transient errors from external services (DUO, Browserless)
+ */
+async function verifyWithBackoff(
+  supabase: ReturnType<typeof createAdminClient>,
+  applicationId: string
+): Promise<{ data: any; error: any; retriesUsed: number }> {
+  let lastError: any = null;
+
+  for (let attempt = 1; attempt <= VERIFY_RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      console.log(`🔄 Verification attempt ${attempt}/${VERIFY_RETRY_CONFIG.maxRetries} for ${applicationId}`);
+      
+      const { data, error } = await supabase.functions.invoke('verify-diploma-duo', {
+        body: { application_id: applicationId }
+      });
+
+      // Success - return immediately
+      if (!error) {
+        if (attempt > 1) {
+          console.log(`✅ Verification succeeded after ${attempt} attempts`);
+        }
+        return { data, error: null, retriesUsed: attempt - 1 };
+      }
+
+      // Check if error is retryable
+      const errorMessage = (error.message || String(error)).toLowerCase();
+      const isRetryable = VERIFY_RETRY_CONFIG.retryableErrors.some(
+        keyword => errorMessage.includes(keyword)
+      );
+
+      if (!isRetryable) {
+        console.log(`❌ Non-retryable error: ${error.message}`);
+        return { data: null, error, retriesUsed: attempt - 1 };
+      }
+
+      // Retryable error - calculate backoff delay
+      lastError = error;
+
+      if (attempt < VERIFY_RETRY_CONFIG.maxRetries) {
+        // Exponential backoff: 2s → 4s → 8s (capped at maxDelayMs)
+        const baseDelay = VERIFY_RETRY_CONFIG.baseDelayMs * Math.pow(2, attempt - 1);
+        const jitter = Math.random() * 1000; // Add 0-1s jitter to prevent thundering herd
+        const delay = Math.min(baseDelay + jitter, VERIFY_RETRY_CONFIG.maxDelayMs);
+        
+        console.log(`⏳ Rate limit/transient error detected, retrying in ${Math.round(delay)}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+
+    } catch (err) {
+      lastError = err;
+      
+      // Network-level errors are always retryable
+      if (attempt < VERIFY_RETRY_CONFIG.maxRetries) {
+        const delay = VERIFY_RETRY_CONFIG.baseDelayMs * Math.pow(2, attempt - 1);
+        console.log(`⚠️ Network error, retrying in ${delay}ms: ${err}`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  return { 
+    data: null, 
+    error: lastError || new Error('Max retries exceeded'),
+    retriesUsed: VERIFY_RETRY_CONFIG.maxRetries - 1
+  };
+}
+
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
@@ -330,10 +421,15 @@ Deno.serve(async (req) => {
           errors: errorCount,
         }, lockMetadata);
 
-        // Invoke verify-diploma-duo
-        const { data: verifyResult, error: verifyError } = await supabase.functions.invoke('verify-diploma-duo', {
-          body: { application_id: candidate.id }
-        });
+        // Invoke verify-diploma-duo with exponential backoff
+        const { data: verifyResult, error: verifyError, retriesUsed } = await verifyWithBackoff(
+          supabase,
+          candidate.id
+        );
+
+        if (retriesUsed > 0) {
+          console.log(`⚠️ Verification required ${retriesUsed} retries for ${candidate.id}`);
+        }
 
         if (verifyError) {
           console.error(`❌ Verification error for ${candidate.id}:`, verifyError);
@@ -401,11 +497,17 @@ Deno.serve(async (req) => {
             previous_status: previousStatus,
             new_status: newStatus,
             attempt_number: (candidate.reverification_attempts || 0) + 1,
+            retries_used: retriesUsed,
             version: `v${VERSION}-reverify`,
           },
           outcome: upgraded ? 'upgrade_success' : 'no_change',
           confidence_score: upgraded ? 1.0 : 0.5,
         });
+
+        // Add delay between candidates to prevent rate limiting
+        if (index < candidates.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, INTER_CANDIDATE_DELAY_MS));
+        }
 
       } catch (err) {
         console.error(`❌ Exception for ${candidate.id}:`, err);
