@@ -838,7 +838,7 @@ Deno.serve(async (req: Request) => {
     
     console.log('🎓 Verifying diploma:', filename, 'size:', pdfBytes.length);
     
-    const result = await verifyDiploma(pdfBytes, filename, app.diploma_file_path);
+    const result = await verifyDiploma(pdfBytes, filename, diplomaPath);
     
     console.log('Verification result:', JSON.stringify(result, null, 2));
     
