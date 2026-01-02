@@ -663,7 +663,10 @@ Deno.serve(async (req) => {
             nestedDataKeys: cvResult.data?.data ? Object.keys(cvResult.data.data).slice(0, 10) : []
           }));
           
-          const extractedCVData = cvResult.data?.data || cvResult.data;
+          // Veiligere extractie: als data.data leeg is, gebruik lege object i.p.v. hele response
+          const extractedCVData = (cvResult.data?.data && typeof cvResult.data.data === 'object' && Object.keys(cvResult.data.data).length > 0) 
+            ? cvResult.data.data 
+            : {};
           const flattenedCV = flattenCVData(extractedCVData);
           
           console.log(`[receive-external-application] Flattened CV data keys:`, Object.keys(flattenedCV));
