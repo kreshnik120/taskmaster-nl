@@ -711,6 +711,48 @@ const GOAL_CONFIGS: Record<string, {
     planGenerator: async (goal, context) => {
       console.log('📜 [Orchestrator] EMREX invitation for:', goal.input_data.candidate_name);
       
+      // 🔧 FASE 4 SAFETY CHECK: Controleer of kandidaat al gereageerd heeft
+      if (context?.supabase && goal.input_data.application_id) {
+        try {
+          const { data: app } = await context.supabase
+            .from('professional_applications')
+            .select('completeness_score, ai_response_count, created_at, pipeline_stage, welcome_email_sent_at')
+            .eq('id', goal.input_data.application_id)
+            .single();
+          
+          if (app) {
+            const aiResponseCount = app.ai_response_count || 0;
+            const completenessScore = app.completeness_score || 0;
+            const pipelineStage = app.pipeline_stage || 'nieuw';
+            
+            // GATE 1: Skip als nog in intake_verstuurd of nieuw stage EN geen interactie
+            if (['nieuw', 'intake_verstuurd'].includes(pipelineStage) && aiResponseCount === 0) {
+              console.log(`⚠️ [EMREX] Skipping - pipeline_stage is '${pipelineStage}' with no candidate responses`);
+              console.log(`   completeness: ${completenessScore}%, responses: ${aiResponseCount}`);
+              return []; // Return empty actions = goal wordt geskipped
+            }
+            
+            // GATE 2: Skip als kandidaat nog niet gereageerd heeft EN completeness < 70%
+            if (aiResponseCount === 0 && completenessScore < 70) {
+              console.log(`⚠️ [EMREX] Skipping - no interaction yet (completeness: ${completenessScore}%, responses: ${aiResponseCount})`);
+              return []; // Return empty actions = goal wordt geskipped
+            }
+            
+            // GATE 3: Skip als applicatie < 24 uur oud EN geen interactie
+            const appAge = Date.now() - new Date(app.created_at).getTime();
+            const hoursOld = appAge / (1000 * 60 * 60);
+            if (hoursOld < 24 && aiResponseCount === 0) {
+              console.log(`⚠️ [EMREX] Skipping - application only ${hoursOld.toFixed(1)}h old with no responses`);
+              return [];
+            }
+            
+            console.log(`✅ [EMREX] Proceeding - candidate has interacted (responses: ${aiResponseCount}, completeness: ${completenessScore}%)`);
+          }
+        } catch (checkError) {
+          console.error('[EMREX] Safety check failed, proceeding with caution:', checkError);
+        }
+      }
+      
       return [
         {
           action_type: 'send_emrex_invitation_email',
@@ -2061,11 +2103,14 @@ async function executeWelcomeAndIntake(supabase: any, action: any) {
 
     console.log('✅ [Welcome] Welcome email sent successfully');
     
-    // 🔧 FASE 1 FIX: Update pipeline_stage to 'screening' after welcome email
+    // 🔧 FASE 1 FIX: Update pipeline_stage to 'intake_verstuurd' after welcome email
+    // KRITIEK: NIET naar 'screening' - dat triggert EMREX te vroeg!
+    // Screening transitie komt pas bij kandidaat-reactie in handle-application-reply
     const { error: stageError } = await supabase
       .from('professional_applications')
       .update({
-        pipeline_stage: 'screening',
+        pipeline_stage: 'intake_verstuurd',
+        welcome_email_sent_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
       .eq('id', applicationId)
@@ -2074,18 +2119,19 @@ async function executeWelcomeAndIntake(supabase: any, action: any) {
     if (stageError) {
       console.error('[Welcome] Pipeline stage update failed:', stageError);
     } else {
-      console.log('✅ [Welcome] Pipeline stage updated to screening');
+      console.log('✅ [Welcome] Pipeline stage updated to intake_verstuurd (awaiting candidate response)');
       
       // Log stage audit
       await supabase.from('application_stage_audit').insert({
         application_id: applicationId,
         from_stage: 'nieuw',
-        to_stage: 'screening',
-        reason: 'Automatische transitie: Welkomstmail verzonden',
+        to_stage: 'intake_verstuurd',
+        reason: 'Welkomstmail verzonden - wacht op reactie kandidaat voor verdere stappen',
         performed_by: null,
         metadata: {
           trigger: 'executeWelcomeAndIntake',
           email_sent: true,
+          awaiting_response: true,
         }
       });
     }
