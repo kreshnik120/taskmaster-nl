@@ -2,6 +2,8 @@ import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { Resend } from "https://esm.sh/resend@4.0.0";
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 import { normalizeFunctieNiveau, normalizeWerkvorm, isPlaceholderPhone, getOrganizationById } from '../_shared/healthcare-mappings.ts';
+import { runPreValidationChecks, formatValidationSummary } from '../_shared/pre-validation.ts';
+
 // PDF parsing moved to separate parse-pdf-cv function
 interface ResendWebhookPayload {
   type: string;
@@ -216,6 +218,19 @@ const handler = async (req: Request): Promise<Response> => {
     console.log("From:", applicantEmail);
     console.log("Subject:", emailSubject);
     console.log("Initial email body length:", emailBody.length);
+
+    // === FASE 5: PRE-VALIDATION CHECKS ===
+    const preValidation = runPreValidationChecks({
+      email: applicantEmail,
+      name: emailSubject.replace(/^(re:|antw:|antwoord:|fw:)\s*/i, '').split(':').pop()?.trim() || '',
+    });
+
+    if (preValidation.warnings.length > 0) {
+      console.log(`[process-application-email] Pre-validation warnings: ${preValidation.warnings.join(', ')}`);
+    }
+    
+    // Store warnings for later use in extracted_data
+    const preValidationWarnings = preValidation.warnings;
     
     // 📧 FETCH EMAIL BODY via Resend Receiving API if empty (common for inbound webhooks)
     if (!emailBody || emailBody.trim().length === 0) {

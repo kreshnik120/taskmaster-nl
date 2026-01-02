@@ -1,5 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { 
+  runPreValidationChecks, 
+  formatValidationSummary,
+  type ApplicationData 
+} from '../_shared/pre-validation.ts';
 
 // CORS headers for cross-origin requests
 const corsHeaders = {
@@ -243,6 +248,34 @@ Deno.serve(async (req) => {
 
     console.log(`[receive-external-application] Processing ${data.type} application from ${data.source} for ${data.email}`);
 
+    // === FASE 5: PRE-VALIDATION CHECKS ===
+    const preValidation = runPreValidationChecks({
+      email: data.email,
+      phone: data.phone,
+      name: data.full_name,
+      cvFileName: data.cv_filename,
+      documents: data.documents?.map(d => ({
+        filename: d.filename,
+        contentType: d.content_type,
+      })),
+    });
+
+    if (!preValidation.passed) {
+      console.warn(`[receive-external-application] Pre-validation BLOCKING: ${formatValidationSummary(preValidation)}`);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: "Validatie gefaald",
+          validation_errors: preValidation.blockingIssues 
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (preValidation.warnings.length > 0) {
+      console.log(`[receive-external-application] Pre-validation warnings: ${preValidation.warnings.join(', ')}`);
+    }
+
     // 4. Create Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -340,6 +373,9 @@ Deno.serve(async (req) => {
       opleiding: data.opleiding,
       ervaring: data.ervaring,
       motivatie: data.motivatie,
+      // FASE 5: Pre-validation results
+      pre_validation_passed: preValidation.passed,
+      pre_validation_warnings: preValidation.warnings,
     };
 
     // Add ZZP-specific fields
