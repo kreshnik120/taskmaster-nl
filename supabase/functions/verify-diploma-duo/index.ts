@@ -2,7 +2,7 @@ import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse
 import puppeteer from 'https://deno.land/x/puppeteer@16.2.0/mod.ts';
 
 // Boot log to verify deployment
-console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v5.1.0-browserless-http-fix-2025-01-02 loaded`);
+console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v5.2.0-browserless-json-api-2025-01-02 loaded`);
 
 // Types
 type DiplomaStatus = 
@@ -39,7 +39,7 @@ interface SignatureInfo {
 
 const DUO_CHECK_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
 const DUO_HOME_URL = 'https://zakelijk.duo.nl/';
-const DEPLOYMENT_VERSION = 'v5.1.0-browserless-http-fix-2025-01-02';
+const DEPLOYMENT_VERSION = 'v5.2.0-browserless-json-api-2025-01-02';
 const MAX_DUO_RETRIES = 3;
 const MAX_CONTEXT_SIZE_BYTES = 500000; // ~500KB max for base64 in context
 
@@ -293,42 +293,29 @@ export default async function ({ page, context }) {
 }
 `;
     
-    // Encode context as JSON for passing to the function
-    const contextData = { signedUrl, pdfBase64, filename };
-    const contextJson = JSON.stringify(contextData);
-    
-    // Check if context is too large (base64 PDF can be big)
-    if (contextJson.length > MAX_CONTEXT_SIZE_BYTES) {
-      console.warn(`Context too large (${contextJson.length} bytes), falling back to next method`);
-      return {
-        status: 'manual_review',
-        method: 'duo_browser',
-        message: 'PDF te groot voor Browserless context - probeer alternatieve methode',
-        details: { 
-          context_size: contextJson.length, 
-          max_size: MAX_CONTEXT_SIZE_BYTES,
-          version: DEPLOYMENT_VERSION,
-        },
-      };
-    }
-    
-    // Encode context as URL parameter per Browserless /function API docs
-    const contextParam = encodeURIComponent(contextJson);
+    // Prepare context for Browserless - prioritize signed URL over base64 (smaller payload)
+    const contextData = signedUrl 
+      ? { signedUrl, pdfBase64: null, filename }
+      : { signedUrl: null, pdfBase64, filename };
     
     // Add timeout with AbortController (90 seconds for DUO verification)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 90000);
     
-    console.log('📡 Calling Browserless HTTP API with Content-Type: application/javascript...');
+    console.log('📡 Calling Browserless HTTP API with Content-Type: application/json (JSON body method)...');
+    console.log(`   Using ${signedUrl ? 'signed URL' : 'base64'} for PDF delivery`);
     
     let response: Response;
     try {
       response = await fetch(
-        `https://production-sfo.browserless.io/function?token=${apiKey}&context=${contextParam}`,
+        `https://production-sfo.browserless.io/function?token=${apiKey}`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/javascript' },
-          body: puppeteerCode, // Raw JavaScript, NOT JSON-wrapped
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: puppeteerCode,
+            context: contextData,
+          }),
           signal: controller.signal,
         }
       );
