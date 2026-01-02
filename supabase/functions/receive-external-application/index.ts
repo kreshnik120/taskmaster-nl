@@ -655,8 +655,18 @@ Deno.serve(async (req) => {
           
           // cvResult.data is het response object van extract-cv-data
           // De geëxtraheerde velden zitten in cvResult.data.data (geneste structuur)
+          console.log(`[receive-external-application] CV extraction response structure:`, JSON.stringify({
+            hasData: !!cvResult.data,
+            hasNestedData: !!cvResult.data?.data,
+            success: cvResult.data?.success,
+            topLevelKeys: cvResult.data ? Object.keys(cvResult.data) : [],
+            nestedDataKeys: cvResult.data?.data ? Object.keys(cvResult.data.data).slice(0, 10) : []
+          }));
+          
           const extractedCVData = cvResult.data?.data || cvResult.data;
           const flattenedCV = flattenCVData(extractedCVData);
+          
+          console.log(`[receive-external-application] Flattened CV data keys:`, Object.keys(flattenedCV));
           
           if (Object.keys(flattenedCV).length > 0) {
             // Merge met bestaande extracted_data (gebruik extractedData variabele)
