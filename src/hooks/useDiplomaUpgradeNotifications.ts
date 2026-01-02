@@ -23,6 +23,8 @@ interface DiplomaUpgradeNotification {
  * Hook that listens to realtime diploma upgrade notifications
  * and shows toast notifications with confetti effect.
  * 
+ * NOTE: Does NOT mark notifications as read - this is handled by NotificationBell.
+ * 
  * @param onApplicationClick - Optional callback when user clicks "Bekijk" in toast
  */
 export function useDiplomaUpgradeNotifications(
@@ -77,17 +79,6 @@ export function useDiplomaUpgradeNotifications(
               }
             } : undefined,
           });
-          
-          // Mark notification as read after displaying
-          try {
-            await supabase
-              .from('recruiter_notifications')
-              .update({ read_at: new Date().toISOString() })
-              .eq('id', notification.id);
-            console.log('[useDiplomaUpgradeNotifications] Marked notification as read');
-          } catch (err) {
-            console.error('[useDiplomaUpgradeNotifications] Failed to mark as read:', err);
-          }
         }
       )
       .subscribe((status) => {

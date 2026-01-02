@@ -24,6 +24,8 @@ interface VogVerificationNotification {
  * Hook that listens to realtime VOG verification notifications
  * and shows toast notifications with confetti effect.
  * 
+ * NOTE: Does NOT mark notifications as read - this is handled by NotificationBell.
+ * 
  * @param onApplicationClick - Optional callback when user clicks "Bekijk" in toast
  */
 export function useVogVerificationNotifications(
@@ -83,17 +85,6 @@ export function useVogVerificationNotifications(
               }
             } : undefined,
           });
-          
-          // Mark notification as read after displaying
-          try {
-            await supabase
-              .from('recruiter_notifications')
-              .update({ read_at: new Date().toISOString() })
-              .eq('id', notification.id);
-            console.log('[useVogVerificationNotifications] Marked notification as read');
-          } catch (err) {
-            console.error('[useVogVerificationNotifications] Failed to mark as read:', err);
-          }
         }
       )
       .subscribe((status) => {
