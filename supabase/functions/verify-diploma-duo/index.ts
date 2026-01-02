@@ -2,7 +2,7 @@ import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse
 import puppeteer from 'https://deno.land/x/puppeteer@16.2.0/mod.ts';
 
 // Boot log to verify deployment
-console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v5.4.0-browserless-cjs-embedded-2025-01-02 loaded`);
+console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v5.5.0-browserless-esm-2025-01-02 loaded`);
 
 // Types
 type DiplomaStatus = 
@@ -39,7 +39,7 @@ interface SignatureInfo {
 
 const DUO_CHECK_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
 const DUO_HOME_URL = 'https://zakelijk.duo.nl/';
-const DEPLOYMENT_VERSION = 'v5.4.0-browserless-cjs-embedded-2025-01-02';
+const DEPLOYMENT_VERSION = 'v5.5.0-browserless-esm-2025-01-02';
 const MAX_DUO_RETRIES = 3;
 const MAX_CONTEXT_SIZE_BYTES = 500000; // ~500KB max for base64 in context
 
@@ -98,14 +98,14 @@ async function verifyViaBrowserlessHttp(pdfBytes: Uint8Array, filename: string, 
       pdfBase64 = btoa(binary);
     }
     
-    // Custom Puppeteer code for DUO verification - using CommonJS format with embedded context
-    // Context is embedded directly to avoid potential JSON body issues
+    // Custom Puppeteer code for DUO verification - ES Module format (required by Browserless JSON API)
+    // Context is passed via JSON body context parameter
     const puppeteerCode = `
-module.exports = async ({ page }) => {
-  // Context embedded directly (not via JSON body context parameter)
-  const signedUrl = ${signedUrl ? JSON.stringify(signedUrl) : 'null'};
-  const pdfBase64 = ${!signedUrl && pdfBase64 ? JSON.stringify(pdfBase64) : 'null'};
-  const filename = ${JSON.stringify(filename)};
+export default async function ({ page, context }) {
+  // Context via JSON body - Browserless passes this automatically
+  const signedUrl = context?.signedUrl || null;
+  const pdfBase64 = context?.pdfBase64 || null;
+  const filename = context?.filename || 'diploma.pdf';
   
   try {
     // Navigate to DUO diploma check
@@ -403,20 +403,25 @@ module.exports = async ({ page }) => {
       type: 'application/json'
     };
   }
-};
+}
 `;
     
     // Add timeout with AbortController (90 seconds for DUO verification)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 90000);
     
-    console.log('📡 Calling Browserless HTTP API with CommonJS format and embedded context [v5.4.0]...');
+    // Prepare context for Browserless - prioritize signed URL over base64 (smaller payload)
+    const contextData = signedUrl 
+      ? { signedUrl, pdfBase64: null, filename }
+      : { signedUrl: null, pdfBase64, filename };
+    
+    console.log('📡 Calling Browserless HTTP API with ES Module format [v5.5.0]...');
     console.log(`   Using ${signedUrl ? 'signed URL' : 'base64'} for PDF delivery`);
     console.log(`   Code length: ${puppeteerCode.length} chars`);
     
     let response: Response;
     try {
-      // Use JSON body with only code (context is embedded in code)
+      // Use JSON body with code + context (ES Module format)
       response = await fetch(
         `https://production-sfo.browserless.io/function?token=${apiKey}`,
         {
@@ -424,7 +429,7 @@ module.exports = async ({ page }) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             code: puppeteerCode,
-            // No context needed - it's embedded in the code
+            context: contextData,
           }),
           signal: controller.signal,
         }
