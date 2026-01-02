@@ -2,7 +2,7 @@ import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse
 import puppeteer from 'https://deno.land/x/puppeteer@16.2.0/mod.ts';
 
 // Boot log to verify deployment
-console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v5.5.0-browserless-esm-2025-01-02 loaded`);
+console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v5.6.0-browserless-base64-eu-2025-01-02 loaded`);
 
 // Types
 type DiplomaStatus = 
@@ -39,7 +39,7 @@ interface SignatureInfo {
 
 const DUO_CHECK_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
 const DUO_HOME_URL = 'https://zakelijk.duo.nl/';
-const DEPLOYMENT_VERSION = 'v5.5.0-browserless-esm-2025-01-02';
+const DEPLOYMENT_VERSION = 'v5.6.0-browserless-base64-eu-2025-01-02';
 const MAX_DUO_RETRIES = 3;
 const MAX_CONTEXT_SIZE_BYTES = 500000; // ~500KB max for base64 in context
 
@@ -87,16 +87,15 @@ async function verifyViaBrowserlessHttp(pdfBytes: Uint8Array, filename: string, 
       }
     }
     
-    // Fallback to base64 if no signed URL
-    let pdfBase64: string | null = null;
-    if (!signedUrl) {
-      console.log('📦 Using base64 encoding...');
-      let binary = '';
-      for (let i = 0; i < pdfBytes.length; i++) {
-        binary += String.fromCharCode(pdfBytes[i]);
-      }
-      pdfBase64 = btoa(binary);
+    // ALWAYS use base64 for Browserless - signed URLs fail from external servers
+    // (Browserless browser in US/EU cannot reliably fetch from Supabase signed URLs)
+    console.log('📦 Converting PDF to base64 for Browserless...');
+    let binary = '';
+    for (let i = 0; i < pdfBytes.length; i++) {
+      binary += String.fromCharCode(pdfBytes[i]);
     }
+    const pdfBase64 = btoa(binary);
+    console.log(`✅ PDF converted to base64: ${pdfBase64.length} chars`);
     
     // Custom Puppeteer code for DUO verification - ES Module format (required by Browserless JSON API)
     // Context is passed via JSON body context parameter
@@ -410,20 +409,23 @@ export default async function ({ page, context }) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 90000);
     
-    // Prepare context for Browserless - prioritize signed URL over base64 (smaller payload)
-    const contextData = signedUrl 
-      ? { signedUrl, pdfBase64: null, filename }
-      : { signedUrl: null, pdfBase64, filename };
+    // Prepare context for Browserless - ALWAYS use base64 (signed URLs fail from external servers)
+    const contextData = { 
+      signedUrl: null,  // Not using - fails from Browserless servers
+      pdfBase64,        // Always base64 - works reliably
+      filename 
+    };
     
-    console.log('📡 Calling Browserless HTTP API with ES Module format [v5.5.0]...');
-    console.log(`   Using ${signedUrl ? 'signed URL' : 'base64'} for PDF delivery`);
+    console.log('📡 Calling Browserless HTTP API with ES Module format [v5.6.0]...');
+    console.log(`   Using base64 for PDF delivery (${pdfBase64.length} chars)`);
     console.log(`   Code length: ${puppeteerCode.length} chars`);
+    console.log(`   Region: EU (London)`);
     
     let response: Response;
     try {
-      // Use JSON body with code + context (ES Module format)
+      // Use JSON body with code + context (ES Module format) - EU region for better Dutch connectivity
       response = await fetch(
-        `https://production-sfo.browserless.io/function?token=${apiKey}`,
+        `https://production-lon.browserless.io/function?token=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
