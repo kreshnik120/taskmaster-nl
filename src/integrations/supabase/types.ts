@@ -1602,6 +1602,54 @@ export type Database = {
         }
         Relationships: []
       }
+      circuit_breaker_state: {
+        Row: {
+          created_at: string | null
+          failure_count: number
+          half_open_at: string | null
+          id: string
+          last_error_message: string | null
+          last_failure_at: string | null
+          last_success_at: string | null
+          metadata: Json | null
+          opened_at: string | null
+          service_name: string
+          state: string
+          success_count: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          failure_count?: number
+          half_open_at?: string | null
+          id?: string
+          last_error_message?: string | null
+          last_failure_at?: string | null
+          last_success_at?: string | null
+          metadata?: Json | null
+          opened_at?: string | null
+          service_name: string
+          state?: string
+          success_count?: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          failure_count?: number
+          half_open_at?: string | null
+          id?: string
+          last_error_message?: string | null
+          last_failure_at?: string | null
+          last_success_at?: string | null
+          metadata?: Json | null
+          opened_at?: string | null
+          service_name?: string
+          state?: string
+          success_count?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       client_expert_preferences: {
         Row: {
           created_at: string

@@ -1,8 +1,12 @@
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
+import { canExecute, recordSuccess, recordFailure, formatCircuitStateForResponse, type CanExecuteResult } from '../_shared/circuit-breaker.ts';
 import puppeteer from 'https://deno.land/x/puppeteer@16.2.0/mod.ts';
 
 // Boot log to verify deployment
-console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v5.6.0-browserless-base64-eu-2025-01-02 loaded`);
+console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v5.7.0-circuit-breaker loaded`);
+
+// Circuit breaker service name for this function
+const CIRCUIT_SERVICE_NAME = 'verify-diploma-duo';
 
 // Types
 type DiplomaStatus = 
@@ -39,7 +43,7 @@ interface SignatureInfo {
 
 const DUO_CHECK_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
 const DUO_HOME_URL = 'https://zakelijk.duo.nl/';
-const DEPLOYMENT_VERSION = 'v5.6.0-browserless-base64-eu-2025-01-02';
+const DEPLOYMENT_VERSION = 'v5.7.0-circuit-breaker';
 const MAX_DUO_RETRIES = 3;
 const MAX_CONTEXT_SIZE_BYTES = 500000; // ~500KB max for base64 in context
 
@@ -1220,9 +1224,33 @@ function validatePdfSignatureFallback(pdfBytes: Uint8Array): VerificationResult 
 
 // ============= MAIN VERIFICATION ORCHESTRATOR =============
 
-async function verifyDiploma(pdfBytes: Uint8Array, filename: string, storagePath?: string): Promise<VerificationResult> {
+async function verifyDiploma(
+  pdfBytes: Uint8Array, 
+  filename: string, 
+  storagePath?: string,
+  circuitCheck?: CanExecuteResult
+): Promise<VerificationResult> {
   console.log('🎓 Starting diploma verification...');
   console.log(`PDF size: ${pdfBytes.length} bytes, filename: ${filename}, storagePath: ${storagePath}`);
+  
+  // CIRCUIT BREAKER CHECK: If circuit is open, skip external calls
+  if (circuitCheck && !circuitCheck.allowed) {
+    console.log(`🔴 Circuit breaker OPEN for external services, using signature fallback only`);
+    
+    const signatureResult = validatePdfSignatureFallback(pdfBytes);
+    
+    return {
+      ...signatureResult,
+      details: {
+        ...signatureResult.details,
+        circuit_breaker_active: true,
+        circuit_state: circuitCheck.state?.state,
+        circuit_reason: circuitCheck.reason,
+        retry_after_ms: circuitCheck.retryAfterMs,
+        verification_cascade: 'circuit_open_signature_fallback_only',
+      },
+    };
+  }
   
   // PRIMARY: Try Browserless HTTP API (bypasses Deno WebSocket ALPN limitation)
   console.log('Attempting primary method: DUO website via Browserless HTTP API...');
@@ -1354,9 +1382,31 @@ Deno.serve(async (req: Request) => {
     
     console.log('🎓 Verifying diploma:', filename, 'size:', pdfBytes.length);
     
-    const result = await verifyDiploma(pdfBytes, filename, diplomaPath);
+    // CIRCUIT BREAKER: Check if external services are available
+    const circuitCheck = await canExecute(supabase, CIRCUIT_SERVICE_NAME);
+    console.log(`🔌 Circuit breaker state: ${circuitCheck.state?.state || 'unknown'} (allowed: ${circuitCheck.allowed})`);
+    
+    const result = await verifyDiploma(pdfBytes, filename, diplomaPath, circuitCheck);
     
     console.log('Verification result:', JSON.stringify(result, null, 2));
+    
+    // CIRCUIT BREAKER: Record outcome for external service calls
+    const usedExternalService = result.details?.verification_cascade !== 'circuit_open_signature_fallback_only';
+    
+    if (usedExternalService) {
+      const isExternalFailure = result.status === 'duo_error' || 
+        (result.details?.browserless_attempt as Record<string, unknown>)?.error ||
+        (result.details?.brightdata_attempt as Record<string, unknown>)?.error;
+      
+      if (isExternalFailure) {
+        const errorMsg = (result.details?.browserless_attempt as Record<string, unknown>)?.error as string ||
+                         (result.details?.brightdata_attempt as Record<string, unknown>)?.error as string ||
+                         'External service failed';
+        await recordFailure(supabase, CIRCUIT_SERVICE_NAME, errorMsg);
+      } else if (result.status === 'verified_duo' || result.status === 'duo_invalid') {
+        await recordSuccess(supabase, CIRCUIT_SERVICE_NAME);
+      }
+    }
     
     // Map result status
     let dbStatus: string;
@@ -1391,6 +1441,7 @@ Deno.serve(async (req: Request) => {
           method: result.method,
           message: result.message,
           verified_at: result.verified_at || new Date().toISOString(),
+          circuit_breaker: formatCircuitStateForResponse(circuitCheck.state),
         },
         duo_verified_at: result.verified_at || null,
       })
@@ -1412,6 +1463,7 @@ Deno.serve(async (req: Request) => {
           file_size: pdfBytes.length,
           verification_method: result.method,
           version: DEPLOYMENT_VERSION,
+          circuit_state: circuitCheck.state?.state,
         },
         outcome: result.status,
         confidence_score: result.status === 'verified_duo' ? 1.0 : 
@@ -1428,6 +1480,7 @@ Deno.serve(async (req: Request) => {
       message: result.message,
       details: result.details,
       version: DEPLOYMENT_VERSION,
+      circuit_breaker: formatCircuitStateForResponse(circuitCheck.state),
     });
     
   } catch (error) {

@@ -1,8 +1,10 @@
 // Reverify Diploma Signatures - Automatic re-verification for signature_valid diplomas
-// Version 1.3.0 - Exponential backoff for verify-diploma-duo calls
+// Version 1.4.0 - Circuit breaker integration
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
+import { canExecute, formatCircuitStateForResponse, CIRCUIT_BREAKER_CONFIG } from '../_shared/circuit-breaker.ts';
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0-circuit-breaker';
+const CIRCUIT_SERVICE_NAME = 'verify-diploma-duo';
 const COMPONENT_NAME = 'reverify-diploma-signatures';
 const HEARTBEAT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -327,6 +329,24 @@ Deno.serve(async (req) => {
 
     // Determine trigger type for logging
     const triggeredBy = specificApplicationId ? 'manual_single' : forceReverify ? 'manual' : 'scheduled';
+
+    // CIRCUIT BREAKER: Check if external services are available BEFORE processing
+    const circuitCheck = await canExecute(supabase, CIRCUIT_SERVICE_NAME);
+    console.log(`🔌 Circuit breaker state: ${circuitCheck.state?.state || 'unknown'} (allowed: ${circuitCheck.allowed})`);
+
+    if (!circuitCheck.allowed) {
+      const cooldownMinutes = Math.ceil((circuitCheck.retryAfterMs || 0) / 60000);
+      console.log(`🔴 Circuit breaker OPEN - skipping batch (retry in ${cooldownMinutes} minutes)`);
+      
+      return jsonResponse({
+        success: false,
+        message: 'External verification service temporarily unavailable',
+        circuit_breaker: formatCircuitStateForResponse(circuitCheck.state),
+        retry_after_seconds: Math.ceil((circuitCheck.retryAfterMs || 0) / 1000),
+        retry_after_minutes: cooldownMinutes,
+        version: VERSION,
+      }, 503);
+    }
 
     // Build query for candidates (before acquiring lock to check if there's work)
     let query = supabase
