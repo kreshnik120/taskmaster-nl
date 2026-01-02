@@ -2,7 +2,7 @@ import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse
 import puppeteer from 'https://deno.land/x/puppeteer@16.2.0/mod.ts';
 
 // Boot log to verify deployment
-console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v5.2.0-browserless-json-api-2025-01-02 loaded`);
+console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v5.3.0-browserless-debug-selectors-2025-01-02 loaded`);
 
 // Types
 type DiplomaStatus = 
@@ -39,7 +39,7 @@ interface SignatureInfo {
 
 const DUO_CHECK_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
 const DUO_HOME_URL = 'https://zakelijk.duo.nl/';
-const DEPLOYMENT_VERSION = 'v5.2.0-browserless-json-api-2025-01-02';
+const DEPLOYMENT_VERSION = 'v5.3.0-browserless-debug-selectors-2025-01-02';
 const MAX_DUO_RETRIES = 3;
 const MAX_CONTEXT_SIZE_BYTES = 500000; // ~500KB max for base64 in context
 
@@ -142,9 +142,107 @@ export default async function ({ page, context }) {
       };
     }
     
-    // Wait for file input
-    await page.waitForSelector('input[type="file"]', { timeout: 20000 });
-    console.log('File input found');
+    // Find file input with multiple strategies
+    console.log('Looking for file upload element with multiple strategies...');
+    
+    let fileInputFound = false;
+    
+    // Strategy 1: Wait for standard file input
+    try {
+      await page.waitForSelector('input[type="file"]', { timeout: 10000 });
+      fileInputFound = true;
+      console.log('Strategy 1: Found input[type="file"]');
+    } catch (e) {
+      console.log('Strategy 1 failed: No visible input[type="file"]');
+    }
+    
+    // Strategy 2: Make hidden file inputs visible
+    if (!fileInputFound) {
+      const madeVisible = await page.evaluate(() => {
+        const inputs = document.querySelectorAll('input[type="file"]');
+        if (inputs.length > 0) {
+          inputs.forEach(input => {
+            input.style.display = 'block';
+            input.style.visibility = 'visible';
+            input.style.opacity = '1';
+            input.style.width = '200px';
+            input.style.height = '50px';
+            input.style.position = 'relative';
+          });
+          return true;
+        }
+        return false;
+      });
+      if (madeVisible) {
+        fileInputFound = true;
+        console.log('Strategy 2: Made hidden input visible');
+      }
+    }
+    
+    // Strategy 3: Look for Angular/custom upload components and click
+    if (!fileInputFound) {
+      const clickedUpload = await page.evaluate(() => {
+        const uploadSelectors = [
+          'uno-ng-input-file',
+          '[class*="upload"]',
+          '[class*="file"]',
+          'button:contains("Bestand")',
+          'a[href*="upload"]',
+          '.file-upload',
+          '[data-testid*="upload"]',
+          '.upload-zone'
+        ];
+        
+        for (const selector of uploadSelectors) {
+          try {
+            const el = document.querySelector(selector);
+            if (el && el.click) {
+              el.click();
+              return selector;
+            }
+          } catch (e) {}
+        }
+        return null;
+      });
+      
+      if (clickedUpload) {
+        console.log('Strategy 3: Clicked upload element:', clickedUpload);
+        await new Promise(r => setTimeout(r, 1000));
+        
+        // Check again for file input
+        const hasInput = await page.evaluate(() => !!document.querySelector('input[type="file"]'));
+        if (hasInput) {
+          fileInputFound = true;
+        }
+      }
+    }
+    
+    // If still not found, take debug screenshot and return
+    if (!fileInputFound) {
+      console.log('All strategies failed - taking debug screenshot');
+      let debugScreenshot = null;
+      try {
+        debugScreenshot = await page.screenshot({ encoding: 'base64', fullPage: false });
+      } catch (e) {
+        console.log('Could not take screenshot:', e.message);
+      }
+      
+      const pageHtml = await page.evaluate(() => document.body.innerHTML.substring(0, 2000));
+      
+      return {
+        data: { 
+          status: 'duo_error', 
+          message: 'File upload element niet gevonden - alle strategieën gefaald',
+          debug_screenshot: debugScreenshot,
+          page_html_preview: pageHtml,
+          selectors_tried: ['input[type="file"]', 'uno-ng-input-file', '[class*="upload"]'],
+          page_url: page.url()
+        },
+        type: 'application/json'
+      };
+    }
+    
+    console.log('File input found, proceeding with upload');
     
     // Upload PDF via signed URL or base64
     console.log('Uploading PDF...');
@@ -285,8 +383,19 @@ export default async function ({ page, context }) {
     };
     
   } catch (error) {
+    // Take debug screenshot on any error
+    let debugScreenshot = null;
+    try {
+      debugScreenshot = await page.screenshot({ encoding: 'base64', fullPage: false });
+    } catch (e) {}
+    
     return {
-      data: { status: 'duo_error', message: error.message || 'Unknown error' },
+      data: { 
+        status: 'duo_error', 
+        message: error.message || 'Unknown error',
+        debug_screenshot: debugScreenshot,
+        page_url: page.url()
+      },
       type: 'application/json'
     };
   }
