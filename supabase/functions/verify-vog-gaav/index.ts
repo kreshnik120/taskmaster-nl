@@ -1,6 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { PDFDocument } from 'https://esm.sh/pdf-lib@1.17.1';
 
+// Boot log to verify deployment
+console.log(`🚀 [WORKER-BOOT] verify-vog-gaav v1.1.0-browserless-base64-eu-2025-01-02 loaded`);
+
+const DEPLOYMENT_VERSION = 'v1.1.0-browserless-base64-eu-2025-01-02';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -421,11 +426,401 @@ async function validateScreeningProfile(
   return result;
 }
 
+// =====================================================
+// BROWSERLESS WEBSITE VERIFICATION (Primary Method)
+// Same proven approach as DUO diploma verification v5.6.0
+// =====================================================
+
+interface BrowserlessResult {
+  status: string;
+  message: string;
+  gaavCode: number;
+  pageContent?: string;
+  details?: Record<string, unknown>;
+  method: string;
+}
+
+async function verifyViaBrowserlessHttp(
+  pdfBytes: Uint8Array,
+  filename: string
+): Promise<BrowserlessResult> {
+  const apiKey = Deno.env.get('BROWSERLESS_API_KEY');
+  if (!apiKey) {
+    console.log(`[VERIFY-VOG-GAAV] Browserless API key niet geconfigureerd`);
+    return { 
+      status: 'fallback_needed', 
+      message: 'Browserless API key niet geconfigureerd', 
+      gaavCode: -1,
+      method: 'browserless_missing_key'
+    };
+  }
+  
+  console.log(`[VERIFY-VOG-GAAV] ${DEPLOYMENT_VERSION} - Starting Browserless verification`);
+  console.log(`   Method: Browserless website automation (validatie.nl)`);
+  console.log(`   Region: EU (London)`);
+  console.log(`   PDF size: ${pdfBytes.length} bytes`);
+  
+  // Convert PDF to base64 (proven successful approach from DUO v5.6.0)
+  console.log('📦 Converting PDF to base64 for Browserless...');
+  let binary = '';
+  for (let i = 0; i < pdfBytes.length; i++) {
+    binary += String.fromCharCode(pdfBytes[i]);
+  }
+  const pdfBase64 = btoa(binary);
+  console.log(`✅ PDF converted to base64: ${pdfBase64.length} chars`);
+  
+  // Puppeteer code for validatie.nl - ES Module format (required by Browserless JSON API)
+  const puppeteerCode = `
+export default async function ({ page, context }) {
+  const pdfBase64 = context?.pdfBase64 || null;
+  const filename = context?.filename || 'vog.pdf';
+  
+  console.log('[VALIDATIE.NL] Starting VOG verification...');
+  console.log('[VALIDATIE.NL] PDF base64 length:', pdfBase64?.length || 0);
+  
+  if (!pdfBase64) {
+    return { 
+      data: { status: 'error', message: 'No PDF base64 provided', gaavCode: -1 }, 
+      type: 'application/json' 
+    };
+  }
+  
+  try {
+    // Navigate to validatie.nl
+    console.log('[VALIDATIE.NL] Navigating to validatie.nl...');
+    await page.goto('https://validatie.nl/', { 
+      waitUntil: 'networkidle2', 
+      timeout: 60000 
+    });
+    await new Promise(r => setTimeout(r, 3000));
+    
+    console.log('[VALIDATIE.NL] Page loaded, looking for file input...');
+    
+    // Find file input element
+    const fileInputSelector = 'input[type="file"]';
+    try {
+      await page.waitForSelector(fileInputSelector, { timeout: 15000 });
+    } catch (e) {
+      // Try alternative selectors
+      console.log('[VALIDATIE.NL] Primary selector not found, trying alternatives...');
+      const altSelectors = ['input[accept*="pdf"]', '.dropzone input', '#file-upload'];
+      for (const sel of altSelectors) {
+        try {
+          await page.waitForSelector(sel, { timeout: 3000 });
+          console.log('[VALIDATIE.NL] Found alternative selector:', sel);
+          break;
+        } catch {}
+      }
+    }
+    
+    // Decode base64 and upload via DataTransfer API (proven approach)
+    console.log('[VALIDATIE.NL] Decoding base64 and uploading file...');
+    const uploadResult = await page.evaluate(async ({ pdfBase64, filename }) => {
+      try {
+        // Decode base64 to binary
+        const binary = atob(pdfBase64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        
+        // Create File object
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        const file = new File([blob], filename, { type: 'application/pdf' });
+        
+        // Find file input
+        const fileInput = document.querySelector('input[type="file"]') 
+          || document.querySelector('input[accept*="pdf"]')
+          || document.querySelector('.dropzone input');
+          
+        if (!fileInput) {
+          return { success: false, error: 'File input not found on page' };
+        }
+        
+        // Use DataTransfer API to set file
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        fileInput.files = dataTransfer.files;
+        
+        // Trigger change event
+        fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+        fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        console.log('[VALIDATIE.NL] File uploaded via DataTransfer');
+        return { success: true, fileSize: bytes.length };
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
+    }, { pdfBase64, filename });
+    
+    if (!uploadResult.success) {
+      console.log('[VALIDATIE.NL] Upload failed:', uploadResult.error);
+      return { 
+        data: { status: 'error', message: 'Upload failed: ' + uploadResult.error, gaavCode: -1 }, 
+        type: 'application/json' 
+      };
+    }
+    
+    console.log('[VALIDATIE.NL] Upload successful, file size:', uploadResult.fileSize);
+    
+    // Wait for processing and click verify button if needed
+    await new Promise(r => setTimeout(r, 2000));
+    
+    // Try to click Controleer/Valideer button
+    const clicked = await page.evaluate(() => {
+      const buttonTexts = ['controleer', 'valideer', 'verify', 'check', 'upload'];
+      const buttons = document.querySelectorAll('button, input[type="submit"], a.btn, .btn');
+      
+      for (const btn of buttons) {
+        const text = (btn.textContent || btn.value || '').toLowerCase();
+        if (buttonTexts.some(t => text.includes(t))) {
+          btn.click();
+          console.log('[VALIDATIE.NL] Clicked button:', text);
+          return { clicked: true, buttonText: text };
+        }
+      }
+      
+      // Also try form submit
+      const form = document.querySelector('form');
+      if (form) {
+        form.submit();
+        return { clicked: true, buttonText: 'form submit' };
+      }
+      
+      return { clicked: false };
+    });
+    
+    console.log('[VALIDATIE.NL] Button click result:', JSON.stringify(clicked));
+    
+    // Wait for result
+    await new Promise(r => setTimeout(r, 8000));
+    
+    // Parse result from page content
+    const pageContent = await page.evaluate(() => document.body.innerText);
+    const contentLower = pageContent.toLowerCase();
+    
+    console.log('[VALIDATIE.NL] Page content length:', pageContent.length);
+    console.log('[VALIDATIE.NL] Content sample:', pageContent.slice(0, 500));
+    
+    // Map results to GAAV codes based on validatie.nl response text
+    // Code 0: Document is authentiek en integer
+    if ((contentLower.includes('authentiek') && contentLower.includes('integer')) ||
+        contentLower.includes('document is geldig') ||
+        contentLower.includes('echtheidskenmerk') ||
+        contentLower.includes('origineel') ||
+        contentLower.includes('valid')) {
+      console.log('[VALIDATIE.NL] ✅ Document verified as authentic');
+      return { 
+        data: { 
+          status: 'authentic_ok', 
+          gaavCode: 0, 
+          message: 'Document is authentiek en integer',
+          pageContent: pageContent.slice(0, 2000)
+        }, 
+        type: 'application/json' 
+      };
+    }
+    
+    // Code 1: Document bekend maar niet integer (tampered)
+    if ((contentLower.includes('bekend') && contentLower.includes('niet integer')) ||
+        contentLower.includes('gewijzigd') ||
+        contentLower.includes('manipulated') ||
+        contentLower.includes('tampered')) {
+      console.log('[VALIDATIE.NL] ❌ Document tampered');
+      return { 
+        data: { 
+          status: 'authentic_fail', 
+          gaavCode: 1, 
+          message: 'Document is bekend, maar niet integer',
+          pageContent: pageContent.slice(0, 2000)
+        }, 
+        type: 'application/json' 
+      };
+    }
+    
+    // Code 2: Document niet bekend
+    if (contentLower.includes('niet bekend') || 
+        contentLower.includes('not found') ||
+        contentLower.includes('onbekend')) {
+      console.log('[VALIDATIE.NL] ⚠️ Document not found in database');
+      return { 
+        data: { 
+          status: 'manual_review', 
+          gaavCode: 2, 
+          message: 'Document niet bekend bij GAAV',
+          pageContent: pageContent.slice(0, 2000)
+        }, 
+        type: 'application/json' 
+      };
+    }
+    
+    // Code 6: Handtekening ongeldig
+    if ((contentLower.includes('handtekening') && contentLower.includes('ongeldig')) ||
+        contentLower.includes('signature invalid') ||
+        contentLower.includes('invalid signature')) {
+      console.log('[VALIDATIE.NL] ❌ Invalid signature');
+      return { 
+        data: { 
+          status: 'authentic_fail', 
+          gaavCode: 6, 
+          message: 'Handtekening ongeldig',
+          pageContent: pageContent.slice(0, 2000)
+        }, 
+        type: 'application/json' 
+      };
+    }
+    
+    // Check for error messages
+    if (contentLower.includes('error') || 
+        contentLower.includes('fout') ||
+        contentLower.includes('probleem')) {
+      console.log('[VALIDATIE.NL] ⚠️ Error detected on page');
+      return { 
+        data: { 
+          status: 'manual_review', 
+          gaavCode: 3, 
+          message: 'Validatie fout gedetecteerd',
+          pageContent: pageContent.slice(0, 2000)
+        }, 
+        type: 'application/json' 
+      };
+    }
+    
+    // Default: unclear result, needs manual review
+    console.log('[VALIDATIE.NL] ⚠️ Unclear result, manual review needed');
+    return { 
+      data: { 
+        status: 'manual_review', 
+        gaavCode: -1, 
+        message: 'Resultaat onduidelijk - handmatige controle vereist',
+        pageContent: pageContent.slice(0, 2000)
+      }, 
+      type: 'application/json' 
+    };
+    
+  } catch (error) {
+    console.log('[VALIDATIE.NL] Error:', error.message);
+    return { 
+      data: { 
+        status: 'error', 
+        message: error.message, 
+        gaavCode: -1 
+      }, 
+      type: 'application/json' 
+    };
+  }
+}
+`;
+  
+  // Prepare context for Browserless
+  const contextData = { 
+    pdfBase64,        // Base64 encoded PDF
+    filename 
+  };
+  
+  console.log('📡 Calling Browserless HTTP API with ES Module format [v1.1.0]...');
+  console.log(`   Using base64 for PDF delivery (${pdfBase64.length} chars)`);
+  console.log(`   Code length: ${puppeteerCode.length} chars`);
+  console.log(`   Region: EU (London)`);
+  
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 90000);
+  
+  try {
+    // Use EU region (London) for better connectivity to Dutch services
+    const response = await fetch(
+      `https://production-lon.browserless.io/function?token=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: puppeteerCode,
+          context: contextData
+        }),
+        signal: controller.signal
+      }
+    );
+    
+    clearTimeout(timeoutId);
+    
+    console.log(`📥 Browserless response status: ${response.status}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log(`❌ Browserless HTTP error: ${response.status} - ${errorText.slice(0, 500)}`);
+      return {
+        status: 'fallback_needed',
+        message: `Browserless HTTP error: ${response.status}`,
+        gaavCode: -1,
+        method: 'browserless_http_error'
+      };
+    }
+    
+    // Try to parse JSON response
+    const responseText = await response.text();
+    console.log(`📄 Response length: ${responseText.length} chars`);
+    console.log(`📄 Response preview: ${responseText.slice(0, 500)}`);
+    
+    try {
+      const result = JSON.parse(responseText);
+      console.log(`✅ Browserless result:`, JSON.stringify(result, null, 2).slice(0, 1000));
+      
+      return {
+        status: result.status || 'manual_review',
+        message: result.message || 'Verification completed',
+        gaavCode: result.gaavCode ?? -1,
+        pageContent: result.pageContent,
+        method: 'browserless_validatie_nl'
+      };
+    } catch (parseError) {
+      console.log(`⚠️ Could not parse Browserless response as JSON`);
+      
+      // Check if response contains success indicators
+      const responseLower = responseText.toLowerCase();
+      if (responseLower.includes('authentiek') || responseLower.includes('valid')) {
+        return {
+          status: 'authentic_ok',
+          message: 'Document verified (parsed from response)',
+          gaavCode: 0,
+          pageContent: responseText.slice(0, 2000),
+          method: 'browserless_validatie_nl_parsed'
+        };
+      }
+      
+      return {
+        status: 'fallback_needed',
+        message: 'Could not parse Browserless response',
+        gaavCode: -1,
+        pageContent: responseText.slice(0, 2000),
+        method: 'browserless_parse_error'
+      };
+    }
+    
+  } catch (fetchError) {
+    clearTimeout(timeoutId);
+    const errorMessage = fetchError instanceof Error ? fetchError.message : 'Unknown fetch error';
+    console.log(`❌ Browserless fetch error: ${errorMessage}`);
+    
+    return {
+      status: 'fallback_needed',
+      message: `Browserless fetch error: ${errorMessage}`,
+      gaavCode: -1,
+      method: 'browserless_fetch_error'
+    };
+  }
+}
+
+// =====================================================
+// MAIN HANDLER
+// =====================================================
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  console.log(`[VERIFY-VOG-GAAV] ${DEPLOYMENT_VERSION} - Request received`);
 
   try {
     const { application_id, vog_file_path, force_revalidation = false } = await req.json();
@@ -488,7 +883,7 @@ Deno.serve(async (req) => {
         .from('professional_applications')
         .update({
           vog_validation_status: 'manual_review',
-          vog_validation_source: 'GAAV_API',
+          vog_validation_source: 'download_error',
           vog_verification_response: {
             error: 'Download failed',
             message: downloadError?.message,
@@ -502,42 +897,56 @@ Deno.serve(async (req) => {
     }
 
     // 4. Extract screening profile from PDF
-    const pdfBytes = await fileData.arrayBuffer();
-    const screeningProfile = await extractScreeningProfile(pdfBytes);
+    const pdfArrayBuffer = await fileData.arrayBuffer();
+    const pdfBytes = new Uint8Array(pdfArrayBuffer);
+    const screeningProfile = await extractScreeningProfile(pdfArrayBuffer);
     console.log(`[VERIFY-VOG-GAAV] Extracted screening profile:`, JSON.stringify(screeningProfile, null, 2));
 
-    // 5. Submit to GAAV API
-    console.log(`[VERIFY-VOG-GAAV] Submitting to GAAV API...`);
+    // 5. PRIMARY: Try Browserless website verification (proven approach from DUO v5.6.0)
+    console.log(`[VERIFY-VOG-GAAV] Attempting Browserless verification via validatie.nl...`);
     
-    const formData = new FormData();
-    formData.append('file', fileData, 'vog.pdf');
+    const filename = vog_file_path.split('/').pop() || 'vog.pdf';
+    const browserlessResult = await verifyViaBrowserlessHttp(pdfBytes, filename);
+    
+    console.log(`[VERIFY-VOG-GAAV] Browserless result:`, JSON.stringify(browserlessResult, null, 2));
 
-    let gaavResponseCode = -1;
+    let gaavResponseCode = browserlessResult.gaavCode;
     let gaavError: string | null = null;
+    let verificationMethod = browserlessResult.method;
 
-    try {
-      const gaavResponse = await fetch(GAAV_API_URL, {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!gaavResponse.ok) {
-        throw new Error(`GAAV API returned status ${gaavResponse.status}`);
-      }
-
-      const responseData = await gaavResponse.json();
-      gaavResponseCode = typeof responseData === 'number' ? responseData : responseData.code ?? responseData.result ?? -1;
+    // 6. FALLBACK: If Browserless failed, try direct API
+    if (browserlessResult.status === 'fallback_needed' || browserlessResult.status === 'error') {
+      console.log(`[VERIFY-VOG-GAAV] Browserless failed, trying direct GAAV API...`);
       
-      console.log(`[VERIFY-VOG-GAAV] GAAV response code: ${gaavResponseCode}`);
-    } catch (fetchError) {
-      console.error(`[VERIFY-VOG-GAAV] GAAV API error:`, fetchError);
-      gaavError = fetchError instanceof Error ? fetchError.message : 'Unknown GAAV API error';
+      verificationMethod = 'direct_api_fallback';
+      
+      const formData = new FormData();
+      formData.append('file', fileData, 'vog.pdf');
+
+      try {
+        const gaavResponse = await fetch(GAAV_API_URL, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!gaavResponse.ok) {
+          throw new Error(`GAAV API returned status ${gaavResponse.status}`);
+        }
+
+        const responseData = await gaavResponse.json();
+        gaavResponseCode = typeof responseData === 'number' ? responseData : responseData.code ?? responseData.result ?? -1;
+        
+        console.log(`[VERIFY-VOG-GAAV] Direct API response code: ${gaavResponseCode}`);
+      } catch (fetchError) {
+        console.error(`[VERIFY-VOG-GAAV] Direct API error:`, fetchError);
+        gaavError = fetchError instanceof Error ? fetchError.message : 'Unknown GAAV API error';
+      }
     }
 
-    // 6. Map response to status
+    // 7. Map response to status
     const responseMapping = GAAV_RESPONSE_MAP[gaavResponseCode] ?? {
       status: 'manual_review',
-      description: gaavError ?? 'Unknown response code',
+      description: gaavError ?? browserlessResult.message ?? 'Unknown response code',
       requiresManualReview: true
     };
 
@@ -547,7 +956,7 @@ Deno.serve(async (req) => {
     let expiryCheck: { valid: boolean; daysRemaining: number } | null = null;
     let profileValidation: ProfileValidationResult | null = null;
 
-    // 7. If authentic, check 3-month validity rule and screening profile
+    // 8. If authentic, check 3-month validity rule and screening profile
     if (validationStatus === 'authentic_ok') {
       // Check issue date
       vogIssueDate = extractVogIssueDate(vog_file_path);
@@ -579,11 +988,18 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 8. Update application with verification result
+    // 9. Update application with verification result
     const verificationResponse = {
+      deployment_version: DEPLOYMENT_VERSION,
+      verification_method: verificationMethod,
       gaav_code: gaavResponseCode,
       gaav_description: responseMapping.description,
       gaav_error: gaavError,
+      browserless_result: browserlessResult.status !== 'fallback_needed' ? {
+        status: browserlessResult.status,
+        message: browserlessResult.message,
+        page_content_sample: browserlessResult.pageContent?.slice(0, 500)
+      } : null,
       requires_manual_review: responseMapping.requiresManualReview,
       issue_date: vogIssueDate?.toISOString() ?? null,
       valid_until: vogValidUntil?.toISOString() ?? null,
@@ -606,7 +1022,7 @@ Deno.serve(async (req) => {
       .from('professional_applications')
       .update({
         vog_validation_status: validationStatus,
-        vog_validation_source: 'GAAV_API',
+        vog_validation_source: verificationMethod.includes('browserless') ? 'BROWSERLESS_VALIDATIE_NL' : 'GAAV_API',
         vog_issue_date: vogIssueDate?.toISOString().split('T')[0] ?? null,
         vog_valid_until: vogValidUntil?.toISOString().split('T')[0] ?? null,
         vog_verification_response: verificationResponse,
@@ -619,32 +1035,40 @@ Deno.serve(async (req) => {
       return errorResponse(`Failed to update application: ${updateError.message}`);
     }
 
-    // 9. Log system event
+    // 10. Log system event
     await supabase.from('system_events').insert({
       org_id: '550e8400-e29b-41d4-a716-446655440000', // ABCzorg default
       event_type: 'vog_verification_completed',
       entity_type: 'professional_application',
       entity_id: application_id,
       event_data: {
+        deployment_version: DEPLOYMENT_VERSION,
+        verification_method: verificationMethod,
         validation_status: validationStatus,
         gaav_code: gaavResponseCode,
         days_remaining: expiryCheck?.daysRemaining ?? null,
         profile_valid: profileValidation?.valid ?? null,
         profile_code: screeningProfile.profileCode
       },
-      metadata: { source: 'GAAV_API' }
+      metadata: { source: verificationMethod.includes('browserless') ? 'BROWSERLESS_VALIDATIE_NL' : 'GAAV_API' }
     });
 
-    console.log(`[VERIFY-VOG-GAAV] Verification complete: ${validationStatus}`);
+    console.log(`[VERIFY-VOG-GAAV] ✅ Verification complete: ${validationStatus} via ${verificationMethod}`);
 
     return jsonResponse({
       success: true,
+      deployment_version: DEPLOYMENT_VERSION,
+      verification_method: verificationMethod,
       validation_status: validationStatus,
       gaav_response: {
         code: gaavResponseCode,
         description: responseMapping.description,
         requires_manual_review: responseMapping.requiresManualReview
       },
+      browserless_result: browserlessResult.status !== 'fallback_needed' ? {
+        status: browserlessResult.status,
+        message: browserlessResult.message
+      } : null,
       expiry_info: expiryCheck ? {
         issue_date: vogIssueDate?.toISOString(),
         valid_until: vogValidUntil?.toISOString(),
