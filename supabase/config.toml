@@ -410,7 +410,7 @@ schedule = "0 7 * * *"
 # Purpose: Monitor document expiry dates and create renewal goals (daily at 07:00)
 
 # -----------------------------------------------------------------------------
-# DOCUMENT ORPHAN CLEANUP
+# DOCUMENT & ORCHESTRATOR CLEANUP
 # -----------------------------------------------------------------------------
 
 [functions.cleanup-orphan-documents]
@@ -420,6 +420,13 @@ timeout = 300
 # Purpose: Cleanup orphan document references (files missing in storage)
 # Frequency: Daily at 06:30 UTC
 # Scope: professional_applications + application_documents tables
+
+[functions.cleanup-orchestrator-state]
+verify_jwt = false
+schedule = "45 6 * * *"
+# Purpose: Cleanup stale orchestrator_state records (timeout, error, completed > 30 days)
+# Frequency: Daily at 06:45 UTC
+# Protected components: master-scheduler
 
 # -----------------------------------------------------------------------------
 # DIPLOMA RE-VERIFICATION
