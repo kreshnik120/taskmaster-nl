@@ -799,7 +799,7 @@ Deno.serve(async (req: Request) => {
     
     const { data: app, error: appFetchError } = await supabase
       .from('professional_applications')
-      .select('id, diploma_file_path, diploma_validation_status, org_id')
+      .select('id, diploma_file_path, diploma_validation_status, org_id, extracted_data')
       .eq('id', application_id)
       .single();
     
@@ -808,15 +808,25 @@ Deno.serve(async (req: Request) => {
       return errorResponse('Application not found', 404);
     }
     
-    if (!app.diploma_file_path) {
+    // Get diploma path from dedicated column, fallback to extracted_data for legacy uploads
+    let diplomaPath = app.diploma_file_path;
+    if (!diplomaPath && app.extracted_data && typeof app.extracted_data === 'object') {
+      const extractedData = app.extracted_data as Record<string, unknown>;
+      if (typeof extractedData.diploma_file_path === 'string') {
+        diplomaPath = extractedData.diploma_file_path;
+        console.log('📂 Using diploma path from extracted_data (legacy):', diplomaPath);
+      }
+    }
+    
+    if (!diplomaPath) {
       return errorResponse('Geen diploma bestand gevonden', 400);
     }
     
-    console.log('📥 Downloading diploma:', app.diploma_file_path);
+    console.log('📥 Downloading diploma:', diplomaPath);
     
     const { data: fileData, error: fileDownloadError } = await supabase.storage
       .from('application-documents')
-      .download(app.diploma_file_path);
+      .download(diplomaPath);
     
     if (fileDownloadError || !fileData) {
       console.error('File download error:', fileDownloadError);
@@ -824,7 +834,7 @@ Deno.serve(async (req: Request) => {
     }
     
     const pdfBytes = new Uint8Array(await fileData.arrayBuffer());
-    const filename = app.diploma_file_path.split('/').pop() || 'diploma.pdf';
+    const filename = diplomaPath.split('/').pop() || 'diploma.pdf';
     
     console.log('🎓 Verifying diploma:', filename, 'size:', pdfBytes.length);
     
