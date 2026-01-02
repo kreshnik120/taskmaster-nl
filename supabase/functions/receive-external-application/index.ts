@@ -614,14 +614,74 @@ Deno.serve(async (req) => {
     // 14. Trigger CV extraction if CV was uploaded
     if (cvFilePath && cvBase64Content) {
       try {
-        await supabase.functions.invoke("extract-cv-data", {
+        const { data: cvResult, error: cvError } = await supabase.functions.invoke("extract-cv-data", {
           body: {
             pdfBase64: cvBase64Content,
             filename: cvFilename,
             applicationId: newApplication.id,
-            orgId: data.source,
+            orgId: defaultOrgId, // UUID, niet string
           },
         });
+        
+        if (cvError) {
+          console.error(`[receive-external-application] CV extraction error for ${newApplication.id}:`, cvError);
+        } else if (cvResult?.data) {
+          console.log(`[receive-external-application] CV extraction completed for ${newApplication.id}, merging data...`);
+          
+          // Flatten CV data van {value, confidence} naar plain values met cv_ prefix
+          const flattenCVData = (cvData: Record<string, any>): Record<string, any> => {
+            const flattened: Record<string, any> = {};
+            const skipKeys = ['success', 'knowledge_items_created', 'profile_photo_base64', 'global_confidence'];
+            
+            for (const [key, val] of Object.entries(cvData)) {
+              if (skipKeys.includes(key)) continue;
+              
+              if (val && typeof val === 'object' && 'value' in val) {
+                // Structured field met value/confidence
+                if (val.value !== null && val.value !== undefined && val.value !== '') {
+                  flattened[key] = val.value;
+                  flattened[`${key}_confidence`] = val.confidence || 0;
+                }
+              } else if (val !== null && val !== undefined && val !== '' && typeof val !== 'object') {
+                // Plain value
+                flattened[key] = val;
+              } else if (Array.isArray(val) && val.length > 0) {
+                // Array value
+                flattened[key] = val;
+              }
+            }
+            return flattened;
+          };
+          
+          const flattenedCV = flattenCVData(cvResult.data);
+          
+          if (Object.keys(flattenedCV).length > 0) {
+            // Merge met bestaande extracted_data (gebruik extractedData variabele)
+            const mergedData = {
+              ...extractedData,
+              ...flattenedCV,
+              cv_extraction_completed: true,
+              cv_extraction_at: new Date().toISOString(),
+            };
+            
+            // Update de application met gemerged data
+            const { error: updateError } = await supabase
+              .from('professional_applications')
+              .update({ 
+                extracted_data: mergedData,
+                // Herbereken completeness met CV velden
+                completeness_score: Math.min(100, completenessScore + 15), // +15% voor CV extractie
+              })
+              .eq('id', newApplication.id);
+            
+            if (updateError) {
+              console.error(`[receive-external-application] Failed to merge CV data:`, updateError);
+            } else {
+              console.log(`[receive-external-application] CV data merged successfully, ${Object.keys(flattenedCV).length} fields added`);
+            }
+          }
+        }
+        
         console.log(`[receive-external-application] CV extraction triggered for ${newApplication.id} with pdfBase64 (${Math.round(cvBase64Content.length / 1024)}KB)`);
       } catch (e) {
         console.error("[receive-external-application] CV extraction trigger failed:", e);
