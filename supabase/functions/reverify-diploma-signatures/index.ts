@@ -496,6 +496,83 @@ Deno.serve(async (req) => {
         if (upgraded) {
           console.log(`✅ UPGRADED: ${candidate.id} from ${previousStatus} → verified_duo`);
           upgradedCount++;
+          
+          // === RECRUITER NOTIFICATION: Toast + optional email ===
+          const candidateName = (candidate as any).extracted_data?.naam || candidate.email_from || 'Onbekende kandidaat';
+          
+          // 1. Insert notification in database (triggers realtime for toast)
+          const { error: notifError } = await supabase
+            .from('recruiter_notifications')
+            .insert({
+              org_id: candidate.org_id,
+              notification_type: 'diploma_upgrade',
+              title: '🎓 Diploma geverifieerd door DUO',
+              message: `Het diploma van ${candidateName} is succesvol geüpgraded naar verified_duo (100% betrouwbaar)`,
+              application_id: candidate.id,
+              metadata: {
+                candidate_name: candidateName,
+                previous_status: previousStatus,
+                new_status: 'verified_duo',
+                upgrade_source: 'reverification_batch',
+                version: VERSION,
+              }
+            });
+            
+          if (notifError) {
+            console.error(`⚠️ Failed to create notification: ${notifError.message}`);
+          } else {
+            console.log(`📢 Notification created for diploma upgrade: ${candidate.id}`);
+          }
+          
+          // 2. Send optional email to recruiters (can be made configurable via org settings)
+          const shouldSendEmail = true; // TODO: Make configurable via org_ai_budgets or settings
+          if (shouldSendEmail) {
+            try {
+              // Fetch recruiter emails for this org from profiles
+              const { data: recruiters } = await supabase
+                .from('profiles')
+                .select('email, full_name')
+                .not('email', 'is', null);
+                
+              if (recruiters && recruiters.length > 0) {
+                console.log(`📧 Sending email notifications to ${recruiters.length} recruiters`);
+                
+                for (const recruiter of recruiters) {
+                  if (!recruiter.email) continue;
+                  
+                  const { error: emailError } = await supabase.functions.invoke('send-ai-email', {
+                    body: {
+                      email_type: 'diploma_upgrade_notification',
+                      recipient_email: recruiter.email,
+                      recipient_name: recruiter.full_name || 'Recruiter',
+                      subject: `🎓 Diploma geverifieerd: ${candidateName}`,
+                      template_data: {
+                        candidate_name: candidateName,
+                        previous_status: previousStatus,
+                        new_status: 'verified_duo',
+                        application_id: candidate.id,
+                      },
+                      application_id: candidate.id,
+                      org_id: candidate.org_id,
+                    }
+                  });
+                  
+                  if (emailError) {
+                    console.error(`⚠️ Failed to send email to ${recruiter.email}: ${emailError.message}`);
+                  }
+                }
+                
+                // Update notification with email sent timestamp
+                await supabase
+                  .from('recruiter_notifications')
+                  .update({ email_sent_at: new Date().toISOString() })
+                  .eq('application_id', candidate.id)
+                  .eq('notification_type', 'diploma_upgrade');
+              }
+            } catch (emailErr) {
+              console.error(`⚠️ Failed to send email notifications: ${emailErr}`);
+            }
+          }
         } else {
           console.log(`➡️ No change: ${candidate.id} remains ${newStatus}`);
         }
@@ -519,6 +596,7 @@ Deno.serve(async (req) => {
             attempt_number: (candidate.reverification_attempts || 0) + 1,
             retries_used: retriesUsed,
             version: `v${VERSION}-reverify`,
+            notification_sent: upgraded,
           },
           outcome: upgraded ? 'upgrade_success' : 'no_change',
           confidence_score: upgraded ? 1.0 : 0.5,

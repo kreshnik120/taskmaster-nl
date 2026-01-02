@@ -9,6 +9,7 @@ type EmailType =
   | 'document_renewal_request'    // Herinnering verlopen documenten met urgentie
   | 'document_renewal_escalation' // Tweede urgente herinnering (na 7 dagen)
   | 'recruiter_document_alert'    // Notificatie naar recruiter (na 14 dagen)
+  | 'diploma_upgrade_notification'// Notificatie naar recruiter bij DUO verificatie success
   | 'interview_confirmation'      // Bevestig interview afspraak
   | 'appointment_confirmation'    // Algemene afspraak bevestiging
   | 'general'                     // Algemene communicatie
@@ -677,6 +678,63 @@ function generateEmailTemplate(
         
         <p style="margin: 25px 0 0 0; color: #4a5568; font-size: 13px;">
           <em>Dit bericht is automatisch gegenereerd door de ${orgName} AI Agent.</em>
+        </p>`;
+      break;
+
+    // =====================================================
+    // NEW: Diploma Upgrade Notification (naar recruiter bij DUO success)
+    // =====================================================
+    case 'diploma_upgrade_notification':
+      const upgradeCandidateName = data.candidate_name || 'Onbekende kandidaat';
+      const upgradePreviousStatus = data.previous_status || 'signature_valid';
+      const upgradeNewStatus = data.new_status || 'verified_duo';
+      const upgradeApplicationId = data.application_id || '';
+      
+      content = `
+        <div style="text-align: center; margin-bottom: 25px;">
+          <span style="font-size: 48px;">🎓✅</span>
+        </div>
+        <h2 style="margin: 0 0 15px 0; color: #1a1a1a; font-size: 20px; text-align: center;">
+          Diploma Succesvol Geverifieerd door DUO
+        </h2>
+        
+        <div style="background-color: #ecfdf5; border: 1px solid #10b981; border-radius: 8px; padding: 20px; margin: 25px 0;">
+          <p style="margin: 0 0 10px 0; color: #047857; font-weight: 700; font-size: 16px;">
+            ✅ Automatische upgrade voltooid
+          </p>
+          <p style="margin: 0; color: #065f46; font-size: 15px; line-height: 1.6;">
+            Het diploma van <strong>${upgradeCandidateName}</strong> is succesvol geüpgraded naar 
+            <strong>verified_duo</strong> (100% betrouwbaar via DUO verificatie).
+          </p>
+        </div>
+        
+        <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 25px 0;">
+          <p style="margin: 0 0 15px 0; color: #1a1a1a; font-weight: 600; font-size: 15px;">📋 Details</p>
+          <table style="width: 100%; font-size: 14px; color: #4a5568;">
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Kandidaat:</strong></td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">${upgradeCandidateName}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Vorige status:</strong></td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">${upgradePreviousStatus}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0;"><strong>Nieuwe status:</strong></td>
+              <td style="padding: 8px 0; color: #10b981; font-weight: 600;">${upgradeNewStatus}</td>
+            </tr>
+          </table>
+        </div>
+        
+        <div style="text-align: center; margin: 25px 0;">
+          <a href="https://taskmaster-nl.lovable.app/sollicitaties?application=${upgradeApplicationId}" 
+             style="display: inline-block; background: linear-gradient(135deg, ${orgColor} 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600;">
+            Bekijk Sollicitatie →
+          </a>
+        </div>
+        
+        <p style="margin: 25px 0 0 0; color: #6b7280; font-size: 13px; text-align: center;">
+          <em>Dit bericht is automatisch gegenereerd door de ${orgName} AI Agent na succesvolle diploma reverificatie.</em>
         </p>`;
       break;
 
