@@ -2,7 +2,7 @@ import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse
 import puppeteer from 'https://deno.land/x/puppeteer@16.2.0/mod.ts';
 
 // Boot log to verify deployment
-console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v4.0.0-brightdata-sbr-2025-12-31 loaded`);
+console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v5.0.0-browserless-http-2025-01-02 loaded`);
 
 // Types
 type DiplomaStatus = 
@@ -39,8 +39,366 @@ interface SignatureInfo {
 
 const DUO_CHECK_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
 const DUO_HOME_URL = 'https://zakelijk.duo.nl/';
-const DEPLOYMENT_VERSION = 'v4.0.0-brightdata-sbr-2025-12-31';
+const DEPLOYMENT_VERSION = 'v5.0.0-browserless-http-2025-01-02';
 const MAX_DUO_RETRIES = 3;
+
+// ============= BROWSERLESS HTTP API (PRIMARY) =============
+
+/**
+ * Verify diploma via DUO website using Browserless HTTP API
+ * This bypasses the Deno WebSocket ALPN limitation that affects Bright Data
+ */
+async function verifyViaBrowserlessHttp(pdfBytes: Uint8Array, filename: string, storagePath?: string): Promise<VerificationResult> {
+  console.log(`🌐 Starting DUO verification via Browserless HTTP API [${DEPLOYMENT_VERSION}]...`);
+  
+  const apiKey = Deno.env.get('BROWSERLESS_API_KEY');
+  if (!apiKey) {
+    console.error('BROWSERLESS_API_KEY not configured');
+    return {
+      status: 'manual_review',
+      method: 'duo_browser',
+      message: 'Browserless API niet geconfigureerd - gebruik handmatige verificatie',
+      details: { 
+        error: 'BROWSERLESS_API_KEY missing', 
+        version: DEPLOYMENT_VERSION,
+        manual_verification_url: DUO_CHECK_URL,
+      },
+    };
+  }
+  
+  const supabase = createAdminClient();
+  
+  try {
+    // Step 1: Generate signed URL for PDF
+    let signedUrl: string | null = null;
+    
+    if (storagePath) {
+      console.log('📎 Generating signed URL for PDF...');
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+        .from('application-documents')
+        .createSignedUrl(storagePath, 300); // 5 minutes for Browserless processing
+      
+      if (signedUrlError) {
+        console.error('Failed to create signed URL:', signedUrlError);
+      } else {
+        signedUrl = signedUrlData?.signedUrl || null;
+        console.log('✅ Signed URL generated');
+      }
+    }
+    
+    // Fallback to base64 if no signed URL
+    let pdfBase64: string | null = null;
+    if (!signedUrl) {
+      console.log('📦 Using base64 encoding...');
+      let binary = '';
+      for (let i = 0; i < pdfBytes.length; i++) {
+        binary += String.fromCharCode(pdfBytes[i]);
+      }
+      pdfBase64 = btoa(binary);
+    }
+    
+    // Custom Puppeteer code for DUO verification
+    const puppeteerCode = `
+export default async function ({ page, context }) {
+  const { signedUrl, pdfBase64, filename } = context;
+  
+  try {
+    // Navigate to DUO diploma check
+    console.log('Navigating to DUO website...');
+    await page.goto('https://zakelijk.duo.nl/portaal/diplomacontrole/', {
+      waitUntil: 'networkidle2',
+      timeout: 60000
+    });
+    
+    // Wait for Angular app
+    await new Promise(r => setTimeout(r, 3000));
+    
+    // Check for error page
+    const pageUrl = page.url();
+    const bodyText = await page.evaluate(() => document.body.innerText.substring(0, 500));
+    const bodyLower = bodyText.toLowerCase();
+    
+    const isErrorPage = 
+      pageUrl.includes('fout') || 
+      pageUrl.includes('error') ||
+      bodyLower.includes('er is iets misgegaan');
+    
+    if (isErrorPage) {
+      return { 
+        data: { status: 'duo_error', message: 'DUO website error', pageContent: bodyText },
+        type: 'application/json' 
+      };
+    }
+    
+    const isLoginPage = 
+      pageUrl.includes('inloggen') ||
+      (bodyLower.includes('inloggen') && !bodyLower.includes('diplomacontrole'));
+    
+    if (isLoginPage) {
+      return {
+        data: { status: 'manual_review', message: 'Redirected to login page', pageUrl },
+        type: 'application/json'
+      };
+    }
+    
+    // Wait for file input
+    await page.waitForSelector('input[type="file"]', { timeout: 20000 });
+    console.log('File input found');
+    
+    // Upload PDF via signed URL or base64
+    console.log('Uploading PDF...');
+    const uploadResult = await page.evaluate(async ({ signedUrl, pdfBase64, filename }) => {
+      try {
+        let blob;
+        if (signedUrl) {
+          const response = await fetch(signedUrl);
+          if (!response.ok) throw new Error('Failed to fetch PDF: ' + response.status);
+          blob = await response.blob();
+        } else {
+          const binary = atob(pdfBase64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          blob = new Blob([bytes], { type: 'application/pdf' });
+        }
+        
+        const file = new File([blob], filename, { type: 'application/pdf' });
+        const fileInput = document.querySelector('uno-ng-input-file input[type="file"]') 
+          || document.querySelector('input.input__control--file')
+          || document.querySelector('input[type="file"]');
+        
+        if (!fileInput) return { success: false, error: 'File input not found' };
+        
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        fileInput.files = dataTransfer.files;
+        
+        fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+        fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        return { success: true, filename: file.name, size: file.size };
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
+    }, { signedUrl, pdfBase64, filename });
+    
+    if (!uploadResult.success) {
+      return {
+        data: { status: 'duo_error', message: 'Upload failed: ' + uploadResult.error },
+        type: 'application/json'
+      };
+    }
+    
+    console.log('PDF uploaded successfully');
+    await new Promise(r => setTimeout(r, 2000));
+    
+    // Click Controleer button
+    console.log('Clicking Controleer button...');
+    const clicked = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('button'));
+      const controleerBtn = buttons.find(btn => 
+        btn.textContent?.toLowerCase().includes('controleer') ||
+        btn.textContent?.toLowerCase().includes('check')
+      );
+      if (controleerBtn && !controleerBtn.disabled) {
+        controleerBtn.click();
+        return true;
+      }
+      // Try submit button
+      const submitBtn = document.querySelector('button[type="submit"]:not([disabled])');
+      if (submitBtn) {
+        submitBtn.click();
+        return true;
+      }
+      return false;
+    });
+    
+    if (!clicked) {
+      console.log('Could not find/click button, continuing anyway...');
+    }
+    
+    // Wait for result
+    console.log('Waiting for verification result...');
+    await new Promise(r => setTimeout(r, 6000));
+    
+    // Parse result
+    const pageContent = await page.evaluate(() => document.body.innerText);
+    const contentLower = pageContent.toLowerCase();
+    
+    console.log('Page content preview:', pageContent.substring(0, 300));
+    
+    const isVerified = 
+      (contentLower.includes('echtheidskenmerk is aanwezig') || contentLower.includes('echtheidskenmerk aanwezig')) &&
+      (contentLower.includes('document origineel') || contentLower.includes('origineel is'));
+    
+    const isChecked = contentLower.includes('gecontroleerd') || contentLower.includes('door duo gecontroleerd');
+    
+    const isInvalid = 
+      contentLower.includes('niet gevonden') ||
+      contentLower.includes('ongeldig') ||
+      contentLower.includes('niet authentiek');
+    
+    const isNotDigital = 
+      contentLower.includes('niet digitaal') ||
+      contentLower.includes('voor 1996');
+    
+    if (isVerified && isChecked && !isInvalid) {
+      return {
+        data: { 
+          status: 'verified_duo', 
+          message: 'Diploma geverifieerd door DUO',
+          pageContent: pageContent.substring(0, 500)
+        },
+        type: 'application/json'
+      };
+    }
+    
+    if (isInvalid) {
+      return {
+        data: { 
+          status: 'duo_invalid', 
+          message: 'Diploma niet gevonden of ongeldig',
+          pageContent: pageContent.substring(0, 500)
+        },
+        type: 'application/json'
+      };
+    }
+    
+    if (isNotDigital) {
+      return {
+        data: { 
+          status: 'duo_not_digital', 
+          message: 'Diploma niet digitaal geregistreerd',
+          pageContent: pageContent.substring(0, 500)
+        },
+        type: 'application/json'
+      };
+    }
+    
+    return {
+      data: { 
+        status: 'manual_review', 
+        message: 'Resultaat onduidelijk',
+        pageContent: pageContent.substring(0, 500)
+      },
+      type: 'application/json'
+    };
+    
+  } catch (error) {
+    return {
+      data: { status: 'duo_error', message: error.message || 'Unknown error' },
+      type: 'application/json'
+    };
+  }
+}
+`;
+    
+    console.log('📡 Calling Browserless HTTP API...');
+    const response = await fetch(
+      `https://production-sfo.browserless.io/function?token=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: puppeteerCode,
+          context: { signedUrl, pdfBase64, filename }
+        })
+      }
+    );
+    
+    console.log(`Browserless response status: ${response.status}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Browserless API error:', errorText);
+      return {
+        status: 'duo_error',
+        method: 'duo_browser',
+        message: `Browserless API error: ${response.status}`,
+        details: { 
+          http_status: response.status,
+          error: errorText.substring(0, 200),
+          version: DEPLOYMENT_VERSION,
+        },
+      };
+    }
+    
+    const result = await response.json();
+    console.log('Browserless result:', JSON.stringify(result, null, 2));
+    
+    // Parse the result
+    const status = result?.status || result?.data?.status || 'manual_review';
+    const message = result?.message || result?.data?.message || 'Unknown result';
+    const pageContent = result?.pageContent || result?.data?.pageContent || '';
+    
+    if (status === 'verified_duo') {
+      return {
+        status: 'verified_duo',
+        method: 'duo_browser',
+        message: 'Diploma geverifieerd door DUO Online Diplomacontrole - echtheidskenmerk aanwezig, document is origineel',
+        details: {
+          verification_source: 'duo_website_browserless',
+          verified_by_government: true,
+          duo_response: 'Het echtheidskenmerk is aanwezig - document origineel',
+          page_preview: pageContent.substring(0, 200),
+          version: DEPLOYMENT_VERSION,
+        },
+        verified_at: new Date().toISOString(),
+      };
+    }
+    
+    if (status === 'duo_invalid') {
+      return {
+        status: 'duo_invalid',
+        method: 'duo_browser',
+        message: 'Diploma niet gevonden of ongeldig volgens DUO Online Diplomacontrole',
+        details: {
+          verification_source: 'duo_website_browserless',
+          page_preview: pageContent.substring(0, 200),
+          version: DEPLOYMENT_VERSION,
+        },
+      };
+    }
+    
+    if (status === 'duo_not_digital') {
+      return {
+        status: 'duo_not_digital',
+        method: 'duo_browser',
+        message: 'Diploma niet digitaal geregistreerd bij DUO (mogelijk van voor 1996)',
+        details: { 
+          verification_source: 'duo_website_browserless',
+          version: DEPLOYMENT_VERSION,
+        },
+      };
+    }
+    
+    // Inconclusive or error
+    return {
+      status: status === 'duo_error' ? 'duo_error' : 'manual_review',
+      method: 'duo_browser',
+      message: message,
+      details: {
+        verification_source: 'duo_website_browserless',
+        browserless_result: result,
+        page_preview: pageContent.substring(0, 200),
+        manual_verification_url: DUO_CHECK_URL,
+        version: DEPLOYMENT_VERSION,
+      },
+    };
+    
+  } catch (error) {
+    console.error('Browserless verification error:', error);
+    return {
+      status: 'duo_error',
+      method: 'duo_browser',
+      message: `Browserless verificatie fout: ${error instanceof Error ? error.message : 'Onbekende fout'}`,
+      details: { 
+        error: String(error),
+        manual_verification_url: DUO_CHECK_URL,
+        version: DEPLOYMENT_VERSION,
+      },
+    };
+  }
+}
 
 // ============= BRIGHT DATA SCRAPING BROWSER =============
 
@@ -720,35 +1078,44 @@ async function verifyDiploma(pdfBytes: Uint8Array, filename: string, storagePath
   console.log('🎓 Starting diploma verification...');
   console.log(`PDF size: ${pdfBytes.length} bytes, filename: ${filename}, storagePath: ${storagePath}`);
   
-  // PRIMARY: Try DUO website verification via Bright Data Scraping Browser
-  console.log('Attempting primary method: DUO website via Bright Data Scraping Browser...');
-  const browserResult = await verifyViaDuoBrowser(pdfBytes, filename, storagePath);
+  // PRIMARY: Try Browserless HTTP API (bypasses Deno WebSocket ALPN limitation)
+  console.log('Attempting primary method: DUO website via Browserless HTTP API...');
+  const browserlessResult = await verifyViaBrowserlessHttp(pdfBytes, filename, storagePath);
   
-  // If browser verification gave definitive result
-  if (browserResult.status === 'verified_duo' || browserResult.status === 'duo_invalid') {
-    console.log(`✅ Browser verification complete: ${browserResult.status}`);
-    return browserResult;
+  // If Browserless verification gave definitive result
+  if (browserlessResult.status === 'verified_duo' || browserlessResult.status === 'duo_invalid') {
+    console.log(`✅ Browserless verification complete: ${browserlessResult.status}`);
+    return browserlessResult;
   }
   
-  // If browser had error or couldn't determine, try signature fallback
-  if (browserResult.status === 'duo_error' || browserResult.status === 'manual_review') {
-    console.log(`Browser verification inconclusive (${browserResult.status}), trying signature fallback...`);
+  // FALLBACK 1: Try Bright Data WebSocket (may fail due to Deno ALPN, but worth trying)
+  if (browserlessResult.status === 'duo_error' || browserlessResult.status === 'manual_review') {
+    console.log(`Browserless inconclusive (${browserlessResult.status}), trying Bright Data fallback...`);
     
+    const brightDataResult = await verifyViaDuoBrowser(pdfBytes, filename, storagePath);
+    
+    if (brightDataResult.status === 'verified_duo' || brightDataResult.status === 'duo_invalid') {
+      console.log(`✅ Bright Data verification complete: ${brightDataResult.status}`);
+      return brightDataResult;
+    }
+    
+    // FALLBACK 2: PDF signature analysis (95% reliable)
+    console.log(`Browser methods failed, trying signature fallback...`);
     const signatureResult = validatePdfSignatureFallback(pdfBytes);
     
-    // Combine info from both methods
+    // Combine info from all methods
     return {
       ...signatureResult,
       details: {
         ...signatureResult.details,
-        browser_attempt: browserResult.details,
-        browser_error: browserResult.message,
-        verification_cascade: 'browser_failed_signature_fallback',
+        browserless_attempt: browserlessResult.details,
+        brightdata_attempt: brightDataResult.details,
+        verification_cascade: 'browserless_failed_brightdata_failed_signature_fallback',
       },
     };
   }
   
-  return browserResult;
+  return browserlessResult;
 }
 
 // ============= EDGE FUNCTION HANDLER =============
