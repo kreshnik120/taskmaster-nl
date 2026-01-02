@@ -2238,18 +2238,59 @@ Return JSON in dit formaat:
     // STAP 1: ALTIJD update application record EERST
     // =====================================================
     console.log("Updating application record...");
+    
+    // 🔧 FASE 3 FIX: Increment ai_response_count bij elke reply
+    const currentResponseCount = (application.ai_response_count || 0) + 1;
+    
     const { error: appUpdateError } = await supabase
       .from("professional_applications")
       .update({
         missing_info: finalRemainingMissing,
         completeness_score: newCompletenessScore,
         extracted_data: mergedData,
+        ai_response_count: currentResponseCount,
         updated_at: new Date().toISOString(),
       })
       .eq("id", applicationId);
 
     if (appUpdateError) {
       console.error("Error updating application:", appUpdateError);
+    }
+    
+    // =====================================================
+    // STAP 1.5: FASE 3 FIX - Transitie naar screening na kandidaat-reactie
+    // Alleen als we nog in 'nieuw' of 'intake_verstuurd' stage zijn
+    // =====================================================
+    if (['nieuw', 'intake_verstuurd'].includes(pipelineStage) && (newCompletenessScore >= 60 || currentResponseCount >= 1)) {
+      console.log(`📊 FASE 3: Transitie naar 'screening' - kandidaat heeft gereageerd (completeness: ${newCompletenessScore}%, responses: ${currentResponseCount})`);
+      
+      const { error: transitionError } = await supabase
+        .from("professional_applications")
+        .update({
+          pipeline_stage: 'screening',
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", applicationId);
+      
+      if (transitionError) {
+        console.error("Error transitioning to screening:", transitionError);
+      } else {
+        console.log("✅ FASE 3: Pipeline stage transitioned to 'screening' after candidate interaction");
+        
+        // Log stage audit
+        await supabase.from("application_stage_audit").insert({
+          application_id: applicationId,
+          from_stage: pipelineStage,
+          to_stage: 'screening',
+          reason: `Kandidaat heeft gereageerd - completeness ${newCompletenessScore}%, antwoorden: ${currentResponseCount}`,
+          performed_by: null,
+          metadata: {
+            trigger: 'handle-application-reply',
+            ai_response_count: currentResponseCount,
+            completeness_score: newCompletenessScore,
+          }
+        });
+      }
     }
 
     // =====================================================
