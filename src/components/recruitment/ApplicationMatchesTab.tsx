@@ -11,7 +11,13 @@ import { Slider } from "@/components/ui/slider";
 import { Loader2, Building2, MapPin, Users, Briefcase, Link2, Clock, Sparkles, CheckCircle2, AlertCircle, Brain, Info, X, ListChecks, Filter, SlidersHorizontal } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { calculateApplicationMatchScoreWithExperts, preloadExpertKnowledge, type MatchScoreBreakdown } from "@/lib/services/matchingService";
+import { 
+  calculateApplicationMatchScoreWithExperts, 
+  preloadExpertKnowledge, 
+  analyzeFitWithEvidence,
+  type MatchScoreBreakdown,
+  type FitAnalysis 
+} from "@/lib/services/matchingService";
 import { MatchScoreBreakdown as MatchScoreBreakdownUI } from "./MatchScoreBreakdown";
 import { loadSuccessPatterns, calculateAILearningBoost, trackPatternUsage, type SuccessPattern } from "@/lib/aiLearningBoost";
 import confetti from "canvas-confetti";
@@ -44,6 +50,7 @@ interface MatchedSublocation {
   aiBoost?: number;
   aiReasons?: string[];
   provincie?: string | null;
+  fitAnalysis?: FitAnalysis;
 }
 
 interface MatchedVacancy {
@@ -60,6 +67,7 @@ interface MatchedVacancy {
   existingApplication?: { id: string; status: string };
   aiBoost?: number;
   aiReasons?: string[];
+  fitAnalysis?: FitAnalysis;
 }
 
 // Helper to get value from {value, confidence} or plain value
@@ -82,6 +90,129 @@ const getProgressColor = (score: number) => {
   if (score >= 50) return "[&>div]:bg-amber-500";
   return "[&>div]:bg-red-500";
 };
+
+// === FIT INDICATOR HELPERS ===
+const getFitIndicatorColor = (fit: FitAnalysis['overallFit']) => {
+  switch (fit) {
+    case 'proceed': return 'bg-green-500';
+    case 'needs_info': return 'bg-amber-500';
+    case 'review_required': return 'bg-orange-500';
+    case 'reject': return 'bg-red-500';
+    default: return 'bg-muted';
+  }
+};
+
+const getFitBadgeStyles = (fit: FitAnalysis['overallFit']) => {
+  switch (fit) {
+    case 'proceed': return { color: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700', icon: CheckCircle2, label: 'Geschikt' };
+    case 'needs_info': return { color: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700', icon: AlertCircle, label: 'Info nodig' };
+    case 'review_required': return { color: 'bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-700', icon: Brain, label: 'Review nodig' };
+    case 'reject': return { color: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700', icon: X, label: 'Afwijzen' };
+    default: return { color: 'bg-muted', icon: Info, label: 'Onbekend' };
+  }
+};
+
+// === FIT ANALYSIS PANEL COMPONENT ===
+const FitAnalysisPanel = memo(({ fitAnalysis }: { fitAnalysis: FitAnalysis }) => {
+  const badge = getFitBadgeStyles(fitAnalysis.overallFit);
+  const BadgeIcon = badge.icon;
+
+  return (
+    <div className="p-3 space-y-3 max-h-[400px] overflow-y-auto">
+      {/* Overall Fit Badge */}
+      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${badge.color}`}>
+        <BadgeIcon className="h-4 w-4" />
+        <span className="font-medium">{badge.label}</span>
+        <span className="text-xs opacity-75 ml-auto">
+          {Math.round(fitAnalysis.confidence * 100)}% vertrouwen
+        </span>
+      </div>
+
+      {/* Must-haves (Groen/Rood) */}
+      <div className="space-y-1.5">
+        <div className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+          <ListChecks className="h-3 w-3" />
+          Must-haves ({fitAnalysis.mustHaves.filter(m => m.met).length}/{fitAnalysis.mustHaves.length})
+        </div>
+        {fitAnalysis.mustHaves.map((req, idx) => (
+          <div 
+            key={idx} 
+            className={`flex items-start gap-2 px-2 py-1.5 rounded text-xs ${
+              req.met 
+                ? 'bg-green-50 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800' 
+                : 'bg-red-50 text-red-800 border border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800'
+            }`}
+          >
+            {req.met ? (
+              <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+            ) : (
+              <X className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="font-medium">{req.requirement}</div>
+              <div className="text-[10px] opacity-75 line-clamp-2">{req.evidence}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Nice-to-haves (Grijs/Groen badges) */}
+      <div className="space-y-1.5">
+        <div className="text-xs font-medium text-muted-foreground">
+          Nice-to-haves ({fitAnalysis.niceToHaves.filter(n => n.met).length}/{fitAnalysis.niceToHaves.length})
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {fitAnalysis.niceToHaves.map((req, idx) => (
+            <Badge 
+              key={idx} 
+              variant={req.met ? "default" : "secondary"}
+              className={`text-[10px] ${req.met ? 'bg-green-600 hover:bg-green-700' : ''}`}
+            >
+              {req.met && <CheckCircle2 className="h-2.5 w-2.5 mr-1" />}
+              {req.requirement}
+            </Badge>
+          ))}
+        </div>
+      </div>
+
+      {/* Dealbreakers (alleen tonen als niet passed) */}
+      {fitAnalysis.dealbreakers.some(d => !d.passed) && (
+        <div className="space-y-1.5">
+          <div className="text-xs font-medium text-red-600 dark:text-red-400 flex items-center gap-1">
+            <AlertCircle className="h-3 w-3" />
+            Dealbreakers
+          </div>
+          {fitAnalysis.dealbreakers.filter(d => !d.passed).map((deal, idx) => (
+            <div 
+              key={idx} 
+              className="flex items-center gap-2 px-2 py-1.5 rounded text-xs bg-red-100 text-red-800 border border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700"
+            >
+              <X className="h-3.5 w-3.5 flex-shrink-0" />
+              <span>{deal.reason || deal.check}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Recommendation */}
+      <div className="pt-2 border-t">
+        <div className="text-xs text-muted-foreground mb-1">Aanbeveling</div>
+        <p className="text-sm">{fitAnalysis.recommendation}</p>
+        {fitAnalysis.nextSteps.length > 0 && (
+          <div className="mt-2 text-xs text-muted-foreground">
+            <span className="font-medium">Volgende stappen:</span>
+            <ul className="list-disc list-inside mt-1 space-y-0.5">
+              {fitAnalysis.nextSteps.map((step, idx) => (
+                <li key={idx}>{step}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+FitAnalysisPanel.displayName = 'FitAnalysisPanel';
 
 // === MEMOIZED SUBLOCATION CARD ===
 const SublocationCard = memo(({ 
@@ -113,6 +244,13 @@ const SublocationCard = memo(({
       
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Fit indicator dot */}
+          {sublocation.fitAnalysis && (
+            <div 
+              className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${getFitIndicatorColor(sublocation.fitAnalysis.overallFit)}`} 
+              title={sublocation.fitAnalysis.recommendation} 
+            />
+          )}
           <span className="font-medium truncate">{sublocation.naam}</span>
           {sublocation.aiBoost && sublocation.aiBoost > 0 && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-purple-50 text-purple-700 border-purple-300">
@@ -187,6 +325,29 @@ const SublocationCard = memo(({
             />
           </PopoverContent>
         </Popover>
+
+        {/* Fit Analysis Popover */}
+        {sublocation.fitAnalysis && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className={`h-7 px-2 text-[10px] ${
+                  sublocation.fitAnalysis.overallFit === 'proceed' ? 'text-green-600 hover:text-green-700 hover:bg-green-50' :
+                  sublocation.fitAnalysis.overallFit === 'reject' ? 'text-red-600 hover:text-red-700 hover:bg-red-50' :
+                  'text-amber-600 hover:text-amber-700 hover:bg-amber-50'
+                }`}
+              >
+                <ListChecks className="h-3.5 w-3.5 mr-1" />
+                Fit
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="end">
+              <FitAnalysisPanel fitAnalysis={sublocation.fitAnalysis} />
+            </PopoverContent>
+          </Popover>
+        )}
         
         {!sublocation.existingMatch ? (
           <Button
@@ -245,6 +406,13 @@ const VacancyCard = memo(({
       
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Fit indicator dot */}
+          {vacancy.fitAnalysis && (
+            <div 
+              className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${getFitIndicatorColor(vacancy.fitAnalysis.overallFit)}`} 
+              title={vacancy.fitAnalysis.recommendation} 
+            />
+          )}
           <span className="font-medium truncate">{vacancy.titel}</span>
           {vacancy.urgentie === 'hoog' && (
             <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Urgent</Badge>
@@ -303,6 +471,29 @@ const VacancyCard = memo(({
             />
           </PopoverContent>
         </Popover>
+
+        {/* Fit Analysis Popover */}
+        {vacancy.fitAnalysis && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className={`h-7 px-2 text-[10px] ${
+                  vacancy.fitAnalysis.overallFit === 'proceed' ? 'text-green-600 hover:text-green-700 hover:bg-green-50' :
+                  vacancy.fitAnalysis.overallFit === 'reject' ? 'text-red-600 hover:text-red-700 hover:bg-red-50' :
+                  'text-amber-600 hover:text-amber-700 hover:bg-amber-50'
+                }`}
+              >
+                <ListChecks className="h-3.5 w-3.5 mr-1" />
+                Fit
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="end">
+              <FitAnalysisPanel fitAnalysis={vacancy.fitAnalysis} />
+            </PopoverContent>
+          </Popover>
+        )}
         
         {!vacancy.existingApplication ? (
           <Button
@@ -487,6 +678,9 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
           usedPatternIds: aiBoostResult.usedPatternIds
         });
 
+        // Calculate FitAnalysis based on matchBreakdown
+        const fitAnalysis = analyzeFitWithEvidence(application, target, matchBreakdown);
+
         return {
           id: sub.id,
           naam: sub.naam,
@@ -502,6 +696,7 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
           aiBoost: matchBreakdown.aiBoost,
           aiReasons: matchBreakdown.aiBoostReasons,
           provincie: sub.provincie,
+          fitAnalysis,
         };
       });
 
@@ -571,6 +766,9 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             usedPatternIds: aiBoostResult.usedPatternIds
           });
 
+          // Calculate FitAnalysis based on matchBreakdown
+          const fitAnalysis = analyzeFitWithEvidence(application, target, matchBreakdown);
+
           return {
             id: vac.id,
             titel: vac.titel,
@@ -585,6 +783,7 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
             existingApplication: existingVacMap.get(vac.id),
             aiBoost: matchBreakdown.aiBoost,
             aiReasons: matchBreakdown.aiBoostReasons,
+            fitAnalysis,
           };
         });
 
