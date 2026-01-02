@@ -39,6 +39,7 @@ import { useProactiveMatchNotifications } from "@/hooks/useProactiveMatchNotific
 import { useDiplomaUpgradeNotifications } from "@/hooks/useDiplomaUpgradeNotifications";
 import { useVogVerificationNotifications } from "@/hooks/useVogVerificationNotifications";
 import { checkExistingActivePlacement } from "@/lib/checkExistingPlacement";
+import { HumanReviewQueue } from "@/components/recruitment/HumanReviewQueue";
 
 interface Application {
   id: string;
@@ -1118,6 +1119,17 @@ const Sollicitaties = () => {
                 }}
               />
             </div>
+
+            {/* Human Review Queue - Shows pending reviews that need manual decision */}
+            <HumanReviewQueue 
+              onViewApplication={(applicationId) => {
+                const app = applications.find(a => a.id === applicationId);
+                if (app) {
+                  setSelectedApplication(app);
+                  setDetailModalOpen(true);
+                }
+              }}
+            />
 
             {/* Pipeline Analytics Widget */}
             <PipelineAnalyticsWidget applications={filteredApplications} />
