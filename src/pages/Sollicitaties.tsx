@@ -37,6 +37,7 @@ import { SmartSublocationPicker } from "@/components/SmartSublocationPicker";
 import { KPICard } from "@/components/ui/kpi-card";
 import { useProactiveMatchNotifications } from "@/hooks/useProactiveMatchNotifications";
 import { useDiplomaUpgradeNotifications } from "@/hooks/useDiplomaUpgradeNotifications";
+import { useVogVerificationNotifications } from "@/hooks/useVogVerificationNotifications";
 import { checkExistingActivePlacement } from "@/lib/checkExistingPlacement";
 
 interface Application {
@@ -130,7 +131,9 @@ const Sollicitaties = () => {
   
   // Diploma upgrade notifications - shows toast with confetti when diploma is verified via DUO
   useDiplomaUpgradeNotifications(handleNotificationClick);
-
+  
+  // VOG verification notifications - shows toast with confetti when VOG is verified via GAAV
+  useVogVerificationNotifications(handleNotificationClick);
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
