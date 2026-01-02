@@ -18,7 +18,8 @@ type EmailType =
   | 'vog_rejection'               // VOG verificatie mislukt, vraag nieuw VOG
   | 'rejection'                   // Afwijzing sollicitatie (geen diploma, etc.)
   | 'emrex_invitation'            // EMREX diploma verificatie uitnodiging
-  | 'emrex_reminder';             // EMREX herinnering na 48 uur
+  | 'emrex_reminder'              // EMREX herinnering na 48 uur
+  | 'vog_verified_notification';  // Notificatie naar recruiter bij VOG GAAV verificatie success
 
 interface SendEmailRequest {
   email_type: EmailType;
@@ -735,6 +736,77 @@ function generateEmailTemplate(
         
         <p style="margin: 25px 0 0 0; color: #6b7280; font-size: 13px; text-align: center;">
           <em>Dit bericht is automatisch gegenereerd door de ${orgName} AI Agent na succesvolle diploma reverificatie.</em>
+        </p>`;
+      break;
+
+    // =====================================================
+    // NEW: VOG Verified Notification (naar recruiter bij GAAV success)
+    // =====================================================
+    case 'vog_verified_notification':
+      const vogCandidateName = data.candidate_name || 'Onbekende kandidaat';
+      const vogValidationStatus = data.validation_status || 'authentic_ok';
+      const vogVerificationSource = data.verification_source || 'GAAV_API';
+      const vogDaysRemaining = data.days_remaining ?? null;
+      const vogApplicationId = data.application_id || '';
+      const vogScreeningValid = data.screening_profile_valid !== false;
+      
+      content = `
+        <div style="text-align: center; margin-bottom: 25px;">
+          <span style="font-size: 48px;">📜✅</span>
+        </div>
+        <h2 style="margin: 0 0 15px 0; color: #1a1a1a; font-size: 20px; text-align: center;">
+          VOG Succesvol Geverifieerd via GAAV
+        </h2>
+        
+        <div style="background-color: #ecfdf5; border: 1px solid #10b981; border-radius: 8px; padding: 20px; margin: 25px 0;">
+          <p style="margin: 0 0 10px 0; color: #047857; font-weight: 700; font-size: 16px;">
+            ✅ VOG authentiek en geldig bevonden
+          </p>
+          <p style="margin: 0; color: #065f46; font-size: 15px; line-height: 1.6;">
+            De Verklaring Omtrent Gedrag van <strong>${vogCandidateName}</strong> is succesvol geverifieerd 
+            via de ${vogVerificationSource === 'BROWSERLESS_VALIDATIE_NL' ? 'validatie.nl website' : 'GAAV API'}.
+          </p>
+        </div>
+        
+        <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 25px 0;">
+          <p style="margin: 0 0 15px 0; color: #1a1a1a; font-weight: 600; font-size: 15px;">📋 Details</p>
+          <table style="width: 100%; font-size: 14px; color: #4a5568;">
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Kandidaat:</strong></td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">${vogCandidateName}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Validatie status:</strong></td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb; color: #10b981; font-weight: 600;">${vogValidationStatus}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Verificatie bron:</strong></td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">${vogVerificationSource}</td>
+            </tr>
+            ${vogDaysRemaining !== null ? `
+            <tr>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;"><strong>Geldig nog:</strong></td>
+              <td style="padding: 8px 0; border-bottom: 1px solid #e5e7eb;">${vogDaysRemaining} dagen</td>
+            </tr>
+            ` : ''}
+            <tr>
+              <td style="padding: 8px 0;"><strong>Screening profiel:</strong></td>
+              <td style="padding: 8px 0; color: ${vogScreeningValid ? '#10b981' : '#f59e0b'}; font-weight: 600;">
+                ${vogScreeningValid ? '✓ Correct' : '⚠️ Controleren'}
+              </td>
+            </tr>
+          </table>
+        </div>
+        
+        <div style="text-align: center; margin: 25px 0;">
+          <a href="https://taskmaster-nl.lovable.app/sollicitaties?application=${vogApplicationId}" 
+             style="display: inline-block; background: linear-gradient(135deg, ${orgColor} 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 600;">
+            Bekijk Sollicitatie →
+          </a>
+        </div>
+        
+        <p style="margin: 25px 0 0 0; color: #6b7280; font-size: 13px; text-align: center;">
+          <em>Dit bericht is automatisch gegenereerd door de ${orgName} AI Agent na succesvolle VOG verificatie.</em>
         </p>`;
       break;
 

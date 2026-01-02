@@ -1053,6 +1053,79 @@ Deno.serve(async (req) => {
       metadata: { source: verificationMethod.includes('browserless') ? 'BROWSERLESS_VALIDATIE_NL' : 'GAAV_API' }
     });
 
+    // 11. Send recruiter notification if VOG is successfully verified
+    if (validationStatus === 'authentic_ok') {
+      console.log('[VERIFY-VOG-GAAV] VOG authentic_ok - sending recruiter notification');
+      
+      // Get candidate name from extracted data or application
+      const candidateName = extractedData?.voornaam && extractedData?.achternaam 
+        ? `${extractedData.voornaam} ${extractedData.achternaam}`
+        : extractedData?.full_name || 'Onbekende kandidaat';
+      
+      // Insert recruiter notification
+      const { error: notifError } = await supabase
+        .from('recruiter_notifications')
+        .insert({
+          org_id: '550e8400-e29b-41d4-a716-446655440000', // ABCzorg default
+          notification_type: 'vog_verified',
+          title: '📜 VOG Geverifieerd via GAAV',
+          message: `De VOG van ${candidateName} is authentiek en geldig bevonden`,
+          application_id: application_id,
+          metadata: {
+            candidate_name: candidateName,
+            validation_status: validationStatus,
+            verification_source: verificationMethod.includes('browserless') ? 'BROWSERLESS_VALIDATIE_NL' : 'GAAV_API',
+            days_remaining: expiryCheck?.daysRemaining ?? null,
+            screening_profile_valid: profileValidation?.valid ?? null,
+            screening_profile_code: screeningProfile.profileCode
+          }
+        });
+      
+      if (notifError) {
+        console.error('[VERIFY-VOG-GAAV] Failed to insert notification:', notifError);
+      } else {
+        console.log('[VERIFY-VOG-GAAV] ✅ Recruiter notification inserted');
+      }
+      
+      // Optionally send email notification to recruiters
+      try {
+        const { data: recruiters } = await supabase
+          .from('profiles')
+          .select('email, full_name')
+          .eq('role', 'recruiter')
+          .limit(5);
+        
+        if (recruiters && recruiters.length > 0) {
+          // Send to first recruiter (or could loop for all)
+          const recruiter = recruiters[0];
+          if (recruiter.email) {
+            await supabase.functions.invoke('send-ai-email', {
+              body: {
+                email_type: 'vog_verified_notification',
+                recipient_email: recruiter.email,
+                recipient_name: recruiter.full_name || 'Recruiter',
+                subject: `📜 VOG Geverifieerd: ${candidateName}`,
+                template_data: {
+                  candidate_name: candidateName,
+                  validation_status: validationStatus,
+                  verification_source: verificationMethod.includes('browserless') ? 'BROWSERLESS_VALIDATIE_NL' : 'GAAV_API',
+                  days_remaining: expiryCheck?.daysRemaining ?? null,
+                  screening_profile_valid: profileValidation?.valid ?? null,
+                  application_id: application_id
+                },
+                application_id: application_id,
+                org_id: '550e8400-e29b-41d4-a716-446655440000'
+              }
+            });
+            console.log('[VERIFY-VOG-GAAV] ✅ Email notification sent to recruiter');
+          }
+        }
+      } catch (emailErr) {
+        console.error('[VERIFY-VOG-GAAV] Failed to send email notification:', emailErr);
+        // Non-blocking - continue even if email fails
+      }
+    }
+
     console.log(`[VERIFY-VOG-GAAV] ✅ Verification complete: ${validationStatus} via ${verificationMethod}`);
 
     return jsonResponse({
