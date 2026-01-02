@@ -1343,7 +1343,7 @@ Deno.serve(async (req: Request) => {
     
     const { data: app, error: appFetchError } = await supabase
       .from('professional_applications')
-      .select('id, diploma_file_path, diploma_validation_status, org_id, extracted_data')
+      .select('id, name, email, diploma_file_path, diploma_validation_status, org_id, extracted_data')
       .eq('id', application_id)
       .single();
     
@@ -1450,6 +1450,39 @@ Deno.serve(async (req: Request) => {
     if (updateError) {
       console.error('Update error:', updateError);
       return errorResponse('Failed to update verification status', 500);
+    }
+    
+    // Create recruiter notification for verified diplomas
+    if (dbStatus === 'verified_duo') {
+      try {
+        const candidateName = app.name || app.email || 'Onbekend';
+        console.log(`🔔 Creating diploma_upgrade notification for ${candidateName}`);
+        
+        const { error: notificationError } = await supabase
+          .from('recruiter_notifications')
+          .insert({
+            notification_type: 'diploma_upgrade',
+            title: `Diploma geverifieerd: ${candidateName}`,
+            message: `Het diploma van ${candidateName} is succesvol geverifieerd door DUO.`,
+            metadata: {
+              application_id,
+              candidate_name: candidateName,
+              candidate_email: app.email,
+              new_status: 'verified_duo',
+              old_status: app.diploma_validation_status || 'not_verified',
+              verification_method: result.method,
+              verification_source: 'initial_verification',
+            },
+          });
+        
+        if (notificationError) {
+          console.error('Failed to create notification:', notificationError);
+        } else {
+          console.log('✅ Recruiter notification created');
+        }
+      } catch (notifyError) {
+        console.log('Notification creation failed (non-critical):', notifyError);
+      }
     }
     
     // Log for AI learning
