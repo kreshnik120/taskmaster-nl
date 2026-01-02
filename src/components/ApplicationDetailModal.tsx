@@ -998,7 +998,7 @@ export function ApplicationDetailModal({
                   <DiplomaVerificationBanner
                     applicationId={application.id}
                     functieNiveau={getFieldValue(application.extracted_data?.functie_niveau) as string | null}
-                    diplomaFilePath={application.extracted_data?.diploma_file_path || null}
+                    diplomaFilePath={(application as any).diploma_file_path || application.extracted_data?.diploma_file_path || null}
                     diplomaStatus={diplomaStatus}
                     candidateEmail={application.email || application.email_from}
                     candidateName={resolveApplicationName(application)}
