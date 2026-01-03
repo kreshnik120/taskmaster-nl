@@ -51,6 +51,7 @@ import { PatternOptimizationMonitor } from "@/components/AITraining/PatternOptim
 import { ErrorSimulationTest } from "@/components/AITraining/ErrorSimulationTest";
 import { DiplomaReverificationWidget } from "@/components/AITraining/DiplomaReverificationWidget";
 import { CircuitBreakerDashboard } from "@/components/AITraining/CircuitBreakerDashboard";
+import { WebhookSecurityDashboard } from "@/components/AITraining/WebhookSecurityDashboard";
 import { toast } from "sonner";
 
 const AiTraining = () => {
@@ -227,6 +228,7 @@ const AiTraining = () => {
                   <TabsContent value="health" className="mt-4">
                     <div className="space-y-6">
                       <UnifiedAIHealthDashboard />
+                      <WebhookSecurityDashboard />
                       <CircuitBreakerDashboard />
                       <DiplomaReverificationWidget />
                       <PatternOptimizationMonitor />
