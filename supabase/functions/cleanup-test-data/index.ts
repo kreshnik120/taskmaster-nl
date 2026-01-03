@@ -40,6 +40,30 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // ========== SECURITY: API KEY AUTHENTICATION ==========
+  // This function can delete production data - require API key
+  const apiKey = req.headers.get("x-api-key") || req.headers.get("X-API-Key");
+  const expectedApiKey = Deno.env.get("CITOZORG_API_KEY");
+
+  if (!expectedApiKey) {
+    console.error("🔒 [cleanup-test-data] CITOZORG_API_KEY not configured");
+    return new Response(
+      JSON.stringify({ error: "Server misconfiguration - API key not set" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  if (!apiKey || apiKey !== expectedApiKey) {
+    console.warn(`🔒 [cleanup-test-data] Unauthorized access attempt from ${req.headers.get("x-forwarded-for") || "unknown"}`);
+    return new Response(
+      JSON.stringify({ error: "Unauthorized - valid API key required via x-api-key header" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  console.log("🔓 [cleanup-test-data] API key validated successfully");
+  // ========== END SECURITY ==========
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
