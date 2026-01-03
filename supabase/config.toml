@@ -430,3 +430,13 @@ schedule = "0 2 * * 0"
 # Frequency: Weekly on Sunday at 02:00 UTC
 # Batch size: 10 diplomas per run (cost control)
 # Cooldown: 7 days between re-verification attempts per diploma
+
+# -----------------------------------------------------------------------------
+# TALENT SEARCH
+# -----------------------------------------------------------------------------
+
+[functions.talent-search]
+verify_jwt = false
+# Purpose: Enterprise professional search with fallback to applications and deduplication
+# Features: Search by functie, regio, beschikbaarheid, specialismen, werkvorm
+# Fallback: If professionals table empty, searches professional_applications
