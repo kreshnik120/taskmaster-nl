@@ -476,6 +476,50 @@ Deno.serve(async (req) => {
     console.error('Failed to log results:', err);
   }
 
+  // Send security alert notifications to admins if tests failed
+  if (suite.failed_tests > 0) {
+    try {
+      // Get all admin users
+      const { data: admins } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .eq('role', 'admin');
+
+      if (admins && admins.length > 0) {
+        const vulnerabilities = suite.results.filter(r => !r.passed);
+        const criticalCount = vulnerabilities.filter(v => 
+          v.test_name.includes('Signature') || v.test_name.includes('SQL') || v.test_name.includes('API Key')
+        ).length;
+
+        const notificationType = criticalCount > 0 ? 'security_alert_critical' : 'security_alert_warning';
+        const notifications = admins.map(admin => ({
+          user_id: admin.user_id,
+          notification_type: notificationType,
+          title: `🚨 Security Alert: ${suite.failed_tests} test(s) gefaald`,
+          message: `Penetratietest detecteerde ${criticalCount} kritieke en ${suite.failed_tests - criticalCount} overige kwetsbaarheden.`,
+          metadata: {
+            suite_name: suite.suite_name,
+            total_tests: suite.total_tests,
+            passed_tests: suite.passed_tests,
+            failed_tests: suite.failed_tests,
+            vulnerabilities: vulnerabilities.map(v => ({
+              test_name: v.test_name,
+              endpoint: v.endpoint,
+              details: v.details
+            }))
+          }
+        }));
+
+        await supabase.from('recruiter_notifications').insert(notifications);
+        console.log(`🔔 [PENTEST] Security alerts sent to ${admins.length} admin(s)`);
+      }
+    } catch (err) {
+      console.error('Failed to send security alerts:', err);
+    }
+  } else {
+    console.log('✅ [PENTEST] All tests passed - no alerts needed');
+  }
+
   return new Response(
     JSON.stringify({
       success: suite.failed_tests === 0,

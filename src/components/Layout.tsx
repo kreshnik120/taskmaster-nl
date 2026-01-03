@@ -3,7 +3,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
-
+import { SecurityAlertBell } from "@/components/notifications/SecurityAlertBell";
 export const Layout = () => {
   const navigate = useNavigate();
   const [, setSearchParams] = useSearchParams();
@@ -21,7 +21,10 @@ export const Layout = () => {
           <div className="p-6">
             <div className="mb-4 flex items-center justify-between">
               <SidebarTrigger />
-              <NotificationBell onNotificationClick={handleNotificationClick} />
+              <div className="flex items-center gap-2">
+                <SecurityAlertBell />
+                <NotificationBell onNotificationClick={handleNotificationClick} />
+              </div>
             </div>
             <ErrorBoundary fallbackTitle="Pagina kon niet laden">
               <Outlet />
