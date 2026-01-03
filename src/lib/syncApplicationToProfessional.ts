@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { parseBeschikbaarheid } from "./parseBeschikbaarheid";
+import { parseBeschikbaarheid } from "./services/matchingService";
 
 interface Application {
   id: string;

@@ -776,51 +776,6 @@ export type Database = {
           },
         ]
       }
-      ai_learning_events_backup_pre_nullable: {
-        Row: {
-          ai_response: Json | null
-          applied_to_knowledge_base: boolean | null
-          confidence_score: number | null
-          context: Json | null
-          created_at: string | null
-          event_type: string | null
-          id: string | null
-          learning_score: number | null
-          org_id: string | null
-          outcome: string | null
-          user_action: Json | null
-          user_id: string | null
-        }
-        Insert: {
-          ai_response?: Json | null
-          applied_to_knowledge_base?: boolean | null
-          confidence_score?: number | null
-          context?: Json | null
-          created_at?: string | null
-          event_type?: string | null
-          id?: string | null
-          learning_score?: number | null
-          org_id?: string | null
-          outcome?: string | null
-          user_action?: Json | null
-          user_id?: string | null
-        }
-        Update: {
-          ai_response?: Json | null
-          applied_to_knowledge_base?: boolean | null
-          confidence_score?: number | null
-          context?: Json | null
-          created_at?: string | null
-          event_type?: string | null
-          id?: string | null
-          learning_score?: number | null
-          org_id?: string | null
-          outcome?: string | null
-          user_action?: Json | null
-          user_id?: string | null
-        }
-        Relationships: []
-      }
       ai_meta_patterns: {
         Row: {
           applied_at: string | null
@@ -1603,39 +1558,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      chat_messages_old_backup: {
-        Row: {
-          content: string
-          content_hash: string | null
-          conversation_id: string | null
-          created_at: string | null
-          id: string
-          metadata: Json | null
-          role: string
-          user_id: string
-        }
-        Insert: {
-          content: string
-          content_hash?: string | null
-          conversation_id?: string | null
-          created_at?: string | null
-          id?: string
-          metadata?: Json | null
-          role: string
-          user_id: string
-        }
-        Update: {
-          content?: string
-          content_hash?: string | null
-          conversation_id?: string | null
-          created_at?: string | null
-          id?: string
-          metadata?: Json | null
-          role?: string
-          user_id?: string
-        }
-        Relationships: []
       }
       circuit_breaker_state: {
         Row: {
