@@ -605,6 +605,9 @@ Alle 6 eerder geïgnoreerde findings blijven correct gemarkeerd:
 | 2026-01-03 | AI Security Agent | **Enterprise Cleanup Fase 2:** Schedule conflict opgelost - `feedback-processor`, `process-system-events`, `ai-chat-health-monitor` verwijderd uit master-scheduler (duplicaat van config.toml) |
 | 2026-01-03 | AI Security Agent | **Enterprise Cleanup Fase 3:** Legacy backup tabellen verwijderd (`chat_messages_old_backup`, `ai_learning_events_backup_pre_nullable`) |
 | 2026-01-03 | AI Security Agent | **Enterprise Cleanup Fase 4:** `parseBeschikbaarheid` geconsolideerd naar `matchingService.ts`, `src/lib/parseBeschikbaarheid.ts` verwijderd |
+| 2026-01-03 | AI Security Agent | **Shim Cleanup Fase 1:** `retroactive-training-evaluator` verwijderd uit master-scheduler (duplicate schedule) |
+| 2026-01-03 | AI Security Agent | **Shim Cleanup Fase 2-3:** 4 shim edge functions verwijderd (`continuous-learner`, `feedback-processor`, `learn-from-pipeline`, `retroactive-training-evaluator`) - alle callers gemigreerd naar `unified-learner` |
+| 2026-01-03 | AI Security Agent | **Shim Cleanup Fase 4:** `process-feedback` behouden (bevat unieke Fast Path logica) |
 
 ---
 
@@ -621,6 +624,24 @@ Een diepgaande enterprise-level audit heeft 12 verbeterpunten geïdentificeerd e
 | 3 | Backup tabellen gedropped | ~3-5 MB ruimte vrijgemaakt |
 | 4 | Code consolidatie | 1 definitieve `parseBeschikbaarheid` implementatie |
 
+### Shim Function Cleanup (2026-01-03)
+
+Deep dive op de 5 shim edge functions resulteerde in:
+
+| Function | Actie | Reden |
+|----------|-------|-------|
+| `continuous-learner` | **VERWIJDERD** | Pure shim → ai-chat nu direct naar unified-learner |
+| `feedback-processor` | **VERWIJDERD** | Pure shim → config.toml schedule gemigreerd |
+| `learn-from-pipeline` | **VERWIJDERD** | Pure shim → callers gemigreerd naar unified-learner |
+| `retroactive-training-evaluator` | **VERWIJDERD** | Pure shim + duplicate schedule conflict |
+| `process-feedback` | **BEHOUDEN** | Bevat 261 lijnen unieke Fast Path logica (pattern confidence, auto-activatie) |
+
+**Resultaat:**
+- Edge functions: 62 → 58 (-4)
+- Shim functions: 5 → 1 (alleen `process-feedback` blijft)
+- Duplicate schedules: 1 → 0 (retroactive-training-evaluator)
+- Codebase: ~400 lijnen minder
+
 ### Behouden Items (Bewuste Keuze)
 
 | Item | Reden |
@@ -628,7 +649,7 @@ Een diepgaande enterprise-level audit heeft 12 verbeterpunten geïdentificeerd e
 | `professionals_public` view | Actieve security view voor PII filtering |
 | `chat_messages` view | Actieve interface naar ai_chat_messages |
 | `calculateSublocationMatchScore.ts` | Backward compatibility wrapper |
-| Shim edge functions (5x) | Backward compatibility voor externe integraties |
+| `process-feedback` edge function | Unieke Fast Path logica, geen shim |
 
 ---
 

@@ -141,8 +141,8 @@ export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTr
 
       if (error) throw error;
 
-      // Display results for retroactive-training-evaluator
-      if (functionName === 'retroactive-training-evaluator' && data) {
+      // Display results based on function type
+      if (functionName === 'unified-learner' && body.action === 'retroactive_scan' && data) {
         toast.success(`✅ Retroactive Training: ${data.reapplied_items || 0} items re-applied!`, {
           description: `Evaluated ${data.evaluated_events || 0} events with 80-85% confidence`,
           duration: 5000,

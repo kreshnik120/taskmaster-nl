@@ -2668,20 +2668,22 @@ Deno.serve(async (req: Request) => {
         .eq('id', cachedResponse.id)
         .then(() => console.log('📊 Cache hit count updated'));
       
-      // Trigger continuous-learner (fire-and-forget)
+      // Trigger unified-learner (fire-and-forget) - migrated from continuous-learner
       if (usedKnowledgeIds.length > 0 && assistantMessageId) {
-        supabaseServiceClient.functions.invoke('continuous-learner', {
+        supabaseServiceClient.functions.invoke('unified-learner', {
           body: {
+            action: 'analyze_chat',
             user_question: userMessage,
             ai_response: cachedContent,
             knowledge_used: usedKnowledgeIds.map((id: string) => ({ id })),
-            auto_apply: true
+            auto_apply: true,
+            org_id: userOrgId
           }
         }).then(({ error }: { error: any }) => {
           if (error) {
-            console.error('❌ Continuous-learner trigger failed:', error);
+            console.error('❌ Unified-learner trigger failed:', error);
           } else {
-            console.log('🧠 Continuous-learner triggered (cache hit)');
+            console.log('🧠 Unified-learner triggered (cache hit)');
           }
         });
       }
@@ -7696,33 +7698,35 @@ BELANGRIJK: Dit moet een compleet nieuw antwoord zijn, geen verwijzing naar je v
             console.log('📤 Sent metadata to client:', { knowledgeCount: usedKnowledgeIds.length, messageId: assistantMessageId });
           }
           
-          // 🧠 CONTINUOUS LEARNER: Background analysis (fire-and-forget)
+          // 🧠 UNIFIED LEARNER: Background analysis (fire-and-forget) - migrated from continuous-learner
           try {
-            console.log('🧠 [PRE-CLOSE] Triggering continuous-learner...');
+            console.log('🧠 [PRE-CLOSE] Triggering unified-learner...');
             const lastUserMessage = messages[messages.length - 1];
             
             // Fire-and-forget: don't await, just let promise run
-            supabaseServiceClient.functions.invoke('continuous-learner', {
+            supabaseServiceClient.functions.invoke('unified-learner', {
               body: {
+                action: 'analyze_chat',
                 user_question: lastUserMessage.content,
                 ai_response: fullResponse,
                 knowledge_used: usedKnowledgeIds,
                 conversation_id: conversationId,
-                auto_apply: true
+                auto_apply: true,
+                org_id: userOrgId
               }
             }).then((res) => {
               if (res.error) {
-                console.error('❌ Continuous learner error:', res.error);
+                console.error('❌ Unified learner error:', res.error);
               } else {
-                console.log('✅ Continuous learner complete:', res.data);
+                console.log('✅ Unified learner complete:', res.data);
               }
             }).catch(err => {
-              console.error('❌ Continuous learner exception:', err);
+              console.error('❌ Unified learner exception:', err);
             });
             
-            console.log('🧠 Continuous learner call initiated (fire-and-forget)');
+            console.log('🧠 Unified learner call initiated (fire-and-forget)');
           } catch (error) {
-            console.error('❌ Failed to initiate continuous-learner:', error);
+            console.error('❌ Failed to initiate unified-learner:', error);
           }
           
           // 🔄 IMPLICIT FEEDBACK: Detect rapid reformulations as negative feedback

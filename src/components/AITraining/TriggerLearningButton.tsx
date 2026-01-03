@@ -194,11 +194,12 @@ export function TriggerLearningButton() {
         return;
       }
 
-      // Process complete conversation pairs
+      // Process complete conversation pairs via unified-learner
       let processed = 0;
       for (const conv of completePairs) {
-        const { error } = await supabase.functions.invoke('continuous-learner', {
+        const { error } = await supabase.functions.invoke('unified-learner', {
           body: { 
+            action: 'analyze_chat',
             user_question: conv.question,
             ai_response: conv.response,
             knowledge_used: conv.knowledge || [],
@@ -207,7 +208,7 @@ export function TriggerLearningButton() {
         });
 
         if (error) {
-          console.error('Continuous learner error for conversation:', error);
+          console.error('Unified learner error for conversation:', error);
         } else {
           processed++;
         }
@@ -238,8 +239,13 @@ export function TriggerLearningButton() {
   const triggerPipelineLearning = async () => {
     setIsPipelineLearning(true);
     try {
-      const { data, error } = await supabase.functions.invoke('learn-from-pipeline', {
-        body: { manual_trigger: true }
+      // Migrated to unified-learner with learn_pipeline action
+      const { data, error } = await supabase.functions.invoke('unified-learner', {
+        body: { 
+          action: 'learn_pipeline',
+          days_back: 7,
+          manual_trigger: true
+        }
       });
 
       if (error) throw error;
