@@ -365,11 +365,21 @@ Geautomatiseerde penetratietest uitgevoerd op alle webhook endpoints om signatur
 - Resultaten gelogd naar `system_events`
 - Kan handmatig worden getriggerd voor regression testing
 
-### Openstaande Acties
+### Afgeronde Acties
 
-| Item | Prioriteit | Actie |
-|------|------------|-------|
-| **DEPLOY_WEBHOOK_SECRET** | 🟠 Medium | Configureer secret in Supabase voor deploy webhook bescherming |
+| Item | Status | Datum |
+|------|--------|-------|
+| **DEPLOY_WEBHOOK_SECRET** | ✅ Geconfigureerd | 2026-01-03 |
+
+**Resultaat:** `deploy-test-webhook` is nu volledig beveiligd met HMAC-SHA256 signature validatie. Ongeautoriseerde deployment triggers worden geblokkeerd met 401 Unauthorized.
+
+---
+
+## 📝 Changelog Update
+
+| Datum | Auteur | Wijziging |
+|-------|--------|-----------|
+| 2026-01-03 | AI Security Agent | DEPLOY_WEBHOOK_SECRET geconfigureerd - webhook beveiliging volledig afgerond |
 
 ---
 
