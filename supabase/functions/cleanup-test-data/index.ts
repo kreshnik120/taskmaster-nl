@@ -40,28 +40,81 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // ========== SECURITY: API KEY AUTHENTICATION ==========
-  // This function can delete production data - require API key
+  // ========== SECURITY: DUAL-AUTH (API Key OR JWT + Admin Role) ==========
+  // This function can delete production data - require either:
+  // 1. Valid API key (for cron/automation jobs)
+  // 2. Valid JWT + admin role (for authenticated admin users)
+  
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  
+  // SECURITY LAYER 1: Check for API key (service/cron access)
   const apiKey = req.headers.get("x-api-key") || req.headers.get("X-API-Key");
   const expectedApiKey = Deno.env.get("CITOZORG_API_KEY");
-
-  if (!expectedApiKey) {
-    console.error("🔒 [cleanup-test-data] CITOZORG_API_KEY not configured");
-    return new Response(
-      JSON.stringify({ error: "Server misconfiguration - API key not set" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  
+  let isServiceAccess = false;
+  if (apiKey && expectedApiKey && apiKey === expectedApiKey) {
+    console.log("🔓 [cleanup-test-data] Service access via API key");
+    isServiceAccess = true;
   }
-
-  if (!apiKey || apiKey !== expectedApiKey) {
-    console.warn(`🔒 [cleanup-test-data] Unauthorized access attempt from ${req.headers.get("x-forwarded-for") || "unknown"}`);
-    return new Response(
-      JSON.stringify({ error: "Unauthorized - valid API key required via x-api-key header" }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  
+  // SECURITY LAYER 2: If no API key, require JWT + admin role
+  if (!isServiceAccess) {
+    const authHeader = req.headers.get("Authorization");
+    
+    if (!authHeader) {
+      console.warn(`🔒 [cleanup-test-data] No auth from ${req.headers.get("x-forwarded-for") || "unknown"}`);
+      return new Response(
+        JSON.stringify({ 
+          error: "Unauthorized - JWT token (with admin role) or API key required",
+          hint: "Provide Authorization header with JWT or x-api-key header"
+        }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // Validate JWT and get user
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+    
+    const { data: { user }, error: userError } = await authClient.auth.getUser();
+    
+    if (userError || !user) {
+      console.warn(`🔒 [cleanup-test-data] Invalid JWT from ${req.headers.get("x-forwarded-for") || "unknown"}: ${userError?.message}`);
+      return new Response(
+        JSON.stringify({ error: "Unauthorized - invalid or expired token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // Check admin role using has_role RPC (security definer function)
+    const { data: isAdmin, error: roleError } = await authClient
+      .rpc('has_role', { _user_id: user.id, _role: 'admin' });
+    
+    if (roleError) {
+      console.error(`🔒 [cleanup-test-data] Role check failed for ${user.email}: ${roleError.message}`);
+      return new Response(
+        JSON.stringify({ error: "Internal error checking user role" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    if (!isAdmin) {
+      console.warn(`🔒 [cleanup-test-data] Non-admin access attempt by ${user.id} (${user.email})`);
+      return new Response(
+        JSON.stringify({ 
+          error: "Forbidden - admin role required",
+          user_id: user.id,
+          hint: "Contact an administrator to request access"
+        }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    console.log(`🔓 [cleanup-test-data] Admin access granted for ${user.email}`);
   }
-
-  console.log("🔓 [cleanup-test-data] API key validated successfully");
   // ========== END SECURITY ==========
 
   try {

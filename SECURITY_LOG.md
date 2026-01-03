@@ -660,28 +660,85 @@ Alle 58 resterende edge functions gecontroleerd op test/debug endpoints en secur
 
 ### Kritieke Bevinding: cleanup-test-data
 
-**VOOR FIX:**
+**VOOR FIX (v1.0.0):**
 | Aspect | Status |
 |--------|--------|
 | JWT verificatie | ❌ Disabled (`verify_jwt = false`) |
 | API key check | ❌ Geen |
+| Role check | ❌ Geen |
 | Impact | 🔴 KRITIEK - Kan productie data verwijderen |
 
-**NA FIX (v1.1.0-secured):**
+**NA FIX v1.1.0 (API key only):**
 | Aspect | Status |
 |--------|--------|
 | JWT verificatie | ❌ Disabled (nodig voor flexibele aanroepen) |
 | API key check | ✅ `CITOZORG_API_KEY` required via `x-api-key` header |
+| Role check | ❌ Geen |
 | Failed auth logging | ✅ IP logging bij unauthorized attempts |
-| Impact | ✅ BEVEILIGD |
+| Impact | ⚠️ BEVEILIGD (alleen API key) |
+
+**NA FIX v1.2.0 (Dual-Auth met Admin Role) - HUIDIGE VERSIE:**
+| Aspect | Status |
+|--------|--------|
+| JWT verificatie | ✅ In-code JWT validatie |
+| API key check | ✅ `CITOZORG_API_KEY` fallback voor automation |
+| Role check | ✅ `has_role(admin)` vereist voor JWT auth |
+| Failed auth logging | ✅ IP + user logging bij unauthorized attempts |
+| Impact | ✅ ENTERPRISE BEVEILIGD |
+
+### Authenticatie Flow (v1.2.0)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    cleanup-test-data                        │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐    YES    ┌─────────────────────┐          │
+│  │ API Key     │ ─────────→│ Service Access OK   │          │
+│  │ Correct?    │           │ (Cron/Automation)   │          │
+│  └──────┬──────┘           └─────────────────────┘          │
+│         │ NO                                                │
+│         ▼                                                   │
+│  ┌─────────────┐    NO     ┌─────────────────────┐          │
+│  │ JWT Token   │ ─────────→│ 401 Unauthorized    │          │
+│  │ Present?    │           └─────────────────────┘          │
+│  └──────┬──────┘                                            │
+│         │ YES                                               │
+│         ▼                                                   │
+│  ┌─────────────┐    NO     ┌─────────────────────┐          │
+│  │ JWT Valid?  │ ─────────→│ 401 Invalid Token   │          │
+│  │ (getUser)   │           └─────────────────────┘          │
+│  └──────┬──────┘                                            │
+│         │ YES                                               │
+│         ▼                                                   │
+│  ┌─────────────┐    NO     ┌─────────────────────┐          │
+│  │ has_role    │ ─────────→│ 403 Forbidden       │          │
+│  │ (admin)?    │           │ "Admin role needed" │          │
+│  └──────┬──────┘           └─────────────────────┘          │
+│         │ YES                                               │
+│         ▼                                                   │
+│  ┌─────────────────────┐                                    │
+│  │ ✓ ACCESS GRANTED    │                                    │
+│  │   Execute cleanup   │                                    │
+│  └─────────────────────┘                                    │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ### Changelog Entry
 ```
-2026-01-03 20:30 UTC - Security Fix: cleanup-test-data
+2026-01-03 20:30 UTC - Security Fix v1.1.0: cleanup-test-data
 - ADDED: API key authentication (CITOZORG_API_KEY)
 - ADDED: 401 Unauthorized response voor ontbrekende/onjuiste key
 - ADDED: Warning logging met IP bij failed attempts
 - ADDED: 500 error als API key niet geconfigureerd is op server
+
+2026-01-03 21:15 UTC - Security Upgrade v1.2.0: cleanup-test-data (ADMIN ROLE-BASED AUTH)
+- ADDED: Dual-auth strategie (API key OR JWT + admin role)
+- ADDED: In-code JWT validatie via Supabase auth.getUser()
+- ADDED: Admin role check via has_role(_user_id, 'admin') RPC
+- ADDED: 403 Forbidden response voor non-admin users
+- ADDED: User email logging bij admin access
+- KEPT: API key fallback voor cron/automation jobs (CITOZORG_API_KEY)
+- SECURITY: Alleen geauthenticeerde admins kunnen test data opschonen via UI
 ```
 
 ### Andere Test/Debug Functions - Verificatie Status
@@ -692,7 +749,7 @@ Alle 58 resterende edge functions gecontroleerd op test/debug endpoints en secur
 | `deploy-test-webhook` | DEPLOY_WEBHOOK_SECRET | ✅ Secure |
 | `webhook-security-tester` | Service role key | ✅ Secure |
 | `cleanup-stuck-test-runs` | Cron-only (geen HTTP) | ✅ Secure |
-| `cleanup-test-data` | CITOZORG_API_KEY | ✅ Secure (FIXED) |
+| `cleanup-test-data` | **Dual-Auth: API key + JWT/Admin role** | ✅ Enterprise Secure (v1.2.0) |
 
 ### Test Commando's
 
