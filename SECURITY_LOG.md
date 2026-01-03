@@ -653,4 +653,64 @@ Deep dive op de 5 shim edge functions resulteerde in:
 
 ---
 
+## Enterprise Security Audit - Test/Debug Endpoints (3 januari 2026, 20:30 UTC)
+
+### Audit Scope
+Alle 58 resterende edge functions gecontroleerd op test/debug endpoints en security vulnerabilities.
+
+### Kritieke Bevinding: cleanup-test-data
+
+**VOOR FIX:**
+| Aspect | Status |
+|--------|--------|
+| JWT verificatie | ❌ Disabled (`verify_jwt = false`) |
+| API key check | ❌ Geen |
+| Impact | 🔴 KRITIEK - Kan productie data verwijderen |
+
+**NA FIX (v1.1.0-secured):**
+| Aspect | Status |
+|--------|--------|
+| JWT verificatie | ❌ Disabled (nodig voor flexibele aanroepen) |
+| API key check | ✅ `CITOZORG_API_KEY` required via `x-api-key` header |
+| Failed auth logging | ✅ IP logging bij unauthorized attempts |
+| Impact | ✅ BEVEILIGD |
+
+### Changelog Entry
+```
+2026-01-03 20:30 UTC - Security Fix: cleanup-test-data
+- ADDED: API key authentication (CITOZORG_API_KEY)
+- ADDED: 401 Unauthorized response voor ontbrekende/onjuiste key
+- ADDED: Warning logging met IP bij failed attempts
+- ADDED: 500 error als API key niet geconfigureerd is op server
+```
+
+### Andere Test/Debug Functions - Verificatie Status
+
+| Function | Auth Method | Status |
+|----------|-------------|--------|
+| `ai-chat-tester` | HMAC-SHA256 via deploy-test-webhook | ✅ Secure |
+| `deploy-test-webhook` | DEPLOY_WEBHOOK_SECRET | ✅ Secure |
+| `webhook-security-tester` | Service role key | ✅ Secure |
+| `cleanup-stuck-test-runs` | Cron-only (geen HTTP) | ✅ Secure |
+| `cleanup-test-data` | CITOZORG_API_KEY | ✅ Secure (FIXED) |
+
+### Test Commando's
+
+```bash
+# Test ZONDER API key (moet 401 geven)
+curl -X POST https://oelmsmcgryeoryhonexw.supabase.co/functions/v1/cleanup-test-data \
+  -H "Content-Type: application/json" \
+  -d '{"email_pattern":"test@example","dry_run":true}'
+# Expected: {"error":"Unauthorized - valid API key required via x-api-key header"}
+
+# Test MET correcte API key
+curl -X POST https://oelmsmcgryeoryhonexw.supabase.co/functions/v1/cleanup-test-data \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $CITOZORG_API_KEY" \
+  -d '{"email_pattern":"test@example","dry_run":true}'
+# Expected: CleanupResult object
+```
+
+---
+
 *Dit document wordt automatisch bijgewerkt na elke security-gerelateerde wijziging.*
