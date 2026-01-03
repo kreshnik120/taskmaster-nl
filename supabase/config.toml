@@ -195,9 +195,8 @@ verify_jwt = true
 verify_jwt = true
 # Purpose: Rollback knowledge to previous version
 
-[functions.continuous-learner]
-verify_jwt = true
-# Purpose: Continuous learning from user interactions
+# REMOVED: continuous-learner - migrated to unified-learner
+# All ai-chat calls now invoke unified-learner directly
 
 [functions.orchestrator-control]
 verify_jwt = true
@@ -229,11 +228,8 @@ schedule = "0 2 * * *"
 # Purpose: Meta-level orchestration (daily at 02:00)
 # Dependencies: Runs after daily cleanup jobs
 
-[functions.retroactive-training-evaluator]
-verify_jwt = false
-schedule = "30 2 * * *"
-# Purpose: Re-evaluate previously rejected learning events (daily at 02:30)
-# Dependencies: Runs after meta-orchestrator, shim → unified-learner
+# REMOVED: retroactive-training-evaluator - migrated to unified-learner
+# Was: schedule = "30 2 * * *", now invokes unified-learner with action: retroactive_scan
 
 # -----------------------------------------------------------------------------
 # SCHEDULED FUNCTIONS (Cron Jobs)
@@ -282,11 +278,8 @@ schedule = "0 * * * *"
 # Purpose: Restart paused/stalled backfill processes
 # Frequency: 24 executions/day (at :00)
 
-[functions.feedback-processor]
-verify_jwt = false
-schedule = "15 * * * *"
-# Purpose: Process pending feedback (shim → unified-learner)
-# Frequency: 24 executions/day (at :15)
+# REMOVED: feedback-processor - now calls unified-learner directly
+# Schedule migrated to unified-learner invocation at :15
 
 [functions.master-scheduler]
 verify_jwt = false
@@ -301,11 +294,8 @@ schedule = "45 * * * *"
 # Frequency: 24 executions/day (at :45)
 
 # --- Every 3 Hours ---
-[functions.learn-from-pipeline]
-verify_jwt = false
-schedule = "0 */3 * * *"
-# Purpose: Learn patterns from recruitment pipeline transitions
-# Frequency: 8 executions/day
+# REMOVED: learn-from-pipeline - now calls unified-learner directly
+# Schedule migrated to unified-learner invocation every 3 hours
 
 # --- Every 6 Hours ---
 [functions.data-quality-auditor]
