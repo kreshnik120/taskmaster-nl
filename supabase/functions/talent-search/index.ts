@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
     let profQuery = supabase
       .from("professionals")
       .select(`
-        id, full_name, email, telefoonnummer, functie_niveau, specialismen,
+        id, full_name, email, telefoonnummer, functie_niveau, specialisaties,
         regio, beschikbaarheid, jaren_ervaring, werkvorm, status
       `)
       .in("status", ["actief", "beschikbaar"])
@@ -108,7 +108,7 @@ Deno.serve(async (req) => {
           email: prof.email,
           telefoon: prof.telefoonnummer,
           functie: prof.functie_niveau,
-          specialismen: prof.specialismen,
+          specialismen: prof.specialisaties,
           regio: prof.regio,
           beschikbaarheid: prof.beschikbaarheid,
           jaren_ervaring: prof.jaren_ervaring,
