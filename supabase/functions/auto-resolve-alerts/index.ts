@@ -1,4 +1,4 @@
-// Auto-Resolve Alerts - automated alert resolution engine
+// Auto-Resolve Alerts - automated alert resolution engine (Enterprise Edition)
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 Deno.serve(async (req) => {
@@ -8,7 +8,7 @@ Deno.serve(async (req) => {
   try {
     const supabase = createAdminClient();
 
-    console.log("🤖 Starting Auto-Resolution Engine...");
+    console.log("🤖 Starting Enterprise Auto-Resolution Engine...");
 
     // Fetch all active critical alerts
     const { data: alerts, error: fetchError } = await supabase
@@ -29,7 +29,9 @@ Deno.serve(async (req) => {
     let resolvedCount = 0;
     const resolutionLog: any[] = [];
 
+    // ============================================================
     // 1. AUTO-MERGE DUPLICATES
+    // ============================================================
     const duplicateGroups = new Map<string, any[]>();
     alerts?.forEach((alert) => {
       const key = `${alert.title}_${alert.data?.category || 'unknown'}`;
@@ -75,7 +77,58 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 2. AUTO-RESOLVE KNOWLEDGE CONFLICTS (Tier 1 source wins)
+    // ============================================================
+    // 2. AUTO-RESOLVE TEST FAILURE ALERTS (pass_rate >= 90%)
+    // ============================================================
+    const testFailureAlerts = alerts?.filter(a => 
+      a.intelligence_type === 'test_failure' && a.status === 'active'
+    ) || [];
+
+    if (testFailureAlerts.length > 0) {
+      // Get latest test run
+      const { data: latestRun } = await supabase
+        .from("ai_chat_test_runs")
+        .select("id, passed_tests, total_tests, completed_at")
+        .eq("status", "completed")
+        .order("completed_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (latestRun && latestRun.total_tests > 0) {
+        const passRate = (latestRun.passed_tests / latestRun.total_tests) * 100;
+        
+        if (passRate >= 90) {
+          for (const alert of testFailureAlerts) {
+            await supabase
+              .from("business_intelligence")
+              .update({
+                status: "resolved",
+                data: {
+                  ...alert.data,
+                  resolution: "auto_resolved_pass_rate_above_threshold",
+                  latest_pass_rate: passRate.toFixed(1),
+                  latest_run_id: latestRun.id,
+                  resolved_at: new Date().toISOString(),
+                }
+              })
+              .eq("id", alert.id);
+
+            resolvedCount++;
+            resolutionLog.push({
+              id: alert.id,
+              title: alert.title,
+              reason: "test_pass_rate_above_90",
+              pass_rate: passRate.toFixed(1),
+            });
+          }
+          console.log(`✅ Auto-resolved ${testFailureAlerts.length} test failure alerts (pass rate: ${passRate.toFixed(1)}%)`);
+        }
+      }
+    }
+
+    // ============================================================
+    // 3. AUTO-RESOLVE KNOWLEDGE CONFLICTS (Tier 1 source wins)
+    // ============================================================
     const conflictAlerts = alerts?.filter(a => 
       a.data?.category === 'knowledge_conflict' && a.status === 'active'
     ) || [];
@@ -111,7 +164,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3. AUTO-RESOLVE DATA QUALITY (check conflicting items)
+    // ============================================================
+    // 4. AUTO-RESOLVE DATA QUALITY (check conflicting items)
+    // ============================================================
     const dataQualityAlerts = alerts?.filter(a => 
       a.data?.category === 'data_quality' && 
       a.status === 'active' &&
@@ -199,13 +254,87 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`✅ Auto-resolved ${resolvedCount} alerts`);
+    // ============================================================
+    // 5. AUTO-COMPLETE WORKFLOW PATTERNS (these are successes)
+    // ============================================================
+    const workflowPatterns = alerts?.filter(a => 
+      a.intelligence_type === 'workflow_pattern' && a.status === 'active'
+    ) || [];
+
+    for (const alert of workflowPatterns) {
+      await supabase
+        .from("business_intelligence")
+        .update({
+          status: "completed",
+          data: {
+            ...alert.data,
+            completion_note: "auto_completed_workflow_pattern_is_success",
+            resolved_at: new Date().toISOString(),
+          }
+        })
+        .eq("id", alert.id);
+
+      resolvedCount++;
+      resolutionLog.push({
+        id: alert.id,
+        title: alert.title,
+        reason: "workflow_pattern_completed",
+      });
+      
+      console.log(`✅ Auto-completed workflow pattern: ${alert.title}`);
+    }
+
+    // ============================================================
+    // 6. CLEANUP OUTDATED ALERTS (> 60 days without update)
+    // ============================================================
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+    const { data: staleAlerts } = await supabase
+      .from("business_intelligence")
+      .select("id, title")
+      .eq("status", "active")
+      .lt("last_updated_at", sixtyDaysAgo.toISOString())
+      .limit(50);
+
+    if (staleAlerts && staleAlerts.length > 0) {
+      for (const alert of staleAlerts) {
+        await supabase
+          .from("business_intelligence")
+          .update({
+            status: "stale",
+            data: {
+              resolution: "auto_marked_stale_no_updates_60_days",
+              stale_at: new Date().toISOString(),
+            }
+          })
+          .eq("id", alert.id);
+
+        resolvedCount++;
+        resolutionLog.push({
+          id: alert.id,
+          title: alert.title,
+          reason: "stale_60_days",
+        });
+      }
+      console.log(`✅ Marked ${staleAlerts.length} alerts as stale (no updates in 60 days)`);
+    }
+
+    console.log(`✅ Enterprise Auto-Resolution complete: ${resolvedCount} alerts processed`);
 
     return jsonResponse({
       success: true,
       total_alerts_scanned: alerts?.length || 0,
       resolved_count: resolvedCount,
       resolution_log: resolutionLog,
+      capabilities: [
+        "duplicate_merging",
+        "test_failure_auto_resolve",
+        "tier1_source_priority",
+        "complementary_items",
+        "workflow_pattern_completion",
+        "stale_alert_cleanup"
+      ]
     });
   } catch (error: any) {
     console.error("❌ Auto-resolution error:", error);
