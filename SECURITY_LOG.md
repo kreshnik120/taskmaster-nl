@@ -212,7 +212,7 @@ CREATE POLICY "Anyone can view screening requirements" ON public.vog_screening_r
 | `supabase/migrations/20260103170916_*.sql` | Migration 2: Security Definer Views |
 | `supabase/migrations/20260103171029_*.sql` | Migration 3: Service Role Hardening |
 | `supabase/migrations/20260103171112_*.sql` | Migration 4: Final Restrictions |
-| `SECURITY_FIXES.sql` | ⚠️ Verouderd - Zie dit document |
+| ~~`SECURITY_FIXES.sql`~~ | 🗑️ Verwijderd op 2026-01-03 - Alle SQL was reeds toegepast via migraties |
 
 ---
 
@@ -222,6 +222,7 @@ CREATE POLICY "Anyone can view screening requirements" ON public.vog_screening_r
 |-------|--------|-----------|
 | 2026-01-03 | AI Security Agent | Initiële security hardening sprint - 4 migraties |
 | 2026-01-03 | AI Security Agent | SECURITY_LOG.md aangemaakt |
+| 2026-01-03 | AI Security Agent | SECURITY_FIXES.sql verwijderd - bestand was overbodig na migratie-toepassing |
 
 ---
 
