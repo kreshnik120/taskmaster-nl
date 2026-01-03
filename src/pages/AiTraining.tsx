@@ -52,6 +52,7 @@ import { ErrorSimulationTest } from "@/components/AITraining/ErrorSimulationTest
 import { DiplomaReverificationWidget } from "@/components/AITraining/DiplomaReverificationWidget";
 import { CircuitBreakerDashboard } from "@/components/AITraining/CircuitBreakerDashboard";
 import { WebhookSecurityDashboard } from "@/components/AITraining/WebhookSecurityDashboard";
+import { DailySecuritySummary } from "@/components/AITraining/DailySecuritySummary";
 import { toast } from "sonner";
 
 const AiTraining = () => {
@@ -205,6 +206,7 @@ const AiTraining = () => {
                   
                   <TabsContent value="dashboard" className="mt-4">
                     <div className="space-y-6">
+                      <DailySecuritySummary />
                       <UnifiedAIHealthDashboard compact />
                       <TriggerLearningButton />
                       <AutoResolveMonitor />
