@@ -15,6 +15,45 @@ interface DeploymentPayload {
   skip_tests?: boolean;
 }
 
+// Verify deploy webhook signature using HMAC-SHA256
+async function verifyDeploySignature(
+  payload: string,
+  signature: string | null,
+  secret: string
+): Promise<boolean> {
+  if (!signature) {
+    console.error("❌ [deploy-test-webhook] Missing x-deploy-signature header");
+    return false;
+  }
+
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const messageData = encoder.encode(payload);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyData,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+
+  const signatureBuffer = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
+  const signatureArray = Array.from(new Uint8Array(signatureBuffer));
+  const expectedSignature = signatureArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+  const isValid = signature === expectedSignature || signature === `sha256=${expectedSignature}`;
+  
+  if (!isValid) {
+    console.error("❌ [deploy-test-webhook] Invalid signature", {
+      expected: expectedSignature.substring(0, 20) + "...",
+      received: signature.substring(0, 20) + "..."
+    });
+  }
+  
+  return isValid;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -26,13 +65,37 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    const deployWebhookSecret = Deno.env.get("DEPLOY_WEBHOOK_SECRET");
     
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+    
+    // Read raw body for signature verification
+    const rawBody = await req.text();
+    
+    // Verify signature if secret is configured
+    if (deployWebhookSecret) {
+      const signature = req.headers.get("x-deploy-signature");
+      const isValid = await verifyDeploySignature(rawBody, signature, deployWebhookSecret);
+      
+      if (!isValid) {
+        console.error("[deploy-test-webhook] Signature verification failed");
+        return new Response(
+          JSON.stringify({ error: "Unauthorized - Invalid signature" }),
+          { 
+            status: 401, 
+            headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          }
+        );
+      }
+      console.log("✅ [deploy-test-webhook] Signature verified");
+    } else {
+      console.warn("⚠️ [deploy-test-webhook] DEPLOY_WEBHOOK_SECRET not configured - skipping signature verification");
+    }
     
     // Parse deployment payload
     let payload: DeploymentPayload = {};
     try {
-      payload = await req.json();
+      payload = rawBody ? JSON.parse(rawBody) : {};
     } catch {
       // Empty body is OK for manual triggers
     }
