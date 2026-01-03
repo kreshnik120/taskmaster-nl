@@ -379,6 +379,10 @@ schedule = "0 5 * * 0"
 verify_jwt = false
 # Purpose: Clean up test data for fresh E2E testing
 
+[functions.webhook-security-tester]
+verify_jwt = false
+# Purpose: Automated penetration testing for webhook security validation
+
 # -----------------------------------------------------------------------------
 # HEALTH MONITORING
 # -----------------------------------------------------------------------------

@@ -271,6 +271,8 @@ CREATE POLICY "Anyone can view screening requirements" ON public.vog_screening_r
 | 2026-01-03 | AI Security Agent | SECURITY_FIXES.sql verwijderd - bestand was overbodig na migratie-toepassing |
 | 2026-01-03 | AI Security Agent | Extensions schema beslissing gedocumenteerd - vector/pg_net geaccepteerd in public |
 | 2026-01-03 | AI Security Agent | Security scan uitgevoerd - 14 findings geanalyseerd als false positives |
+| 2026-01-03 | AI Security Agent | Penetratietest webhook security - 9 tests uitgevoerd |
+| 2026-01-03 | AI Security Agent | deploy-test-webhook gehardend met HMAC-SHA256 signature validatie |
 
 ---
 
@@ -315,6 +317,59 @@ CREATE POLICY "Anyone can view screening requirements" ON public.vog_screening_r
 | Item | Prioriteit | Actie |
 |------|------------|-------|
 | **Leaked Password Protection** | 🟠 Medium | Inschakelen via Backend → Auth Settings |
+
+---
+
+## 🔐 Penetratietest Webhook Security 2026-01-03 18:30 UTC
+
+### Test Scope
+
+Geautomatiseerde penetratietest uitgevoerd op alle webhook endpoints om signature validatie te verifiëren.
+
+### Geteste Endpoints
+
+| Endpoint | Auth Mechanisme | Status |
+|----------|-----------------|--------|
+| `process-application-email` | Svix HMAC-SHA256 | ✅ Getest |
+| `handle-application-reply` | Svix HMAC-SHA256 | ✅ Getest |
+| `receive-external-application` | API Key + Rate Limiting | ✅ Getest |
+| `deploy-test-webhook` | HMAC-SHA256 (nieuw) | ✅ Gehardend |
+
+### Test Cases Uitgevoerd
+
+| Test | Endpoint | Verwacht | Resultaat |
+|------|----------|----------|-----------|
+| Missing Svix Headers | process-application-email | 401/403 | ✅ Pass |
+| Invalid Signature | process-application-email | 401/403 | ✅ Pass |
+| Replay Attack (>5 min) | process-application-email | 401/403 | ✅ Pass |
+| Payload Tampering | process-application-email | 401/403 | ✅ Pass |
+| Missing API Key | receive-external-application | 401 | ✅ Pass |
+| Invalid API Key | receive-external-application | 401 | ✅ Pass |
+| SQL Injection | receive-external-application | 400/sanitized | ✅ Pass |
+| XSS Attempt | receive-external-application | 400/sanitized | ✅ Pass |
+| Reply Handler Security | handle-application-reply | 401/403 | ✅ Pass |
+
+### Hardening Uitgevoerd
+
+**deploy-test-webhook** was onbeschermd. Nu gehardend met:
+
+- **Header:** `x-deploy-signature`
+- **Algorithm:** HMAC-SHA256
+- **Format:** `sha256=<hex>` of raw hex
+- **Secret:** `DEPLOY_WEBHOOK_SECRET` (moet worden geconfigureerd)
+
+### Nieuwe Edge Function
+
+`webhook-security-tester` - Geautomatiseerde penetratietest suite:
+- 9 security test cases
+- Resultaten gelogd naar `system_events`
+- Kan handmatig worden getriggerd voor regression testing
+
+### Openstaande Acties
+
+| Item | Prioriteit | Actie |
+|------|------------|-------|
+| **DEPLOY_WEBHOOK_SECRET** | 🟠 Medium | Configureer secret in Supabase voor deploy webhook bescherming |
 
 ---
 
