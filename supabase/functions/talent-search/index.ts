@@ -48,16 +48,16 @@ Deno.serve(async (req) => {
     let profQuery = supabase
       .from("professionals")
       .select(`
-        id, naam, email, telefoon, functie, specialismen,
-        regio, beschikbaarheid, jaren_ervaring, werkvorm,
-        status
+        id, full_name, email, telefoonnummer, functie_niveau, specialismen,
+        regio, beschikbaarheid, jaren_ervaring, werkvorm, status
       `)
-      .eq("status", "actief")
+      .in("status", ["actief", "beschikbaar"])
+      .is("deleted_at", null)
       .limit(limit * 2); // Get extra to account for filtering
 
     // Apply filters
     if (params.functie) {
-      profQuery = profQuery.ilike("functie", `%${params.functie}%`);
+      profQuery = profQuery.ilike("functie_niveau", `%${params.functie}%`);
     }
     if (params.regio) {
       profQuery = profQuery.ilike("regio", `%${params.regio}%`);
@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
       
       for (const prof of professionals) {
         const emailKey = prof.email?.toLowerCase() || '';
-        const nameKey = prof.naam?.toLowerCase() || '';
+        const nameKey = prof.full_name?.toLowerCase() || '';
         
         // Deduplication check
         if (emailKey && seenEmails.has(emailKey)) continue;
@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
 
         // Calculate match score
         let matchScore = 0.5; // Base score
-        if (params.functie && prof.functie?.toLowerCase().includes(params.functie.toLowerCase())) {
+        if (params.functie && prof.functie_niveau?.toLowerCase().includes(params.functie.toLowerCase())) {
           matchScore += 0.2;
         }
         if (params.regio && prof.regio?.toLowerCase().includes(params.regio.toLowerCase())) {
@@ -104,10 +104,10 @@ Deno.serve(async (req) => {
 
         results.push({
           id: prof.id,
-          naam: prof.naam,
+          naam: prof.full_name,
           email: prof.email,
-          telefoon: prof.telefoon,
-          functie: prof.functie,
+          telefoon: prof.telefoonnummer,
+          functie: prof.functie_niveau,
           specialismen: prof.specialismen,
           regio: prof.regio,
           beschikbaarheid: prof.beschikbaarheid,
@@ -128,18 +128,13 @@ Deno.serve(async (req) => {
       let appQuery = supabase
         .from("professional_applications")
         .select(`
-          id, naam, email, telefoon, stage, extracted_data,
-          created_at
+          id, email_from, pipeline_stage, extracted_data, created_at
         `)
-        .not("stage", "eq", "afgewezen")
-        .not("stage", "eq", "withdrawn")
+        .is("deleted_at", null)
+        .not("pipeline_stage", "eq", "afgewezen")
+        .not("pipeline_stage", "eq", "withdrawn")
         .order("created_at", { ascending: false })
         .limit((limit - results.length) * 3); // Get extra for filtering
-
-      // Basic filters on application fields
-      if (params.functie) {
-        appQuery = appQuery.or(`functie.ilike.%${params.functie}%,naam.ilike.%${params.functie}%`);
-      }
 
       const { data: applications, error: appError } = await appQuery;
 
@@ -151,19 +146,29 @@ Deno.serve(async (req) => {
         for (const app of applications) {
           if (results.length >= limit) break;
           
-          const emailKey = app.email?.toLowerCase() || '';
-          const nameKey = app.naam?.toLowerCase() || '';
+          // Extract data from extracted_data JSON
+          const extracted = app.extracted_data || {};
+          const appNaam = extracted.naam || extracted.name || 'Onbekend';
+          const appTelefoon = extracted.telefoon || extracted.telefoonnummer || null;
+          
+          const emailKey = app.email_from?.toLowerCase() || '';
+          const nameKey = appNaam?.toLowerCase() || '';
           
           // Deduplication check
           if (emailKey && seenEmails.has(emailKey)) continue;
-          if (nameKey && seenNames.has(nameKey)) continue;
+          if (nameKey && nameKey !== 'onbekend' && seenNames.has(nameKey)) continue;
           
           if (emailKey) seenEmails.add(emailKey);
-          if (nameKey) seenNames.add(nameKey);
+          if (nameKey && nameKey !== 'onbekend') seenNames.add(nameKey);
 
-          // Extract data from extracted_data JSON
-          const extracted = app.extracted_data || {};
-          
+          // Filter by functie if specified
+          if (params.functie) {
+            const appFunctie = extracted.functie || extracted.gewenste_functie || extracted.functie_niveau || '';
+            if (!appFunctie.toLowerCase().includes(params.functie.toLowerCase())) {
+              continue;
+            }
+          }
+
           // Filter by regio if specified
           if (params.regio) {
             const appRegio = extracted.regio || extracted.woonplaats || '';
@@ -175,16 +180,18 @@ Deno.serve(async (req) => {
           // Filter by werkvorm if specified
           if (params.werkvorm) {
             const appWerkvorm = extracted.werkvorm || extracted.voorkeur_werkvorm || '';
-            if (appWerkvorm !== params.werkvorm) {
+            if (appWerkvorm && appWerkvorm !== params.werkvorm) {
               continue;
             }
           }
 
           // Calculate match score (lower for applications)
           let matchScore = 0.4; // Lower base for applications
-          if (params.functie && (app.naam?.toLowerCase().includes(params.functie.toLowerCase()) || 
-              extracted.functie?.toLowerCase().includes(params.functie.toLowerCase()))) {
-            matchScore += 0.15;
+          if (params.functie) {
+            const appFunctie = extracted.functie || extracted.gewenste_functie || '';
+            if (appFunctie.toLowerCase().includes(params.functie.toLowerCase())) {
+              matchScore += 0.15;
+            }
           }
           if (params.regio) {
             const appRegio = extracted.regio || extracted.woonplaats || '';
@@ -195,10 +202,10 @@ Deno.serve(async (req) => {
 
           results.push({
             id: app.id,
-            naam: app.naam,
-            email: app.email,
-            telefoon: app.telefoon,
-            functie: extracted.functie || extracted.gewenste_functie || null,
+            naam: appNaam,
+            email: app.email_from,
+            telefoon: appTelefoon,
+            functie: extracted.functie || extracted.gewenste_functie || extracted.functie_niveau || null,
             specialismen: extracted.specialismen || [],
             regio: extracted.regio || extracted.woonplaats || null,
             beschikbaarheid: extracted.beschikbaarheid || null,
