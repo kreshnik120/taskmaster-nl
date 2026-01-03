@@ -1,35 +1,34 @@
 // Master Scheduler - central cron job orchestration
-// Version 2.0.4 - Daily Security Scan Support
+// Version 2.0.5 - Schedule Cleanup (removed duplicate feedback-processor, process-system-events, ai-chat-health-monitor)
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const VERSION = '2.0.4-daily-security-scan';
+const VERSION = '2.0.5-schedule-cleanup';
 
-// Active scheduled functions (17 schedules for 5 learning loops + 5 support + 3 fast path optimization + 2 cleanups + 1 diploma reverify + 1 security scan)
+// Active scheduled functions (13 schedules - removed duplicates that already have config.toml schedules)
+// REMOVED: feedback-processor (already scheduled in config.toml at "15 * * * *")
+// REMOVED: process-system-events (already scheduled in config.toml at "*/5 * * * *")
+// REMOVED: ai-chat-health-monitor (already scheduled in config.toml at "*/5 * * * *")
 const SCHEDULES = {
   'auto-resolve-alerts': '*/30 * * * *',        // Every 30 minutes (ACE Alert Resolution)
   'smart-deduplicator': '30 * * * *',           // Every hour at :30 (Learning Loop 5)
   'data-quality-auditor': '20 * * * *',         // Every hour at :20 (Learning Loop 4)
   'knowledge-graph-builder': '15 * * * *',      // Every hour at :15 (Learning Loop 3)
-  'feedback-processor': '*/5 * * * *',          // Every 5 minutes (Learning Loop 2)
   'process-pending-jobs': '*/1 * * * *',        // Every minute (Background Job Queue)
-  'process-system-events': '*/5 * * * *',       // Every 5 minutes (System Event Learning)
   // Phase 2: Self-Learning Reinforcement
   'apply-meta-patterns': '0 */6 * * *',         // Every 6 hours (Meta-pattern application)
   'temporal-decay': '0 3 * * *',                // Daily at 03:00 (Temporal decay for stale knowledge)
   // Phase 2.5: Retroactive Training (re-evaluate previously rejected learning events)
   'retroactive-training-evaluator': '0 4 * * *', // Daily at 04:00
-  // Health Monitoring
-  'ai-chat-health-monitor': '*/5 * * * *',      // Every 5 minutes (AI Chat health check with alerts)
-  // 🆕 Self-Learning Fast Path with Pattern Optimization
+  // Self-Learning Fast Path with Pattern Optimization
   'pattern-health-monitor': '*/15 * * * *',     // Every 15 minutes (Real-time health detection)
   'learn-fast-path-patterns': '0 5 * * *',      // Daily at 05:00 (Learn new patterns from usage)
   'cleanup-fast-path-patterns': '0 */4 * * *',  // Every 4 hours (Stricter cleanup cycle)
-  // 🆕 Document & Orchestrator Cleanup
+  // Document & Orchestrator Cleanup
   'cleanup-orphan-documents': '30 6 * * *',     // Daily at 06:30 (Cleanup orphan document references)
   'cleanup-orchestrator-state': '45 6 * * *',   // Daily at 06:45 (Cleanup stale orchestrator records)
-  // 🆕 Diploma Re-Verification (signature_valid → verified_duo)
+  // Diploma Re-Verification (signature_valid → verified_duo)
   'reverify-diploma-signatures': '0 1 * * 0',   // Weekly Sunday 01:00 (Re-verify signature_valid diplomas)
-  // 🆕 Security Penetration Testing
+  // Security Penetration Testing
   'webhook-security-tester': '0 2 * * *',       // Daily at 02:00 UTC (Automated security scan)
   // Note: continuous-learner (Loop 1) runs via database trigger, not scheduler
 };

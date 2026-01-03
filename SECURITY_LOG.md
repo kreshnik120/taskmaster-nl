@@ -601,6 +601,34 @@ Alle 6 eerder geïgnoreerde findings blijven correct gemarkeerd:
 | 2026-01-03 | AI Security Agent | SECURITY_LOG.md uitgebreid met dashboard documentatie |
 | 2026-01-03 | AI Security Agent | Dagelijkse security scan toegevoegd aan master-scheduler (02:00 UTC) |
 | 2026-01-03 | AI Security Agent | DailySecuritySummary component geïmplementeerd voor AI Training dashboard |
+| 2026-01-03 | AI Security Agent | **Enterprise Cleanup Fase 1:** `test-webhook-receiver` edge function verwijderd (security risico) |
+| 2026-01-03 | AI Security Agent | **Enterprise Cleanup Fase 2:** Schedule conflict opgelost - `feedback-processor`, `process-system-events`, `ai-chat-health-monitor` verwijderd uit master-scheduler (duplicaat van config.toml) |
+| 2026-01-03 | AI Security Agent | **Enterprise Cleanup Fase 3:** Legacy backup tabellen verwijderd (`chat_messages_old_backup`, `ai_learning_events_backup_pre_nullable`) |
+| 2026-01-03 | AI Security Agent | **Enterprise Cleanup Fase 4:** `parseBeschikbaarheid` geconsolideerd naar `matchingService.ts`, `src/lib/parseBeschikbaarheid.ts` verwijderd |
+
+---
+
+## 🏢 Enterprise Cleanup Audit (2026-01-03)
+
+### Samenvatting
+
+Een diepgaande enterprise-level audit heeft 12 verbeterpunten geïdentificeerd en opgelost:
+
+| Fase | Actie | Impact |
+|------|-------|--------|
+| 1 | `test-webhook-receiver` verwijderd | Security risico geëlimineerd - publiek endpoint zonder JWT |
+| 2 | Schedule duplicaten opgelost | ~263 minder function calls/dag (287 → 24 voor feedback-processor) |
+| 3 | Backup tabellen gedropped | ~3-5 MB ruimte vrijgemaakt |
+| 4 | Code consolidatie | 1 definitieve `parseBeschikbaarheid` implementatie |
+
+### Behouden Items (Bewuste Keuze)
+
+| Item | Reden |
+|------|-------|
+| `professionals_public` view | Actieve security view voor PII filtering |
+| `chat_messages` view | Actieve interface naar ai_chat_messages |
+| `calculateSublocationMatchScore.ts` | Backward compatibility wrapper |
+| Shim edge functions (5x) | Backward compatibility voor externe integraties |
 
 ---
 
