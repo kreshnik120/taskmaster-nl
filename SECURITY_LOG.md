@@ -440,6 +440,146 @@ Alle 6 eerder geïgnoreerde findings blijven correct gemarkeerd:
 
 ---
 
+## 🖥️ Security Monitoring Dashboard
+
+### WebhookSecurityDashboard Component
+
+| Aspect | Details |
+|--------|---------|
+| **Locatie** | `src/components/AITraining/WebhookSecurityDashboard.tsx` |
+| **Toegang** | AI Training → Systeem Health tab |
+| **Doelgroep** | Alle ingelogde gebruikers (read-only), Admins (pentest triggeren) |
+
+**Features:**
+- **Endpoint Status Overzicht:** 4 webhook endpoints met real-time status (Beveiligd/Waarschuwing/Kwetsbaar)
+- **Security Metrics Grid:** Totaal endpoints, pass rate, vulnerabilities, laatste test datum
+- **Penetratietest Resultaten:** Per-test breakdown van 10 security tests
+- **Test Historie:** Laatste 5 penetratietests met datum/resultaat
+- **Admin Actie:** "Run Penetratietest" button (AdminOnly)
+
+**Gemonitorde Endpoints:**
+
+| Endpoint | Security Type | Beschrijving |
+|----------|---------------|--------------|
+| `process-application-email` | Svix Signature | Inbound email processing |
+| `handle-application-reply` | Svix Signature | Email reply handling |
+| `receive-external-application` | API Key + Rate Limit | External application intake |
+| `deploy-test-webhook` | HMAC-SHA256 | Deployment test callbacks |
+
+---
+
+### SecurityAlertBell Component
+
+| Aspect | Details |
+|--------|---------|
+| **Locatie** | `src/components/notifications/SecurityAlertBell.tsx` |
+| **Toegang** | Header (naast NotificationBell) |
+| **Doelgroep** | Alleen admin users |
+
+**Features:**
+- **Shield Icon:** Rode schildicoon in header
+- **Pulserende Badge:** Knippert bij kritieke alerts
+- **Badge Count:** Toont aantal ongelezen security alerts
+- **Popover Details:** Alert severity, titel, beschrijving, timestamp
+- **Quick Actions:** Markeer gelezen, navigeer naar Security Dashboard
+
+**Alert Types:**
+
+| Type | Icon | Trigger |
+|------|------|---------|
+| `security_alert_critical` | AlertTriangle (rood) | Penetratietest gefaald |
+| `security_alert_warning` | AlertTriangle (geel) | Specifieke vulnerability gedetecteerd |
+| `security_alert_info` | Shield (blauw) | Security scan voltooid |
+
+---
+
+### useSecurityAlerts Hook
+
+| Aspect | Details |
+|--------|---------|
+| **Locatie** | `src/hooks/useSecurityAlerts.ts` |
+| **Database Tabel** | `recruiter_notifications` |
+
+**Returned Values:**
+
+```typescript
+{
+  alerts: SecurityAlert[];      // Alle ongelezen security alerts
+  unreadCount: number;          // Totaal ongelezen
+  criticalCount: number;        // Kritieke alerts
+  warningCount: number;         // Warning alerts
+  isLoading: boolean;           // Loading state
+  isAdmin: boolean;             // User is admin
+  markAsRead: (id) => void;     // Markeer alert gelezen
+  markAllAsRead: () => void;    // Alles gelezen markeren
+  refetch: () => void;          // Handmatige refresh
+}
+```
+
+---
+
+### Alert Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SECURITY ALERT FLOW                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. Penetratietest Trigger                                      │
+│     └── Admin klikt "Run Penetratietest" in Dashboard           │
+│                        ↓                                        │
+│  2. webhook-security-tester Edge Function                       │
+│     ├── Voert 10 security tests uit                             │
+│     ├── Slaat resultaten op in system_events                    │
+│     └── Bij failures → stap 3                                   │
+│                        ↓                                        │
+│  3. Alert Generatie (in edge function)                          │
+│     ├── Haalt alle admin users op uit user_roles                │
+│     └── Maakt recruiter_notifications voor elke admin           │
+│                        ↓                                        │
+│  4. Real-time Notificatie                                       │
+│     ├── postgres_changes trigger                                │
+│     └── useSecurityAlerts hook refresht automatisch             │
+│                        ↓                                        │
+│  5. Admin Ziet Alert                                            │
+│     ├── SecurityAlertBell toont pulserende badge                │
+│     └── Popover toont alert details                             │
+│                        ↓                                        │
+│  6. Admin Actie                                                 │
+│     ├── Klikt "Bekijk Details" → navigeert naar Dashboard       │
+│     └── Markeert alert als gelezen                              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Admin Gebruikershandleiding
+
+**Stap 1: Security Dashboard Openen**
+1. Navigeer naar AI Training (zijbalk)
+2. Klik op "Systeem Health" tab
+3. Scroll naar "Webhook Security Status"
+
+**Stap 2: Security Status Controleren**
+- Bekijk de 4 KPI kaarten bovenaan (Endpoints, Pass Rate, Vulnerabilities, Laatste Test)
+- Check individuele endpoint statussen
+- Review test historie
+
+**Stap 3: Penetratietest Uitvoeren (Admin Only)**
+1. Klik op "Run Penetratietest" button
+2. Wacht tot test voltooid (10-30 seconden)
+3. Review resultaten in het dashboard
+4. Bij failures: ontvang automatisch alert in SecurityAlertBell
+
+**Stap 4: Security Alerts Beheren**
+1. Let op de rode shield icon in de header
+2. Klik voor popover met alert details
+3. Klik "Bekijk Security Dashboard" voor volledige details
+4. Markeer alerts als gelezen wanneer afgehandeld
+
+---
+
 ## 📝 Changelog
 
 | Datum | Auteur | Wijziging |
@@ -454,6 +594,11 @@ Alle 6 eerder geïgnoreerde findings blijven correct gemarkeerd:
 | 2026-01-03 | AI Security Agent | DEPLOY_WEBHOOK_SECRET geconfigureerd - webhook beveiliging volledig afgerond |
 | 2026-01-03 | AI Security Agent | Finale penetratietest - 10/10 tests geslaagd, 100% pass rate, 0 vulnerabilities |
 | 2026-01-03 | AI Security Agent | Post-hardening security scan - geen nieuwe issues, 0 regressies |
+| 2026-01-03 | AI Security Agent | WebhookSecurityDashboard component geïmplementeerd |
+| 2026-01-03 | AI Security Agent | SecurityAlertBell component geïmplementeerd |
+| 2026-01-03 | AI Security Agent | useSecurityAlerts hook aangemaakt |
+| 2026-01-03 | AI Security Agent | Real-time security alerts voor admin users |
+| 2026-01-03 | AI Security Agent | SECURITY_LOG.md uitgebreid met dashboard documentatie |
 
 ---
 
