@@ -5286,15 +5286,15 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
                               success: false, 
                               message: `❌ Fout bij zoeken professionals: ${searchError.message}` 
                             };
-                          } else if (!searchData.professionals || searchData.professionals.length === 0) {
+                          } else if (!searchData.results || searchData.results.length === 0) {
                             result = { 
                               success: false, 
                               message: `ℹ️ Geen professionals gevonden met deze filters. Probeer filters te verruimen of voeg eerst professionals toe via de Professionals pagina.` 
                             };
                           } else {
-                            const profList = searchData.professionals
+                            const profList = searchData.results
                               .map((p: any, i: number) => 
-                                `${i + 1}. **${p.full_name}** - ${p.functie_niveau}${p.regio ? ` (${p.regio})` : ''}${p.rating ? ` ⭐ ${p.rating.toFixed(1)}` : ''}`
+                                `${i + 1}. **${p.naam}** - ${p.functie || 'N/A'}${p.regio ? ` (${p.regio})` : ''}${p.match_score ? ` 📊 ${Math.round(p.match_score * 100)}%` : ''}`
                               )
                               .join('\n');
                             
@@ -5306,7 +5306,7 @@ KENNIS: ${fullKnowledgeBase.length} items | INSIGHTS: ${businessIntel.length}
                             
                             result = { 
                               success: true, 
-                              message: `✅ ${searchData.total_found} professionals gevonden${filterInfo.length > 0 ? ` (${filterInfo.join(', ')})` : ''}:\n\n${profList}` 
+                              message: `✅ ${searchData.count} professionals gevonden${filterInfo.length > 0 ? ` (${filterInfo.join(', ')})` : ''}:\n\n${profList}` 
                             };
                           }
                           break;
