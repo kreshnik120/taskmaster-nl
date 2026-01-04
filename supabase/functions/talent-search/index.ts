@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
       .from("professionals")
       .select(`
         id, full_name, email, telefoonnummer, functie_niveau, specialisaties,
-        regio, beschikbaarheid, jaren_ervaring, werkvorm, status
+        regio, beschikbaarheid_uren, jaren_ervaring, werkvorm, status
       `)
       .in("status", ["actief", "beschikbaar"])
       .is("deleted_at", null)
@@ -68,9 +68,7 @@ Deno.serve(async (req) => {
     if (params.min_ervaring) {
       profQuery = profQuery.gte("jaren_ervaring", params.min_ervaring);
     }
-    if (params.beschikbaarheid) {
-      profQuery = profQuery.eq("beschikbaarheid", params.beschikbaarheid);
-    }
+    // Note: beschikbaarheid filter removed - beschikbaarheid_uren is JSONB and requires complex querying
 
     const { data: professionals, error: profError } = await profQuery;
 
@@ -110,7 +108,7 @@ Deno.serve(async (req) => {
           functie: prof.functie_niveau,
           specialismen: prof.specialisaties,
           regio: prof.regio,
-          beschikbaarheid: prof.beschikbaarheid,
+          beschikbaarheid: prof.beschikbaarheid_uren ? 'Beschikbaar (zie details)' : undefined,
           jaren_ervaring: prof.jaren_ervaring,
           werkvorm: prof.werkvorm,
           source: 'professional',
