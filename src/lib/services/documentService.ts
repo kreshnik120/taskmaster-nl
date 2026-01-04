@@ -14,15 +14,28 @@ export interface DocumentConfig {
 }
 
 export const DOCUMENT_CONFIGS: Record<string, DocumentConfig> = {
+  // Basis documenten (alle werkvormen)
   cv: { type: 'cv', label: 'CV', category: 'basis', required: true, hasExpiry: false },
   vog: { type: 'vog', label: 'VOG', category: 'basis', required: true, hasExpiry: true, expiryMonths: 3 },
   diploma: { type: 'diploma', label: 'Diploma', category: 'basis', required: true, hasExpiry: false },
-  kvk_uittreksel: { type: 'kvk_uittreksel', label: 'KVK Uittreksel', category: 'zzp', required: true, hasExpiry: false },
+  
+  // ZZP verplichte documenten
+  kvk_uittreksel: { type: 'kvk_uittreksel', label: 'KVK Uittreksel', category: 'zzp', required: true, hasExpiry: true, expiryMonths: 3 },
   beroepsaansprakelijkheid: { type: 'beroepsaansprakelijkheid', label: 'Beroepsaansprakelijkheidsverzekering', category: 'zzp', required: true, hasExpiry: true, expiryMonths: 12 },
+  identiteitsbewijs: { type: 'identiteitsbewijs', label: 'Identiteitsbewijs', category: 'zzp', required: true, hasExpiry: true, expiryMonths: 120 },
+  klachtenportaal_wkkgz: { type: 'klachtenportaal_wkkgz', label: 'Klachtenportaal WKKGZ', category: 'zzp', required: true, hasExpiry: false },
+  
+  // ZZP optionele documenten
   bhv_certificaat: { type: 'bhv_certificaat', label: 'BHV Certificaat', category: 'zzp', required: false, hasExpiry: true, expiryMonths: 24 },
-  identiteitsbewijs: { type: 'identiteitsbewijs', label: 'Identiteitsbewijs', category: 'zzp', required: true, hasExpiry: false },
-  klachtenportaal_wkkgz: { type: 'klachtenportaal_wkkgz', label: 'Klachtenportaal WKKGZ', category: 'zzp', required: false, hasExpiry: false },
   tillift_certificaat: { type: 'tillift_certificaat', label: 'Tillift Certificaat', category: 'zzp', required: false, hasExpiry: true, expiryMonths: 24 },
+  
+  // BIG-geregistreerde beroepen
+  big_registratie: { type: 'big_registratie', label: 'BIG-registratie', category: 'certificaat', required: false, hasExpiry: true, expiryMonths: 60 },
+  
+  // Overige documenten
+  rijbewijs: { type: 'rijbewijs', label: 'Rijbewijs', category: 'overig', required: false, hasExpiry: true, expiryMonths: 120 },
+  referentie: { type: 'referentie', label: 'Referentie', category: 'overig', required: false, hasExpiry: false },
+  arbeidsovereenkomst: { type: 'arbeidsovereenkomst', label: 'Arbeidsovereenkomst', category: 'overig', required: false, hasExpiry: false },
 };
 
 export interface ApplicationDocument {

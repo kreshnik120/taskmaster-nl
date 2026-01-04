@@ -233,6 +233,84 @@ export function detectRoleFromQuestion(question: string): string {
   return 'Algemeen';
 }
 
+// ============================================
+// HR DOCUMENT REQUIREMENTS
+// ============================================
+
+export const HR_DOCUMENT_REQUIREMENTS = `
+## Document Vereisten per Werkvorm
+
+### Loondienst (Uitzendkracht)
+Verplichte documenten:
+- **VOG** (Verklaring Omtrent Gedrag) - maximaal 3 maanden oud
+- **Diploma/Certificaten** - passend bij functieniveau
+- **CV** - actueel en volledig
+
+### ZZP (Zelfstandige Zonder Personeel)
+Alle documenten van Loondienst PLUS:
+- **KvK Uittreksel** - maximaal 3 maanden oud
+- **Beroepsaansprakelijkheidsverzekering** - geldig bewijs
+- **WKKGZ Registratie** - klachtenportaal registratie
+- **Identiteitsbewijs** - paspoort of ID-kaart
+- **IBAN zakelijke rekening** - Nederlands formaat
+
+Optioneel maar aanbevolen:
+- BHV Certificaat (geldig 2 jaar)
+- Tillift Certificaat (bij fysieke zorg)
+
+### BIG-geregistreerde Beroepen
+Voor functies die BIG-registratie vereisen:
+- **BIG-nummer verificatie** - automatisch via BIG-register
+- **Herregistratie check** - 5-jaars cyclus controle
+
+### VOG Validiteit Regels
+- Maximum geldigheid: 3 maanden vanaf afgiftedatum
+- Bij "expiring_soon" (< 14 dagen): automatisch vernieuwingsverzoek
+- Bij "expired" (> 3 maanden): blokkeert plaatsing
+
+### Document Verificatie Methoden
+1. **VOG**: GAAV API (digitale handtekening validatie)
+2. **Diploma**: EMREX/DUO (directe verificatie)
+3. **KvK**: Browserless scraping (real-time status)
+4. **Fallback**: 4-eyes handmatige verificatie
+`;
+
+// ============================================
+// ZZP SPECIFIEKE VEREISTEN
+// ============================================
+
+export const ZZP_COMPLIANCE_REQUIREMENTS = `
+## ZZP Compliance Checklist
+
+### Verplichte Documenten
+| Document | Verificatie | Expiry |
+|----------|-------------|--------|
+| KvK Uittreksel | Browserless/handmatig | 3 maanden |
+| IBAN | NL-format check | Geen |
+| Bedrijfsnaam | KvK match | Geen |
+| Beroepsaansprakelijkheid | PDF aanwezig | 12 maanden |
+| WKKGZ Registratie | Registratie check | Geen |
+| Identiteitsbewijs | PDF aanwezig | Geldigheid ID |
+
+### Optionele Documenten
+| Document | Aanbevolen voor |
+|----------|-----------------|
+| BHV Certificaat | Alle zorgfuncties |
+| Tillift Certificaat | Fysieke zorg |
+
+### KvK Verificatie Stappen
+1. Upload KvK uittreksel (PDF)
+2. Automatische extractie KvK-nummer (8 cijfers)
+3. Browserless verificatie bij KvK.nl
+4. Status check: actief/non-actief
+5. Handmatige review bij afwijking
+
+### WKKGZ Vereisten
+- Registratie bij erkend klachtenportaal verplicht
+- Link naar klachtenportaal moet werkend zijn
+- Jaarlijkse controle door compliance team
+`;
+
 /**
  * Combineer alle instructies voor een volledig system prompt
  */
@@ -247,6 +325,10 @@ ${SEARCH_STRATEGY}
 ${UNCERTAINTY_HANDLING}
 
 ${QUALITY_GUIDELINES}
+
+${HR_DOCUMENT_REQUIREMENTS}
+
+${ZZP_COMPLIANCE_REQUIREMENTS}
 
 ${additionalContext || ''}
 
