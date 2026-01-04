@@ -75,6 +75,7 @@ const WERKVORMEN = [
   { value: "ZZP", label: "ZZP" },
   { value: "Uitzendkracht", label: "Uitzendkracht" },
   { value: "ABCito constructie", label: "ABCito constructie" },
+  { value: "Anders (vrije invoer)", label: "Anders (vrije invoer)" },
 ];
 
 const BESCHIKBAARHEDEN = [
@@ -132,6 +133,8 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
   const [extractedPhotoBase64, setExtractedPhotoBase64] = useState<string | null>(null);
   const [customFunctieNiveau, setCustomFunctieNiveau] = useState("");
   const [showCustomFunctieInput, setShowCustomFunctieInput] = useState(false);
+  const [customWerkvorm, setCustomWerkvorm] = useState("");
+  const [showCustomWerkvormInput, setShowCustomWerkvormInput] = useState(false);
 
   // Helper to extract value from {value, confidence} or plain value (backwards compatible)
   const getFieldValue = <T,>(field: T | { value: T; confidence: number } | null | undefined): T | null => {
@@ -726,6 +729,8 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
     setCurrentStep(0);
     setCustomFunctieNiveau("");
     setShowCustomFunctieInput(false);
+    setCustomWerkvorm("");
+    setShowCustomWerkvormInput(false);
   };
 
   return (
@@ -1304,8 +1309,18 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                       </Badge>
                     </div>
                     <Select 
-                      value={watch("werkvorm") || ""} 
-                      onValueChange={(value) => setValue("werkvorm", value)}
+                      value={showCustomWerkvormInput ? "Anders (vrije invoer)" : (watch("werkvorm") || "")} 
+                      onValueChange={(value) => {
+                        if (value === "Anders (vrije invoer)") {
+                          setShowCustomWerkvormInput(true);
+                          setCustomWerkvorm("");
+                          setValue("werkvorm", "");
+                        } else {
+                          setShowCustomWerkvormInput(false);
+                          setCustomWerkvorm("");
+                          setValue("werkvorm", value);
+                        }
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecteer werkvorm" />
@@ -1318,6 +1333,21 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                         ))}
                       </SelectContent>
                     </Select>
+                    {showCustomWerkvormInput && (
+                      <div className="mt-2">
+                        <Input
+                          placeholder="Voer werkvorm in (bijv. Payroll, Detachering)"
+                          value={customWerkvorm}
+                          onChange={(e) => {
+                            setCustomWerkvorm(e.target.value);
+                            setValue("werkvorm", e.target.value);
+                          }}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Onbekende werkvormen worden opgeslagen voor analyse
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
