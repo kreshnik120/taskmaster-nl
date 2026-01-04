@@ -85,6 +85,27 @@ function matchesCron(cronExpr: string, now: Date): boolean {
   return true;
 }
 
+/**
+ * Enhanced cron matcher with grace period for catching jobs that might be missed
+ * due to scheduler timing. Checks if cron expression matches any minute in the 
+ * past `graceMinutes` window.
+ * 
+ * This prevents daily/hourly jobs from being missed when scheduler runs at :00, :05, etc.
+ * and cron is scheduled for e.g. :01 or :03.
+ */
+function matchesCronWithGrace(cronExpr: string, now: Date, graceMinutes: number = 5): boolean {
+  // First check exact match (most common case)
+  if (matchesCron(cronExpr, now)) return true;
+  
+  // Check previous minutes within grace window
+  for (let i = 1; i <= graceMinutes; i++) {
+    const checkTime = new Date(now.getTime() - i * 60000);
+    if (matchesCron(cronExpr, checkTime)) return true;
+  }
+  
+  return false;
+}
+
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
@@ -97,11 +118,11 @@ Deno.serve(async (req) => {
   try {
     const supabase = createAdminClient();
 
-    // Find functions that should run now
+    // Find functions that should run now (with 5-minute grace period to catch missed jobs)
     const functionsToTrigger: string[] = [];
     
     for (const [functionName, cronExpr] of Object.entries(SCHEDULES)) {
-      if (matchesCron(cronExpr, now)) {
+      if (matchesCronWithGrace(cronExpr, now, 5)) {
         functionsToTrigger.push(functionName);
       }
     }
