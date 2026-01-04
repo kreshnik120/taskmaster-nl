@@ -32,15 +32,15 @@ export const FeedbackButton = ({ messageId, messageContent, context }: FeedbackB
     
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('process-feedback', {
+      // Invoke unified-learner directly for feedback processing
+      const { data, error } = await supabase.functions.invoke('unified-learner', {
         body: {
+          action: 'process_feedback',
           messageId,
-          feedback: type,
-          context: {
-            message: messageContent,
-            usedKnowledge: context?.knowledge_ids_for_feedback || [],
-            ...context
-          }
+          feedback_type: type === 'positive' ? 'helpful' : 'harmful',
+          message_context: messageContent,
+          knowledge_ids: context?.knowledge_ids_for_feedback || [],
+          ...context
         }
       });
 

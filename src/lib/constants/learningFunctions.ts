@@ -29,19 +29,13 @@ export interface LearningFunction {
 }
 
 // Learning functions - consolidated after shim migration
-// Removed: feedback-processor, continuous-learner, learn-from-pipeline, retroactive-training-evaluator (now unified-learner shims)
+// Removed: feedback-processor, continuous-learner, learn-from-pipeline, retroactive-training-evaluator, process-feedback (all migrated to unified-learner)
 export const LEARNING_FUNCTIONS: LearningFunction[] = [
   { 
     name: 'unified-learner', 
     displayName: 'Unified Learner',
     icon: Brain,
     description: 'Centrale learning engine - verwerkt chat analyse, pipeline learning, feedback en retroactive scans'
-  },
-  { 
-    name: 'process-feedback', 
-    displayName: 'Process Feedback',
-    icon: MessageSquare,
-    description: 'Verwerkt gebruikersfeedback met Fast Path logica voor pattern confidence'
   },
   { 
     name: 'knowledge-graph-builder', 
