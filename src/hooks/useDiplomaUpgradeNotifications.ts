@@ -33,61 +33,76 @@ export function useDiplomaUpgradeNotifications(
   const notifiedIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    console.log('[useDiplomaUpgradeNotifications] Setting up realtime subscription');
+    let channel: ReturnType<typeof supabase.channel> | null = null;
     
-    const channel = supabase
-      .channel('diploma-upgrade-notifications')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'recruiter_notifications',
-          filter: 'notification_type=eq.diploma_upgrade'
-        },
-        async (payload) => {
-          const notification = payload.new as DiplomaUpgradeNotification;
-          console.log('[useDiplomaUpgradeNotifications] Received notification:', notification);
-          
-          // Prevent duplicate notifications in same session
-          if (notifiedIds.current.has(notification.id)) {
-            console.log('[useDiplomaUpgradeNotifications] Duplicate notification, skipping');
-            return;
-          }
-          notifiedIds.current.add(notification.id);
-          
-          // Fire confetti celebration effect
-          confetti({
-            particleCount: 100,
-            spread: 70,
-            origin: { y: 0.6 },
-            colors: ['#10b981', '#34d399', '#6ee7b7', '#fbbf24', '#f59e0b'],
-          });
-          
-          // Show toast notification
-          const candidateName = notification.metadata?.candidate_name || 'Kandidaat';
-          
-          toast.success('🎓 Diploma Geverifieerd door DUO!', {
-            description: `Het diploma van ${candidateName} is succesvol geüpgraded naar verified_duo (100% betrouwbaar)`,
-            duration: 12000,
-            action: notification.application_id && onApplicationClick ? {
-              label: "Bekijk",
-              onClick: () => {
-                if (notification.application_id) {
-                  onApplicationClick(notification.application_id);
+    const checkAndSubscribe = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        console.debug('[useDiplomaUpgradeNotifications] No auth session, skipping subscription');
+        return;
+      }
+      
+      console.log('[useDiplomaUpgradeNotifications] Setting up realtime subscription');
+      
+      channel = supabase
+        .channel('diploma-upgrade-notifications')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'recruiter_notifications',
+            filter: 'notification_type=eq.diploma_upgrade'
+          },
+          async (payload) => {
+            const notification = payload.new as DiplomaUpgradeNotification;
+            console.log('[useDiplomaUpgradeNotifications] Received notification:', notification);
+            
+            // Prevent duplicate notifications in same session
+            if (notifiedIds.current.has(notification.id)) {
+              console.log('[useDiplomaUpgradeNotifications] Duplicate notification, skipping');
+              return;
+            }
+            notifiedIds.current.add(notification.id);
+            
+            // Fire confetti celebration effect
+            confetti({
+              particleCount: 100,
+              spread: 70,
+              origin: { y: 0.6 },
+              colors: ['#10b981', '#34d399', '#6ee7b7', '#fbbf24', '#f59e0b'],
+            });
+            
+            // Show toast notification
+            const candidateName = notification.metadata?.candidate_name || 'Kandidaat';
+            
+            toast.success('🎓 Diploma Geverifieerd door DUO!', {
+              description: `Het diploma van ${candidateName} is succesvol geüpgraded naar verified_duo (100% betrouwbaar)`,
+              duration: 12000,
+              action: notification.application_id && onApplicationClick ? {
+                label: "Bekijk",
+                onClick: () => {
+                  if (notification.application_id) {
+                    onApplicationClick(notification.application_id);
+                  }
                 }
-              }
-            } : undefined,
-          });
-        }
-      )
-      .subscribe((status) => {
-        console.log('[useDiplomaUpgradeNotifications] Subscription status:', status);
-      });
+              } : undefined,
+            });
+          }
+        )
+        .subscribe((status) => {
+          console.log('[useDiplomaUpgradeNotifications] Subscription status:', status);
+        });
+    };
+    
+    checkAndSubscribe();
 
     return () => {
-      console.log('[useDiplomaUpgradeNotifications] Cleaning up subscription');
-      supabase.removeChannel(channel);
+      if (channel) {
+        console.log('[useDiplomaUpgradeNotifications] Cleaning up subscription');
+        supabase.removeChannel(channel);
+      }
     };
   }, [onApplicationClick]);
 }
