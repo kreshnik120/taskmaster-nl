@@ -14,7 +14,7 @@ interface RecruitmentAnalyticsProps {
 
 export function RecruitmentAnalytics({ applications }: RecruitmentAnalyticsProps) {
   // Conversion rates per stage
-  const stageOrder = ["nieuw", "screening", "interview", "goedgekeurd", "geplaatst"];
+  const stageOrder = ["nieuw", "intake_verstuurd", "screening", "interview", "goedgekeurd", "geplaatst"];
   
   const getStageCount = (stage: string) => {
     return applications.filter(app => app.pipeline_stage === stage).length;
@@ -62,6 +62,7 @@ export function RecruitmentAnalytics({ applications }: RecruitmentAnalyticsProps
 
   const stageNames: Record<string, string> = {
     nieuw: "Nieuw",
+    intake_verstuurd: "Intake Verstuurd",
     screening: "Screening",
     interview: "Interview",
     goedgekeurd: "Goedgekeurd",
