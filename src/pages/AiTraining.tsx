@@ -48,6 +48,7 @@ import { ResendInboundSetup } from "@/components/AITraining/ResendInboundSetup";
 import { EmailReplyTestPanel } from "@/components/AITraining/EmailReplyTestPanel";
 import { AIChatTestDashboard } from "@/components/AITraining/AIChatTestDashboard";
 import { PatternOptimizationMonitor } from "@/components/AITraining/PatternOptimizationMonitor";
+import { FunctieNiveauLearningDashboard } from "@/components/AITraining/FunctieNiveauLearningDashboard";
 import { ErrorSimulationTest } from "@/components/AITraining/ErrorSimulationTest";
 import { DiplomaReverificationWidget } from "@/components/AITraining/DiplomaReverificationWidget";
 import { CircuitBreakerDashboard } from "@/components/AITraining/CircuitBreakerDashboard";
@@ -234,6 +235,7 @@ const AiTraining = () => {
                       <CircuitBreakerDashboard />
                       <DiplomaReverificationWidget />
                       <PatternOptimizationMonitor />
+                      <FunctieNiveauLearningDashboard />
                       <ErrorSimulationTest />
                       <LearningDashboard />
                       <SystemHealthDashboard />
