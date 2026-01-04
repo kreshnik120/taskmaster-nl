@@ -1,14 +1,10 @@
 // Master Scheduler - central cron job orchestration
-// Version 2.1.0 - Shim Cleanup (removed retroactive-training-evaluator - now handled by config.toml → unified-learner)
+// Version 2.2.0 - Cache Warming + Enterprise Monitoring
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const VERSION = '2.1.0-shim-cleanup';
+const VERSION = '2.2.0-enterprise';
 
-// Active scheduled functions (12 schedules - removed shim functions that now use config.toml → unified-learner)
-// REMOVED: feedback-processor (config.toml schedule → unified-learner)
-// REMOVED: process-system-events (config.toml schedule)
-// REMOVED: ai-chat-health-monitor (config.toml schedule)
-// REMOVED: retroactive-training-evaluator (config.toml schedule → unified-learner) - was duplicate!
+// Active scheduled functions (14 schedules - added cache warming)
 const SCHEDULES = {
   'auto-resolve-alerts': '*/30 * * * *',        // Every 30 minutes (ACE Alert Resolution)
   'smart-deduplicator': '30 * * * *',           // Every hour at :30 (Learning Loop 5)
@@ -29,8 +25,8 @@ const SCHEDULES = {
   'reverify-diploma-signatures': '0 1 * * 0',   // Weekly Sunday 01:00 (Re-verify signature_valid diplomas)
   // Security Penetration Testing
   'webhook-security-tester': '0 2 * * *',       // Daily at 02:00 UTC (Automated security scan)
-  // Note: Learning functions (continuous-learner, feedback-processor, learn-from-pipeline, retroactive-training-evaluator)
-  // are now migrated to unified-learner and scheduled via config.toml
+  // Cache Management (NEW in v2.2.0)
+  'cache-warmer': '0 */2 * * *',                // Every 2 hours (Refresh expiring cache entries)
 };
 
 // Simple cron expression matcher (minute hour dayOfMonth month dayOfWeek)

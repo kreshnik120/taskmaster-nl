@@ -1,9 +1,29 @@
 # 🔒 Security Hardening Log
 
 **Platform:** ABCzorg/CitoZorg Recruitment Platform  
-**Laatste Update:** 2026-01-03  
+**Laatste Update:** 2026-01-04  
 **Verantwoordelijke:** AI Security Agent  
 **Status:** ✅ Alle kritieke issues opgelost
+
+---
+
+## 🛡️ Enterprise Niveau Hardening - 2026-01-04
+
+### Auth Configuratie Update
+
+| Setting | Oude Waarde | Nieuwe Waarde | Datum |
+|---------|-------------|---------------|-------|
+| Auto Confirm Email | ✅ Enabled | ✅ Enabled | 2026-01-04 |
+| Disable Signup | ❌ Disabled | ❌ Disabled | 2026-01-04 |
+| Anonymous Users | ❌ Disabled | ❌ Disabled | 2026-01-04 |
+
+### Openstaande Handmatige Actie
+
+| Item | Prioriteit | Actie | Status |
+|------|------------|-------|--------|
+| **Leaked Password Protection** | 🟠 Medium | Backend → Auth Settings → Security → Enable "Check passwords against breach databases" | ⏳ In Afwachting |
+
+**Rationale:** Leaked Password Protection is een Supabase Auth setting die niet via API geconfigureerd kan worden. Deze moet handmatig worden ingeschakeld via de backend settings.
 
 ---
 
