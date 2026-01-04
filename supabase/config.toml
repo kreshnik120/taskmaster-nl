@@ -440,3 +440,13 @@ verify_jwt = false
 # Purpose: Enterprise professional search with fallback to applications and deduplication
 # Features: Search by functie, regio, beschikbaarheid, specialismen, werkvorm
 # Fallback: If professionals table empty, searches professional_applications
+
+# -----------------------------------------------------------------------------
+# CACHE MANAGEMENT
+# -----------------------------------------------------------------------------
+
+[functions.cache-warmer]
+verify_jwt = false
+schedule = "0 */2 * * *"
+# Purpose: Proactively refresh expiring cache entries (every 2 hours)
+# Benefits: Prevents cache miss storms, maintains response latency
