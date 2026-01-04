@@ -25,6 +25,12 @@
 
 **Rationale:** Leaked Password Protection is een Supabase Auth setting die niet via API geconfigureerd kan worden. Deze moet handmatig worden ingeschakeld via de backend settings.
 
+> **💡 Instructie voor Admin:**  
+> 1. Open de Lovable Cloud backend via onderstaande knop  
+> 2. Navigeer naar **Auth → Providers → Email → Security Settings**  
+> 3. Schakel "Check passwords against HaveIBeenPwned database" in  
+> 4. Sla de wijziging op en update de status hieronder naar ✅ Voltooid
+
 ---
 
 ## 📊 Executive Summary
