@@ -17,11 +17,13 @@ interface Suggestion {
     suggested_target?: string;
     target?: string;
     occurrences?: number;
+    occurrence_count?: number;
     confidence?: number;
     similarity_score?: number;
   };
   confidence_score: number | null;
-  requires_verification: boolean | null;
+  needs_review: boolean | null;
+  occurrence_count: number | null;
   created_at: string | null;
 }
 
@@ -35,7 +37,7 @@ export function FunctieNiveauLearningDashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("ai_knowledge_base")
-        .select("id, key, value, confidence_score, requires_verification, created_at")
+        .select("id, key, value, confidence_score, needs_review, occurrence_count, created_at")
         .eq("category", "functie_niveau_mapping_suggestion")
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
@@ -83,8 +85,9 @@ export function FunctieNiveauLearningDashboard() {
       const { error } = await supabase
         .from("ai_knowledge_base")
         .update({
-          requires_verification: false,
+          needs_review: false,
           confidence_score: 0.95,
+          validation_status: 'verified',
           last_reviewed_at: new Date().toISOString(),
         })
         .eq("id", id);
@@ -106,6 +109,7 @@ export function FunctieNiveauLearningDashboard() {
       const { error } = await supabase
         .from("ai_knowledge_base")
         .update({
+          needs_review: false,
           deleted_at: new Date().toISOString(),
           deletion_reason: { rejected: true, reason: "Manual rejection by user" },
         })
@@ -137,7 +141,7 @@ export function FunctieNiveauLearningDashboard() {
     }
   };
 
-  const pendingReview = suggestions?.filter((s) => s.requires_verification) || [];
+  const pendingReview = suggestions?.filter((s) => s.needs_review) || [];
   const autoPromoted = learnedMappings?.length || 0;
   const lastRun = functionLogs?.[0]?.created_at;
 
@@ -243,7 +247,7 @@ export function FunctieNiveauLearningDashboard() {
                         {((suggestion.confidence_score || 0) * 100).toFixed(0)}%
                       </Badge>
                     </TableCell>
-                    <TableCell>{suggestion.value?.occurrences || 1}</TableCell>
+                    <TableCell>{suggestion.occurrence_count || suggestion.value?.occurrence_count || suggestion.value?.occurrences || 1}</TableCell>
                     <TableCell className="text-right space-x-2">
                       <Button
                         size="sm"
