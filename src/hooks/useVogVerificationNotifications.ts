@@ -34,66 +34,81 @@ export function useVogVerificationNotifications(
   const notifiedIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    console.log('[useVogVerificationNotifications] Setting up realtime subscription');
+    let channel: ReturnType<typeof supabase.channel> | null = null;
     
-    const channel = supabase
-      .channel('vog-verification-notifications')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'recruiter_notifications',
-          filter: 'notification_type=eq.vog_verified'
-        },
-        async (payload) => {
-          const notification = payload.new as VogVerificationNotification;
-          console.log('[useVogVerificationNotifications] Received notification:', notification);
-          
-          // Prevent duplicate notifications in same session
-          if (notifiedIds.current.has(notification.id)) {
-            console.log('[useVogVerificationNotifications] Duplicate notification, skipping');
-            return;
-          }
-          notifiedIds.current.add(notification.id);
-          
-          // Fire confetti celebration effect with VOG-themed colors (blue/green)
-          confetti({
-            particleCount: 100,
-            spread: 70,
-            origin: { y: 0.6 },
-            colors: ['#0ea5e9', '#06b6d4', '#22d3ee', '#10b981', '#34d399'],
-          });
-          
-          // Show toast notification
-          const candidateName = notification.metadata?.candidate_name || 'Kandidaat';
-          const daysRemaining = notification.metadata?.days_remaining;
-          
-          const description = daysRemaining 
-            ? `De VOG van ${candidateName} is authentiek en geldig (nog ${daysRemaining} dagen)`
-            : `De VOG van ${candidateName} is succesvol geverifieerd via GAAV`;
-          
-          toast.success('📜 VOG Geverifieerd via GAAV!', {
-            description,
-            duration: 12000,
-            action: notification.application_id && onApplicationClick ? {
-              label: "Bekijk",
-              onClick: () => {
-                if (notification.application_id) {
-                  onApplicationClick(notification.application_id);
+    const checkAndSubscribe = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        console.debug('[useVogVerificationNotifications] No auth session, skipping subscription');
+        return;
+      }
+      
+      console.log('[useVogVerificationNotifications] Setting up realtime subscription');
+      
+      channel = supabase
+        .channel('vog-verification-notifications')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'recruiter_notifications',
+            filter: 'notification_type=eq.vog_verified'
+          },
+          async (payload) => {
+            const notification = payload.new as VogVerificationNotification;
+            console.log('[useVogVerificationNotifications] Received notification:', notification);
+            
+            // Prevent duplicate notifications in same session
+            if (notifiedIds.current.has(notification.id)) {
+              console.log('[useVogVerificationNotifications] Duplicate notification, skipping');
+              return;
+            }
+            notifiedIds.current.add(notification.id);
+            
+            // Fire confetti celebration effect with VOG-themed colors (blue/green)
+            confetti({
+              particleCount: 100,
+              spread: 70,
+              origin: { y: 0.6 },
+              colors: ['#0ea5e9', '#06b6d4', '#22d3ee', '#10b981', '#34d399'],
+            });
+            
+            // Show toast notification
+            const candidateName = notification.metadata?.candidate_name || 'Kandidaat';
+            const daysRemaining = notification.metadata?.days_remaining;
+            
+            const description = daysRemaining 
+              ? `De VOG van ${candidateName} is authentiek en geldig (nog ${daysRemaining} dagen)`
+              : `De VOG van ${candidateName} is succesvol geverifieerd via GAAV`;
+            
+            toast.success('📜 VOG Geverifieerd via GAAV!', {
+              description,
+              duration: 12000,
+              action: notification.application_id && onApplicationClick ? {
+                label: "Bekijk",
+                onClick: () => {
+                  if (notification.application_id) {
+                    onApplicationClick(notification.application_id);
+                  }
                 }
-              }
-            } : undefined,
-          });
-        }
-      )
-      .subscribe((status) => {
-        console.log('[useVogVerificationNotifications] Subscription status:', status);
-      });
+              } : undefined,
+            });
+          }
+        )
+        .subscribe((status) => {
+          console.log('[useVogVerificationNotifications] Subscription status:', status);
+        });
+    };
+    
+    checkAndSubscribe();
 
     return () => {
-      console.log('[useVogVerificationNotifications] Cleaning up subscription');
-      supabase.removeChannel(channel);
+      if (channel) {
+        console.log('[useVogVerificationNotifications] Cleaning up subscription');
+        supabase.removeChannel(channel);
+      }
     };
   }, [onApplicationClick]);
 }
