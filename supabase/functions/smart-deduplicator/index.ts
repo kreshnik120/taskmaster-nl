@@ -3,14 +3,15 @@ import { softDeleteKnowledge } from '../_shared/knowledge-crud.ts';
 
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
-// Configuration - Optimized for speed
+// Configuration - Optimized to prevent timeouts
 const CONFIG = {
-  MAX_ITEMS_PER_RUN: 50,          // Max items to process per run (was unlimited)
-  BATCH_SIZE: 20,                  // Items per AI call (was 10)
-  DELAY_BETWEEN_BATCHES_MS: 200,   // Delay between batches (was 1000)
+  MAX_ITEMS_PER_RUN: 25,           // Reduced to prevent timeout (was 50)
+  BATCH_SIZE: 10,                  // Reduced batch size (was 20)
+  DELAY_BETWEEN_BATCHES_MS: 100,   // Reduced delay for faster processing
   MIN_CATEGORY_SIZE: 5,            // Skip categories with fewer items
   MIN_USAGE_PROTECTION: 3,         // Never delete items with usage >= this
   MIN_SIMILARITY_THRESHOLD: 0.8,   // Minimum similarity for merging
+  MAX_RUNTIME_MS: 45000,           // Max 45s to prevent 504 timeout
 };
 
 interface DeduplicatorState {
@@ -145,6 +146,12 @@ Deno.serve(async (req) => {
 
     // Process each category with new items
     for (const [category, items] of Object.entries(itemsByCategory)) {
+      // Timeout check - return partial results before edge function timeout
+      if (Date.now() - startTime > CONFIG.MAX_RUNTIME_MS) {
+        console.log(`⏱️ Approaching timeout limit - returning partial results`);
+        break;
+      }
+
       // Skip small categories - unlikely to have duplicates
       if (items.length < CONFIG.MIN_CATEGORY_SIZE) {
         console.log(`⏭️ Skipping category: ${category} (only ${items.length} items < ${CONFIG.MIN_CATEGORY_SIZE})`);

@@ -69,14 +69,11 @@ export const SystemMonitor = () => {
       // Edge function stats (last 24h)
       const { data: edgeData } = await supabase
         .from('function_call_logs')
-        .select('function_name, metadata')
-        .gte('executed_at', oneDayAgo);
+        .select('function_name, success, metadata')
+        .gte('created_at', oneDayAgo);
 
       const totalCalls = edgeData?.length || 0;
-      const successCalls = edgeData?.filter(e => {
-        const meta = e.metadata as Record<string, unknown> | null;
-        return !meta?.error;
-      }).length || 0;
+      const successCalls = edgeData?.filter(e => e.success === true).length || 0;
 
       setEdgeFunctionStats({
         success: successCalls,
