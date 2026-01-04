@@ -226,9 +226,8 @@ Deno.serve(async (req) => {
       specifieke_doelgroepen: extractedData.specifieke_doelgroepen || [],
       max_reisafstand_km: extractedData.max_reisafstand_km || null,
       specialisaties: extractedData.specialisaties || [],
-      // Document tracking
-      vog_date: extractedData.vog_date || null,
-      vog_file_path: extractedData.vog_file_path || null,
+      // Document tracking (vog_file_path stored in application_documents, not here)
+      vog_date: extractedData.vog_date || extractedData.vog_datum || null,
       // CV fields from application
       cv_file_path: application.cv_file_path || null,
       cv_file_name: application.cv_file_name || null,
