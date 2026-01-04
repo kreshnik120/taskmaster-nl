@@ -21,6 +21,7 @@ export function PipelineFunnelMini({ applications, onStageClick }: PipelineFunne
   // Calculate stage counts
   const stages = [
     { key: 'nieuw', label: 'Nieuw', color: 'bg-blue-500' },
+    { key: 'intake_verstuurd', label: 'Intake Verstuurd', color: 'bg-blue-400' },
     { key: 'screening', label: 'Screening', color: 'bg-purple-500' },
     { key: 'interview', label: 'Interview', color: 'bg-orange-500' },
     { key: 'goedgekeurd', label: 'Goedgekeurd', color: 'bg-green-500' },

@@ -72,8 +72,9 @@ interface Application {
 
 const PIPELINE_STAGES = [
   { id: "nieuw", name: "Nieuw", color: "", borderColor: "border-t-4 border-t-recruitment-nieuw", countColor: "text-recruitment-nieuw" },
-  { id: "interview", name: "Interview", color: "", borderColor: "border-t-4 border-t-recruitment-interview", countColor: "text-recruitment-interview" },
+  { id: "intake_verstuurd", name: "Intake Verstuurd", color: "", borderColor: "border-t-4 border-t-blue-400", countColor: "text-blue-500" },
   { id: "screening", name: "Screening", color: "", borderColor: "border-t-4 border-t-recruitment-screening", countColor: "text-recruitment-screening" },
+  { id: "interview", name: "Interview", color: "", borderColor: "border-t-4 border-t-recruitment-interview", countColor: "text-recruitment-interview" },
   { id: "goedgekeurd", name: "Goedgekeurd", color: "", borderColor: "border-t-4 border-t-recruitment-goedgekeurd", countColor: "text-recruitment-goedgekeurd" },
   { id: "geplaatst", name: "Geplaatst", color: "", borderColor: "border-t-4 border-t-recruitment-geplaatst", countColor: "text-recruitment-geplaatst" },
   { id: "afgewezen", name: "Afgewezen", color: "", borderColor: "border-t-4 border-t-recruitment-afgewezen", countColor: "text-recruitment-afgewezen" },
@@ -319,6 +320,7 @@ const Sollicitaties = () => {
     // Map pipeline_stage to status (using valid enum values from database constraint)
     const stageToStatus: Record<string, string> = {
       nieuw: "nieuw",
+      intake_verstuurd: "in_verwerking",
       screening: "in_verwerking",
       interview: "in_gesprek",
       goedgekeurd: "klaar_voor_review",

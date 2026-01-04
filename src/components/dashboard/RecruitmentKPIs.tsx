@@ -29,7 +29,7 @@ export function RecruitmentKPIs() {
           .gte("created_at", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
       ]);
 
-      const newApplications = applicationsRes.data?.filter(a => a.pipeline_stage === "nieuw").length || 0;
+      const newApplications = applicationsRes.data?.filter(a => a.pipeline_stage === "nieuw" || a.pipeline_stage === "intake_verstuurd").length || 0;
       
       return {
         newApplications,

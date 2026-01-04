@@ -33,19 +33,23 @@ export function UrgencyBanner({ applications, onViewDetails, onApplicationClick 
     app.pipeline_stage === 'interview'
   );
 
+  const intakeApps = applications.filter(app => 
+    app.pipeline_stage === 'intake_verstuurd'
+  );
+
   const staleApps = applications.filter(app => {
     const daysSinceUpdate = (Date.now() - new Date(app.updated_at).getTime()) / (1000 * 60 * 60 * 24);
     return daysSinceUpdate > 5 && app.pipeline_stage !== 'geplaatst';
   });
 
-  const totalUrgent = screeningApps.length + interviewApps.length + staleApps.length;
+  const totalUrgent = screeningApps.length + interviewApps.length + intakeApps.length + staleApps.length;
 
   if (totalUrgent === 0) {
     return null;
   }
 
   // Get first urgent application for avatar
-  const firstUrgentApp = interviewApps[0] || screeningApps[0] || staleApps[0];
+  const firstUrgentApp = intakeApps[0] || interviewApps[0] || screeningApps[0] || staleApps[0];
   const candidateName = firstUrgentApp ? resolveApplicationName({ extracted_data: firstUrgentApp.extracted_data, email_from: '' }) : 'Onbekend';
   
   const getInitials = (name: string) => {
@@ -58,6 +62,7 @@ export function UrgencyBanner({ applications, onViewDetails, onApplicationClick 
   };
 
   const urgencyItems = [];
+  if (intakeApps.length > 0) urgencyItems.push(`${intakeApps.length} wacht${intakeApps.length > 1 ? 'en' : ''} op reactie`);
   if (interviewApps.length > 0) urgencyItems.push(`${interviewApps.length} interview${interviewApps.length > 1 ? 's' : ''} te plannen`);
   if (screeningApps.length > 0) urgencyItems.push(`${screeningApps.length} screening${screeningApps.length > 1 ? 's' : ''}`);
   if (staleApps.length > 0) urgencyItems.push(`${staleApps.length} inactieve kandidaten`);
