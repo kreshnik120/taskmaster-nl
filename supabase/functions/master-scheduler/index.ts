@@ -1,11 +1,13 @@
 // Master Scheduler - central cron job orchestration
-// Version 2.2.0 - Cache Warming + Enterprise Monitoring
+// Version 2.3.0 - Professional Creation Chain Fix
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const VERSION = '2.2.0-enterprise';
+const VERSION = '2.3.0-enterprise';
 
-// Active scheduled functions (14 schedules - added cache warming)
+// Active scheduled functions (15 schedules - added process-system-events for professional creation)
 const SCHEDULES = {
+  // CRITICAL: Process system events for professional creation chain
+  'process-system-events': '*/5 * * * *',       // Every 5 minutes (Recruitment events & professional creation)
   'auto-resolve-alerts': '*/30 * * * *',        // Every 30 minutes (ACE Alert Resolution)
   'smart-deduplicator': '30 * * * *',           // Every hour at :30 (Learning Loop 5)
   'data-quality-auditor': '20 * * * *',         // Every hour at :20 (Learning Loop 4)
