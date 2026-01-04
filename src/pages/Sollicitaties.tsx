@@ -453,26 +453,15 @@ const Sollicitaties = () => {
         colors: ['#22c55e', '#16a34a', '#4ade80'],
       });
 
-      // Automatisch professional aanmaken of data synchroniseren
-      let professionalCreated = false;
+      // Professional creatie wordt afgehandeld via backend pipeline:
+      // DB trigger → process-system-events → create-professional-from-application
+      // Dit zorgt voor consistente functie_niveau normalisatie en AI learning
+      
+      // Sync data naar bestaand profiel indien aanwezig
       let dataSynced = false;
       let syncedFieldsCount = 0;
 
-      if (!application.professional_id && (application.completeness_score || 0) >= 80) {
-        // Nieuw profiel aanmaken
-        const { convertApplicationToProfessional } = await import("@/lib/convertApplicationToProfessional");
-        
-        const result = await convertApplicationToProfessional(application, {
-          showToast: false,
-          silent: true
-        });
-
-        if (result.success) {
-          professionalCreated = true;
-          application.professional_id = result.professionalId;
-        }
-      } else if (application.professional_id) {
-        // Sync data naar bestaand profiel
+      if (application.professional_id) {
         const { syncApplicationToProfessional } = await import("@/lib/syncApplicationToProfessional");
         
         const syncResult = await syncApplicationToProfessional(
@@ -487,15 +476,11 @@ const Sollicitaties = () => {
         }
       }
 
-      // Smart toast met acties (taken worden alleen aangemaakt via Acties tab)
       const candidateName = application.extracted_data?.naam || application.email_from;
       
-      let toastDescription = "Klaar voor matching. Gebruik Acties tab voor vervolgstappen.";
-      if (professionalCreated) {
-        toastDescription = "Professional profiel aangemaakt. Gebruik Acties tab voor vervolgstappen.";
-      } else if (dataSynced) {
-        toastDescription = `${syncedFieldsCount} veld${syncedFieldsCount > 1 ? 'en' : ''} bijgewerkt in professional profiel.`;
-      }
+      let toastDescription = application.professional_id 
+        ? (dataSynced ? `${syncedFieldsCount} veld${syncedFieldsCount > 1 ? 'en' : ''} bijgewerkt.` : "Klaar voor matching.")
+        : "Professional profiel wordt automatisch aangemaakt...";
       
       toast.success(`${candidateName} is goedgekeurd! 🎉`, {
         description: toastDescription,

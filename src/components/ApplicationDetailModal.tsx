@@ -30,7 +30,7 @@ import { nl } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState, useEffect, useRef } from "react";
-import { convertApplicationToProfessional } from "@/lib/convertApplicationToProfessional";
+// convertApplicationToProfessional removed - using backend edge function instead
 import { resolveApplicationName } from "@/lib/utils";
 import { ApplicationActivityTimeline } from "@/components/recruitment/ApplicationActivityTimeline";
 import { EmailTemplateSuggestions } from "@/components/recruitment/EmailTemplateSuggestions";
@@ -711,16 +711,35 @@ export function ApplicationDetailModal({
   const handleConvertToProfessional = async () => {
     setConvertingToProfessional(true);
     
-    const result = await convertApplicationToProfessional(application, { 
-      showToast: true,
-      silent: false 
-    });
-    
-    setConvertingToProfessional(false);
-    
-    if (result.success) {
-      onApplicationUpdated();
-      onOpenChange(false);
+    try {
+      // Use backend pipeline for consistent functie_niveau normalization and AI learning
+      const { data, error } = await supabase.functions.invoke('create-professional-from-application', {
+        body: { 
+          application_id: application.id, 
+          trigger_source: 'manual_conversion' 
+        }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.success) {
+        toast.success("Professional profiel aangemaakt", {
+          description: `${data.professional_name || 'Professional'} is toegevoegd aan het systeem.`,
+        });
+        onApplicationUpdated();
+        onOpenChange(false);
+      } else {
+        toast.error("Kon professional niet aanmaken", {
+          description: data?.error || "Onbekende fout",
+        });
+      }
+    } catch (err: any) {
+      console.error("Error converting to professional:", err);
+      toast.error("Fout bij aanmaken professional", {
+        description: err?.message || "Probeer het opnieuw",
+      });
+    } finally {
+      setConvertingToProfessional(false);
     }
   };
 
