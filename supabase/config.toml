@@ -187,9 +187,8 @@ verify_jwt = true
 verify_jwt = true
 # Purpose: Send reminder emails
 
-[functions.process-feedback]
-verify_jwt = true
-# Purpose: Process user feedback on AI responses
+# REMOVED: process-feedback - migrated to unified-learner (2026-01-04)
+# Frontend now calls unified-learner directly with action: 'process_feedback'
 
 [functions.rollback-knowledge]
 verify_jwt = true

@@ -98,19 +98,18 @@ export const MessageFeedback = ({
     setFeedback(type);
 
     try {
-      // 🆕 Include Fast Path metadata in feedback call
-      const { data, error } = await supabase.functions.invoke('process-feedback', {
+      // Invoke unified-learner directly for feedback processing
+      const { data, error } = await supabase.functions.invoke('unified-learner', {
         body: {
+          action: 'process_feedback',
           messageId: messageId,
-          feedback: type,
-          context: {
-            message: messageContent,
-            usedKnowledge: usedKnowledge || [],
-            // Fast Path specific fields
-            isFastPath: isFastPath,
-            fastPathLogId: fastPathLogId,
-            patternId: patternId
-          }
+          feedback_type: type === 'positive' ? 'helpful' : 'harmful',
+          message_context: messageContent,
+          knowledge_ids: usedKnowledge || [],
+          // Fast Path specific fields
+          isFastPath: isFastPath,
+          fastPathLogId: fastPathLogId,
+          patternId: patternId
         }
       });
 
