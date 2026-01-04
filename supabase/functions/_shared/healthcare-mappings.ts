@@ -389,7 +389,8 @@ export function recalculateMissingInfo(
  * Pipeline stage progression map
  */
 export const PIPELINE_STAGE_PROGRESSION: Record<string, string> = {
-  'nieuw': 'screening',
+  'nieuw': 'intake_verstuurd',
+  'intake_verstuurd': 'screening',
   'screening': 'interview',
   'interview': 'goedgekeurd',
   'goedgekeurd': 'geplaatst'
@@ -400,6 +401,100 @@ export const PIPELINE_STAGE_PROGRESSION: Record<string, string> = {
  */
 export function getNextPipelineStage(currentStage: string): string | null {
   return PIPELINE_STAGE_PROGRESSION[currentStage] || null;
+}
+
+// ============================================
+// STAGE COMPLIANCE GATES
+// ============================================
+
+/**
+ * Compliance gate configuration per pipeline stage
+ * Defines minimum requirements for stage transitions
+ */
+export interface StageComplianceGate {
+  minCompleteness: number;
+  requiredDocs: string[];
+  requiredFields: string[];
+}
+
+export const STAGE_COMPLIANCE_GATES: Record<string, StageComplianceGate> = {
+  'nieuw': {
+    minCompleteness: 0,
+    requiredDocs: [],
+    requiredFields: ['naam', 'email']
+  },
+  'intake_verstuurd': {
+    minCompleteness: 20,
+    requiredDocs: [],
+    requiredFields: ['naam', 'email']
+  },
+  'screening': {
+    minCompleteness: 30,
+    requiredDocs: [],
+    requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm']
+  },
+  'interview': {
+    minCompleteness: 70,
+    requiredDocs: ['cv'],
+    requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer']
+  },
+  'goedgekeurd': {
+    minCompleteness: 85,
+    requiredDocs: ['cv', 'diploma'],
+    requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer', 'beschikbaarheid']
+  },
+  'geplaatst': {
+    minCompleteness: 95,
+    requiredDocs: ['cv', 'diploma', 'vog'],
+    requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer', 'beschikbaarheid', 'diploma']
+  }
+} as const;
+
+/**
+ * Validates if a stage transition is allowed based on compliance gates
+ */
+export function validateStageTransition(
+  currentStage: string,
+  targetStage: string,
+  completenessScore: number,
+  presentDocs: string[],
+  presentFields: string[]
+): { allowed: boolean; blockers: string[] } {
+  const gate = STAGE_COMPLIANCE_GATES[targetStage];
+  if (!gate) {
+    return { allowed: true, blockers: [] };
+  }
+
+  const blockers: string[] = [];
+
+  // Check completeness
+  if (completenessScore < gate.minCompleteness) {
+    blockers.push(`Completeness score ${completenessScore}% is lager dan vereiste ${gate.minCompleteness}%`);
+  }
+
+  // Check required docs
+  const missingDocs = gate.requiredDocs.filter(doc => !presentDocs.includes(doc));
+  if (missingDocs.length > 0) {
+    blockers.push(`Ontbrekende documenten: ${missingDocs.join(', ')}`);
+  }
+
+  // Check required fields
+  const missingFields = gate.requiredFields.filter(field => !presentFields.includes(field));
+  if (missingFields.length > 0) {
+    blockers.push(`Ontbrekende velden: ${missingFields.join(', ')}`);
+  }
+
+  return {
+    allowed: blockers.length === 0,
+    blockers
+  };
+}
+
+/**
+ * Gets the compliance gate for a specific stage
+ */
+export function getStageComplianceGate(stage: string): StageComplianceGate | null {
+  return STAGE_COMPLIANCE_GATES[stage] || null;
 }
 
 // ============================================
