@@ -752,17 +752,17 @@ export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTr
               </Button>
 
               <Button
-                onClick={() => triggerValidationFunction('feedback-processor')}
-                disabled={triggeringFunction === 'feedback-processor'}
+                onClick={() => triggerValidationFunction('unified-learner')}
+                disabled={triggeringFunction === 'unified-learner'}
                 variant="outline"
                 className="w-full"
               >
-                {triggeringFunction === 'feedback-processor' ? (
+                {triggeringFunction === 'unified-learner' ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <RefreshCw className="mr-2 h-4 w-4" />
                 )}
-                Process Feedback
+                Unified Learner
               </Button>
 
               <Button
