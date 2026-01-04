@@ -264,7 +264,8 @@ Deno.serve(async (req) => {
     // =========================================================================
     await supabase.from('function_call_logs').insert({
       function_name: 'learn-functie-niveau-patterns',
-      duration_ms: duration,
+      org_id: ORG_IDS.CITOZORG,
+      execution_time_ms: duration,
       success: true,
       metadata: {
         version: VERSION,
@@ -300,7 +301,8 @@ Deno.serve(async (req) => {
       const supabase = createAdminClient();
       await supabase.from('function_call_logs').insert({
         function_name: 'learn-functie-niveau-patterns',
-        duration_ms: duration,
+        org_id: ORG_IDS.CITOZORG,
+        execution_time_ms: duration,
         success: false,
         error_message: error instanceof Error ? error.message : String(error),
         metadata: { version: VERSION },

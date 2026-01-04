@@ -129,7 +129,53 @@ export function normalizeFunctieNiveau(input: string | null | undefined): string
   if (normalized.includes('begeleid')) return 'Begeleider';
   if (normalized.includes('ggz')) return 'GGZ-agoog';
   
-// 5. Return null instead of original (prevents constraint violations)
+  // 5. Return null instead of original (prevents constraint violations)
+  return null;
+}
+
+/**
+ * Async version of normalizeFunctieNiveau that also checks learned mappings from database.
+ * Use this when database access is available and you want to leverage AI-learned patterns.
+ * 
+ * @param supabase - Supabase client passed from caller
+ * @param input - Raw functie_niveau string to normalize
+ * @returns Normalized functie_niveau or null if no match found
+ */
+export async function normalizeFunctieNiveauAsync(
+  supabase: any, // SupabaseClient type - passed from caller
+  input: string | null | undefined
+): Promise<string | null> {
+  // First try static normalization (fast path)
+  const staticResult = normalizeFunctieNiveau(input);
+  if (staticResult) return staticResult;
+  
+  if (!input) return null;
+  
+  const normalized = input.toLowerCase().trim();
+  
+  // Check learned mappings in database (slow path - only if static fails)
+  try {
+    const { data } = await supabase
+      .from('ai_knowledge_base')
+      .select('value')
+      .eq('category', 'functie_niveau_mapping_learned')
+      .gte('confidence_score', 0.85)
+      .is('deleted_at', null);
+    
+    for (const item of data || []) {
+      const rawValue = (item.value as any)?.raw_value?.toLowerCase()?.trim();
+      if (rawValue === normalized) {
+        const target = (item.value as any)?.target;
+        if (target) {
+          console.log(`[healthcare-mappings] Used learned mapping: "${input}" → "${target}"`);
+          return target;
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('[healthcare-mappings] Failed to check learned mappings:', error);
+  }
+  
   return null;
 }
 
