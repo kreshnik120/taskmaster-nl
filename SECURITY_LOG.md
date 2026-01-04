@@ -898,6 +898,21 @@ curl -X POST https://oelmsmcgryeoryhonexw.supabase.co/functions/v1/cleanup-test-
 5. Klik **Save**
 6. Update deze sectie met ✅ status en datum
 
+### Broken Source Repair - 4 januari 2026 21:00 UTC
+
+4 knowledge base items met 404-errors gerepareerd met werkende rijksoverheid.nl bronnen:
+
+| Item Key | Oude URL (404) | Nieuwe URL (Werkend) |
+|----------|----------------|---------------------|
+| `regionale_arbeidsmarktverschillen_impact` | /publicaties/2022/09/16/... | /documenten/rapporten/2022/09/16/integraal-zorgakkoord-samen-werken-aan-gezonde-zorg |
+| `wlz_scope_criteria` | /onderwerpen/wet-langdurige-zorg-wlz | /onderwerpen/verpleeghuizen-en-zorginstellingen/wet-langdurige-zorg-wlz |
+| `wet_toelating_terbeschikkingstelling_arbeidskrachten_wtta` | /onderwerpen/terbeschikkingstelling-van-arbeidskrachten-wtta | /onderwerpen/hervormingen-arbeidsmarkt/aanpak-missstanden-bij-uitzendbureaus-en-andere-uitleners |
+| `vws_voortgangsrapportage_programma_wozo_q2_2025` | /documenten/kamerstukken/2025/06/28/... | /documenten/kamerstukken/2024/12/20/kamerbrief-over-programma-wonen-ondersteuning-en-zorg-voor-ouderen |
+
+**BI Alert resolved:** `d65802c1-8733-48ea-8537-d32fe7a839f3`
+
+---
+
 ### Audit Trail
 
 | Datum | Actie | Auditor |
@@ -907,6 +922,7 @@ curl -X POST https://oelmsmcgryeoryhonexw.supabase.co/functions/v1/cleanup-test-
 | 2026-01-03 | Post-hardening verificatie scan | AI Security Agent |
 | 2026-01-04 | Enterprise optimization fixes | AI Security Agent |
 | 2026-01-04 | Compliance audit & documentatie | AI Security Agent |
+| 2026-01-04 | Broken Source Repair (4 items) | AI Security Agent |
 
 ---
 
