@@ -71,6 +71,69 @@ const werkvormMapping: Record<string, string> = {
   'beide': 'Beide'
 };
 
+// Map various functie_niveau input formats to valid database enum values
+const functieNiveauMapping: Record<string, string> = {
+  // Direct matches
+  'vig': 'VIG',
+  'hbo-v': 'HBO-V',
+  'hbo v': 'HBO-V',
+  'hbo verpleegkunde': 'HBO-V',
+  'verpleegkundige mbo': 'Verpleegkundige MBO',
+  'verpleegkundige (mbo)': 'Verpleegkundige (MBO)',
+  'helpende': 'Helpende',
+  'helpende 2': 'Helpende 2',
+  'begeleider': 'Begeleider',
+  'persoonlijk begeleider': 'Persoonlijk begeleider',
+  'ggz-agoog': 'GGZ-agoog',
+  'ggz agoog': 'GGZ-agoog',
+  'vp3': 'VP3',
+  'vp4': 'VP4',
+  // Common variations
+  'verpleegkundige niveau 3': 'VP3',
+  'verpleegkundige niveau 4': 'VP4',
+  'verpleegkundige n3': 'VP3',
+  'verpleegkundige n4': 'VP4',
+  'mbo verpleegkundige': 'Verpleegkundige MBO',
+  'verzorgende ig': 'VIG',
+  'verzorgende-ig': 'VIG',
+  'helpende niveau 2': 'Helpende 2',
+  'helpende plus': 'Helpende 2',
+};
+
+function normalizeFunctieNiveau(input: string | null | undefined): string | null {
+  if (!input) return null;
+  
+  const normalized = input.toLowerCase().trim();
+  
+  // Check direct mapping
+  if (functieNiveauMapping[normalized]) {
+    return functieNiveauMapping[normalized];
+  }
+  
+  // Check if input already matches valid enum (case-insensitive)
+  const validValues = ['VIG', 'HBO-V', 'Verpleegkundige MBO', 'Verpleegkundige (MBO)', 
+                       'Helpende', 'Helpende 2', 'Begeleider', 'Persoonlijk begeleider', 
+                       'GGZ-agoog', 'VP3', 'VP4'];
+  
+  for (const valid of validValues) {
+    if (valid.toLowerCase() === normalized) {
+      return valid;
+    }
+  }
+  
+  // Partial match fallbacks
+  if (normalized.includes('vig') || normalized.includes('verzorgend')) return 'VIG';
+  if (normalized.includes('hbo')) return 'HBO-V';
+  if (normalized.includes('niveau 4') || normalized.includes('n4')) return 'VP4';
+  if (normalized.includes('niveau 3') || normalized.includes('n3')) return 'VP3';
+  if (normalized.includes('helpend')) return 'Helpende';
+  if (normalized.includes('begeleid')) return 'Begeleider';
+  if (normalized.includes('ggz')) return 'GGZ-agoog';
+  
+  // Default to null if no match (will be handled by caller)
+  return null;
+}
+
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
@@ -121,8 +184,9 @@ Deno.serve(async (req) => {
       return errorResponse('Missing required field: naam', 400);
     }
 
-    // functie_niveau is important but we'll allow creation with a default if missing
-    const functieNiveau = extractedData.functie_niveau || 'Onbekend';
+    // functie_niveau must match database enum - normalize input
+    const rawFunctieNiveau = extractedData.functie_niveau || extractedData.functie || extractedData.niveau;
+    const functieNiveau = normalizeFunctieNiveau(rawFunctieNiveau);
 
     // =====================================================
     // STEP 3: Determine Organization
@@ -192,10 +256,11 @@ Deno.serve(async (req) => {
     const hasDiplomas = !!(extractedData.diploma_file_paths?.length > 0);
     const initialStatus = (hasVog && hasDiplomas) ? 'beschikbaar' : 'beschikbaar_pending_documents';
 
+    // Only set functie_niveau if we have a valid normalized value
     const professionalData = {
       org_id: orgId,
       full_name: extractedData.naam,
-      functie_niveau: functieNiveau,
+      functie_niveau: functieNiveau, // Will be null if not mappable to valid enum
       werkvorm: mappedWerkvorm,
       regio: extractedData.regio || null,
       provincie: bepaalProvincie(extractedData.regio),
