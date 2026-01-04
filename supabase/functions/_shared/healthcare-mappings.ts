@@ -16,51 +16,61 @@ export const ORG_IDS = {
 } as const;
 
 // ============================================
-// FUNCTIE NIVEAU MAPPING
+// FUNCTIE NIVEAU MAPPING - SINGLE SOURCE OF TRUTH
 // ============================================
 
 /**
  * Normalizes various representations of functie_niveau to exact database values.
- * The database constraint only accepts: VIG, VP3, VP4, HBO-V, Helpende 2
+ * This is the ONLY mapping used across all edge functions.
+ * 
+ * Valid database values: VIG, VP3, VP4, HBO-V, Helpende 2, Verpleegkundige MBO,
+ * Begeleider, Persoonlijk begeleider, GGZ-agoog
  */
-const FUNCTIE_NIVEAU_MAP: Record<string, string> = {
-  // VIG variations
+export const FUNCTIE_NIVEAU_MAP: Record<string, string> = {
+  // === VIG variations ===
   "verzorgende ig": "VIG",
   "verzorgende IG": "VIG",
   "vig": "VIG",
   "v.i.g": "VIG",
   "v.i.g.": "VIG",
+  "verzorgende-ig": "VIG",
   
-  // VP3 variations
+  // === VP3 variations ===
   "verzorgende niveau 3": "VP3",
   "verzorgende 3": "VP3",
   "vp3": "VP3",
   "niveau 3": "VP3",
+  "verpleegkundige niveau 3": "VP3",
+  "verpleegkundige n3": "VP3",
   
-  // VP4 variations  
+  // === VP4 variations ===
   "verzorgende niveau 4": "VP4",
   "verzorgende 4": "VP4",
   "vp4": "VP4",
   "niveau 4": "VP4",
+  "verpleegkundige niveau 4": "VP4",
+  "verpleegkundige n4": "VP4",
   
-  // HBO-V variations
+  // === HBO-V variations ===
   "hbo verpleegkundige": "HBO-V",
   "hbo-v": "HBO-V",
   "hbov": "HBO-V",
   "hbo v": "HBO-V",
   "verpleegkundige hbo": "HBO-V",
+  "hbo verpleegkunde": "HBO-V",
   
-  // Helpende 2 variations
+  // === Helpende 2 variations ===
   "helpende": "Helpende 2",
   "helpende 2": "Helpende 2",
   "helpende niveau 2": "Helpende 2",
   "helpende plus": "Helpende 2",
   
-  // MBO variations (map to VP4)
-  "verpleegkundige mbo": "VP4",
-  "mbo verpleegkundige": "VP4",
+  // === Verpleegkundige MBO variations ===
+  "verpleegkundige mbo": "Verpleegkundige MBO",
+  "mbo verpleegkundige": "Verpleegkundige MBO",
+  "verpleegkundige (mbo)": "Verpleegkundige MBO",
   
-  // Begeleider variations (keep as-is, expanded constraint)
+  // === Begeleider variations ===
   "begeleider": "Begeleider",
   "persoonlijk begeleider": "Persoonlijk begeleider",
   "ggz-agoog": "GGZ-agoog",
@@ -84,25 +94,43 @@ export const VALID_FUNCTIE_NIVEAUS = [
 
 /**
  * Normalizes a functie_niveau value to the exact database format.
- * Returns the original value if no mapping found.
+ * Returns null if no valid mapping found (safer than returning invalid input).
+ * 
+ * Includes partial match fallbacks for robustness.
  */
 export function normalizeFunctieNiveau(input: string | null | undefined): string | null {
   if (!input) return null;
   
   const normalized = input.toLowerCase().trim();
   
-  // Direct mapping
+  // 1. Direct mapping lookup
   if (FUNCTIE_NIVEAU_MAP[normalized]) {
     return FUNCTIE_NIVEAU_MAP[normalized];
   }
   
-  // Check if it's already a valid value
+  // 2. Check if it's already a valid value (case-sensitive match)
   if (VALID_FUNCTIE_NIVEAUS.includes(input as any)) {
     return input;
   }
   
-  // Return original if no mapping found
-  return input;
+  // 3. Case-insensitive valid value check
+  for (const valid of VALID_FUNCTIE_NIVEAUS) {
+    if (valid.toLowerCase() === normalized) {
+      return valid;
+    }
+  }
+  
+  // 4. Partial match fallbacks for robustness
+  if (normalized.includes('vig') || normalized.includes('verzorgend')) return 'VIG';
+  if (normalized.includes('hbo')) return 'HBO-V';
+  if (normalized.includes('niveau 4') || normalized.includes('n4')) return 'VP4';
+  if (normalized.includes('niveau 3') || normalized.includes('n3')) return 'VP3';
+  if (normalized.includes('helpend')) return 'Helpende 2';
+  if (normalized.includes('begeleid')) return 'Begeleider';
+  if (normalized.includes('ggz')) return 'GGZ-agoog';
+  
+  // 5. Return null instead of original (prevents constraint violations)
+  return null;
 }
 
 // ============================================
