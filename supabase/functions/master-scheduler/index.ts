@@ -1,10 +1,10 @@
 // Master Scheduler - central cron job orchestration
-// Version 2.4.0 - Functie Niveau AI Learning Loop
+// Version 2.5.0 - Werkvorm AI Learning Loop
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const VERSION = '2.4.0-enterprise';
+const VERSION = '2.5.0-enterprise';
 
-// Active scheduled functions (17 schedules - added functie niveau learning)
+// Active scheduled functions (19 schedules - added werkvorm learning)
 const SCHEDULES = {
   // CRITICAL: Process system events for professional creation chain
   'process-system-events': '*/5 * * * *',       // Every 5 minutes (Recruitment events & professional creation)
@@ -29,9 +29,12 @@ const SCHEDULES = {
   'webhook-security-tester': '0 2 * * *',       // Daily at 02:00 UTC (Automated security scan)
   // Cache Management
   'cache-warmer': '0 */2 * * *',                // Every 2 hours (Refresh expiring cache entries)
-  // Functie Niveau AI Learning (NEW in v2.4.0)
+  // Functie Niveau AI Learning
   'learn-functie-niveau-patterns': '0 4 * * *', // Daily at 04:00 UTC (Learn from unknown values)
   'apply-learned-functie-niveau': '15 4 * * *', // Daily at 04:15 UTC (Promote high-confidence suggestions)
+  // Werkvorm AI Learning (NEW in v2.5.0)
+  'learn-werkvorm-patterns': '30 4 * * *',      // Daily at 04:30 UTC (Learn from unknown werkvormen)
+  'apply-learned-werkvorm': '45 4 * * *',       // Daily at 04:45 UTC (Promote high-confidence werkvorm suggestions)
 };
 
 // Simple cron expression matcher (minute hour dayOfMonth month dayOfWeek)

@@ -233,7 +233,7 @@ export async function logFunctieNiveauUnknown(
  */
 export const VALID_WERKVORMEN = ['ZZP', 'Uitzendkracht', 'ABCito constructie'] as const;
 
-const WERKVORM_MAP: Record<string, string> = {
+export const WERKVORM_MAP: Record<string, string> = {
   'zzp': 'ZZP',
   'zzper': 'ZZP',
   'zzp\'er': 'ZZP',
@@ -265,7 +265,96 @@ export function normalizeWerkvorm(input: string | null | undefined): string | nu
     return input;
   }
   
-  return input;
+  return null; // Return null instead of original to prevent invalid values
+}
+
+/**
+ * Async version of normalizeWerkvorm that also checks learned mappings from database.
+ * Use this when database access is available and you want to leverage AI-learned patterns.
+ * 
+ * @param supabase - Supabase client passed from caller
+ * @param input - Raw werkvorm string to normalize
+ * @returns Normalized werkvorm or null if no match found
+ */
+export async function normalizeWerkvormAsync(
+  supabase: any,
+  input: string | null | undefined
+): Promise<string | null> {
+  // First try static normalization (fast path)
+  const staticResult = normalizeWerkvorm(input);
+  if (staticResult && VALID_WERKVORMEN.includes(staticResult as any)) return staticResult;
+  
+  if (!input) return null;
+  
+  const normalized = input.toLowerCase().trim();
+  
+  // Check learned mappings in database (slow path - only if static fails)
+  try {
+    const { data } = await supabase
+      .from('ai_knowledge_base')
+      .select('value')
+      .eq('category', 'werkvorm_mapping_learned')
+      .gte('confidence_score', 0.85)
+      .is('deleted_at', null);
+    
+    for (const item of data || []) {
+      const rawValue = (item.value as any)?.raw_value?.toLowerCase()?.trim();
+      if (rawValue === normalized) {
+        const target = (item.value as any)?.target;
+        if (target) {
+          console.log(`[healthcare-mappings] Used learned werkvorm mapping: "${input}" → "${target}"`);
+          return target;
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('[healthcare-mappings] Failed to check learned werkvorm mappings:', error);
+  }
+  
+  return null;
+}
+
+/**
+ * Log failed werkvorm normalization for AI learning.
+ * Creates a system_event that will be processed by learn-werkvorm-patterns.
+ * 
+ * @param supabase - Supabase client passed from caller
+ * @param rawValue - The raw werkvorm value that failed normalization
+ * @param context - Context including application_id (required), org_id, and source
+ */
+export async function logWerkvormUnknown(
+  supabase: any,
+  rawValue: string,
+  context: {
+    application_id: string;
+    org_id?: string;
+    source?: string;
+  }
+): Promise<void> {
+  // Skip garbage/too short values
+  if (!rawValue || rawValue.trim().length < 2) return;
+  
+  try {
+    await supabase.from('system_events').insert({
+      event_type: 'werkvorm_unknown',
+      entity_type: 'professional_application',
+      entity_id: context.application_id,
+      event_data: {
+        raw_value: rawValue,
+        normalized_attempt: rawValue.toLowerCase().trim(),
+      },
+      org_id: context.org_id || ORG_IDS.CITOZORG,
+      metadata: {
+        learning_eligible: true,
+        source: context.source || 'unknown',
+        timestamp: new Date().toISOString(),
+      },
+    });
+    console.log(`[Learning] Logged unknown werkvorm: "${rawValue}"`);
+  } catch (error) {
+    // Non-blocking - don't fail main operation if logging fails
+    console.warn('[healthcare-mappings] Failed to log unknown werkvorm:', error);
+  }
 }
 
 // ============================================
