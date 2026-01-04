@@ -1,5 +1,14 @@
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
-import { normalizeFunctieNiveau, normalizeFunctieNiveauAsync, normalizeWerkvorm, ORG_IDS, logFunctieNiveauUnknown } from '../_shared/healthcare-mappings.ts';
+import { 
+  normalizeFunctieNiveau, 
+  normalizeFunctieNiveauAsync, 
+  normalizeWerkvorm, 
+  normalizeWerkvormAsync,
+  ORG_IDS, 
+  logFunctieNiveauUnknown,
+  logWerkvormUnknown,
+  VALID_WERKVORMEN
+} from '../_shared/healthcare-mappings.ts';
 
 /**
  * Phase 3: Create Professional from Application
@@ -190,9 +199,25 @@ Deno.serve(async (req) => {
     }
 
     // =====================================================
-    // STEP 5: Create Professional Record
+    // STEP 5: Normalize Werkvorm with Learning Loop
     // =====================================================
-    const mappedWerkvorm = normalizeWerkvorm(extractedData.werkvorm);
+    const rawWerkvorm = extractedData.werkvorm;
+    let mappedWerkvorm = await normalizeWerkvormAsync(supabase, rawWerkvorm) 
+      || normalizeWerkvorm(rawWerkvorm);
+
+    // Log unknown werkvormen for AI learning feedback loop
+    if (!mappedWerkvorm && rawWerkvorm) {
+      await logWerkvormUnknown(supabase, rawWerkvorm, {
+        application_id,
+        org_id: application.org_id || ORG_IDS.CITOZORG,
+        source: 'create-professional-from-application',
+      });
+      console.warn(`⚠️ [Create Professional] Unknown werkvorm: "${rawWerkvorm}" - logged for AI learning`);
+    }
+
+    // =====================================================
+    // STEP 6: Create Professional Record
+    // =====================================================
 
     // Determine initial status: pending_documents if VOG/diplomas needed
     const hasVog = !!extractedData.vog_file_path || !!extractedData.vog_date;

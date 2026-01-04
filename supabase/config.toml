@@ -464,4 +464,19 @@ verify_jwt = false
 schedule = "15 4 * * *"
 # Purpose: Promote high-confidence functie_niveau suggestions to learned mappings (daily at 04:15 UTC)
 # Auto-promotes when confidence >= 0.85 and occurrences >= 3
-# Benefits: Prevents cache miss storms, maintains response latency
+
+# -----------------------------------------------------------------------------
+# WERKVORM AI LEARNING
+# -----------------------------------------------------------------------------
+
+[functions.learn-werkvorm-patterns]
+verify_jwt = false
+schedule = "30 4 * * *"
+# Purpose: Learn new werkvorm mappings from unknown values (daily at 04:30 UTC)
+# Aggregates werkvorm_unknown system_events, calculates similarity, creates suggestions in ai_knowledge_base
+
+[functions.apply-learned-werkvorm]
+verify_jwt = false
+schedule = "45 4 * * *"
+# Purpose: Promote high-confidence werkvorm suggestions to learned mappings (daily at 04:45 UTC)
+# Auto-promotes when confidence >= 0.85 and occurrences >= 3
