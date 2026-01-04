@@ -229,9 +229,9 @@ export async function logFunctieNiveauUnknown(
 // ============================================
 
 /**
- * Valid werkvorm values
+ * Valid werkvorm values (enterprise v2.6.0 - added Detachering)
  */
-export const VALID_WERKVORMEN = ['ZZP', 'Uitzendkracht', 'ABCito constructie'] as const;
+export const VALID_WERKVORMEN = ['ZZP', 'Uitzendkracht', 'ABCito constructie', 'Detachering'] as const;
 
 export const WERKVORM_MAP: Record<string, string> = {
   'zzp': 'ZZP',
@@ -247,6 +247,11 @@ export const WERKVORM_MAP: Record<string, string> = {
   'abcito': 'ABCito constructie',
   'abcito constructie': 'ABCito constructie',
   'abc constructie': 'ABCito constructie',
+  // Enterprise v2.6.0 - Added Detachering as valid werkvorm
+  'detachering': 'Detachering',
+  'detacheren': 'Detachering',
+  'gedetacheerd': 'Detachering',
+  'secondment': 'Detachering',
 };
 
 /**

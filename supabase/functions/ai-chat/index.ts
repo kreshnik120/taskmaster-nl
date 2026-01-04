@@ -21,7 +21,7 @@ const SYSTEM_PROMPT_VERSION = "v2.13.0-count-fast-path";
 // ============================================
 // CACHE CONFIGURATION
 // ============================================
-const CACHE_TTL_MINUTES = 5; // Short TTL for development/testing (was 24 hours)
+const CACHE_TTL_MINUTES = 60 * 24; // 24 hours cache TTL (enterprise-grade)
 
 // ============================================
 // ⚡ ULTRA FAST PATH: COUNT QUERIES (NO AI NEEDED)
