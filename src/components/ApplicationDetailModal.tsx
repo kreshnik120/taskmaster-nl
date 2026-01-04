@@ -30,7 +30,7 @@ import { nl } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState, useEffect, useRef } from "react";
-// convertApplicationToProfessional removed - using backend edge function instead
+
 import { resolveApplicationName } from "@/lib/utils";
 import { ApplicationActivityTimeline } from "@/components/recruitment/ApplicationActivityTimeline";
 import { EmailTemplateSuggestions } from "@/components/recruitment/EmailTemplateSuggestions";
