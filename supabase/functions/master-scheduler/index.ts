@@ -1,10 +1,10 @@
 // Master Scheduler - central cron job orchestration
-// Version 2.3.0 - Professional Creation Chain Fix
+// Version 2.4.0 - Functie Niveau AI Learning Loop
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
-const VERSION = '2.3.0-enterprise';
+const VERSION = '2.4.0-enterprise';
 
-// Active scheduled functions (15 schedules - added process-system-events for professional creation)
+// Active scheduled functions (17 schedules - added functie niveau learning)
 const SCHEDULES = {
   // CRITICAL: Process system events for professional creation chain
   'process-system-events': '*/5 * * * *',       // Every 5 minutes (Recruitment events & professional creation)
@@ -27,8 +27,11 @@ const SCHEDULES = {
   'reverify-diploma-signatures': '0 1 * * 0',   // Weekly Sunday 01:00 (Re-verify signature_valid diplomas)
   // Security Penetration Testing
   'webhook-security-tester': '0 2 * * *',       // Daily at 02:00 UTC (Automated security scan)
-  // Cache Management (NEW in v2.2.0)
+  // Cache Management
   'cache-warmer': '0 */2 * * *',                // Every 2 hours (Refresh expiring cache entries)
+  // Functie Niveau AI Learning (NEW in v2.4.0)
+  'learn-functie-niveau-patterns': '0 4 * * *', // Daily at 04:00 UTC (Learn from unknown values)
+  'apply-learned-functie-niveau': '15 4 * * *', // Daily at 04:15 UTC (Promote high-confidence suggestions)
 };
 
 // Simple cron expression matcher (minute hour dayOfMonth month dayOfWeek)

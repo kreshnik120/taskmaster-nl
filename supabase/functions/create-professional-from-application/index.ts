@@ -1,5 +1,5 @@
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
-import { normalizeFunctieNiveau, normalizeWerkvorm, ORG_IDS } from '../_shared/healthcare-mappings.ts';
+import { normalizeFunctieNiveau, normalizeWerkvorm, ORG_IDS, logFunctieNiveauUnknown } from '../_shared/healthcare-mappings.ts';
 
 /**
  * Phase 3: Create Professional from Application
@@ -122,6 +122,15 @@ Deno.serve(async (req) => {
     const rawFunctieNiveau = extractedData.functie_niveau || extractedData.functie || extractedData.niveau;
     const functieNiveau = normalizeFunctieNiveau(rawFunctieNiveau);
 
+    // Log unknown values for AI learning feedback loop
+    if (!functieNiveau && rawFunctieNiveau) {
+      await logFunctieNiveauUnknown(supabase, rawFunctieNiveau, {
+        application_id,
+        org_id: application.org_id || ORG_IDS.CITOZORG,
+        source: 'create-professional-from-application',
+      });
+      console.warn(`⚠️ [Create Professional] Unknown functie_niveau: "${rawFunctieNiveau}" - logged for AI learning`);
+    }
     // =====================================================
     // STEP 3: Determine Organization
     // =====================================================

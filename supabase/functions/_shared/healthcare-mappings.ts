@@ -129,8 +129,53 @@ export function normalizeFunctieNiveau(input: string | null | undefined): string
   if (normalized.includes('begeleid')) return 'Begeleider';
   if (normalized.includes('ggz')) return 'GGZ-agoog';
   
-  // 5. Return null instead of original (prevents constraint violations)
+// 5. Return null instead of original (prevents constraint violations)
   return null;
+}
+
+/**
+ * Log failed functie_niveau normalization for AI learning.
+ * Creates a system_event that will be processed by learn-functie-niveau-patterns.
+ * 
+ * IMPORTANT: Must include entity_type and entity_id (NOT NULL constraints on system_events)
+ * 
+ * @param supabase - Supabase client passed from caller (edge functions cannot import directly)
+ * @param rawValue - The raw functie_niveau value that failed normalization
+ * @param context - Context including application_id (required), org_id, and source
+ */
+export async function logFunctieNiveauUnknown(
+  supabase: any, // SupabaseClient type - passed from caller
+  rawValue: string,
+  context: {
+    application_id: string;
+    org_id?: string;
+    source?: string;
+  }
+): Promise<void> {
+  // Skip garbage/too short values
+  if (!rawValue || rawValue.trim().length < 2) return;
+  
+  try {
+    await supabase.from('system_events').insert({
+      event_type: 'functie_niveau_unknown',
+      entity_type: 'professional_application',
+      entity_id: context.application_id,
+      event_data: {
+        raw_value: rawValue,
+        normalized_attempt: rawValue.toLowerCase().trim(),
+      },
+      org_id: context.org_id || ORG_IDS.CITOZORG,
+      metadata: {
+        learning_eligible: true,
+        source: context.source || 'unknown',
+        timestamp: new Date().toISOString(),
+      },
+    });
+    console.log(`[Learning] Logged unknown functie_niveau: "${rawValue}"`);
+  } catch (error) {
+    // Non-blocking - don't fail main operation if logging fails
+    console.warn('[healthcare-mappings] Failed to log unknown functie_niveau:', error);
+  }
 }
 
 // ============================================

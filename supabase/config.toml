@@ -448,4 +448,20 @@ verify_jwt = false
 verify_jwt = false
 schedule = "0 */2 * * *"
 # Purpose: Proactively refresh expiring cache entries (every 2 hours)
+
+# -----------------------------------------------------------------------------
+# FUNCTIE NIVEAU AI LEARNING
+# -----------------------------------------------------------------------------
+
+[functions.learn-functie-niveau-patterns]
+verify_jwt = false
+schedule = "0 4 * * *"
+# Purpose: Learn new functie_niveau mappings from unknown values (daily at 04:00 UTC)
+# Aggregates system_events, calculates similarity, creates suggestions in ai_knowledge_base
+
+[functions.apply-learned-functie-niveau]
+verify_jwt = false
+schedule = "15 4 * * *"
+# Purpose: Promote high-confidence functie_niveau suggestions to learned mappings (daily at 04:15 UTC)
+# Auto-promotes when confidence >= 0.85 and occurrences >= 3
 # Benefits: Prevents cache miss storms, maintains response latency
