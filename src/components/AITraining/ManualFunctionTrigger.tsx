@@ -114,14 +114,14 @@ export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTr
   };
 
 
-  const triggerValidationFunction = async (functionName: string) => {
+  const triggerValidationFunction = async (functionName: string, bodyParams?: Record<string, any>) => {
     setTriggeringFunction(functionName);
     
     try {
       toast.info(`🚀 Starting ${functionName}...`);
       
       // ✅ Haal org_id op voor meta-orchestrator
-      let body: any = { trigger: 'manual' };
+      let body: any = { trigger: 'manual', ...bodyParams };
       
       if (functionName === 'meta-orchestrator') {
         const { data: { user } } = await supabase.auth.getUser();
@@ -752,7 +752,7 @@ export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTr
               </Button>
 
               <Button
-                onClick={() => triggerValidationFunction('unified-learner')}
+                onClick={() => triggerValidationFunction('unified-learner', { action: 'process_feedback' })}
                 disabled={triggeringFunction === 'unified-learner'}
                 variant="outline"
                 className="w-full"
@@ -762,7 +762,7 @@ export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTr
                 ) : (
                   <RefreshCw className="mr-2 h-4 w-4" />
                 )}
-                Unified Learner
+                Process Feedback (Unified)
               </Button>
 
               <Button
