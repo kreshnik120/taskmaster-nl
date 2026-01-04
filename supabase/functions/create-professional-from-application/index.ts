@@ -1,5 +1,5 @@
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
-import { normalizeFunctieNiveau, normalizeWerkvorm, ORG_IDS, logFunctieNiveauUnknown } from '../_shared/healthcare-mappings.ts';
+import { normalizeFunctieNiveau, normalizeFunctieNiveauAsync, normalizeWerkvorm, ORG_IDS, logFunctieNiveauUnknown } from '../_shared/healthcare-mappings.ts';
 
 /**
  * Phase 3: Create Professional from Application
@@ -119,8 +119,10 @@ Deno.serve(async (req) => {
     }
 
     // functie_niveau must match database enum - normalize input
+    // Use async version first to check learned mappings, fallback to static
     const rawFunctieNiveau = extractedData.functie_niveau || extractedData.functie || extractedData.niveau;
-    const functieNiveau = normalizeFunctieNiveau(rawFunctieNiveau);
+    const functieNiveau = await normalizeFunctieNiveauAsync(supabase, rawFunctieNiveau) 
+      || normalizeFunctieNiveau(rawFunctieNiveau);
 
     // Log unknown values for AI learning feedback loop
     if (!functieNiveau && rawFunctieNiveau) {
