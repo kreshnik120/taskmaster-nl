@@ -50,6 +50,7 @@ const FUNCTIE_NIVEAUS = [
   "Begeleider",
   "Persoonlijk begeleider",
   "GGZ-agoog",
+  "Anders (vrije invoer)",
 ];
 
 const SECTOREN = [
@@ -129,6 +130,8 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
   const [cvExtractedData, setCvExtractedData] = useState<Record<string, any> | null>(null);
   const [cvDataOpen, setCvDataOpen] = useState(false);
   const [extractedPhotoBase64, setExtractedPhotoBase64] = useState<string | null>(null);
+  const [customFunctieNiveau, setCustomFunctieNiveau] = useState("");
+  const [showCustomFunctieInput, setShowCustomFunctieInput] = useState(false);
 
   // Helper to extract value from {value, confidence} or plain value (backwards compatible)
   const getFieldValue = <T,>(field: T | { value: T; confidence: number } | null | undefined): T | null => {
@@ -721,6 +724,8 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
     setCvExtractedData(null);
     setExtractedPhotoBase64(null);
     setCurrentStep(0);
+    setCustomFunctieNiveau("");
+    setShowCustomFunctieInput(false);
   };
 
   return (
@@ -937,8 +942,18 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                   )}
                 </Label>
                 <Select
-                  value={watch("functie_niveau")}
-                  onValueChange={(value) => setValue("functie_niveau", value)}
+                  value={showCustomFunctieInput ? "Anders (vrije invoer)" : watch("functie_niveau")}
+                  onValueChange={(value) => {
+                    if (value === "Anders (vrije invoer)") {
+                      setShowCustomFunctieInput(true);
+                      setCustomFunctieNiveau("");
+                      setValue("functie_niveau", "");
+                    } else {
+                      setShowCustomFunctieInput(false);
+                      setCustomFunctieNiveau("");
+                      setValue("functie_niveau", value);
+                    }
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecteer functieniveau" />
@@ -951,6 +966,21 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
                     ))}
                   </SelectContent>
                 </Select>
+                {showCustomFunctieInput && (
+                  <div className="mt-2">
+                    <Input
+                      placeholder="Voer functieniveau in (bijv. Kraamverzorgende)"
+                      value={customFunctieNiveau}
+                      onChange={(e) => {
+                        setCustomFunctieNiveau(e.target.value);
+                        setValue("functie_niveau", e.target.value);
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Onbekende functies worden automatisch door AI geanalyseerd
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
