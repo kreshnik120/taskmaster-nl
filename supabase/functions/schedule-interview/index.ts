@@ -363,6 +363,35 @@ Deno.serve(async (req) => {
       case 'request_availability':
       case 'request_alternative_availability': {
         // ================================================================
+        // 🔒 IDEMPOTENCY GUARD: Voorkom duplicaat interview emails
+        // Check of er al een interview email verstuurd is in de laatste 5 minuten
+        // ================================================================
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        
+        const { data: recentInterviewEmail } = await supabase
+          .from("application_conversations")
+          .select("id, created_at")
+          .eq("application_id", application_id)
+          .eq("metadata->>email_type", "interview_availability_request")
+          .gte("created_at", fiveMinutesAgo)
+          .limit(1)
+          .maybeSingle();
+        
+        if (recentInterviewEmail) {
+          logWarning('ScheduleInterview', `Interview email already sent at ${recentInterviewEmail.created_at}, skipping duplicate`, {
+            recent_email_id: recentInterviewEmail.id,
+            application_id
+          });
+          return jsonResponse({
+            success: false,
+            skipped: true,
+            reason: 'duplicate_prevention',
+            message: `Interview email al verstuurd om ${recentInterviewEmail.created_at}`,
+            recent_email_id: recentInterviewEmail.id
+          });
+        }
+        
+        // ================================================================
         // SMART SLOT GENERATION: n8n calendar check met fallback
         // ================================================================
         const isAlternative = action === 'request_alternative_availability';
