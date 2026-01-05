@@ -450,7 +450,7 @@ Deno.serve(async (req) => {
       totalPoints += 15;
     }
     
-    const completenessScore = Math.round((earnedPoints / totalPoints) * 100);
+    let completenessScore = Math.round((earnedPoints / totalPoints) * 100);
     console.log(`[receive-external-application] Completeness score: ${completenessScore}% (${earnedPoints}/${totalPoints} points)`);
 
     // 12. Insert into professional_applications
@@ -619,86 +619,133 @@ Deno.serve(async (req) => {
             pdfBase64: cvBase64Content,
             filename: cvFilename,
             applicationId: newApplication.id,
-            orgId: defaultOrgId, // UUID, niet string
+            orgId: defaultOrgId,
           },
         });
         
         if (cvError) {
           console.error(`[receive-external-application] CV extraction error for ${newApplication.id}:`, cvError);
-        } else if (cvResult?.data) {
-          console.log(`[receive-external-application] CV extraction completed for ${newApplication.id}, merging data...`);
-          
-          // Flatten CV data van {value, confidence} naar plain values met cv_ prefix
-          const flattenCVData = (cvData: Record<string, any>): Record<string, any> => {
-            const flattened: Record<string, any> = {};
-            const skipKeys = ['success', 'knowledge_items_created', 'profile_photo_base64', 'global_confidence'];
-            
-            for (const [key, val] of Object.entries(cvData)) {
-              if (skipKeys.includes(key)) continue;
-              
-              if (val && typeof val === 'object' && 'value' in val) {
-                // Structured field met value/confidence
-                if (val.value !== null && val.value !== undefined && val.value !== '') {
-                  flattened[key] = val.value;
-                  flattened[`${key}_confidence`] = val.confidence || 0;
-                }
-              } else if (val !== null && val !== undefined && val !== '' && typeof val !== 'object') {
-                // Plain value
-                flattened[key] = val;
-              } else if (Array.isArray(val) && val.length > 0) {
-                // Array value
-                flattened[key] = val;
-              }
-            }
-            return flattened;
-          };
-          
-          // cvResult.data is het response object van extract-cv-data
-          // De geëxtraheerde velden zitten in cvResult.data.data (geneste structuur)
+        } else if (cvResult) {
+          // FIXED: extract-cv-data retourneert direct { success, data: {...extractedFields}, cvText, ... }
+          // Na supabase.functions.invoke is cvResult al de response body (niet genest in .data)
           console.log(`[receive-external-application] CV extraction response structure:`, JSON.stringify({
-            hasData: !!cvResult.data,
-            hasNestedData: !!cvResult.data?.data,
-            success: cvResult.data?.success,
-            topLevelKeys: cvResult.data ? Object.keys(cvResult.data) : [],
-            nestedDataKeys: cvResult.data?.data ? Object.keys(cvResult.data.data).slice(0, 10) : []
+            success: cvResult?.success,
+            hasData: !!cvResult?.data,
+            dataKeys: cvResult?.data ? Object.keys(cvResult.data).length : 0,
+            globalConfidence: cvResult?.data?.global_confidence,
+            topLevelKeys: cvResult ? Object.keys(cvResult).slice(0, 10) : []
           }));
           
-          // Veiligere extractie: als data.data leeg is, gebruik lege object i.p.v. hele response
-          const extractedCVData = (cvResult.data?.data && typeof cvResult.data.data === 'object' && Object.keys(cvResult.data.data).length > 0) 
-            ? cvResult.data.data 
-            : {};
-          const flattenedCV = flattenCVData(extractedCVData);
-          
-          console.log(`[receive-external-application] Flattened CV data keys:`, Object.keys(flattenedCV));
-          
-          if (Object.keys(flattenedCV).length > 0) {
-            // Merge met bestaande extracted_data (gebruik extractedData variabele)
-            const mergedData = {
-              ...extractedData,
-              ...flattenedCV,
-              cv_extraction_completed: true,
-              cv_extraction_at: new Date().toISOString(),
+          if (cvResult?.success && cvResult?.data) {
+            const extractedCVData = cvResult.data;
+            
+            // VERBETERDE FLATTEN FUNCTIE: correct omgaan met alle data types
+            const flattenCVData = (cvData: Record<string, any>): Record<string, any> => {
+              const flattened: Record<string, any> = {};
+              const skipKeys = ['success', 'knowledge_items_created', 'profile_photo_base64'];
+              
+              for (const [key, val] of Object.entries(cvData)) {
+                if (skipKeys.includes(key)) continue;
+                
+                // Handle {value, confidence} format
+                if (val && typeof val === 'object' && 'value' in val && !Array.isArray(val)) {
+                  const innerValue = val.value;
+                  if (innerValue !== null && innerValue !== undefined && innerValue !== '') {
+                    flattened[key] = innerValue;
+                    if (val.confidence !== undefined) {
+                      flattened[`${key}_confidence`] = val.confidence;
+                    }
+                  }
+                }
+                // Handle arrays (keep all, including empty for schema consistency)
+                else if (Array.isArray(val)) {
+                  flattened[key] = val;
+                }
+                // Handle primitive values (string, number, boolean)
+                else if (val !== null && val !== undefined && typeof val !== 'object') {
+                  flattened[key] = val;
+                }
+                // Handle nested objects without 'value' key (like voorkeur_uren: {min, max})
+                else if (val && typeof val === 'object' && !('value' in val)) {
+                  flattened[key] = val;
+                }
+              }
+              return flattened;
             };
             
-            // Update de application met gemerged data
-            // NOTE: completeness_score wordt NIET geüpdatet - de CV upload bonus (+15) is al toegepast
-            // bij de initiële insert. Hier voegen we alleen de extracted data toe.
-            const { error: updateError } = await supabase
-              .from('professional_applications')
-              .update({ 
-                extracted_data: mergedData,
-              })
-              .eq('id', newApplication.id);
+            const flattenedCV = flattenCVData(extractedCVData);
+            console.log(`[receive-external-application] Flattened ${Object.keys(flattenedCV).length} CV fields:`, Object.keys(flattenedCV));
             
-            if (updateError) {
-              console.error(`[receive-external-application] Failed to merge CV data:`, updateError);
-            } else {
-              console.log(`[receive-external-application] CV data merged successfully, ${Object.keys(flattenedCV).length} fields added`);
+            if (Object.keys(flattenedCV).length > 0) {
+              // Merge met bestaande extracted_data
+              const mergedData: Record<string, any> = {
+                ...extractedData,
+                ...flattenedCV,
+                cv_extraction_completed: true,
+                cv_extraction_at: new Date().toISOString(),
+                cv_global_confidence: extractedCVData.global_confidence || 0,
+              };
+              
+              // HERBEREKEN COMPLETENESS SCORE met nieuwe CV data
+              let newEarnedPoints = 0;
+              let newTotalPoints = 0;
+              
+              const cvFieldMapping: Record<string, unknown> = {
+                full_name: mergedData.naam,
+                email: mergedData.email,
+                telefoonnummer: mergedData.telefoon,
+                functie_niveau: mergedData.functie_niveau,
+                regio: mergedData.regio || mergedData.woonplaats || mergedData.gewenste_regio,
+                werkvorm: mergedData.werkvorm,
+                skills: (mergedData.certificaten?.length > 0) || (mergedData.ervaring_sector?.length > 0),
+                jaren_ervaring: mergedData.jaren_ervaring,
+                ervaring_sector: mergedData.ervaring_sector?.length > 0,
+                doelgroep_ervaring: mergedData.doelgroep_ervaring?.length > 0,
+                woonplaats: mergedData.woonplaats,
+                beschikbaarheid: mergedData.beschikbaarheid,
+                motivatie: mergedData.motivatie || mergedData.opmerkingen,
+                gewenst_uurloon: mergedData.gewenst_uurloon,
+                kvk_nummer: mergedData.kvk_nummer,
+              };
+              
+              for (const [field, weight] of Object.entries(fieldWeights)) {
+                if (weight === 0) continue;
+                newTotalPoints += weight;
+                if (cvFieldMapping[field]) newEarnedPoints += weight;
+              }
+              
+              // CV bonus blijft behouden
+              newEarnedPoints += 15;
+              newTotalPoints += 15;
+              
+              const newCompletenessScore = Math.round((newEarnedPoints / newTotalPoints) * 100);
+              
+              // Update met merged data EN nieuwe score
+              const { error: updateError } = await supabase
+                .from('professional_applications')
+                .update({ 
+                  extracted_data: mergedData,
+                  completeness_score: newCompletenessScore,
+                })
+                .eq('id', newApplication.id);
+              
+              if (updateError) {
+                console.error(`[receive-external-application] CV merge update failed:`, updateError);
+              } else {
+                console.log(`[receive-external-application] CV data merged: ${Object.keys(flattenedCV).length} fields, score ${completenessScore}% → ${newCompletenessScore}%`);
+                // Update local voor downstream interview trigger logic
+                completenessScore = newCompletenessScore;
+              }
             }
+          } else {
+            console.warn(`[receive-external-application] CV extraction returned no data:`, {
+              success: cvResult?.success,
+              hasData: !!cvResult?.data
+            });
           }
         }
         
-        console.log(`[receive-external-application] CV extraction triggered for ${newApplication.id} with pdfBase64 (${Math.round(cvBase64Content.length / 1024)}KB)`);
+        console.log(`[receive-external-application] CV extraction triggered for ${newApplication.id}`);
       } catch (e) {
         console.error("[receive-external-application] CV extraction trigger failed:", e);
       }
