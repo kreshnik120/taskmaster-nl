@@ -13,6 +13,7 @@ import { PipelineFunnelMini } from "./PipelineFunnelMini";
 import { RecruitmentAnalytics } from "./RecruitmentAnalytics";
 import { UrgencyBanner } from "./UrgencyBanner";
 import { RecentMovementsWidget } from "./RecentMovementsWidget";
+import { CitoZorgIntegrationMonitor } from "./CitoZorgIntegrationMonitor";
 
 interface Application {
   id: string;
@@ -102,6 +103,12 @@ export function AnalyticsSheet({
                 applications={applications}
                 isLoading={isLoading}
               />
+            </div>
+
+            {/* CitoZorg Integration Monitor */}
+            <div>
+              <h3 className="text-sm font-medium mb-3">Externe Integraties</h3>
+              <CitoZorgIntegrationMonitor />
             </div>
           </div>
         </ScrollArea>
