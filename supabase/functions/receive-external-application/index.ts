@@ -5,7 +5,7 @@ import {
   formatValidationSummary,
   type ApplicationData 
 } from '../_shared/pre-validation.ts';
-
+import { ORG_IDS } from '../_shared/healthcare-mappings.ts';
 // CORS headers for cross-origin requests
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -392,8 +392,10 @@ Deno.serve(async (req) => {
       extractedData.werkvorm = "Uitzendkracht";
     }
 
-    // 10. Get default org_id (ABCzorg)
-    const defaultOrgId = "550e8400-e29b-41d4-a716-446655440000";
+    // 10. Determine org_id based on source - CitoZorg applications get CitoZorg branding
+    const orgId = data.source?.toLowerCase() === "citozorg" 
+      ? ORG_IDS.CITOZORG  // 650e8400-e29b-41d4-a716-446655440001
+      : ORG_IDS.ABCZORG;  // 550e8400-e29b-41d4-a716-446655440000
 
     // 11. Calculate completeness score using same weights as process-application-email
     const fieldWeights: Record<string, number> = {
@@ -457,7 +459,7 @@ Deno.serve(async (req) => {
     const { data: newApplication, error: insertError } = await supabase
       .from("professional_applications")
       .insert({
-        org_id: defaultOrgId,
+        org_id: orgId,
         email_from: data.email.toLowerCase().trim(),
         email_subject: `${sourceLabel} via ${data.source}: ${data.full_name}`,
         email_body: data.motivatie || `Sollicitatie van ${data.full_name} via ${data.source}`,
@@ -484,7 +486,7 @@ Deno.serve(async (req) => {
 
     // 12. Log to system_events for audit
     await supabase.from("system_events").insert({
-      org_id: defaultOrgId,
+      org_id: orgId,
       event_type: "external_application_received",
       entity_type: "professional_application",
       entity_id: newApplication.id,
@@ -619,7 +621,7 @@ Deno.serve(async (req) => {
             pdfBase64: cvBase64Content,
             filename: cvFilename,
             applicationId: newApplication.id,
-            orgId: defaultOrgId,
+            orgId: orgId,
           },
         });
         
