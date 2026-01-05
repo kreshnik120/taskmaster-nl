@@ -1950,7 +1950,7 @@ async function executeFollowupQuestion(supabase: any, action: any) {
         html_content: emailData?.emailHtml,
         plain_text: emailData?.emailPlainText,
         application_id: action.input_data.application_id,
-        org_id: action.agent_goals?.org_id
+        org_id: resolvedOrgId  // FIXED: Use resolvedOrgId instead of action.agent_goals?.org_id
       }
     });
 
@@ -2072,7 +2072,7 @@ async function executeWelcomeAndIntake(supabase: any, action: any) {
         html_content: emailData?.emailHtml,
         plain_text: emailData?.emailPlainText,
         application_id: action.input_data.application_id,
-        org_id: action.agent_goals?.org_id
+        org_id: resolvedOrgId  // FIXED: Use resolvedOrgId instead of action.agent_goals?.org_id
       }
     });
 
