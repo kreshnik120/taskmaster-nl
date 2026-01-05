@@ -684,13 +684,41 @@ Deno.serve(async (req) => {
             console.log(`[receive-external-application] Flattened ${Object.keys(flattenedCV).length} CV fields:`, Object.keys(flattenedCV));
             
             if (Object.keys(flattenedCV).length > 0) {
-              // Merge met bestaande extracted_data
+              // =====================================================
+              // 🔒 CRITICAL: Formulier data heeft prioriteit over CV data
+              // voor essentiële identificatievelden (naam, email)
+              // CV data mag deze NIET overschrijven om verkeerde communicatie te voorkomen
+              // =====================================================
+              
+              // Bewaar originele formulier waarden voor naam/email
+              const formNaam = (extractedData.naam || extractedData.full_name) as string | undefined;
+              const formEmail = extractedData.email as string | undefined;
+              
+              // Detecteer naam mismatch voor audit trail
+              const cvNaam = (flattenedCV.naam || flattenedCV.full_name) as string | undefined;
+              const naamMismatch = !!(formNaam && cvNaam && 
+                formNaam.toLowerCase().trim() !== cvNaam.toLowerCase().trim());
+              
+              if (naamMismatch) {
+                console.warn(`[receive-external-application] ⚠️ NAAM MISMATCH DETECTED: Form="${formNaam}", CV="${cvNaam}" - Using form value`);
+              }
+              
+              // Merge: CV data eerst, daarna formulier data overschrijft (KRITISCHE VELDEN BEHOUDEN)
               const mergedData: Record<string, any> = {
-                ...extractedData,
-                ...flattenedCV,
+                ...flattenedCV,       // CV data als basis
+                ...extractedData,     // Formulier data overschrijft (heeft prioriteit!)
+                
+                // Metadata voor CV extraction
                 cv_extraction_completed: true,
                 cv_extraction_at: new Date().toISOString(),
                 cv_global_confidence: extractedCVData.global_confidence || 0,
+                
+                // Audit trail voor naam mismatch
+                ...(naamMismatch ? {
+                  naam_from_cv: cvNaam,
+                  naam_mismatch_detected: true,
+                  naam_mismatch_detected_at: new Date().toISOString(),
+                } : {}),
               };
               
               // HERBEREKEN COMPLETENESS SCORE met nieuwe CV data
@@ -771,31 +799,25 @@ Deno.serve(async (req) => {
     console.log(`[receive-external-application] Goal 'send_welcome_and_intake' is aangemaakt via database trigger.`);
     console.log(`[receive-external-application] Welkomstmail wordt binnen 5 minuten verzonden via pg_cron jobs.`);
 
-    // 16. Auto-trigger interview slots if completeness >= threshold (same as email flow)
-    const INTERVIEW_THRESHOLD = parseInt(Deno.env.get('INTERVIEW_THRESHOLD') || '85');
-    
-    if (completenessScore >= INTERVIEW_THRESHOLD) {
-      console.log(`[receive-external-application] Completeness ${completenessScore}% >= ${INTERVIEW_THRESHOLD}%, triggering auto-send-interview-slots...`);
-      
-      try {
-        const { data: interviewResult, error: interviewError } = await supabase.functions.invoke('auto-send-interview-slots', {
-          body: {
-            application_id: newApplication.id,
-            trigger_source: 'external_api',
-          }
-        });
-        
-        if (interviewError) {
-          console.error("[receive-external-application] Auto interview slots error:", interviewError);
-        } else {
-          console.log("[receive-external-application] Auto interview slots result:", interviewResult);
-        }
-      } catch (interviewErr) {
-        console.error("[receive-external-application] Exception triggering interview slots:", interviewErr);
-      }
-    } else {
-      console.log(`[receive-external-application] Completeness ${completenessScore}% < ${INTERVIEW_THRESHOLD}%, follow-up via AI Agent Orchestrator`);
-    }
+    // =====================================================
+    // 🚫 AUTO-INTERVIEW-SLOTS VERWIJDERD
+    // =====================================================
+    // Interview slots worden NIET automatisch verstuurd bij initiële ontvangst.
+    // De correcte flow is:
+    // 1. Kandidaat ontvangt welkomstmail + intake vragen
+    // 2. Kandidaat reageert met ontbrekende info
+    // 3. Kandidaat uploadt documenten (CV, Diploma)
+    // 4. Documenten worden geverifieerd (DUO/EMREX voor diploma)
+    // 5. PAS DAN: Interview slots worden aangeboden
+    // 
+    // Dit respecteert de STAGE_COMPLIANCE_GATES uit healthcare-mappings.ts:
+    // - Interview stage vereist: 70% completeness + CV document
+    // - Goedgekeurd stage vereist: 85% + CV + Diploma
+    // 
+    // De AI Agent Orchestrator handelt de follow-up communicatie.
+    // =====================================================
+    console.log(`[receive-external-application] ℹ️ Interview slots worden NIET automatisch verstuurd bij initiële ontvangst.`);
+    console.log(`[receive-external-application] ℹ️ Flow: Welkomstmail → Kandidaat response → Document upload → Verificatie → Interview slots`);
 
     // 17. Return success response
     const processingTime = Date.now() - startTime;
@@ -810,7 +832,7 @@ Deno.serve(async (req) => {
         cv_uploaded: !!cvFilePath,
         documents_uploaded: uploadedDocuments.length,
         completeness_score: completenessScore,
-        interview_slots_triggered: completenessScore >= INTERVIEW_THRESHOLD,
+        interview_slots_triggered: false, // Nooit automatisch bij initiële ontvangst
         processing_time_ms: processingTime,
       }),
       { 
