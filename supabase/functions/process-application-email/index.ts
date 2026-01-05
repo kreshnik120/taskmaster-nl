@@ -735,46 +735,26 @@ Belangrijk:
     console.log("📋 [process-application-email] Goal aangemaakt via database trigger, verwerking door pg_cron (elke 5 min)");
 
     // =====================================================
-    // 🎯 AUTOMATISCHE INTERVIEW SLOTS BIJ >= 85% COMPLETENESS
+    // 🚫 AUTO-INTERVIEW-SLOTS VERWIJDERD
     // =====================================================
-    const INTERVIEW_THRESHOLD = parseInt(Deno.env.get('INTERVIEW_THRESHOLD') || '85');
-    
-    if (completenessScore >= INTERVIEW_THRESHOLD) {
-      console.log(`🎉 Completeness ${completenessScore}% >= threshold ${INTERVIEW_THRESHOLD}%, triggering auto-send-interview-slots...`);
-      
-      try {
-        const { data: interviewResult, error: interviewError } = await supabase.functions.invoke('auto-send-interview-slots', {
-          body: {
-            application_id: application.id,
-            trigger_source: 'initial_application',
-          }
-        });
-        
-        if (interviewError) {
-          console.error("Error auto-sending interview slots:", interviewError);
-        } else {
-          console.log("✅ Auto interview slots result:", interviewResult);
-        }
-      } catch (interviewErr) {
-        console.error("Exception auto-sending interview slots:", interviewErr);
-      }
-    } else {
-      // ✅ Email verzending is verplaatst naar AI Agent Orchestrator
-      // Dit voorkomt duplicate emails - de orchestrator handelt:
-      // - Dynamische org branding (ABCzorg/CitoZorg)
-      // - Follow-up counting (1/3, 2/3, 3/3)
-      // - Deduplicatie checks
-      // - Intelligente timing
-      // 
-      // De flow is nu:
-      // 1. process-application-email: Creëert sollicitatie + logt system event
-      // 2. process-system-events: Detecteert nieuwe sollicitatie → creëert application_intake_completion goal
-      // 3. ai-agent-orchestrator: Verwerkt goal → stuurt gepersonaliseerde follow-up email
-      
-      const missingInfo = extractedData.missing_info || [];
-      console.log(`📧 Completeness ${completenessScore}% < threshold ${INTERVIEW_THRESHOLD}% - follow-up via AI Agent Orchestrator`);
-      console.log(`📋 Missing info voor orchestrator: ${missingInfo.join(', ') || 'geen'}`);
-    }
+    // Interview slots worden NIET automatisch verstuurd bij initiële ontvangst.
+    // De correcte flow respecteert STAGE_COMPLIANCE_GATES:
+    // 
+    // 1. NIEUW → INTAKE_VERSTUURD: Welkomstmail + intake vragen
+    // 2. Kandidaat reageert met ontbrekende info
+    // 3. SCREENING: Document collectie (CV, Diploma uploads)
+    // 4. Document verificatie (DUO/EMREX voor diploma)
+    // 5. INTERVIEW: PAS DAN interview slots aanbieden (vereist: 70% + CV)
+    // 6. GOEDGEKEURD: Na interview + recruiter approval (vereist: 85% + CV + Diploma)
+    // 7. GEPLAATST: Na VOG verificatie (vereist: 95% + CV + Diploma + VOG)
+    // 
+    // De AI Agent Orchestrator handelt alle follow-up communicatie.
+    // =====================================================
+    const missingInfo = extractedData.missing_info || [];
+    console.log(`[process-application-email] ℹ️ Interview slots worden NIET automatisch verstuurd bij initiële ontvangst.`);
+    console.log(`[process-application-email] ℹ️ Flow: Welkomstmail → Kandidaat response → Document upload → Verificatie → Interview slots`);
+    console.log(`[process-application-email] 📋 Missing info voor AI Agent: ${missingInfo.join(', ') || 'geen'}`);
+    console.log(`[process-application-email] 📊 Completeness: ${completenessScore}%`);
     
     // Note: Auto-learning will happen when professional is created (at 100% completeness)
 

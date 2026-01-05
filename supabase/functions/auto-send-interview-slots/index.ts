@@ -1,18 +1,31 @@
 import { createAdminClient, corsHeaders, jsonResponse, errorResponse, handleCors, logInfo, logSuccess, logError, logWarning } from '../_shared/core.ts';
+import { 
+  STAGE_COMPLIANCE_GATES, 
+  validateStageTransition, 
+  hasField,
+  FIELD_ALIASES 
+} from '../_shared/healthcare-mappings.ts';
 
 /**
  * auto-send-interview-slots
  * 
  * Centrale functie voor automatische interview slot verzending.
  * 
+ * ⚠️ KRITIEK: Respecteert STAGE_COMPLIANCE_GATES
+ * Interview stage vereist:
+ * - minCompleteness: 70%
+ * - requiredDocs: ['cv']
+ * - requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer']
+ * 
  * Features:
  * - Configureerbare threshold (default 85%)
  * - Controleert interview_status voordat slots worden gestuurd
  * - Support voor alternative slots bij afwijzing
+ * - Compliance gate validatie voordat slots worden verstuurd
  * - Kan getriggerd worden vanuit:
- *   - process-application-email (bij nieuwe sollicitatie >= threshold)
- *   - handle-application-reply (na reply met nieuwe data >= threshold)
- *   - Database trigger (bij score update)
+ *   - handle-application-reply (na reply met nieuwe data + docs)
+ *   - Database trigger (bij score update + doc verificatie)
+ *   - manual trigger
  */
 
 interface AutoInterviewRequest {
@@ -20,7 +33,7 @@ interface AutoInterviewRequest {
   trigger_source: 'initial_application' | 'reply_update' | 'manual' | 'alternative_request' | 'external_api';
   force?: boolean; // Skip status checks (for alternative slots)
   alternative_attempt?: number; // Track alternative slot attempts
-  include_completion_message?: boolean; // 🆕 Gecombineerde email met bevestigingsboodschap
+  include_completion_message?: boolean; // Gecombineerde email met bevestigingsboodschap
 }
 
 // Configuratie via environment variables
@@ -53,10 +66,10 @@ Deno.serve(async (req) => {
       threshold: INTERVIEW_THRESHOLD
     });
 
-    // Fetch application details
+    // Fetch application details - include cv_file_path for compliance check
     const { data: application, error: appError } = await supabase
       .from('professional_applications')
-      .select('id, email_from, completeness_score, interview_status, pipeline_stage, extracted_data, org_id')
+      .select('id, email_from, completeness_score, interview_status, pipeline_stage, extracted_data, org_id, cv_file_path')
       .eq('id', application_id)
       .single();
 
@@ -88,7 +101,65 @@ Deno.serve(async (req) => {
     // ================================================================
     
     if (!force) {
-      // Check 1: Completeness threshold
+      // ================================================================
+      // 🔒 COMPLIANCE GATE VALIDATION - Interview Stage Requirements
+      // ================================================================
+      const interviewGate = STAGE_COMPLIANCE_GATES['interview'];
+      
+      // Determine present documents
+      const presentDocs: string[] = [];
+      if (application.cv_file_path || extractedData.cv_file_path) {
+        presentDocs.push('cv');
+      }
+      if (extractedData.diploma_file_path || extractedData.diploma_validation_status === 'verified_duo') {
+        presentDocs.push('diploma');
+      }
+      if (extractedData.vog_file_path || extractedData.vog_validation_status === 'verified_gaav') {
+        presentDocs.push('vog');
+      }
+      
+      // Determine present fields using hasField helper
+      const presentFields: string[] = [];
+      for (const field of interviewGate.requiredFields) {
+        if (hasField(extractedData, field)) {
+          presentFields.push(field);
+        }
+      }
+      
+      // Validate stage transition to 'interview'
+      const complianceCheck = validateStageTransition(
+        pipelineStage,
+        'interview',
+        completenessScore,
+        presentDocs,
+        presentFields
+      );
+      
+      if (!complianceCheck.allowed) {
+        logWarning('AutoSendInterviewSlots', `Compliance gate blocked`, {
+          blockers: complianceCheck.blockers,
+          presentDocs,
+          presentFields,
+          completenessScore
+        });
+        return jsonResponse({
+          success: false,
+          reason: 'compliance_gate_blocked',
+          blockers: complianceCheck.blockers,
+          present_docs: presentDocs,
+          present_fields: presentFields,
+          completeness_score: completenessScore,
+          message: `Interview slots geblokkeerd door compliance gates: ${complianceCheck.blockers.join('; ')}`
+        });
+      }
+      
+      logInfo('AutoSendInterviewSlots', 'Compliance gate passed', {
+        presentDocs,
+        presentFields,
+        completenessScore
+      });
+
+      // Check 1: Completeness threshold (already validated in compliance gate, but double-check)
       if (completenessScore < INTERVIEW_THRESHOLD) {
         logWarning('AutoSendInterviewSlots', `Completeness ${completenessScore}% below threshold ${INTERVIEW_THRESHOLD}%`);
         return jsonResponse({
@@ -112,15 +183,17 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Check 3: Pipeline stage - only process 'nieuw' or 'screening' applications
-      const validStages = ['nieuw', 'screening'];
+      // Check 3: Pipeline stage - only process 'screening' or later (NOT 'nieuw' or 'intake_verstuurd')
+      // Interview slots should only be offered AFTER kandidaat has responded and uploaded documents
+      const validStages = ['screening', 'interview'];
       if (!validStages.includes(pipelineStage)) {
         logWarning('AutoSendInterviewSlots', `Invalid pipeline stage for auto-interview: ${pipelineStage}`);
         return jsonResponse({
           success: false,
           reason: 'invalid_stage',
           pipeline_stage: pipelineStage,
-          message: `Application not in valid stage for auto-interview`
+          valid_stages: validStages,
+          message: `Kandidaat moet eerst door intake en document collectie gaan voordat interview gepland kan worden`
         });
       }
     }
