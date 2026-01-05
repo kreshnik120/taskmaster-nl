@@ -4,7 +4,9 @@ import {
   sanitizeCandidateName, 
   isTerminalPipelineStage,
   validatePreActionRequirements,
-  type PreActionValidationResult 
+  getOrganizationById,
+  type PreActionValidationResult,
+  type OrganizationInfo
 } from '../_shared/healthcare-mappings.ts';
 interface AgentGoal {
   id: string;
@@ -1805,40 +1807,29 @@ async function executeTask(supabase: any, task: any) {
 async function executeFollowupQuestion(supabase: any, action: any) {
   const applicationId = action.input_data.application_id;
   
-  // 🔧 FIX: Get organization from application's assigned_organization OR fallback to org_id
-  let organization = 'citozorg';
-  let org_name = 'CitoZorg';
+  // 🔧 REFACTORED: Use getOrganizationById() as single source of truth
+  // Priority: application.org_id > goal.org_id > default (CitoZorg)
+  let resolvedOrgId = action.agent_goals?.org_id;
   
-  // First try to get from application's extracted_data.assigned_organization
+  // Try to get org_id from application if available
   if (applicationId) {
     const { data: appData } = await supabase
       .from('professional_applications')
-      .select('extracted_data, org_id')
+      .select('org_id')
       .eq('id', applicationId)
       .single();
     
-    if (appData?.extracted_data?.assigned_organization) {
-      const assignedOrg = appData.extracted_data.assigned_organization.toLowerCase();
-      if (assignedOrg.includes('abc')) {
-        organization = 'abczorg';
-        org_name = 'ABCzorg';
-      }
-      console.log(`📧 [Followup] Using assigned_organization: ${org_name}`);
-    } else if (appData?.org_id === '550e8400-e29b-41d4-a716-446655440000') {
-      organization = 'abczorg';
-      org_name = 'ABCzorg';
-      console.log(`📧 [Followup] Using org_id fallback: ${org_name}`);
+    if (appData?.org_id) {
+      resolvedOrgId = appData.org_id;
     }
   }
   
-  // Fallback to goal's org_id
-  const goal_org_id = action.agent_goals?.org_id;
-  if (organization === 'citozorg' && goal_org_id === '550e8400-e29b-41d4-a716-446655440000') {
-    organization = 'abczorg';
-    org_name = 'ABCzorg';
-  }
+  // Use centralized organization resolver
+  const orgInfo = getOrganizationById(resolvedOrgId);
+  const organization = orgInfo.name;
+  const org_name = orgInfo.displayName;
 
-  console.log(`📧 [Followup] Organization determined: ${org_name}`);
+  console.log(`📧 [Followup] Organization resolved via getOrganizationById: ${org_name} (org_id: ${resolvedOrgId})`);
   
   // 🔧 FIX: Get candidate_name from extracted_data if not provided (fixes "Beste null" bug)
   let candidateName = action.input_data.candidate_name;
@@ -2002,40 +1993,29 @@ async function executeFollowupQuestion(supabase: any, action: any) {
 async function executeWelcomeAndIntake(supabase: any, action: any) {
   const applicationId = action.input_data.application_id;
   
-  // 🔧 FIX: Get organization from application's assigned_organization OR fallback to org_id
-  let organization = 'citozorg';
-  let org_name = 'CitoZorg';
+  // 🔧 REFACTORED: Use getOrganizationById() as single source of truth
+  // Priority: application.org_id > goal.org_id > default (CitoZorg)
+  let resolvedOrgId = action.agent_goals?.org_id;
   
-  // First try to get from application's extracted_data.assigned_organization
+  // Try to get org_id from application if available
   if (applicationId) {
     const { data: appData } = await supabase
       .from('professional_applications')
-      .select('extracted_data, org_id')
+      .select('org_id')
       .eq('id', applicationId)
       .single();
     
-    if (appData?.extracted_data?.assigned_organization) {
-      const assignedOrg = appData.extracted_data.assigned_organization.toLowerCase();
-      if (assignedOrg.includes('abc')) {
-        organization = 'abczorg';
-        org_name = 'ABCzorg';
-      }
-      console.log(`🎉 [Welcome] Using assigned_organization: ${org_name}`);
-    } else if (appData?.org_id === '550e8400-e29b-41d4-a716-446655440000') {
-      organization = 'abczorg';
-      org_name = 'ABCzorg';
-      console.log(`🎉 [Welcome] Using org_id fallback: ${org_name}`);
+    if (appData?.org_id) {
+      resolvedOrgId = appData.org_id;
     }
   }
   
-  // Fallback to goal's org_id
-  const goal_org_id = action.agent_goals?.org_id;
-  if (organization === 'citozorg' && goal_org_id === '550e8400-e29b-41d4-a716-446655440000') {
-    organization = 'abczorg';
-    org_name = 'ABCzorg';
-  }
+  // Use centralized organization resolver
+  const orgInfo = getOrganizationById(resolvedOrgId);
+  const organization = orgInfo.name;
+  const org_name = orgInfo.displayName;
 
-  console.log(`🎉 [Welcome] Organization determined: ${org_name}`);
+  console.log(`🎉 [Welcome] Organization resolved via getOrganizationById: ${org_name} (org_id: ${resolvedOrgId})`);
   console.log(`🎉 [Welcome] Checking for existing welcome emails...`);
 
   // 🔒 DEDUPLICATION CHECK: Skip if welcome email was already sent (any time)
@@ -2161,13 +2141,11 @@ async function executeWelcomeAndIntake(supabase: any, action: any) {
 // Execute Request Interview Availability via schedule-interview
 // =====================================================
 async function executeRequestInterviewAvailability(supabase: any, action: any) {
-  const org_id = action.agent_goals?.org_id;
-  let organization = 'citozorg';
-  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
-    organization = 'abczorg';
-  }
+  // 🔧 REFACTORED: Use getOrganizationById() as single source of truth
+  const orgInfo = getOrganizationById(action.agent_goals?.org_id);
+  const organization = orgInfo.name;
 
-  console.log(`🗓️ [Interview] Requesting availability for ${action.input_data.candidate_name}`);
+  console.log(`🗓️ [Interview] Requesting availability for ${action.input_data.candidate_name} (${orgInfo.displayName})`);
 
   try {
     // Call schedule-interview edge function with action: request_availability
@@ -2209,13 +2187,11 @@ async function executeRequestInterviewAvailability(supabase: any, action: any) {
 // Execute Interview Email via send-interview-email (Resend)
 // =====================================================
 async function executeInterviewEmail(supabase: any, action: any) {
-  const org_id = action.agent_goals?.org_id;
-  let organization = 'citozorg';
-  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
-    organization = 'abczorg';
-  }
+  // 🔧 REFACTORED: Use getOrganizationById() as single source of truth
+  const orgInfo = getOrganizationById(action.agent_goals?.org_id);
+  const organization = orgInfo.name;
 
-  console.log(`📧 [Interview] Sending interview email via Resend for ${organization}`);
+  console.log(`📧 [Interview] Sending interview email via Resend for ${orgInfo.displayName}`);
 
   try {
     const { data, error } = await supabase.functions.invoke('send-interview-email', {
@@ -2247,11 +2223,10 @@ async function executeInterviewEmail(supabase: any, action: any) {
 // Execute AI Email via send-ai-email (Resend)
 // =====================================================
 async function executeSendAiEmail(supabase: any, action: any) {
+  // 🔧 REFACTORED: Use getOrganizationById() as single source of truth
   const org_id = action.agent_goals?.org_id;
-  let organization = 'citozorg';
-  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
-    organization = 'abczorg';
-  }
+  const orgInfo = getOrganizationById(org_id);
+  const organization = orgInfo.name;
 
   // Map action types to email types
   const emailTypeMap: Record<string, string> = {
@@ -2420,11 +2395,10 @@ async function createOnboardingTasks(supabase: any, action: any) {
 async function executeEmrexInvitation(supabase: any, action: any) {
   console.log(`📜 [EMREX Invitation] Sending to ${action.input_data.candidate_email}`);
   
+  // 🔧 REFACTORED: Use getOrganizationById() as single source of truth
   const org_id = action.agent_goals?.org_id;
-  let organization = 'citozorg';
-  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
-    organization = 'abczorg';
-  }
+  const orgInfo = getOrganizationById(org_id);
+  const organization = orgInfo.name;
 
   try {
     // Step 1: Generate EMREX link via verify-diploma-emrex
@@ -2489,11 +2463,10 @@ async function executeEmrexInvitation(supabase: any, action: any) {
 async function executeEmrexReminder(supabase: any, action: any) {
   console.log(`⏰ [EMREX Reminder] Sending reminder to ${action.input_data.candidate_email}`);
   
+  // 🔧 REFACTORED: Use getOrganizationById() as single source of truth
   const org_id = action.agent_goals?.org_id;
-  let organization = 'citozorg';
-  if (org_id === '550e8400-e29b-41d4-a716-446655440000') {
-    organization = 'abczorg';
-  }
+  const orgInfo = getOrganizationById(org_id);
+  const organization = orgInfo.name;
 
   try {
     // Get fresh EMREX link
