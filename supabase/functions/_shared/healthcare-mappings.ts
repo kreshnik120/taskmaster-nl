@@ -598,6 +598,257 @@ export function recalculateMissingInfo(
   return CRITICAL_FIELDS.filter(field => !hasField(extractedData, field));
 }
 
+// ============================================
+// DOCUMENT-AWARE COMPLETENESS CALCULATION
+// ============================================
+
+/**
+ * Document requirements with verification status weights
+ * Used for calculating document-aware completeness scores
+ */
+export interface DocumentWeightConfig {
+  weight: number;
+  required_for: string[];
+  field: string;
+  verification_field?: string;
+  verified_statuses?: string[];
+  unverified_weight_multiplier?: number;
+  expiry_check?: boolean;
+  expired_weight_multiplier?: number;
+}
+
+export const DOCUMENT_WEIGHTS: Record<string, DocumentWeightConfig> = {
+  cv: { 
+    weight: 10, 
+    required_for: ['interview', 'goedgekeurd', 'geplaatst'],
+    field: 'cv_file_path'
+  },
+  diploma: { 
+    weight: 15, 
+    required_for: ['goedgekeurd', 'geplaatst'],
+    field: 'diploma_file_path',
+    verification_field: 'diploma_validation_status',
+    verified_statuses: ['verified_duo', 'signature_valid', 'manual_verified'],
+    unverified_weight_multiplier: 0.5  // Half points for uploaded but unverified
+  },
+  vog: { 
+    weight: 10, 
+    required_for: ['geplaatst'],
+    field: 'vog_file_path',
+    verification_field: 'vog_validation_status',
+    verified_statuses: ['valid', 'verified_gaav'],
+    expiry_check: true,
+    expired_weight_multiplier: 0.3  // Minimal points for expired VOG
+  }
+};
+
+/**
+ * Document presence result
+ */
+export interface DocumentPresenceResult {
+  present: boolean;
+  verified: boolean;
+  expired?: boolean;
+  status?: string;
+}
+
+/**
+ * Checks if a document is present and optionally verified
+ */
+export function checkDocumentPresence(
+  extractedData: Record<string, unknown>,
+  application: Record<string, unknown>,
+  docType: string
+): DocumentPresenceResult {
+  const config = DOCUMENT_WEIGHTS[docType];
+  if (!config) {
+    return { present: false, verified: false };
+  }
+  
+  // Check for document file path
+  const filePath = extractedData[config.field] || application[config.field];
+  if (!filePath) {
+    return { present: false, verified: false };
+  }
+  
+  // If no verification required, document is present and "verified"
+  if (!('verification_field' in config)) {
+    return { present: true, verified: true };
+  }
+  
+  // Check verification status
+  const verificationStatus = application[config.verification_field as string] as string || 
+                            extractedData[config.verification_field as string] as string;
+  
+  const isVerified = (config.verified_statuses as readonly string[]).includes(verificationStatus || '');
+  
+  // Check expiry for VOG
+  let isExpired = false;
+  if (docType === 'vog' && config.expiry_check) {
+    const vogDate = extractedData.vog_date as string || application.vog_issue_date as string;
+    if (vogDate) {
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      if (new Date(vogDate) < threeMonthsAgo) {
+        isExpired = true;
+      }
+    }
+  }
+  
+  return { 
+    present: true, 
+    verified: isVerified, 
+    expired: isExpired,
+    status: verificationStatus
+  };
+}
+
+/**
+ * Gets list of present documents for compliance gate validation
+ * Only counts VERIFIED documents for diploma and vog
+ */
+export function getPresentDocuments(
+  extractedData: Record<string, unknown>,
+  application: Record<string, unknown>,
+  requireVerification: boolean = true
+): string[] {
+  const presentDocs: string[] = [];
+  
+  for (const docType of Object.keys(DOCUMENT_WEIGHTS)) {
+    const presence = checkDocumentPresence(extractedData, application, docType);
+    
+    if (!presence.present) continue;
+    
+    // For diploma and vog, only count if verified (when requireVerification is true)
+    if (requireVerification && docType !== 'cv') {
+      if (presence.verified && !presence.expired) {
+        presentDocs.push(docType);
+      }
+    } else {
+      presentDocs.push(docType);
+    }
+  }
+  
+  return presentDocs;
+}
+
+/**
+ * Calculates document-aware completeness score
+ * Factors in document presence, verification status, and expiry
+ */
+export interface DocumentAwareCompletenessResult {
+  score: number;
+  fieldScore: number;
+  documentScore: number;
+  missingDocs: string[];
+  unverifiedDocs: string[];
+  expiredDocs: string[];
+  missingFields: string[];
+  blockers: string[];
+}
+
+export function calculateDocumentAwareCompleteness(
+  extractedData: Record<string, unknown>,
+  application: Record<string, unknown>,
+  targetStage: string = 'geplaatst'
+): DocumentAwareCompletenessResult {
+  
+  let fieldEarnedPoints = 0;
+  let fieldTotalPoints = 0;
+  let docEarnedPoints = 0;
+  let docTotalPoints = 0;
+  
+  const missingDocs: string[] = [];
+  const unverifiedDocs: string[] = [];
+  const expiredDocs: string[] = [];
+  const missingFields: string[] = [];
+  const blockers: string[] = [];
+  
+  // 1. Field scoring (existing logic)
+  const FIELD_WEIGHTS: Record<string, number> = {
+    naam: 10,
+    email: 10,
+    telefoonnummer: 8,
+    functie_niveau: 15,
+    werkvorm: 10,
+    regio: 10,
+    beschikbaarheid: 8,
+    diploma: 5, // Note: diploma field (type info), not the document
+  };
+  
+  for (const [field, weight] of Object.entries(FIELD_WEIGHTS)) {
+    fieldTotalPoints += weight;
+    if (hasField(extractedData, field)) {
+      fieldEarnedPoints += weight;
+    } else {
+      missingFields.push(field);
+    }
+  }
+  
+  // 2. Document scoring with verification status
+  for (const [docType, config] of Object.entries(DOCUMENT_WEIGHTS)) {
+    // Check if document is required for target stage
+    if (!config.required_for.includes(targetStage)) continue;
+    
+    docTotalPoints += config.weight;
+    
+    const presence = checkDocumentPresence(
+      extractedData, 
+      application, 
+      docType
+    );
+    
+    if (!presence.present) {
+      missingDocs.push(docType);
+      blockers.push(`Ontbrekend document: ${docType.toUpperCase()}`);
+      continue;
+    }
+    
+    // Check verification status
+    if ('verification_field' in config) {
+      if (presence.expired) {
+        // Expired document - minimal points
+        const multiplier = config.expired_weight_multiplier ?? 0.3;
+        docEarnedPoints += config.weight * multiplier;
+        expiredDocs.push(docType);
+        blockers.push(`${docType.toUpperCase()} is verlopen (status: ${presence.status})`);
+        continue;
+      }
+      
+      if (!presence.verified) {
+        // Uploaded but not verified - half points
+        const multiplier = config.unverified_weight_multiplier ?? 0.5;
+        docEarnedPoints += config.weight * multiplier;
+        unverifiedDocs.push(docType);
+        blockers.push(`${docType.toUpperCase()} nog niet geverifieerd (status: ${presence.status || 'pending'})`);
+        continue;
+      }
+    }
+    
+    // Fully verified document - full points
+    docEarnedPoints += config.weight;
+  }
+  
+  // Calculate final score
+  const totalPoints = fieldTotalPoints + docTotalPoints;
+  const earnedPoints = fieldEarnedPoints + docEarnedPoints;
+  const score = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
+  
+  const fieldScore = fieldTotalPoints > 0 ? Math.round((fieldEarnedPoints / fieldTotalPoints) * 100) : 0;
+  const documentScore = docTotalPoints > 0 ? Math.round((docEarnedPoints / docTotalPoints) * 100) : 0;
+  
+  return { 
+    score: Math.min(100, Math.max(0, score)),
+    fieldScore,
+    documentScore,
+    missingDocs, 
+    unverifiedDocs,
+    expiredDocs,
+    missingFields, 
+    blockers 
+  };
+}
+
 /**
  * Pipeline stage progression map
  */

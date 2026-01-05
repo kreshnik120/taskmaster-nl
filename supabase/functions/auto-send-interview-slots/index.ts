@@ -3,7 +3,8 @@ import {
   STAGE_COMPLIANCE_GATES, 
   validateStageTransition, 
   hasField,
-  FIELD_ALIASES 
+  FIELD_ALIASES,
+  getPresentDocuments
 } from '../_shared/healthcare-mappings.ts';
 
 /**
@@ -66,10 +67,10 @@ Deno.serve(async (req) => {
       threshold: INTERVIEW_THRESHOLD
     });
 
-    // Fetch application details - include cv_file_path for compliance check
+    // Fetch application details - include cv_file_path and validation status for compliance check
     const { data: application, error: appError } = await supabase
       .from('professional_applications')
-      .select('id, email_from, completeness_score, interview_status, pipeline_stage, extracted_data, org_id, cv_file_path')
+      .select('id, email_from, completeness_score, interview_status, pipeline_stage, extracted_data, org_id, cv_file_path, diploma_validation_status, vog_validation_status')
       .eq('id', application_id)
       .single();
 
@@ -106,17 +107,21 @@ Deno.serve(async (req) => {
       // ================================================================
       const interviewGate = STAGE_COMPLIANCE_GATES['interview'];
       
-      // Determine present documents
-      const presentDocs: string[] = [];
-      if (application.cv_file_path || extractedData.cv_file_path) {
-        presentDocs.push('cv');
-      }
-      if (extractedData.diploma_file_path || extractedData.diploma_validation_status === 'verified_duo') {
-        presentDocs.push('diploma');
-      }
-      if (extractedData.vog_file_path || extractedData.vog_validation_status === 'verified_gaav') {
-        presentDocs.push('vog');
-      }
+      // Determine present documents using centralized helper
+      // This ensures only VERIFIED documents count for diploma and vog
+      const presentDocs = getPresentDocuments(extractedData, application, true);
+      
+      // Log document status for debugging
+      const diplomaStatus = application.diploma_validation_status || extractedData.diploma_validation_status;
+      const vogStatus = application.vog_validation_status || extractedData.vog_validation_status;
+      logInfo('AutoSendInterviewSlots', 'Document status check', {
+        cv_present: !!application.cv_file_path || !!extractedData.cv_file_path,
+        diploma_file: !!extractedData.diploma_file_path,
+        diploma_status: diplomaStatus,
+        vog_file: !!extractedData.vog_file_path,
+        vog_status: vogStatus,
+        presentDocs
+      });
       
       // Determine present fields using hasField helper
       const presentFields: string[] = [];

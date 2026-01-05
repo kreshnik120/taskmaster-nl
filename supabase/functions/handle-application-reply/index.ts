@@ -21,6 +21,11 @@ import {
   fuzzyNameMatch,
   type NameMatchResult,
   type IdentityValidationResult,
+  // Phase 6: Compliance gates and document awareness
+  validateStageTransition,
+  STAGE_COMPLIANCE_GATES,
+  getPresentDocuments,
+  hasField,
 } from '../_shared/healthcare-mappings.ts';
 // Fase 1: Quick Wins - Modulaire detection & audit
 import { stripQuotedContent, detectSlotWithRegex, detectInterviewSlot, type SlotDetectionInput } from '../_shared/slot-detection.ts';
@@ -2258,38 +2263,51 @@ Return JSON in dit formaat:
     }
     
     // =====================================================
-    // STAP 1.5: FASE 3 FIX - Transitie naar screening na kandidaat-reactie
+    // STAP 1.5: FASE 6 FIX - Transitie naar screening met strikte voorwaarden
     // Alleen als we nog in 'nieuw' of 'intake_verstuurd' stage zijn
+    // VEREISTEN:
+    // 1. CV is geüpload
+    // 2. Completeness >= 70% (interview gate minimum)
+    // 3. Kandidaat heeft gereageerd (ai_response_count >= 1)
     // =====================================================
-    if (['nieuw', 'intake_verstuurd'].includes(pipelineStage) && (newCompletenessScore >= 60 || currentResponseCount >= 1)) {
-      console.log(`📊 FASE 3: Transitie naar 'screening' - kandidaat heeft gereageerd (completeness: ${newCompletenessScore}%, responses: ${currentResponseCount})`);
-      
-      const { error: transitionError } = await supabase
-        .from("professional_applications")
-        .update({
-          pipeline_stage: 'screening',
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", applicationId);
-      
-      if (transitionError) {
-        console.error("Error transitioning to screening:", transitionError);
-      } else {
-        console.log("✅ FASE 3: Pipeline stage transitioned to 'screening' after candidate interaction");
+    const hasCV = !!application.cv_file_path || !!mergedData.cv_file_path;
+    const hasMinimalCompleteness = newCompletenessScore >= 70;
+    const hasCandidateInteraction = currentResponseCount >= 1;
+    
+    if (['nieuw', 'intake_verstuurd'].includes(pipelineStage)) {
+      if (hasCV && hasMinimalCompleteness && hasCandidateInteraction) {
+        console.log(`📊 FASE 6: Transitie naar 'screening' - alle voorwaarden voldaan (CV: ${hasCV}, completeness: ${newCompletenessScore}%, responses: ${currentResponseCount})`);
         
-        // Log stage audit
-        await supabase.from("application_stage_audit").insert({
-          application_id: applicationId,
-          from_stage: pipelineStage,
-          to_stage: 'screening',
-          reason: `Kandidaat heeft gereageerd - completeness ${newCompletenessScore}%, antwoorden: ${currentResponseCount}`,
-          performed_by: null,
-          metadata: {
-            trigger: 'handle-application-reply',
-            ai_response_count: currentResponseCount,
-            completeness_score: newCompletenessScore,
-          }
-        });
+        const { error: transitionError } = await supabase
+          .from("professional_applications")
+          .update({
+            pipeline_stage: 'screening',
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", applicationId);
+        
+        if (transitionError) {
+          console.error("Error transitioning to screening:", transitionError);
+        } else {
+          console.log("✅ FASE 6: Pipeline stage transitioned to 'screening' with proper requirements");
+          
+          // Log stage audit
+          await supabase.from("application_stage_audit").insert({
+            application_id: applicationId,
+            from_stage: pipelineStage,
+            to_stage: 'screening',
+            reason: `Screening requirements voldaan - CV: ${hasCV}, completeness: ${newCompletenessScore}%, antwoorden: ${currentResponseCount}`,
+            performed_by: null,
+            metadata: {
+              trigger: 'handle-application-reply',
+              ai_response_count: currentResponseCount,
+              completeness_score: newCompletenessScore,
+              has_cv: hasCV,
+            }
+          });
+        }
+      } else {
+        console.log(`📊 Staying in '${pipelineStage}' - missing requirements for screening (CV: ${hasCV}, completeness: ${newCompletenessScore}%, responses: ${currentResponseCount})`);
       }
     }
 
@@ -2578,49 +2596,23 @@ Return JSON in dit formaat:
     }
 
     // =====================================================
-    // STAP 5: AUTOMATISCHE INTERVIEW SLOTS BIJ >= 85% (NIEUW THRESHOLD!)
-    // Interview stage alleen via slot confirmatie (STAP 3)
+    // STAP 5: VERWIJDERD - Interview slots nu ALLEEN via STAP 6 goal
+    // Dit voorkomt race condition en dubbele interview emails
     // =====================================================
     const currentInterviewStatus = mergedData.interview_status as string || interviewStatus;
     const INTERVIEW_THRESHOLD = parseInt(Deno.env.get('INTERVIEW_THRESHOLD') || '85');
     
-    // Skip als slot rejection net verwerkt is
-    // 🎯 GECOMBINEERDE EMAIL: Bij threshold → stuur include_completion_message: true
-    // zodat de interview slots email ook de bevestigingsboodschap bevat
-    let skipResponseEmail = false;
+    // Log voor debugging, maar GEEN actie hier - alles via STAP 6
+    if (newCompletenessScore >= INTERVIEW_THRESHOLD) {
+      console.log(`📊 Completeness ${newCompletenessScore}% >= threshold ${INTERVIEW_THRESHOLD}% - interview eligibility via STAP 6`);
+    }
     
-    if (!slotRejection && pipelineStage === 'nieuw' && newCompletenessScore >= INTERVIEW_THRESHOLD && !interviewConfirmed) {
-      // Check of slots al gestuurd zijn
-      const skipStatuses = ['slots_offered', 'alternative_slots_offered', 'scheduled', 'confirmed', 'awaiting_manual_intervention'];
-      if (!skipStatuses.includes(currentInterviewStatus || '')) {
-        console.log(`🎉 Completeness ${newCompletenessScore}% >= threshold ${INTERVIEW_THRESHOLD}%, sending COMBINED interview slots email`);
-        
-        try {
-          const { data: autoResult, error: autoError } = await supabase.functions.invoke('auto-send-interview-slots', {
-            body: {
-              application_id: applicationId,
-              trigger_source: 'reply_update',
-              include_completion_message: true, // 🆕 Gecombineerde email met bevestiging
-            }
-          });
-          
-          if (autoError) {
-            console.error("Error auto-sending interview slots:", autoError);
-          } else {
-            console.log("✅ Auto interview slots result (combined email):", autoResult);
-            // 🆕 Skip de losse bevestigingsmail - alles zit in de interview slots email
-            skipResponseEmail = true;
-          }
-        } catch (autoErr) {
-          console.error("Exception auto-sending interview slots:", autoErr);
-        }
-      } else {
-        console.log(`⏭️ Interview already in progress: ${currentInterviewStatus}, skipping auto-send`);
-      }
-    } 
-    // Bij 70-84%: log maar geen automatische actie
-    else if (pipelineStage === 'nieuw' && newCompletenessScore >= 70 && newCompletenessScore < INTERVIEW_THRESHOLD) {
-      console.log(`📊 Completeness ${newCompletenessScore}% is close to threshold ${INTERVIEW_THRESHOLD}%, waiting for more info`);
+    // Skip response email flag - alleen true als interview slots al verstuurd zijn
+    let skipResponseEmail = false;
+    const skipStatuses = ['slots_offered', 'alternative_slots_offered', 'scheduled', 'confirmed', 'awaiting_manual_intervention'];
+    if (currentInterviewStatus && skipStatuses.includes(currentInterviewStatus)) {
+      console.log(`⏭️ Interview already in progress: ${currentInterviewStatus}, skipping response email`);
+      skipResponseEmail = true;
     }
     
     // =====================================================
@@ -2686,8 +2678,28 @@ Return JSON in dit formaat:
             responseType = 'interview_acknowledgment';
             responsePriority = 80;
           } else if (newCompletenessScore >= 80) {
-            responseType = 'ready_for_interview';
-            responsePriority = 150;
+            // 🔒 COMPLIANCE GATE: Check interview requirements before setting ready_for_interview
+            const interviewGate = STAGE_COMPLIANCE_GATES['interview'];
+            const presentDocs = getPresentDocuments(mergedData, application, true);
+            const presentFields = interviewGate.requiredFields.filter(f => hasField(mergedData, f));
+            
+            const gateCheck = validateStageTransition(
+              pipelineStage,
+              'interview',
+              newCompletenessScore,
+              presentDocs,
+              presentFields
+            );
+            
+            if (gateCheck.allowed) {
+              responseType = 'ready_for_interview';
+              responsePriority = 150;
+              console.log(`✅ Compliance gate PASSED for interview: docs=${presentDocs.join(',')}, fields=${presentFields.length}`);
+            } else {
+              console.log(`⚠️ Compliance gate BLOCKED interview: ${gateCheck.blockers.join('; ')}`);
+              responseType = 'followup_with_context';
+              responsePriority = 130;
+            }
           } else if (finalRemainingMissing.length > 0 || Object.keys(rejectionContext).length > 0) {
             responseType = 'followup_with_context';
             responsePriority = 130;
