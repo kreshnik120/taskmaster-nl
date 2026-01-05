@@ -5,7 +5,7 @@ import {
   formatValidationSummary,
   type ApplicationData 
 } from '../_shared/pre-validation.ts';
-import { ORG_IDS } from '../_shared/healthcare-mappings.ts';
+import { ORG_IDS, recalculateMissingInfo } from '../_shared/healthcare-mappings.ts';
 // CORS headers for cross-origin requests
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -455,6 +455,10 @@ Deno.serve(async (req) => {
     let completenessScore = Math.round((earnedPoints / totalPoints) * 100);
     console.log(`[receive-external-application] Completeness score: ${completenessScore}% (${earnedPoints}/${totalPoints} points)`);
 
+    // 12a. Calculate missing_info for AI Agent intake questions
+    const missingInfo = recalculateMissingInfo(extractedData);
+    console.log(`[receive-external-application] Missing info (${missingInfo.length}): ${missingInfo.join(', ')}`);
+
     // 12. Insert into professional_applications
     const { data: newApplication, error: insertError } = await supabase
       .from("professional_applications")
@@ -470,6 +474,7 @@ Deno.serve(async (req) => {
         source_project: data.source,
         source_label: sourceLabel,
         completeness_score: completenessScore,
+        missing_info: missingInfo,  // Now populated for AI Agent
       })
       .select("id")
       .single();
@@ -722,12 +727,17 @@ Deno.serve(async (req) => {
               
               const newCompletenessScore = Math.round((newEarnedPoints / newTotalPoints) * 100);
               
-              // Update met merged data EN nieuwe score
+              // Recalculate missing_info after CV merge
+              const updatedMissingInfo = recalculateMissingInfo(mergedData);
+              console.log(`[receive-external-application] Post-CV missing info (${updatedMissingInfo.length}): ${updatedMissingInfo.join(', ')}`);
+              
+              // Update met merged data, nieuwe score EN updated missing_info
               const { error: updateError } = await supabase
                 .from('professional_applications')
                 .update({ 
                   extracted_data: mergedData,
                   completeness_score: newCompletenessScore,
+                  missing_info: updatedMissingInfo,  // Keep missing_info in sync
                 })
                 .eq('id', newApplication.id);
               
