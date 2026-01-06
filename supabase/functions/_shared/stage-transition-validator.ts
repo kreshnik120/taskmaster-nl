@@ -16,6 +16,9 @@ import {
   STAGE_COMPLIANCE_GATES,
   validateStageTransition,
   hasField,
+  getPresentDocuments as getPresentDocumentsFromHealthcare,
+  checkDocumentPresence,
+  DOCUMENT_WEIGHTS,
   type StageComplianceGate,
 } from './healthcare-mappings.ts';
 
@@ -46,36 +49,26 @@ export interface ComplianceValidationResult {
 
 /**
  * Determines which documents are present for an application
+ * Uses the document-aware verification from healthcare-mappings.ts
+ * Only counts VERIFIED documents for diploma and vog (compliance requirement)
  */
 export function getPresentDocuments(data: ApplicationComplianceData): string[] {
-  const presentDocs: string[] = [];
+  // Build application object compatible with healthcare-mappings format
+  const applicationForCheck: Record<string, unknown> = {
+    cv_file_path: data.cvFilePath,
+    diploma_file_path: data.diplomaFilePath,
+    diploma_validation_status: data.diplomaValidationStatus,
+    vog_file_path: data.vogFilePath,
+    vog_validation_status: data.vogValidationStatus,
+  };
   
-  // CV check
-  if (data.cvFilePath || data.extractedData?.cv_file_path) {
-    presentDocs.push('cv');
-  }
-  
-  // Diploma check - either file uploaded or verified via DUO/EMREX
-  if (
-    data.diplomaFilePath || 
-    data.extractedData?.diploma_file_path ||
-    data.diplomaValidationStatus === 'verified_duo' ||
-    data.diplomaValidationStatus === 'verified_emrex'
-  ) {
-    presentDocs.push('diploma');
-  }
-  
-  // VOG check - either file uploaded or verified via GAAV
-  if (
-    data.vogFilePath ||
-    data.extractedData?.vog_file_path ||
-    data.vogValidationStatus === 'verified_gaav' ||
-    data.vogValidationStatus === 'valid'
-  ) {
-    presentDocs.push('vog');
-  }
-  
-  return presentDocs;
+  // Use the authoritative getPresentDocuments from healthcare-mappings
+  // which properly checks verification status
+  return getPresentDocumentsFromHealthcare(
+    data.extractedData || {},
+    applicationForCheck,
+    true // requireVerification = true for compliance gates
+  );
 }
 
 /**
