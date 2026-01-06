@@ -1,5 +1,6 @@
 // FASE 3: Synapse Pruning - Automatic cleanup of weak/unused relationships
-import { handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
+// Force deploy: 2026-01-06T16:10:00Z
+import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 
 Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
