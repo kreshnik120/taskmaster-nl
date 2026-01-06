@@ -88,6 +88,80 @@ export type Database = {
           },
         ]
       }
+      agent_execution_traces: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          error_message: string | null
+          final_answer: string | null
+          goal_description: string
+          goal_type: string | null
+          id: string
+          input_data: Json | null
+          learning_applied: boolean | null
+          metadata: Json | null
+          natural_language_goal: string | null
+          org_id: string
+          outcome: string | null
+          session_id: string
+          steps: Json
+          tool_usage_stats: Json | null
+          tools_executed: string[] | null
+          total_duration_ms: number | null
+          total_tokens_used: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          final_answer?: string | null
+          goal_description: string
+          goal_type?: string | null
+          id?: string
+          input_data?: Json | null
+          learning_applied?: boolean | null
+          metadata?: Json | null
+          natural_language_goal?: string | null
+          org_id: string
+          outcome?: string | null
+          session_id: string
+          steps?: Json
+          tool_usage_stats?: Json | null
+          tools_executed?: string[] | null
+          total_duration_ms?: number | null
+          total_tokens_used?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          final_answer?: string | null
+          goal_description?: string
+          goal_type?: string | null
+          id?: string
+          input_data?: Json | null
+          learning_applied?: boolean | null
+          metadata?: Json | null
+          natural_language_goal?: string | null
+          org_id?: string
+          outcome?: string | null
+          session_id?: string
+          steps?: Json
+          tool_usage_stats?: Json | null
+          tools_executed?: string[] | null
+          total_duration_ms?: number | null
+          total_tokens_used?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_execution_traces_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_goals: {
         Row: {
           completed_at: string | null
@@ -3247,6 +3321,75 @@ export type Database = {
         }
         Relationships: []
       }
+      pending_approvals: {
+        Row: {
+          action_type: string
+          expires_at: string | null
+          id: string
+          input_data: Json
+          org_id: string
+          reason: string | null
+          requested_at: string | null
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          risk_level: string | null
+          session_id: string
+          status: string | null
+          tool_name: string
+          trace_id: string | null
+        }
+        Insert: {
+          action_type: string
+          expires_at?: string | null
+          id?: string
+          input_data: Json
+          org_id: string
+          reason?: string | null
+          requested_at?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          risk_level?: string | null
+          session_id: string
+          status?: string | null
+          tool_name: string
+          trace_id?: string | null
+        }
+        Update: {
+          action_type?: string
+          expires_at?: string | null
+          id?: string
+          input_data?: Json
+          org_id?: string
+          reason?: string | null
+          requested_at?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          risk_level?: string | null
+          session_id?: string
+          status?: string | null
+          tool_name?: string
+          trace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_approvals_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_approvals_trace_id_fkey"
+            columns: ["trace_id"]
+            isOneToOne: false
+            referencedRelation: "agent_execution_traces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pii_patterns: {
         Row: {
           created_at: string | null
@@ -4246,6 +4389,65 @@ export type Database = {
           },
         ]
       }
+      react_agent_config: {
+        Row: {
+          created_at: string | null
+          critical_actions: string[] | null
+          enabled: boolean | null
+          excluded_goal_types: string[] | null
+          fallback_on_error: boolean | null
+          id: string
+          max_database_mutations: number | null
+          max_emails_per_session: number | null
+          max_steps: number | null
+          monitoring_mode: boolean | null
+          org_id: string | null
+          rollout_percentage: number | null
+          timeout_seconds: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          critical_actions?: string[] | null
+          enabled?: boolean | null
+          excluded_goal_types?: string[] | null
+          fallback_on_error?: boolean | null
+          id?: string
+          max_database_mutations?: number | null
+          max_emails_per_session?: number | null
+          max_steps?: number | null
+          monitoring_mode?: boolean | null
+          org_id?: string | null
+          rollout_percentage?: number | null
+          timeout_seconds?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          critical_actions?: string[] | null
+          enabled?: boolean | null
+          excluded_goal_types?: string[] | null
+          fallback_on_error?: boolean | null
+          id?: string
+          max_database_mutations?: number | null
+          max_emails_per_session?: number | null
+          max_steps?: number | null
+          monitoring_mode?: boolean | null
+          org_id?: string | null
+          rollout_percentage?: number | null
+          timeout_seconds?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "react_agent_config_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recruiter_notifications: {
         Row: {
           application_id: string | null
@@ -5235,6 +5437,68 @@ export type Database = {
           },
         ]
       }
+      tool_stability_scores: {
+        Row: {
+          avg_execution_ms: number | null
+          context_performance: Json | null
+          created_at: string | null
+          error_categories: Json | null
+          failure_count: number | null
+          id: string
+          last_failure_at: string | null
+          last_success_at: string | null
+          last_used_at: string | null
+          org_id: string | null
+          stability_score: number | null
+          success_count: number | null
+          tool_name: string
+          total_executions: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          avg_execution_ms?: number | null
+          context_performance?: Json | null
+          created_at?: string | null
+          error_categories?: Json | null
+          failure_count?: number | null
+          id?: string
+          last_failure_at?: string | null
+          last_success_at?: string | null
+          last_used_at?: string | null
+          org_id?: string | null
+          stability_score?: number | null
+          success_count?: number | null
+          tool_name: string
+          total_executions?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          avg_execution_ms?: number | null
+          context_performance?: Json | null
+          created_at?: string | null
+          error_categories?: Json | null
+          failure_count?: number | null
+          id?: string
+          last_failure_at?: string | null
+          last_success_at?: string | null
+          last_used_at?: string | null
+          org_id?: string | null
+          stability_score?: number | null
+          success_count?: number | null
+          tool_name?: string
+          total_executions?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tool_stability_scores_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       training_documents: {
         Row: {
           created_at: string | null
@@ -6177,6 +6441,16 @@ export type Database = {
           confidence: number
         }[]
       }
+      get_tool_stability_scores: {
+        Args: { p_org_id?: string; p_tool_names: string[] }
+        Returns: {
+          avg_execution_ms: number
+          stability_score: number
+          success_rate: number
+          tool_name: string
+          total_executions: number
+        }[]
+      }
       has_acl_access: {
         Args: { _acl: Json; _user_id: string }
         Returns: boolean
@@ -6306,6 +6580,37 @@ export type Database = {
           p_was_successful: boolean
         }
         Returns: undefined
+      }
+      update_tool_stability: {
+        Args: {
+          p_execution_ms?: number
+          p_org_id: string
+          p_success: boolean
+          p_tool_name: string
+        }
+        Returns: {
+          avg_execution_ms: number | null
+          context_performance: Json | null
+          created_at: string | null
+          error_categories: Json | null
+          failure_count: number | null
+          id: string
+          last_failure_at: string | null
+          last_success_at: string | null
+          last_used_at: string | null
+          org_id: string | null
+          stability_score: number | null
+          success_count: number | null
+          tool_name: string
+          total_executions: number | null
+          updated_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tool_stability_scores"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       user_is_org_member: {
         Args: { _org_id: string; _user_id: string }
