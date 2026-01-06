@@ -480,3 +480,11 @@ verify_jwt = false
 schedule = "45 4 * * *"
 # Purpose: Promote high-confidence werkvorm suggestions to learned mappings (daily at 04:45 UTC)
 # Auto-promotes when confidence >= 0.85 and occurrences >= 3
+
+# -----------------------------------------------------------------------------
+# ENTERPRISE REACT AI AGENT
+# -----------------------------------------------------------------------------
+
+[functions.react-agent]
+verify_jwt = false
+# Purpose: Enterprise ReAct AI Agent with dynamic tool selection, self-correction, and learning integration
