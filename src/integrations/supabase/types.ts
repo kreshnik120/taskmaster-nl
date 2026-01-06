@@ -4391,6 +4391,7 @@ export type Database = {
       }
       react_agent_config: {
         Row: {
+          config_key: string | null
           created_at: string | null
           critical_actions: string[] | null
           enabled: boolean | null
@@ -4407,6 +4408,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          config_key?: string | null
           created_at?: string | null
           critical_actions?: string[] | null
           enabled?: boolean | null
@@ -4423,6 +4425,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          config_key?: string | null
           created_at?: string | null
           critical_actions?: string[] | null
           enabled?: boolean | null
