@@ -43,6 +43,7 @@ import { CleanupDuplicateFields } from "@/components/AITraining/CleanupDuplicate
 import { EvaluationLearningWidget } from "@/components/AITraining/EvaluationLearningWidget";
 import { TriggerLearningButton } from "@/components/AITraining/TriggerLearningButton";
 import { AIAgentTestPanel } from "@/components/AITraining/AIAgentTestPanel";
+import { ReactAgentTestPanel } from "@/components/AITraining/ReactAgentTestPanel";
 import { N8nIntegrationTestPanel } from "@/components/AITraining/N8nIntegrationTestPanel";
 import { ResendInboundSetup } from "@/components/AITraining/ResendInboundSetup";
 import { EmailReplyTestPanel } from "@/components/AITraining/EmailReplyTestPanel";
@@ -222,6 +223,7 @@ const AiTraining = () => {
 
                   <TabsContent value="ai-agent" className="mt-4">
                     <div className="space-y-6">
+                      <ReactAgentTestPanel />
                       <ResendInboundSetup />
                       <EmailReplyTestPanel />
                       <AIAgentTestPanel />

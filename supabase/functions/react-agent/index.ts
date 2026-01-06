@@ -608,8 +608,9 @@ async function executeReActLoop(
           memory.tool_call_counts[toolName] = (memory.tool_call_counts[toolName] || 0) + 1;
           toolsExecuted.push(toolName);
 
-          // Update tool stability
-          await updateToolStability(supabase, toolName, result.success);
+          // Update tool stability with org_id from context
+          const orgId = (memory.context.org_id as string) || '550e8400-e29b-41d4-a716-446655440000';
+          await updateToolStability(supabase, toolName, result.success, orgId);
 
           if (result.data && typeof result.data === 'object' && result.data !== null) {
             memory.entities_discovered.push(result.data as Record<string, unknown>);
@@ -617,7 +618,8 @@ async function executeReActLoop(
         } catch (toolErr) {
           step.observation = `ERROR: ${getErrorMessage(toolErr)}`;
           step.execution_ms = Date.now() - toolStart;
-          await updateToolStability(supabase, toolName, false);
+          const orgId = (memory.context.org_id as string) || '550e8400-e29b-41d4-a716-446655440000';
+          await updateToolStability(supabase, toolName, false, orgId);
         }
       }
 
@@ -707,12 +709,18 @@ async function persistSessionTrace(
   }
 }
 
-async function updateToolStability(supabase: any, toolName: string, success: boolean): Promise<void> {
+async function updateToolStability(
+  supabase: any, 
+  toolName: string, 
+  success: boolean,
+  orgId: string = '550e8400-e29b-41d4-a716-446655440000'
+): Promise<void> {
   try {
     await supabase.rpc('update_tool_stability', {
       p_tool_name: toolName,
+      p_org_id: orgId,
       p_success: success,
-      p_execution_ms: 0, // Will be updated separately if needed
+      p_execution_ms: 0,
     });
   } catch (err) {
     console.error('[ReAct] Failed to update tool stability:', err);
