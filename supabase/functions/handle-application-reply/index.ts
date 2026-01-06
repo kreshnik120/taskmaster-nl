@@ -26,6 +26,7 @@ import {
   STAGE_COMPLIANCE_GATES,
   getPresentDocuments,
   hasField,
+  calculateDocumentAwareCompleteness,
 } from '../_shared/healthcare-mappings.ts';
 // Fase 1: Quick Wins - Modulaire detection & audit
 import { stripQuotedContent, detectSlotWithRegex, detectInterviewSlot, type SlotDetectionInput } from '../_shared/slot-detection.ts';
@@ -2162,70 +2163,41 @@ Return JSON in dit formaat:
       }
     }
     
-    // Calculate completeness based on CRITICAL intake fields (inclusief conditional)
-    const allRequiredFields = [...CRITICAL_INTAKE_FIELDS, ...conditionalFields];
+    // =====================================================
+    // FASE 6 FIX: DOCUMENT-AWARE COMPLETENESS BEREKENING
+    // Vervangt de oude field-only berekening met document verificatie
+    // =====================================================
+    const completenessResult = calculateDocumentAwareCompleteness(
+      mergedData,
+      application,
+      'geplaatst' // Target stage voor maximale berekening
+    );
+
+    const newCompletenessScore = completenessResult.score;
     
-    const criticalFieldsFilled = allRequiredFields.filter(field => {
-      // Handle naam/full_name as aliases
-      if (field === 'naam') {
-        const nameValue = mergedData.naam || mergedData.full_name;
-        return nameValue !== null && nameValue !== undefined && nameValue !== '';
-      }
-      // Telefoonnummer: alleen geldig als NIET placeholder
-      if (field === 'telefoonnummer') {
-        return hasValidPhone;
-      }
-      // Diploma type: accepteer variaties
-      if (field === 'diploma_type') {
-        const diplomaValue = mergedData.diploma_type || mergedData.opleiding || mergedData.diploma;
-        return diplomaValue !== null && diplomaValue !== undefined && diplomaValue !== '';
-      }
-      // BIG nummer: 11 cijfers
-      if (field === 'big_nummer') {
-        const bigValue = mergedData.big_nummer as string;
-        return bigValue && /^\d{11}$/.test(bigValue.replace(/\D/g, ''));
-      }
-      const value = mergedData[field];
-      return value !== null && value !== undefined && value !== '';
-    });
-    
-    // Base score from all required fields (critical + conditional)
-    const baseScore = Math.round((criticalFieldsFilled.length / allRequiredFields.length) * 100);
-    
-    // Smart remaining_missing_info: filter out filled fields
-    const smartRemainingMissing = [...smartMissingFields];
+    // Build comprehensive missing info list
+    const finalRemainingMissing = [
+      ...completenessResult.missingFields,
+      ...completenessResult.missingDocs.map(doc => `${doc}_upload`),
+      ...completenessResult.unverifiedDocs.map(doc => `${doc}_verificatie`),
+      ...completenessResult.expiredDocs.map(doc => `${doc}_verlopen`),
+    ];
     
     // Add telefoon terug als blocked
-    if (phoneBlocked && !smartRemainingMissing.includes('telefoonnummer')) {
-      smartRemainingMissing.push('telefoonnummer (echt nummer, geen placeholder zoals 06-12345678)');
+    if (phoneBlocked && !finalRemainingMissing.includes('telefoonnummer')) {
+      finalRemainingMissing.push('telefoonnummer (echt nummer, geen placeholder zoals 06-12345678)');
     }
-    
-    // Filter wat al ingevuld is
-    const finalRemainingMissing = smartRemainingMissing.filter(field => {
-      const baseField = field.split(' ')[0]; // "telefoonnummer (echt..." → "telefoonnummer"
-      if (baseField === 'naam') {
-        const nameValue = mergedData.naam || mergedData.full_name;
-        return nameValue === null || nameValue === undefined || nameValue === '';
-      }
-      if (baseField === 'telefoonnummer') {
-        return !hasValidPhone;
-      }
-      if (baseField === 'diploma_type') {
-        const diplomaValue = mergedData.diploma_type || mergedData.opleiding || mergedData.diploma;
-        return diplomaValue === null || diplomaValue === undefined || diplomaValue === '';
-      }
-      const value = mergedData[baseField];
-      return value === null || value === undefined || value === '';
-    });
-    
-    const newCompletenessScore = Math.max(0, Math.min(100, baseScore));
 
-    console.log("🧮 Smart Completeness Calculation:");
-    console.log("   Critical fields:", CRITICAL_INTAKE_FIELDS);
-    console.log("   Critical filled:", criticalFieldsFilled);
-    console.log("   Base score:", baseScore);
+    console.log("🧮 FASE 6 Document-Aware Completeness Calculation:");
+    console.log("   Field score:", completenessResult.fieldScore);
+    console.log("   Document score:", completenessResult.documentScore);
+    console.log("   Total score:", completenessResult.score);
+    console.log("   Missing docs:", completenessResult.missingDocs);
+    console.log("   Unverified docs:", completenessResult.unverifiedDocs);
+    console.log("   Expired docs:", completenessResult.expiredDocs);
+    console.log("   Missing fields:", completenessResult.missingFields);
+    console.log("   Blockers:", completenessResult.blockers);
     console.log("   Final remaining missing:", finalRemainingMissing);
-    console.log("   New completeness score:", newCompletenessScore);
 
 
     // =====================================================
