@@ -889,6 +889,32 @@ function generateEmailTemplate(
         </p>`;
       break;
 
+    // =====================================================
+    // NEW: Interview Availability Request (3 opties voorstellen)
+    // =====================================================
+    case 'interview_availability_request':
+      const interviewSlots = data.available_slots || [];
+      const interviewSlotsList = interviewSlots.map((s: any, i: number) => 
+        `<li style="margin: 8px 0;"><strong>${i+1}.</strong> ${s.formatted || s.date + ' om ' + s.time}</li>`
+      ).join('');
+      content = `
+        <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName},</h2>
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
+          We plannen graag het intake-/sollicitatiegesprek. Dit zijn 3 beschikbare momenten:
+        </p>
+        <ol style="background-color: #e7f5ff; padding: 20px 20px 20px 40px; border-radius: 6px; margin: 20px 0; border-left: 4px solid ${orgColor}; color: #1a1a1a;">
+          ${interviewSlotsList}
+        </ol>
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6;">
+          Welke optie past het beste? Reageer met "1", "2" of "3".<br>
+          Als geen van deze momenten kan, stuur 2-3 alternatieven (ma-vr 09:00-17:00).
+        </p>
+        <p style="margin: 25px 0 0 0; color: #4a5568;">
+          Met vriendelijke groet,<br>
+          <strong>Het ${orgName} Recruitment Team</strong>
+        </p>`;
+      break;
+
     default:
       content = `
         <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName},</h2>

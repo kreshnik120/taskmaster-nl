@@ -557,15 +557,39 @@ const TOOL_HANDLERS: Record<string, (supabase: any, params: Record<string, unkno
       });
       if (convError) throw convError;
       
-      // Update pipeline based on outcome
       let newStage = null;
+      let requiresHumanReview = false;
+      
       if (outcome === 'positive') {
         newStage = 'screening';
       } else if (outcome === 'negative') {
-        newStage = 'afgewezen';
+        // HUMAN-IN-THE-LOOP: Afwijzingen vereisen menselijke goedkeuring
+        requiresHumanReview = true;
+        
+        // Maak human review record aan
+        await supabase.from('human_review_queue').insert({
+          application_id: applicationId,
+          review_type: 'interview_rejection',
+          priority: 'high',
+          reason: `Interview feedback: ${outcome}. ${params.notes || 'Geen notities'}`,
+          suggested_action: 'afgewezen',
+          created_by: 'react_agent',
+          metadata: {
+            interviewer_name: params.interviewer_name,
+            original_outcome: outcome
+          }
+        });
+        
+        // Update application to pending review status
+        await supabase.from('professional_applications')
+          .update({ 
+            pending_human_review: true,
+            updated_at: new Date().toISOString() 
+          })
+          .eq('id', applicationId);
       }
       
-      if (newStage) {
+      if (newStage && !requiresHumanReview) {
         const { error: updateError } = await supabase
           .from('professional_applications')
           .update({ 
@@ -576,7 +600,6 @@ const TOOL_HANDLERS: Record<string, (supabase: any, params: Record<string, unkno
         
         if (updateError) throw updateError;
         
-        // Log audit trail
         await supabase.from('application_stage_audit').insert({
           application_id: applicationId,
           to_stage: newStage,
@@ -589,8 +612,9 @@ const TOOL_HANDLERS: Record<string, (supabase: any, params: Record<string, unkno
         data: { 
           recorded: true, 
           outcome, 
-          pipeline_updated: !!newStage,
-          new_stage: newStage 
+          pipeline_updated: !!newStage && !requiresHumanReview,
+          new_stage: newStage,
+          requires_human_review: requiresHumanReview
         }, 
         execution_ms: Date.now() - start 
       };
