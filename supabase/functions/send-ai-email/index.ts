@@ -4,22 +4,23 @@ import { getOrganizationById, getEmailConfig } from '../_shared/healthcare-mappi
 
 // Email types supported by this function
 type EmailType = 
-  | 'followup_question'           // Vraag ontbrekende info aan kandidaat
-  | 'document_request'            // Vraag VOG, diploma's, certificaten
-  | 'document_renewal_request'    // Herinnering verlopen documenten met urgentie
-  | 'document_renewal_escalation' // Tweede urgente herinnering (na 7 dagen)
-  | 'recruiter_document_alert'    // Notificatie naar recruiter (na 14 dagen)
-  | 'diploma_upgrade_notification'// Notificatie naar recruiter bij DUO verificatie success
-  | 'interview_confirmation'      // Bevestig interview afspraak
-  | 'appointment_confirmation'    // Algemene afspraak bevestiging
-  | 'general'                     // Algemene communicatie
-  | 'welcome'                     // Welkomstmail nieuwe kandidaat
-  | 'status_update'               // Status update (goedgekeurd, afgewezen, etc.)
-  | 'vog_rejection'               // VOG verificatie mislukt, vraag nieuw VOG
-  | 'rejection'                   // Afwijzing sollicitatie (geen diploma, etc.)
-  | 'emrex_invitation'            // EMREX diploma verificatie uitnodiging
-  | 'emrex_reminder'              // EMREX herinnering na 48 uur
-  | 'vog_verified_notification';  // Notificatie naar recruiter bij VOG GAAV verificatie success
+  | 'followup_question'              // Vraag ontbrekende info aan kandidaat
+  | 'document_request'               // Vraag VOG, diploma's, certificaten
+  | 'document_renewal_request'       // Herinnering verlopen documenten met urgentie
+  | 'document_renewal_escalation'    // Tweede urgente herinnering (na 7 dagen)
+  | 'recruiter_document_alert'       // Notificatie naar recruiter (na 14 dagen)
+  | 'diploma_upgrade_notification'   // Notificatie naar recruiter bij DUO verificatie success
+  | 'interview_confirmation'         // Bevestig interview afspraak
+  | 'appointment_confirmation'       // Algemene afspraak bevestiging
+  | 'general'                        // Algemene communicatie
+  | 'welcome'                        // Welkomstmail nieuwe kandidaat
+  | 'status_update'                  // Status update (goedgekeurd, afgewezen, etc.)
+  | 'vog_rejection'                  // VOG verificatie mislukt, vraag nieuw VOG
+  | 'rejection'                      // Afwijzing sollicitatie (geen diploma, etc.)
+  | 'emrex_invitation'               // EMREX diploma verificatie uitnodiging
+  | 'emrex_reminder'                 // EMREX herinnering na 48 uur
+  | 'vog_verified_notification'      // Notificatie naar recruiter bij VOG GAAV verificatie success
+  | 'interview_availability_request'; // Master Prompt: 3 interview opties voorstellen
 
 interface SendEmailRequest {
   email_type: EmailType;
@@ -76,6 +77,56 @@ interface SendEmailRequest {
 // Organization email configuration - now uses shared healthcare-mappings
 // NOTE: This constant is kept for backward compatibility but getEmailConfig() is preferred
 
+/**
+ * Genereer standaard subject op basis van email type
+ * Ondersteunt alle email types conform Master Prompt templates
+ */
+function generateDefaultSubject(
+  emailType: EmailType, 
+  recipientName: string, 
+  organization: string
+): string {
+  const orgName = organization === 'abczorg' ? 'ABCzorg' : 'CitoZorg';
+  
+  switch (emailType) {
+    case 'welcome':
+      return `Welkom bij ${orgName}, ${recipientName}! 🎉`;
+    case 'followup_question':
+      return `${orgName}: Aanvulling nodig voor je aanmelding`;
+    case 'document_request':
+      return `${orgName}: Documentenverzoek voor je sollicitatie`;
+    case 'document_renewal_request':
+      return `${orgName}: Actie vereist - Document verloopt binnenkort`;
+    case 'document_renewal_escalation':
+      return `⚠️ ${orgName}: Urgent - Document dreigt te verlopen`;
+    case 'recruiter_document_alert':
+      return `[Intern] Document alert: ${recipientName}`;
+    case 'diploma_upgrade_notification':
+      return `[Intern] Diploma gevalideerd: ${recipientName}`;
+    case 'interview_confirmation':
+      return `${orgName}: Bevestiging intakegesprek`;
+    case 'appointment_confirmation':
+      return `${orgName}: Bevestiging afspraak`;
+    case 'status_update':
+      return `${orgName}: Update over je sollicitatie`;
+    case 'vog_rejection':
+      return `${orgName}: Actie vereist - VOG verificatie`;
+    case 'rejection':
+      return `${orgName}: Update op je aanmelding`;
+    case 'emrex_invitation':
+      return `${orgName}: Diploma verificatie via EMREX`;
+    case 'emrex_reminder':
+      return `${orgName}: Herinnering - Diploma verificatie`;
+    case 'vog_verified_notification':
+      return `[Intern] VOG geverifieerd: ${recipientName}`;
+    case 'interview_availability_request':
+      return `${orgName}: Intakegesprek inplannen — kies een moment`;
+    case 'general':
+    default:
+      return `${orgName}: Bericht van het recruitment team`;
+  }
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
@@ -105,9 +156,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       reply_to
     } = body;
 
-    // Validate required fields
-    if (!recipient_email || !subject) {
-      return errorResponse("Missing required fields: recipient_email, subject", 400);
+    // Validate required fields - subject is now optional (auto-generated)
+    if (!recipient_email) {
+      return errorResponse("Missing required field: recipient_email", 400);
     }
 
     // Initialize clients
@@ -119,12 +170,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const orgInfo = getOrganizationById(org_id);
     const emailConfig = getEmailConfig(org_id);
     
+    // Auto-generate subject if not provided (Master Prompt feature)
+    const finalSubject = subject || generateDefaultSubject(email_type, recipient_name, orgInfo.name);
+    
     console.log(`[send-ai-email] Using org: ${orgInfo.displayName} (${orgInfo.name})`);
+    console.log(`[send-ai-email] Subject: provided=${!!subject}, generated=${!subject}, final="${finalSubject}"`);
     
     // Build HTML content if not provided
     let finalHtmlContent = html_content;
     if (!finalHtmlContent) {
-      finalHtmlContent = generateEmailTemplate(email_type, recipient_name, subject, template_data, orgInfo.name);
+      finalHtmlContent = generateEmailTemplate(email_type, recipient_name, finalSubject, template_data, orgInfo.name);
     }
 
     console.log(`[send-ai-email] Sending via Resend as ${emailConfig.name}`);
@@ -134,7 +189,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       from: `${emailConfig.name} <${emailConfig.from}>`,
       to: [recipient_email],
       replyTo: reply_to || emailConfig.replyTo,
-      subject: subject,
+      subject: finalSubject,
       html: finalHtmlContent,
       text: plain_text,
     });
@@ -152,7 +207,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         email_type,
         recipient_email,
         recipient_name,
-        subject,
+        subject: finalSubject,
         sent_via: 'resend',
         organization: orgInfo.name,
         success: !emailResult.error
@@ -168,7 +223,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       await supabase.from("application_conversations").insert({
         application_id,
         role: "assistant",
-        content: `Email verzonden: ${subject}`,
+        content: `Email verzonden: ${finalSubject}`,
         metadata: {
           email_type,
           resend_email_id: emailResult.data?.id,
@@ -531,7 +586,31 @@ function generateEmailTemplate(
         </p>`;
       break;
 
-    case 'emrex_reminder':
+    // =====================================================
+    // Master Prompt: Interview Availability Request (3 opties)
+    // =====================================================
+    case 'interview_availability_request':
+      const slots = data.available_slots || [];
+      const slotsList = slots.map((s: { date?: string; time?: string; formatted?: string }, i: number) => 
+        `<li style="margin: 8px 0;"><strong>${i+1}.</strong> ${s.formatted || (s.date + ' om ' + s.time)}</li>`
+      ).join('');
+      content = `
+        <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName},</h2>
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
+          We plannen graag het intake-/sollicitatiegesprek. Dit zijn 3 beschikbare momenten:
+        </p>
+        <ol style="background-color: #e7f5ff; padding: 20px 20px 20px 40px; border-radius: 6px; margin: 20px 0; border-left: 4px solid ${orgColor}; color: #1a1a1a;">
+          ${slotsList}
+        </ol>
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6;">
+          Welke optie past het beste? Reageer met "1", "2" of "3".<br>
+          Als geen van deze momenten kan, stuur 2-3 alternatieven (ma-vr 09:00-17:00).
+        </p>
+        <p style="margin: 25px 0 0 0; color: #4a5568;">
+          Met vriendelijke groet,<br>
+          <strong>Het ${orgName} Recruitment Team</strong>
+        </p>`;
+      break;
       const reminderEmrexLink = data.emrex_link || '#';
       const daysSinceInvitation = data.days_since_invitation || 2;
       content = `

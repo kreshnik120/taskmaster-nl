@@ -43,7 +43,7 @@ const REACT_CONFIG: ReActConfig = {
 // SYSTEM PROMPT FOR REACT REASONING
 // ============================================================================
 
-const REACT_SYSTEM_PROMPT = `Je bent een Enterprise AI Agent voor recruitment in de Nederlandse zorgsector.
+const REACT_SYSTEM_PROMPT = `Je bent de TaskFlow Recruitment AI Agent voor Citozorg en ABCzorg.
 
 Je werkt via het ReAct pattern (Reason → Act):
 1. THOUGHT: Analyseer de huidige situatie en bepaal de volgende stap
@@ -51,27 +51,96 @@ Je werkt via het ReAct pattern (Reason → Act):
 3. OBSERVATION: Ontvang het resultaat
 4. Herhaal tot het doel bereikt is, of geef een FINAL ANSWER
 
-BELANGRIJKE REGELS:
-- Gebruik ALLEEN de beschikbare tools
-- Wees specifiek met parameters
-- Valideer data voordat je acties uitvoert
-- Bij onzekerheid: vraag verduidelijking via FINAL ANSWER
-- KRITIEKE ACTIES (reject_application, delete_professional) vereisen menselijke goedkeuring
+═══════════════════════════════════════════════════════════════════
+JOUW SCOPE (STOPPUNT)
+═══════════════════════════════════════════════════════════════════
+Je handelt sollicitanten af van binnenkomst in de pipeline tot:
+- "Screening" (kandidaat positief na interview, screening/compliance start)
+- of "Afgewezen"
 
-OUTPUT FORMAT (strict JSON):
+Alles NA "Screening" valt buiten scope.
+
+═══════════════════════════════════════════════════════════════════
+HARD REGELS (INVARIANTEN)
+═══════════════════════════════════════════════════════════════════
+1) PIPELINE-REGEL:
+   - Sollicitant blijft op "Nieuw" zolang er géén bevestigde afspraak in agenda staat
+   - Alleen met bevestigde afspraak → "Intake Verstuurd"
+
+2) DATAMINIMALISATIE:
+   - Vraag alleen info/documenten die ontbreken en nu nodig zijn
+   - Gevoelige documenten (ID, verzekering) via upload portaal
+
+3) GEEN GOKKEN:
+   - Vul geen gegevens in als het niet in documenten/antwoord staat
+   - Bij twijfel: stel gerichte vraag of markeer als "onbekend"
+
+4) DOCUMENTBEHEER:
+   - Label elk document correct (CV, Diploma, VOG, ID, BAV, KvK, etc.)
+   - Sla op met einddatum/expiry indien relevant
+
+5) VERIFICATIE:
+   - Bij nieuw Diploma/VOG: voer verificatie uit via trigger_document_verification tool
+   - Sla verificatiestatus op (verified/rejected/pending)
+
+6) HUMAN INPUT BEPAALT EINDBESLUIT:
+   - Jij beslist NIET aangenomen/afgewezen
+   - Na interview wacht op medewerkerfeedback via record_interview_feedback tool
+     * Akkoord → "Screening"
+     * Afwijzing → "Afgewezen"
+
+═══════════════════════════════════════════════════════════════════
+BRONNEN (LEIDEND)
+═══════════════════════════════════════════════════════════════════
+Gebruik altijd systeemvelden als bron van waarheid:
+- "missing_info" (ontbrekende velden uit context)
+- "extracted_data" (geëxtraheerde gegevens)
+- "pipeline_stage" (Nieuw/Intake Verstuurd/Interview/Screening/Afgewezen)
+- "application_conversations" via query tools
+
+═══════════════════════════════════════════════════════════════════
+EVENT HANDLERS (gebruik de juiste tools per situatie)
+═══════════════════════════════════════════════════════════════════
+
+EVENT 1: Nieuwe sollicitatie (goal: send_welcome_and_intake)
+DOEL: Welkomstmail sturen met gerichte vragen over ontbrekende info
+TOOLS: send_email (email_type: 'welcome' of 'followup_question')
+STAPPEN:
+1. Lees missing_info uit context
+2. Stuur welkomstmail met vragen over ontbrekende velden
+
+EVENT 2: Kandidatenreactie (goal: send_reply_response)
+DOEL: Verwerken, profiel bijwerken, verificaties uitvoeren
+TOOLS: send_email, trigger_document_verification
+STAPPEN:
+1. Detecteer nieuwe info uit context
+2. Bij Diploma/VOG: trigger_document_verification
+3. Follow-up indien nog items ontbreken
+
+EVENT 3: Interview plannen (goal: schedule_interview)
+DOEL: 3 opties voorstellen, keuze verwerken
+TOOLS: check_recruiter_availability, send_email, create_calendar_event
+STAPPEN:
+1. check_recruiter_availability voor slots
+2. send_email met email_type: 'interview_availability_request'
+3. Bij akkoord: create_calendar_event + update_pipeline_stage naar 'intake_verstuurd'
+
+EVENT 4: Na intakegesprek
+DOEL: Wachten op feedback, uitvoeren beslissing
+TOOLS: record_interview_feedback, update_pipeline_stage, send_email
+STAPPEN:
+1. Lees feedback uit context
+2. Feedback positief → update_pipeline_stage naar 'screening'
+3. Feedback negatief → update_pipeline_stage naar 'afgewezen' + send_email (rejection)
+
+═══════════════════════════════════════════════════════════════════
+OUTPUT FORMAT (STRICT JSON)
+═══════════════════════════════════════════════════════════════════
 {
   "thought": "Je redenering over de huidige situatie en volgende stap",
   "action": "tool_name" of null voor final answer,
   "action_input": { parameters } of null,
   "final_answer": "Antwoord aan gebruiker" of null
-}
-
-Als je klaar bent of geen tools meer nodig hebt, gebruik dan:
-{
-  "thought": "Ik heb voldoende informatie om te antwoorden",
-  "action": null,
-  "action_input": null,
-  "final_answer": "Je complete antwoord hier"
 }`;
 
 // ============================================================================
@@ -394,6 +463,171 @@ const TOOL_HANDLERS: Record<string, (supabase: any, params: Record<string, unkno
       const { data, error } = await supabase.from('agent_goals').insert({ org_id: context.context.org_id, goal_type: params.goal_type, goal_description: params.goal_description, input_data: params.input_data, priority: params.priority || 5, status: 'pending' }).select().single();
       if (error) throw error;
       return { success: true, data, execution_ms: Date.now() - start };
+    } catch (err) {
+      return { success: false, data: null, error: getErrorMessage(err), execution_ms: Date.now() - start };
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SPECIALIST TOOLS (Master Prompt)
+  // ═══════════════════════════════════════════════════════════════════
+
+  check_recruiter_availability: async (supabase, params, _context) => {
+    const start = Date.now();
+    try {
+      const daysAhead = (params.date_range_days as number) || 7;
+      
+      // Haal bestaande taken/afspraken op
+      const startDate = new Date();
+      const endDate = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000);
+      
+      const { data: tasks, error } = await supabase
+        .from('tasks')
+        .select('start_at, due_at, title')
+        .gte('start_at', startDate.toISOString().split('T')[0])
+        .lte('start_at', endDate.toISOString().split('T')[0])
+        .is('deleted_at', null);
+      
+      if (error) throw error;
+      
+      // Blokkeer bezette tijden
+      const blockedTimes = new Set(
+        (tasks || []).map((t: { start_at: string | null; due_at: string | null; title: string | null }) => {
+          if (!t.start_at) return null;
+          const d = new Date(t.start_at);
+          return `${d.toISOString().split('T')[0]}-${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+        }).filter(Boolean)
+      );
+      
+      // Genereer beschikbare slots (ma-vr 09:00-17:00)
+      const defaultTimes = ['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'];
+      const availableSlots = [];
+      
+      for (let dayOffset = 2; dayOffset <= daysAhead && availableSlots.length < 6; dayOffset++) {
+        const date = new Date();
+        date.setDate(date.getDate() + dayOffset);
+        if (date.getDay() === 0 || date.getDay() === 6) continue; // Skip weekend
+        
+        const dateStr = date.toISOString().split('T')[0];
+        const weekday = date.toLocaleDateString('nl-NL', { weekday: 'long' });
+        const formattedDate = date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' });
+        
+        for (const time of defaultTimes) {
+          if (blockedTimes.has(`${dateStr}-${time}`) || availableSlots.length >= 6) continue;
+          availableSlots.push({ 
+            date: dateStr, 
+            time, 
+            formatted: `${weekday} ${formattedDate} om ${time}` 
+          });
+        }
+      }
+      
+      return { 
+        success: true, 
+        data: { 
+          available_slots: availableSlots.slice(0, 3),
+          total_available: availableSlots.length,
+          blocked_count: blockedTimes.size 
+        }, 
+        execution_ms: Date.now() - start 
+      };
+    } catch (err) {
+      return { success: false, data: null, error: getErrorMessage(err), execution_ms: Date.now() - start };
+    }
+  },
+
+  record_interview_feedback: async (supabase, params, _context) => {
+    const start = Date.now();
+    try {
+      const outcome = params.outcome as string;
+      const applicationId = params.application_id as string;
+      
+      // Log feedback in application_conversations
+      const { error: convError } = await supabase.from('application_conversations').insert({
+        application_id: applicationId,
+        role: 'system',
+        content: `Interview feedback geregistreerd: ${outcome}. ${params.notes || ''}`,
+        metadata: {
+          feedback_type: 'interview_completed',
+          outcome,
+          interviewer_name: params.interviewer_name,
+          recorded_at: new Date().toISOString(),
+          recorded_by: 'react_agent'
+        }
+      });
+      if (convError) throw convError;
+      
+      // Update pipeline based on outcome
+      let newStage = null;
+      if (outcome === 'positive') {
+        newStage = 'screening';
+      } else if (outcome === 'negative') {
+        newStage = 'afgewezen';
+      }
+      
+      if (newStage) {
+        const { error: updateError } = await supabase
+          .from('professional_applications')
+          .update({ 
+            pipeline_stage: newStage, 
+            updated_at: new Date().toISOString() 
+          })
+          .eq('id', applicationId);
+        
+        if (updateError) throw updateError;
+        
+        // Log audit trail
+        await supabase.from('application_stage_audit').insert({
+          application_id: applicationId,
+          to_stage: newStage,
+          reason: `Interview feedback: ${outcome}`
+        });
+      }
+      
+      return { 
+        success: true, 
+        data: { 
+          recorded: true, 
+          outcome, 
+          pipeline_updated: !!newStage,
+          new_stage: newStage 
+        }, 
+        execution_ms: Date.now() - start 
+      };
+    } catch (err) {
+      return { success: false, data: null, error: getErrorMessage(err), execution_ms: Date.now() - start };
+    }
+  },
+
+  trigger_document_verification: async (supabase, params, _context) => {
+    const start = Date.now();
+    try {
+      const docType = params.document_type as string;
+      const applicationId = params.application_id as string;
+      
+      // Bepaal welke verificatie functie aan te roepen
+      const functionName = docType === 'diploma' ? 'verify-diploma-duo' : 'verify-vog-gaav';
+      
+      console.log(`[ReAct] Triggering ${functionName} for application ${applicationId}`);
+      
+      const { data, error } = await supabase.functions.invoke(functionName, {
+        body: { 
+          application_id: applicationId, 
+          document_path: params.document_path 
+        }
+      });
+      
+      if (error) throw error;
+      
+      return { 
+        success: true, 
+        data: { 
+          verification_triggered: true,
+          function: functionName,
+          result: data 
+        }, 
+        execution_ms: Date.now() - start 
+      };
     } catch (err) {
       return { success: false, data: null, error: getErrorMessage(err), execution_ms: Date.now() - start };
     }

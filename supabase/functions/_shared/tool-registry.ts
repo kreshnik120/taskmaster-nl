@@ -414,7 +414,60 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
       },
       required: ['action_type', 'reason', 'input_data'],
     },
-    requires_approval: false, // This tool itself creates an approval request
+    requires_approval: false,
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SPECIALIST TOOLS (Master Prompt ondersteuning)
+  // ═══════════════════════════════════════════════════════════════════
+
+  check_recruiter_availability: {
+    name: 'check_recruiter_availability',
+    description: 'Check beschikbare interview slots in de agenda voor de komende 7 dagen. Geeft 3-6 opties terug (ma-vr 09:00-17:00).',
+    category: 'action',
+    parameters: {
+      type: 'object',
+      properties: {
+        recruiter_id: { type: 'string', description: 'Recruiter user ID (optioneel, default = owner)' },
+        date_range_days: { type: 'number', description: 'Aantal dagen vooruit te kijken (default: 7)' },
+        slot_duration_minutes: { type: 'number', description: 'Gewenste duur per slot (default: 30)' },
+      },
+      required: [],
+    },
+    requires_approval: false,
+  },
+
+  record_interview_feedback: {
+    name: 'record_interview_feedback',
+    description: 'Registreer interview feedback van een medewerker. Wijzigt automatisch pipeline status naar screening of afgewezen.',
+    category: 'action',
+    parameters: {
+      type: 'object',
+      properties: {
+        application_id: { type: 'string', description: 'Sollicitatie ID', required: true },
+        outcome: { type: 'string', description: 'Uitkomst: positive, negative, on_hold', required: true },
+        notes: { type: 'string', description: 'Feedback notities' },
+        interviewer_name: { type: 'string', description: 'Naam van interviewer' },
+      },
+      required: ['application_id', 'outcome'],
+    },
+    requires_approval: false,
+  },
+
+  trigger_document_verification: {
+    name: 'trigger_document_verification',
+    description: 'Start verificatie voor een specifiek document (Diploma via DUO, VOG via GAAV).',
+    category: 'action',
+    parameters: {
+      type: 'object',
+      properties: {
+        application_id: { type: 'string', description: 'Sollicitatie ID', required: true },
+        document_type: { type: 'string', description: 'Type: diploma, vog', required: true },
+        document_path: { type: 'string', description: 'Pad naar document in storage (optioneel)' },
+      },
+      required: ['application_id', 'document_type'],
+    },
+    requires_approval: false,
   },
 };
 
