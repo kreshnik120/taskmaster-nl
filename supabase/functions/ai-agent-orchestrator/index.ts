@@ -1329,8 +1329,26 @@ async function processPendingGoals(supabase: any, limit: number, filterApplicati
 
   const results: Array<{ goal_id: string; success: boolean; error?: string; actions_created?: number; routed_to?: string }> = [];
   for (const goal of goals || []) {
+    // ===== RACE CONDITION MITIGATIE: Atomaire goal claiming =====
+    const { data: claimed, error: claimError } = await supabase
+      .from('agent_goals')
+      .update({ 
+        status: 'claiming',
+        started_at: new Date().toISOString()
+      })
+      .eq('id', goal.id)
+      .eq('status', 'pending')
+      .select()
+      .single();
+    
+    if (claimError || !claimed) {
+      console.log(`⏭️ [Orchestrator] Goal ${goal.id} already claimed by another process`);
+      continue;
+    }
+    // ===== END RACE CONDITION MITIGATIE =====
+    
     try {
-      // ===== NEW: Check ReAct routing =====
+      // ===== Check ReAct routing =====
       const { route, config } = await shouldRouteToReActAgent(
         supabase, goal.goal_type, goal.org_id
       );
@@ -1344,14 +1362,12 @@ async function processPendingGoals(supabase: any, limit: number, filterApplicati
             success: true, 
             routed_to: 'react-agent',
           });
-          continue; // Skip legacy processing
+          continue;
         }
         
         if (reactResult.fallback) {
           console.log(`🔄 [Orchestrator] Falling back to legacy for goal ${goal.id}`);
-          // Continue to legacy processing below
         } else {
-          // ReAct failed without fallback
           results.push({ 
             goal_id: goal.id, 
             success: false, 
@@ -1361,7 +1377,7 @@ async function processPendingGoals(supabase: any, limit: number, filterApplicati
           continue;
         }
       }
-      // ===== END NEW =====
+      // ===== END ReAct routing =====
       
       // Original legacy processing
       const result = await planAndQueueGoal(supabase, goal);
