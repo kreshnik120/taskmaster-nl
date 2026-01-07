@@ -154,7 +154,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
       properties: {
         recipient_email: { type: 'string', description: 'Email adres van de ontvanger', required: true },
         recipient_name: { type: 'string', description: 'Naam van de ontvanger', required: true },
-        email_type: { type: 'string', description: 'Type email: followup, welcome, interview, document_request, rejection', required: true },
+        email_type: { type: 'string', description: 'Type email: welcome, followup_question, document_request, interview_confirmation, interview_availability_request, rejection, status_update', required: true },
         subject: { type: 'string', description: 'Email onderwerp' },
         context: { type: 'object', description: 'Extra context voor email generatie' },
         application_id: { type: 'string', description: 'Gerelateerde sollicitatie ID' },
