@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Bot, Send, Loader2, CheckCircle2, XCircle, Clock, Activity, RefreshCw, Zap, Mail, Copy, FileText, Code } from "lucide-react";
+import { Bot, Send, Loader2, CheckCircle2, XCircle, Clock, Activity, RefreshCw, Zap, Mail, Copy, FileText, Code, Brain } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { logger } from "@/lib/logger";
@@ -57,7 +57,7 @@ export function AIAgentTestPanel() {
       const { count: pendingGoals } = await supabase
         .from("agent_goals")
         .select("*", { count: "exact", head: true })
-        .in("status", ["pending", "in_progress"]);
+        .in("status", ["pending", "in_progress", "planning", "executing", "executing_react"]);
 
       const { count: completedGoals } = await supabase
         .from("agent_goals")
@@ -263,17 +263,21 @@ export function AIAgentTestPanel() {
   };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode }> = {
+    const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode; label?: string }> = {
       pending: { variant: "secondary", icon: <Clock className="h-3 w-3" /> },
       in_progress: { variant: "default", icon: <Loader2 className="h-3 w-3 animate-spin" /> },
+      planning: { variant: "default", icon: <Loader2 className="h-3 w-3 animate-spin" /> },
+      executing: { variant: "default", icon: <Loader2 className="h-3 w-3 animate-spin" /> },
+      executing_react: { variant: "default", icon: <Brain className="h-3 w-3 animate-pulse text-purple-500" />, label: "ReAct 🧠" },
       completed: { variant: "outline", icon: <CheckCircle2 className="h-3 w-3 text-green-500" /> },
       failed: { variant: "destructive", icon: <XCircle className="h-3 w-3" /> },
+      skipped: { variant: "secondary", icon: <Clock className="h-3 w-3 text-yellow-500" /> },
     };
     const config = variants[status] || variants.pending;
     return (
       <Badge variant={config.variant} className="gap-1 text-[10px]">
         {config.icon}
-        {status}
+        {config.label || status}
       </Badge>
     );
   };

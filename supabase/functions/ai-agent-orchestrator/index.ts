@@ -1054,6 +1054,253 @@ async function debugQueueStatus(supabase: any) {
   );
 }
 
+// =====================================================
+// REACT AGENT ROUTING - Backwards Compatibility Layer
+// =====================================================
+
+interface ReactAgentConfig {
+  enabled: boolean;
+  rollout_percentage: number;
+  excluded_goal_types: string[];
+  fallback_on_error: boolean;
+  monitoring_mode: boolean;
+}
+
+async function shouldRouteToReActAgent(
+  supabase: any,
+  goalType: string,
+  orgId?: string
+): Promise<{ route: boolean; config: ReactAgentConfig | null }> {
+  try {
+    const { data: config, error } = await supabase
+      .from('react_agent_config')
+      .select('enabled, rollout_percentage, excluded_goal_types, fallback_on_error, monitoring_mode')
+      .eq('config_key', 'default')
+      .single();
+
+    if (error || !config) {
+      console.log(`🔀 [Routing] No ReAct config found, using legacy`);
+      return { route: false, config: null };
+    }
+
+    if (!config.enabled) {
+      console.log(`🔀 [Routing] ReAct agent disabled`);
+      return { route: false, config };
+    }
+
+    // Check excluded goal types
+    const excludedTypes = config.excluded_goal_types || [];
+    if (excludedTypes.includes(goalType)) {
+      console.log(`🔀 [Routing] Goal type '${goalType}' excluded from ReAct`);
+      return { route: false, config };
+    }
+
+    // Check rollout percentage
+    const randomValue = Math.random() * 100;
+    if (randomValue > config.rollout_percentage) {
+      console.log(`🔀 [Routing] Outside rollout (${randomValue.toFixed(1)}% > ${config.rollout_percentage}%)`);
+      return { route: false, config };
+    }
+
+    console.log(`🧠 [Routing] Goal '${goalType}' routed to ReAct Agent`);
+    return { route: true, config };
+  } catch (err) {
+    console.error(`❌ [Routing] Error checking ReAct config:`, err);
+    return { route: false, config: null };
+  }
+}
+
+function buildNaturalLanguageGoal(goal: AgentGoal): string {
+  const inputData = goal.input_data || {};
+  const candidateName = inputData.candidate_name || inputData.naam || 'de kandidaat';
+  const candidateEmail = inputData.candidate_email || inputData.email || '';
+  const applicationId = inputData.application_id || '';
+  const missingInfo = (inputData.missing_info || []).join(', ') || 'geen specifieke velden';
+
+  const templates: Record<string, () => string> = {
+    'send_welcome_and_intake': () => 
+      `Stuur een welkomst- en intake email naar ${candidateName} (${candidateEmail}). ` +
+      `Vraag naar ontbrekende informatie: ${missingInfo}. ` +
+      `Sollicitatie ID: ${applicationId}`,
+    
+    'application_intake_completion': () => 
+      `Stuur een follow-up email naar ${candidateName} om ontbrekende informatie te verzamelen: ${missingInfo}. ` +
+      `Email: ${candidateEmail}. Sollicitatie ID: ${applicationId}`,
+    
+    'schedule_interview': () =>
+      `Plan een sollicitatiegesprek voor ${candidateName} (${candidateEmail}). ` +
+      `Sollicitatie ID: ${applicationId}`,
+    
+    'send_emrex_invitation': () =>
+      `Stuur een EMREX diploma verificatie uitnodiging naar ${candidateName} (${candidateEmail}). ` +
+      `Sollicitatie ID: ${applicationId}`,
+
+    'send_reply_response': () =>
+      `Beantwoord de email van ${candidateName} (${candidateEmail}). ` +
+      `Context: ${inputData.reply_context || 'geen context'}. ` +
+      `Sollicitatie ID: ${applicationId}`,
+
+    'request_documents': () =>
+      `Vraag documenten op bij ${candidateName} (${candidateEmail}): ` +
+      `${(inputData.required_documents || inputData.documents || []).join(', ')}. ` +
+      `Sollicitatie ID: ${applicationId}`,
+  };
+
+  const templateFn = templates[goal.goal_type];
+  if (templateFn) {
+    return templateFn();
+  }
+
+  // Default template voor onbekende goal types
+  return `Voer de volgende actie uit: ${goal.goal_description || goal.goal_type}. ` +
+    `Goal type: ${goal.goal_type}. ` +
+    `Context: ${JSON.stringify(inputData).substring(0, 500)}`;
+}
+
+interface RouteResult {
+  success: boolean;
+  fallback: boolean;
+  result?: any;
+  error?: string;
+}
+
+async function routeToReActAgent(
+  supabase: any,
+  goal: AgentGoal,
+  config: ReactAgentConfig
+): Promise<RouteResult> {
+  const startTime = Date.now();
+  
+  try {
+    // Build natural language goal
+    const naturalLanguageGoal = buildNaturalLanguageGoal(goal);
+    
+    console.log(`🧠 [ReAct] Invoking for goal ${goal.id}: ${naturalLanguageGoal.substring(0, 100)}...`);
+    
+    // Update goal status to 'executing_react'
+    await supabase
+      .from('agent_goals')
+      .update({ 
+        status: 'executing_react', 
+        started_at: new Date().toISOString() 
+      })
+      .eq('id', goal.id);
+    
+    // Call react-agent edge function
+    const { data, error } = await supabase.functions.invoke('react-agent', {
+      body: {
+        goal: naturalLanguageGoal,
+        context: {
+          goal_id: goal.id,
+          goal_type: goal.goal_type,
+          org_id: goal.org_id,
+          ...goal.input_data,
+        },
+        include_steps: config.monitoring_mode,
+      },
+    });
+
+    const duration = Date.now() - startTime;
+
+    if (error) {
+      console.error(`❌ [ReAct] Invocation error:`, error);
+      throw error;
+    }
+
+    // Check if ReAct returned fallback signal
+    if (data?.fallback_to_legacy) {
+      console.log(`🔄 [ReAct] Fallback to legacy requested (${duration}ms)`);
+      
+      // Reset status to pending for legacy processing
+      await supabase
+        .from('agent_goals')
+        .update({ status: 'pending', started_at: null })
+        .eq('id', goal.id);
+      
+      return { success: false, fallback: true };
+    }
+
+    if (!data?.success) {
+      console.error(`❌ [ReAct] Agent failed:`, data?.error);
+      
+      // Check if we should fallback on error
+      if (config.fallback_on_error) {
+        console.log(`🔄 [ReAct] Fallback on error enabled, trying legacy...`);
+        
+        // Reset status to pending for legacy processing
+        await supabase
+          .from('agent_goals')
+          .update({ status: 'pending', started_at: null })
+          .eq('id', goal.id);
+        
+        return { success: false, fallback: true, error: data?.error };
+      }
+      
+      // Mark goal as failed
+      await supabase
+        .from('agent_goals')
+        .update({ 
+          status: 'failed', 
+          completed_at: new Date().toISOString(),
+          output_data: { 
+            react_error: data?.error, 
+            react_steps: data?.steps_count,
+            react_duration_ms: duration
+          }
+        })
+        .eq('id', goal.id);
+      
+      return { success: false, fallback: false, error: data?.error };
+    }
+
+    // Success! Mark goal as completed
+    await supabase
+      .from('agent_goals')
+      .update({ 
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        success_score: 1.0,
+        output_data: {
+          react_answer: data.answer,
+          react_steps: data.steps_count,
+          react_tokens: data.tokens_used,
+          react_duration_ms: data.duration_ms,
+          react_tools: data.tools_used,
+        }
+      })
+      .eq('id', goal.id);
+
+    console.log(`✅ [ReAct] Goal ${goal.id} completed successfully (${duration}ms, ${data.steps_count} steps)`);
+    return { success: true, fallback: false, result: data };
+
+  } catch (err) {
+    const duration = Date.now() - startTime;
+    console.error(`❌ [ReAct] Routing error (${duration}ms):`, err);
+    
+    if (config.fallback_on_error) {
+      // Reset status for legacy fallback
+      await supabase
+        .from('agent_goals')
+        .update({ status: 'pending', started_at: null })
+        .eq('id', goal.id);
+      
+      return { success: false, fallback: true, error: err instanceof Error ? err.message : 'Unknown error' };
+    }
+    
+    // Mark as failed without fallback
+    await supabase
+      .from('agent_goals')
+      .update({ 
+        status: 'failed',
+        completed_at: new Date().toISOString(),
+        output_data: { react_routing_error: err instanceof Error ? err.message : 'Unknown error' }
+      })
+      .eq('id', goal.id);
+    
+    return { success: false, fallback: false, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
+
 // Process all pending goals (with optional filter for specific application)
 async function processPendingGoals(supabase: any, limit: number, filterApplicationId?: string) {
   console.log('📋 [Orchestrator] Processing pending goals...');
@@ -1080,11 +1327,45 @@ async function processPendingGoals(supabase: any, limit: number, filterApplicati
 
   console.log(`📋 Found ${goals?.length || 0} pending goals${filterApplicationId ? ` for application ${filterApplicationId}` : ''}`);
 
-  const results: Array<{ goal_id: string; success: boolean; error?: string; actions_created?: number }> = [];
+  const results: Array<{ goal_id: string; success: boolean; error?: string; actions_created?: number; routed_to?: string }> = [];
   for (const goal of goals || []) {
     try {
+      // ===== NEW: Check ReAct routing =====
+      const { route, config } = await shouldRouteToReActAgent(
+        supabase, goal.goal_type, goal.org_id
+      );
+      
+      if (route && config) {
+        const reactResult = await routeToReActAgent(supabase, goal, config);
+        
+        if (reactResult.success) {
+          results.push({ 
+            goal_id: goal.id, 
+            success: true, 
+            routed_to: 'react-agent',
+          });
+          continue; // Skip legacy processing
+        }
+        
+        if (reactResult.fallback) {
+          console.log(`🔄 [Orchestrator] Falling back to legacy for goal ${goal.id}`);
+          // Continue to legacy processing below
+        } else {
+          // ReAct failed without fallback
+          results.push({ 
+            goal_id: goal.id, 
+            success: false, 
+            error: reactResult.error, 
+            routed_to: 'react-agent' 
+          });
+          continue;
+        }
+      }
+      // ===== END NEW =====
+      
+      // Original legacy processing
       const result = await planAndQueueGoal(supabase, goal);
-      results.push({ goal_id: goal.id, success: true, actions_created: result.actions_created });
+      results.push({ goal_id: goal.id, success: true, actions_created: result.actions_created, routed_to: 'legacy' });
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       console.error(`❌ [Orchestrator] Failed to process goal ${goal.id}:`, err);
@@ -1119,10 +1400,41 @@ async function planGoal(supabase: any, goalId: string) {
     );
   }
 
+  // ===== NEW: Check ReAct routing =====
+  const { route, config } = await shouldRouteToReActAgent(supabase, goal.goal_type, goal.org_id);
+  
+  if (route && config) {
+    const reactResult = await routeToReActAgent(supabase, goal, config);
+    
+    if (reactResult.success) {
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          routed_to: 'react-agent',
+          ...reactResult.result 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    if (!reactResult.fallback) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          routed_to: 'react-agent', 
+          error: reactResult.error 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    // Continue to legacy if fallback
+  }
+  // ===== END NEW =====
+
   const result = await planAndQueueGoal(supabase, goal);
 
   return new Response(
-    JSON.stringify({ success: true, ...result }),
+    JSON.stringify({ success: true, routed_to: 'legacy', ...result }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 }

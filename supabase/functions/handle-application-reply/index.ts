@@ -2332,7 +2332,7 @@ Return JSON in dit formaat:
           .from("agent_goals")
           .select("id")
           .eq("goal_type", "request_documents")
-          .in("status", ["pending", "planning", "executing", "in_progress"])
+          .in("status", ["pending", "planning", "executing", "in_progress", "executing_react"])
           .filter("input_data->application_id", "eq", applicationId)
           .maybeSingle();
         

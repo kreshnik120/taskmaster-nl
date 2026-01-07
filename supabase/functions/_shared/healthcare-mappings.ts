@@ -584,7 +584,8 @@ export const ACTIVE_GOAL_STATUSES = [
   'pending',
   'planning', 
   'executing',
-  'in_progress'
+  'in_progress',
+  'executing_react'  // ReAct agent routing
 ] as const;
 
 /**

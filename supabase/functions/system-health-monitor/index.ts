@@ -144,12 +144,12 @@ Deno.serve(async (req) => {
         }
       }
 
-      // **CHECK 4: Stuck Agent Goals (>10 min in executing)**
+      // **CHECK 4: Stuck Agent Goals (>10 min in executing or executing_react)**
       const { data: stuckGoals, error: goalError } = await supabase
         .from('agent_goals')
         .select('*')
         .eq('org_id', org.id)
-        .eq('status', 'executing')
+        .in('status', ['executing', 'executing_react'])
         .lt('started_at', new Date(Date.now() - 10 * 60 * 1000).toISOString());
 
       let stuckGoalsCount = 0;
