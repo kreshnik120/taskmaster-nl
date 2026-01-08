@@ -566,19 +566,33 @@ const TOOL_HANDLERS: Record<string, (supabase: any, params: Record<string, unkno
         // HUMAN-IN-THE-LOOP: Afwijzingen vereisen menselijke goedkeuring
         requiresHumanReview = true;
         
-        // Maak human review record aan
-        await supabase.from('human_review_queue').insert({
+        // Haal org_id op voor human_review_queue
+        const { data: appData } = await supabase
+          .from('professional_applications')
+          .select('org_id')
+          .eq('id', applicationId)
+          .single();
+        
+        // Maak human review record aan met correct schema
+        const { error: hrError } = await supabase.from('human_review_queue').insert({
           application_id: applicationId,
-          review_type: 'interview_rejection',
-          priority: 'high',
-          reason: `Interview feedback: ${outcome}. ${params.notes || 'Geen notities'}`,
-          suggested_action: 'afgewezen',
-          created_by: 'react_agent',
-          metadata: {
+          org_id: appData?.org_id || '550e8400-e29b-41d4-a716-446655440000',
+          review_type: 'low_confidence_rejection',  // Geldige waarden: low_confidence_rejection, data_conflict, must_have_fail, manual_escalation, document_verification
+          escalation_reason: `Interview feedback: ${outcome}. ${params.notes || 'Geen notities'}`,
+          status: 'pending',
+          priority: 1,  // INTEGER: 1 = high, 2 = medium, 3 = low
+          ai_recommendation: 'reject',  // Geldige waarden: proceed, reject, needs_info, interview
+          ai_confidence: 0.85,
+          ai_reasoning: {
             interviewer_name: params.interviewer_name,
-            original_outcome: outcome
+            original_outcome: outcome,
+            recorded_by: 'react_agent'
           }
         });
+        
+        if (hrError) {
+          console.error('[record_interview_feedback] human_review_queue insert error:', hrError);
+        }
         
         // Update application to pending review status
         await supabase.from('professional_applications')
