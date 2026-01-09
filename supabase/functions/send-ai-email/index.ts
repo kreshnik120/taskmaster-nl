@@ -13,7 +13,8 @@ type EmailType =
   | 'interview_confirmation'         // Bevestig interview afspraak
   | 'appointment_confirmation'       // Algemene afspraak bevestiging
   | 'general'                        // Algemene communicatie
-  | 'welcome'                        // Welkomstmail nieuwe kandidaat
+  | 'welcome'                        // Welkomstmail GEPLAATSTE professional (profiel actief)
+  | 'welcome_intake'                 // Welkomstmail NIEUWE sollicitant + intake vragen
   | 'status_update'                  // Status update (goedgekeurd, afgewezen, etc.)
   | 'vog_rejection'                  // VOG verificatie mislukt, vraag nieuw VOG
   | 'rejection'                      // Afwijzing sollicitatie (geen diploma, etc.)
@@ -91,6 +92,8 @@ function generateDefaultSubject(
   switch (emailType) {
     case 'welcome':
       return `Welkom bij ${orgName}, ${recipientName}! 🎉`;
+    case 'welcome_intake':
+      return `Welkom bij ${orgName} – nog een paar vragen`;
     case 'followup_question':
       return `${orgName}: Aanvulling nodig voor je aanmelding`;
     case 'document_request':
@@ -454,6 +457,67 @@ function generateEmailTemplate(
             Zodra we een passende opdracht hebben, nemen we contact met je op.
           </p>
         </div>
+        <p style="margin: 25px 0 0 0; color: #4a5568;">
+          Met vriendelijke groet,<br>
+          <strong>Het ${orgName} Recruitment Team</strong>
+        </p>`;
+      break;
+
+    // =====================================================
+    // NEW: Welcome + Intake - Voor NIEUWE sollicitanten met intake vragen
+    // =====================================================
+    case 'welcome_intake':
+      const intakeFields = data.fields_to_ask || data.missing_info || [];
+      const intakeFieldsList = intakeFields.map((f: string) => `<li style="margin: 8px 0;">${f}</li>`).join('');
+      const hasExtractedData = data.extracted_data && Object.keys(data.extracted_data).length > 0;
+      const extractedInfo = hasExtractedData 
+        ? Object.entries(data.extracted_data)
+            .filter(([_, v]) => v !== null && v !== '')
+            .slice(0, 5)
+            .map(([k, v]) => `<li style="margin: 4px 0;"><strong>${k}:</strong> ${Array.isArray(v) ? v.join(', ') : v}</li>`)
+            .join('')
+        : '';
+      
+      content = `
+        <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName || 'sollicitant'},</h2>
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
+          Bedankt voor je sollicitatie bij ${orgName}! 🎉 We hebben je gegevens ontvangen en gaan graag met je aan de slag.
+        </p>
+        
+        ${extractedInfo ? `
+        <div style="background-color: #d1fae5; padding: 16px 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #10b981;">
+          <p style="margin: 0 0 8px 0; color: #065f46; font-weight: 600;">✅ Wat we al weten:</p>
+          <ul style="margin: 0; padding-left: 20px; color: #047857; font-size: 14px;">
+            ${extractedInfo}
+          </ul>
+        </div>
+        ` : ''}
+        
+        ${intakeFieldsList ? `
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 10px;">
+          Om je sollicitatie verder te kunnen behandelen, hebben we nog enkele gegevens nodig:
+        </p>
+        <ul style="background-color: #fef3c7; padding: 20px 20px 20px 40px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #f59e0b; color: #1a1a1a;">
+          ${intakeFieldsList}
+        </ul>
+        ` : `
+        <div style="background-color: #e0f2fe; padding: 16px 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #0284c7;">
+          <p style="margin: 0; color: #0369a1; font-size: 14px;">
+            We hebben alle benodigde gegevens ontvangen. We nemen zo snel mogelijk contact met je op voor de volgende stappen.
+          </p>
+        </div>
+        `}
+        
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6;">
+          Je kunt eenvoudig op deze email antwoorden met de gevraagde informatie en eventuele documenten (CV, diploma's) als bijlage meesturen.
+        </p>
+        
+        <div style="background-color: #f8fafc; padding: 16px 20px; border-radius: 6px; margin: 25px 0; border: 1px solid #e2e8f0;">
+          <p style="margin: 0; color: #64748b; font-size: 13px;">
+            📋 <strong>Tip:</strong> Hoe completer je profiel, hoe sneller we je kunnen koppelen aan passende opdrachten!
+          </p>
+        </div>
+        
         <p style="margin: 25px 0 0 0; color: #4a5568;">
           Met vriendelijke groet,<br>
           <strong>Het ${orgName} Recruitment Team</strong>
