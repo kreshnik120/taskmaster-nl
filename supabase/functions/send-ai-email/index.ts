@@ -179,10 +179,29 @@ Deno.serve(async (req: Request): Promise<Response> => {
     console.log(`[send-ai-email] Using org: ${orgInfo.displayName} (${orgInfo.name})`);
     console.log(`[send-ai-email] Subject: provided=${!!subject}, generated=${!subject}, final="${finalSubject}"`);
     
+    // DATABASE FALLBACK: If fields_to_ask is empty and application_id is available, query database
+    // This prevents empty yellow boxes in followup emails
+    let enrichedTemplateData = { ...template_data };
+    if (email_type === 'followup_question' && 
+        (!enrichedTemplateData.fields_to_ask || enrichedTemplateData.fields_to_ask.length === 0) && 
+        application_id) {
+      console.log('📋 [send-ai-email] fields_to_ask empty, querying database for application:', application_id);
+      const { data: appData } = await supabase
+        .from('professional_applications')
+        .select('missing_info')
+        .eq('id', application_id)
+        .single();
+      
+      if (appData?.missing_info && appData.missing_info.length > 0) {
+        enrichedTemplateData.fields_to_ask = appData.missing_info;
+        console.log('✅ [send-ai-email] Got missing_info from database:', enrichedTemplateData.fields_to_ask);
+      }
+    }
+    
     // Build HTML content if not provided
     let finalHtmlContent = html_content;
     if (!finalHtmlContent) {
-      finalHtmlContent = generateEmailTemplate(email_type, recipient_name, finalSubject, template_data, orgInfo.name);
+      finalHtmlContent = generateEmailTemplate(email_type, recipient_name, finalSubject, enrichedTemplateData, orgInfo.name);
     }
 
     console.log(`[send-ai-email] Sending via Resend as ${emailConfig.name}`);
@@ -314,6 +333,7 @@ function generateEmailTemplate(
   
   switch (emailType) {
     case 'followup_question':
+      // NOTE: fields_to_ask fallback is now handled before generateEmailTemplate is called
       const fields = data.fields_to_ask || [];
       const fieldsList = fields.map((f: string) => `<li style="margin: 8px 0;">${f}</li>`).join('');
       content = `

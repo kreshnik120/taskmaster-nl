@@ -332,12 +332,18 @@ const TOOL_HANDLERS: Record<string, (supabase: any, params: Record<string, unkno
       }
       
       // Build template_data with missing_info for intake emails
+      // PRIORITY: Use params.fields_to_ask from orchestrator first, then fall back to context
       const templateData = {
         ...(params.context || {}),
-        fields_to_ask: context.context?.missing_info || [],
-        missing_info: context.context?.missing_info || [],
-        extracted_data: context.context?.extracted_data || {},
-        current_completeness: context.context?.completeness_score || 0,
+        // CRITICAL: params.fields_to_ask comes from orchestrator action input_data
+        fields_to_ask: params.fields_to_ask || params.missing_info || context.context?.missing_info || [],
+        missing_info: params.all_missing_info || params.missing_info || context.context?.missing_info || [],
+        extracted_data: params.extracted_data || context.context?.extracted_data || {},
+        current_completeness: params.current_completeness || context.context?.completeness_score || 0,
+        // Include application_id for database fallback
+        application_id: params.application_id,
+        // Rejection context for explaining why data was rejected
+        rejection_context: params.rejection_context || {},
       };
       
       const { data, error } = await supabase.functions.invoke('send-ai-email', {

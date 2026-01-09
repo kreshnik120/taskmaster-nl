@@ -1343,7 +1343,7 @@ Deno.serve(async (req: Request) => {
     
     const { data: app, error: appFetchError } = await supabase
       .from('professional_applications')
-      .select('id, name, email, diploma_file_path, diploma_validation_status, org_id, extracted_data')
+      .select('id, email_from, diploma_file_path, diploma_validation_status, org_id, extracted_data')
       .eq('id', application_id)
       .single();
     
@@ -1455,7 +1455,8 @@ Deno.serve(async (req: Request) => {
     // Create recruiter notification for verified diplomas
     if (dbStatus === 'verified_duo') {
       try {
-        const candidateName = app.name || app.email || 'Onbekend';
+        const extractedData = app.extracted_data as Record<string, unknown> | null;
+        const candidateName = extractedData?.naam as string || app.email_from || 'Onbekend';
         console.log(`🔔 Creating diploma_upgrade notification for ${candidateName}`);
         
         const { error: notificationError } = await supabase
@@ -1467,7 +1468,7 @@ Deno.serve(async (req: Request) => {
             metadata: {
               application_id,
               candidate_name: candidateName,
-              candidate_email: app.email,
+              candidate_email: app.email_from,
               new_status: 'verified_duo',
               old_status: app.diploma_validation_status || 'not_verified',
               verification_method: result.method,
