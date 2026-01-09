@@ -314,11 +314,45 @@ const TOOL_HANDLERS: Record<string, (supabase: any, params: Record<string, unkno
       if (emailCount >= REACT_CONFIG.max_emails_per_session) {
         return { success: false, data: null, error: `Email limit reached (${REACT_CONFIG.max_emails_per_session} per session)`, execution_ms: Date.now() - start };
       }
+      
+      // Determine correct email_type based on goal and context
+      let emailType = params.email_type as string || 'general';
+      const goalText = context.goal || '';
+      const goalTypeFromContext = (context.context?.goal_type as string) || '';
+      
+      // For send_welcome_and_intake goal, always use welcome_intake template
+      const isWelcomeIntakeGoal = goalTypeFromContext === 'send_welcome_and_intake' || 
+                                   goalText.toLowerCase().includes('welcome') || 
+                                   goalText.toLowerCase().includes('intake') ||
+                                   goalText.toLowerCase().includes('welkom');
+      
+      if (isWelcomeIntakeGoal && (emailType === 'welcome' || emailType === 'general')) {
+        emailType = 'welcome_intake';
+        console.log('[ReAct] send_email: Overriding email_type to welcome_intake for intake goal');
+      }
+      
+      // Build template_data with missing_info for intake emails
+      const templateData = {
+        ...(params.context || {}),
+        fields_to_ask: context.context?.missing_info || [],
+        missing_info: context.context?.missing_info || [],
+        extracted_data: context.context?.extracted_data || {},
+        current_completeness: context.context?.completeness_score || 0,
+      };
+      
       const { data, error } = await supabase.functions.invoke('send-ai-email', {
-        body: { email_type: params.email_type, recipient_email: params.recipient_email, recipient_name: params.recipient_name, subject: params.subject, template_data: params.context, application_id: params.application_id }
+        body: { 
+          email_type: emailType, 
+          recipient_email: params.recipient_email, 
+          recipient_name: params.recipient_name, 
+          subject: params.subject, 
+          template_data: templateData, 
+          application_id: params.application_id,
+          org_id: context.context?.org_id 
+        }
       });
       if (error) throw error;
-      return { success: true, data: { email_sent: true, ...data }, execution_ms: Date.now() - start };
+      return { success: true, data: { email_sent: true, email_type: emailType, ...data }, execution_ms: Date.now() - start };
     } catch (err) {
       return { success: false, data: null, error: getErrorMessage(err), execution_ms: Date.now() - start };
     }
