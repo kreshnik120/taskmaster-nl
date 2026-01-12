@@ -48,8 +48,17 @@ const REACT_SYSTEM_PROMPT = `Je bent de TaskFlow Recruitment AI Agent voor Citoz
 Je werkt via het ReAct pattern (Reason → Act):
 1. THOUGHT: Analyseer de huidige situatie en bepaal de volgende stap
 2. ACTION: Kies een tool en parameters
-3. OBSERVATION: Ontvang het resultaat
+3. OBSERVATION: Ontvang het resultaat (dit wordt door het SYSTEEM gegenereerd, NIET door jou!)
 4. Herhaal tot het doel bereikt is, of geef een FINAL ANSWER
+
+═══════════════════════════════════════════════════════════════════
+KRITIEK - OUTPUT REGELS (STRIKT NALEVEN!)
+═══════════════════════════════════════════════════════════════════
+1. Stuur PRECIES ÉÉN stap per response
+2. Wacht ALTIJD op de tool observation voordat je verdergaat
+3. Genereer NOOIT zelf een OBSERVATION - die komt van het SYSTEEM
+4. Als je meerdere tools wilt uitvoeren, doe ze ÉÉN VOOR ÉÉN
+5. Geef NOOIT multi-step responses met meerdere THOUGHT/ACTION blokken
 
 ═══════════════════════════════════════════════════════════════════
 JOUW SCOPE (STOPPUNT)
@@ -134,14 +143,27 @@ STAPPEN:
 3. Feedback negatief → update_pipeline_stage naar 'afgewezen' + send_email (rejection)
 
 ═══════════════════════════════════════════════════════════════════
-OUTPUT FORMAT (STRICT JSON)
+OUTPUT FORMAT (STRICT JSON - ALLEEN DIT FORMAT!)
 ═══════════════════════════════════════════════════════════════════
+Antwoord ALTIJD met EEN ENKEL JSON object in dit format:
+
+Voor een actie:
 {
   "thought": "Je redenering over de huidige situatie en volgende stap",
-  "action": "tool_name" of null voor final answer,
-  "action_input": { parameters } of null,
-  "final_answer": "Antwoord aan gebruiker" of null
-}`;
+  "action": "tool_name",
+  "action_input": { "param": "value" }
+}
+
+OF voor eindantwoord:
+{
+  "thought": "Samenvatting van wat je hebt gedaan",
+  "final_answer": "Het definitieve antwoord"
+}
+
+VERBODEN:
+- Meerdere JSON blokken in één response
+- OBSERVATION zelf genereren
+- Multi-step responses met THOUGHT/ACTION/OBSERVATION sequences`;
 
 // ============================================================================
 // TOOL HANDLERS
@@ -834,18 +856,54 @@ async function executeReActLoop(
       let parsed: { thought: string; action: string | null; action_input: Record<string, unknown> | null; final_answer: string | null };
       
       try {
-        // Extract JSON from response
-        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error('No JSON found in response');
-        parsed = JSON.parse(jsonMatch[0]);
+        // KRITIEK: Detecteer multi-step hallucinatie (AI genereert eigen OBSERVATION)
+        if (responseText.includes('OBSERVATION:') || responseText.includes('"observation"')) {
+          console.warn('[ReAct] ⚠️ AI included fabricated OBSERVATION - this is a hallucination! Extracting first action only.');
+        }
+
+        // Probeer eerst JSON te parsen (preferred)
+        const jsonMatch = responseText.match(/\{[\s\S]*?\}/);
+        if (jsonMatch) {
+          const candidate = JSON.parse(jsonMatch[0]);
+          // Valideer dat het een geldige ReAct response is
+          if (candidate.thought !== undefined || candidate.action !== undefined || candidate.final_answer !== undefined) {
+            parsed = candidate;
+          } else {
+            throw new Error('Invalid JSON structure');
+          }
+        } else {
+          throw new Error('No JSON found in response');
+        }
       } catch (parseErr) {
-        console.error('[ReAct] Failed to parse AI response:', responseText);
-        parsed = {
-          thought: responseText,
-          action: null,
-          action_input: null,
-          final_answer: 'Ik kon de vraag niet goed verwerken. Kun je het anders formuleren?',
-        };
+        // Fallback: parse tekstueel THOUGHT/ACTION format (voor als AI het JSON format niet volgt)
+        console.warn('[ReAct] JSON parse failed, trying textual format parsing...');
+        
+        const thoughtMatch = responseText.match(/(?:THOUGHT|Thought):\s*([\s\S]*?)(?=(?:ACTION|Action):|(?:FINAL_ANSWER|Final_answer):|OBSERVATION:|$)/i);
+        const actionMatch = responseText.match(/(?:ACTION|Action):\s*(\w+)/i);
+        const inputMatch = responseText.match(/(?:ACTION_INPUT|Action_input):\s*(\{[\s\S]*?\})/i);
+        const finalMatch = responseText.match(/(?:FINAL_ANSWER|Final_answer):\s*([\s\S]*?)(?=THOUGHT:|OBSERVATION:|$)/i);
+        
+        if (thoughtMatch || actionMatch || finalMatch) {
+          parsed = {
+            thought: thoughtMatch?.[1]?.trim() || responseText.substring(0, 500),
+            action: actionMatch?.[1] || null,
+            action_input: inputMatch ? JSON.parse(inputMatch[1]) : null,
+            final_answer: finalMatch?.[1]?.trim() || null,
+          };
+          console.log('[ReAct] Successfully parsed textual format:', { 
+            hasThought: !!parsed.thought, 
+            action: parsed.action, 
+            hasFinalAnswer: !!parsed.final_answer 
+          });
+        } else {
+          console.error('[ReAct] Failed to parse AI response (both JSON and textual):', responseText.substring(0, 200));
+          parsed = {
+            thought: responseText.substring(0, 500),
+            action: null,
+            action_input: null,
+            final_answer: 'Ik kon de vraag niet goed verwerken. Kun je het anders formuleren?',
+          };
+        }
       }
 
       const step: ReActStep = {
