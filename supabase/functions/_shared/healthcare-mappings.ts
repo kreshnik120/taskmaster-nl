@@ -555,7 +555,9 @@ export function hasField(
   // Document fields: check file_path columns on application record first
   if (applicationData) {
     if (field === 'diploma' && applicationData.diploma_file_path) return true;
-    if (field === 'vog' && applicationData.vog_file_path) return true;
+    // VOG check: use validation_status since there's no vog_file_path column
+    if (field === 'vog' && applicationData.vog_validation_status && 
+        applicationData.vog_validation_status !== 'not_uploaded') return true;
     if (field === 'cv' && applicationData.cv_file_path) return true;
   }
   
