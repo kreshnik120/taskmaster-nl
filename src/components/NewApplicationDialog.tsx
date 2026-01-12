@@ -424,6 +424,48 @@ export function NewApplicationDialog({ open, onOpenChange, onApplicationCreated 
         }
       }
 
+      // 🆕 Upload CV bestand naar Storage (consistent met email flow)
+      if (cvFile && newApplicationId) {
+        try {
+          log.log("📤 Uploading CV file to Storage...");
+          
+          // Use same naming convention as process-application-email
+          const timestamp = Date.now();
+          const sanitizedName = cvFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const cvFileName = `${newApplicationId}/${timestamp}_${sanitizedName}`;
+          
+          // Convert File to ArrayBuffer for upload
+          const arrayBuffer = await cvFile.arrayBuffer();
+          const cvBuffer = new Uint8Array(arrayBuffer);
+          
+          const { error: cvUploadError } = await supabase.storage
+            .from('application-cvs')
+            .upload(cvFileName, cvBuffer, {
+              contentType: cvFile.type,
+              upsert: false
+            });
+          
+          if (!cvUploadError) {
+            // Update application met cv_file_path en cv_file_name
+            await supabase
+              .from('professional_applications')
+              .update({
+                cv_file_path: cvFileName,
+                cv_file_name: cvFile.name
+              })
+              .eq('id', newApplicationId);
+            
+            log.log("✅ CV uploaded and linked:", cvFileName);
+          } else {
+            log.error("❌ CV upload error:", cvUploadError);
+            // Non-blocking: CV kan later nog worden geüpload via reply
+          }
+        } catch (cvError) {
+          log.error("❌ CV upload failed:", cvError);
+          // Non-blocking: applicatie is al aangemaakt
+        }
+      }
+
       // 🆕 Direct welkomstmail triggeren (geen wachten op cron job)
       if (newApplicationId) {
         try {
