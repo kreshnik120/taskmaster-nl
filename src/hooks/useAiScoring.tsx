@@ -87,7 +87,11 @@ export const useAiScoring = (tasks: Task[], enableAutoScoring: boolean = false) 
   }, []); // Only run on mount
 
   const calculateScores = useCallback(async (tasksToScore: Task[]) => {
-    if (tasksToScore.length === 0) return;
+    // Defensive check: prevent calling edge function with empty or invalid array
+    if (!tasksToScore || tasksToScore.length === 0) {
+      logger.log('⏭️ No tasks to score, skipping AI call');
+      return;
+    }
 
     setLoading(true);
     try {
