@@ -856,47 +856,95 @@ async function executeReActLoop(
       let parsed: { thought: string; action: string | null; action_input: Record<string, unknown> | null; final_answer: string | null };
       
       try {
-        // KRITIEK: Detecteer multi-step hallucinatie (AI genereert eigen OBSERVATION)
-        if (responseText.includes('OBSERVATION:') || responseText.includes('"observation"')) {
-          console.warn('[ReAct] ⚠️ AI included fabricated OBSERVATION - this is a hallucination! Extracting first action only.');
-        }
-
-        // Probeer eerst JSON te parsen (preferred)
-        const jsonMatch = responseText.match(/\{[\s\S]*?\}/);
-        if (jsonMatch) {
-          const candidate = JSON.parse(jsonMatch[0]);
-          // Valideer dat het een geldige ReAct response is
-          if (candidate.thought !== undefined || candidate.action !== undefined || candidate.final_answer !== undefined) {
-            parsed = candidate;
+        // KRITIEK: Detecteer en handel multi-step hallucinatie af (AI genereert eigen OBSERVATION)
+        const hasHallucination = responseText.includes('OBSERVATION:') || responseText.includes('"observation"');
+        
+        if (hasHallucination) {
+          console.warn('[ReAct] ⚠️ AI included fabricated OBSERVATION - extracting ONLY first action!');
+          
+          // Splits de response op de eerste OBSERVATION en negeer alles daarna
+          const beforeFirstObservation = responseText.split(/OBSERVATION:|"observation"/i)[0];
+          console.log('[ReAct] Extracted text before hallucinated observation:', beforeFirstObservation.substring(0, 300));
+          
+          // Probeer JSON uit het eerste deel te extraheren
+          const jsonMatch = beforeFirstObservation.match(/\{[\s\S]*?\}/);
+          if (jsonMatch) {
+            const candidate = JSON.parse(jsonMatch[0]);
+            if (candidate.action) {
+              parsed = {
+                thought: candidate.thought || 'Extracted from hallucinated multi-step response',
+                action: candidate.action,
+                action_input: candidate.action_input || {},
+                final_answer: null, // NOOIT fallback gebruiken bij hallucinatie!
+              };
+              console.log('[ReAct] ✅ Successfully extracted first action from hallucinated response:', parsed.action);
+            } else {
+              throw new Error('No action found in first JSON block');
+            }
           } else {
-            throw new Error('Invalid JSON structure');
+            // Tekstuele parsing van het eerste deel
+            const thoughtMatch = beforeFirstObservation.match(/(?:THOUGHT|Thought):\s*([\s\S]*?)(?=(?:ACTION|Action):|$)/i);
+            const actionMatch = beforeFirstObservation.match(/(?:ACTION|Action):\s*(\w+)/i);
+            const inputMatch = beforeFirstObservation.match(/(?:ACTION_INPUT|Action_input):\s*(\{[\s\S]*?\})/i);
+            
+            if (actionMatch) {
+              parsed = {
+                thought: thoughtMatch?.[1]?.trim() || 'Extracted from hallucinated response',
+                action: actionMatch[1],
+                action_input: inputMatch ? JSON.parse(inputMatch[1]) : {},
+                final_answer: null, // NOOIT fallback!
+              };
+              console.log('[ReAct] ✅ Parsed first action from textual hallucinated response:', parsed.action);
+            } else {
+              throw new Error('No action found in hallucinated response');
+            }
           }
         } else {
-          throw new Error('No JSON found in response');
+          // Geen hallucinatie - normale JSON parsing
+          const jsonMatch = responseText.match(/\{[\s\S]*?\}/);
+          if (jsonMatch) {
+            const candidate = JSON.parse(jsonMatch[0]);
+            if (candidate.thought !== undefined || candidate.action !== undefined || candidate.final_answer !== undefined) {
+              parsed = candidate;
+            } else {
+              throw new Error('Invalid JSON structure');
+            }
+          } else {
+            throw new Error('No JSON found in response');
+          }
         }
       } catch (parseErr) {
         // Fallback: parse tekstueel THOUGHT/ACTION format (voor als AI het JSON format niet volgt)
-        console.warn('[ReAct] JSON parse failed, trying textual format parsing...');
+        console.warn('[ReAct] JSON parse failed, trying textual format parsing...', parseErr);
         
-        const thoughtMatch = responseText.match(/(?:THOUGHT|Thought):\s*([\s\S]*?)(?=(?:ACTION|Action):|(?:FINAL_ANSWER|Final_answer):|OBSERVATION:|$)/i);
-        const actionMatch = responseText.match(/(?:ACTION|Action):\s*(\w+)/i);
-        const inputMatch = responseText.match(/(?:ACTION_INPUT|Action_input):\s*(\{[\s\S]*?\})/i);
-        const finalMatch = responseText.match(/(?:FINAL_ANSWER|Final_answer):\s*([\s\S]*?)(?=THOUGHT:|OBSERVATION:|$)/i);
+        // Splits op OBSERVATION om alleen het eerste deel te gebruiken
+        const cleanText = responseText.split(/OBSERVATION:/i)[0];
         
-        if (thoughtMatch || actionMatch || finalMatch) {
+        const thoughtMatch = cleanText.match(/(?:THOUGHT|Thought):\s*([\s\S]*?)(?=(?:ACTION|Action):|(?:FINAL_ANSWER|Final_answer):|$)/i);
+        const actionMatch = cleanText.match(/(?:ACTION|Action):\s*(\w+)/i);
+        const inputMatch = cleanText.match(/(?:ACTION_INPUT|Action_input):\s*(\{[\s\S]*?\})/i);
+        const finalMatch = cleanText.match(/(?:FINAL_ANSWER|Final_answer):\s*([\s\S]*?)$/i);
+        
+        if (actionMatch) {
+          // Prioriteit aan actie boven final_answer
           parsed = {
-            thought: thoughtMatch?.[1]?.trim() || responseText.substring(0, 500),
-            action: actionMatch?.[1] || null,
-            action_input: inputMatch ? JSON.parse(inputMatch[1]) : null,
-            final_answer: finalMatch?.[1]?.trim() || null,
+            thought: thoughtMatch?.[1]?.trim() || 'Extracted from textual response',
+            action: actionMatch[1],
+            action_input: inputMatch ? JSON.parse(inputMatch[1]) : {},
+            final_answer: null,
           };
-          console.log('[ReAct] Successfully parsed textual format:', { 
-            hasThought: !!parsed.thought, 
-            action: parsed.action, 
-            hasFinalAnswer: !!parsed.final_answer 
-          });
+          console.log('[ReAct] ✅ Successfully parsed action from textual format:', parsed.action);
+        } else if (finalMatch) {
+          parsed = {
+            thought: thoughtMatch?.[1]?.trim() || cleanText.substring(0, 500),
+            action: null,
+            action_input: null,
+            final_answer: finalMatch[1].trim(),
+          };
+          console.log('[ReAct] Parsed final_answer from textual format');
         } else {
-          console.error('[ReAct] Failed to parse AI response (both JSON and textual):', responseText.substring(0, 200));
+          console.error('[ReAct] ❌ Failed to parse AI response:', responseText.substring(0, 200));
+          // Alleen als echt NIETS te parsen is, gebruik fallback
           parsed = {
             thought: responseText.substring(0, 500),
             action: null,
