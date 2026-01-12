@@ -54,11 +54,11 @@ export interface ComplianceValidationResult {
  */
 export function getPresentDocuments(data: ApplicationComplianceData): string[] {
   // Build application object compatible with healthcare-mappings format
+  // Note: vog_file_path column does not exist - use vog_validation_status only
   const applicationForCheck: Record<string, unknown> = {
     cv_file_path: data.cvFilePath,
     diploma_file_path: data.diplomaFilePath,
     diploma_validation_status: data.diplomaValidationStatus,
-    vog_file_path: data.vogFilePath,
     vog_validation_status: data.vogValidationStatus,
   };
   

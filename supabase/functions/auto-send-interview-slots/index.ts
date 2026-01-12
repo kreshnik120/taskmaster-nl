@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
         cv_present: !!application.cv_file_path || !!extractedData.cv_file_path,
         diploma_file: !!extractedData.diploma_file_path,
         diploma_status: diplomaStatus,
-        vog_file: !!extractedData.vog_file_path,
+        vog_valid: !!vogStatus && vogStatus !== 'not_uploaded' && vogStatus !== 'missing',
         vog_status: vogStatus,
         presentDocs
       });

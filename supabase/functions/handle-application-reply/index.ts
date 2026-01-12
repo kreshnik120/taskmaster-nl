@@ -1411,6 +1411,7 @@ Return JSON in dit formaat:
       file_path: string;
       document_type: string;
       vog_expiry_status?: string;
+      vog_issue_date?: string;
     }> = [];
 
     if (realAttachments.length > 0) {
@@ -1845,12 +1846,14 @@ Return JSON in dit formaat:
               file_path: filePath,
               document_type: documentType,
               vog_expiry_status: vogExpiryStatus || undefined,
+              vog_issue_date: vogIssueDate || undefined,
             });
             
             // Update extracted_data based on document type
             // Only accept VOG if validation passed AND not quarantined
+            // Note: VOG file is stored in application_documents table, not as file_path column
             if (documentType === 'vog' && vogExpiryStatus === 'valid' && !requiresManualReview) {
-              analysis.new_data.vog_file_path = filePath;
+              analysis.new_data.vog_validation_status = 'valid';
               analysis.new_data.vog_uploaded = true;
               if (vogIssueDate) {
                 analysis.new_data.vog_date = vogIssueDate;
@@ -1863,12 +1866,12 @@ Return JSON in dit formaat:
               console.log(`✅ VOG validated and linked to application`);
             } else if (documentType === 'vog' && vogExpiryStatus === 'expired') {
               // VOG is expired - don't remove from missing_info
-              analysis.new_data.vog_file_path = filePath;
+              analysis.new_data.vog_validation_status = 'expired';
               analysis.new_data.vog_expired = true;
               console.log(`⚠️ VOG expired - still in missing_info`);
             } else if (documentType === 'vog' && requiresManualReview) {
               // VOG needs HR review - don't accept automatically
-              analysis.new_data.vog_file_path = filePath;
+              analysis.new_data.vog_validation_status = 'pending_review';
               analysis.new_data.vog_pending_review = true;
               console.log(`⚠️ VOG requires manual review due to validation flags: ${validationFlags.join(', ')}`);
             }
@@ -2043,7 +2046,10 @@ Return JSON in dit formaat:
         
         for (const doc of processedDocuments) {
           if (doc.document_type === 'vog' && doc.vog_expiry_status === 'valid') {
-            updateData.vog_file_path = doc.file_path;
+            // VOG file is stored in application_documents, update vog_date if available
+            if (doc.vog_issue_date) {
+              updateData.vog_date = doc.vog_issue_date;
+            }
             hasVog = true;
           }
           if (doc.document_type === 'diploma' || doc.document_type === 'certificate') {
@@ -2055,11 +2061,11 @@ Return JSON in dit formaat:
         // Get current professional to check existing documents
         const { data: currentProfessional } = await supabase
           .from('professionals')
-          .select('status, vog_file_path')
+          .select('status, vog_date')
           .eq('id', application.professional_id)
           .single();
         
-        const existingVog = !!currentProfessional?.vog_file_path || hasVog;
+        const existingVog = !!currentProfessional?.vog_date || hasVog;
         
         // If professional has pending_documents status, check if they're now complete
         if (currentProfessional?.status === 'beschikbaar_pending_documents') {
@@ -2315,8 +2321,13 @@ Return JSON in dit formaat:
       
       const missingDocs: string[] = [];
       
-      // VOG check met 3-maanden validatie
-      if (!mergedData.vog_file_path) {
+      // VOG check met 3-maanden validatie - check vog_validation_status instead of non-existent vog_file_path
+      const hasValidVog = mergedData.vog_validation_status && 
+                          mergedData.vog_validation_status !== 'not_uploaded' &&
+                          mergedData.vog_validation_status !== 'missing' &&
+                          mergedData.vog_validation_status !== 'expired';
+      
+      if (!hasValidVog) {
         missingDocs.push('VOG (Verklaring Omtrent Gedrag) - max 3 maanden oud');
       } else if (mergedData.vog_date) {
         const vogDate = new Date(mergedData.vog_date);
