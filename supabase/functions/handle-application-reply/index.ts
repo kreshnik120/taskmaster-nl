@@ -2035,6 +2035,40 @@ Return JSON in dit formaat:
       }
       
       // =====================================================
+      // FIX 2: REFRESH APPLICATION DATA NA DOCUMENT UPLOADS
+      // Zorgt dat completeness berekening verse data gebruikt
+      // =====================================================
+      if (processedDocuments.length > 0) {
+        console.log("🔄 Refreshing application data after document uploads...");
+        const { data: refreshedApp, error: refreshError } = await supabase
+          .from("professional_applications")
+          .select(`*`)
+          .eq("id", applicationId)
+          .single();
+        
+        if (refreshedApp && !refreshError) {
+          // Update application object met verse document paths en statuses
+          Object.assign(application, {
+            cv_file_path: refreshedApp.cv_file_path,
+            diploma_file_path: refreshedApp.diploma_file_path,
+            vog_validation_status: refreshedApp.vog_validation_status,
+            diploma_validation_status: refreshedApp.diploma_validation_status,
+            duo_verification_status: refreshedApp.duo_verification_status,
+          });
+          
+          console.log("✅ Application refreshed after document uploads:", {
+            cv_file_path: !!refreshedApp.cv_file_path,
+            diploma_file_path: !!refreshedApp.diploma_file_path,
+            vog_validation_status: refreshedApp.vog_validation_status,
+            diploma_validation_status: refreshedApp.diploma_validation_status,
+            duo_verification_status: refreshedApp.duo_verification_status,
+          });
+        } else if (refreshError) {
+          console.warn("⚠️ Failed to refresh application data:", refreshError.message);
+        }
+      }
+      
+      // =====================================================
       // PHASE 3: Update Professional with Documents (if exists)
       // =====================================================
       if (application.professional_id && processedDocuments.length > 0) {
@@ -2205,12 +2239,38 @@ Return JSON in dit formaat:
     const newCompletenessScore = completenessResult.score;
     
     // Build comprehensive missing info list
-    const finalRemainingMissing = [
+    let finalRemainingMissing = [
       ...completenessResult.missingFields,
       ...completenessResult.missingDocs.map(doc => `${doc}_upload`),
       ...completenessResult.unverifiedDocs.map(doc => `${doc}_verificatie`),
       ...completenessResult.expiredDocs.map(doc => `${doc}_verlopen`),
     ];
+    
+    // FIX 4: Dedupe document fields - verwijder redundante vragen als document al aanwezig
+    // Check diploma - verwijder 'diploma' text field als diploma_upload al aanwezig is OF diploma_file_path al bestaat
+    if (application.diploma_file_path) {
+      finalRemainingMissing = finalRemainingMissing.filter(f => 
+        f !== 'diploma' && f !== 'diploma_upload' && f !== 'diploma_type'
+      );
+      console.log("📋 Diploma file present, removed diploma/diploma_upload from missing info");
+    }
+    
+    // Check CV - verwijder 'cv_upload' als cv_file_path al bestaat
+    if (application.cv_file_path) {
+      finalRemainingMissing = finalRemainingMissing.filter(f => 
+        f !== 'cv' && f !== 'cv_upload'
+      );
+      console.log("📋 CV file present, removed cv/cv_upload from missing info");
+    }
+    
+    // Check VOG - verwijder vog vragen als validation status OK is
+    const vogValidStatuses = ['pending', 'valid', 'verified', 'verified_gaav'];
+    if (application.vog_validation_status && vogValidStatuses.includes(application.vog_validation_status)) {
+      finalRemainingMissing = finalRemainingMissing.filter(f => 
+        !f.toLowerCase().includes('vog')
+      );
+      console.log(`📋 VOG status ${application.vog_validation_status}, removed vog from missing info`);
+    }
     
     // Add telefoon terug als blocked
     if (phoneBlocked && !finalRemainingMissing.includes('telefoonnummer')) {

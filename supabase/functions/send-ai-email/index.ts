@@ -355,7 +355,47 @@ function generateEmailTemplate(
     case 'followup_question':
       // NOTE: fields_to_ask fallback is now handled before generateEmailTemplate is called
       const fields = data.fields_to_ask || [];
-      const fieldsList = fields.map((f: string) => `<li style="margin: 8px 0;">${f}</li>`).join('');
+      
+      // FIX 3: Human-friendly field labels for better UX
+      const FIELD_LABEL_MAP: Record<string, string> = {
+        // Text fields
+        'telefoonnummer': 'Geldig telefoonnummer',
+        'telefoonnummer (echt nummer, geen placeholder zoals 06-12345678)': 'Geldig telefoonnummer (geen testwaarde zoals 06-12345678)',
+        'functie_niveau': 'Functieniveau (bijv. Niveau 3, 4, of 5)',
+        'werkvorm': 'Werkvorm (ZZP of Uitzendkracht)',
+        'regio': 'Regio/woonplaats',
+        'beschikbaarheid': 'Beschikbaarheid (uren per week)',
+        'diploma': 'Diploma informatie',
+        'naam': 'Volledige naam',
+        'email': 'E-mailadres',
+        
+        // Document upload fields
+        'cv_upload': 'CV document (PDF)',
+        'diploma_upload': 'Diploma document (PDF)',
+        'vog_upload': 'Verklaring Omtrent Gedrag (VOG)',
+        
+        // Verification fields (pending)
+        'diploma_verificatie': 'Diploma verificatie (in behandeling)',
+        'vog_verificatie': 'VOG verificatie (in behandeling)',
+        'cv_verificatie': 'CV verificatie (in behandeling)',
+        
+        // Expired documents
+        'diploma_verlopen': 'Diploma is verlopen - graag nieuwe uploaden',
+        'vog_verlopen': 'VOG is verlopen - graag nieuwe aanvragen',
+        
+        // ZZP-specific
+        'kvk_nummer': 'KvK-nummer',
+        'iban': 'IBAN rekeningnummer',
+        'bedrijfsnaam': 'Bedrijfsnaam',
+        'beroepsaansprakelijkheidsverzekering': 'Beroepsaansprakelijkheidsverzekering',
+        'identiteitsbewijs': 'Identiteitsbewijs (voor- en achterkant)',
+        'wkkgz_registratie': 'WKKGZ-registratie',
+      };
+      
+      const fieldsList = fields.map((f: string) => {
+        const label = FIELD_LABEL_MAP[f.toLowerCase()] || FIELD_LABEL_MAP[f] || f;
+        return `<li style="margin: 8px 0;">${label}</li>`;
+      }).join('');
       
       // FIX 3: Build rejection context section if present
       const rejectionContext = data.rejection_context || {};
