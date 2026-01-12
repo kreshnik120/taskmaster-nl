@@ -1457,7 +1457,7 @@ Deno.serve(async (req: Request) => {
     try {
       const { data: updatedApp } = await supabase
         .from('professional_applications')
-        .select('extracted_data, missing_info, diploma_file_path, cv_file_path, vog_file_path')
+        .select('extracted_data, missing_info, diploma_file_path, cv_file_path, vog_validation_status')
         .eq('id', application_id)
         .single();
       

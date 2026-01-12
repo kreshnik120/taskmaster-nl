@@ -1936,7 +1936,7 @@ Return JSON in dit formaat:
               try {
                 const { data: currentApp } = await supabase
                   .from('professional_applications')
-                  .select('extracted_data, diploma_file_path, cv_file_path, vog_file_path')
+                  .select('extracted_data, diploma_file_path, cv_file_path, vog_validation_status')
                   .eq('id', applicationId)
                   .single();
                 
@@ -2015,20 +2015,17 @@ Return JSON in dit formaat:
             }
           }
           
-          // Handle VOG documents
+          // Handle VOG documents - only update validation status (file stored in application_documents)
           if (doc.document_type === 'vog' && doc.vog_expiry_status === 'valid') {
             const { error: vogUpdateError } = await supabase
               .from('professional_applications')
-              .update({ 
-                vog_file_path: doc.file_path,
-                vog_validation_status: 'valid'
-              })
+              .update({ vog_validation_status: 'valid' })
               .eq('id', applicationId);
             
             if (vogUpdateError) {
-              console.error(`❌ Failed to update vog_file_path:`, vogUpdateError);
+              console.error(`❌ Failed to update vog_validation_status:`, vogUpdateError);
             } else {
-              console.log(`✅ Application updated with vog_file_path: ${doc.file_path}`);
+              console.log(`✅ Application updated with vog_validation_status: valid`);
             }
           }
         }
