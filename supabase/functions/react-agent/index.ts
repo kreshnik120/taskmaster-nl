@@ -825,34 +825,71 @@ async function executeReActLoop(
       const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
       if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
-      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: REACT_SYSTEM_PROMPT + '\n\nBESCHIKBARE TOOLS:\n' + toolsPrompt },
-            { role: 'user', content: `DOEL: ${goal}\n\nCONTEXT: ${JSON.stringify(context)}` },
-            ...conversationHistory,
-          ],
-          temperature: 0.3,
-          max_tokens: 1000,
-        }),
-      });
+      // Helper to detect truncation in AI response
+      const detectTruncation = (text: string): boolean => {
+        const openBraces = (text.match(/{/g) || []).length;
+        const closeBraces = (text.match(/}/g) || []).length;
+        const openBrackets = (text.match(/\[/g) || []).length;
+        const closeBrackets = (text.match(/\]/g) || []).length;
+        
+        const isTruncated = openBraces > closeBraces || 
+                            openBrackets > closeBrackets ||
+                            text.trim().endsWith('"') ||
+                            text.trim().endsWith('_e') ||
+                            text.trim().endsWith('_') ||
+                            text.trim().endsWith(':');
+        
+        return isTruncated;
+      };
 
-      if (!aiResponse.ok) {
-        const errorText = await aiResponse.text();
-        throw new Error(`AI API error: ${aiResponse.status} - ${errorText}`);
+      // AI call with retry on truncation
+      let responseText = '';
+      let maxRetries = 2;
+      let currentMaxTokens = 4096; // VERHOOGD van 1000
+
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-flash',
+            messages: [
+              { role: 'system', content: REACT_SYSTEM_PROMPT + '\n\nBESCHIKBARE TOOLS:\n' + toolsPrompt },
+              { role: 'user', content: `DOEL: ${goal}\n\nCONTEXT: ${JSON.stringify(context)}` },
+              ...conversationHistory,
+            ],
+            temperature: 0.3,
+            max_tokens: currentMaxTokens,
+          }),
+        });
+
+        if (!aiResponse.ok) {
+          const errorText = await aiResponse.text();
+          throw new Error(`AI API error: ${aiResponse.status} - ${errorText}`);
+        }
+
+        const aiData = await aiResponse.json();
+        totalTokens += aiData.usage?.total_tokens || 0;
+        responseText = aiData.choices?.[0]?.message?.content || '';
+
+        // Check for truncation
+        if (detectTruncation(responseText)) {
+          console.warn(`[ReAct] ⚠️ Response truncation detected (attempt ${attempt + 1}/${maxRetries + 1}), response length: ${responseText.length}`);
+          if (attempt < maxRetries) {
+            currentMaxTokens = Math.min(currentMaxTokens * 2, 8192); // Double tokens for retry
+            console.log(`[ReAct] Retrying with max_tokens: ${currentMaxTokens}`);
+            continue;
+          } else {
+            console.warn('[ReAct] Max retries reached, proceeding with truncated response');
+          }
+        }
+        break; // Success - exit retry loop
       }
 
-      const aiData = await aiResponse.json();
-      totalTokens += aiData.usage?.total_tokens || 0;
-
       // Parse AI response
-      const responseText = aiData.choices?.[0]?.message?.content || '';
       let parsed: { thought: string; action: string | null; action_input: Record<string, unknown> | null; final_answer: string | null } = {
         thought: '',
         action: null,
