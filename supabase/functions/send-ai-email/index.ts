@@ -181,20 +181,40 @@ Deno.serve(async (req: Request): Promise<Response> => {
     
     // DATABASE FALLBACK: If fields_to_ask is empty and application_id is available, query database
     // This prevents empty yellow boxes in followup emails
+    // ENHANCED: Priority chain - agent_goals.remaining_missing_info → applications.missing_info
     let enrichedTemplateData = { ...template_data };
     if (email_type === 'followup_question' && 
         (!enrichedTemplateData.fields_to_ask || enrichedTemplateData.fields_to_ask.length === 0) && 
         application_id) {
       console.log('📋 [send-ai-email] fields_to_ask empty, querying database for application:', application_id);
-      const { data: appData } = await supabase
-        .from('professional_applications')
-        .select('missing_info')
-        .eq('id', application_id)
-        .single();
       
-      if (appData?.missing_info && appData.missing_info.length > 0) {
-        enrichedTemplateData.fields_to_ask = appData.missing_info;
-        console.log('✅ [send-ai-email] Got missing_info from database:', enrichedTemplateData.fields_to_ask);
+      // STEP 1: Check most recent agent_goal for remaining_missing_info (most accurate)
+      const { data: goalData } = await supabase
+        .from('agent_goals')
+        .select('input_data')
+        .or(`input_data->>application_id.eq.${application_id},input_data->context->>application_id.eq.${application_id}`)
+        .in('status', ['completed', 'executing_react', 'executing'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (goalData?.input_data?.remaining_missing_info && Array.isArray(goalData.input_data.remaining_missing_info) && goalData.input_data.remaining_missing_info.length > 0) {
+        enrichedTemplateData.fields_to_ask = goalData.input_data.remaining_missing_info;
+        enrichedTemplateData.rejection_context = goalData.input_data?.rejection_context || enrichedTemplateData.rejection_context || {};
+        console.log('✅ [send-ai-email] Got remaining_missing_info from agent_goals:', enrichedTemplateData.fields_to_ask);
+        console.log('✅ [send-ai-email] Got rejection_context from agent_goals:', JSON.stringify(enrichedTemplateData.rejection_context));
+      } else {
+        // STEP 2: Fallback to professional_applications.missing_info
+        const { data: appData } = await supabase
+          .from('professional_applications')
+          .select('missing_info')
+          .eq('id', application_id)
+          .single();
+        
+        if (appData?.missing_info && appData.missing_info.length > 0) {
+          enrichedTemplateData.fields_to_ask = appData.missing_info;
+          console.log('✅ [send-ai-email] Got missing_info from applications (fallback):', enrichedTemplateData.fields_to_ask);
+        }
       }
     }
     
@@ -336,21 +356,60 @@ function generateEmailTemplate(
       // NOTE: fields_to_ask fallback is now handled before generateEmailTemplate is called
       const fields = data.fields_to_ask || [];
       const fieldsList = fields.map((f: string) => `<li style="margin: 8px 0;">${f}</li>`).join('');
-      content = `
-        <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName || 'sollicitant'},</h2>
-        <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
-          Bedankt voor je interesse in ${orgName}! Om je sollicitatie compleet te maken, hebben we nog enkele gegevens nodig:
-        </p>
-        <ul style="background-color: #fef3c7; padding: 20px 20px 20px 40px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #f59e0b; color: #1a1a1a;">
-          ${fieldsList}
-        </ul>
-        <p style="color: #4a5568; font-size: 15px; line-height: 1.6;">
-          Je kunt eenvoudig op deze email antwoorden met de gevraagde informatie.
-        </p>
-        <p style="margin: 25px 0 0 0; color: #4a5568;">
-          Met vriendelijke groet,<br>
-          <strong>Het ${orgName} Recruitment Team</strong>
-        </p>`;
+      
+      // FIX 3: Build rejection context section if present
+      const rejectionContext = data.rejection_context || {};
+      const hasRejections = Object.keys(rejectionContext).length > 0;
+      const rejectionItems = Object.entries(rejectionContext).map(([field, ctx]: [string, any]) => 
+        `<li style="margin: 8px 0;">
+          <strong>${field}</strong>: "${ctx.provided_value || 'onbekend'}" - ${ctx.rejected_reason || 'afgewezen'}.
+          ${ctx.suggestion ? `<br><em style="color: #065f46;">💡 ${ctx.suggestion}</em>` : ''}
+        </li>`
+      ).join('');
+      
+      const rejectionSection = hasRejections ? `
+        <div style="background-color: #fef2f2; padding: 15px 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #dc2626;">
+          <p style="margin: 0 0 10px 0; font-weight: 600; color: #991b1b;">⚠️ Let op bij de volgende gegevens:</p>
+          <ul style="margin: 0; padding-left: 20px; color: #7f1d1d;">
+            ${rejectionItems}
+          </ul>
+        </div>
+      ` : '';
+      
+      // FIX 4: Fallback to AI generated content if fields are empty
+      const aiGeneratedContent = data.ai_generated_content;
+      const hasAiContent = aiGeneratedContent && typeof aiGeneratedContent === 'string' && aiGeneratedContent.length > 50;
+      
+      if (hasAiContent && fields.length === 0 && !hasRejections) {
+        // Use AI's free-text content as main email body
+        content = `
+          <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName || 'sollicitant'},</h2>
+          <div style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 20px; white-space: pre-line;">
+            ${aiGeneratedContent}
+          </div>
+          <p style="margin: 25px 0 0 0; color: #4a5568;">
+            Met vriendelijke groet,<br>
+            <strong>Het ${orgName} Recruitment Team</strong>
+          </p>`;
+      } else {
+        // Standard template with rejection context and fields
+        content = `
+          <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName || 'sollicitant'},</h2>
+          <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
+            Bedankt voor je reactie! Om je sollicitatie compleet te maken, hebben we nog enkele gegevens nodig:
+          </p>
+          ${rejectionSection}
+          <ul style="background-color: #fef3c7; padding: 20px 20px 20px 40px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #f59e0b; color: #1a1a1a;">
+            ${fieldsList || '<li style="margin: 8px 0;">Controleer je eerdere reactie</li>'}
+          </ul>
+          <p style="color: #4a5568; font-size: 15px; line-height: 1.6;">
+            Je kunt eenvoudig op deze email antwoorden met de gevraagde informatie.
+          </p>
+          <p style="margin: 25px 0 0 0; color: #4a5568;">
+            Met vriendelijke groet,<br>
+            <strong>Het ${orgName} Recruitment Team</strong>
+          </p>`;
+      }
       break;
 
     case 'document_request':

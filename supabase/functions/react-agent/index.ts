@@ -333,18 +333,40 @@ const TOOL_HANDLERS: Record<string, (supabase: any, params: Record<string, unkno
       
       // Build template_data with missing_info for intake emails
       // PRIORITY: Use params.fields_to_ask from orchestrator first, then fall back to context
+      // FIX: Handle AI sending params.context as string instead of structured data
+      const contextData = (params.context && typeof params.context === 'string') 
+        ? { ai_generated_content: params.context } // Preserve AI's free-text content
+        : (params.context || {});
+      
+      // ENHANCED: Priority chain for fields_to_ask with remaining_missing_info support
+      const paramsFieldsToAsk = params.fields_to_ask as string[] | undefined;
+      const paramsMissingInfo = params.missing_info as string[] | undefined;
+      const contextRemaining = context.context?.remaining_missing_info as string[] | undefined;
+      const contextMissing = context.context?.missing_info as string[] | undefined;
+      
+      const fieldsToAsk = (Array.isArray(paramsFieldsToAsk) && paramsFieldsToAsk.length > 0) 
+        ? paramsFieldsToAsk 
+        : (Array.isArray(paramsMissingInfo) && paramsMissingInfo.length > 0)
+          ? paramsMissingInfo
+          : contextRemaining 
+            || contextMissing 
+            || [];
+      
       const templateData = {
-        ...(params.context || {}),
-        // CRITICAL: params.fields_to_ask comes from orchestrator action input_data
-        fields_to_ask: params.fields_to_ask || params.missing_info || context.context?.missing_info || [],
+        ...contextData,
+        // CRITICAL: Use enhanced priority chain for fields_to_ask
+        fields_to_ask: fieldsToAsk,
         missing_info: params.all_missing_info || params.missing_info || context.context?.missing_info || [],
         extracted_data: params.extracted_data || context.context?.extracted_data || {},
         current_completeness: params.current_completeness || context.context?.completeness_score || 0,
         // Include application_id for database fallback
         application_id: params.application_id,
-        // Rejection context for explaining why data was rejected
-        rejection_context: params.rejection_context || {},
+        // ENHANCED: Rejection context with priority chain
+        rejection_context: params.rejection_context || context.context?.rejection_context || {},
       };
+      
+      console.log('[ReAct] send_email: templateData.fields_to_ask:', JSON.stringify(fieldsToAsk));
+      console.log('[ReAct] send_email: templateData.rejection_context:', JSON.stringify(templateData.rejection_context));
       
       const { data, error } = await supabase.functions.invoke('send-ai-email', {
         body: { 
