@@ -853,7 +853,12 @@ async function executeReActLoop(
 
       // Parse AI response
       const responseText = aiData.choices?.[0]?.message?.content || '';
-      let parsed: { thought: string; action: string | null; action_input: Record<string, unknown> | null; final_answer: string | null };
+      let parsed: { thought: string; action: string | null; action_input: Record<string, unknown> | null; final_answer: string | null } = {
+        thought: '',
+        action: null,
+        action_input: null,
+        final_answer: null,
+      };
       
       try {
         // KRITIEK: Detecteer en handel multi-step hallucinatie af (AI genereert eigen OBSERVATION)
@@ -861,41 +866,68 @@ async function executeReActLoop(
         
         if (hasHallucination) {
           console.warn('[ReAct] ⚠️ AI included fabricated OBSERVATION - extracting ONLY first action!');
+          console.log('[ReAct] Response length:', responseText.length);
+          console.log('[ReAct] Aantal gefabriceerde OBSERVATION blocks:', 
+            (responseText.match(/OBSERVATION:/gi) || []).length);
           
           // Splits de response op de eerste OBSERVATION en negeer alles daarna
           const beforeFirstObservation = responseText.split(/OBSERVATION:|"observation"/i)[0];
-          console.log('[ReAct] Extracted text before hallucinated observation:', beforeFirstObservation.substring(0, 300));
+          console.log('[ReAct] beforeFirstObservation (first 500 chars):', beforeFirstObservation.substring(0, 500));
           
-          // Probeer JSON uit het eerste deel te extraheren
-          const jsonMatch = beforeFirstObservation.match(/\{[\s\S]*?\}/);
-          if (jsonMatch) {
-            const candidate = JSON.parse(jsonMatch[0]);
-            if (candidate.action) {
-              parsed = {
-                thought: candidate.thought || 'Extracted from hallucinated multi-step response',
-                action: candidate.action,
-                action_input: candidate.action_input || {},
-                final_answer: null, // NOOIT fallback gebruiken bij hallucinatie!
-              };
-              console.log('[ReAct] ✅ Successfully extracted first action from hallucinated response:', parsed.action);
-            } else {
-              throw new Error('No action found in first JSON block');
+          // KRITIEK FIX v1.6.0: Probeer eerst TEKSTUELE parsing (werkt altijd bij multi-step hallucinaties)
+          // De JSON regex matcht vaak de ACTION_INPUT in plaats van de volledige response
+          const thoughtMatch = beforeFirstObservation.match(/(?:THOUGHT|Thought):\s*([\s\S]*?)(?=(?:ACTION|Action):|$)/i);
+          const actionMatch = beforeFirstObservation.match(/(?:ACTION|Action):\s*(\w+)/i);
+          const inputMatch = beforeFirstObservation.match(/(?:ACTION_INPUT|Action_input):\s*(\{[\s\S]*?\})/i);
+          
+          if (actionMatch) {
+            // Tekstuele parsing succesvol - dit is de primaire methode
+            let actionInput = {};
+            if (inputMatch) {
+              try {
+                actionInput = JSON.parse(inputMatch[1]);
+              } catch (e) {
+                console.warn('[ReAct] Failed to parse ACTION_INPUT JSON:', e);
+              }
             }
+            parsed = {
+              thought: thoughtMatch?.[1]?.trim() || 'Extracted from hallucinated multi-step response',
+              action: actionMatch[1],
+              action_input: actionInput,
+              final_answer: null, // NOOIT fallback gebruiken bij hallucinatie!
+            };
+            console.log('[ReAct] ✅ Parsed first action from textual hallucinated response:', parsed.action);
           } else {
-            // Tekstuele parsing van het eerste deel
-            const thoughtMatch = beforeFirstObservation.match(/(?:THOUGHT|Thought):\s*([\s\S]*?)(?=(?:ACTION|Action):|$)/i);
-            const actionMatch = beforeFirstObservation.match(/(?:ACTION|Action):\s*(\w+)/i);
-            const inputMatch = beforeFirstObservation.match(/(?:ACTION_INPUT|Action_input):\s*(\{[\s\S]*?\})/i);
+            // Fallback: probeer JSON parsing met volledige ReAct structuur check
+            const jsonMatches = beforeFirstObservation.match(/\{(?:[^{}]|\{[^{}]*\})*\}/g);
+            let foundValidJson = false;
             
-            if (actionMatch) {
-              parsed = {
-                thought: thoughtMatch?.[1]?.trim() || 'Extracted from hallucinated response',
-                action: actionMatch[1],
-                action_input: inputMatch ? JSON.parse(inputMatch[1]) : {},
-                final_answer: null, // NOOIT fallback!
-              };
-              console.log('[ReAct] ✅ Parsed first action from textual hallucinated response:', parsed.action);
-            } else {
+            if (jsonMatches) {
+              for (const jsonStr of jsonMatches) {
+                try {
+                  const candidate = JSON.parse(jsonStr);
+                  // Check of dit een ReAct response is (met action property, NIET action_input parameters)
+                  if (candidate.action && typeof candidate.action === 'string' && 
+                      !candidate.application_id && !candidate.document_type && !candidate.email_type) {
+                    parsed = {
+                      thought: candidate.thought || 'Extracted from hallucinated multi-step response',
+                      action: candidate.action,
+                      action_input: candidate.action_input || {},
+                      final_answer: null,
+                    };
+                    console.log('[ReAct] ✅ Parsed ReAct JSON from hallucinated response:', parsed.action);
+                    foundValidJson = true;
+                    break;
+                  }
+                } catch {
+                  // Skip invalid JSON blocks
+                }
+              }
+            }
+            
+            if (!foundValidJson) {
+              console.error('[ReAct] ❌ No valid action found in hallucinated response');
+              console.error('[ReAct] Raw beforeFirstObservation:', beforeFirstObservation);
               throw new Error('No action found in hallucinated response');
             }
           }
