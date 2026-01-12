@@ -1,5 +1,6 @@
 import { corsHeaders, handleCors, createAdminClient, jsonResponse, errorResponse } from '../_shared/core.ts';
 import { canExecute, recordSuccess, recordFailure, formatCircuitStateForResponse, type CanExecuteResult } from '../_shared/circuit-breaker.ts';
+import { recalculateMissingInfo } from '../_shared/healthcare-mappings.ts';
 import puppeteer from 'https://deno.land/x/puppeteer@16.2.0/mod.ts';
 
 // Boot log to verify deployment
@@ -1450,6 +1451,44 @@ Deno.serve(async (req: Request) => {
     if (updateError) {
       console.error('Update error:', updateError);
       return errorResponse('Failed to update verification status', 500);
+    }
+    
+    // CRITICAL FIX: Sync duo_verification_status and missing_info after DUO verification
+    try {
+      const { data: updatedApp } = await supabase
+        .from('professional_applications')
+        .select('extracted_data, missing_info, diploma_file_path, cv_file_path, vog_file_path')
+        .eq('id', application_id)
+        .single();
+      
+      if (updatedApp) {
+        const newMissingInfo = recalculateMissingInfo(
+          updatedApp.extracted_data as Record<string, unknown>,
+          updatedApp  // Pass application data for document file_path checks
+        );
+        
+        // Map diploma_validation_status to duo_verification_status
+        const duoVerificationStatus = dbStatus === 'verified_duo' ? 'verified' : 
+                                      dbStatus === 'duo_invalid' ? 'invalid' : 
+                                      dbStatus === 'signature_valid' ? 'verified' :
+                                      'manual_review';
+        
+        // Only update if there are changes
+        const currentMissing = updatedApp.missing_info || [];
+        const missingChanged = JSON.stringify(newMissingInfo.sort()) !== JSON.stringify([...currentMissing].sort());
+        
+        await supabase
+          .from('professional_applications')
+          .update({ 
+            missing_info: newMissingInfo,
+            duo_verification_status: duoVerificationStatus
+          })
+          .eq('id', application_id);
+        
+        console.log(`📋 Synced after DUO verification: missing_info=[${newMissingInfo.join(', ')}], duo_status=${duoVerificationStatus}`);
+      }
+    } catch (syncError) {
+      console.error('⚠️ Failed to sync missing_info after DUO verification:', syncError);
     }
     
     // Create recruiter notification for verified diplomas

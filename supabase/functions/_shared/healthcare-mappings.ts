@@ -544,12 +544,21 @@ export const FIELD_ALIASES: Record<string, string[]> = {
  * Checks if a field has a valid value, using aliases and placeholder detection
  * @param data - The extracted_data object to check
  * @param field - The canonical field name to check
+ * @param applicationData - Optional: full application record to check document file paths
  * @returns true if field has a valid (non-placeholder) value
  */
 export function hasField(
   data: Record<string, unknown>, 
-  field: string
+  field: string,
+  applicationData?: Record<string, unknown>
 ): boolean {
+  // Document fields: check file_path columns on application record first
+  if (applicationData) {
+    if (field === 'diploma' && applicationData.diploma_file_path) return true;
+    if (field === 'vog' && applicationData.vog_file_path) return true;
+    if (field === 'cv' && applicationData.cv_file_path) return true;
+  }
+  
   const aliasesToCheck = FIELD_ALIASES[field] || [field];
   
   for (const alias of aliasesToCheck) {
@@ -590,13 +599,16 @@ export const ACTIVE_GOAL_STATUSES = [
 
 /**
  * Recalculates missing_info based on extracted_data using aliases and placeholder detection
+ * @param extractedData - The extracted_data object from the application
+ * @param applicationData - Optional: full application record to check document file paths
  */
 export function recalculateMissingInfo(
-  extractedData: Record<string, unknown> | null
+  extractedData: Record<string, unknown> | null,
+  applicationData?: Record<string, unknown>
 ): string[] {
   if (!extractedData) return [...CRITICAL_FIELDS];
   
-  return CRITICAL_FIELDS.filter(field => !hasField(extractedData, field));
+  return CRITICAL_FIELDS.filter(field => !hasField(extractedData, field, applicationData));
 }
 
 // ============================================
