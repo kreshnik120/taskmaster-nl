@@ -220,7 +220,11 @@ Deno.serve(async (req) => {
     // =====================================================
 
     // Determine initial status: pending_documents if VOG/diplomas needed
-    const hasVog = !!extractedData.vog_file_path || !!extractedData.vog_date;
+    // Check vog_validation_status instead of non-existent vog_file_path
+    const hasVog = (!!extractedData.vog_validation_status && 
+                    extractedData.vog_validation_status !== 'not_uploaded' &&
+                    extractedData.vog_validation_status !== 'missing') ||
+                   !!extractedData.vog_date;
     const hasDiplomas = !!(extractedData.diploma_file_paths?.length > 0);
     const initialStatus = (hasVog && hasDiplomas) ? 'beschikbaar' : 'beschikbaar_pending_documents';
 
