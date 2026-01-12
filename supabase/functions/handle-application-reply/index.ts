@@ -1931,6 +1931,32 @@ Return JSON in dit formaat:
             } else {
               console.log(`✅ Application updated with diploma_file_path: ${doc.file_path}`);
               
+              // CRITICAL FIX: Recalculate missing_info with document awareness
+              // This ensures 'diploma' is removed from missing_info immediately after upload
+              try {
+                const { data: currentApp } = await supabase
+                  .from('professional_applications')
+                  .select('extracted_data, diploma_file_path, cv_file_path, vog_file_path')
+                  .eq('id', applicationId)
+                  .single();
+                
+                if (currentApp) {
+                  const updatedMissingInfo = recalculateMissingInfo(
+                    currentApp.extracted_data as Record<string, unknown>,
+                    currentApp  // Pass application data for document file_path checks
+                  );
+                  
+                  console.log(`📋 Updated missing_info after diploma upload: [${updatedMissingInfo.join(', ')}]`);
+                  
+                  await supabase
+                    .from('professional_applications')
+                    .update({ missing_info: updatedMissingInfo })
+                    .eq('id', applicationId);
+                }
+              } catch (missingInfoError) {
+                console.error('⚠️ Failed to update missing_info after diploma upload:', missingInfoError);
+              }
+              
               // Trigger async DUO verification - non-blocking with robust fallback
               supabase.functions.invoke('verify-diploma-duo', {
                 body: {
