@@ -825,27 +825,79 @@ async function executeReActLoop(
       const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
       if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
-      // Helper to detect truncation in AI response
+      // Helper to detect truncation in AI response (v1.7.1 - improved detection)
       const detectTruncation = (text: string): boolean => {
+        const trimmed = text.trim();
+        
+        // 1. Brace/bracket balans check
         const openBraces = (text.match(/{/g) || []).length;
         const closeBraces = (text.match(/}/g) || []).length;
         const openBrackets = (text.match(/\[/g) || []).length;
         const closeBrackets = (text.match(/\]/g) || []).length;
         
-        const isTruncated = openBraces > closeBraces || 
-                            openBrackets > closeBrackets ||
-                            text.trim().endsWith('"') ||
-                            text.trim().endsWith('_e') ||
-                            text.trim().endsWith('_') ||
-                            text.trim().endsWith(':');
+        if (openBraces > closeBraces) {
+          console.log('[ReAct] Truncation: unbalanced braces', { open: openBraces, close: closeBraces });
+          return true;
+        }
+        if (openBrackets > closeBrackets) {
+          console.log('[ReAct] Truncation: unbalanced brackets', { open: openBrackets, close: closeBrackets });
+          return true;
+        }
         
-        return isTruncated;
+        // 2. JSON code block check - begint met ```json maar eindigt niet op ```
+        if (trimmed.includes('```json') && !trimmed.endsWith('```')) {
+          console.log('[ReAct] Truncation: JSON code block not closed');
+          return true;
+        }
+        
+        // 3. Quote balans check (oneven = mid-string truncatie)
+        const quoteCount = (text.match(/(?<!\\)"/g) || []).length;
+        if (quoteCount % 2 !== 0) {
+          console.log('[ReAct] Truncation: uneven quote count', quoteCount);
+          return true;
+        }
+        
+        // 4. Uitgebreide truncatie-eindpatronen
+        const suspiciousEndings = [
+          '"', '_e', '_', ':', 'send_', 'email', 'emai', 'ema', 'em', 
+          '"we', '"wel', '"welc', '"welco', '"welcom', 
+          '"int', '"inta', '"intak',
+          'action', '"action', 'input', '"action_input',
+          'thought', '"thought'
+        ];
+        
+        for (const ending of suspiciousEndings) {
+          if (trimmed.endsWith(ending) && !trimmed.endsWith('"}') && !trimmed.endsWith('"]') && !trimmed.endsWith('```')) {
+            console.log(`[ReAct] Truncation: ends with suspicious pattern "${ending}"`);
+            return true;
+          }
+        }
+        
+        // 5. Actie-specifieke check: "action" aanwezig maar geen complete "action_input": {...}
+        if (text.includes('"action"') && text.includes('"action_input"')) {
+          // Check of action_input een complete object heeft
+          const inputMatch = text.match(/"action_input"\s*:\s*\{/);
+          if (inputMatch) {
+            const afterInputStart = text.substring(text.indexOf(inputMatch[0]) + inputMatch[0].length);
+            const innerBraces = (afterInputStart.match(/{/g) || []).length;
+            const innerCloseBraces = (afterInputStart.match(/}/g) || []).length;
+            if (innerBraces >= innerCloseBraces) {
+              console.log('[ReAct] Truncation: action_input object not closed');
+              return true;
+            }
+          }
+        } else if (text.includes('"action"') && !text.includes('"action_input"')) {
+          console.log('[ReAct] Truncation: action found but no action_input');
+          return true;
+        }
+        
+        return false;
       };
 
       // AI call with retry on truncation
       let responseText = '';
       let maxRetries = 2;
-      let currentMaxTokens = 4096; // VERHOOGD van 1000
+      let currentMaxTokens = 6144; // VERHOOGD van 4096 voor langere responses
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -1012,14 +1064,65 @@ async function executeReActLoop(
           };
           console.log('[ReAct] Parsed final_answer from textual format');
         } else {
-          console.error('[ReAct] ❌ Failed to parse AI response:', responseText.substring(0, 200));
-          // Alleen als echt NIETS te parsen is, gebruik fallback
-          parsed = {
-            thought: responseText.substring(0, 500),
-            action: null,
-            action_input: null,
-            final_answer: 'Ik kon de vraag niet goed verwerken. Kun je het anders formuleren?',
-          };
+          console.error('[ReAct] ❌ Failed to parse AI response:', responseText.substring(0, 500));
+          
+          // v1.7.1: Partial JSON Recovery voor kritieke tools
+          // Als we een truncated JSON hebben met een bekende tool, probeer te recoveren
+          const toolNameMatch = responseText.match(/"action"\s*:\s*"(\w+)"/);
+          const thoughtMatch = responseText.match(/"thought"\s*:\s*"([^"]+)"/);
+          
+          if (toolNameMatch) {
+            const toolName = toolNameMatch[1];
+            console.log(`[ReAct] ⚡ Attempting partial recovery for tool "${toolName}"`);
+            
+            // Voor send_email: bouw action_input uit context
+            if (toolName === 'send_email' || toolName.startsWith('send_')) {
+              const ctx = memory.context || {};
+              const recoveredInput = {
+                recipient_email: ctx.candidate_email || ctx.email || '',
+                recipient_name: ctx.candidate_name || ctx.name || '',
+                email_type: 'welcome_intake',
+                application_id: ctx.application_id || '',
+                fields_to_ask: ctx.missing_info || [],
+              };
+              
+              if (recoveredInput.recipient_email && recoveredInput.application_id) {
+                parsed = {
+                  thought: thoughtMatch?.[1] || 'Recovered from truncated response - sending welcome email',
+                  action: 'send_email',
+                  action_input: recoveredInput,
+                  final_answer: null,
+                };
+                console.log('[ReAct] ✅ Successfully recovered send_email from truncated response');
+                console.log('[ReAct] Recovered input:', JSON.stringify(recoveredInput));
+              } else {
+                console.warn('[ReAct] ⚠️ Cannot recover send_email - missing required context (email or application_id)');
+                parsed = {
+                  thought: responseText.substring(0, 500),
+                  action: null,
+                  action_input: null,
+                  final_answer: 'Er ging iets mis bij het verwerken van de email. Probeer het opnieuw.',
+                };
+              }
+            } else {
+              // Andere tools kunnen niet automatisch recoveren
+              console.warn(`[ReAct] ⚠️ Cannot auto-recover tool "${toolName}" - no context mapping available`);
+              parsed = {
+                thought: responseText.substring(0, 500),
+                action: null,
+                action_input: null,
+                final_answer: 'Ik kon de vraag niet goed verwerken. Kun je het anders formuleren?',
+              };
+            }
+          } else {
+            // Geen tool gevonden - standaard fallback
+            parsed = {
+              thought: responseText.substring(0, 500),
+              action: null,
+              action_input: null,
+              final_answer: 'Ik kon de vraag niet goed verwerken. Kun je het anders formuleren?',
+            };
+          }
         }
       }
 
