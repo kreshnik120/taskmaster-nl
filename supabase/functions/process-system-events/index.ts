@@ -41,6 +41,25 @@ Deno.serve(async (req) => {
     
     if (!events || events.length === 0) {
       console.log('✅ No unprocessed events found');
+      
+      // Log function call even when no events to process for dashboard monitoring
+      try {
+        await supabase.from('function_call_logs').insert({
+          function_name: 'process-system-events',
+          org_id: '550e8400-e29b-41d4-a716-446655440000',
+          success: true,
+          execution_time_ms: Date.now() - startTime,
+          metadata: {
+            processed: 0,
+            total: 0,
+            knowledge_created: 0,
+            status: 'no_events'
+          }
+        });
+      } catch (logErr) {
+        console.warn('⚠️ Failed to log function call:', logErr);
+      }
+      
       return new Response(JSON.stringify({ 
         processed: 0,
         message: 'No events to process' 
