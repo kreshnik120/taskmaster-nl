@@ -45,6 +45,7 @@ import { StageTransitionButton } from "@/components/recruitment/StageTransitionB
 import { WerkvormDetectionBanner } from "@/components/recruitment/WerkvormDetectionBanner";
 import { DiplomaVerificationBanner } from "@/components/recruitment/DiplomaVerificationBanner";
 import { DiplomaLevelMismatchAlert } from "@/components/recruitment/DiplomaLevelMismatchAlert";
+import { GesprekFeedbackSection } from "@/components/recruitment/GesprekFeedbackSection";
 
 interface Application {
   id: string;
@@ -73,6 +74,9 @@ interface Application {
   diploma_validation_source?: string | null;
   documents_verified_by?: string | null;
   documents_verified_at?: string | null;
+  // Interview fields
+  gesprek_datum?: string | null;
+  gesprek_feedback?: string | null;
   professionals?: {
     full_name: string;
     functie_niveau: string;
@@ -1235,6 +1239,18 @@ export function ApplicationDetailModal({
                 </ul>
               </div>
             )}
+
+            {/* Interview Planning & Feedback Section */}
+            <GesprekFeedbackSection
+              applicationId={application.id}
+              orgId={application.org_id || '550e8400-e29b-41d4-a716-446655440000'}
+              pipelineStage={application.pipeline_stage}
+              gesprekDatum={application.gesprek_datum || null}
+              gesprekFeedback={application.gesprek_feedback || null}
+              candidateName={candidateName}
+              candidateEmail={application.email || application.email_from}
+              onUpdated={onApplicationUpdated}
+            />
 
             {/* Contactgegevens - Collapsible */}
             <Collapsible open={contactOpen} onOpenChange={setContactOpen}>
