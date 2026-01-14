@@ -183,6 +183,13 @@ Deno.serve(async (req) => {
     // Parse request body
     const body = await req.json();
     
+    // Auto-detect scheduler trigger and apply defaults
+    if (body.trigger === 'scheduler' && !body.action) {
+      console.log('🔄 Scheduler trigger detected - applying defaults for retroactive_scan');
+      body.action = 'retroactive_scan';
+      body.org_id = body.org_id || '550e8400-e29b-41d4-a716-446655440000';
+    }
+    
     // Validate request
     const validation = validateRequest(body);
     if (!validation.valid) {
