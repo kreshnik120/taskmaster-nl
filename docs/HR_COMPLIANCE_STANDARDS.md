@@ -1,7 +1,7 @@
 # HR Compliance Standards - Enterprise Niveau
 
-> **Versie:** 2.0.0-enterprise  
-> **Laatst bijgewerkt:** 2026-01-04  
+> **Versie:** 3.0.0-enterprise  
+> **Laatst bijgewerkt:** 2026-01-14  
 > **Eigenaar:** HR Compliance Team ABCzorg/CitoZorg
 
 Dit document definieert alle HR compliance standaarden voor ABCzorg en CitoZorg. Het dient als **Single Source of Truth** voor alle HR-gerelateerde validatie, documentvereisten en pipeline compliance gates.
@@ -31,6 +31,7 @@ Dit document definieert alle HR compliance standaarden voor ABCzorg en CitoZorg.
 | **Maximum geldigheid** | 3 maanden | Vanaf afgiftedatum VOG |
 | **Waarschuwingsperiode** | 14 dagen | Trigger voor vernieuwingsverzoek |
 | **Grace period** | 0 dagen | Geen tolerantie na expiry |
+| **Aanvraag timing** | Bij screening stage | VOG pas aanvragen na positief gesprek |
 
 ### 1.2 Expiry Statuses
 
@@ -205,15 +206,16 @@ Helpende 2 (laagst)
 
 ## 6. Pipeline Stage Compliance Gates
 
-### 6.1 Stage Definities
+### 6.1 Stage Definities (NIEUWE FLOW v3.0)
 
 | Stage | Beschrijving | Minimum Completeness |
 |-------|--------------|---------------------|
 | `nieuw` | Net binnengekomen | 0% |
-| `intake_verstuurd` | Intake vragen verzonden | 20% |
-| `screening` | Eerste beoordeling | 30% |
-| `interview` | Gesprek gepland/uitgevoerd | 70% |
-| `goedgekeurd` | Akkoord voor professional creatie | 85% |
+| `intake_verstuurd` | Welkomstmail verzonden, wacht op documenten | 10% |
+| `docs_compleet` | CV + Diploma geverifieerd, klaar voor gesprek | 70% |
+| `gesprek_gepland` | Fysiek gesprek datum door recruiter ingevoerd | 70% |
+| `screening` | Na positieve gesprek feedback (VOG aanvraag hier!) | 75% |
+| `goedgekeurd` | VOG geverifieerd, klaar voor plaatsing | 90% |
 | `geplaatst` | Actief bij klant | 95% |
 | `afgewezen` | Niet geschikt | N/A |
 | `on_hold` | Tijdelijk gepauzeerd | N/A |
@@ -228,23 +230,31 @@ const STAGE_COMPLIANCE_GATES = {
     requiredFields: ['naam', 'email']
   },
   'intake_verstuurd': {
-    minCompleteness: 20,
+    minCompleteness: 10,
     requiredDocs: [],
     requiredFields: ['naam', 'email']
   },
-  'screening': {
-    minCompleteness: 30,
-    requiredDocs: [],
-    requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm']
-  },
-  'interview': {
+  'docs_compleet': {
     minCompleteness: 70,
-    requiredDocs: ['cv'],
-    requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer']
+    requiredDocs: ['cv', 'diploma'], // Diploma MOET geverifieerd zijn via EMREX/DUO
+    requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer'],
+    // ZZP extra docs worden dynamisch gecontroleerd
+  },
+  'gesprek_gepland': {
+    minCompleteness: 70,
+    requiredDocs: ['cv', 'diploma'],
+    requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer'],
+    requiredConditions: ['gesprek_datum_set'] // gesprek_datum moet door recruiter zijn ingevuld
+  },
+  'screening': {
+    minCompleteness: 75,
+    requiredDocs: ['cv', 'diploma'],
+    requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer'],
+    requiredConditions: ['gesprek_feedback_positive'] // KRITIEK: Menselijke goedkeuring vereist!
   },
   'goedgekeurd': {
-    minCompleteness: 85,
-    requiredDocs: ['cv', 'diploma'],
+    minCompleteness: 90,
+    requiredDocs: ['cv', 'diploma', 'vog'], // VOG nu verplicht
     requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer', 'beschikbaarheid']
   },
   'geplaatst': {
@@ -255,15 +265,30 @@ const STAGE_COMPLIANCE_GATES = {
 };
 ```
 
-### 6.3 Stage Transitie Regels
+### 6.3 Stage Transitie Regels (KRITIEK)
 
-| Van | Naar | Vereisten |
-|-----|------|-----------|
-| `nieuw` | `intake_verstuurd` | Automatisch bij eerste contact |
-| `intake_verstuurd` | `screening` | Completeness ≥ 30% |
-| `screening` | `interview` | Completeness ≥ 70%, CV aanwezig |
-| `interview` | `goedgekeurd` | Recruiter goedkeuring |
-| `goedgekeurd` | `geplaatst` | VOG valid, Diploma geverifieerd |
+| Van | Naar | Vereisten | Trigger |
+|-----|------|-----------|---------|
+| `nieuw` | `intake_verstuurd` | Welkomstmail verzonden | Automatisch (AI Agent) |
+| `intake_verstuurd` | `docs_compleet` | CV + geverifieerd diploma + 70% completeness | Automatisch na reply verwerking |
+| `docs_compleet` | `gesprek_gepland` | `gesprek_datum` ingevuld | **HANDMATIG door recruiter** |
+| `gesprek_gepland` | `screening` | `gesprek_feedback = 'positive'` | **HANDMATIG door recruiter** + VOG request |
+| `screening` | `goedgekeurd` | VOG valid (< 3 maanden) | Automatisch na VOG verificatie |
+| `goedgekeurd` | `geplaatst` | Plaatsing bij klant bevestigd | Handmatig |
+
+### 6.4 KRITIEKE REGELS
+
+⚠️ **Kandidaat kan NIET naar screening zonder:**
+1. Fysiek gesprek (gesprek_datum moet ingevuld zijn)
+2. Positieve feedback van recruiter (gesprek_feedback = 'positive')
+
+⚠️ **VOG wordt ALLEEN aangevraagd bij screening:**
+- Niet eerder, omdat VOG max 3 maanden oud mag zijn bij plaatsing
+- Te vroeg aanvragen resulteert in verlopen VOG
+
+⚠️ **Gesprek planning is HANDMATIG:**
+- AI Agent plant GEEN gesprekken automatisch
+- Recruiter vult gesprek_datum in via UI
 
 ---
 
@@ -374,6 +399,7 @@ CREATE TABLE verification_approvals (
 
 | Versie | Datum | Wijziging |
 |--------|-------|-----------|
+| 3.0.0-enterprise | 2026-01-14 | **MAJOR:** Nieuwe pipeline flow met docs_compleet en gesprek_gepland stages. Handmatige interview planning. VOG alleen bij screening. |
 | 2.0.0-enterprise | 2026-01-04 | Complete enterprise documentatie |
 | 1.0.0 | 2025-12-01 | Initiële versie |
 
