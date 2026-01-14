@@ -3,16 +3,26 @@ import { softDeleteKnowledge } from '../_shared/knowledge-crud.ts';
 
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
-// Configuration - Optimized to prevent timeouts
+// Configuration - V3.0 Optimized for large knowledge bases
 const CONFIG = {
-  MAX_ITEMS_PER_RUN: 25,           // Reduced to prevent timeout (was 50)
-  BATCH_SIZE: 10,                  // Reduced batch size (was 20)
-  DELAY_BETWEEN_BATCHES_MS: 100,   // Reduced delay for faster processing
+  MAX_ITEMS_PER_RUN: 30,           // New items to check per run
+  MAX_ITEMS_PER_CATEGORY: 50,      // Hard limit per category to prevent explosion
+  TOTAL_ITEMS_HARD_LIMIT: 200,     // Absolute max items to compare
+  BATCH_SIZE: 10,                  // Items per AI call
+  DELAY_BETWEEN_BATCHES_MS: 50,    // Reduced delay for faster processing
   MIN_CATEGORY_SIZE: 5,            // Skip categories with fewer items
   MIN_USAGE_PROTECTION: 3,         // Never delete items with usage >= this
   MIN_SIMILARITY_THRESHOLD: 0.8,   // Minimum similarity for merging
-  MAX_RUNTIME_MS: 45000,           // Max 45s to prevent 504 timeout
+  MAX_RUNTIME_MS: 150000,          // Max 150s (with 180s timeout buffer)
 };
+
+// Adaptive batch sizing based on category size
+function getOptimalBatchSize(categorySize: number): number {
+  if (categorySize > 200) return 5;   // Very large: smaller batches, more targeted
+  if (categorySize > 100) return 8;   // Large: standard
+  if (categorySize > 50) return 10;   // Medium: larger batches
+  return 15;                          // Small: max efficiency
+}
 
 interface DeduplicatorState {
   id: string;
@@ -115,26 +125,34 @@ Deno.serve(async (req) => {
 
     // Get all active items for comparison (only from categories with new items)
     const categoriesWithNewItems = [...new Set(newItems.map(i => i.category))];
+    const newItemIds = new Set(newItems.map(i => i.id));
     
+    // V3.0: Hard limit on total items + order by confidence for quality-first comparison
     const { data: allItems } = await supabase
       .from('ai_knowledge_base')
       .select('*')
       .eq('org_id', orgId)
       .is('deleted_at', null)
       .in('category', categoriesWithNewItems)
-      .order('confidence_score', { ascending: false });
+      .order('confidence_score', { ascending: false })
+      .limit(CONFIG.TOTAL_ITEMS_HARD_LIMIT);
 
     if (!allItems || allItems.length === 0) {
       return jsonResponse({ success: true, duplicates_found: 0, duration_ms: Date.now() - startTime });
     }
 
-    // Group by category for efficient processing
+    console.log(`📊 Limited to ${allItems.length} items (hard limit: ${CONFIG.TOTAL_ITEMS_HARD_LIMIT})`);
+
+    // Group by category for efficient processing with per-category limits
     const itemsByCategory: Record<string, any[]> = {};
     for (const item of allItems) {
       if (!itemsByCategory[item.category]) {
         itemsByCategory[item.category] = [];
       }
-      itemsByCategory[item.category].push(item);
+      // V3.0: Limit items per category to prevent explosion
+      if (itemsByCategory[item.category].length < CONFIG.MAX_ITEMS_PER_CATEGORY) {
+        itemsByCategory[item.category].push(item);
+      }
     }
 
     let totalMerged = 0;
@@ -159,11 +177,22 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      console.log(`🔍 Checking category: ${category} (${items.length} items)`);
+      console.log(`🔍 Checking category: ${category} (${items.length} items, limit: ${CONFIG.MAX_ITEMS_PER_CATEGORY})`);
 
-      // Process in larger batches for efficiency
-      for (let i = 0; i < items.length; i += CONFIG.BATCH_SIZE) {
-        const batch = items.slice(i, Math.min(i + CONFIG.BATCH_SIZE, items.length));
+      // V3.0: Use adaptive batch size based on category size
+      const batchSize = getOptimalBatchSize(items.length);
+
+      // Process in optimized batches
+      for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, Math.min(i + batchSize, items.length));
+        
+        // V3.0: Only process batches containing at least one new item (skip unchanged batches)
+        const batchHasNewItem = batch.some(b => newItemIds.has(b.id));
+        if (!batchHasNewItem) {
+          console.log(`⏭️ Skipping batch ${i / batchSize + 1} - no new items`);
+          continue;
+        }
+        
         totalChecked += batch.length;
         
         // Ask AI to identify duplicates
@@ -313,8 +342,8 @@ Als GEEN duplicates: []`
           }
         }
 
-        // Reduced rate limiting
-        if (i + CONFIG.BATCH_SIZE < items.length) {
+        // Reduced rate limiting with adaptive delay
+        if (i + batchSize < items.length) {
           await new Promise(resolve => setTimeout(resolve, CONFIG.DELAY_BETWEEN_BATCHES_MS));
         }
       }
