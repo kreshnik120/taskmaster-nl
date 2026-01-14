@@ -73,8 +73,9 @@ interface Application {
 const PIPELINE_STAGES = [
   { id: "nieuw", name: "Nieuw", color: "", borderColor: "border-t-4 border-t-recruitment-nieuw", countColor: "text-recruitment-nieuw" },
   { id: "intake_verstuurd", name: "Intake Verstuurd", color: "", borderColor: "border-t-4 border-t-blue-400", countColor: "text-blue-500" },
+  { id: "docs_compleet", name: "Docs Compleet", color: "", borderColor: "border-t-4 border-t-emerald-400", countColor: "text-emerald-500" },
+  { id: "gesprek_gepland", name: "Gesprek Gepland", color: "", borderColor: "border-t-4 border-t-purple-400", countColor: "text-purple-500" },
   { id: "screening", name: "Screening", color: "", borderColor: "border-t-4 border-t-recruitment-screening", countColor: "text-recruitment-screening" },
-  { id: "interview", name: "Interview", color: "", borderColor: "border-t-4 border-t-recruitment-interview", countColor: "text-recruitment-interview" },
   { id: "goedgekeurd", name: "Goedgekeurd", color: "", borderColor: "border-t-4 border-t-recruitment-goedgekeurd", countColor: "text-recruitment-goedgekeurd" },
   { id: "geplaatst", name: "Geplaatst", color: "", borderColor: "border-t-4 border-t-recruitment-geplaatst", countColor: "text-recruitment-geplaatst" },
   { id: "afgewezen", name: "Afgewezen", color: "", borderColor: "border-t-4 border-t-recruitment-afgewezen", countColor: "text-recruitment-afgewezen" },
