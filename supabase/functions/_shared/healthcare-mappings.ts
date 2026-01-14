@@ -866,12 +866,20 @@ export function calculateDocumentAwareCompleteness(
 
 /**
  * Pipeline stage progression map
+ * CORRECTE FLOW (januari 2026):
+ * nieuw → intake_verstuurd → docs_compleet → gesprek_gepland → screening → goedgekeurd → geplaatst
+ * 
+ * Let op: 'interview' stage is hernoemd naar 'gesprek_gepland' om fysiek gesprek te reflecteren
+ * 'docs_compleet' stage toegevoegd: kandidaat heeft alle documenten (CV, diploma, ZZP docs) ingediend
+ * 'screening' stage komt NA het gesprek + positieve feedback (VOG aanvraag hier)
  */
 export const PIPELINE_STAGE_PROGRESSION: Record<string, string> = {
   'nieuw': 'intake_verstuurd',
-  'intake_verstuurd': 'screening',
-  'screening': 'interview',
-  'interview': 'goedgekeurd',
+  'intake_verstuurd': 'docs_compleet',
+  'docs_compleet': 'gesprek_gepland',
+  'gesprek_gepland': 'screening',  // Na positieve gesprek feedback!
+  'screening': 'goedgekeurd',
+  'interview': 'screening',  // Legacy support voor oude 'interview' stage
   'goedgekeurd': 'geplaatst'
 } as const;
 
@@ -896,6 +904,17 @@ export interface StageComplianceGate {
   requiredFields: string[];
 }
 
+/**
+ * CORRECTE RECRUITMENT FLOW (januari 2026):
+ * 
+ * nieuw → intake_verstuurd → docs_compleet → gesprek_gepland → screening → goedgekeurd → geplaatst
+ * 
+ * KRITIEKE REGELS:
+ * 1. docs_compleet: ALLE documenten (CV + diploma) moeten binnen zijn voordat gesprek gepland wordt
+ * 2. gesprek_gepland: Fysiek gesprek datum moet gezet zijn
+ * 3. screening: Alleen na POSITIEVE gesprek feedback (menselijke goedkeuring verplicht!)
+ * 4. VOG wordt pas aangevraagd bij screening (max 3 maanden oud requirement)
+ */
 export const STAGE_COMPLIANCE_GATES: Record<string, StageComplianceGate> = {
   'nieuw': {
     minCompleteness: 0,
@@ -907,19 +926,35 @@ export const STAGE_COMPLIANCE_GATES: Record<string, StageComplianceGate> = {
     requiredDocs: [],
     requiredFields: ['naam', 'email']
   },
-  'screening': {
-    minCompleteness: 30,
-    requiredDocs: [],
-    requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm']
+  // NIEUWE STAGE: Alle documenten binnen, klaar voor gesprek
+  'docs_compleet': {
+    minCompleteness: 70,
+    requiredDocs: ['cv', 'diploma'],  // CV + Diploma VERPLICHT voordat gesprek gepland wordt
+    requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer']
   },
+  // NIEUWE STAGE: Fysiek gesprek ingepland (datum moet gezet zijn)
+  'gesprek_gepland': {
+    minCompleteness: 70,
+    requiredDocs: ['cv', 'diploma'],
+    requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer']
+    // Extra vereiste: gesprek_datum moet gezet zijn (wordt in code gecheckt)
+  },
+  // Legacy 'interview' stage mapping → nu 'gesprek_gepland'
   'interview': {
     minCompleteness: 70,
-    requiredDocs: ['cv'],
+    requiredDocs: ['cv', 'diploma'],
     requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer']
+  },
+  // SCREENING: Na positieve gesprek feedback, VOG aanvragen hier!
+  'screening': {
+    minCompleteness: 75,
+    requiredDocs: ['cv', 'diploma'],  // VOG wordt hier pas AANGEVRAAGD
+    requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer']
+    // Extra vereiste: gesprek_feedback === 'positive' (wordt in code gecheckt)
   },
   'goedgekeurd': {
     minCompleteness: 85,
-    requiredDocs: ['cv', 'diploma'],
+    requiredDocs: ['cv', 'diploma', 'vog'],  // VOG nu verplicht geverifieerd
     requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer', 'beschikbaarheid']
   },
   'geplaatst': {

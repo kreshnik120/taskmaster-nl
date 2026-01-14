@@ -3607,6 +3607,8 @@ export type Database = {
           email_from: string
           email_subject: string | null
           extracted_data: Json | null
+          gesprek_datum: string | null
+          gesprek_feedback: string | null
           iban: string | null
           id: string
           identiteitsbewijs_path: string | null
@@ -3666,6 +3668,8 @@ export type Database = {
           email_from: string
           email_subject?: string | null
           extracted_data?: Json | null
+          gesprek_datum?: string | null
+          gesprek_feedback?: string | null
           iban?: string | null
           id?: string
           identiteitsbewijs_path?: string | null
@@ -3725,6 +3729,8 @@ export type Database = {
           email_from?: string
           email_subject?: string | null
           extracted_data?: Json | null
+          gesprek_datum?: string | null
+          gesprek_feedback?: string | null
           iban?: string | null
           id?: string
           identiteitsbewijs_path?: string | null

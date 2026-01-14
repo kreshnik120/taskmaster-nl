@@ -2324,51 +2324,90 @@ Return JSON in dit formaat:
     }
     
     // =====================================================
-    // STAP 1.5: FASE 6 FIX - Transitie naar screening met strikte voorwaarden
+    // STAP 1.5: CORRECTE FLOW - Transitie naar docs_compleet (NIET screening!)
     // Alleen als we nog in 'nieuw' of 'intake_verstuurd' stage zijn
     // VEREISTEN:
     // 1. CV is geüpload
-    // 2. Completeness >= 70% (interview gate minimum)
-    // 3. Kandidaat heeft gereageerd (ai_response_count >= 1)
+    // 2. Diploma is geüpload en geverifieerd (DUO of handmatig)
+    // 3. Completeness >= 70%
+    // 4. Kandidaat heeft gereageerd (ai_response_count >= 1)
+    // 
+    // KRITIEK: GEEN automatische transitie naar screening!
+    // Screening komt pas NA fysiek gesprek + positieve feedback (menselijke goedkeuring)
     // =====================================================
     const hasCV = !!application.cv_file_path || !!mergedData.cv_file_path;
+    const hasDiploma = !!application.diploma_file_path || !!mergedData.diploma_file_path;
+    const isDiplomaVerified = ['verified_duo', 'verified_manual', 'verified_emrex', 'signature_valid'].includes(
+      (application.diploma_validation_status as string) || ''
+    );
     const hasMinimalCompleteness = newCompletenessScore >= 70;
     const hasCandidateInteraction = currentResponseCount >= 1;
     
     if (['nieuw', 'intake_verstuurd'].includes(pipelineStage)) {
-      if (hasCV && hasMinimalCompleteness && hasCandidateInteraction) {
-        console.log(`📊 FASE 6: Transitie naar 'screening' - alle voorwaarden voldaan (CV: ${hasCV}, completeness: ${newCompletenessScore}%, responses: ${currentResponseCount})`);
+      // Check of alle documenten (CV + geverifieerd diploma) binnen zijn
+      if (hasCV && hasDiploma && isDiplomaVerified && hasMinimalCompleteness && hasCandidateInteraction) {
+        console.log(`📊 CORRECTE FLOW: Transitie naar 'docs_compleet' - documenten compleet!`);
+        console.log(`   CV: ${hasCV}, Diploma: ${hasDiploma}, Diploma verified: ${isDiplomaVerified}`);
+        console.log(`   Completeness: ${newCompletenessScore}%, Responses: ${currentResponseCount}`);
         
         const { error: transitionError } = await supabase
           .from("professional_applications")
           .update({
-            pipeline_stage: 'screening',
+            pipeline_stage: 'docs_compleet',
             updated_at: new Date().toISOString(),
           })
           .eq("id", applicationId);
         
         if (transitionError) {
-          console.error("Error transitioning to screening:", transitionError);
+          console.error("Error transitioning to docs_compleet:", transitionError);
         } else {
-          console.log("✅ FASE 6: Pipeline stage transitioned to 'screening' with proper requirements");
+          console.log("✅ CORRECTE FLOW: Pipeline stage transitioned to 'docs_compleet'");
+          console.log("   → Kandidaat is nu klaar voor fysiek gesprek (recruiter moet gesprek plannen)");
           
           // Log stage audit
           await supabase.from("application_stage_audit").insert({
             application_id: applicationId,
             from_stage: pipelineStage,
-            to_stage: 'screening',
-            reason: `Screening requirements voldaan - CV: ${hasCV}, completeness: ${newCompletenessScore}%, antwoorden: ${currentResponseCount}`,
+            to_stage: 'docs_compleet',
+            reason: `Documenten compleet - CV: ${hasCV}, Diploma geverifieerd: ${isDiplomaVerified}, completeness: ${newCompletenessScore}%`,
             performed_by: null,
             metadata: {
               trigger: 'handle-application-reply',
               ai_response_count: currentResponseCount,
               completeness_score: newCompletenessScore,
               has_cv: hasCV,
+              has_diploma: hasDiploma,
+              diploma_verified: isDiplomaVerified,
+              next_action: 'recruiter_moet_gesprek_plannen'
             }
           });
+          
+          // Notificeer recruiter dat kandidaat klaar is voor gesprek
+          const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
+          
+          try {
+            await supabase.from("recruiter_notifications").insert({
+              org_id: application.org_id,
+              notification_type: 'candidate_ready_for_interview',
+              title: `${professionalName} is klaar voor een gesprek`,
+              message: `Alle documenten zijn binnen en geverifieerd. Plan een fysiek sollicitatiegesprek.`,
+              application_id: applicationId,
+              priority: 'high'
+            });
+          } catch (notifErr) {
+            // Non-blocking - notification failure shouldn't block flow
+            console.warn("Could not create recruiter notification:", notifErr);
+          }
         }
       } else {
-        console.log(`📊 Staying in '${pipelineStage}' - missing requirements for screening (CV: ${hasCV}, completeness: ${newCompletenessScore}%, responses: ${currentResponseCount})`);
+        // Log wat er nog mist
+        const missing: string[] = [];
+        if (!hasCV) missing.push('CV');
+        if (!hasDiploma) missing.push('Diploma');
+        if (hasDiploma && !isDiplomaVerified) missing.push('Diploma verificatie');
+        if (!hasMinimalCompleteness) missing.push(`Completeness (${newCompletenessScore}% < 70%)`);
+        
+        console.log(`📊 Staying in '${pipelineStage}' - ontbrekend voor docs_compleet: ${missing.join(', ')}`);
       }
     }
 
