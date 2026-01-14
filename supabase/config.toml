@@ -320,7 +320,8 @@ schedule = "*/10 * * * *"
 [functions.smart-deduplicator]
 verify_jwt = false
 schedule = "0 4 * * *"
-# Purpose: Deduplicate similar knowledge items (daily at 04:00)
+timeout = 180
+# Purpose: Deduplicate similar knowledge items (daily at 04:00, 3min timeout)
 
 [functions.knowledge-graph-builder]
 verify_jwt = false
