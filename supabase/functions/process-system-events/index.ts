@@ -6,6 +6,8 @@ Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
+  const startTime = Date.now();
+
   try {
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
     
@@ -239,6 +241,24 @@ Deno.serve(async (req) => {
     }
     
     console.log(`✅ Processing complete: ${processedCount}/${events.length} events, ${knowledgeCreatedCount} knowledge items created`);
+    
+    // Log function call for dashboard monitoring
+    try {
+      await supabase.from('function_call_logs').insert({
+        function_name: 'process-system-events',
+        org_id: '550e8400-e29b-41d4-a716-446655440000',
+        success: true,
+        execution_time_ms: Date.now() - startTime,
+        metadata: {
+          processed: processedCount,
+          total: events.length,
+          knowledge_created: knowledgeCreatedCount,
+          errors_count: errors.length
+        }
+      });
+    } catch (logErr) {
+      console.warn('⚠️ Failed to log function call:', logErr);
+    }
     
     return new Response(JSON.stringify({
       processed: processedCount,

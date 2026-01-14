@@ -35,6 +35,8 @@ const SCHEDULES = {
   // Werkvorm AI Learning (NEW in v2.5.0)
   'learn-werkvorm-patterns': '30 4 * * *',      // Daily at 04:30 UTC (Learn from unknown werkvormen)
   'apply-learned-werkvorm': '45 4 * * *',       // Daily at 04:45 UTC (Promote high-confidence werkvorm suggestions)
+  // Unified Learner - Central AI Learning Engine (consolidates learning functions)
+  'unified-learner': '*/30 * * * *',            // Every 30 minutes (Retroactive scan + batch feedback)
 };
 
 // Simple cron expression matcher (minute hour dayOfMonth month dayOfWeek)
