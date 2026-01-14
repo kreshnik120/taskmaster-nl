@@ -43,6 +43,7 @@ import { HumanReviewQueue } from "@/components/recruitment/HumanReviewQueue";
 
 interface Application {
   id: string;
+  org_id?: string;
   email_from: string;
   email_subject: string | null;
   email_body: string | null;
@@ -64,6 +65,9 @@ interface Application {
   vog_verification_response?: any;
   diploma_validation_status?: string | null;
   diploma_validation_source?: string | null;
+  // Interview fields
+  gesprek_datum?: string | null;
+  gesprek_feedback?: string | null;
   professionals?: {
     full_name: string;
     functie_niveau: string;
