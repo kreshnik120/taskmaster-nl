@@ -1095,61 +1095,135 @@ async function executeReActLoop(
         } else {
           console.error('[ReAct] ❌ Failed to parse AI response:', responseText.substring(0, 500));
           
-          // v1.7.1: Partial JSON Recovery voor kritieke tools
-          // Als we een truncated JSON hebben met een bekende tool, probeer te recoveren
+          // v1.8.0: Enhanced Goal-Based Action Recovery
+          // Probeer actie te inferen van goal_type wanneer parsing faalt
+          const goalTypeFromCtx = (memory.context?.goal_type as string) || '';
+          const goalActionMapping: Record<string, { action: string; defaultEmailType: string }> = {
+            'send_reply_response': { action: 'send_email', defaultEmailType: 'followup_question' },
+            'send_welcome_and_intake': { action: 'send_email', defaultEmailType: 'welcome_intake' },
+            'request_documents': { action: 'send_email', defaultEmailType: 'document_request' },
+            'process_candidate_reply': { action: 'send_email', defaultEmailType: 'followup_question' },
+          };
+          
+          // v1.8.0: Partial JSON Recovery voor kritieke tools
           const toolNameMatch = responseText.match(/"action"\s*:\s*"(\w+)"/);
           const thoughtMatch = responseText.match(/"thought"\s*:\s*"([^"]+)"/);
           
-          if (toolNameMatch) {
-            const toolName = toolNameMatch[1];
-            console.log(`[ReAct] ⚡ Attempting partial recovery for tool "${toolName}"`);
+          // Probeer eerst van tool name, dan van goal type
+          const inferredTool = toolNameMatch?.[1] || goalActionMapping[goalTypeFromCtx]?.action;
+          
+          if (inferredTool) {
+            console.log(`[ReAct] ⚡ Attempting recovery - tool: "${inferredTool}", goal_type: "${goalTypeFromCtx}"`);
             
-            // Voor send_email: bouw action_input uit context
-            if (toolName === 'send_email' || toolName.startsWith('send_')) {
+            // Voor send_email: bouw action_input uit context met smart email type detection
+            if (inferredTool === 'send_email' || inferredTool.startsWith('send_')) {
               const ctx = memory.context || {};
+              
+              // v1.8.0: Smart Email Type Selection gebaseerd op context
+              const determineEmailType = (): string => {
+                const completeness = (ctx.current_completeness as number) || (ctx.completeness as number) || 0;
+                const remainingMissing = (ctx.remaining_missing_info as string[]) || (ctx.missing_info as string[]) || [];
+                const diplomaVerified = ctx.duo_verification_status === 'verified' || ctx.diploma_verified === true;
+                const hasDocumentsReceived = ctx.documents_received === true || (ctx.new_documents_count as number || 0) > 0;
+                
+                // Als diploma geverifieerd en high completeness → bevestigingsmail
+                if (diplomaVerified && completeness >= 80) {
+                  // Alleen VOG ontbreekt of niets mist
+                  const onlyVogMissing = remainingMissing.length === 0 || 
+                    (remainingMissing.length === 1 && remainingMissing.includes('vog_upload'));
+                  if (onlyVogMissing) {
+                    return 'documents_received_confirmation';
+                  }
+                }
+                
+                // Als er documenten zijn ontvangen, bevestig dat
+                if (hasDocumentsReceived && completeness >= 60) {
+                  return 'document_confirmation';
+                }
+                
+                // Anders vraag ontbrekende info
+                if (remainingMissing.length > 0) {
+                  return 'followup_question';
+                }
+                
+                // Default voor goal type
+                return goalActionMapping[goalTypeFromCtx]?.defaultEmailType || 'general_followup';
+              };
+              
               const recoveredInput = {
                 recipient_email: ctx.candidate_email || ctx.email || '',
                 recipient_name: ctx.candidate_name || ctx.name || '',
-                email_type: 'welcome_intake',
+                email_type: determineEmailType(),
                 application_id: ctx.application_id || '',
-                fields_to_ask: ctx.missing_info || [],
+                fields_to_ask: (ctx.remaining_missing_info as string[]) || (ctx.missing_info as string[]) || [],
               };
               
               if (recoveredInput.recipient_email && recoveredInput.application_id) {
                 parsed = {
-                  thought: thoughtMatch?.[1] || 'Recovered from truncated response - sending welcome email',
+                  thought: thoughtMatch?.[1] || `Recovered from goal type "${goalTypeFromCtx}" - sending ${recoveredInput.email_type}`,
                   action: 'send_email',
                   action_input: recoveredInput,
                   final_answer: null,
                 };
-                console.log('[ReAct] ✅ Successfully recovered send_email from truncated response');
+                console.log('[ReAct] ✅ Successfully recovered send_email from context');
                 console.log('[ReAct] Recovered input:', JSON.stringify(recoveredInput));
               } else {
                 console.warn('[ReAct] ⚠️ Cannot recover send_email - missing required context (email or application_id)');
+                // Markeer als partial failure, niet als success
                 parsed = {
                   thought: responseText.substring(0, 500),
                   action: null,
                   action_input: null,
-                  final_answer: 'Er ging iets mis bij het verwerken van de email. Probeer het opnieuw.',
+                  final_answer: '[RECOVERY_FAILED] Er ging iets mis bij het verwerken van de email. Probeer het opnieuw.',
                 };
               }
             } else {
               // Andere tools kunnen niet automatisch recoveren
-              console.warn(`[ReAct] ⚠️ Cannot auto-recover tool "${toolName}" - no context mapping available`);
+              console.warn(`[ReAct] ⚠️ Cannot auto-recover tool "${inferredTool}" - no context mapping available`);
               parsed = {
                 thought: responseText.substring(0, 500),
                 action: null,
                 action_input: null,
-                final_answer: 'Ik kon de vraag niet goed verwerken. Kun je het anders formuleren?',
+                final_answer: '[RECOVERY_FAILED] Ik kon de vraag niet goed verwerken. Kun je het anders formuleren?',
+              };
+            }
+          } else if (goalActionMapping[goalTypeFromCtx]) {
+            // v1.8.0: Goal-based inference als geen tool name gevonden
+            console.log(`[ReAct] ⚡ Inferring action from goal_type: "${goalTypeFromCtx}"`);
+            const mapping = goalActionMapping[goalTypeFromCtx];
+            const ctx = memory.context || {};
+            
+            const recoveredInput = {
+              recipient_email: ctx.candidate_email || ctx.email || '',
+              recipient_name: ctx.candidate_name || ctx.name || '',
+              email_type: mapping.defaultEmailType,
+              application_id: ctx.application_id || '',
+              fields_to_ask: (ctx.remaining_missing_info as string[]) || (ctx.missing_info as string[]) || [],
+            };
+            
+            if (recoveredInput.recipient_email && recoveredInput.application_id) {
+              parsed = {
+                thought: `Inferred from goal_type "${goalTypeFromCtx}" - original response parsing failed`,
+                action: mapping.action,
+                action_input: recoveredInput,
+                final_answer: null,
+              };
+              console.log('[ReAct] ✅ Successfully inferred action from goal_type');
+            } else {
+              parsed = {
+                thought: responseText.substring(0, 500),
+                action: null,
+                action_input: null,
+                final_answer: '[RECOVERY_FAILED] Ik kon de vraag niet goed verwerken. Kun je het anders formuleren?',
               };
             }
           } else {
-            // Geen tool gevonden - standaard fallback
+            // Geen tool gevonden en geen goal mapping - standaard fallback
             parsed = {
               thought: responseText.substring(0, 500),
               action: null,
               action_input: null,
-              final_answer: 'Ik kon de vraag niet goed verwerken. Kun je het anders formuleren?',
+              final_answer: '[RECOVERY_FAILED] Ik kon de vraag niet goed verwerken. Kun je het anders formuleren?',
             };
           }
         }
@@ -1170,13 +1244,34 @@ async function executeReActLoop(
         steps.push(step);
         memory.steps = steps;
 
-        console.log(`✅ [ReAct] Session completed in ${stepNum} steps`);
+        // v1.8.0: Correcte Outcome Detectie
+        // Detecteer of dit een echte success is of een fallback error message
+        const ERROR_FALLBACK_PHRASES = [
+          'Ik kon de vraag niet goed verwerken',
+          'Er ging iets mis bij het verwerken',
+          'Probeer het opnieuw',
+          'Kun je het anders formuleren',
+          '[RECOVERY_FAILED]',
+          'Er is een fout opgetreden',
+        ];
+        
+        const isErrorFallback = ERROR_FALLBACK_PHRASES.some(phrase => 
+          parsed.final_answer?.includes(phrase)
+        );
+        
+        const actualOutcome = isErrorFallback ? 'partial' : 'success';
+        const isActualSuccess = !isErrorFallback;
+        
+        console.log(`${isActualSuccess ? '✅' : '⚠️'} [ReAct] Session completed in ${stepNum} steps (outcome: ${actualOutcome})`);
+        if (isErrorFallback) {
+          console.warn('[ReAct] Detected error fallback message - marking as partial failure');
+        }
 
-        // Persist session trace
-        await persistSessionTrace(supabase, memory, 'success', parsed.final_answer, totalTokens, toolsExecuted);
+        // Persist session trace with correct outcome
+        await persistSessionTrace(supabase, memory, actualOutcome, parsed.final_answer, totalTokens, toolsExecuted);
 
         return {
-          success: true,
+          success: isActualSuccess,
           final_answer: parsed.final_answer,
           steps,
           total_tokens_used: totalTokens,
