@@ -970,15 +970,89 @@ async function executeReActLoop(
         break; // Success - exit retry loop
       }
 
-      // Parse AI response
-      let parsed: { thought: string; action: string | null; action_input: Record<string, unknown> | null; final_answer: string | null } = {
-        thought: '',
-        action: null,
-        action_input: null,
-        final_answer: null,
-      };
+        // v1.8.1: Enhanced logging for debugging
+        console.log(`[ReAct] Step ${stepNum} - AI response length: ${responseText.length}`);
+        console.log(`[ReAct] Step ${stepNum} - First 300 chars:`, responseText.substring(0, 300));
+        console.log(`[ReAct] Step ${stepNum} - Last 100 chars:`, responseText.slice(-100));
+
+        // v1.8.1: Pre-parse JSON repair for truncated responses
+        const attemptJsonRepair = (text: string): string => {
+          let repaired = text.trim();
+          
+          // Verwijder markdown code blocks
+          repaired = repaired.replace(/^```json\s*/g, '').replace(/\s*```$/g, '');
+          repaired = repaired.replace(/```json\s*/g, '').replace(/\s*```/g, '');
+          
+          // Tel braces
+          const openBraces = (repaired.match(/{/g) || []).length;
+          const closeBraces = (repaired.match(/}/g) || []).length;
+          
+          // Als er meer open dan close braces zijn
+          if (openBraces > closeBraces) {
+            // Check of we midden in een string zitten (oneven quotes)
+            const quoteCount = (repaired.match(/(?<!\\)"/g) || []).length;
+            if (quoteCount % 2 !== 0) {
+              repaired += '"';
+            }
+            // Sluit open braces
+            repaired += '}'.repeat(openBraces - closeBraces);
+            console.log(`[ReAct] 🔧 JSON repair: closed ${openBraces - closeBraces} braces`);
+          }
+          
+          return repaired;
+        };
+
+        // v1.8.1: Iterative JSON extraction with fallback (greedy, from longest to shortest)
+        const extractValidJson = (text: string): { thought?: string; action?: string | null; action_input?: Record<string, unknown> | null; final_answer?: string | null } | null => {
+          const repaired = attemptJsonRepair(text);
+          
+          // Probeer eerst de volledige repaired response als JSON
+          try {
+            const full = JSON.parse(repaired);
+            if (full.thought !== undefined || full.action !== undefined || full.final_answer !== undefined) {
+              return full;
+            }
+          } catch {}
+          
+          // Zoek naar JSON code blocks
+          const codeBlockMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
+          if (codeBlockMatch) {
+            try {
+              const parsed = JSON.parse(attemptJsonRepair(codeBlockMatch[1]));
+              if (parsed.thought !== undefined || parsed.action !== undefined || parsed.final_answer !== undefined) {
+                return parsed;
+              }
+            } catch {}
+          }
+          
+          // Zoek naar standalone JSON objecten (greedy, van langste naar kortste match)
+          const jsonStart = repaired.indexOf('{');
+          if (jsonStart === -1) return null;
+          
+          // Probeer van de langste match naar kortere
+          for (let end = repaired.length; end > jsonStart; end--) {
+            if (repaired[end - 1] === '}') {
+              try {
+                const candidate = JSON.parse(repaired.substring(jsonStart, end));
+                if (candidate.thought !== undefined || candidate.action !== undefined || candidate.final_answer !== undefined) {
+                  return candidate;
+                }
+              } catch {}
+            }
+          }
+          
+          return null;
+        };
+
+        // Parse AI response
+        let parsed: { thought: string; action: string | null; action_input: Record<string, unknown> | null; final_answer: string | null } = {
+          thought: '',
+          action: null,
+          action_input: null,
+          final_answer: null,
+        };
       
-      try {
+        try {
         // KRITIEK: Detecteer en handel multi-step hallucinatie af (AI genereert eigen OBSERVATION)
         const hasHallucination = responseText.includes('OBSERVATION:') || responseText.includes('"observation"');
         
@@ -1050,17 +1124,18 @@ async function executeReActLoop(
             }
           }
         } else {
-          // Geen hallucinatie - normale JSON parsing
-          const jsonMatch = responseText.match(/\{[\s\S]*?\}/);
-          if (jsonMatch) {
-            const candidate = JSON.parse(jsonMatch[0]);
-            if (candidate.thought !== undefined || candidate.action !== undefined || candidate.final_answer !== undefined) {
-              parsed = candidate;
-            } else {
-              throw new Error('Invalid JSON structure');
-            }
+          // Geen hallucinatie - v1.8.1: gebruik iteratieve JSON extraction
+          const extracted = extractValidJson(responseText);
+          if (extracted) {
+            parsed = {
+              thought: extracted.thought || '',
+              action: extracted.action || null,
+              action_input: extracted.action_input || null,
+              final_answer: extracted.final_answer || null,
+            };
+            console.log(`[ReAct] ✅ Successfully extracted JSON via iterative parser`);
           } else {
-            throw new Error('No JSON found in response');
+            throw new Error('No valid JSON found in response');
           }
         }
       } catch (parseErr) {
@@ -1150,11 +1225,20 @@ async function executeReActLoop(
                 return goalActionMapping[goalTypeFromCtx]?.defaultEmailType || 'general_followup';
               };
               
+              // v1.8.1: Uitgebreide context key aliasing voor robuustere recovery
+              const getContextValue = (keys: string[]): string => {
+                for (const key of keys) {
+                  const val = ctx[key];
+                  if (val !== undefined && val !== null && val !== '') return String(val);
+                }
+                return '';
+              };
+
               const recoveredInput = {
-                recipient_email: ctx.candidate_email || ctx.email || '',
-                recipient_name: ctx.candidate_name || ctx.name || '',
+                recipient_email: getContextValue(['candidate_email', 'email', 'kandidaat_email', 'to', 'recipient_email']),
+                recipient_name: getContextValue(['candidate_name', 'name', 'kandidaat_naam', 'recipient_name', 'full_name']),
                 email_type: determineEmailType(),
-                application_id: ctx.application_id || '',
+                application_id: getContextValue(['application_id', 'sollicitatie_id', 'app_id', 'id']),
                 fields_to_ask: (ctx.remaining_missing_info as string[]) || (ctx.missing_info as string[]) || [],
               };
               
