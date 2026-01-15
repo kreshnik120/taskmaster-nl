@@ -1513,6 +1513,7 @@ async function persistSessionTrace(
     await supabase.from('agent_execution_traces').insert({
       org_id: memory.context.org_id || '550e8400-e29b-41d4-a716-446655440000',
       session_id: memory.session_id,
+      goal_type: memory.context.goal_type || null,
       goal_description: memory.goal,
       steps: memory.steps,
       final_answer: finalAnswer,
