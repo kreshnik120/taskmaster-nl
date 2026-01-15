@@ -242,10 +242,10 @@ Deno.serve(async (req) => {
       .from('function_call_logs')
       .insert({
         function_name: 'pattern-health-monitor',
-        duration_ms: duration,
+        org_id: orgId,
+        execution_time_ms: duration,
         success: true,
         metadata: {
-          org_id: orgId,
           total_checked: result.total_checked,
           healthy: result.healthy,
           slow_count: result.slow_patterns.length,
