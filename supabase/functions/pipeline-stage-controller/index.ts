@@ -193,14 +193,23 @@ async function getSpecialistForStage(
   supabase: any,
   stage: string
 ): Promise<{ agent_name: string; target_stage: string; available_tools: string[]; email_types: string[] } | null> {
-  const { data } = await supabase
+  // Use limit(1) instead of single() to handle stages with multiple agents (e.g., intake_verstuurd has document + planning)
+  // Order by created_at to get the first registered agent as primary handler
+  const { data: agents, error } = await supabase
     .from('agent_specialists')
     .select('agent_name, target_stage, available_tools, email_types')
     .eq('handles_stage', stage)
     .eq('is_active', true)
-    .single();
+    .order('created_at', { ascending: true })
+    .limit(1);
 
-  return data;
+  if (error) {
+    console.error(`[pipeline-stage-controller] Error fetching specialist for stage ${stage}:`, error);
+    return null;
+  }
+
+  // Return the first agent or null if none found
+  return agents && agents.length > 0 ? agents[0] : null;
 }
 
 // ============================================================================
