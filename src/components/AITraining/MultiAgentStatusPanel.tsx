@@ -24,7 +24,7 @@ import {
   Loader2
 } from "lucide-react";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 
@@ -63,6 +63,7 @@ const PIPELINE_STAGES = [
 
 export function MultiAgentStatusPanel() {
   const [isUpdating, setIsUpdating] = useState(false);
+  const [localRollout, setLocalRollout] = useState<number>(0);
 
   // Fetch feature flag status
   const { data: featureFlag, isLoading: flagLoading, refetch: refetchFlag } = useQuery({
@@ -78,6 +79,13 @@ export function MultiAgentStatusPanel() {
       return data as FeatureFlagData | null;
     },
   });
+
+  // Sync local state with feature flag data
+  useEffect(() => {
+    if (featureFlag?.rollout_percentage !== undefined) {
+      setLocalRollout(featureFlag.rollout_percentage);
+    }
+  }, [featureFlag?.rollout_percentage]);
 
   // Fetch specialist agents config
   const { data: specialists, isLoading: specialistsLoading } = useQuery({
@@ -257,20 +265,21 @@ export function MultiAgentStatusPanel() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <Label>Rollout Percentage</Label>
-                  <span className="font-mono text-primary">{featureFlag?.rollout_percentage || 0}%</span>
+                  <span className="font-mono text-primary">{localRollout}%</span>
                 </div>
                 <Slider
-                  value={[featureFlag?.rollout_percentage || 0]}
+                  value={[localRollout]}
+                  onValueChange={(value) => setLocalRollout(value[0])}
                   onValueCommit={handleUpdateRollout}
                   max={100}
                   step={10}
                   className="w-full"
                 />
                 <p className="text-xs text-muted-foreground">
-                  {featureFlag?.rollout_percentage === 0 && "Geen traffic naar multi-agent systeem"}
-                  {featureFlag?.rollout_percentage && featureFlag.rollout_percentage > 0 && featureFlag.rollout_percentage < 100 && 
-                    `${featureFlag.rollout_percentage}% van requests gaat naar multi-agent systeem`}
-                  {featureFlag?.rollout_percentage === 100 && "Alle requests gaan naar multi-agent systeem"}
+                  {localRollout === 0 && "Geen traffic naar multi-agent systeem"}
+                  {localRollout > 0 && localRollout < 100 && 
+                    `${localRollout}% van requests gaat naar multi-agent systeem`}
+                  {localRollout === 100 && "Alle requests gaan naar multi-agent systeem"}
                 </p>
               </div>
             </div>
