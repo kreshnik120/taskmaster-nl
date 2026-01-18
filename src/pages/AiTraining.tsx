@@ -48,6 +48,8 @@ import { N8nIntegrationTestPanel } from "@/components/AITraining/N8nIntegrationT
 import { ResendInboundSetup } from "@/components/AITraining/ResendInboundSetup";
 import { EmailReplyTestPanel } from "@/components/AITraining/EmailReplyTestPanel";
 import { AIChatTestDashboard } from "@/components/AITraining/AIChatTestDashboard";
+import { MultiAgentStatusPanel } from "@/components/AITraining/MultiAgentStatusPanel";
+import { MigrationAuditViewer } from "@/components/AITraining/MigrationAuditViewer";
 import { PatternOptimizationMonitor } from "@/components/AITraining/PatternOptimizationMonitor";
 import { FunctieNiveauLearningDashboard } from "@/components/AITraining/FunctieNiveauLearningDashboard";
 import { WerkvormLearningDashboard } from "@/components/AITraining/WerkvormLearningDashboard";
@@ -223,11 +225,19 @@ const AiTraining = () => {
 
                   <TabsContent value="ai-agent" className="mt-4">
                     <div className="space-y-6">
+                      {/* Multi-Agent Architecture Status (bovenaan) */}
+                      <MultiAgentStatusPanel />
+                      
+                      {/* Migration Audit (alleen zichtbaar tijdens rollout) */}
+                      <MigrationAuditViewer />
+                      
+                      {/* Legacy panels (met deprecation warnings indien nodig) */}
                       <ReactAgentTestPanel />
+                      <AIAgentTestPanel />
+                      
+                      {/* Email testing */}
                       <ResendInboundSetup />
                       <EmailReplyTestPanel />
-                      <AIAgentTestPanel />
-                      <N8nIntegrationTestPanel />
                     </div>
                   </TabsContent>
                   

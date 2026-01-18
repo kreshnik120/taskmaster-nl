@@ -6,7 +6,13 @@ import {
   Clock, 
   Database, 
   Activity, 
-  RefreshCw 
+  RefreshCw,
+  Workflow,
+  Hand,
+  FileCheck,
+  CalendarCheck,
+  UserCheck,
+  Award
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -26,52 +32,108 @@ export interface LearningFunction {
   icon: LucideIcon;
   /** Beschrijving van wat de functie doet */
   description: string;
+  /** Optioneel: categorie voor groupering */
+  category?: 'learning' | 'pipeline' | 'specialist';
 }
 
 // Learning functions - consolidated after shim migration
 // Removed: feedback-processor, continuous-learner, learn-from-pipeline, retroactive-training-evaluator, process-feedback (all migrated to unified-learner)
 export const LEARNING_FUNCTIONS: LearningFunction[] = [
+  // === Core Learning Functions ===
   { 
     name: 'unified-learner', 
     displayName: 'Unified Learner',
     icon: Brain,
-    description: 'Centrale learning engine - verwerkt chat analyse, pipeline learning, feedback en retroactive scans'
+    description: 'Centrale learning engine - verwerkt chat analyse, pipeline learning, feedback en retroactive scans',
+    category: 'learning'
   },
   { 
     name: 'knowledge-graph-builder', 
     displayName: 'Knowledge Graph',
     icon: GitBranch,
-    description: 'Bouwt relaties tussen kennisitems voor betere context'
+    description: 'Bouwt relaties tussen kennisitems voor betere context',
+    category: 'learning'
   },
   { 
     name: 'apply-meta-patterns', 
     displayName: 'Meta Patterns',
     icon: Zap,
-    description: 'Past gedetecteerde success patterns toe op nieuwe data'
+    description: 'Past gedetecteerde success patterns toe op nieuwe data',
+    category: 'learning'
   },
   { 
     name: 'temporal-decay', 
     displayName: 'Temporal Decay',
     icon: Clock,
-    description: 'Verlaagt confidence van verouderde kennis automatisch'
+    description: 'Verlaagt confidence van verouderde kennis automatisch',
+    category: 'learning'
   },
   { 
     name: 'data-quality-auditor', 
     displayName: 'Data Quality',
     icon: Database,
-    description: 'Controleert kwaliteit en consistentie van knowledge base'
+    description: 'Controleert kwaliteit en consistentie van knowledge base',
+    category: 'learning'
   },
   { 
     name: 'smart-deduplicator', 
     displayName: 'Deduplicator',
     icon: Activity,
-    description: 'Detecteert en verwijdert duplicate kennisitems'
+    description: 'Detecteert en verwijdert duplicate kennisitems',
+    category: 'learning'
   },
   { 
     name: 'process-system-events', 
     displayName: 'System Events',
     icon: RefreshCw,
-    description: 'Verwerkt systeem events en triggert learning loops'
+    description: 'Verwerkt systeem events en triggert learning loops',
+    category: 'learning'
+  },
+  
+  // === Pipeline Management ===
+  { 
+    name: 'pipeline-stage-controller', 
+    displayName: 'Pipeline Controller',
+    icon: Workflow,
+    description: 'Centrale stage transition validator en multi-agent router',
+    category: 'pipeline'
+  },
+  
+  // === Specialist Agents ===
+  { 
+    name: 'agent-welkom', 
+    displayName: 'Welkom Agent',
+    icon: Hand,
+    description: 'Handles nieuw → intake_verstuurd: stuurt welkom emails en vraagt ontbrekende info',
+    category: 'specialist'
+  },
+  { 
+    name: 'agent-document', 
+    displayName: 'Document Agent',
+    icon: FileCheck,
+    description: 'Handles intake_verstuurd → docs_compleet: verifieert documenten en triggert DUO/GAAV',
+    category: 'specialist'
+  },
+  { 
+    name: 'agent-planning', 
+    displayName: 'Planning Agent',
+    icon: CalendarCheck,
+    description: 'Handles docs_compleet → gesprek_gepland: plant gesprekken met beschikbare slots',
+    category: 'specialist'
+  },
+  { 
+    name: 'agent-screening', 
+    displayName: 'Screening Agent',
+    icon: UserCheck,
+    description: 'Handles gesprek_gepland → screening: verwerkt interview feedback en VOG requests',
+    category: 'specialist'
+  },
+  { 
+    name: 'agent-placement', 
+    displayName: 'Placement Agent',
+    icon: Award,
+    description: 'Handles screening → goedgekeurd: finaliseert goedkeuring en notificeert recruiters',
+    category: 'specialist'
   },
 ];
 
@@ -80,4 +142,11 @@ export const LEARNING_FUNCTIONS: LearningFunction[] = [
  */
 export function getLearningFunctionByName(name: string): LearningFunction | undefined {
   return LEARNING_FUNCTIONS.find(fn => fn.name === name);
+}
+
+/**
+ * Helper om functies per categorie te groeperen
+ */
+export function getLearningFunctionsByCategory(category: 'learning' | 'pipeline' | 'specialist'): LearningFunction[] {
+  return LEARNING_FUNCTIONS.filter(fn => fn.category === category);
 }
