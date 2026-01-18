@@ -50,7 +50,7 @@ interface ApplicationData {
   gesprek_feedback: string | null;
   vog_validation_status: string | null;
   org_id: string;
-  candidate_name: string | null;
+  extracted_data: { naam?: string } | null;
   email_from: string | null;
 }
 
@@ -261,7 +261,7 @@ Deno.serve(async (req) => {
     // Get application data
     const { data: app, error: appError } = await supabase
       .from('professional_applications')
-      .select('id, pipeline_stage, welcome_email_sent_at, completeness_score, gesprek_datum, gesprek_feedback, vog_validation_status, org_id, candidate_name, email_from')
+      .select('id, pipeline_stage, welcome_email_sent_at, completeness_score, gesprek_datum, gesprek_feedback, vog_validation_status, org_id, extracted_data, email_from')
       .eq('id', application_id)
       .single();
 
