@@ -1491,6 +1491,36 @@ Deno.serve(async (req: Request) => {
       console.error('⚠️ Failed to sync missing_info after DUO verification:', syncError);
     }
     
+    // ========================================================================
+    // FIX v5.7.1: Sync is_verified to application_documents after DUO verification
+    // This ensures application_documents.is_verified matches diploma_validation_status
+    // ========================================================================
+    if (dbStatus === 'verified_duo' || dbStatus === 'signature_valid') {
+      try {
+        const { error: docSyncError } = await supabase
+          .from('application_documents')
+          .update({ 
+            is_verified: true, 
+            verified_at: new Date().toISOString(),
+            metadata: { 
+              verification_method: result.method,
+              verification_source: 'duo_edge_function',
+              synced_at: new Date().toISOString()
+            }
+          })
+          .eq('application_id', application_id)
+          .eq('document_type', 'diploma');
+        
+        if (docSyncError) {
+          console.error('⚠️ Failed to sync is_verified to application_documents:', docSyncError);
+        } else {
+          console.log('✅ Synced is_verified=true to application_documents for diploma');
+        }
+      } catch (syncErr) {
+        console.error('⚠️ Exception syncing application_documents:', syncErr);
+      }
+    }
+
     // Create recruiter notification for verified diplomas
     if (dbStatus === 'verified_duo') {
       try {

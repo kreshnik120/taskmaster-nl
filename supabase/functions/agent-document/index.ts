@@ -1,5 +1,5 @@
 /**
- * Agent Document v1.0.1
+ * Agent Document v1.0.2
  * =====================
  * Specialist agent for the 'intake_verstuurd' stage.
  * 
@@ -249,40 +249,48 @@ Deno.serve(async (req) => {
       registrationResults.push({ type: doc.type, success: result.success });
     }
 
-    // Also check if application has file paths that aren't registered yet
+    // ========================================================================
+    // FIX v1.0.2: Use count() instead of single() to correctly detect missing docs
+    // single() errors on "no rows" which was causing false negatives
+    // ========================================================================
+    
+    // Sync CV from cv_file_path if not registered
     if (app.cv_file_path) {
-      const cvDocs = await supabase
+      const { count: cvCount } = await supabase
         .from('application_documents')
-        .select('id')
+        .select('id', { count: 'exact', head: true })
         .eq('application_id', application_id)
-        .eq('document_type', 'cv')
-        .single();
+        .eq('document_type', 'cv');
 
-      if (!cvDocs.data) {
+      if (!cvCount || cvCount === 0) {
+        const cvFilename = app.cv_file_path.split('/').pop() || 'CV.pdf';
         await registerDocument(supabase, application_id, {
-          filename: 'CV',
+          filename: cvFilename,
           file_path: app.cv_file_path,
           type: 'cv',
-          source: 'application_field'
+          source: 'application_field_sync'
         });
+        console.log('[agent-document] ✅ Synced CV from cv_file_path:', cvFilename);
       }
     }
 
+    // Sync Diploma from diploma_file_path if not registered
     if (app.diploma_file_path) {
-      const diplomaDocs = await supabase
+      const { count: diplomaCount } = await supabase
         .from('application_documents')
-        .select('id')
+        .select('id', { count: 'exact', head: true })
         .eq('application_id', application_id)
-        .eq('document_type', 'diploma')
-        .single();
+        .eq('document_type', 'diploma');
 
-      if (!diplomaDocs.data) {
+      if (!diplomaCount || diplomaCount === 0) {
+        const diplomaFilename = app.diploma_file_path.split('/').pop() || 'Diploma.pdf';
         await registerDocument(supabase, application_id, {
-          filename: 'Diploma',
+          filename: diplomaFilename,
           file_path: app.diploma_file_path,
           type: 'diploma',
-          source: 'application_field'
+          source: 'application_field_sync'
         });
+        console.log('[agent-document] ✅ Synced Diploma from diploma_file_path:', diplomaFilename);
       }
     }
 
