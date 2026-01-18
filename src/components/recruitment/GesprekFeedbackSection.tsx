@@ -172,12 +172,14 @@ export function GesprekFeedbackSection({
           description: "Kandidaat gemarkeerd voor review door recruiter.",
         });
       } else if (pendingFeedback === "no_show") {
-        // No show → Stay in gesprek_gepland, allow reschedule
+        // No show → Transition back to intake_verstuurd for rescheduling
+        // As per docs/AGENT_WORKFLOW_PER_STAGE.md section "No-Show"
         const { error } = await supabase
           .from("professional_applications")
           .update({
             gesprek_feedback: "no_show",
             gesprek_datum: null, // Clear date to allow reschedule
+            pipeline_stage: "intake_verstuurd", // Reset to intake for re-planning
             updated_at: new Date().toISOString(),
           })
           .eq("id", applicationId);
@@ -185,7 +187,7 @@ export function GesprekFeedbackSection({
         if (error) throw error;
 
         toast.info("No-show geregistreerd", {
-          description: "Kandidaat is niet verschenen. Je kunt een nieuwe datum inplannen.",
+          description: "Kandidaat is niet verschenen. Terug naar intake voor herplanning.",
         });
       }
 

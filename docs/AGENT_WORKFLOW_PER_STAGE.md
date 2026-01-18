@@ -1,6 +1,6 @@
 # Agent Workflow Per Pipeline Stage
 
-> **Versie:** 1.0.0  
+> **Versie:** 1.0.1  
 > **Laatste update:** 2025-01-18  
 > **Status:** Production
 
@@ -560,10 +560,12 @@ sequenceDiagram
    UPDATE professional_applications
    SET gesprek_feedback = 'no_show',
        gesprek_datum = NULL,
+       pipeline_stage = 'intake_verstuurd',  -- Terug naar intake voor herplanning
        updated_at = NOW()
    WHERE id = :application_id;
    ```
 3. **Stage Transitie:** `gesprek_gepland` → `intake_verstuurd` (voor herplanning)
+4. **UI Effect:** Kandidaat verschijnt weer in "Intake Verstuurd" kolom, recruiter kan opnieuw datum selecteren
 
 ### Email Types
 
@@ -907,6 +909,42 @@ stateDiagram-v2
 
 ---
 
+## Document Verificatie Status
+
+### Verificatie per Document Type
+
+| Document Type | Verificatie Vereist | Verificatie Methode | `is_verified` Gedrag |
+|---------------|---------------------|---------------------|----------------------|
+| **CV** | ❌ Nee | Geen | Blijft `false` - dit is acceptabel |
+| **Diploma** | ✓ Ja | DUO / EMREX / Handmatig | `true` na verificatie |
+| **VOG** | ✓ Ja | GAAV / Handmatig | `true` na verificatie |
+| **ID Document** | ○ Optioneel | Handmatig | `true` na verificatie indien vereist |
+
+### CV Verificatie Toelichting
+
+CVs ondergaan **geen formele verificatie**. De `is_verified` waarde blijft `false`, en dit is normaal gedrag:
+
+- CVs worden geüpload en opgeslagen in `application_documents`
+- Data wordt geëxtraheerd naar `extracted_data` voor profiel vulling
+- Geen externe API check (geen DUO/EMREX equivalent voor CVs)
+- Recruiter kan CV handmatig reviewen via UI
+
+**Praktijk:** CV met `is_verified = false` blokkeert geen stage transitie.
+
+### Pre-emptive Document Uploads
+
+Kandidaten kunnen documenten (inclusief VOG) vroeger uploaden dan strikt nodig in de workflow. Gedrag:
+
+| Situatie | Document Status | Effect |
+|----------|-----------------|--------|
+| VOG geüpload in `nieuw` stage | `is_verified = false` | Geen actie - verificatie pas in screening |
+| VOG geüpload in `intake_verstuurd` | `is_verified = false` | Geen actie - verificatie pas in screening |
+| VOG geüpload in `screening` | `is_verified = false` → `true` | GAAV verificatie gestart |
+
+**Belangrijke Regel:** De `agent-placement` (screening fase) verifieert de VOG **ongeacht wanneer deze is geüpload**. Pre-emptive uploads blokkeren niets en worden automatisch verwerkt zodra de kandidaat de screening fase bereikt.
+
+---
+
 ## Appendix: Agent Specialist Database Schema
 
 ```sql
@@ -933,4 +971,7 @@ CREATE TABLE agent_specialists (
 
 | Versie | Datum | Wijzigingen |
 |--------|-------|-------------|
+| 1.0.1 | 2025-01-18 | Fix: No-show transitie naar `intake_verstuurd` (was incorrect `gesprek_gepland`) |
+| 1.0.1 | 2025-01-18 | Add: Document Verificatie Status sectie (CV verificatie verduidelijking) |
+| 1.0.1 | 2025-01-18 | Add: Pre-emptive Document Uploads documentatie |
 | 1.0.0 | 2025-01-18 | Initiële documentatie |
