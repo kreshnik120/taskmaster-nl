@@ -54,10 +54,11 @@ interface AgentActivity {
 const PIPELINE_STAGES = [
   { stage: 'nieuw', label: 'Nieuw', agent: 'agent-welkom', icon: Hand },
   { stage: 'intake_verstuurd', label: 'Intake Verstuurd', agent: 'agent-document', icon: FileCheck },
-  { stage: 'docs_compleet', label: 'Docs Compleet', agent: 'agent-planning', icon: CalendarCheck },
-  { stage: 'gesprek_gepland', label: 'Gesprek Gepland', agent: 'agent-screening', icon: UserCheck },
-  { stage: 'screening', label: 'Screening', agent: 'agent-placement', icon: Award },
-  { stage: 'goedgekeurd', label: 'Goedgekeurd', agent: null, icon: CheckCircle2 },
+  // docs_compleet verwijderd - agent-planning werkt nu vanuit intake_verstuurd wanneer docs compleet zijn
+  { stage: 'gesprek_gepland', label: 'Gesprek Gepland', agent: 'agent-planning', icon: CalendarCheck },
+  { stage: 'screening', label: 'Screening', agent: 'agent-screening', icon: UserCheck },
+  { stage: 'goedgekeurd', label: 'Goedgekeurd', agent: 'agent-placement', icon: Award },
+  { stage: 'geplaatst', label: 'Geplaatst', agent: null, icon: CheckCircle2 },
   { stage: 'afgewezen', label: 'Afgewezen', agent: null, icon: XCircle },
 ];
 

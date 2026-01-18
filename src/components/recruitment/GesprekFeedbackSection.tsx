@@ -52,8 +52,9 @@ export function GesprekFeedbackSection({
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [pendingFeedback, setPendingFeedback] = useState<"positive" | "negative" | "no_show" | null>(null);
 
-  // Show this section only for docs_compleet or gesprek_gepland stages
-  const showSection = ["docs_compleet", "gesprek_gepland"].includes(pipelineStage);
+  // Show this section only for intake_verstuurd (when docs complete) or gesprek_gepland stages
+  // docs_compleet stage is removed - we now use intake_verstuurd with document check
+  const showSection = ["intake_verstuurd", "gesprek_gepland"].includes(pipelineStage);
   if (!showSection) return null;
 
   const handleScheduleInterview = async () => {
@@ -231,11 +232,11 @@ export function GesprekFeedbackSection({
         )}
       </div>
 
-      {/* Stage: docs_compleet → Schedule interview */}
-      {pipelineStage === "docs_compleet" && (
+      {/* Stage: intake_verstuurd → Schedule interview (when documents are complete) */}
+      {pipelineStage === "intake_verstuurd" && (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Documenten zijn compleet. Plan nu een gesprek met de kandidaat.
+            Documenten zijn binnen. Plan nu een gesprek met de kandidaat.
           </p>
           <div className="flex items-center gap-3">
             <Popover>
