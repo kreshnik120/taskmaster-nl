@@ -233,6 +233,54 @@ export type Database = {
           },
         ]
       }
+      agent_specialists: {
+        Row: {
+          agent_name: string
+          available_tools: string[]
+          created_at: string | null
+          email_types: string[]
+          handles_stage: string
+          id: string
+          is_active: boolean | null
+          requires_human_approval: boolean | null
+          system_prompt: string | null
+          target_stage: string
+          transition_requirements: Json | null
+          updated_at: string | null
+          version: string | null
+        }
+        Insert: {
+          agent_name: string
+          available_tools?: string[]
+          created_at?: string | null
+          email_types?: string[]
+          handles_stage: string
+          id?: string
+          is_active?: boolean | null
+          requires_human_approval?: boolean | null
+          system_prompt?: string | null
+          target_stage: string
+          transition_requirements?: Json | null
+          updated_at?: string | null
+          version?: string | null
+        }
+        Update: {
+          agent_name?: string
+          available_tools?: string[]
+          created_at?: string | null
+          email_types?: string[]
+          handles_stage?: string
+          id?: string
+          is_active?: boolean | null
+          requires_human_approval?: boolean | null
+          system_prompt?: string | null
+          target_stage?: string
+          transition_requirements?: Json | null
+          updated_at?: string | null
+          version?: string | null
+        }
+        Relationships: []
+      }
       agent_task_queue: {
         Row: {
           action_id: string | null
@@ -3132,6 +3180,57 @@ export type Database = {
           },
         ]
       }
+      migration_audit_log: {
+        Row: {
+          application_id: string | null
+          created_at: string | null
+          discrepancy_notes: string | null
+          execution_time_ms: number | null
+          id: string
+          matched: boolean | null
+          new_system_action: Json | null
+          old_system_action: Json | null
+          trigger_source: string | null
+        }
+        Insert: {
+          application_id?: string | null
+          created_at?: string | null
+          discrepancy_notes?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          matched?: boolean | null
+          new_system_action?: Json | null
+          old_system_action?: Json | null
+          trigger_source?: string | null
+        }
+        Update: {
+          application_id?: string | null
+          created_at?: string | null
+          discrepancy_notes?: string | null
+          execution_time_ms?: number | null
+          id?: string
+          matched?: boolean | null
+          new_system_action?: Json | null
+          old_system_action?: Json | null
+          trigger_source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "migration_audit_log_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "application_evidence_summary"
+            referencedColumns: ["application_id"]
+          },
+          {
+            foreignKeyName: "migration_audit_log_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "professional_applications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orchestrator_state: {
         Row: {
           categories_created: number | null
@@ -5068,6 +5167,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      system_feature_flags: {
+        Row: {
+          created_at: string | null
+          feature_name: string
+          id: string
+          is_enabled: boolean | null
+          metadata: Json | null
+          rollout_percentage: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          feature_name: string
+          id?: string
+          is_enabled?: boolean | null
+          metadata?: Json | null
+          rollout_percentage?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          feature_name?: string
+          id?: string
+          is_enabled?: boolean | null
+          metadata?: Json | null
+          rollout_percentage?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       system_health_log: {
         Row: {
