@@ -765,6 +765,44 @@ const TOOL_HANDLERS: Record<string, (supabase: any, params: Record<string, unkno
       const docType = params.document_type as string;
       const applicationId = params.application_id as string;
       
+      // ========================================================================
+      // FIX v1.8.4: Stage Guard for VOG Requests
+      // VOG verification should only happen at screening stage after positive feedback
+      // ========================================================================
+      if (docType === 'vog') {
+        const { data: app } = await supabase
+          .from('professional_applications')
+          .select('pipeline_stage, gesprek_feedback')
+          .eq('id', applicationId)
+          .single();
+        
+        const validStages = ['screening', 'gesprek_gepland', 'goedgekeurd'];
+        const isValidStage = app && validStages.includes(app.pipeline_stage);
+        const hasPositiveFeedback = app?.gesprek_feedback === 'positive';
+        
+        if (!isValidStage) {
+          console.log(`[ReAct] ⛔ VOG verification blocked: current stage is "${app?.pipeline_stage}", required: screening/gesprek_gepland`);
+          return { 
+            success: false, 
+            data: null, 
+            error: `VOG verificatie alleen toegestaan bij screening stage (na positieve gesprek feedback). Huidige stage: ${app?.pipeline_stage}`,
+            execution_ms: Date.now() - start 
+          };
+        }
+        
+        if (!hasPositiveFeedback && app?.pipeline_stage === 'gesprek_gepland') {
+          console.log(`[ReAct] ⛔ VOG verification blocked: gesprek_feedback is "${app?.gesprek_feedback}", required: positive`);
+          return { 
+            success: false, 
+            data: null, 
+            error: `VOG verificatie vereist positieve gesprek feedback. Huidige feedback: ${app?.gesprek_feedback || 'pending'}`,
+            execution_ms: Date.now() - start 
+          };
+        }
+        
+        console.log(`[ReAct] ✅ VOG verification allowed: stage=${app?.pipeline_stage}, feedback=${app?.gesprek_feedback}`);
+      }
+      
       // Bepaal welke verificatie functie aan te roepen
       const functionName = docType === 'diploma' ? 'verify-diploma-duo' : 'verify-vog-gaav';
       
