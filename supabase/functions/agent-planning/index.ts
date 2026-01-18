@@ -194,12 +194,15 @@ Deno.serve(async (req) => {
     if (availableSlots.length === 0) {
       console.log('[agent-planning] No available slots found');
       
+      // Extract candidate name from extracted_data
+      const candidateName = app.extracted_data?.naam || null;
+      
       // Create notification for recruiter
       await supabase.from('recruiter_notifications').insert({
         org_id: app.org_id,
         type: 'no_slots_available',
         title: 'Geen beschikbare tijdslots',
-        message: `Er zijn geen beschikbare tijdslots voor ${app.candidate_name}. Controleer de agenda.`,
+        message: `Er zijn geen beschikbare tijdslots voor ${candidateName || 'kandidaat'}. Controleer de agenda.`,
         application_id: app.id,
         is_read: false
       });
@@ -216,16 +219,18 @@ Deno.serve(async (req) => {
     }
 
     // Step 3: Send interview slot proposal email
-    const firstName = app.candidate_name?.split(' ')[0] || 'daar';
+    // Extract candidate name from extracted_data (if not already extracted above)
+    const candidateNameForEmail = app.extracted_data?.naam || null;
+    const firstName = candidateNameForEmail?.split(' ')[0] || 'daar';
     
     const { error: emailError } = await supabase.functions.invoke('send-ai-email', {
       body: {
         application_id: app.id,
         email_type: 'interview_slot_proposal',
         recipient_email: app.email_from,
-        recipient_name: app.candidate_name,
+        recipient_name: candidateNameForEmail,
         context: {
-          candidate_name: app.candidate_name,
+          candidate_name: candidateNameForEmail,
           first_name: firstName,
           available_slots: availableSlots,
           slot_1: availableSlots[0]?.formatted,
@@ -246,7 +251,7 @@ Deno.serve(async (req) => {
       org_id: app.org_id,
       type: 'interview_slots_proposed',
       title: 'Gesprek tijdslots voorgesteld',
-      message: `Er zijn 3 tijdslots voorgesteld aan ${app.candidate_name}. Wachtend op bevestiging.`,
+      message: `Er zijn 3 tijdslots voorgesteld aan ${candidateNameForEmail || 'kandidaat'}. Wachtend op bevestiging.`,
       application_id: app.id,
       is_read: false,
       metadata: {

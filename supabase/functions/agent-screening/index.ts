@@ -138,7 +138,7 @@ Deno.serve(async (req) => {
             reason: 'Negatieve gesprek feedback',
             gesprek_datum: app.gesprek_datum,
             gesprek_feedback: feedback,
-            candidate_name: app.candidate_name
+            candidate_name: app.extracted_data?.naam
           }
         });
       }
@@ -176,7 +176,9 @@ Deno.serve(async (req) => {
       // Positive feedback - proceed with VOG request
       console.log('[agent-screening] Positive feedback received, requesting VOG');
       
-      const firstName = app.candidate_name?.split(' ')[0] || 'daar';
+      // Extract candidate name from extracted_data
+      const candidateName = app.extracted_data?.naam || null;
+      const firstName = candidateName?.split(' ')[0] || 'daar';
       
       // Send VOG request email
       const { error: emailError } = await supabase.functions.invoke('send-ai-email', {
@@ -184,9 +186,9 @@ Deno.serve(async (req) => {
           application_id: app.id,
           email_type: 'vog_request',
           recipient_email: app.email_from,
-          recipient_name: app.candidate_name,
+          recipient_name: candidateName,
           context: {
-            candidate_name: app.candidate_name,
+            candidate_name: candidateName,
             first_name: firstName,
             gesprek_datum: app.gesprek_datum,
             agent: 'screening'
@@ -219,7 +221,7 @@ Deno.serve(async (req) => {
         org_id: app.org_id,
         type: 'vog_requested',
         title: 'VOG aangevraagd',
-        message: `VOG is aangevraagd bij ${app.candidate_name} na positief gesprek.`,
+        message: `VOG is aangevraagd bij ${candidateName || 'kandidaat'} na positief gesprek.`,
         application_id: app.id,
         is_read: false
       });

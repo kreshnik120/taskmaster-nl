@@ -233,19 +233,29 @@ const TOOL_HANDLERS: Record<string, (supabase: any, params: Record<string, unkno
     const start = Date.now();
     try {
       let query = supabase.from('professional_applications')
-        .select('id, candidate_name, candidate_email, pipeline_stage, functie_niveau, completeness_percentage, extracted_data, created_at');
+        .select('id, email_from, pipeline_stage, functie_niveau, completeness_score, extracted_data, created_at');
       
       if (params.pipeline_stage) query = query.eq('pipeline_stage', params.pipeline_stage);
-      if (params.candidate_name) query = query.ilike('candidate_name', `%${params.candidate_name}%`);
-      if (params.email) query = query.ilike('candidate_email', `%${params.email}%`);
-      if (params.min_completeness) query = query.gte('completeness_percentage', params.min_completeness);
+      // Filter by candidate_name using extracted_data->naam (JSONB filter)
+      if (params.candidate_name) {
+        query = query.ilike('extracted_data->>naam', `%${params.candidate_name}%`);
+      }
+      if (params.email) query = query.ilike('email_from', `%${params.email}%`);
+      if (params.min_completeness) query = query.gte('completeness_score', params.min_completeness);
       
       query = query.order('created_at', { ascending: false }).limit(params.limit as number || 10);
       
       const { data, error } = await query;
       if (error) throw error;
       
-      return { success: true, data, execution_ms: Date.now() - start };
+      // Map extracted_data.naam to candidate_name for backwards compatibility
+      const mappedData = (data || []).map((app: any) => ({
+        ...app,
+        candidate_name: app.extracted_data?.naam || null,
+        candidate_email: app.email_from
+      }));
+      
+      return { success: true, data: mappedData, execution_ms: Date.now() - start };
     } catch (err) {
       return { success: false, data: null, error: getErrorMessage(err), execution_ms: Date.now() - start };
     }

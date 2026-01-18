@@ -327,6 +327,10 @@ Deno.serve(async (req) => {
     let emailSent = false;
     let emailType: string | null = null;
 
+    // Extract candidate name from extracted_data
+    const candidateName = app.extracted_data?.naam || null;
+    const firstName = candidateName?.split(' ')[0] || 'daar';
+
     if (missingDocs.length > 0) {
       // Request missing documents
       emailType = 'document_request';
@@ -336,10 +340,10 @@ Deno.serve(async (req) => {
           application_id,
           email_type: emailType,
           recipient_email: app.email_from,
-          recipient_name: app.candidate_name,
+          recipient_name: candidateName,
           context: {
-            candidate_name: app.candidate_name,
-            first_name: app.candidate_name?.split(' ')[0] || 'daar',
+            candidate_name: candidateName,
+            first_name: firstName,
             missing_documents: missingDocs,
             has_cv: hasCV,
             has_diploma: hasDiploma,
@@ -364,10 +368,10 @@ Deno.serve(async (req) => {
           application_id,
           email_type: emailType,
           recipient_email: app.email_from,
-          recipient_name: app.candidate_name,
+          recipient_name: candidateName,
           context: {
-            candidate_name: app.candidate_name,
-            first_name: app.candidate_name?.split(' ')[0] || 'daar',
+            candidate_name: candidateName,
+            first_name: firstName,
             verification_pending: true,
             completeness_score: app.completeness_score || 0,
             agent: 'document'

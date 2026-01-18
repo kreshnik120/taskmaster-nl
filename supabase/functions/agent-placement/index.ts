@@ -150,7 +150,9 @@ Deno.serve(async (req) => {
     // All requirements met - can advance to goedgekeurd
     console.log('[agent-placement] All requirements met, advancing to goedgekeurd');
 
-    const firstName = app.candidate_name?.split(' ')[0] || 'daar';
+    // Extract candidate name from extracted_data
+    const candidateName = app.extracted_data?.naam || null;
+    const firstName = candidateName?.split(' ')[0] || 'daar';
 
     // Send approval notification email
     const { error: emailError } = await supabase.functions.invoke('send-ai-email', {
@@ -158,9 +160,9 @@ Deno.serve(async (req) => {
         application_id: app.id,
         email_type: 'approval_notification',
         recipient_email: app.email_from,
-        recipient_name: app.candidate_name,
+        recipient_name: candidateName,
         context: {
-          candidate_name: app.candidate_name,
+          candidate_name: candidateName,
           first_name: firstName,
           functie_interesse: app.functie_interesse,
           agent: 'placement'
@@ -178,7 +180,7 @@ Deno.serve(async (req) => {
       org_id: app.org_id,
       type: 'candidate_approved',
       title: 'Kandidaat goedgekeurd',
-      message: `${app.candidate_name} is volledig gescreend en goedgekeurd voor plaatsing.`,
+      message: `${candidateName || 'Kandidaat'} is volledig gescreend en goedgekeurd voor plaatsing.`,
       application_id: app.id,
       is_read: false
     });
