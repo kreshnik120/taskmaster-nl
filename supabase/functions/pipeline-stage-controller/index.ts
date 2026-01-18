@@ -10,8 +10,8 @@
  * - POST /route    - Route to the correct specialist agent
  * - POST /status   - Get current pipeline status and blockers
  * 
- * This controller enforces the strict 7-stage flow:
- * nieuw → intake_verstuurd → docs_compleet → gesprek_gepland → screening → goedgekeurd → geplaatst
+ * This controller enforces the strict 6-stage flow:
+ * nieuw → intake_verstuurd → gesprek_gepland → screening → goedgekeurd → geplaatst
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
