@@ -288,12 +288,64 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }, 500);
     }
 
+    // =====================================================
+    // FASE 3 FIX: Update welcome_email_sent_at na welcome_intake
+    // En trigger pipeline-stage-controller voor stage transitie
+    // =====================================================
+    if ((email_type === 'welcome_intake' || email_type === 'welcome') && application_id && emailResult.data?.id) {
+      console.log(`[send-ai-email] Updating welcome_email_sent_at for application ${application_id}`);
+      
+      const { error: welcomeUpdateError } = await supabase
+        .from('professional_applications')
+        .update({ 
+          welcome_email_sent_at: new Date().toISOString()
+        })
+        .eq('id', application_id);
+      
+      if (welcomeUpdateError) {
+        console.error('[send-ai-email] Failed to update welcome_email_sent_at:', welcomeUpdateError);
+      } else {
+        console.log('[send-ai-email] ✅ Updated welcome_email_sent_at');
+        
+        // Check if multi-agent architecture is enabled
+        const { data: featureFlag } = await supabase
+          .from('system_feature_flags')
+          .select('is_enabled, rollout_percentage')
+          .eq('feature_name', 'multi_agent_architecture')
+          .maybeSingle();
+        
+        if (featureFlag?.is_enabled) {
+          // Trigger pipeline-stage-controller for stage advancement
+          console.log('[send-ai-email] Multi-agent enabled, triggering pipeline-stage-controller...');
+          
+          try {
+            const controllerResult = await supabase.functions.invoke('pipeline-stage-controller', {
+              body: {
+                action: 'advance',
+                application_id,
+                trigger_source: `send-ai-email:${email_type}`
+              }
+            });
+            
+            if (controllerResult.error) {
+              console.error('[send-ai-email] Pipeline controller error:', controllerResult.error);
+            } else {
+              console.log('[send-ai-email] ✅ Pipeline controller triggered:', controllerResult.data);
+            }
+          } catch (controllerErr) {
+            console.warn('[send-ai-email] Pipeline controller invocation failed:', controllerErr);
+          }
+        }
+      }
+    }
+
     return jsonResponse({
       success: true,
       sent_via: 'resend',
       organization: orgInfo.name,
       email_id: emailResult.data?.id,
-      message: `Email verzonden naar ${recipient_email}`
+      message: `Email verzonden naar ${recipient_email}`,
+      welcome_email_tracked: (email_type === 'welcome_intake' || email_type === 'welcome') && !!application_id
     });
 
   } catch (error: any) {

@@ -2343,10 +2343,53 @@ Return JSON in dit formaat:
     const hasMinimalCompleteness = newCompletenessScore >= 70;
     const hasCandidateInteraction = currentResponseCount >= 1;
     
-    if (['nieuw', 'intake_verstuurd'].includes(pipelineStage)) {
-      // Check of alle documenten (CV + geverifieerd diploma) binnen zijn
+    // =====================================================
+    // FASE 4 REFACTOR: Route naar pipeline-stage-controller
+    // GEEN directe stage updates meer - controller valideert en voert uit
+    // =====================================================
+    
+    // Check if multi-agent architecture is enabled
+    const { data: featureFlagData } = await supabase
+      .from('system_feature_flags')
+      .select('is_enabled, rollout_percentage')
+      .eq('feature_name', 'multi_agent_architecture')
+      .maybeSingle();
+    
+    const useMultiAgent = featureFlagData?.is_enabled === true;
+    
+    if (useMultiAgent && ['nieuw', 'intake_verstuurd'].includes(pipelineStage)) {
+      // =====================================================
+      // NEW: Route via pipeline-stage-controller
+      // Controller handles validation and stage transitions
+      // =====================================================
+      console.log(`🔄 [Multi-Agent] Routing to pipeline-stage-controller for stage transition check...`);
+      
+      try {
+        const controllerResult = await supabase.functions.invoke('pipeline-stage-controller', {
+          body: {
+            action: 'route',
+            application_id: applicationId,
+            trigger: 'email_reply',
+            extracted_data: mergedData,
+            documents: processedDocuments || [],
+            completeness_score: newCompletenessScore
+          }
+        });
+        
+        if (controllerResult.error) {
+          console.error('❌ [Multi-Agent] Pipeline controller error:', controllerResult.error);
+        } else {
+          console.log('✅ [Multi-Agent] Pipeline controller response:', controllerResult.data);
+        }
+      } catch (controllerErr) {
+        console.warn('⚠️ [Multi-Agent] Pipeline controller invocation failed:', controllerErr);
+      }
+    } else if (['nieuw', 'intake_verstuurd'].includes(pipelineStage)) {
+      // =====================================================
+      // LEGACY: Direct stage transition (when multi-agent disabled)
+      // =====================================================
       if (hasCV && hasDiploma && isDiplomaVerified && hasMinimalCompleteness && hasCandidateInteraction) {
-        console.log(`📊 CORRECTE FLOW: Transitie naar 'docs_compleet' - documenten compleet!`);
+        console.log(`📊 [Legacy] CORRECTE FLOW: Transitie naar 'docs_compleet' - documenten compleet!`);
         console.log(`   CV: ${hasCV}, Diploma: ${hasDiploma}, Diploma verified: ${isDiplomaVerified}`);
         console.log(`   Completeness: ${newCompletenessScore}%, Responses: ${currentResponseCount}`);
         
@@ -2361,8 +2404,7 @@ Return JSON in dit formaat:
         if (transitionError) {
           console.error("Error transitioning to docs_compleet:", transitionError);
         } else {
-          console.log("✅ CORRECTE FLOW: Pipeline stage transitioned to 'docs_compleet'");
-          console.log("   → Kandidaat is nu klaar voor fysiek gesprek (recruiter moet gesprek plannen)");
+          console.log("✅ [Legacy] Pipeline stage transitioned to 'docs_compleet'");
           
           // Log stage audit
           await supabase.from("application_stage_audit").insert({
@@ -2378,11 +2420,11 @@ Return JSON in dit formaat:
               has_cv: hasCV,
               has_diploma: hasDiploma,
               diploma_verified: isDiplomaVerified,
-              next_action: 'recruiter_moet_gesprek_plannen'
+              system: 'legacy'
             }
           });
           
-          // Notificeer recruiter dat kandidaat klaar is voor gesprek
+          // Notificeer recruiter
           const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
           
           try {
@@ -2395,19 +2437,17 @@ Return JSON in dit formaat:
               priority: 'high'
             });
           } catch (notifErr) {
-            // Non-blocking - notification failure shouldn't block flow
             console.warn("Could not create recruiter notification:", notifErr);
           }
         }
       } else {
-        // Log wat er nog mist
         const missing: string[] = [];
         if (!hasCV) missing.push('CV');
         if (!hasDiploma) missing.push('Diploma');
         if (hasDiploma && !isDiplomaVerified) missing.push('Diploma verificatie');
         if (!hasMinimalCompleteness) missing.push(`Completeness (${newCompletenessScore}% < 70%)`);
         
-        console.log(`📊 Staying in '${pipelineStage}' - ontbrekend voor docs_compleet: ${missing.join(', ')}`);
+        console.log(`📊 [Legacy] Staying in '${pipelineStage}' - ontbrekend voor docs_compleet: ${missing.join(', ')}`);
       }
     }
 
@@ -2862,28 +2902,49 @@ Return JSON in dit formaat:
               .eq("id", applicationId);
 
             // Direct de agent triggeren (geen wachten op cron)
+            // FASE 4: Check multi-agent flag for routing
             try {
-              console.log("🚀 Triggering ai-agent-orchestrator for immediate response...");
+              const { data: agentFlag } = await supabase
+                .from('system_feature_flags')
+                .select('is_enabled')
+                .eq('feature_name', 'multi_agent_architecture')
+                .maybeSingle();
               
-              // Stap 1: Plan de goal (voegt actie toe aan queue)
-              await supabase.functions.invoke('ai-agent-orchestrator', {
-                body: { 
-                  action: 'process_pending_goals',
-                  filter_application_id: applicationId 
-                }
-              });
-              
-              // Stap 2: Voer de actie DIRECT uit
-              await supabase.functions.invoke('ai-agent-orchestrator', {
-                body: { 
-                  action: 'execute_actions'
-                }
-              });
-              
-              console.log("✅ AI Agent triggered for immediate response");
+              if (agentFlag?.is_enabled) {
+                // NEW: Route via pipeline-stage-controller
+                console.log("🚀 [Multi-Agent] Routing to pipeline-stage-controller...");
+                
+                await supabase.functions.invoke('pipeline-stage-controller', {
+                  body: {
+                    action: 'route',
+                    application_id: applicationId,
+                    trigger: 'reply_processed',
+                    response_type: responseType
+                  }
+                });
+                
+                console.log("✅ [Multi-Agent] Pipeline controller triggered for response");
+              } else {
+                // LEGACY: Trigger ai-agent-orchestrator
+                console.log("🚀 [Legacy] Triggering ai-agent-orchestrator for immediate response...");
+                
+                await supabase.functions.invoke('ai-agent-orchestrator', {
+                  body: { 
+                    action: 'process_pending_goals',
+                    filter_application_id: applicationId 
+                  }
+                });
+                
+                await supabase.functions.invoke('ai-agent-orchestrator', {
+                  body: { 
+                    action: 'execute_actions'
+                  }
+                });
+                
+                console.log("✅ [Legacy] AI Agent triggered for immediate response");
+              }
             } catch (orchestratorErr) {
-              console.warn("⚠️ Orchestrator trigger failed, will retry via cron:", orchestratorErr);
-              // Non-blocking: als het faalt, pakt de cron job het op
+              console.warn("⚠️ Agent trigger failed, will retry via cron:", orchestratorErr);
             }
           }
         }
