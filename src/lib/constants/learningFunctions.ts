@@ -111,14 +111,14 @@ export const LEARNING_FUNCTIONS: LearningFunction[] = [
     name: 'agent-document', 
     displayName: 'Document Agent',
     icon: FileCheck,
-    description: 'Handles intake_verstuurd → docs_compleet: verifieert documenten en triggert DUO/GAAV',
+    description: 'Handles intake_verstuurd: verifieert documenten en triggert DUO/GAAV validatie',
     category: 'specialist'
   },
   { 
     name: 'agent-planning', 
     displayName: 'Planning Agent',
     icon: CalendarCheck,
-    description: 'Handles docs_compleet → gesprek_gepland: plant gesprekken met beschikbare slots',
+    description: 'Handles intake_verstuurd → gesprek_gepland: plant gesprekken wanneer docs compleet zijn',
     category: 'specialist'
   },
   { 

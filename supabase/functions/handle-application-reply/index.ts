@@ -2853,6 +2853,21 @@ Return JSON in dit formaat:
                 org_name: orgInfo.displayName,
                 email_config: emailConfig,
                 followup_count: currentFollowupCount + 1, // Track follow-up count
+                // Document status voor correcte kleuren in email templates
+                document_statuses: {
+                  cv: hasCV ? 'received' : 'missing',
+                  diploma: hasDiploma ? (isDiplomaVerified ? 'verified' : 'received') : 'missing',
+                  vog: (mergedData.vog_validation_status === 'verified' || mergedData.vog_validation_status === 'verified_gaav')
+                    ? 'verified'
+                    : mergedData.vog_file_path ? 'received' : 'missing'
+                },
+                template_data: {
+                  cv_uploaded: hasCV,
+                  diploma_uploaded: hasDiploma,
+                  diploma_verified: isDiplomaVerified,
+                  vog_uploaded: !!mergedData.vog_file_path,
+                  vog_verified: mergedData.vog_validation_status === 'verified' || mergedData.vog_validation_status === 'verified_gaav',
+                },
               },
               status: "pending"
             });
