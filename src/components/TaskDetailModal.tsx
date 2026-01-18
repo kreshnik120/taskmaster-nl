@@ -38,6 +38,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useTaskTimer } from "@/hooks/useTaskTimer";
+import { InterviewDetails } from "@/types/recruitment";
 
 interface Subtask {
   id: string;
@@ -50,21 +51,6 @@ interface Subtask {
     name: string | null;
     email: string | null;
   } | null;
-}
-
-interface InterviewDetails {
-  application_id?: string;
-  candidate_name?: string;
-  candidate_email?: string;
-  type?: string;
-  interview_type?: 'phone' | 'video' | 'in_person';
-  teams_link?: string;
-  location?: string;
-  duration_minutes?: number;
-  interviewer_name?: string;
-  interviewer_email?: string;
-  organization_name?: string;
-  [key: string]: unknown;
 }
 
 interface Task {
