@@ -54,7 +54,7 @@ Na het succesvol versturen van de welkomstmail: nieuw → intake_verstuurd
 
 interface ApplicationData {
   id: string;
-  candidate_name: string | null;
+  extracted_data: { naam?: string; functie?: string; regio?: string } | null;
   email_from: string | null;
   pipeline_stage: string;
   org_id: string;
@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
 
     // Get full application data if not provided
     let app: ApplicationData = application;
-    if (!app || !app.candidate_name) {
+    if (!app || !app.extracted_data?.naam) {
       const { data, error } = await supabase
         .from('professional_applications')
         .select('*')
@@ -136,8 +136,9 @@ Deno.serve(async (req) => {
       console.log(`[agent-welkom] Email type ${emailType} not in allowed types: ${allowed_email_types}`);
     }
 
-    // Extract first name for personalization
-    const firstName = app.candidate_name?.split(' ')[0] || 'daar';
+    // Extract candidate name from extracted_data
+    const candidateName = app.extracted_data?.naam || null;
+    const firstName = candidateName?.split(' ')[0] || 'daar';
 
     console.log(`[agent-welkom] Sending ${emailType} email to ${app.email_from}, missing: ${missingInfo.join(', ')}`);
 
@@ -147,9 +148,9 @@ Deno.serve(async (req) => {
         application_id: app.id,
         email_type: emailType,
         recipient_email: app.email_from,
-        recipient_name: app.candidate_name,
+        recipient_name: candidateName,
         context: {
-          candidate_name: app.candidate_name,
+          candidate_name: candidateName,
           first_name: firstName,
           missing_info: missingInfo,
           functie_interesse: app.functie_interesse,
