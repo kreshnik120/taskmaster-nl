@@ -23,27 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-interface PendingReview {
-  id: string;
-  application_id: string;
-  org_id: string;
-  review_type: string;
-  escalation_reason: string;
-  ai_recommendation: string | null;
-  ai_confidence: number | null;
-  ai_reasoning: any;
-  status: string;
-  priority: number;
-  due_date: string | null;
-  created_at: string;
-  candidate_name: string;
-  candidate_email: string;
-  functie_niveau: string | null;
-  completeness_score: number | null;
-  current_stage: string;
-  application_created_at: string;
-}
+import { PendingReview } from "@/types/recruitment";
 
 interface HumanReviewQueueProps {
   onViewApplication?: (applicationId: string) => void;

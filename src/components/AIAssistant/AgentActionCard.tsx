@@ -8,21 +8,12 @@ import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { logger } from '@/lib/logger';
+import { AgentActionData, FIELD_LABELS } from '@/types/recruitment';
 
 const log = logger.create('AgentAction');
 
-export interface AgentActionData {
-  type: 'agent_action_pending';
-  action_type: 'send_email' | 'send_followup' | 'schedule_interview' | 'request_documents';
-  candidate_name: string;
-  candidate_email: string;
-  application_id: string;
-  action_description: string;
-  action_preview?: string;
-  missing_fields?: string[];
-  custom_message?: string;
-  pending_goal_id?: string;
-}
+// Re-export for backward compatibility
+export type { AgentActionData } from '@/types/recruitment';
 
 interface AgentActionCardProps {
   actionData: AgentActionData;
@@ -305,24 +296,13 @@ export const AgentActionCard: React.FC<AgentActionCardProps> = ({
   const renderMissingFields = () => {
     if (!actionData.missing_fields || actionData.missing_fields.length === 0) return null;
 
-    const fieldLabels: Record<string, string> = {
-      functie_niveau: 'Functieniveau',
-      werkvorm: 'Werkvorm (ZZP/Uitzend)',
-      regio: 'Voorkeursregio',
-      beschikbaarheid: 'Beschikbaarheid',
-      telefoonnummer: 'Telefoonnummer',
-      ervaring_sector: 'Sector ervaring',
-      doelgroep_ervaring: 'Doelgroep ervaring',
-      diploma: 'Diploma',
-    };
-
     return (
       <div className="mt-2 text-sm text-muted-foreground">
         <p className="font-medium mb-1">Te vragen informatie:</p>
         <div className="flex flex-wrap gap-1">
           {actionData.missing_fields.slice(0, 5).map((field) => (
             <Badge key={field} variant="secondary" className="text-xs">
-              {fieldLabels[field] || field}
+              {FIELD_LABELS[field] || field}
             </Badge>
           ))}
           {actionData.missing_fields.length > 5 && (

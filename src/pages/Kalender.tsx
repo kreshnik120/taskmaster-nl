@@ -13,21 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCountUp } from "@/hooks/useCountUp";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { KPICard } from "@/components/ui/kpi-card";
-
-interface InterviewDetails {
-  application_id?: string;
-  candidate_name?: string;
-  candidate_email?: string;
-  type?: string;
-  interview_type?: 'phone' | 'video' | 'in_person';
-  teams_link?: string;
-  location?: string;
-  duration_minutes?: number;
-  interviewer_name?: string;
-  interviewer_email?: string;
-  organization_name?: string;
-  [key: string]: unknown;
-}
+import { InterviewDetails } from "@/types/recruitment";
 
 interface Task {
   id: string;
