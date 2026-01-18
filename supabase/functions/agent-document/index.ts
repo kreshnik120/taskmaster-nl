@@ -1,8 +1,10 @@
 /**
- * Agent Document v1.0.0
+ * Agent Document v1.0.1
  * =====================
  * Specialist agent for the 'intake_verstuurd' stage.
- * Handles: intake_verstuurd → docs_compleet
+ * 
+ * NOTE: Kandidaten blijven op 'intake_verstuurd' tot recruiter gesprek plant.
+ * Er is GEEN automatische transitie naar 'docs_compleet' (deze stage bestaat niet meer in 6-stage pipeline).
  * 
  * Responsibilities:
  * - Process documents sent by candidates (CV, Diploma)
@@ -10,10 +12,11 @@
  * - Trigger DUO/EMREX verification for diplomas
  * - Request missing documents via email
  * - Track completeness score
+ * - Notify recruiter when CV + verified diploma are ready for interview scheduling
  * 
  * This agent does NOTHING else:
  * - No welcome emails (Welkom Agent)
- * - No interview scheduling (Planning Agent)
+ * - No interview scheduling (Planning Agent) - gesprek planning is HANDMATIG
  * - No VOG requests (Screening Agent - VOG is requested at screening stage)
  */
 

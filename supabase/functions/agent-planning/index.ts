@@ -1,8 +1,11 @@
 /**
- * Agent Planning v1.0.0
+ * Agent Planning v1.0.1
  * =====================
- * Specialist agent for the 'docs_compleet' stage.
- * Handles: docs_compleet → gesprek_gepland
+ * Specialist agent for candidates with complete documents in 'intake_verstuurd'.
+ * 
+ * NOTE: Deze agent helpt bij het plannen van gesprekken voor kandidaten
+ * die voldoende documenten hebben verzameld (CV + geverifieerd diploma).
+ * Transitie naar 'gesprek_gepland' gebeurt wanneer recruiter gesprek_datum invult.
  * 
  * Responsibilities:
  * - Check recruiter availability

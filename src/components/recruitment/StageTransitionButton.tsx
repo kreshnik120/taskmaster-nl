@@ -15,7 +15,7 @@ import { Loader2, ArrowRight, ShieldAlert, Calendar, ThumbsUp, ThumbsDown, UserX
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-type PipelineStage = 'nieuw' | 'intake_verstuurd' | 'docs_compleet' | 'gesprek_gepland' | 'interview' | 'screening' | 'goedgekeurd' | 'geplaatst' | 'afgewezen';
+type PipelineStage = 'nieuw' | 'intake_verstuurd' | 'gesprek_gepland' | 'interview' | 'screening' | 'goedgekeurd' | 'geplaatst' | 'afgewezen';
 
 interface StageTransitionButtonProps {
   applicationId: string;
@@ -35,7 +35,6 @@ interface StageTransitionButtonProps {
 const STAGE_LABELS: Record<PipelineStage, string> = {
   nieuw: 'Nieuw',
   intake_verstuurd: 'Intake Verstuurd',
-  docs_compleet: 'Docs Compleet',
   gesprek_gepland: 'Gesprek Gepland',
   interview: 'Interview',  // Legacy
   screening: 'Screening',
@@ -45,13 +44,10 @@ const STAGE_LABELS: Record<PipelineStage, string> = {
 };
 
 // Define which transitions require document verification
-// CORRECTE FLOW: docs_compleet → gesprek_gepland → screening (na positieve feedback) → goedgekeurd
+// CORRECTE FLOW (6-stage): intake_verstuurd → gesprek_gepland → screening (na positieve feedback) → goedgekeurd
 const DOCUMENT_REQUIREMENTS: Partial<Record<PipelineStage, { vog?: string[]; diploma?: string[] }>> = {
-  docs_compleet: {
-    diploma: ['verified_duo', 'verified_manual', 'verified_emrex'] // Diploma must be verified before docs_compleet
-  },
   gesprek_gepland: {
-    diploma: ['verified_duo', 'verified_manual', 'verified_emrex'] // Keep diploma verification
+    diploma: ['verified_duo', 'verified_manual', 'verified_emrex'] // Diploma moet geverifieerd zijn voor gesprek
   },
   interview: {
     diploma: ['verified_duo', 'verified_manual', 'verified_emrex'] // Legacy support
@@ -92,7 +88,7 @@ export function StageTransitionButton({
 
     // Check diploma requirements
     if (requirements.diploma && !requirements.diploma.includes(diplomaStatus)) {
-      if (targetStage === 'docs_compleet' || targetStage === 'gesprek_gepland' || targetStage === 'interview') {
+      if (targetStage === 'gesprek_gepland' || targetStage === 'interview') {
         return { 
           blocked: true, 
           reason: 'Diploma moet geverifieerd zijn (DUO, EMREX of handmatig) voordat het gesprek gepland kan worden.'

@@ -22,9 +22,11 @@ interface BulkActionBarProps {
   onBulkDelete: () => void;
 }
 
+// 6-stage pipeline (januari 2026)
 const PIPELINE_STAGES = [
   { id: "nieuw", label: "Nieuw" },
-  { id: "interview", label: "Interview" },
+  { id: "intake_verstuurd", label: "Intake Verstuurd" },
+  { id: "gesprek_gepland", label: "Gesprek Gepland" },
   { id: "screening", label: "Screening" },
   { id: "goedgekeurd", label: "Goedgekeurd" },
   { id: "geplaatst", label: "Geplaatst" },
