@@ -21,7 +21,8 @@ type EmailType =
   | 'emrex_invitation'               // EMREX diploma verificatie uitnodiging
   | 'emrex_reminder'                 // EMREX herinnering na 48 uur
   | 'vog_verified_notification'      // Notificatie naar recruiter bij VOG GAAV verificatie success
-  | 'interview_availability_request'; // Master Prompt: 3 interview opties voorstellen
+  | 'interview_availability_request' // Master Prompt: 3 interview opties voorstellen
+  | 'documents_received_confirmation'; // Bevestiging documenten ontvangen + voortgang
 
 interface SendEmailRequest {
   email_type: EmailType;
@@ -124,6 +125,8 @@ function generateDefaultSubject(
       return `[Intern] VOG geverifieerd: ${recipientName}`;
     case 'interview_availability_request':
       return `${orgName}: Intakegesprek inplannen — kies een moment`;
+    case 'documents_received_confirmation':
+      return `${orgName}: Documenten ontvangen – bijna compleet!`;
     case 'general':
     default:
       return `${orgName}: Bericht van het recruitment team`;
@@ -1092,6 +1095,95 @@ function generateEmailTemplate(
           Welke optie past het beste? Reageer met "1", "2" of "3".<br>
           Als geen van deze momenten kan, stuur 2-3 alternatieven (ma-vr 09:00-17:00).
         </p>
+        <p style="margin: 25px 0 0 0; color: #4a5568;">
+          Met vriendelijke groet,<br>
+          <strong>Het ${orgName} Recruitment Team</strong>
+        </p>`;
+      break;
+
+    // =====================================================
+    // NEW: Documents Received Confirmation (voortgang + status)
+    // =====================================================
+    case 'documents_received_confirmation':
+      const completenessScore = data.completeness_score || 0;
+      const remainingDocs = data.remaining_documents || [];
+      const diplomaVerified = data.diploma_verified || false;
+      const vogStatus = data.vog_status || 'pending';
+      
+      const remainingDocsList = remainingDocs.length > 0 
+        ? remainingDocs.map((doc: string) => `<li style="margin: 8px 0;">${doc}</li>`).join('')
+        : '';
+      
+      const progressColor = completenessScore >= 80 ? '#10b981' : 
+                            completenessScore >= 60 ? '#f59e0b' : '#ef4444';
+      
+      content = `
+        <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">
+          Beste ${recipientName},
+        </h2>
+        
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
+          Bedankt voor het aanleveren van je documenten! We hebben je gegevens succesvol verwerkt.
+        </p>
+        
+        <!-- Progress Indicator -->
+        <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <p style="margin: 0 0 12px 0; color: #1a1a1a; font-weight: 600;">
+            📊 Je profiel voortgang: ${completenessScore}%
+          </p>
+          <div style="background-color: #e5e7eb; border-radius: 4px; height: 12px; overflow: hidden;">
+            <div style="background-color: ${progressColor}; height: 100%; width: ${completenessScore}%; border-radius: 4px;"></div>
+          </div>
+        </div>
+        
+        <!-- Diploma Verified Badge -->
+        ${diplomaVerified ? `
+        <div style="background-color: #d1fae5; padding: 16px 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #10b981;">
+          <p style="margin: 0; color: #065f46; font-weight: 600;">
+            ✅ Diploma geverifieerd via DUO!
+          </p>
+          <p style="margin: 8px 0 0 0; color: #047857; font-size: 14px;">
+            Je diploma is officieel gevalideerd in het DUO-register.
+          </p>
+        </div>
+        ` : ''}
+        
+        <!-- VOG Status (if verified) -->
+        ${vogStatus === 'verified' ? `
+        <div style="background-color: #d1fae5; padding: 16px 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #10b981;">
+          <p style="margin: 0; color: #065f46; font-weight: 600;">
+            ✅ VOG geverifieerd!
+          </p>
+          <p style="margin: 8px 0 0 0; color: #047857; font-size: 14px;">
+            Je Verklaring Omtrent Gedrag is goedgekeurd.
+          </p>
+        </div>
+        ` : ''}
+        
+        <!-- Remaining Documents -->
+        ${remainingDocsList ? `
+        <div style="background-color: #fef3c7; padding: 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+          <p style="margin: 0 0 12px 0; color: #92400e; font-weight: 600;">
+            📋 Nog te ontvangen:
+          </p>
+          <ul style="margin: 0; padding-left: 20px; color: #78350f;">
+            ${remainingDocsList}
+          </ul>
+        </div>
+        <p style="color: #4a5568; font-size: 15px; line-height: 1.6;">
+          Stuur de ontbrekende documenten als bijlage in een antwoord op deze email.
+        </p>
+        ` : `
+        <div style="background-color: #d1fae5; padding: 16px 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #10b981;">
+          <p style="margin: 0; color: #065f46; font-weight: 600;">
+            🎉 Je profiel is compleet!
+          </p>
+          <p style="margin: 8px 0 0 0; color: #047857; font-size: 14px;">
+            We nemen binnenkort contact op voor de volgende stap.
+          </p>
+        </div>
+        `}
+        
         <p style="margin: 25px 0 0 0; color: #4a5568;">
           Met vriendelijke groet,<br>
           <strong>Het ${orgName} Recruitment Team</strong>
