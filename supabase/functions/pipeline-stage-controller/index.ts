@@ -22,13 +22,13 @@ const corsHeaders = {
 };
 
 // Valid pipeline stages in order
+// HERZIEN januari 2026: 'docs_compleet' verwijderd - documenten verzameld in intake_verstuurd
 const PIPELINE_STAGES = [
   'nieuw',
   'intake_verstuurd', 
-  'docs_compleet',
-  'gesprek_gepland',
-  'screening',
-  'goedgekeurd',
+  'gesprek_gepland',    // Direct naar gesprek_gepland (recruiter plant of kandidaat kiest slot)
+  'screening',          // Na positieve gesprek feedback
+  'goedgekeurd',        // Na VOG verificatie
   'geplaatst'
 ] as const;
 
@@ -82,6 +82,7 @@ async function checkTransitionRequirements(
   const documents = (docs || []) as DocumentData[];
 
   // Define requirements per transition
+  // HERZIEN januari 2026: docs_compleet verwijderd, intake_verstuurd→gesprek_gepland vereist gesprek_datum
   switch (`${fromStage}→${toStage}`) {
     case 'nieuw→intake_verstuurd':
       if (!app.welcome_email_sent_at) {
@@ -89,12 +90,10 @@ async function checkTransitionRequirements(
       }
       break;
 
-    case 'intake_verstuurd→docs_compleet':
+    // HERZIEN: intake_verstuurd→gesprek_gepland vereist gesprek_datum (door recruiter of kandidaat slot keuze)
+    case 'intake_verstuurd→gesprek_gepland': {
       const hasCV = documents.some(d => d.document_type === 'cv');
       const hasDiploma = documents.some(d => d.document_type === 'diploma');
-      const diplomaVerified = documents.some(d => 
-        d.document_type === 'diploma' && d.is_verified
-      );
       const completeness = app.completeness_score || 0;
 
       if (!hasCV) {
@@ -103,14 +102,16 @@ async function checkTransitionRequirements(
       if (!hasDiploma) {
         blockers.push('Diploma ontbreekt in application_documents');
       }
-      if (hasDiploma && !diplomaVerified) {
-        blockers.push('Diploma niet geverifieerd (DUO/EMREX/Handmatig)');
-      }
       if (completeness < 70) {
         blockers.push(`Completeness score ${completeness}% is lager dan 70%`);
       }
+      if (!app.gesprek_datum) {
+        blockers.push('Gesprek datum niet bevestigd door kandidaat of recruiter');
+      }
       break;
+    }
 
+    // LEGACY: docs_compleet→gesprek_gepland (voor oude applicaties)
     case 'docs_compleet→gesprek_gepland':
       if (!app.gesprek_datum) {
         blockers.push('Gesprek datum niet ingevuld door medewerker');
@@ -123,7 +124,7 @@ async function checkTransitionRequirements(
       }
       break;
 
-    case 'screening→goedgekeurd':
+    case 'screening→goedgekeurd': {
       const vogVerified = documents.some(d => 
         d.document_type === 'vog' && d.is_verified
       );
@@ -134,6 +135,7 @@ async function checkTransitionRequirements(
         blockers.push(`VOG validatie status is niet verified (huidige: ${app.vog_validation_status || 'null'})`);
       }
       break;
+    }
 
     case 'goedgekeurd→geplaatst':
       // No automatic requirements - this is done via placement creation

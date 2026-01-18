@@ -447,7 +447,76 @@ function generateEmailTemplate(
         'wkkgz_registratie': 'WKKGZ-registratie',
       };
       
-      const fieldsList = fields.map((f: string) => {
+      // =====================================================
+      // FIX: Document status met correcte kleuren
+      // Groen voor ontvangen/geverifieerd, geel voor nog nodig
+      // =====================================================
+      const documentStatuses = data.document_statuses || {};
+      const receivedDocs: string[] = [];
+      const pendingDocs: string[] = [];
+      const missingDocs: string[] = [];
+      
+      // Parse document statuses from template_data
+      // Check for diploma status
+      if (data.diploma_uploaded || data.diploma_received || documentStatuses.diploma === 'received' || documentStatuses.diploma === 'verified') {
+        if (documentStatuses.diploma === 'verified' || data.diploma_verified) {
+          receivedDocs.push('✅ Diploma ontvangen en geverifieerd');
+        } else {
+          pendingDocs.push('🔄 Diploma ontvangen (verificatie in behandeling)');
+        }
+      }
+      
+      // Check for CV status
+      if (data.cv_uploaded || data.cv_received || documentStatuses.cv === 'received') {
+        receivedDocs.push('✅ CV ontvangen');
+      }
+      
+      // Check for VOG status
+      if (documentStatuses.vog === 'received' || documentStatuses.vog === 'verified') {
+        if (documentStatuses.vog === 'verified') {
+          receivedDocs.push('✅ VOG ontvangen en geverifieerd');
+        } else {
+          pendingDocs.push('🔄 VOG ontvangen (verificatie in behandeling)');
+        }
+      }
+      
+      // Build received documents section (green)
+      const receivedSection = receivedDocs.length > 0 ? `
+        <div style="background-color: #d1fae5; padding: 15px 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #10b981;">
+          <p style="margin: 0 0 8px 0; color: #065f46; font-weight: 600;">Ontvangen documenten:</p>
+          <ul style="margin: 0; padding-left: 20px; color: #047857;">
+            ${receivedDocs.map(d => `<li style="margin: 4px 0;">${d}</li>`).join('')}
+          </ul>
+        </div>
+      ` : '';
+      
+      // Build pending documents section (blue)
+      const pendingSection = pendingDocs.length > 0 ? `
+        <div style="background-color: #e0f2fe; padding: 15px 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #0284c7;">
+          <p style="margin: 0 0 8px 0; color: #0369a1; font-weight: 600;">In behandeling:</p>
+          <ul style="margin: 0; padding-left: 20px; color: #0369a1;">
+            ${pendingDocs.map(d => `<li style="margin: 4px 0;">${d}</li>`).join('')}
+          </ul>
+        </div>
+      ` : '';
+      
+      // Filter out already received documents from fields_to_ask
+      const filteredFields = fields.filter((f: string) => {
+        const lowerF = f.toLowerCase();
+        // Skip if it's a document we already received
+        if (lowerF.includes('diploma') && (receivedDocs.some(d => d.includes('Diploma')) || pendingDocs.some(d => d.includes('Diploma')))) {
+          return false;
+        }
+        if (lowerF.includes('cv') && receivedDocs.some(d => d.includes('CV'))) {
+          return false;
+        }
+        if (lowerF.includes('vog') && (receivedDocs.some(d => d.includes('VOG')) || pendingDocs.some(d => d.includes('VOG')))) {
+          return false;
+        }
+        return true;
+      });
+      
+      const fieldsList = filteredFields.map((f: string) => {
         const label = FIELD_LABEL_MAP[f.toLowerCase()] || FIELD_LABEL_MAP[f] || f;
         return `<li style="margin: 8px 0;">${label}</li>`;
       }).join('');
@@ -475,10 +544,12 @@ function generateEmailTemplate(
       const aiGeneratedContent = data.ai_generated_content;
       const hasAiContent = aiGeneratedContent && typeof aiGeneratedContent === 'string' && aiGeneratedContent.length > 50;
       
-      if (hasAiContent && fields.length === 0 && !hasRejections) {
+      if (hasAiContent && filteredFields.length === 0 && !hasRejections) {
         // Use AI's free-text content as main email body
         content = `
           <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName || 'sollicitant'},</h2>
+          ${receivedSection}
+          ${pendingSection}
           <div style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 20px; white-space: pre-line;">
             ${aiGeneratedContent}
           </div>
@@ -487,19 +558,31 @@ function generateEmailTemplate(
             <strong>Het ${orgName} Recruitment Team</strong>
           </p>`;
       } else {
-        // Standard template with rejection context and fields
+        // Standard template with document status, rejection context and remaining fields
+        const hasRemainingFields = fieldsList.length > 0;
+        
         content = `
           <h2 style="margin: 0 0 20px 0; color: #1a1a1a; font-size: 20px;">Beste ${recipientName || 'sollicitant'},</h2>
           <p style="color: #4a5568; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
-            Bedankt voor je reactie! Om je sollicitatie compleet te maken, hebben we nog enkele gegevens nodig:
+            Bedankt voor je reactie!${hasRemainingFields ? ' Om je sollicitatie compleet te maken, hebben we nog enkele gegevens nodig:' : ''}
           </p>
+          ${receivedSection}
+          ${pendingSection}
           ${rejectionSection}
+          ${hasRemainingFields ? `
           <ul style="background-color: #fef3c7; padding: 20px 20px 20px 40px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #f59e0b; color: #1a1a1a;">
-            ${fieldsList || '<li style="margin: 8px 0;">Controleer je eerdere reactie</li>'}
+            ${fieldsList}
           </ul>
           <p style="color: #4a5568; font-size: 15px; line-height: 1.6;">
             Je kunt eenvoudig op deze email antwoorden met de gevraagde informatie.
           </p>
+          ` : `
+          <div style="background-color: #d1fae5; padding: 16px 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #10b981;">
+            <p style="margin: 0; color: #065f46; font-size: 14px;">
+              ✅ We hebben alle benodigde gegevens ontvangen! We nemen zo snel mogelijk contact met je op voor de volgende stappen.
+            </p>
+          </div>
+          `}
           <p style="margin: 25px 0 0 0; color: #4a5568;">
             Met vriendelijke groet,<br>
             <strong>Het ${orgName} Recruitment Team</strong>
