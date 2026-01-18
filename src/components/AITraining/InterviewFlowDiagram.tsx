@@ -11,12 +11,12 @@ interface FlowStage {
 }
 
 /**
- * CORRECTE RECRUITMENT FLOW (januari 2026):
- * nieuw → intake_verstuurd → docs_compleet → gesprek_gepland → screening → goedgekeurd → geplaatst
+ * CORRECTE RECRUITMENT FLOW (januari 2026 - 6-stage pipeline):
+ * nieuw → intake_verstuurd → gesprek_gepland → screening → goedgekeurd → geplaatst
  * 
  * KRITIEKE PUNTEN:
- * - docs_compleet: CV + diploma geverifieerd, klaar voor fysiek gesprek
- * - gesprek_gepland: Fysiek gesprek datum ingepland
+ * - intake_verstuurd: Welkomstmail verzonden, documenten worden verzameld
+ * - gesprek_gepland: Fysiek gesprek datum ingepland (HANDMATIG door recruiter)
  * - screening: Alleen na POSITIEVE gesprek feedback (menselijke goedkeuring!)
  * - VOG wordt aangevraagd bij screening (max 3 maanden oud)
  */
@@ -25,22 +25,22 @@ const FLOW_STAGES: FlowStage[] = [
     id: "nieuw",
     label: "Nieuw",
     icon: <User className="h-4 w-4" />,
-    description: "Sollicitatie ontvangen, intake gestart",
+    description: "Sollicitatie ontvangen",
     requirements: ["Email ontvangen", "Basis gegevens verzameld"]
   },
   {
-    id: "docs_compleet",
-    label: "Docs Compleet",
+    id: "intake_verstuurd",
+    label: "Intake Verstuurd",
     icon: <FileText className="h-4 w-4" />,
-    description: "Alle documenten binnen en geverifieerd",
-    requirements: ["CV aanwezig", "Diploma geverifieerd (DUO/EMREX)", "Completeness ≥ 70%"]
+    description: "Welkomstmail verzonden, documenten verzamelen",
+    requirements: ["Welkomstmail verstuurd", "CV + Diploma uploaden"]
   },
   {
     id: "gesprek_gepland",
     label: "Gesprek Gepland",
     icon: <Calendar className="h-4 w-4" />,
     description: "Fysiek sollicitatiegesprek ingepland",
-    requirements: ["Gesprek datum gezet", "Kandidaat bevestigd"]
+    requirements: ["Gesprek datum gezet (handmatig)", "Kandidaat bevestigd"]
   },
   {
     id: "screening",
@@ -85,13 +85,13 @@ export function InterviewFlowDiagram({
   className
 }: InterviewFlowDiagramProps) {
   // Determine active stage based on pipeline_stage
+  // 6-stage pipeline mapping: nieuw=0, intake_verstuurd=1, gesprek_gepland=2, screening=3, goedgekeurd=4, geplaatst=5
   const getActiveStageIndex = () => {
     if (pipelineStage === "geplaatst") return 5;
     if (pipelineStage === "goedgekeurd") return 4;
     if (pipelineStage === "screening") return 3;
-    if (pipelineStage === "gesprek_gepland" || pipelineStage === "interview") return 2;
-    if (pipelineStage === "docs_compleet") return 1;
-    if (pipelineStage === "intake_verstuurd") return 0;
+    if (pipelineStage === "gesprek_gepland" || pipelineStage === "interview" || pipelineStage === "docs_compleet") return 2; // docs_compleet maps to gesprek_gepland (legacy)
+    if (pipelineStage === "intake_verstuurd") return 1;
     return 0; // nieuw
   };
 
@@ -106,14 +106,14 @@ export function InterviewFlowDiagram({
   const getBlockerInfo = (stage: FlowStage, index: number): string | null => {
     if (getStageStatus(index) !== "active") return null;
     
-    if (stage.id === "nieuw" && completenessScore < 70) {
-      return `Completeness: ${completenessScore}% (documenten nog niet compleet)`;
+    if (stage.id === "nieuw") {
+      return "Welkomstmail moet nog verstuurd worden";
     }
-    if (stage.id === "docs_compleet" && missingInfo.length > 0) {
+    if (stage.id === "intake_verstuurd" && missingInfo.length > 0) {
       return `Ontbrekend: ${missingInfo.slice(0, 3).join(', ')}`;
     }
     if (stage.id === "gesprek_gepland" && !gesprekDatum) {
-      return "Gesprek datum moet nog ingepland worden";
+      return "Gesprek datum moet nog ingepland worden (handmatig)";
     }
     if (stage.id === "screening" && gesprekFeedback !== 'positive') {
       if (!gesprekFeedback || gesprekFeedback === 'pending') {

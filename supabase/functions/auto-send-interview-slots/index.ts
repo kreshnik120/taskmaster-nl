@@ -6,15 +6,17 @@ import { corsHeaders, jsonResponse, logInfo, logWarning } from '../_shared/core.
  * ⚠️ DEZE FUNCTIE IS UITGESCHAKELD
  * 
  * Fysieke gesprekken worden nu HANDMATIG gepland door recruiters via de UI.
- * De recruiter vult gesprek_datum in wanneer een kandidaat in 'docs_compleet' stage staat.
+ * De recruiter vult gesprek_datum in wanneer kandidaat documenten heeft ingediend.
  * 
- * De nieuwe recruitment flow is:
+ * De nieuwe recruitment flow is (6-stage pipeline):
  * 1. nieuw → intake_verstuurd (welkomstmail)
- * 2. intake_verstuurd → docs_compleet (CV + diploma geverifieerd + 70% completeness)
- * 3. docs_compleet → gesprek_gepland (HANDMATIG door recruiter: gesprek_datum invullen)
- * 4. gesprek_gepland → screening (NA positieve gesprek_feedback door recruiter)
- * 5. screening → goedgekeurd (VOG geverifieerd)
- * 6. goedgekeurd → geplaatst
+ * 2. intake_verstuurd → gesprek_gepland (HANDMATIG door recruiter: gesprek_datum invullen)
+ * 3. gesprek_gepland → screening (NA positieve gesprek_feedback door recruiter)
+ * 4. screening → goedgekeurd (VOG geverifieerd)
+ * 5. goedgekeurd → geplaatst
+ * 
+ * NOTE: Er is GEEN 'docs_compleet' stage meer in de 6-stage pipeline.
+ * Documenten worden verzameld tijdens 'intake_verstuurd' stage.
  * 
  * Deze functie retourneert nu alleen een bericht dat interview planning handmatig is.
  */
@@ -44,8 +46,7 @@ Deno.serve(async (req) => {
     logInfo('AutoSendInterviewSlots', 'Functie uitgeschakeld - recruiters plannen gesprekken via UI', {
       new_flow: [
         'nieuw → intake_verstuurd',
-        'intake_verstuurd → docs_compleet',
-        'docs_compleet → gesprek_gepland (HANDMATIG)',
+        'intake_verstuurd → gesprek_gepland (HANDMATIG)',
         'gesprek_gepland → screening (na positieve feedback)',
         'screening → goedgekeurd',
         'goedgekeurd → geplaatst'
@@ -56,19 +57,18 @@ Deno.serve(async (req) => {
       success: false,
       deprecated: true,
       reason: 'function_disabled',
-      message: 'Interview planning is nu handmatig. Recruiters plannen gesprekken via de UI wanneer een kandidaat in "docs_compleet" stage staat.',
+      message: 'Interview planning is nu handmatig. Recruiters plannen gesprekken via de UI wanneer kandidaat documenten heeft ingediend.',
       new_flow: {
-        description: 'Fysieke gesprekken worden handmatig gepland door recruiters',
+        description: 'Fysieke gesprekken worden handmatig gepland door recruiters (6-stage pipeline)',
         stages: [
           { from: 'nieuw', to: 'intake_verstuurd', trigger: 'welkomstmail verzonden' },
-          { from: 'intake_verstuurd', to: 'docs_compleet', trigger: 'CV + geverifieerd diploma + 70% completeness' },
-          { from: 'docs_compleet', to: 'gesprek_gepland', trigger: 'HANDMATIG: recruiter vult gesprek_datum in' },
+          { from: 'intake_verstuurd', to: 'gesprek_gepland', trigger: 'HANDMATIG: recruiter vult gesprek_datum in' },
           { from: 'gesprek_gepland', to: 'screening', trigger: 'HANDMATIG: positieve gesprek_feedback door recruiter' },
           { from: 'screening', to: 'goedgekeurd', trigger: 'VOG geverifieerd' },
           { from: 'goedgekeurd', to: 'geplaatst', trigger: 'plaatsing bij klant' }
         ]
       },
-      action_required: 'Gebruik de Sollicitaties UI om gesprek_datum in te vullen voor kandidaten in "docs_compleet" stage',
+      action_required: 'Gebruik de Sollicitaties UI om gesprek_datum in te vullen voor kandidaten in "intake_verstuurd" stage',
       application_id
     });
 

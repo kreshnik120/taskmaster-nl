@@ -54,25 +54,26 @@ graph TB
 5. **Execution**: Orchestrator voert actions uit
 6. **Completion**: Goal status update naar `completed`
 
-### 1.3 Pipeline Flow (v3.0)
+### 1.3 Pipeline Flow (v3.1 - 6-stage)
 
 ```mermaid
 graph LR
     A[nieuw] --> B[intake_verstuurd]
-    B --> C[docs_compleet]
-    C --> D[gesprek_gepland]
-    D --> E[screening]
-    E --> F[goedgekeurd]
-    F --> G[geplaatst]
+    B --> C[gesprek_gepland]
+    C --> D[screening]
+    D --> E[goedgekeurd]
+    E --> F[geplaatst]
     
-    style C fill:#10b981
-    style D fill:#8b5cf6
-    style E fill:#f59e0b
+    style B fill:#10b981
+    style C fill:#8b5cf6
+    style D fill:#f59e0b
 ```
 
 **Kritieke transities:**
-- `docs_compleet → gesprek_gepland`: **HANDMATIG** (recruiter vult gesprek_datum in)
+- `intake_verstuurd → gesprek_gepland`: **HANDMATIG** (recruiter vult gesprek_datum in)
 - `gesprek_gepland → screening`: **HANDMATIG** (recruiter geeft positieve feedback)
+
+> **NOTE:** De `docs_compleet` stage is verwijderd. Documenten worden verzameld tijdens `intake_verstuurd`.
 
 ---
 
@@ -172,7 +173,7 @@ stateDiagram-v2
 | **Prioriteit** | 9 |
 | **Input Data** | `{ application_id, email_content, response_type }` |
 | **Output Actions** | `analyze_reply`, `update_application`, `send_response` |
-| **Pipeline Update** | `intake_verstuurd → docs_compleet` (indien CV + diploma + 70%) |
+| **Pipeline Update** | Geen automatische transitie - kandidaat blijft op `intake_verstuurd` |
 | **Response Types** | `acceptance`, `rejection`, `question`, `info_provided` |
 
 ---
@@ -239,7 +240,7 @@ stateDiagram-v2
 
 | Eigenschap | Waarde |
 |------------|--------|
-| **Trigger** | Transitie naar `docs_compleet` stage |
+| **Trigger** | CV + geverifieerd diploma ontvangen in `intake_verstuurd` stage |
 | **Prioriteit** | 8 |
 | **Input Data** | `{ application_id, candidate_name, completeness_score }` |
 | **Output Actions** | `create_recruiter_notification` |
@@ -250,7 +251,7 @@ stateDiagram-v2
 {
   "notification_type": "candidate_ready_for_interview",
   "title": "Jan de Vries is klaar voor een gesprek",
-  "message": "Documenten compleet (CV + Diploma geverifieerd). Plan een fysiek sollicitatiegesprek.",
+  "message": "CV en Diploma ontvangen. Plan een fysiek sollicitatiegesprek via de UI.",
   "application_id": "uuid"
 }
 ```
@@ -264,7 +265,7 @@ stateDiagram-v2
 > ⚠️ **DEPRECATED sinds v3.0.0**
 > 
 > Fysieke gesprekken worden nu **HANDMATIG** gepland door recruiters via de UI.
-> De recruiter vult `gesprek_datum` in wanneer een kandidaat in `docs_compleet` stage staat.
+> De recruiter vult `gesprek_datum` in wanneer een kandidaat in `intake_verstuurd` stage staat.
 >
 > **Reden:** Interview planning vereist menselijke coördinatie en kan niet effectief geautomatiseerd worden.
 
@@ -273,12 +274,12 @@ stateDiagram-v2
 - ~~Trigger: Completeness ≥ 85%~~
 - ~~Output: send_interview_slots, create_calendar_event~~
 
-**Vervangende flow:**
-1. Kandidaat bereikt `docs_compleet`
-2. `notify_candidate_ready_for_interview` goal triggert
+**Vervangende flow (6-stage pipeline):**
+1. Kandidaat in `intake_verstuurd` - documenten worden verzameld
+2. CV + geverifieerd diploma ontvangen → `notify_candidate_ready_for_interview` goal triggert
 3. Recruiter ontvangt notificatie
 4. Recruiter plant gesprek **handmatig** via UI
-5. Recruiter vult `gesprek_datum` in
+5. Recruiter vult `gesprek_datum` in → transitie naar `gesprek_gepland`
 6. Na gesprek: recruiter vult `gesprek_feedback` in
 
 ---

@@ -206,19 +206,20 @@ Helpende 2 (laagst)
 
 ## 6. Pipeline Stage Compliance Gates
 
-### 6.1 Stage Definities (NIEUWE FLOW v3.0)
+### 6.1 Stage Definities (6-STAGE PIPELINE v3.1 - januari 2026)
 
 | Stage | Beschrijving | Minimum Completeness |
 |-------|--------------|---------------------|
 | `nieuw` | Net binnengekomen | 0% |
-| `intake_verstuurd` | Welkomstmail verzonden, wacht op documenten | 10% |
-| `docs_compleet` | CV + Diploma geverifieerd, klaar voor gesprek | 70% |
-| `gesprek_gepland` | Fysiek gesprek datum door recruiter ingevoerd | 70% |
+| `intake_verstuurd` | Welkomstmail verzonden, documenten verzamelen | 10% |
+| `gesprek_gepland` | Fysiek gesprek datum door recruiter ingevoerd | 50% |
 | `screening` | Na positieve gesprek feedback (VOG aanvraag hier!) | 75% |
 | `goedgekeurd` | VOG geverifieerd, klaar voor plaatsing | 90% |
 | `geplaatst` | Actief bij klant | 95% |
 | `afgewezen` | Niet geschikt | N/A |
 | `on_hold` | Tijdelijk gepauzeerd | N/A |
+
+> **NOTE:** De `docs_compleet` stage is verwijderd in v3.1. Documenten worden nu verzameld tijdens `intake_verstuurd`.
 
 ### 6.2 Compliance Gates per Stage
 
@@ -232,18 +233,13 @@ const STAGE_COMPLIANCE_GATES = {
   'intake_verstuurd': {
     minCompleteness: 10,
     requiredDocs: [],
-    requiredFields: ['naam', 'email']
-  },
-  'docs_compleet': {
-    minCompleteness: 70,
-    requiredDocs: ['cv', 'diploma'], // Diploma MOET geverifieerd zijn via EMREX/DUO
-    requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer'],
-    // ZZP extra docs worden dynamisch gecontroleerd
+    requiredFields: ['naam', 'email'],
+    // Documenten (CV, Diploma) worden hier verzameld, maar zijn geen harde vereiste voor de stage
   },
   'gesprek_gepland': {
-    minCompleteness: 70,
-    requiredDocs: ['cv', 'diploma'],
-    requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer'],
+    minCompleteness: 50,
+    requiredDocs: ['cv'], // CV aanbevolen, diploma verificatie kan parallel lopen
+    requiredFields: ['naam', 'email'],
     requiredConditions: ['gesprek_datum_set'] // gesprek_datum moet door recruiter zijn ingevuld
   },
   'screening': {
@@ -265,16 +261,17 @@ const STAGE_COMPLIANCE_GATES = {
 };
 ```
 
-### 6.3 Stage Transitie Regels (KRITIEK)
+### 6.3 Stage Transitie Regels (6-STAGE PIPELINE)
 
 | Van | Naar | Vereisten | Trigger |
 |-----|------|-----------|---------|
 | `nieuw` | `intake_verstuurd` | Welkomstmail verzonden | Automatisch (AI Agent) |
-| `intake_verstuurd` | `docs_compleet` | CV + geverifieerd diploma + 70% completeness | Automatisch na reply verwerking |
-| `docs_compleet` | `gesprek_gepland` | `gesprek_datum` ingevuld | **HANDMATIG door recruiter** |
+| `intake_verstuurd` | `gesprek_gepland` | `gesprek_datum` ingevuld | **HANDMATIG door recruiter** |
 | `gesprek_gepland` | `screening` | `gesprek_feedback = 'positive'` | **HANDMATIG door recruiter** + VOG request |
 | `screening` | `goedgekeurd` | VOG valid (< 3 maanden) | Automatisch na VOG verificatie |
 | `goedgekeurd` | `geplaatst` | Plaatsing bij klant bevestigd | Handmatig |
+
+> **VERWIJDERD:** De transitie `intake_verstuurd → docs_compleet` bestaat niet meer.
 
 ### 6.4 KRITIEKE REGELS
 
@@ -289,6 +286,7 @@ const STAGE_COMPLIANCE_GATES = {
 ⚠️ **Gesprek planning is HANDMATIG:**
 - AI Agent plant GEEN gesprekken automatisch
 - Recruiter vult gesprek_datum in via UI
+- Documenten worden verzameld tijdens `intake_verstuurd`, niet in aparte stage
 
 ---
 
