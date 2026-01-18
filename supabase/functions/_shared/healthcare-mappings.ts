@@ -866,20 +866,23 @@ export function calculateDocumentAwareCompleteness(
 
 /**
  * Pipeline stage progression map
- * CORRECTE FLOW (januari 2026):
- * nieuw → intake_verstuurd → docs_compleet → gesprek_gepland → screening → goedgekeurd → geplaatst
+ * CORRECTE FLOW (januari 2026 - HERZIEN):
+ * nieuw → intake_verstuurd → gesprek_gepland → screening → goedgekeurd → geplaatst
  * 
- * Let op: 'interview' stage is hernoemd naar 'gesprek_gepland' om fysiek gesprek te reflecteren
- * 'docs_compleet' stage toegevoegd: kandidaat heeft alle documenten (CV, diploma, ZZP docs) ingediend
- * 'screening' stage komt NA het gesprek + positieve feedback (VOG aanvraag hier)
+ * VERWIJDERD: 'docs_compleet' stage - documenten worden verzameld IN intake_verstuurd stage
+ * De transitie van intake_verstuurd naar gesprek_gepland gebeurt ALLEEN door:
+ * 1. Recruiter plant handmatig een gesprek
+ * 2. Kandidaat kiest een aangeboden interview slot
+ * 
+ * GEEN automatische transitie op basis van document completeness!
  */
 export const PIPELINE_STAGE_PROGRESSION: Record<string, string> = {
   'nieuw': 'intake_verstuurd',
-  'intake_verstuurd': 'docs_compleet',
-  'docs_compleet': 'gesprek_gepland',
-  'gesprek_gepland': 'screening',  // Na positieve gesprek feedback!
+  'intake_verstuurd': 'gesprek_gepland',  // GEEN docs_compleet meer!
+  'docs_compleet': 'gesprek_gepland',     // Legacy fallback
+  'gesprek_gepland': 'screening',         // Na positieve gesprek feedback!
   'screening': 'goedgekeurd',
-  'interview': 'screening',  // Legacy support voor oude 'interview' stage
+  'interview': 'screening',               // Legacy support voor oude 'interview' stage
   'goedgekeurd': 'geplaatst'
 } as const;
 
@@ -905,15 +908,18 @@ export interface StageComplianceGate {
 }
 
 /**
- * CORRECTE RECRUITMENT FLOW (januari 2026):
+ * CORRECTE RECRUITMENT FLOW (januari 2026 - HERZIEN):
  * 
- * nieuw → intake_verstuurd → docs_compleet → gesprek_gepland → screening → goedgekeurd → geplaatst
+ * nieuw → intake_verstuurd → gesprek_gepland → screening → goedgekeurd → geplaatst
  * 
- * KRITIEKE REGELS:
- * 1. docs_compleet: ALLE documenten (CV + diploma) moeten binnen zijn voordat gesprek gepland wordt
- * 2. gesprek_gepland: Fysiek gesprek datum moet gezet zijn
+ * KRITIEKE REGELS (HERZIEN):
+ * 1. intake_verstuurd: Kandidaat blijft hier totdat fysiek gesprek gepland wordt (GEEN automatische transitie!)
+ * 2. gesprek_gepland: Alleen wanneer recruiter gesprek inplant OF kandidaat datum kiest
  * 3. screening: Alleen na POSITIEVE gesprek feedback (menselijke goedkeuring verplicht!)
  * 4. VOG wordt pas aangevraagd bij screening (max 3 maanden oud requirement)
+ * 5. goedgekeurd: Na VOG verificatie
+ * 
+ * VERWIJDERD: 'docs_compleet' stage - documenten worden verzameld IN intake_verstuurd stage
  */
 export const STAGE_COMPLIANCE_GATES: Record<string, StageComplianceGate> = {
   'nieuw': {
@@ -921,21 +927,23 @@ export const STAGE_COMPLIANCE_GATES: Record<string, StageComplianceGate> = {
     requiredDocs: [],
     requiredFields: ['naam', 'email']
   },
+  // Kandidaat blijft in intake_verstuurd totdat gesprek wordt gepland
+  // Documenten (CV, Diploma) worden hier verzameld via email replies
   'intake_verstuurd': {
     minCompleteness: 20,
-    requiredDocs: [],
+    requiredDocs: [],  // Documenten worden verzameld, maar geen gate voor transitie
     requiredFields: ['naam', 'email']
   },
-  // NIEUWE STAGE: Alle documenten binnen, klaar voor gesprek
+  // LEGACY: docs_compleet wordt NIET meer gebruikt - redirect naar intake_verstuurd
   'docs_compleet': {
     minCompleteness: 70,
-    requiredDocs: ['cv', 'diploma'],  // CV + Diploma VERPLICHT voordat gesprek gepland wordt
+    requiredDocs: ['cv', 'diploma'],
     requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer']
   },
-  // NIEUWE STAGE: Fysiek gesprek ingepland (datum moet gezet zijn)
+  // Fysiek gesprek ingepland - vereist CV + Diploma + gesprek_datum
   'gesprek_gepland': {
     minCompleteness: 70,
-    requiredDocs: ['cv', 'diploma'],
+    requiredDocs: ['cv', 'diploma'],  // CV + Diploma VERPLICHT voor gesprek
     requiredFields: ['naam', 'email', 'functie_niveau', 'werkvorm', 'regio', 'telefoonnummer']
     // Extra vereiste: gesprek_datum moet gezet zijn (wordt in code gecheckt)
   },

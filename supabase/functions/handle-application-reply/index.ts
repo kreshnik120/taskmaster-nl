@@ -2324,16 +2324,13 @@ Return JSON in dit formaat:
     }
     
     // =====================================================
-    // STAP 1.5: CORRECTE FLOW - Transitie naar docs_compleet (NIET screening!)
-    // Alleen als we nog in 'nieuw' of 'intake_verstuurd' stage zijn
-    // VEREISTEN:
-    // 1. CV is geüpload
-    // 2. Diploma is geüpload en geverifieerd (DUO of handmatig)
-    // 3. Completeness >= 70%
-    // 4. Kandidaat heeft gereageerd (ai_response_count >= 1)
+    // STAP 1.5: HERZIENE FLOW - GEEN automatische stage transitie!
+    // Kandidaat BLIJFT in 'intake_verstuurd' totdat:
+    // 1. Recruiter handmatig een gesprek plant, OF
+    // 2. Kandidaat een aangeboden interview slot bevestigt
     // 
-    // KRITIEK: GEEN automatische transitie naar screening!
-    // Screening komt pas NA fysiek gesprek + positieve feedback (menselijke goedkeuring)
+    // VERWIJDERD: Automatische transitie naar 'docs_compleet'
+    // De stage 'docs_compleet' is geëlimineerd uit de flow.
     // =====================================================
     const hasCV = !!application.cv_file_path || !!mergedData.cv_file_path;
     const hasDiploma = !!application.diploma_file_path || !!mergedData.diploma_file_path;
@@ -2342,11 +2339,6 @@ Return JSON in dit formaat:
     );
     const hasMinimalCompleteness = newCompletenessScore >= 70;
     const hasCandidateInteraction = currentResponseCount >= 1;
-    
-    // =====================================================
-    // FASE 4 REFACTOR: Route naar pipeline-stage-controller
-    // GEEN directe stage updates meer - controller valideert en voert uit
-    // =====================================================
     
     // Check if multi-agent architecture is enabled
     const { data: featureFlagData } = await supabase
@@ -2357,97 +2349,60 @@ Return JSON in dit formaat:
     
     const useMultiAgent = featureFlagData?.is_enabled === true;
     
-    if (useMultiAgent && ['nieuw', 'intake_verstuurd'].includes(pipelineStage)) {
-      // =====================================================
-      // NEW: Route via pipeline-stage-controller
-      // Controller handles validation and stage transitions
-      // =====================================================
-      console.log(`🔄 [Multi-Agent] Routing to pipeline-stage-controller for stage transition check...`);
-      
-      try {
-        const controllerResult = await supabase.functions.invoke('pipeline-stage-controller', {
-          body: {
-            action: 'route',
-            application_id: applicationId,
-            trigger: 'email_reply',
-            extracted_data: mergedData,
-            documents: processedDocuments || [],
-            completeness_score: newCompletenessScore
-          }
-        });
+    // =====================================================
+    // LOG: Document status voor debugging
+    // =====================================================
+    console.log(`📊 HERZIENE FLOW - Document status check:`);
+    console.log(`   Stage: ${pipelineStage}, CV: ${hasCV}, Diploma: ${hasDiploma}`);
+    console.log(`   Diploma verified: ${isDiplomaVerified}, Completeness: ${newCompletenessScore}%`);
+    console.log(`   Responses: ${currentResponseCount}, Multi-agent: ${useMultiAgent}`);
+    
+    // =====================================================
+    // GEEN automatische stage transitie meer!
+    // Kandidaat blijft in intake_verstuurd totdat gesprek gepland wordt
+    // =====================================================
+    if (['nieuw', 'intake_verstuurd'].includes(pipelineStage)) {
+      // Documenten zijn compleet? → Notificeer recruiter, maar GEEN stage transitie!
+      if (hasCV && hasDiploma && hasMinimalCompleteness) {
+        console.log(`📊 HERZIENE FLOW: Documenten compleet! Maar GEEN automatische transitie.`);
+        console.log(`   Kandidaat blijft in '${pipelineStage}' - wacht op gesprek planning door recruiter.`);
         
-        if (controllerResult.error) {
-          console.error('❌ [Multi-Agent] Pipeline controller error:', controllerResult.error);
-        } else {
-          console.log('✅ [Multi-Agent] Pipeline controller response:', controllerResult.data);
-        }
-      } catch (controllerErr) {
-        console.warn('⚠️ [Multi-Agent] Pipeline controller invocation failed:', controllerErr);
-      }
-    } else if (['nieuw', 'intake_verstuurd'].includes(pipelineStage)) {
-      // =====================================================
-      // LEGACY: Direct stage transition (when multi-agent disabled)
-      // =====================================================
-      if (hasCV && hasDiploma && isDiplomaVerified && hasMinimalCompleteness && hasCandidateInteraction) {
-        console.log(`📊 [Legacy] CORRECTE FLOW: Transitie naar 'docs_compleet' - documenten compleet!`);
-        console.log(`   CV: ${hasCV}, Diploma: ${hasDiploma}, Diploma verified: ${isDiplomaVerified}`);
-        console.log(`   Completeness: ${newCompletenessScore}%, Responses: ${currentResponseCount}`);
+        // Notificeer recruiter dat kandidaat klaar is voor gesprek
+        const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
         
-        const { error: transitionError } = await supabase
-          .from("professional_applications")
-          .update({
-            pipeline_stage: 'docs_compleet',
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", applicationId);
-        
-        if (transitionError) {
-          console.error("Error transitioning to docs_compleet:", transitionError);
-        } else {
-          console.log("✅ [Legacy] Pipeline stage transitioned to 'docs_compleet'");
+        try {
+          // Check of er al een recente notificatie is (binnen 24 uur)
+          const { data: recentNotif } = await supabase
+            .from('recruiter_notifications')
+            .select('id')
+            .eq('application_id', applicationId)
+            .eq('notification_type', 'candidate_ready_for_interview')
+            .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+            .maybeSingle();
           
-          // Log stage audit
-          await supabase.from("application_stage_audit").insert({
-            application_id: applicationId,
-            from_stage: pipelineStage,
-            to_stage: 'docs_compleet',
-            reason: `Documenten compleet - CV: ${hasCV}, Diploma geverifieerd: ${isDiplomaVerified}, completeness: ${newCompletenessScore}%`,
-            performed_by: null,
-            metadata: {
-              trigger: 'handle-application-reply',
-              ai_response_count: currentResponseCount,
-              completeness_score: newCompletenessScore,
-              has_cv: hasCV,
-              has_diploma: hasDiploma,
-              diploma_verified: isDiplomaVerified,
-              system: 'legacy'
-            }
-          });
-          
-          // Notificeer recruiter
-          const professionalName = mergedData.naam || mergedData.full_name || from.split("@")[0];
-          
-          try {
+          if (!recentNotif) {
             await supabase.from("recruiter_notifications").insert({
               org_id: application.org_id,
               notification_type: 'candidate_ready_for_interview',
               title: `${professionalName} is klaar voor een gesprek`,
-              message: `Alle documenten zijn binnen en geverifieerd. Plan een fysiek sollicitatiegesprek.`,
+              message: `CV en diploma zijn binnen (completeness: ${newCompletenessScore}%). Plan een fysiek sollicitatiegesprek.`,
               application_id: applicationId,
               priority: 'high'
             });
-          } catch (notifErr) {
-            console.warn("Could not create recruiter notification:", notifErr);
+            console.log(`✅ Recruiter notificatie aangemaakt: kandidaat klaar voor gesprek`);
+          } else {
+            console.log(`⏭️ Skipping recruiter notification - already sent in last 24 hours`);
           }
+        } catch (notifErr) {
+          console.warn("Could not create recruiter notification:", notifErr);
         }
       } else {
         const missing: string[] = [];
         if (!hasCV) missing.push('CV');
         if (!hasDiploma) missing.push('Diploma');
-        if (hasDiploma && !isDiplomaVerified) missing.push('Diploma verificatie');
         if (!hasMinimalCompleteness) missing.push(`Completeness (${newCompletenessScore}% < 70%)`);
         
-        console.log(`📊 [Legacy] Staying in '${pipelineStage}' - ontbrekend voor docs_compleet: ${missing.join(', ')}`);
+        console.log(`📊 HERZIENE FLOW: Staying in '${pipelineStage}' - ontbrekend: ${missing.join(', ')}`);
       }
     }
 
@@ -2758,6 +2713,26 @@ Return JSON in dit formaat:
     if (currentInterviewStatus && skipStatuses.includes(currentInterviewStatus)) {
       console.log(`⏭️ Interview already in progress: ${currentInterviewStatus}, skipping response email`);
       skipResponseEmail = true;
+    }
+    
+    // =====================================================
+    // FIX DUBBELE EMAIL: Idempotency check voor recente followup emails
+    // Voorkomt dat dezelfde email binnen 60 seconden opnieuw wordt verstuurd
+    // =====================================================
+    if (!skipResponseEmail) {
+      const { data: recentFollowup } = await supabase
+        .from('system_events')
+        .select('id, created_at')
+        .eq('entity_id', applicationId)
+        .eq('event_type', 'email_sent_followup_question')
+        .gte('created_at', new Date(Date.now() - 60000).toISOString())
+        .limit(1)
+        .maybeSingle();
+      
+      if (recentFollowup) {
+        console.log(`⏭️ DEDUP: Skipping response email - followup already sent ${Math.round((Date.now() - new Date(recentFollowup.created_at).getTime()) / 1000)}s ago`);
+        skipResponseEmail = true;
+      }
     }
     
     // =====================================================
