@@ -143,13 +143,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validate we're in the correct stage
-    if (app.pipeline_stage !== 'docs_compleet') {
-      console.log(`[agent-planning] Wrong stage: ${app.pipeline_stage}, expected: docs_compleet`);
+    // Validate we're in the correct stage (6-stage pipeline: intake_verstuurd is where planning happens)
+    if (app.pipeline_stage !== 'intake_verstuurd') {
+      console.log(`[agent-planning] Wrong stage: ${app.pipeline_stage}, expected: intake_verstuurd`);
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: `Agent Planning handles 'docs_compleet' stage only, current: ${app.pipeline_stage}`,
+          error: `Agent Planning handles 'intake_verstuurd' stage only, current: ${app.pipeline_stage}`,
           stage_completed: false
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }

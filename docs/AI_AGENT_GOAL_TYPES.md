@@ -190,7 +190,7 @@ stateDiagram-v2
 | **Prioriteit** | 7 |
 | **Input Data** | `{ application_id, document_path, claimed_niveau }` |
 | **Output Actions** | `emrex_verification`, `update_verification_status` |
-| **Pipeline Impact** | Vereist voor `docs_compleet` stage |
+| **Pipeline Impact** | Vereist voor `gesprek_gepland` transitie |
 
 ---
 
@@ -500,7 +500,7 @@ GROUP BY action_type, error_message;
 
 | Versie | Datum | Wijziging |
 |--------|-------|-----------|
-| 3.0.0-enterprise | 2026-01-14 | **MAJOR:** schedule_interview goal DEPRECATED. Handmatige interview planning. Nieuwe stages (docs_compleet, gesprek_gepland). VOG alleen bij screening. |
+| 3.0.0-enterprise | 2026-01-14 | **MAJOR:** schedule_interview goal DEPRECATED. Handmatige interview planning. 6-stage pipeline (nieuw→intake_verstuurd→gesprek_gepland→screening→goedgekeurd→geplaatst). VOG alleen bij screening. |
 | 2.0.0-enterprise | 2026-01-04 | Complete enterprise documentatie |
 | 1.0.0 | 2025-12-15 | Initiële versie |
 
