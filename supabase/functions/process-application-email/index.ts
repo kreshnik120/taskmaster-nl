@@ -728,6 +728,36 @@ Belangrijk:
 
     console.log("Application created:", application.id);
 
+    // v1.8.3: Register CV in application_documents for unified document tracking
+    if (cvFilePath && application.id) {
+      console.log('📄 [process-application-email] Registering CV in application_documents...');
+      
+      const { error: docError } = await supabase
+        .from('application_documents')
+        .insert({
+          application_id: application.id,
+          filename: cvFileName || 'CV.pdf',
+          file_path: cvFilePath,
+          document_type: 'cv',
+          category: 'basis',
+          source: 'email_attachment',
+          is_verified: false,
+          metadata: {
+            uploaded_via: 'initial_application_email',
+            parsed_by_ai: true,
+            extracted_at: new Date().toISOString(),
+            completeness_at_upload: completenessScore
+          }
+        });
+      
+      if (docError) {
+        console.error('⚠️ CV document registration failed:', docError);
+        // Non-blocking - CV is still saved via cv_file_path column
+      } else {
+        console.log('✅ CV registered in application_documents table');
+      }
+    }
+
     // 🔄 Welkomstmail wordt getriggerd via database trigger + pg_cron jobs
     // Dit zorgt voor consistentie met receive-external-application flow
     // De consolidated_welcome_intake_trigger maakt automatisch een agent_goal aan

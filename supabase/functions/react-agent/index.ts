@@ -1199,76 +1199,109 @@ async function executeReActLoop(
           if (inferredTool) {
             console.log(`[ReAct] ⚡ Attempting recovery - tool: "${inferredTool}", goal_type: "${goalTypeFromCtx}"`);
             
-            // Voor send_email: bouw action_input uit context met smart email type detection
+            // v1.8.3: Idempotency Check - Prevent duplicate emails via recovery
             if (inferredTool === 'send_email' || inferredTool.startsWith('send_')) {
-              const ctx = memory.context || {};
+              const emailAlreadySent = (memory.tool_call_counts?.['send_email'] || 0) > 0;
               
-              // v1.8.0: Smart Email Type Selection gebaseerd op context
-              const determineEmailType = (): string => {
-                const completeness = (ctx.current_completeness as number) || (ctx.completeness as number) || 0;
-                const remainingMissing = (ctx.remaining_missing_info as string[]) || (ctx.missing_info as string[]) || [];
-                const diplomaVerified = ctx.duo_verification_status === 'verified' || ctx.diploma_verified === true;
-                const hasDocumentsReceived = ctx.documents_received === true || (ctx.new_documents_count as number || 0) > 0;
+              if (emailAlreadySent) {
+                console.log('[ReAct] ⚠️ Recovery skipped: send_email already executed in this session');
+                console.log('[ReAct] 📊 tool_call_counts:', JSON.stringify(memory.tool_call_counts));
                 
-                // Als diploma geverifieerd en high completeness → bevestigingsmail
-                if (diplomaVerified && completeness >= 80) {
-                  // Alleen VOG ontbreekt of niets mist
-                  const onlyVogMissing = remainingMissing.length === 0 || 
-                    (remainingMissing.length === 1 && remainingMissing.includes('vog_upload'));
-                  if (onlyVogMissing) {
-                    return 'documents_received_confirmation';
-                  }
+                // Redirect recovery to update_pipeline_stage instead of duplicate email
+                if (goalTypeFromCtx === 'send_welcome_and_intake') {
+                  const ctx = memory.context || {};
+                  parsed = {
+                    thought: 'Email al verstuurd in deze sessie, nu pipeline stage bijwerken naar intake_verstuurd',
+                    action: 'update_pipeline_stage',
+                    action_input: {
+                      application_id: ctx.application_id || '',
+                      new_stage: 'intake_verstuurd',
+                      reason: 'Welcome email sent, transitioning from nieuw'
+                    },
+                    final_answer: null,
+                  };
+                  console.log('[ReAct] ✅ Recovery redirected to update_pipeline_stage');
+                } else {
+                  // Voor andere goal types: finish gracefully zonder duplicate
+                  parsed = {
+                    thought: 'Email actie al uitgevoerd in deze sessie, geen verdere actie nodig',
+                    action: null,
+                    action_input: null,
+                    final_answer: 'De email is succesvol verzonden naar de kandidaat.',
+                  };
+                  console.log('[ReAct] ✅ Recovery completed with graceful finish');
                 }
-                
-                // Als er documenten zijn ontvangen, bevestig dat
-                if (hasDocumentsReceived && completeness >= 60) {
-                  return 'document_confirmation';
-                }
-                
-                // Anders vraag ontbrekende info
-                if (remainingMissing.length > 0) {
-                  return 'followup_question';
-                }
-                
-                // Default voor goal type
-                return goalActionMapping[goalTypeFromCtx]?.defaultEmailType || 'general_followup';
-              };
-              
-              // v1.8.1: Uitgebreide context key aliasing voor robuustere recovery
-              const getContextValue = (keys: string[]): string => {
-                for (const key of keys) {
-                  const val = ctx[key];
-                  if (val !== undefined && val !== null && val !== '') return String(val);
-                }
-                return '';
-              };
-
-              const recoveredInput = {
-                recipient_email: getContextValue(['candidate_email', 'email', 'kandidaat_email', 'to', 'recipient_email']),
-                recipient_name: getContextValue(['candidate_name', 'name', 'kandidaat_naam', 'recipient_name', 'full_name']),
-                email_type: determineEmailType(),
-                application_id: getContextValue(['application_id', 'sollicitatie_id', 'app_id', 'id']),
-                fields_to_ask: (ctx.remaining_missing_info as string[]) || (ctx.missing_info as string[]) || [],
-              };
-              
-              if (recoveredInput.recipient_email && recoveredInput.application_id) {
-                parsed = {
-                  thought: thoughtMatch?.[1] || `Recovered from goal type "${goalTypeFromCtx}" - sending ${recoveredInput.email_type}`,
-                  action: 'send_email',
-                  action_input: recoveredInput,
-                  final_answer: null,
-                };
-                console.log('[ReAct] ✅ Successfully recovered send_email from context');
-                console.log('[ReAct] Recovered input:', JSON.stringify(recoveredInput));
               } else {
-                console.warn('[ReAct] ⚠️ Cannot recover send_email - missing required context (email or application_id)');
-                // Markeer als partial failure, niet als success
-                parsed = {
-                  thought: responseText.substring(0, 500),
-                  action: null,
-                  action_input: null,
-                  final_answer: '[RECOVERY_FAILED] Er ging iets mis bij het verwerken van de email. Probeer het opnieuw.',
+                // Original recovery logic continues below
+                const ctx = memory.context || {};
+              
+                // v1.8.0: Smart Email Type Selection gebaseerd op context
+                const determineEmailType = (): string => {
+                  const completeness = (ctx.current_completeness as number) || (ctx.completeness as number) || 0;
+                  const remainingMissing = (ctx.remaining_missing_info as string[]) || (ctx.missing_info as string[]) || [];
+                  const diplomaVerified = ctx.duo_verification_status === 'verified' || ctx.diploma_verified === true;
+                  const hasDocumentsReceived = ctx.documents_received === true || (ctx.new_documents_count as number || 0) > 0;
+                  
+                  // Als diploma geverifieerd en high completeness → bevestigingsmail
+                  if (diplomaVerified && completeness >= 80) {
+                    // Alleen VOG ontbreekt of niets mist
+                    const onlyVogMissing = remainingMissing.length === 0 || 
+                      (remainingMissing.length === 1 && remainingMissing.includes('vog_upload'));
+                    if (onlyVogMissing) {
+                      return 'documents_received_confirmation';
+                    }
+                  }
+                  
+                  // Als er documenten zijn ontvangen, bevestig dat
+                  if (hasDocumentsReceived && completeness >= 60) {
+                    return 'document_confirmation';
+                  }
+                  
+                  // Anders vraag ontbrekende info
+                  if (remainingMissing.length > 0) {
+                    return 'followup_question';
+                  }
+                  
+                  // Default voor goal type
+                  return goalActionMapping[goalTypeFromCtx]?.defaultEmailType || 'general_followup';
                 };
+                
+                // v1.8.1: Uitgebreide context key aliasing voor robuustere recovery
+                const getContextValue = (keys: string[]): string => {
+                  for (const key of keys) {
+                    const val = ctx[key];
+                    if (val !== undefined && val !== null && val !== '') return String(val);
+                  }
+                  return '';
+                };
+
+                const recoveredInput = {
+                  recipient_email: getContextValue(['candidate_email', 'email', 'kandidaat_email', 'to', 'recipient_email']),
+                  recipient_name: getContextValue(['candidate_name', 'name', 'kandidaat_naam', 'recipient_name', 'full_name']),
+                  email_type: determineEmailType(),
+                  application_id: getContextValue(['application_id', 'sollicitatie_id', 'app_id', 'id']),
+                  fields_to_ask: (ctx.remaining_missing_info as string[]) || (ctx.missing_info as string[]) || [],
+                };
+                
+                if (recoveredInput.recipient_email && recoveredInput.application_id) {
+                  parsed = {
+                    thought: thoughtMatch?.[1] || `Recovered from goal type "${goalTypeFromCtx}" - sending ${recoveredInput.email_type}`,
+                    action: 'send_email',
+                    action_input: recoveredInput,
+                    final_answer: null,
+                  };
+                  console.log('[ReAct] ✅ Successfully recovered send_email from context');
+                  console.log('[ReAct] Recovered input:', JSON.stringify(recoveredInput));
+                } else {
+                  console.warn('[ReAct] ⚠️ Cannot recover send_email - missing required context (email or application_id)');
+                  // Markeer als partial failure, niet als success
+                  parsed = {
+                    thought: responseText.substring(0, 500),
+                    action: null,
+                    action_input: null,
+                    final_answer: '[RECOVERY_FAILED] Er ging iets mis bij het verwerken van de email. Probeer het opnieuw.',
+                  };
+                }
               }
             } else {
               // Andere tools kunnen niet automatisch recoveren
