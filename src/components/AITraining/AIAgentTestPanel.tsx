@@ -31,6 +31,23 @@ export function AIAgentTestPanel() {
   const [sendingEmail, setSendingEmail] = useState(false);
   const [generatedEmail, setGeneratedEmail] = useState<GeneratedEmail | null>(null);
 
+  // Check if multi-agent feature flag is enabled
+  const { data: featureFlag } = useQuery({
+    queryKey: ["multi-agent-feature-flag-aiagent"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("system_feature_flags")
+        .select("is_enabled, rollout_percentage")
+        .eq("feature_name", "multi_agent_architecture")
+        .maybeSingle();
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const isMultiAgentActive = featureFlag?.is_enabled || (featureFlag?.rollout_percentage ?? 0) > 0;
+
   // Fetch recent AI agent activity
   const { data: recentActivity, isLoading, refetch } = useQuery({
     queryKey: ["ai-agent-activity"],
@@ -202,58 +219,77 @@ export function AIAgentTestPanel() {
 
   const handleTriggerOrchestrator = async () => {
     setSending(true);
-    log.log("🚀 Triggering AI Agent Orchestrator (2-step process)...");
     
     try {
-      // STAP 1: Process pending goals (planning fase)
-      log.log("📋 Step 1: Processing pending goals...");
-      toast.info("Stap 1/2: Goals verwerken...");
-      
-      const { data: planData, error: planError } = await supabase.functions.invoke(
-        "ai-agent-orchestrator",
-        { body: { action: 'process_pending_goals' } }
-      );
-      
-      log.log("📋 Plan result:", planData, planError);
-      
-      if (planError) {
-        log.error("❌ Plan error:", planError);
-        throw planError;
-      }
-
-      const goalsProcessed = planData?.goalsProcessed || planData?.processed || 0;
-      
-      // STAP 2: Execute queued actions (dit stuurt de emails!)
-      log.log("⚡ Step 2: Executing queued actions...");
-      toast.info("Stap 2/2: Acties uitvoeren (emails versturen)...");
-      
-      const { data: execData, error: execError } = await supabase.functions.invoke(
-        "ai-agent-orchestrator",
-        { body: { action: 'execute_actions' } }
-      );
-      
-      log.log("⚡ Execute result:", execData, execError);
-      
-      if (execError) {
-        log.error("❌ Execute error:", execError);
-        // Don't throw - still show partial success
-        toast.warning("Goals verwerkt, maar acties gefaald", {
-          description: execError.message,
+      if (isMultiAgentActive) {
+        // NIEUW: Multi-Agent systeem via pipeline-stage-controller
+        log.log("🚀 Triggering Pipeline Stage Controller (Multi-Agent)...");
+        toast.info("Multi-Agent Pipeline activeren...");
+        
+        const { data, error } = await supabase.functions.invoke(
+          "pipeline-stage-controller",
+          { body: { action: 'status' } }
+        );
+        
+        if (error) throw error;
+        
+        log.log("✅ Pipeline Controller response:", data);
+        toast.success("🤖 Pipeline Controller actief!", {
+          description: `Rollout: ${featureFlag?.rollout_percentage || 100}%`,
         });
       } else {
-        const actionsExecuted = execData?.executed || execData?.actionsExecuted || 0;
+        // Legacy: ai-agent-orchestrator (bestaande 2-step process)
+        log.log("🚀 Triggering AI Agent Orchestrator (Legacy 2-step process)...");
         
-        toast.success("🤖 Orchestrator complete!", {
-          description: `${goalsProcessed} goals gepland, ${actionsExecuted} acties uitgevoerd`,
-        });
+        // STAP 1: Process pending goals (planning fase)
+        log.log("📋 Step 1: Processing pending goals...");
+        toast.info("Stap 1/2: Goals verwerken...");
         
-        log.log("✅ Orchestrator complete:", { goalsProcessed, actionsExecuted });
+        const { data: planData, error: planError } = await supabase.functions.invoke(
+          "ai-agent-orchestrator",
+          { body: { action: 'process_pending_goals' } }
+        );
+        
+        log.log("📋 Plan result:", planData, planError);
+        
+        if (planError) {
+          log.error("❌ Plan error:", planError);
+          throw planError;
+        }
+
+        const goalsProcessed = planData?.goalsProcessed || planData?.processed || 0;
+        
+        // STAP 2: Execute queued actions (dit stuurt de emails!)
+        log.log("⚡ Step 2: Executing queued actions...");
+        toast.info("Stap 2/2: Acties uitvoeren (emails versturen)...");
+        
+        const { data: execData, error: execError } = await supabase.functions.invoke(
+          "ai-agent-orchestrator",
+          { body: { action: 'execute_actions' } }
+        );
+        
+        log.log("⚡ Execute result:", execData, execError);
+        
+        if (execError) {
+          log.error("❌ Execute error:", execError);
+          toast.warning("Goals verwerkt, maar acties gefaald", {
+            description: execError.message,
+          });
+        } else {
+          const actionsExecuted = execData?.executed || execData?.actionsExecuted || 0;
+          
+          toast.success("🤖 Orchestrator complete!", {
+            description: `${goalsProcessed} goals gepland, ${actionsExecuted} acties uitgevoerd`,
+          });
+          
+          log.log("✅ Orchestrator complete:", { goalsProcessed, actionsExecuted });
+        }
       }
 
       refetch();
     } catch (error: any) {
       log.error("❌ Orchestrator error:", error);
-      toast.error("Fout bij triggeren orchestrator", {
+      toast.error("Fout bij triggeren", {
         description: error.message,
       });
     } finally {
@@ -288,6 +324,15 @@ export function AIAgentTestPanel() {
         <CardTitle className="flex items-center gap-2">
           <Bot className="h-5 w-5 text-primary" />
           AI Agent Test Panel
+          {isMultiAgentActive ? (
+            <Badge className="bg-green-500/20 text-green-400 border-green-500/30 ml-2">
+              Multi-Agent
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="ml-2">
+              Legacy
+            </Badge>
+          )}
         </CardTitle>
         <CardDescription>
           Test de AI Agent intake flow en bekijk recente activiteit
@@ -346,7 +391,7 @@ export function AIAgentTestPanel() {
             </Button>
             <Button variant="outline" onClick={handleTriggerOrchestrator} disabled={sending} className="gap-2">
               <Zap className="h-4 w-4" />
-              Trigger Orchestrator
+              {isMultiAgentActive ? "Trigger Pipeline Controller" : "Trigger Orchestrator"}
             </Button>
             <Button variant="ghost" onClick={() => refetch()} className="gap-2">
               <RefreshCw className="h-4 w-4" />
