@@ -55,6 +55,23 @@ export function ReactAgentTestPanel() {
   const [isStepsOpen, setIsStepsOpen] = useState(true);
   const queryClient = useQueryClient();
 
+  // Check if multi-agent feature flag is enabled
+  const { data: featureFlag } = useQuery({
+    queryKey: ["multi-agent-feature-flag-deprecation"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("system_feature_flags")
+        .select("is_enabled, rollout_percentage")
+        .eq("feature_name", "multi_agent_architecture")
+        .maybeSingle();
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const isMultiAgentActive = featureFlag?.is_enabled || (featureFlag?.rollout_percentage ?? 0) > 0;
+
   // Fetch recent execution traces
   const { data: traces, isLoading: tracesLoading } = useQuery({
     queryKey: ["react-agent-traces"],
@@ -154,12 +171,28 @@ export function ReactAgentTestPanel() {
 
   return (
     <div className="space-y-6">
+      {/* Deprecation Warning Banner */}
+      {isMultiAgentActive && (
+        <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+          <div className="flex items-center gap-2 text-yellow-400 font-medium">
+            <AlertTriangle className="h-4 w-4" />
+            Legacy ReAct Agent - Deprecated
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Multi-Agent architectuur is actief ({featureFlag?.rollout_percentage || 100}% rollout). 
+            Dit panel is alleen voor debugging van legacy issues. 
+            Gebruik <strong>MultiAgentStatusPanel</strong> voor het nieuwe systeem.
+          </p>
+        </div>
+      )}
+
       {/* Test Panel */}
-      <Card>
+      <Card className={isMultiAgentActive ? "opacity-75" : ""}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Brain className="h-5 w-5 text-primary" />
             ReAct Agent Test Panel
+            {isMultiAgentActive && <Badge variant="secondary" className="ml-2">Legacy</Badge>}
           </CardTitle>
           <CardDescription>
             Test de Enterprise ReAct Agent met Observe → Reason → Act → Reflect loop
