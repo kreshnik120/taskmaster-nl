@@ -1677,14 +1677,16 @@ Return JSON in dit formaat:
                   };
                   
                   // Log high-severity security alert for all identity documents
+                  // Use correct system_events schema: event_data contains all details
                   await supabase.from('system_events').insert({
                     event_type: 'security_alert',
-                    severity: 'high',
-                    source: 'handle-application-reply',
+                    entity_type: 'document_identity_mismatch',
+                    entity_id: applicationId,
                     org_id: application.org_id,
-                    title: alertTitles[documentType] || '🚨 Document Identity Mismatch Detected',
-                    description: alertDescriptions[documentType] || `Document name "${nameExtraction.name}" does not match applicant "${applicantName}" (score: ${nameMatch.score})`,
-                    metadata: {
+                    event_data: {
+                      severity: 'high',
+                      title: alertTitles[documentType] || '🚨 Document Identity Mismatch Detected',
+                      description: alertDescriptions[documentType] || `Document name "${nameExtraction.name}" does not match applicant "${applicantName}" (score: ${nameMatch.score})`,
                       application_id: applicationId,
                       document_type: documentType,
                       document_filename: attachment.filename,
@@ -1699,6 +1701,7 @@ Return JSON in dit formaat:
                           ? 'HR must verify qualification belongs to correct applicant - affects candidate eligibility'
                           : 'HR must verify document belongs to correct applicant',
                     },
+                    metadata: { source: 'handle-application-reply', version: '2.0' },
                   });
                   
                   console.log(`📝 High-severity security alert logged for ${documentType.toUpperCase()} identity mismatch`);
