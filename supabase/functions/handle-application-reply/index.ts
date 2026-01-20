@@ -30,6 +30,8 @@ import {
   // v1.4.0: Fase 1 completeness check for nieuw → intake_verstuurd
   checkFase1Completeness,
   tryAdvanceFase1,
+  // v1.7.2: Document-aware types
+  type ApplicationDocumentRecord,
 } from '../_shared/healthcare-mappings.ts';
 // Fase 1: Quick Wins - Modulaire detection & audit
 import { stripQuotedContent, detectSlotWithRegex, detectInterviewSlot, type SlotDetectionInput } from '../_shared/slot-detection.ts';
@@ -2445,6 +2447,13 @@ Return JSON in dit formaat:
     // 🔧 FASE 3 FIX: Increment ai_response_count bij elke reply
     const currentResponseCount = (application.ai_response_count || 0) + 1;
     
+    // v1.7.2: Sync vog_validation_status column when VOG is in documents table
+    const vogColumnSync: Record<string, unknown> = {};
+    if (hasVogInDocuments && (!application.vog_validation_status || ['not_uploaded', 'missing'].includes(application.vog_validation_status as string))) {
+      vogColumnSync.vog_validation_status = vogDocVerified ? 'verified_gaav' : 'pending_review';
+      console.log(`[v1.7.2] Syncing vog_validation_status to: ${vogColumnSync.vog_validation_status}`);
+    }
+    
     const { error: appUpdateError } = await supabase
       .from("professional_applications")
       .update({
@@ -2453,6 +2462,7 @@ Return JSON in dit formaat:
         extracted_data: mergedData,
         ai_response_count: currentResponseCount,
         updated_at: new Date().toISOString(),
+        ...vogColumnSync,
       })
       .eq("id", applicationId);
 
@@ -3032,11 +3042,27 @@ Return JSON in dit formaat:
               followup_email_count: currentFollowupCount + 1,
             };
             
+            // v1.7.2: Build document-aware context for recalculateMissingInfo
+            const applicationDocumentsArray = [
+              ...(cvDocuments || []).map((d: any) => ({ document_type: 'cv', is_verified: d.is_verified, file_path: d.file_path })),
+              ...(diplomaDocuments || []).map((d: any) => ({ document_type: 'diploma', is_verified: d.is_verified, file_path: d.file_path })),
+              ...(vogDocuments || []).map((d: any) => ({ document_type: 'vog', is_verified: d.is_verified, file_path: d.file_path })),
+            ];
+            
+            // v1.7.2: Sync vog_validation_status column when VOG is in documents table
+            const vogSyncUpdate: Record<string, unknown> = {};
+            if (hasVogInDocuments && (!application.vog_validation_status || ['not_uploaded', 'missing'].includes(application.vog_validation_status as string))) {
+              vogSyncUpdate.vog_validation_status = vogDocVerified ? 'verified_gaav' : 'pending_review';
+              console.log(`[v1.7.2] Syncing vog_validation_status column to: ${vogSyncUpdate.vog_validation_status}`);
+            }
+            
             await supabase
               .from("professional_applications")
               .update({
                 extracted_data: updatedDataForFollowup,
-                missing_info: recalculateMissingInfo(updatedDataForFollowup),
+                // v1.7.2: Pass full document context to recalculateMissingInfo
+                missing_info: recalculateMissingInfo(updatedDataForFollowup, application, applicationDocumentsArray),
+                ...vogSyncUpdate,
               })
               .eq("id", applicationId);
 
