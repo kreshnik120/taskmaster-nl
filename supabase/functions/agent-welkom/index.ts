@@ -1,7 +1,14 @@
 /**
- * Agent Welkom v1.6.0
+ * Agent Welkom v1.8.0
  * ===================
  * Specialist agent for the 'nieuw' stage.
+ * 
+ * v1.8.0 NEW: DOCUMENT SYNC TO application_documents
+ * - Syncs CV and Diploma to application_documents table if missing
+ * - Ensures document-aware completeness scores are accurate from Phase 1
+ * - Uses source='agent_welkom_sync' for traceability
+ * 
+ * v1.7.0: Query database for recently uploaded documents in follow-up context
  * 
  * v1.6.0 NEW: REPLY RESPONSE HANDLING
  * - Detecteert reply triggers (send_reply_response, reply_processed)
@@ -21,6 +28,7 @@
  * 
  * Responsibilities:
  * - Send professional welcome email to new applicants
+ * - v1.8.0: Sync CV/Diploma to application_documents
  * - v1.6.0: Handle follow-up responses after candidate replies
  * - Request missing information using DATABASE missing_info (not self-calculated)
  * - Update welcome_email_sent_at timestamp (CRITICAL)
@@ -34,7 +42,7 @@
  * - No interview scheduling (Planning Agent)
  * - No VOG requests (Screening Agent)
  */
-console.log('[agent-welkom] v1.7.0 BOOTED at', new Date().toISOString());
+console.log('[agent-welkom] v1.8.0 BOOTED at', new Date().toISOString());
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -142,6 +150,78 @@ Deno.serve(async (req) => {
         JSON.stringify({ success: false, error: 'Application not found' }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // =====================================================
+    // v1.8.0 NEW: DOCUMENT SYNC TO application_documents
+    // Ensures CV and Diploma are registered for document-aware completeness
+    // =====================================================
+    console.log('[agent-welkom] v1.8.0: Checking document sync...');
+    
+    // Sync CV if present but not in application_documents
+    if (fullApp.cv_file_path) {
+      const { count: cvCount } = await supabase
+        .from('application_documents')
+        .select('id', { count: 'exact', head: true })
+        .eq('application_id', application_id)
+        .eq('document_type', 'cv');
+
+      if (!cvCount || cvCount === 0) {
+        const cvFilename = fullApp.cv_file_path.split('/').pop() || 'CV.pdf';
+        const { error: cvInsertError } = await supabase
+          .from('application_documents')
+          .insert({
+            application_id,
+            filename: cvFilename,
+            file_path: fullApp.cv_file_path,
+            document_type: 'cv',
+            category: 'basis',
+            source: 'agent_welkom_sync',
+            is_verified: false,
+            metadata: { synced_at: new Date().toISOString(), sync_version: '1.8.0' }
+          });
+        
+        if (!cvInsertError) {
+          console.log('[agent-welkom] v1.8.0 ✅ Synced CV to application_documents:', cvFilename);
+        } else {
+          console.warn('[agent-welkom] v1.8.0 CV sync failed:', cvInsertError.message);
+        }
+      } else {
+        console.log('[agent-welkom] v1.8.0: CV already in application_documents');
+      }
+    }
+
+    // Sync Diploma if present but not in application_documents
+    if (fullApp.diploma_file_path) {
+      const { count: diplomaCount } = await supabase
+        .from('application_documents')
+        .select('id', { count: 'exact', head: true })
+        .eq('application_id', application_id)
+        .eq('document_type', 'diploma');
+
+      if (!diplomaCount || diplomaCount === 0) {
+        const diplomaFilename = fullApp.diploma_file_path.split('/').pop() || 'Diploma.pdf';
+        const { error: diplomaInsertError } = await supabase
+          .from('application_documents')
+          .insert({
+            application_id,
+            filename: diplomaFilename,
+            file_path: fullApp.diploma_file_path,
+            document_type: 'diploma',
+            category: 'basis',
+            source: 'agent_welkom_sync',
+            is_verified: false,
+            metadata: { synced_at: new Date().toISOString(), sync_version: '1.8.0' }
+          });
+        
+        if (!diplomaInsertError) {
+          console.log('[agent-welkom] v1.8.0 ✅ Synced Diploma to application_documents:', diplomaFilename);
+        } else {
+          console.warn('[agent-welkom] v1.8.0 Diploma sync failed:', diplomaInsertError.message);
+        }
+      } else {
+        console.log('[agent-welkom] v1.8.0: Diploma already in application_documents');
+      }
     }
     
     // =====================================================
