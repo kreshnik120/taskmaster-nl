@@ -4,7 +4,7 @@ import { recalculateMissingInfo } from '../_shared/healthcare-mappings.ts';
 import puppeteer from 'https://deno.land/x/puppeteer@16.2.0/mod.ts';
 
 // Boot log to verify deployment
-console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v5.7.0-circuit-breaker loaded`);
+console.log(`🚀 [WORKER-BOOT] verify-diploma-duo v5.8.0-fase1-trigger loaded`);
 
 // Circuit breaker service name for this function
 const CIRCUIT_SERVICE_NAME = 'verify-diploma-duo';
@@ -44,7 +44,7 @@ interface SignatureInfo {
 
 const DUO_CHECK_URL = 'https://zakelijk.duo.nl/portaal/diplomacontrole/';
 const DUO_HOME_URL = 'https://zakelijk.duo.nl/';
-const DEPLOYMENT_VERSION = 'v5.7.0-circuit-breaker';
+const DEPLOYMENT_VERSION = 'v5.8.0-fase1-trigger';
 const MAX_DUO_RETRIES = 3;
 const MAX_CONTEXT_SIZE_BYTES = 500000; // ~500KB max for base64 in context
 
@@ -1552,6 +1552,44 @@ Deno.serve(async (req: Request) => {
         }
       } catch (notifyError) {
         console.log('Notification creation failed (non-critical):', notifyError);
+      }
+    }
+    
+    // v5.8.0: Trigger Fase 1 check after successful DUO verification
+    if (dbStatus === 'verified_duo' || dbStatus === 'signature_valid') {
+      try {
+        // Fetch current pipeline stage
+        const { data: currentApp } = await supabase
+          .from('professional_applications')
+          .select('pipeline_stage')
+          .eq('id', application_id)
+          .single();
+        
+        if (currentApp?.pipeline_stage === 'nieuw') {
+          console.log('[v5.8.0] Triggering Fase 1 check after DUO verification...');
+          
+          const { data: checkResult, error: checkError } = await supabase.functions.invoke(
+            'pipeline-stage-controller',
+            {
+              body: {
+                action: 'check_fase1',
+                application_id: application_id,
+                trigger: 'duo_verification_complete',
+                trigger_source: 'verify-diploma-duo'
+              }
+            }
+          );
+          
+          if (checkError) {
+            console.error('[v5.8.0] Fase 1 check failed:', checkError);
+          } else {
+            console.log('[v5.8.0] Fase 1 check result:', JSON.stringify(checkResult));
+          }
+        } else {
+          console.log(`[v5.8.0] Skipping Fase 1 check - application in stage: ${currentApp?.pipeline_stage}`);
+        }
+      } catch (fase1Err) {
+        console.error('[v5.8.0] Exception in Fase 1 check:', fase1Err);
       }
     }
     

@@ -158,7 +158,7 @@ export function MigrationAuditViewer() {
                         <CheckCircle2 className="h-4 w-4 text-green-500" />
                       )}
                       <span className="font-mono text-xs text-muted-foreground">
-                        {entry.application_id.slice(0, 8)}...
+                        {entry.application_id ? `${entry.application_id.slice(0, 8)}...` : 'N/A'}
                       </span>
                       <Badge variant="outline" className="text-xs">
                         {entry.trigger_source}
