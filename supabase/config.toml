@@ -118,6 +118,10 @@ verify_jwt = false
 verify_jwt = false
 # Purpose: Automatically create professional profile from approved application
 
+[functions.suggest-recruitment-actions]
+verify_jwt = false
+# Purpose: Suggest recruitment actions based on pipeline stage changes
+
 [functions.schedule-interview]
 verify_jwt = false
 # Purpose: AI-driven interview scheduling (request availability, confirm slot, send confirmation, alternative slots)
