@@ -562,14 +562,29 @@ function generateEmailTemplate(
       }).join('');
       
       // FIX 3: Build rejection context section if present
+      // v1.6.0: Enhanced with human-friendly field names
       const rejectionContext = data.rejection_context || {};
       const hasRejections = Object.keys(rejectionContext).length > 0;
-      const rejectionItems = Object.entries(rejectionContext).map(([field, ctx]: [string, any]) => 
-        `<li style="margin: 8px 0;">
-          <strong>${field}</strong>: "${ctx.provided_value || 'onbekend'}" - ${ctx.rejected_reason || 'afgewezen'}.
+      
+      // Field name translations for rejection context
+      const REJECTION_FIELD_LABELS: Record<string, string> = {
+        'telefoonnummer': 'Telefoonnummer',
+        'telefoon': 'Telefoonnummer',
+        'big_nummer': 'BIG-registratienummer',
+        'kvk_nummer': 'KvK-nummer',
+        'iban': 'IBAN rekeningnummer',
+        'email': 'E-mailadres',
+        'vog': 'VOG document',
+        'diploma': 'Diploma',
+      };
+      
+      const rejectionItems = Object.entries(rejectionContext).map(([field, ctx]: [string, any]) => {
+        const fieldLabel = REJECTION_FIELD_LABELS[field.toLowerCase()] || field;
+        return `<li style="margin: 8px 0;">
+          <strong>${fieldLabel}</strong>: "${ctx.provided_value || 'onbekend'}" - ${ctx.rejected_reason || 'afgewezen'}.
           ${ctx.suggestion ? `<br><em style="color: #065f46;">💡 ${ctx.suggestion}</em>` : ''}
-        </li>`
-      ).join('');
+        </li>`;
+      }).join('');
       
       const rejectionSection = hasRejections ? `
         <div style="background-color: #fef2f2; padding: 15px 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #dc2626;">

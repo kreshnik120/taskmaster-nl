@@ -493,6 +493,33 @@ Deno.serve(async (req) => {
 
         console.log(`[pipeline-stage-controller] Routing to agent-${specialist.agent_name}`);
 
+        // v1.2.0: Enrich context from agent_goals for rejection_context and other data
+        let enrichedContext = body.context || {};
+        
+        // If this is a reply_processed trigger, try to get rejection_context from recent goal
+        if (trigger === 'reply_processed' || trigger === 'send_reply_response') {
+          const { data: recentGoal } = await supabase
+            .from('agent_goals')
+            .select('input_data')
+            .eq('goal_type', 'send_reply_response')
+            .or(`input_data->>application_id.eq.${application_id}`)
+            .in('status', ['pending', 'completed'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (recentGoal?.input_data) {
+            console.log(`[pipeline-stage-controller] Found recent goal with context data`);
+            enrichedContext = {
+              ...enrichedContext,
+              rejection_context: recentGoal.input_data.rejection_context || enrichedContext.rejection_context,
+              newly_extracted_data: recentGoal.input_data.newly_extracted_data || enrichedContext.newly_extracted_data,
+              remaining_missing_info: recentGoal.input_data.remaining_missing_info || enrichedContext.remaining_missing_info,
+              document_statuses: recentGoal.input_data.document_statuses || enrichedContext.document_statuses,
+            };
+          }
+        }
+
         // Invoke specialist agent
         const { data: specialistResult, error: specialistError } = await supabase.functions.invoke(`agent-${specialist.agent_name}`, {
           body: {
@@ -502,7 +529,7 @@ Deno.serve(async (req) => {
             allowed_tools: specialist.available_tools,
             allowed_email_types: specialist.email_types,
             target_stage: specialist.target_stage,
-            context: body.context || {},
+            context: enrichedContext,
             extracted_data: body.extracted_data || {},
             documents: body.documents || []
           }
