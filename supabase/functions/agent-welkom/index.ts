@@ -1,5 +1,5 @@
 /**
- * Agent Welkom v1.0.0
+ * Agent Welkom v1.1.0
  * ===================
  * Specialist agent for the 'nieuw' stage.
  * Handles: nieuw → intake_verstuurd
@@ -14,6 +14,7 @@
  * - No interview scheduling (Planning Agent)
  * - No VOG requests (Screening Agent)
  */
+console.log('[agent-welkom] v1.1.0 BOOTED at', new Date().toISOString());
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 

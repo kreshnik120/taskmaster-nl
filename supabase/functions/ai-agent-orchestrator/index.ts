@@ -1,3 +1,10 @@
+/**
+ * AI Agent Orchestrator v1.9.0
+ * ============================
+ * Boot logging added for deployment verification.
+ */
+console.log('[ai-agent-orchestrator] v1.9.0 BOOTED at', new Date().toISOString());
+
 import { corsHeaders, handleCors, createAdminClient } from '../_shared/core.ts';
 import { 
   isValidEmailFormat, 
@@ -1080,45 +1087,67 @@ async function routeToSpecialistAgent(
 ): Promise<SpecialistRoutingResult> {
   const startTime = Date.now();
   
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`🚀 [Specialist Routing v1.9.0] Starting for goal: ${goal.id}`);
+  console.log(`   Goal type: ${goal.goal_type}`);
+  console.log(`   Application ID: ${goal.input_data?.application_id || 'NONE'}`);
+  console.log(`${'='.repeat(60)}`);
+  
   try {
     // Check if multi-agent architecture is enabled
-    const { data: featureFlag } = await supabase
+    console.log(`🔍 [Specialist] Checking multi_agent_architecture feature flag...`);
+    
+    const { data: featureFlag, error: flagError } = await supabase
       .from('system_feature_flags')
       .select('is_enabled, rollout_percentage')
       .eq('feature_name', 'multi_agent_architecture')
       .single();
 
-    if (!featureFlag) {
-      console.log(`🔀 [Specialist] No multi_agent_architecture flag found`);
+    if (flagError) {
+      console.error(`❌ [Specialist] Feature flag query error:`, flagError);
       return { routed: false, success: false };
     }
 
+    if (!featureFlag) {
+      console.log(`❌ [Specialist] No multi_agent_architecture flag found in database`);
+      return { routed: false, success: false };
+    }
+
+    console.log(`✅ [Specialist] Feature flag found: is_enabled=${featureFlag.is_enabled}, rollout=${featureFlag.rollout_percentage}%`);
+
     // Check rollout percentage
+    const randomRoll = Math.random() * 100;
     const isEnabled = featureFlag.is_enabled && 
-      (featureFlag.rollout_percentage >= 100 || Math.random() * 100 < featureFlag.rollout_percentage);
+      (featureFlag.rollout_percentage >= 100 || randomRoll < featureFlag.rollout_percentage);
+
+    console.log(`📊 [Specialist] Rollout check: random=${randomRoll.toFixed(1)}%, threshold=${featureFlag.rollout_percentage}%, isEnabled=${isEnabled}`);
 
     if (!isEnabled) {
-      console.log(`🔀 [Specialist] Multi-agent disabled or outside rollout (${featureFlag.rollout_percentage}%)`);
+      console.log(`🔀 [Specialist] Multi-agent DISABLED - falling back to legacy`);
       return { routed: false, success: false };
     }
 
     // Get the pipeline stage for this goal type
     const pipelineStage = GOAL_TO_STAGE_MAP[goal.goal_type];
     
+    console.log(`🗺️ [Specialist] Stage mapping: goal_type='${goal.goal_type}' → stage='${pipelineStage || 'NOT FOUND'}'`);
+    
     if (!pipelineStage) {
-      console.log(`🔀 [Specialist] No stage mapping for goal type: ${goal.goal_type}`);
+      console.log(`⚠️ [Specialist] No stage mapping for goal type: ${goal.goal_type} - using legacy`);
       return { routed: false, success: false };
     }
 
     console.log(`🎯 [Specialist] Goal ${goal.goal_type} maps to stage ${pipelineStage}`);
 
     // Route via pipeline-stage-controller
-    const applicationId = goal.input_data?.application_id;
+    const targetApplicationId = goal.input_data?.application_id;
     
-    if (!applicationId) {
-      console.log(`🔀 [Specialist] No application_id in goal, cannot route`);
+    if (!targetApplicationId) {
+      console.log(`❌ [Specialist] No application_id in goal input_data, cannot route`);
       return { routed: false, success: false };
     }
+
+    console.log(`📞 [Specialist] Invoking pipeline-stage-controller with action='route' for app=${targetApplicationId}...`);
 
     // Mark goal as executing
     await supabase
@@ -1133,13 +1162,15 @@ async function routeToSpecialistAgent(
     const { data: routeResult, error: routeError } = await supabase.functions.invoke('pipeline-stage-controller', {
       body: {
         action: 'route',
-        application_id: applicationId,
+        application_id: targetApplicationId,
         trigger: goal.goal_type,
         trigger_source: 'ai-agent-orchestrator',
         context: goal.input_data,
         extracted_data: goal.input_data.extracted_data || {}
       }
     });
+
+    console.log(`📥 [Specialist] Pipeline controller response:`, routeResult ? 'SUCCESS' : 'NO DATA', routeError ? `ERROR: ${routeError.message}` : '');
 
     const duration = Date.now() - startTime;
 
