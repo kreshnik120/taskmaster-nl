@@ -465,23 +465,58 @@ export function getEmailConfig(orgId: string | null | undefined): EmailConfig {
 // PLACEHOLDER DETECTION
 // ============================================
 
-const PLACEHOLDER_PHONE_PATTERNS = [
+/**
+ * v1.7.0: Configurable placeholder detection
+ * Set STRICT_PHONE_VALIDATION=false to allow test numbers like 06-12345678
+ * Useful for development/testing environments
+ */
+const STRICT_PHONE_VALIDATION = Deno.env.get('STRICT_PHONE_VALIDATION') !== 'false';
+
+// Base patterns - always blocked (obviously fake)
+const BASE_PLACEHOLDER_PATTERNS = [
   /^06[-\s]?0{6,}$/,              // 06-00000000
-  /^06[-\s]?1234567[89]?$/,       // 06-12345678
   /^000/,                          // starts with 000
   /^06[-\s]?9{6,}$/,              // 06-99999999
-  /^(\d)\1{7,}$/,                  // all same digit
-  /^0612345/,                      // test pattern
+  /^(\d)\1{7,}$/,                  // all same digit (8+ repeating)
 ];
+
+// Strict patterns - only blocked in production mode
+const STRICT_PLACEHOLDER_PATTERNS = [
+  /^06[-\s]?1234567[89]?$/,       // 06-12345678 or 06-123456789
+  /^0612345/,                      // test pattern starting with 0612345
+];
+
+// Combine patterns based on environment
+const PLACEHOLDER_PHONE_PATTERNS = STRICT_PHONE_VALIDATION 
+  ? [...BASE_PLACEHOLDER_PATTERNS, ...STRICT_PLACEHOLDER_PATTERNS]
+  : BASE_PLACEHOLDER_PATTERNS;
 
 /**
  * Detects if a phone number is a placeholder/test value
+ * 
+ * v1.7.0: Configurable via STRICT_PHONE_VALIDATION env var
+ * - Production (default): Blocks 06-12345678 and similar test patterns
+ * - Testing (STRICT_PHONE_VALIDATION=false): Only blocks obviously fake numbers
  */
 export function isPlaceholderPhone(phone: string | null | undefined): boolean {
   if (!phone) return false;
   
   const cleaned = phone.replace(/[\s-]/g, '');
-  return PLACEHOLDER_PHONE_PATTERNS.some(p => p.test(phone) || p.test(cleaned));
+  const isPlaceholder = PLACEHOLDER_PHONE_PATTERNS.some(p => p.test(phone) || p.test(cleaned));
+  
+  // Log when a phone is blocked in strict mode for debugging
+  if (isPlaceholder && STRICT_PHONE_VALIDATION) {
+    console.log(`⚠️ [healthcare-mappings] Placeholder phone detected (strict mode): ${phone}`);
+  }
+  
+  return isPlaceholder;
+}
+
+/**
+ * Checks if strict phone validation is enabled
+ */
+export function isStrictPhoneValidationEnabled(): boolean {
+  return STRICT_PHONE_VALIDATION;
 }
 
 /**
