@@ -13,7 +13,7 @@
  * This controller enforces the strict 6-stage flow:
  * nieuw → intake_verstuurd → gesprek_gepland → screening → goedgekeurd → geplaatst
  */
-console.log('[pipeline-stage-controller] v1.1.0 BOOTED at', new Date().toISOString());
+console.log('[pipeline-stage-controller] v1.3.0 BOOTED at', new Date().toISOString());
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -493,31 +493,72 @@ Deno.serve(async (req) => {
 
         console.log(`[pipeline-stage-controller] Routing to agent-${specialist.agent_name}`);
 
-        // v1.2.0: Enrich context from agent_goals for rejection_context and other data
+        // v1.3.0: ALWAYS enrich context from agent_goals for rejection_context and other data
+        // Not just for reply triggers - ensures all context propagates through routing
         let enrichedContext = body.context || {};
         
-        // If this is a reply_processed trigger, try to get rejection_context from recent goal
-        if (trigger === 'reply_processed' || trigger === 'send_reply_response') {
-          const { data: recentGoal } = await supabase
-            .from('agent_goals')
-            .select('input_data')
-            .eq('goal_type', 'send_reply_response')
-            .or(`input_data->>application_id.eq.${application_id}`)
-            .in('status', ['pending', 'completed'])
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+        // Fetch most recent goal with context data for this application
+        console.log(`[pipeline-stage-controller] v1.3.0: Fetching enriched context for application ${application_id}`);
+        
+        const { data: recentGoal } = await supabase
+          .from('agent_goals')
+          .select('input_data, goal_type, created_at')
+          .eq('goal_type', 'send_reply_response')
+          .or(`input_data->>application_id.eq.${application_id},input_data->context->>application_id.eq.${application_id}`)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (recentGoal?.input_data) {
+          console.log(`[pipeline-stage-controller] Found goal context from ${recentGoal.created_at}`);
           
-          if (recentGoal?.input_data) {
-            console.log(`[pipeline-stage-controller] Found recent goal with context data`);
-            enrichedContext = {
-              ...enrichedContext,
-              rejection_context: recentGoal.input_data.rejection_context || enrichedContext.rejection_context,
-              newly_extracted_data: recentGoal.input_data.newly_extracted_data || enrichedContext.newly_extracted_data,
-              remaining_missing_info: recentGoal.input_data.remaining_missing_info || enrichedContext.remaining_missing_info,
-              document_statuses: recentGoal.input_data.document_statuses || enrichedContext.document_statuses,
-            };
-          }
+          // Extract goal data with safe defaults
+          const goalData = recentGoal.input_data;
+          
+          enrichedContext = {
+            ...enrichedContext,
+            // CRITICAL: Always provide object defaults, never undefined
+            rejection_context: goalData.rejection_context && Object.keys(goalData.rejection_context).length > 0 
+              ? goalData.rejection_context 
+              : (enrichedContext.rejection_context || {}),
+            newly_extracted_data: goalData.newly_extracted_data || enrichedContext.newly_extracted_data || {},
+            remaining_missing_info: goalData.remaining_missing_info || enrichedContext.remaining_missing_info || [],
+            document_statuses: goalData.document_statuses || enrichedContext.document_statuses || {},
+          };
+          
+          console.log(`[pipeline-stage-controller] Enriched context: rejection_keys=${Object.keys(enrichedContext.rejection_context || {}).length}, remaining_missing=${(enrichedContext.remaining_missing_info || []).length}`);
+        } else {
+          console.log(`[pipeline-stage-controller] No recent goal found for context enrichment`);
+          // Ensure empty objects instead of undefined
+          enrichedContext = {
+            ...enrichedContext,
+            rejection_context: enrichedContext.rejection_context || {},
+            newly_extracted_data: enrichedContext.newly_extracted_data || {},
+            remaining_missing_info: enrichedContext.remaining_missing_info || [],
+            document_statuses: enrichedContext.document_statuses || {},
+          };
+        }
+        
+        // v1.3.0: Also query application_documents for recently uploaded docs (last 15 minutes)
+        const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+        const { data: recentDocs } = await supabase
+          .from('application_documents')
+          .select('document_type, filename, is_verified, created_at')
+          .eq('application_id', application_id)
+          .gte('created_at', fifteenMinutesAgo)
+          .order('created_at', { ascending: false });
+        
+        if (recentDocs && recentDocs.length > 0) {
+          const documentsReceived = recentDocs.map(d => {
+            const type = d.document_type || d.filename?.toLowerCase();
+            if (type?.includes('diploma')) return d.is_verified ? 'Diploma (geverifieerd ✓)' : 'Diploma';
+            if (type?.includes('cv')) return 'CV';
+            if (type?.includes('vog')) return d.is_verified ? 'VOG (geverifieerd ✓)' : 'VOG (in behandeling)';
+            return d.filename || 'Document';
+          });
+          
+          enrichedContext.documents_received = documentsReceived;
+          console.log(`[pipeline-stage-controller] Added recent docs to context: ${documentsReceived.join(', ')}`);
         }
 
         // Invoke specialist agent
