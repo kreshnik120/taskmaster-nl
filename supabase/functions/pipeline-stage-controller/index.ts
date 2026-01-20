@@ -13,7 +13,7 @@
  * This controller enforces the strict 6-stage flow:
  * nieuw → intake_verstuurd → gesprek_gepland → screening → goedgekeurd → geplaatst
  */
-console.log('[pipeline-stage-controller] v1.3.0 BOOTED at', new Date().toISOString());
+console.log('[pipeline-stage-controller] v1.4.0 BOOTED at', new Date().toISOString());
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -675,9 +675,144 @@ Deno.serve(async (req) => {
         );
       }
 
+      // =====================================================================
+      // ACTION: CHECK_FASE1 - Validate Fase 1 requirements and auto-advance
+      // v1.4.0: Called after DUO verification to check if ready for intake_verstuurd
+      // =====================================================================
+      case 'check_fase1': {
+        console.log(`[pipeline-stage-controller] v1.4.0 check_fase1 for application ${application_id}`);
+        
+        // Only process if still in 'nieuw' stage
+        if (app.pipeline_stage !== 'nieuw') {
+          console.log(`[pipeline-stage-controller] Application not in 'nieuw' stage (${app.pipeline_stage}), skipping check_fase1`);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              action: 'check_fase1_skipped',
+              reason: `Application in stage '${app.pipeline_stage}', not 'nieuw'`,
+              current_stage: app.pipeline_stage
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        // Fetch document counts from application_documents table
+        const { data: docCounts } = await supabase
+          .from('application_documents')
+          .select('document_type, is_verified, filename')
+          .eq('application_id', application_id);
+        
+        const documents = (docCounts || []) as DocumentData[];
+        
+        const hasCV = documents.some(d => 
+          d.document_type === 'cv' || 
+          d.filename?.toLowerCase().includes('cv') ||
+          d.filename?.toLowerCase().includes('curriculum')
+        );
+        
+        const diplomaDoc = documents.find(d => 
+          d.document_type === 'diploma' || 
+          d.filename?.toLowerCase().includes('diploma')
+        );
+        const hasDiploma = !!diplomaDoc;
+        const diplomaVerified = diplomaDoc?.is_verified === true;
+        
+        // Fetch welcome email status and completeness
+        const welcomeSent = !!app.welcome_email_sent_at;
+        const completeness = app.completeness_score ?? 0;
+        
+        // Check all Fase 1 requirements
+        const fase1Requirements = {
+          welcome_email: welcomeSent,
+          cv_registered: hasCV,
+          diploma_registered: hasDiploma,
+          diploma_verified: diplomaVerified,
+          completeness_threshold: completeness >= 70
+        };
+        
+        const allMet = Object.values(fase1Requirements).every(v => v === true);
+        const blockers = Object.entries(fase1Requirements)
+          .filter(([_, met]) => !met)
+          .map(([req]) => req);
+        
+        console.log(`[pipeline-stage-controller] Fase 1 requirements:`, JSON.stringify(fase1Requirements));
+        console.log(`[pipeline-stage-controller] All met: ${allMet}, Blockers: ${blockers.join(', ')}`);
+        
+        if (allMet) {
+          // Advance to intake_verstuurd
+          const { error: advanceError } = await supabase
+            .from('professional_applications')
+            .update({
+              pipeline_stage: 'intake_verstuurd',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', application_id);
+          
+          if (advanceError) {
+            console.error('[pipeline-stage-controller] Fase 1 advance error:', advanceError);
+            return new Response(
+              JSON.stringify({
+                success: false,
+                action: 'check_fase1',
+                error: advanceError.message
+              }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          
+          // Log the transition
+          await supabase.from('system_events').insert({
+            event_type: 'fase1_completed',
+            entity_type: 'application',
+            entity_id: application_id,
+            org_id: app.org_id,
+            event_data: {
+              from_stage: 'nieuw',
+              to_stage: 'intake_verstuurd',
+              requirements_met: fase1Requirements,
+              trigger: trigger,
+              source: trigger_source || 'check_fase1'
+            },
+            metadata: {}
+          });
+          
+          // Log audit trail
+          await logAudit(supabase, application_id, trigger_source || 'check_fase1', {
+            action: 'fase1_advanced',
+            from_stage: 'nieuw',
+            to_stage: 'intake_verstuurd',
+            requirements: fase1Requirements
+          }, Date.now() - startTime);
+          
+          console.log(`✅ [pipeline-stage-controller] Fase 1 completed: nieuw → intake_verstuurd`);
+          
+          return new Response(
+            JSON.stringify({
+              success: true,
+              action: 'fase1_advanced',
+              from_stage: 'nieuw',
+              to_stage: 'intake_verstuurd',
+              requirements: fase1Requirements
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        return new Response(
+          JSON.stringify({
+            success: false,
+            action: 'fase1_not_ready',
+            current_stage: app.pipeline_stage,
+            requirements: fase1Requirements,
+            blockers: blockers
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
-          JSON.stringify({ error: `Unknown action: ${action}. Valid actions: check, advance, route, status` }),
+          JSON.stringify({ error: `Unknown action: ${action}. Valid actions: check, advance, route, status, check_fase1` }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
     }
