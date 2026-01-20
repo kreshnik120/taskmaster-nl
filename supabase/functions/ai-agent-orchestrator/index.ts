@@ -2666,24 +2666,13 @@ async function executeWelcomeAndIntake(supabase: any, action: any) {
       console.log('✅ [Welcome] welcome_email_sent_at timestamp updated');
     }
 
-    // Trigger pipeline-stage-controller to advance stage (if appropriate)
-    console.log('[Welcome] Triggering pipeline-stage-controller for stage advancement...');
-    const { data: advanceResult, error: advanceError } = await supabase.functions.invoke('pipeline-stage-controller', {
-      body: {
-        action: 'advance',
-        application_id: applicationId,
-        trigger_source: 'legacy-executeWelcomeAndIntake',
-        trigger: 'welcome_email_sent'
-      }
-    });
-
-    if (advanceError) {
-      console.warn('[Welcome] Pipeline advance failed (may be expected if requirements not met):', advanceError.message);
-    } else if (advanceResult?.success) {
-      console.log(`✅ [Welcome] Pipeline stage advanced: ${advanceResult.previous_stage} → ${advanceResult.new_stage}`);
-    } else {
-      console.log('[Welcome] Pipeline advance not executed:', advanceResult?.blockers || 'unknown reason');
-    }
+    // =====================================================
+    // FASE 1 FIX v1.4.0: DO NOT auto-advance stage after welcome email
+    // The candidate stays in 'nieuw' until documents (CV + verified Diploma) are received
+    // Stage advancement is handled by handle-application-reply → tryAdvanceFase1()
+    // =====================================================
+    console.log('[Welcome] ✅ Fase 1: Kandidaat blijft in "nieuw" stage - wacht op documenten');
+    console.log('[Welcome] Stage transitie wordt afgehandeld door handle-application-reply wanneer CV + geverifieerd diploma ontvangen zijn');
     
     return { 
       executed_via: 'resend', 
@@ -2692,7 +2681,8 @@ async function executeWelcomeAndIntake(supabase: any, action: any) {
       email_generated: !!emailData,
       email_sent: !!sendData,
       fields_asked: action.input_data.fields_to_ask?.length || 0,
-      pipeline_advance_result: advanceResult,
+      stage_completed: false, // Fase 1: blijf in 'nieuw' tot documenten ontvangen
+      awaiting_documents: true,
       ...sendData 
     };
 
