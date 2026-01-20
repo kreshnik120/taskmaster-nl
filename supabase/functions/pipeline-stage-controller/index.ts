@@ -84,12 +84,55 @@ async function checkTransitionRequirements(
 
   // Define requirements per transition
   // HERZIEN januari 2026: docs_compleet verwijderd, intake_verstuurd→gesprek_gepland vereist gesprek_datum
+  // HERZIEN januari 2026 v2: nieuw→intake_verstuurd vereist geverifieerde documenten
   switch (`${fromStage}→${toStage}`) {
-    case 'nieuw→intake_verstuurd':
+    case 'nieuw→intake_verstuurd': {
+      // v1.2.0: Uitgebreide transitie vereisten voor Fase 1 → Fase 2
+      // Kandidaat moet documenten aangeleverd EN geverifieerd hebben
+      
+      // Check 1: Welkomstmail moet verstuurd zijn
       if (!app.welcome_email_sent_at) {
         blockers.push('Welkomstmail niet verstuurd (welcome_email_sent_at is null)');
       }
+      
+      // Check 2: CV moet aanwezig zijn in application_documents
+      const hasCV = documents.some(d => 
+        d.document_type === 'cv' || 
+        d.filename?.toLowerCase().includes('cv') ||
+        d.filename?.toLowerCase().includes('curriculum')
+      );
+      if (!hasCV) {
+        blockers.push('CV ontbreekt in application_documents');
+      }
+      
+      // Check 3: Diploma moet aanwezig zijn
+      const hasDiploma = documents.some(d => 
+        d.document_type === 'diploma' || 
+        d.filename?.toLowerCase().includes('diploma') ||
+        d.filename?.toLowerCase().includes('certificaat')
+      );
+      if (!hasDiploma) {
+        blockers.push('Diploma ontbreekt in application_documents');
+      }
+      
+      // Check 4: Diploma moet GEVERIFIEERD zijn via Bright/DUO
+      const diplomaVerified = documents.some(d => 
+        (d.document_type === 'diploma' || d.filename?.toLowerCase().includes('diploma')) && 
+        d.is_verified === true
+      );
+      if (hasDiploma && !diplomaVerified) {
+        blockers.push('Diploma nog niet geverifieerd via DUO/Bright');
+      }
+      
+      // Check 5: Completeness score minimaal 70%
+      const completeness = app.completeness_score || 0;
+      if (completeness < 70) {
+        blockers.push(`Completeness score ${completeness}% is lager dan vereiste 70%`);
+      }
+      
+      console.log(`[pipeline-controller] nieuw→intake_verstuurd check: hasCV=${hasCV}, hasDiploma=${hasDiploma}, diplomaVerified=${diplomaVerified}, completeness=${completeness}%, blockers=${blockers.length}`);
       break;
+    }
 
     // HERZIEN: intake_verstuurd→gesprek_gepland vereist gesprek_datum (door recruiter of kandidaat slot keuze)
     case 'intake_verstuurd→gesprek_gepland': {

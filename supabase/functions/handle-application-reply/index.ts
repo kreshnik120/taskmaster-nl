@@ -27,6 +27,9 @@ import {
   getPresentDocuments,
   hasField,
   calculateDocumentAwareCompleteness,
+  // v1.4.0: Fase 1 completeness check for nieuw → intake_verstuurd
+  checkFase1Completeness,
+  tryAdvanceFase1,
 } from '../_shared/healthcare-mappings.ts';
 // Fase 1: Quick Wins - Modulaire detection & audit
 import { stripQuotedContent, detectSlotWithRegex, detectInterviewSlot, type SlotDetectionInput } from '../_shared/slot-detection.ts';
@@ -2068,6 +2071,84 @@ Return JSON in dit formaat:
           });
         } else if (refreshError) {
           console.warn("⚠️ Failed to refresh application data:", refreshError.message);
+        }
+      }
+      
+      // =====================================================
+      // v1.4.0 FASE 1 CHECK: Probeer stage transitie als in 'nieuw'
+      // Dit checkt of alle documenten ontvangen EN geverifieerd zijn
+      // =====================================================
+      const pipelineStage = application.pipeline_stage || 'nieuw';
+      
+      if (pipelineStage === 'nieuw' && processedDocuments.length > 0) {
+        console.log(`🔍 [Fase 1 Check] Application in 'nieuw' stage, checking completeness...`);
+        
+        // Check if we have diploma documents - wait for DUO verification first
+        const hasNewDiploma = processedDocuments.some(d => 
+          d.document_type === 'diploma' || d.document_type === 'certificate'
+        );
+        
+        if (hasNewDiploma) {
+          // DUO verification is async - we need to wait a bit or handle in callback
+          // For now, log that we're waiting for DUO verification
+          console.log(`⏳ [Fase 1] Diploma uploaded, waiting for DUO verification before stage transition`);
+          console.log(`   DUO verification is async - stage transition will happen when verification completes`);
+          
+          // Create a system event for tracking
+          await supabase.from('system_events').insert({
+            org_id: application.org_id,
+            event_type: 'fase1_awaiting_verification',
+            entity_type: 'professional_application',
+            entity_id: applicationId,
+            event_data: {
+              documents_received: processedDocuments.map(d => d.document_type),
+              awaiting_verification: ['diploma'],
+              current_completeness: application.completeness_score,
+            },
+            metadata: { source: 'handle-application-reply', version: '3.1.0' }
+          });
+        } else {
+          // No diploma in this batch - check if we can advance anyway
+          const fase1Result = await checkFase1Completeness(supabase, applicationId);
+          
+          console.log(`📋 [Fase 1] Completeness check result:`, {
+            canAdvance: fase1Result.canAdvance,
+            hasCV: fase1Result.hasCV,
+            hasDiploma: fase1Result.hasDiploma,
+            diplomaVerified: fase1Result.diplomaVerified,
+            completeness: fase1Result.completenessScore,
+            blockers: fase1Result.blockers
+          });
+          
+          if (fase1Result.canAdvance) {
+            console.log(`✅ [Fase 1] All requirements met - triggering stage transition...`);
+            
+            const advanceResult = await tryAdvanceFase1(supabase, applicationId);
+            
+            if (advanceResult.transitioned) {
+              console.log(`✅ [Fase 1] Successfully transitioned to intake_verstuurd`);
+              
+              // Update local application object
+              Object.assign(application, { pipeline_stage: 'intake_verstuurd' });
+              
+              // Log audit event
+              await supabase.from('application_conversations').insert({
+                application_id: applicationId,
+                role: 'system',
+                content: `[Fase 1 Compleet] ✅ Alle vereisten voldaan:\n- CV ontvangen\n- Diploma ontvangen en geverifieerd via DUO\n- Completeness ${fase1Result.completenessScore}% ≥ 70%\n\nStage: nieuw → intake_verstuurd`,
+                metadata: {
+                  phase: 'fase1_complete',
+                  transition: 'nieuw→intake_verstuurd',
+                  completeness: fase1Result.completenessScore,
+                  triggered_by: 'handle-application-reply'
+                }
+              });
+            } else {
+              console.log(`⚠️ [Fase 1] Transition failed:`, advanceResult.blockers);
+            }
+          } else {
+            console.log(`⏳ [Fase 1] Not ready to advance:`, fase1Result.blockers);
+          }
         }
       }
       

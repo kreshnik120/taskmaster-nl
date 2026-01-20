@@ -1,26 +1,28 @@
 /**
- * Agent Welkom v1.3.0
+ * Agent Welkom v1.4.0
  * ===================
  * Specialist agent for the 'nieuw' stage.
- * Handles: nieuw → intake_verstuurd
+ * 
+ * v1.4.0 BREAKING CHANGE:
+ * - Kandidaat BLIJFT in 'nieuw' stage na welkomstmail (stage_completed: false)
+ * - Transitie naar 'intake_verstuurd' pas NA ontvangst + verificatie documenten
+ * - Dit wordt afgehandeld door handle-application-reply + pipeline-stage-controller
  * 
  * Responsibilities:
  * - Send professional welcome email to new applicants
  * - Request missing information using DATABASE missing_info (not self-calculated)
  * - Update welcome_email_sent_at timestamp (CRITICAL)
+ * - NIET: stage transitie (dit doet pipeline-stage-controller na doc verificatie)
  * 
- * v1.3.0 FIX: 
- * - ALWAYS fetch from database (orchestrator doesn't pass missing_info)
- * - Use template_data instead of context for send-ai-email
- * 
- * v1.2.0 FIX: Use database missing_info array instead of self-calculating
+ * v1.3.0 FIX: ALWAYS fetch from database, use template_data
+ * v1.2.0 FIX: Use database missing_info array
  * 
  * This agent does NOTHING else:
- * - No document verification (Document Agent)
+ * - No document verification (handle-application-reply + Bright/DUO)
  * - No interview scheduling (Planning Agent)
  * - No VOG requests (Screening Agent)
  */
-console.log('[agent-welkom] v1.3.0 BOOTED at', new Date().toISOString());
+console.log('[agent-welkom] v1.4.0 BOOTED at', new Date().toISOString());
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -292,14 +294,24 @@ Deno.serve(async (req) => {
     });
 
     console.log(`[agent-welkom] ✅ Completed in ${Date.now() - startTime}ms`);
+    console.log(`[agent-welkom] v1.4.0: stage_completed=false - kandidaat blijft in 'nieuw' tot documenten geverifieerd`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        stage_completed: true, // Signal to controller to advance stage
+        // v1.4.0 BREAKING: Kandidaat blijft in 'nieuw' stage!
+        // Transitie naar intake_verstuurd pas na:
+        // 1. Ontvangst documenten via handle-application-reply
+        // 2. Verificatie via Bright/DUO
+        // 3. Pipeline-stage-controller check
+        stage_completed: false,
+        awaiting_documents: true,
         email_sent: true,
         email_type: emailType,
         missing_info: missingInfo,
+        required_documents: ['CV', 'Diploma'],
+        verification_required: ['Diploma via DUO'],
+        message: 'Welkomstmail verstuurd. Kandidaat blijft in nieuw stage tot documenten ontvangen en geverifieerd.',
         updated_fields: {
           welcome_email_sent_at: new Date().toISOString()
         },

@@ -75,42 +75,69 @@ WHERE is_active = true;
 
 | Eigenschap | Waarde |
 |------------|--------|
-| **Verantwoordelijke Agent** | `agent-welkom` |
+| **Verantwoordelijke Agent** | `agent-welkom` (welkomstmail) + `handle-application-reply` (document ontvangst) |
 | **Trigger** | Nieuwe sollicitatie email ontvangen |
-| **Doel** | Kandidaat welkom heten, ontbrekende informatie identificeren |
-| **Target Stage** | `intake_verstuurd` |
+| **Doel** | Kandidaat welkom heten, documenten verzamelen en verifiëren |
+| **Target Stage** | `intake_verstuurd` (pas na verificatie!) |
 
-### Workflow Stappen
+### ⚠️ KRITIEKE WIJZIGING v1.4.0
+
+**Kandidaat BLIJFT in 'nieuw' stage tot:**
+1. ✅ Welkomstmail verstuurd (`welcome_email_sent_at != null`)
+2. ✅ CV ontvangen en geregistreerd in `application_documents`
+3. ✅ Diploma ontvangen en geregistreerd in `application_documents`
+4. ✅ Diploma geverifieerd via Bright/DUO (`is_verified = true`)
+5. ✅ Completeness score ≥ 70%
+
+### Transitie Vereisten (nieuw → intake_verstuurd)
+
+| Vereiste | Controle | Beschrijving |
+|----------|----------|--------------|
+| `welcome_email_sent_at` | `!= null` | Welkomstmail moet verstuurd zijn |
+| CV | `application_documents` | Document met type 'cv' aanwezig |
+| Diploma | `application_documents` | Document met type 'diploma' aanwezig |
+| Diploma Verificatie | `is_verified = true` | Via DUO/Bright geverifieerd |
+| Completeness | `≥ 70%` | Profiel voldoende ingevuld |
+
+### Document Verificatie Flow
 
 ```mermaid
 sequenceDiagram
     participant Email as Inbound Email
     participant PAE as process-application-email
     participant DB as Database
-    participant Trigger as DB Trigger
     participant Welkom as agent-welkom
     participant SendEmail as send-ai-email
+    participant Reply as handle-application-reply
+    participant DUO as verify-diploma-duo
     participant PSC as pipeline-stage-controller
 
+    Note over Email,PAE: STAP 1: Initiële sollicitatie
     Email->>PAE: Nieuwe sollicitatie ontvangen
-    PAE->>PAE: Parse email headers & body
-    PAE->>PAE: Identificeer CV attachment
-    PAE->>DB: Upload CV naar storage
-    PAE->>PAE: Extract data uit CV (naam, email, telefoon)
     PAE->>DB: INSERT professional_applications (stage: 'nieuw')
-    DB->>Trigger: consolidated_welcome_intake_trigger
-    Trigger->>DB: INSERT agent_goals (type: 'send_welcome_and_intake')
-    Note over Welkom: AI Agent Orchestrator activeert goal
-    Welkom->>DB: Fetch application data
-    Welkom->>Welkom: Analyseer ontbrekende velden
-    Welkom->>Welkom: Bepaal email type (welcome vs welcome_intake)
-    Welkom->>SendEmail: Invoke met email_type + context
-    SendEmail->>SendEmail: Genereer gepersonaliseerde email
+    PAE->>DB: INSERT application_documents (CV)
+    DB->>Welkom: Trigger agent-welkom
+    Welkom->>SendEmail: Stuur welkomstmail met missing items
     SendEmail->>DB: UPDATE welcome_email_sent_at
-    SendEmail->>DB: INSERT application_conversations (audit log)
-    Welkom->>PSC: Request stage transition
-    PSC->>PSC: Validate: welcome_email_sent_at != null
-    PSC->>DB: UPDATE pipeline_stage → 'intake_verstuurd'
+    Note over Welkom: stage_completed: FALSE - kandidaat blijft in 'nieuw'
+
+    Note over Email,Reply: STAP 2: Kandidaat antwoordt met documenten
+    Email->>Reply: Reply met diploma attachment
+    Reply->>DB: INSERT application_documents (diploma)
+    Reply->>DUO: Trigger diploma verificatie
+    DUO->>DUO: Bright Data / DUO portal check
+    DUO->>DB: UPDATE is_verified = true
+    
+    Note over Reply,PSC: STAP 3: Check transitie vereisten
+    Reply->>PSC: checkFase1Completeness()
+    PSC->>DB: Check alle vereisten
+    alt Alle vereisten voldaan
+        PSC->>DB: UPDATE pipeline_stage → 'intake_verstuurd'
+        PSC-->>Reply: transitioned: true
+    else Vereisten niet voldaan
+        PSC-->>Reply: blockers: ["Diploma nog niet geverifieerd"]
+        Reply->>SendEmail: Stuur follow-up email
+    end
 ```
 
 ### Stap-voor-Stap Beschrijving

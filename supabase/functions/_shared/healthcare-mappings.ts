@@ -2545,3 +2545,166 @@ export async function logSecurityEvent(
     console.error(`❌ Failed to log security event: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
+
+// ============================================
+// FASE 1 COMPLETENESS CHECK (v1.0.0)
+// ============================================
+
+/**
+ * Result of Fase 1 completeness check
+ */
+export interface Fase1CompletenessResult {
+  canAdvance: boolean;
+  blockers: string[];
+  hasCV: boolean;
+  hasDiploma: boolean;
+  diplomaVerified: boolean;
+  completenessScore: number;
+}
+
+/**
+ * Checks if an application in 'nieuw' stage is ready to advance to 'intake_verstuurd'.
+ * 
+ * Requirements for transition:
+ * 1. Welkomstmail verstuurd (welcome_email_sent_at != null)
+ * 2. CV aanwezig in application_documents
+ * 3. Diploma aanwezig in application_documents
+ * 4. Diploma geverifieerd via DUO/Bright (is_verified = true)
+ * 5. Completeness score >= 70%
+ * 
+ * @param supabase - Supabase client
+ * @param applicationId - ID of the application to check
+ * @returns Fase1CompletenessResult with canAdvance flag and blockers
+ */
+export async function checkFase1Completeness(
+  supabase: any,
+  applicationId: string
+): Promise<Fase1CompletenessResult> {
+  const blockers: string[] = [];
+  
+  // Fetch application
+  const { data: app, error: appError } = await supabase
+    .from('professional_applications')
+    .select('id, welcome_email_sent_at, completeness_score, missing_info, extracted_data')
+    .eq('id', applicationId)
+    .single();
+  
+  if (appError || !app) {
+    console.error('[checkFase1Completeness] Application not found:', applicationId);
+    return { 
+      canAdvance: false, 
+      blockers: ['Application not found'], 
+      hasCV: false, 
+      hasDiploma: false, 
+      diplomaVerified: false,
+      completenessScore: 0 
+    };
+  }
+  
+  // Fetch documents
+  const { data: docs } = await supabase
+    .from('application_documents')
+    .select('document_type, is_verified, filename')
+    .eq('application_id', applicationId);
+  
+  const documents = docs || [];
+  
+  // Check 1: Welkomstmail verstuurd
+  if (!app.welcome_email_sent_at) {
+    blockers.push('Welkomstmail niet verstuurd');
+  }
+  
+  // Check 2: CV aanwezig
+  const hasCV = documents.some((d: any) => 
+    d.document_type === 'cv' || 
+    d.filename?.toLowerCase().includes('cv') ||
+    d.filename?.toLowerCase().includes('curriculum')
+  );
+  if (!hasCV) {
+    blockers.push('CV ontbreekt');
+  }
+  
+  // Check 3: Diploma aanwezig
+  const hasDiploma = documents.some((d: any) => 
+    d.document_type === 'diploma' || 
+    d.filename?.toLowerCase().includes('diploma') ||
+    d.filename?.toLowerCase().includes('certificaat')
+  );
+  if (!hasDiploma) {
+    blockers.push('Diploma ontbreekt');
+  }
+  
+  // Check 4: Diploma geverifieerd via Bright/DUO
+  const diplomaVerified = documents.some((d: any) => 
+    (d.document_type === 'diploma' || d.filename?.toLowerCase().includes('diploma')) && 
+    d.is_verified === true
+  );
+  if (hasDiploma && !diplomaVerified) {
+    blockers.push('Diploma nog niet geverifieerd via DUO');
+  }
+  
+  // Check 5: Completeness score
+  const completenessScore = app.completeness_score || 0;
+  if (completenessScore < 70) {
+    blockers.push(`Completeness ${completenessScore}% < 70%`);
+  }
+  
+  console.log(`[checkFase1Completeness] app=${applicationId}: CV=${hasCV}, Diploma=${hasDiploma}, DiplomaVerified=${diplomaVerified}, Score=${completenessScore}%, Blockers=${blockers.length}`);
+  
+  return {
+    canAdvance: blockers.length === 0,
+    blockers,
+    hasCV,
+    hasDiploma,
+    diplomaVerified,
+    completenessScore
+  };
+}
+
+/**
+ * Triggers stage transition from 'nieuw' to 'intake_verstuurd' if all requirements are met.
+ * Called by handle-application-reply after processing documents and verification.
+ * 
+ * @param supabase - Supabase client
+ * @param applicationId - ID of the application
+ * @returns Object indicating if transition was triggered
+ */
+export async function tryAdvanceFase1(
+  supabase: any,
+  applicationId: string
+): Promise<{ transitioned: boolean; blockers: string[] }> {
+  const result = await checkFase1Completeness(supabase, applicationId);
+  
+  if (!result.canAdvance) {
+    console.log(`[tryAdvanceFase1] Cannot advance: ${result.blockers.join(', ')}`);
+    return { transitioned: false, blockers: result.blockers };
+  }
+  
+  // All requirements met - trigger pipeline-stage-controller
+  console.log(`[tryAdvanceFase1] All requirements met, triggering stage transition...`);
+  
+  try {
+    const { data, error } = await supabase.functions.invoke('pipeline-stage-controller', {
+      body: {
+        action: 'advance',
+        application_id: applicationId,
+        current_stage: 'nieuw',
+        target_stage: 'intake_verstuurd',
+        agent: 'handle-application-reply',
+        reason: 'Fase 1 compleet: documenten ontvangen en geverifieerd'
+      }
+    });
+    
+    if (error) {
+      console.error('[tryAdvanceFase1] Pipeline controller error:', error);
+      return { transitioned: false, blockers: [`Pipeline controller error: ${error.message}`] };
+    }
+    
+    console.log(`[tryAdvanceFase1] ✅ Transitioned to intake_verstuurd`);
+    return { transitioned: true, blockers: [] };
+    
+  } catch (err) {
+    console.error('[tryAdvanceFase1] Exception:', err);
+    return { transitioned: false, blockers: [`Exception: ${err instanceof Error ? err.message : 'Unknown'}`] };
+  }
+}
