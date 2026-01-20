@@ -34,7 +34,7 @@
  * - No interview scheduling (Planning Agent)
  * - No VOG requests (Screening Agent)
  */
-console.log('[agent-welkom] v1.6.0 BOOTED at', new Date().toISOString());
+console.log('[agent-welkom] v1.7.0 BOOTED at', new Date().toISOString());
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -182,14 +182,49 @@ Deno.serve(async (req) => {
       const remainingMissing = body.context?.remaining_missing_info || fullApp.missing_info || [];
       const rejectionContext = body.context?.rejection_context || {};
       
-      // Build human-readable list of newly received data
+      // v1.7.0 FIX: Build human-readable list of newly received data from BOTH context AND database
       const newlyReceivedItems: string[] = [];
+      
+      // Add data fields that were extracted
       if (newlyExtractedData.naam) newlyReceivedItems.push(`Naam: ${newlyExtractedData.naam}`);
       if (newlyExtractedData.telefoon) newlyReceivedItems.push(`Telefoonnummer: ${newlyExtractedData.telefoon}`);
       if (newlyExtractedData.geboortedatum) newlyReceivedItems.push('Geboortedatum');
       if (newlyExtractedData.adres) newlyReceivedItems.push('Adres');
+      if (newlyExtractedData.kvk_nummer) newlyReceivedItems.push(`KvK-nummer: ${newlyExtractedData.kvk_nummer}`);
+      if (newlyExtractedData.iban) newlyReceivedItems.push('IBAN rekeningnummer');
+      if (newlyExtractedData.nachtdienst_bereid !== undefined) newlyReceivedItems.push('Bereidheid nachtdiensten');
+      if (newlyExtractedData.weekenddienst_bereid !== undefined) newlyReceivedItems.push('Bereidheid weekenddiensten');
+      
+      // Add documents from context (set by pipeline-stage-controller)
       if (body.context?.documents_received?.length > 0) {
-        newlyReceivedItems.push(...body.context.documents_received.map((d: string) => `Document: ${d}`));
+        newlyReceivedItems.push(...body.context.documents_received);
+      }
+      
+      // v1.7.0: Also query database for recent documents if none in context
+      if (newlyReceivedItems.filter(i => i.includes('Diploma') || i.includes('CV') || i.includes('VOG')).length === 0) {
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+        const { data: recentDocs } = await supabase
+          .from('application_documents')
+          .select('document_type, filename, is_verified, created_at')
+          .eq('application_id', fullApp.id)
+          .gte('created_at', tenMinutesAgo)
+          .order('created_at', { ascending: false });
+        
+        if (recentDocs && recentDocs.length > 0) {
+          for (const doc of recentDocs) {
+            const type = doc.document_type || doc.filename?.toLowerCase();
+            if (type?.includes('diploma')) {
+              newlyReceivedItems.push(doc.is_verified ? 'Diploma (geverifieerd ✓)' : 'Diploma');
+            } else if (type?.includes('cv')) {
+              newlyReceivedItems.push('CV');
+            } else if (type?.includes('vog')) {
+              newlyReceivedItems.push(doc.is_verified ? 'VOG (geverifieerd ✓)' : 'VOG (in behandeling)');
+            } else {
+              newlyReceivedItems.push(doc.filename || 'Document');
+            }
+          }
+          console.log(`[agent-welkom] v1.7.0: Added ${recentDocs.length} recent docs from database`);
+        }
       }
       
       // Use FIELD_LABEL_MAP for human-readable missing info

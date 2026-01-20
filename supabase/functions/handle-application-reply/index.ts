@@ -2927,7 +2927,8 @@ Return JSON in dit formaat:
                 // Volledige context voor AI-gestuurde response
                 response_type: responseType,
                 newly_extracted_data: analysis.new_data || {},
-                rejection_context: Object.keys(rejectionContext).length > 0 ? rejectionContext : undefined,
+                // v1.4.0 FIX: Always pass object, never undefined - prevents missing context downstream
+                rejection_context: rejectionContext || {},
                 accepted_data: Object.keys(analysis.new_data || {}).filter(k => !rejectionContext[k]),
                 remaining_missing_info: finalRemainingMissing,
                 current_completeness: newCompletenessScore,
