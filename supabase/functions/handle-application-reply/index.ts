@@ -2347,13 +2347,33 @@ Return JSON in dit formaat:
       console.log("📋 CV file present, removed cv/cv_upload from missing info");
     }
     
-    // Check VOG - verwijder vog vragen als validation status OK is
-    const vogValidStatuses = ['pending', 'valid', 'verified', 'verified_gaav'];
-    if (application.vog_validation_status && vogValidStatuses.includes(application.vog_validation_status)) {
+    // =====================================================
+    // v1.7.0 FIX: DOCUMENT-AWARE VOG STATUS CHECK
+    // Query application_documents table instead of just columns
+    // =====================================================
+    const { data: vogDocuments } = await supabase
+      .from('application_documents')
+      .select('id, is_verified, document_type, metadata')
+      .eq('application_id', applicationId)
+      .eq('document_type', 'vog')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    const hasVogInDocuments = vogDocuments && vogDocuments.length > 0;
+    const vogDocVerified = vogDocuments?.[0]?.is_verified === true;
+    const vogPendingReview = hasVogInDocuments && !vogDocVerified;
+    
+    console.log(`📋 [v1.7.0] VOG document check: inDocTable=${hasVogInDocuments}, verified=${vogDocVerified}, pendingReview=${vogPendingReview}`);
+    
+    // Check VOG - verwijder vog vragen als document aanwezig is OF validation status OK is
+    const vogValidStatuses = ['pending', 'pending_review', 'valid', 'verified', 'verified_gaav'];
+    const vogStatusFromData = mergedData.vog_validation_status || application.vog_validation_status;
+    
+    if (hasVogInDocuments || (vogStatusFromData && vogValidStatuses.includes(vogStatusFromData))) {
       finalRemainingMissing = finalRemainingMissing.filter(f => 
         !f.toLowerCase().includes('vog')
       );
-      console.log(`📋 VOG status ${application.vog_validation_status}, removed vog from missing info`);
+      console.log(`📋 VOG present (doc=${hasVogInDocuments}, status=${vogStatusFromData}), removed vog from missing info`);
     }
     
     // Add telefoon terug als blocked
@@ -2370,6 +2390,7 @@ Return JSON in dit formaat:
     console.log("   Expired docs:", completenessResult.expiredDocs);
     console.log("   Missing fields:", completenessResult.missingFields);
     console.log("   Blockers:", completenessResult.blockers);
+    console.log("   VOG in documents table:", hasVogInDocuments);
     console.log("   Final remaining missing:", finalRemainingMissing);
 
 
@@ -2939,20 +2960,25 @@ Return JSON in dit formaat:
                 org_name: orgInfo.displayName,
                 email_config: emailConfig,
                 followup_count: currentFollowupCount + 1, // Track follow-up count
-                // Document status voor correcte kleuren in email templates
+                // v1.7.0 FIX: Document status met application_documents table check
                 document_statuses: {
                   cv: hasCV ? 'received' : 'missing',
                   diploma: hasDiploma ? (isDiplomaVerified ? 'verified' : 'received') : 'missing',
-                  vog: (mergedData.vog_validation_status === 'verified' || mergedData.vog_validation_status === 'verified_gaav')
+                  // v1.7.0: Check application_documents table for VOG
+                  vog: vogDocVerified || mergedData.vog_validation_status === 'verified' || mergedData.vog_validation_status === 'verified_gaav'
                     ? 'verified'
-                    : mergedData.vog_file_path ? 'received' : 'missing'
+                    : hasVogInDocuments || mergedData.vog_validation_status === 'pending_review' || !!mergedData.vog_file_path
+                      ? 'received'  // VOG in quarantine/pending is still "received"
+                      : 'missing'
                 },
                 template_data: {
                   cv_uploaded: hasCV,
                   diploma_uploaded: hasDiploma,
                   diploma_verified: isDiplomaVerified,
-                  vog_uploaded: !!mergedData.vog_file_path,
-                  vog_verified: mergedData.vog_validation_status === 'verified' || mergedData.vog_validation_status === 'verified_gaav',
+                  // v1.7.0: VOG status from documents table
+                  vog_uploaded: hasVogInDocuments || !!mergedData.vog_file_path,
+                  vog_verified: vogDocVerified || mergedData.vog_validation_status === 'verified' || mergedData.vog_validation_status === 'verified_gaav',
+                  vog_pending_review: vogPendingReview || mergedData.vog_pending_review || false,
                 },
               },
               status: "pending"
