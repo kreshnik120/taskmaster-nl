@@ -242,6 +242,7 @@ export type Database = {
           handles_stage: string
           id: string
           is_active: boolean | null
+          priority: number | null
           requires_human_approval: boolean | null
           system_prompt: string | null
           target_stage: string
@@ -257,6 +258,7 @@ export type Database = {
           handles_stage: string
           id?: string
           is_active?: boolean | null
+          priority?: number | null
           requires_human_approval?: boolean | null
           system_prompt?: string | null
           target_stage: string
@@ -272,6 +274,7 @@ export type Database = {
           handles_stage?: string
           id?: string
           is_active?: boolean | null
+          priority?: number | null
           requires_human_approval?: boolean | null
           system_prompt?: string | null
           target_stage?: string

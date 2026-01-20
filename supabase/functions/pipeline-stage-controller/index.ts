@@ -230,20 +230,20 @@ async function isMultiAgentEnabled(supabase: any): Promise<boolean> {
 }
 
 // ============================================================================
-// GET SPECIALIST AGENT FOR STAGE
+// GET SPECIALIST AGENT FOR STAGE (single agent - for check/advance/status)
 // ============================================================================
 
 async function getSpecialistForStage(
   supabase: any,
   stage: string
 ): Promise<{ agent_name: string; target_stage: string; available_tools: string[]; email_types: string[] } | null> {
-  // Use limit(1) instead of single() to handle stages with multiple agents (e.g., intake_verstuurd has document + planning)
-  // Order by created_at to get the first registered agent as primary handler
+  // Get primary agent (lowest priority) for single-agent operations
   const { data: agents, error } = await supabase
     .from('agent_specialists')
     .select('agent_name, target_stage, available_tools, email_types')
     .eq('handles_stage', stage)
     .eq('is_active', true)
+    .order('priority', { ascending: true })
     .order('created_at', { ascending: true })
     .limit(1);
 
@@ -252,8 +252,120 @@ async function getSpecialistForStage(
     return null;
   }
 
-  // Return the first agent or null if none found
   return agents && agents.length > 0 ? agents[0] : null;
+}
+
+// ============================================================================
+// GET ALL SPECIALISTS FOR STAGE (multi-agent orchestration)
+// ============================================================================
+
+interface SpecialistAgent {
+  agent_name: string;
+  target_stage: string;
+  available_tools: string[];
+  email_types: string[];
+  priority: number;
+}
+
+async function getAllSpecialistsForStage(
+  supabase: any,
+  stage: string
+): Promise<SpecialistAgent[]> {
+  const { data: agents, error } = await supabase
+    .from('agent_specialists')
+    .select('agent_name, target_stage, available_tools, email_types, priority')
+    .eq('handles_stage', stage)
+    .eq('is_active', true)
+    .order('priority', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error(`[pipeline-stage-controller] Error fetching specialists for stage ${stage}:`, error);
+    return [];
+  }
+
+  return agents || [];
+}
+
+// ============================================================================
+// CHECK IF AGENT-PLANNING SHOULD RUN
+// ============================================================================
+
+interface PlanningEligibility {
+  eligible: boolean;
+  reason: string;
+  details: {
+    has_cv: boolean;
+    has_diploma: boolean;
+    diploma_verified: boolean;
+    completeness_score: number;
+    interview_already_scheduled: boolean;
+    slots_already_proposed: boolean;
+  };
+}
+
+async function checkPlanningAgentEligibility(
+  supabase: any,
+  applicationId: string,
+  app: any
+): Promise<PlanningEligibility> {
+  // Check documents in application_documents table
+  const { data: docs } = await supabase
+    .from('application_documents')
+    .select('document_type, is_verified')
+    .eq('application_id', applicationId);
+
+  const hasCV = docs?.some((d: any) => d.document_type === 'cv') || false;
+  const hasDiploma = docs?.some((d: any) => d.document_type === 'diploma') || false;
+  const diplomaVerified = docs?.some((d: any) => d.document_type === 'diploma' && d.is_verified) || false;
+  const completenessScore = app.completeness_score || 0;
+  const interviewAlreadyScheduled = !!app.gesprek_datum;
+
+  // Check if interview slots were already proposed (via application_conversations or notifications)
+  const { data: slotsProposed } = await supabase
+    .from('application_conversations')
+    .select('id')
+    .eq('application_id', applicationId)
+    .eq('role', 'agent-planning')
+    .limit(1);
+
+  const slotsAlreadyProposed = (slotsProposed?.length || 0) > 0;
+
+  const details = {
+    has_cv: hasCV,
+    has_diploma: hasDiploma,
+    diploma_verified: diplomaVerified,
+    completeness_score: completenessScore,
+    interview_already_scheduled: interviewAlreadyScheduled,
+    slots_already_proposed: slotsAlreadyProposed
+  };
+
+  // Determine eligibility
+  if (interviewAlreadyScheduled) {
+    return { eligible: false, reason: 'Interview al gepland', details };
+  }
+
+  if (slotsAlreadyProposed) {
+    return { eligible: false, reason: 'Interview slots al voorgesteld', details };
+  }
+
+  if (!hasCV) {
+    return { eligible: false, reason: 'CV ontbreekt', details };
+  }
+
+  if (!hasDiploma) {
+    return { eligible: false, reason: 'Diploma ontbreekt', details };
+  }
+
+  if (!diplomaVerified) {
+    return { eligible: false, reason: 'Diploma nog niet geverifieerd', details };
+  }
+
+  if (completenessScore < 70) {
+    return { eligible: false, reason: `Compleetheid te laag (${completenessScore}% < 70%)`, details };
+  }
+
+  return { eligible: true, reason: 'Alle voorwaarden voldaan', details };
 }
 
 // ============================================================================
@@ -451,7 +563,8 @@ Deno.serve(async (req) => {
       }
 
       // =====================================================================
-      // ACTION: ROUTE - Route to the correct specialist agent
+      // ACTION: ROUTE - Route to the correct specialist agent(s)
+      // v1.5.0: Multi-Agent Orchestration - calls ALL agents for a stage sequentially
       // =====================================================================
       case 'route': {
         if (!multiAgentEnabled) {
@@ -477,11 +590,11 @@ Deno.serve(async (req) => {
           );
         }
 
-        // Get specialist for current stage
-        const specialist = await getSpecialistForStage(supabase, app.pipeline_stage);
+        // v1.5.0: Get ALL specialists for current stage (multi-agent orchestration)
+        const specialists = await getAllSpecialistsForStage(supabase, app.pipeline_stage);
         
-        if (!specialist) {
-          console.log(`[pipeline-stage-controller] No specialist for stage: ${app.pipeline_stage}`);
+        if (specialists.length === 0) {
+          console.log(`[pipeline-stage-controller] No specialists for stage: ${app.pipeline_stage}`);
           return new Response(
             JSON.stringify({ 
               success: false, 
@@ -491,10 +604,9 @@ Deno.serve(async (req) => {
           );
         }
 
-        console.log(`[pipeline-stage-controller] Routing to agent-${specialist.agent_name}`);
+        console.log(`[pipeline-stage-controller] v1.5.0 Multi-Agent: Found ${specialists.length} agents for stage ${app.pipeline_stage}`);
 
         // v1.3.0: ALWAYS enrich context from agent_goals for rejection_context and other data
-        // Not just for reply triggers - ensures all context propagates through routing
         let enrichedContext = body.context || {};
         
         // Fetch most recent goal with context data for this application
@@ -511,13 +623,10 @@ Deno.serve(async (req) => {
         
         if (recentGoal?.input_data) {
           console.log(`[pipeline-stage-controller] Found goal context from ${recentGoal.created_at}`);
-          
-          // Extract goal data with safe defaults
           const goalData = recentGoal.input_data;
           
           enrichedContext = {
             ...enrichedContext,
-            // CRITICAL: Always provide object defaults, never undefined
             rejection_context: goalData.rejection_context && Object.keys(goalData.rejection_context).length > 0 
               ? goalData.rejection_context 
               : (enrichedContext.rejection_context || {}),
@@ -525,11 +634,7 @@ Deno.serve(async (req) => {
             remaining_missing_info: goalData.remaining_missing_info || enrichedContext.remaining_missing_info || [],
             document_statuses: goalData.document_statuses || enrichedContext.document_statuses || {},
           };
-          
-          console.log(`[pipeline-stage-controller] Enriched context: rejection_keys=${Object.keys(enrichedContext.rejection_context || {}).length}, remaining_missing=${(enrichedContext.remaining_missing_info || []).length}`);
         } else {
-          console.log(`[pipeline-stage-controller] No recent goal found for context enrichment`);
-          // Ensure empty objects instead of undefined
           enrichedContext = {
             ...enrichedContext,
             rejection_context: enrichedContext.rejection_context || {},
@@ -539,7 +644,7 @@ Deno.serve(async (req) => {
           };
         }
         
-        // v1.3.0: Also query application_documents for recently uploaded docs (last 15 minutes)
+        // v1.3.0: Query application_documents for recently uploaded docs (last 15 minutes)
         const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
         const { data: recentDocs } = await supabase
           .from('application_documents')
@@ -549,7 +654,7 @@ Deno.serve(async (req) => {
           .order('created_at', { ascending: false });
         
         if (recentDocs && recentDocs.length > 0) {
-          const documentsReceived = recentDocs.map(d => {
+          const documentsReceived = recentDocs.map((d: any) => {
             const type = d.document_type || d.filename?.toLowerCase();
             if (type?.includes('diploma')) return d.is_verified ? 'Diploma (geverifieerd ✓)' : 'Diploma';
             if (type?.includes('cv')) return 'CV';
@@ -561,77 +666,123 @@ Deno.serve(async (req) => {
           console.log(`[pipeline-stage-controller] Added recent docs to context: ${documentsReceived.join(', ')}`);
         }
 
-        // Invoke specialist agent
-        const { data: specialistResult, error: specialistError } = await supabase.functions.invoke(`agent-${specialist.agent_name}`, {
-          body: {
-            application_id,
-            application: app,
-            trigger,
-            allowed_tools: specialist.available_tools,
-            allowed_email_types: specialist.email_types,
-            target_stage: specialist.target_stage,
-            context: enrichedContext,
-            extracted_data: body.extracted_data || {},
-            documents: body.documents || []
-          }
-        });
+        // v1.5.0: Execute ALL agents sequentially with conditional logic
+        const agentResults: Record<string, any> = {};
+        let stageAdvanced = false;
 
-        if (specialistError) {
-          console.error(`[pipeline-stage-controller] Specialist error:`, specialistError);
+        for (const specialist of specialists) {
+          console.log(`[pipeline-stage-controller] Processing agent: ${specialist.agent_name} (priority: ${specialist.priority})`);
           
-          // Log failure
-          await logAudit(supabase, application_id, trigger_source || trigger, {
-            action: 'route_failed',
-            agent: specialist.agent_name,
-            error: specialistError.message
-          }, Date.now() - startTime);
+          // v1.5.0: Conditional logic for agent-planning
+          if (specialist.agent_name === 'planning') {
+            const eligibility = await checkPlanningAgentEligibility(supabase, application_id, app);
+            
+            if (!eligibility.eligible) {
+              console.log(`[pipeline-stage-controller] ⏭️ Skipping agent-planning: ${eligibility.reason}`);
+              agentResults['planning'] = { 
+                skipped: true, 
+                reason: eligibility.reason,
+                details: eligibility.details
+              };
+              continue;
+            }
+            
+            console.log(`[pipeline-stage-controller] ✅ agent-planning eligible: ${eligibility.reason}`);
+          }
 
-          return new Response(
-            JSON.stringify({ 
+          // Invoke the specialist agent
+          console.log(`[pipeline-stage-controller] 🚀 Invoking agent-${specialist.agent_name}`);
+          
+          const { data: specialistResult, error: specialistError } = await supabase.functions.invoke(`agent-${specialist.agent_name}`, {
+            body: {
+              application_id,
+              application: app,
+              trigger,
+              allowed_tools: specialist.available_tools,
+              allowed_email_types: specialist.email_types,
+              target_stage: specialist.target_stage,
+              context: enrichedContext,
+              extracted_data: body.extracted_data || {},
+              documents: body.documents || []
+            }
+          });
+
+          if (specialistError) {
+            console.error(`[pipeline-stage-controller] Agent ${specialist.agent_name} error:`, specialistError);
+            agentResults[specialist.agent_name] = { 
               success: false, 
-              error: specialistError.message,
-              agent: specialist.agent_name
-            }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
+              error: specialistError.message 
+            };
+            // Continue to next agent even if one fails
+            continue;
+          }
 
-        // Log success
-        await logAudit(supabase, application_id, trigger_source || trigger, {
-          action: 'route_success',
-          agent: specialist.agent_name,
-          result: specialistResult
-        }, Date.now() - startTime);
+          agentResults[specialist.agent_name] = { 
+            success: true, 
+            result: specialistResult 
+          };
 
-        // If specialist completed its task, try to advance to next stage
-        if (specialistResult?.stage_completed) {
-          console.log(`[pipeline-stage-controller] Agent ${specialist.agent_name} completed, attempting advance`);
-          
-          const advanceResult = await checkTransitionRequirements(
-            supabase,
-            { ...app, ...specialistResult.updated_fields },
-            app.pipeline_stage,
-            specialist.target_stage
-          );
-
-          if (advanceResult.allowed) {
-            await supabase
+          // If this agent completed its task and stage transition is allowed, advance
+          if (specialistResult?.stage_completed && !stageAdvanced) {
+            console.log(`[pipeline-stage-controller] Agent ${specialist.agent_name} completed, checking transition`);
+            
+            // Refresh app data after agent execution
+            const { data: refreshedApp } = await supabase
               .from('professional_applications')
-              .update({ 
-                pipeline_stage: specialist.target_stage,
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', application_id);
+              .select('completeness_score, gesprek_datum, gesprek_feedback, vog_validation_status')
+              .eq('id', application_id)
+              .single();
+            
+            const mergedApp = { ...app, ...refreshedApp, ...specialistResult.updated_fields };
+            
+            const advanceResult = await checkTransitionRequirements(
+              supabase,
+              mergedApp,
+              app.pipeline_stage,
+              specialist.target_stage
+            );
 
-            console.log(`[pipeline-stage-controller] ✅ Auto-advanced: ${app.pipeline_stage} → ${specialist.target_stage}`);
+            if (advanceResult.allowed) {
+              const { error: updateError } = await supabase
+                .from('professional_applications')
+                .update({ 
+                  pipeline_stage: specialist.target_stage,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', application_id);
+
+              if (!updateError) {
+                stageAdvanced = true;
+                console.log(`[pipeline-stage-controller] ✅ Auto-advanced: ${app.pipeline_stage} → ${specialist.target_stage}`);
+                agentResults[specialist.agent_name].stage_advanced = {
+                  from: app.pipeline_stage,
+                  to: specialist.target_stage
+                };
+              }
+            }
           }
         }
+
+        // Log audit trail
+        await logAudit(supabase, application_id, trigger_source || trigger, {
+          action: 'multi_agent_route',
+          agents_executed: Object.keys(agentResults),
+          stage: app.pipeline_stage,
+          stage_advanced: stageAdvanced,
+          results_summary: Object.entries(agentResults).map(([name, result]) => ({
+            agent: name,
+            success: result.success ?? false,
+            skipped: result.skipped ?? false
+          }))
+        }, Date.now() - startTime);
 
         return new Response(
           JSON.stringify({ 
             success: true, 
-            routed_to: specialist.agent_name,
-            result: specialistResult
+            multi_agent: true,
+            stage: app.pipeline_stage,
+            agents_executed: agentResults,
+            stage_advanced: stageAdvanced
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
