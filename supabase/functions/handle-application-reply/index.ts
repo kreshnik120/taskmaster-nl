@@ -2026,17 +2026,31 @@ Return JSON in dit formaat:
             }
           }
           
-          // Handle VOG documents - only update validation status (file stored in application_documents)
-          if (doc.document_type === 'vog' && doc.vog_expiry_status === 'valid') {
+          // Handle VOG documents - sync file path AND validation status for UI visibility
+          if (doc.document_type === 'vog') {
+            console.log(`🛡️ VOG detected: ${doc.file_path} - syncing to application record`);
+            
+            // Determine validation status based on VOG analysis
+            let vogStatus = 'pending_review';
+            if (doc.vog_expiry_status === 'valid') {
+              vogStatus = 'valid';
+            } else if (doc.vog_expiry_status === 'expired') {
+              vogStatus = 'expired';
+            }
+            
+            // Sync VOG file path AND status to application for UI visibility
             const { error: vogUpdateError } = await supabase
               .from('professional_applications')
-              .update({ vog_validation_status: 'valid' })
+              .update({ 
+                vog_file_path: doc.file_path,
+                vog_validation_status: vogStatus
+              })
               .eq('id', applicationId);
             
             if (vogUpdateError) {
-              console.error(`❌ Failed to update vog_validation_status:`, vogUpdateError);
+              console.error(`❌ Failed to update VOG path/status:`, vogUpdateError);
             } else {
-              console.log(`✅ Application updated with vog_validation_status: valid`);
+              console.log(`✅ Application updated with vog_file_path: ${doc.file_path}, status: ${vogStatus}`);
             }
           }
         }
@@ -2059,6 +2073,7 @@ Return JSON in dit formaat:
           Object.assign(application, {
             cv_file_path: refreshedApp.cv_file_path,
             diploma_file_path: refreshedApp.diploma_file_path,
+            vog_file_path: refreshedApp.vog_file_path,
             vog_validation_status: refreshedApp.vog_validation_status,
             diploma_validation_status: refreshedApp.diploma_validation_status,
             duo_verification_status: refreshedApp.duo_verification_status,
@@ -2067,6 +2082,7 @@ Return JSON in dit formaat:
           console.log("✅ Application refreshed after document uploads:", {
             cv_file_path: !!refreshedApp.cv_file_path,
             diploma_file_path: !!refreshedApp.diploma_file_path,
+            vog_file_path: !!refreshedApp.vog_file_path,
             vog_validation_status: refreshedApp.vog_validation_status,
             diploma_validation_status: refreshedApp.diploma_validation_status,
             duo_verification_status: refreshedApp.duo_verification_status,

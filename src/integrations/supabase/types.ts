@@ -3736,6 +3736,7 @@ export type Database = {
           target_vacancy_id: string | null
           tillift_certificaat_path: string | null
           updated_at: string | null
+          vog_file_path: string | null
           vog_issue_date: string | null
           vog_valid_until: string | null
           vog_validation_source: string | null
@@ -3797,6 +3798,7 @@ export type Database = {
           target_vacancy_id?: string | null
           tillift_certificaat_path?: string | null
           updated_at?: string | null
+          vog_file_path?: string | null
           vog_issue_date?: string | null
           vog_valid_until?: string | null
           vog_validation_source?: string | null
@@ -3858,6 +3860,7 @@ export type Database = {
           target_vacancy_id?: string | null
           tillift_certificaat_path?: string | null
           updated_at?: string | null
+          vog_file_path?: string | null
           vog_issue_date?: string | null
           vog_valid_until?: string | null
           vog_validation_source?: string | null
