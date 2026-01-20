@@ -2496,10 +2496,37 @@ async function executeFollowupQuestion(supabase: any, action: any) {
 }
 
 // =====================================================
+// @deprecated - This function is LEGACY and should only run as fallback
+// when the Multi-Agent Specialist Architecture fails.
+// Primary flow should use: agent-welkom via pipeline-stage-controller
 // Execute Welcome & Intake Email - Gecombineerde welkomst + informatieverzoek
 // ENHANCED: Added deduplication check to prevent duplicate welcome emails
 // =====================================================
 async function executeWelcomeAndIntake(supabase: any, action: any) {
+  // ⚠️ LEGACY DEPRECATION WARNING
+  console.warn('⚠️ [LEGACY] executeWelcomeAndIntake called - should use agent-welkom specialist');
+  console.warn('⚠️ [LEGACY] Check if multi_agent_architecture is enabled (100% rollout expected)');
+  
+  // Log legacy usage for monitoring
+  try {
+    const appId = action.input_data?.application_id;
+    if (appId) {
+      await supabase.from('function_call_logs').insert({
+        function_name: 'ai-agent-orchestrator',
+        org_id: action.agent_goals?.org_id || null,
+        execution_time_ms: 0,
+        success: true,
+        metadata: {
+          legacy_function: 'executeWelcomeAndIntake',
+          warning: 'LEGACY_FALLBACK_USED',
+          application_id: appId,
+          reason: 'Multi-agent routing failed or disabled'
+        }
+      });
+    }
+  } catch (logErr) {
+    console.error('[LEGACY] Failed to log usage:', logErr);
+  }
   const applicationId = action.input_data.application_id;
   
   // 🔧 REFACTORED: Use getOrganizationById() as single source of truth

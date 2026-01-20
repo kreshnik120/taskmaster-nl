@@ -247,6 +247,7 @@ Deno.serve(async (req) => {
   }
 
   const startTime = Date.now();
+  console.log(`[pipeline-stage-controller] 🚀 Function invoked at ${new Date().toISOString()}`);
 
   try {
     const supabase = createClient(
@@ -257,7 +258,22 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { action, application_id, trigger, trigger_source, force_legacy } = body;
 
-    console.log(`[pipeline-stage-controller] Action: ${action}, Application: ${application_id}, Trigger: ${trigger}`);
+    console.log(`[pipeline-stage-controller] 📋 Action: ${action}, Application: ${application_id}, Trigger: ${trigger}, Source: ${trigger_source || 'unknown'}`);
+    
+    // Log invocation for observability (non-blocking)
+    supabase.from('function_call_logs').insert({
+      function_name: 'pipeline-stage-controller',
+      org_id: null,
+      execution_time_ms: 0,
+      success: true,
+      metadata: {
+        action,
+        application_id,
+        trigger,
+        trigger_source: trigger_source || 'unknown',
+        invocation_time: new Date().toISOString()
+      }
+    });
 
     // Validate required fields
     if (!application_id) {

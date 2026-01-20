@@ -2516,12 +2516,17 @@ export async function logSecurityEvent(
   };
 
   try {
+    // Use correct system_events schema: event_data contains all details
     await supabase.from('system_events').insert({
       event_type: 'security_alert',
-      severity,
-      title: titleMap[eventType],
-      description: descriptionMap[eventType],
-      details: {
+      entity_type: 'security',
+      entity_id: details.function_name || 'unknown',
+      org_id: details.org_id || null,
+      user_id: details.user_id || null,
+      event_data: {
+        severity,
+        title: titleMap[eventType],
+        description: descriptionMap[eventType],
         alert_category: eventType,
         timestamp: new Date().toISOString(),
         function_name: details.function_name,
@@ -2529,11 +2534,9 @@ export async function logSecurityEvent(
         blocked_reason: details.blocked_reason,
         input_preview: details.input_content?.substring(0, 200),
         detected_patterns: details.detected_patterns,
-        user_id: details.user_id,
-        org_id: details.org_id,
         ...details.additional_context,
       },
-      processed: false,
+      metadata: { source: 'healthcare-mappings', version: '2.0' },
     });
     
     console.log(`📊 Security event logged: ${eventType} (${severity})`);
