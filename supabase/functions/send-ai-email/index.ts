@@ -511,9 +511,12 @@ function generateEmailTemplate(
         receivedDocs.push('✅ CV ontvangen');
       }
       
-      // Check for VOG status
-      if (documentStatuses.vog === 'received' || documentStatuses.vog === 'verified') {
-        if (documentStatuses.vog === 'verified') {
+      // v1.6.0 FIX: Check for VOG status with pending_review support
+      // Check if VOG is in quarantine/pending review state
+      if (data.vog_pending_review || documentStatuses.vog === 'pending_review') {
+        pendingDocs.push('🔄 VOG ontvangen (identiteitscontrole in behandeling - handmatige review nodig)');
+      } else if (documentStatuses.vog === 'received' || documentStatuses.vog === 'verified' || data.vog_uploaded) {
+        if (documentStatuses.vog === 'verified' || data.vog_verified) {
           receivedDocs.push('✅ VOG ontvangen en geverifieerd');
         } else {
           pendingDocs.push('🔄 VOG ontvangen (verificatie in behandeling)');
