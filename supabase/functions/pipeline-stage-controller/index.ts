@@ -1,5 +1,5 @@
 /**
- * Pipeline Stage Controller v1.0.0
+ * Pipeline Stage Controller v1.1.0
  * ================================
  * Central controller for ALL pipeline stage transitions.
  * Part of the Multi-Agent Specialist Architecture.
@@ -13,6 +13,7 @@
  * This controller enforces the strict 6-stage flow:
  * nieuw → intake_verstuurd → gesprek_gepland → screening → goedgekeurd → geplaatst
  */
+console.log('[pipeline-stage-controller] v1.1.0 BOOTED at', new Date().toISOString());
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
