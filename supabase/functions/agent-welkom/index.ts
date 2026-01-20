@@ -1,7 +1,12 @@
 /**
- * Agent Welkom v1.4.0
+ * Agent Welkom v1.5.0
  * ===================
  * Specialist agent for the 'nieuw' stage.
+ * 
+ * v1.5.0 FIX: DUPLICATE EMAIL PREVENTION
+ * - Added upfront check for welcome_email_sent_at before processing
+ * - Prevents duplicate welcome emails from concurrent triggers (orchestrator + DB trigger)
+ * - Returns skipped: true with reason if welcome email already sent
  * 
  * v1.4.0 BREAKING CHANGE:
  * - Kandidaat BLIJFT in 'nieuw' stage na welkomstmail (stage_completed: false)
@@ -22,7 +27,7 @@
  * - No interview scheduling (Planning Agent)
  * - No VOG requests (Screening Agent)
  */
-console.log('[agent-welkom] v1.4.0 BOOTED at', new Date().toISOString());
+console.log('[agent-welkom] v1.5.0 BOOTED at', new Date().toISOString());
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -114,9 +119,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    // v1.3.0 FIX: ALWAYS fetch from database!
-    // The orchestrator does NOT pass missing_info in the application object
-    console.log('[agent-welkom] v1.3.0: Force fetching from database for missing_info');
+    // v1.5.0 FIX: ALWAYS fetch from database FIRST to check welcome_email_sent_at
+    // This prevents duplicate welcome emails from race conditions
+    console.log('[agent-welkom] v1.5.0: Fetching from database + checking welcome_email_sent_at');
     
     const { data: fullApp, error: fetchError } = await supabase
       .from('professional_applications')
@@ -129,6 +134,27 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, error: 'Application not found' }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // =====================================================
+    // v1.5.0 FIX: CHECK IF WELCOME EMAIL ALREADY SENT
+    // Prevents duplicate welcome emails from concurrent triggers
+    // =====================================================
+    if (fullApp.welcome_email_sent_at) {
+      const ageMinutes = Math.round((Date.now() - new Date(fullApp.welcome_email_sent_at).getTime()) / 60000);
+      console.log(`⏭️ [agent-welkom] DEDUP: Welcome email already sent ${ageMinutes} minutes ago - skipping`);
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          skipped: true, 
+          reason: 'welcome_email_already_sent',
+          welcome_email_sent_at: fullApp.welcome_email_sent_at,
+          age_minutes: ageMinutes,
+          stage_completed: false  // Don't trigger stage advance
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
     
