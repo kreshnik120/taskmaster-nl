@@ -1,7 +1,13 @@
 /**
- * Agent Welkom v1.5.0
+ * Agent Welkom v1.6.0
  * ===================
  * Specialist agent for the 'nieuw' stage.
+ * 
+ * v1.6.0 NEW: REPLY RESPONSE HANDLING
+ * - Detecteert reply triggers (send_reply_response, reply_processed)
+ * - Als welcome email al verstuurd EN reply trigger → stuur follow-up email
+ * - Gebruikt context.newly_extracted_data en remaining_missing_info voor personalisatie
+ * - Voorkomt dat replies onbeantwoord blijven terwijl kandidaat nog in 'nieuw' stage zit
  * 
  * v1.5.0 FIX: DUPLICATE EMAIL PREVENTION
  * - Added upfront check for welcome_email_sent_at before processing
@@ -15,6 +21,7 @@
  * 
  * Responsibilities:
  * - Send professional welcome email to new applicants
+ * - v1.6.0: Handle follow-up responses after candidate replies
  * - Request missing information using DATABASE missing_info (not self-calculated)
  * - Update welcome_email_sent_at timestamp (CRITICAL)
  * - NIET: stage transitie (dit doet pipeline-stage-controller na doc verificatie)
@@ -27,7 +34,7 @@
  * - No interview scheduling (Planning Agent)
  * - No VOG requests (Screening Agent)
  */
-console.log('[agent-welkom] v1.5.0 BOOTED at', new Date().toISOString());
+console.log('[agent-welkom] v1.6.0 BOOTED at', new Date().toISOString());
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -138,21 +145,175 @@ Deno.serve(async (req) => {
     }
     
     // =====================================================
-    // v1.5.0 FIX: CHECK IF WELCOME EMAIL ALREADY SENT
-    // Prevents duplicate welcome emails from concurrent triggers
+    // v1.6.0 FIX: REPLY RESPONSE HANDLING
+    // If welcome email already sent AND this is a reply trigger:
+    // → Send follow-up email instead of skipping
     // =====================================================
+    const REPLY_TRIGGERS = ['send_reply_response', 'reply_processed', 'process_pending_goals'];
+    const isReplyTrigger = REPLY_TRIGGERS.includes(trigger);
+    
     if (fullApp.welcome_email_sent_at) {
       const ageMinutes = Math.round((Date.now() - new Date(fullApp.welcome_email_sent_at).getTime()) / 60000);
-      console.log(`⏭️ [agent-welkom] DEDUP: Welcome email already sent ${ageMinutes} minutes ago - skipping`);
       
+      if (!isReplyTrigger) {
+        // Original skip logic for duplicate welcome emails
+        console.log(`⏭️ [agent-welkom] DEDUP: Welcome email already sent ${ageMinutes} minutes ago - skipping`);
+        
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            skipped: true, 
+            reason: 'welcome_email_already_sent',
+            welcome_email_sent_at: fullApp.welcome_email_sent_at,
+            age_minutes: ageMinutes,
+            stage_completed: false  // Don't trigger stage advance
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      // =====================================================
+      // v1.6.0 NEW: Handle follow-up response after candidate reply
+      // =====================================================
+      console.log(`📧 [agent-welkom] v1.6.0: Processing REPLY response (trigger=${trigger})`);
+      
+      // Get context data from request body (set by handle-application-reply)
+      const newlyExtractedData = body.context?.newly_extracted_data || body.extracted_data || {};
+      const remainingMissing = body.context?.remaining_missing_info || fullApp.missing_info || [];
+      const rejectionContext = body.context?.rejection_context || {};
+      
+      // Build human-readable list of newly received data
+      const newlyReceivedItems: string[] = [];
+      if (newlyExtractedData.naam) newlyReceivedItems.push(`Naam: ${newlyExtractedData.naam}`);
+      if (newlyExtractedData.telefoon) newlyReceivedItems.push(`Telefoonnummer: ${newlyExtractedData.telefoon}`);
+      if (newlyExtractedData.geboortedatum) newlyReceivedItems.push('Geboortedatum');
+      if (newlyExtractedData.adres) newlyReceivedItems.push('Adres');
+      if (body.context?.documents_received?.length > 0) {
+        newlyReceivedItems.push(...body.context.documents_received.map((d: string) => `Document: ${d}`));
+      }
+      
+      // Use FIELD_LABEL_MAP for human-readable missing info
+      const FIELD_LABEL_MAP: Record<string, string> = {
+        'kvk_nummer': 'KvK-nummer',
+        'iban': 'IBAN rekeningnummer',
+        'bedrijfsnaam': 'Bedrijfsnaam',
+        'beroepsaansprakelijkheidsverzekering': 'Beroepsaansprakelijkheidsverzekering',
+        'vog_upload': 'Verklaring Omtrent Gedrag (VOG)',
+        'diploma_upload': 'Diploma',
+        'cv_upload': 'CV document',
+        'id_bewijs': 'Identiteitsbewijs',
+        'big_registratie': 'BIG-registratienummer',
+        'rijbewijs': 'Rijbewijs',
+        'telefoon': 'Telefoonnummer',
+        'geboortedatum': 'Geboortedatum',
+        'adres': 'Adresgegevens',
+        'postcode': 'Postcode',
+        'woonplaats': 'Woonplaats',
+        'nationaliteit': 'Nationaliteit',
+        'bsn': 'BSN-nummer',
+      };
+      
+      const remainingMissingLabels: string[] = (remainingMissing as string[]).map((item: string) => {
+        const lower = item.toLowerCase().replace(/[-_\s]/g, '_');
+        return FIELD_LABEL_MAP[lower] || item;
+      });
+      
+      const candidateName = fullApp.extracted_data?.naam || null;
+      const firstName = candidateName?.split(' ')[0] || 'daar';
+      
+      console.log(`[agent-welkom] v1.6.0: Sending follow-up email. Newly received: ${newlyReceivedItems.length}, Still missing: ${remainingMissingLabels.length}`);
+      
+      // Send follow-up email
+      const { data: emailResult, error: emailError } = await supabase.functions.invoke('send-ai-email', {
+        body: {
+          application_id: fullApp.id,
+          email_type: 'followup_question',
+          recipient_email: fullApp.email_from,
+          recipient_name: candidateName,
+          template_data: {
+            fields_to_ask: remainingMissingLabels,
+            newly_extracted: newlyExtractedData,
+            newly_received_items: newlyReceivedItems,
+            rejection_context: rejectionContext,
+            candidate_name: candidateName,
+            first_name: firstName,
+            has_cv: !!fullApp.cv_file_path,
+            has_diploma: !!fullApp.diploma_file_path,
+            completeness_score: fullApp.completeness_score || 0,
+            werkvorm: fullApp.werkvorm,
+            agent: 'welkom',
+            is_reply_response: true
+          },
+          org_id: fullApp.org_id
+        }
+      });
+
+      if (emailError) {
+        console.error('[agent-welkom] v1.6.0 Follow-up email error:', emailError);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: `Failed to send follow-up email: ${emailError.message}`,
+            stage_completed: false
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Log to application_conversations for audit trail
+      await supabase.from('application_conversations').insert({
+        application_id: fullApp.id,
+        role: 'agent',
+        content: `[Agent Welkom v1.6.0] Follow-up response verstuurd. Nieuw ontvangen: ${newlyReceivedItems.join(', ') || 'geen'}. Nog ontbrekend: ${remainingMissingLabels.join(', ') || 'geen'}`,
+        metadata: { 
+          agent: 'welkom', 
+          email_type: 'followup_question', 
+          trigger,
+          newly_received: newlyReceivedItems,
+          still_missing: remainingMissingLabels,
+          is_reply_response: true
+        }
+      });
+
+      // Update followup email count
+      const currentFollowupCount = (fullApp.followup_email_count as number) || 0;
+      await supabase
+        .from('professional_applications')
+        .update({ 
+          followup_email_count: currentFollowupCount + 1,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', fullApp.id);
+
+      // Log to function_call_logs
+      await supabase.from('function_call_logs').insert({
+        function_name: 'agent-welkom',
+        org_id: fullApp.org_id,
+        execution_time_ms: Date.now() - startTime,
+        success: true,
+        metadata: {
+          application_id: fullApp.id,
+          email_type: 'followup_question',
+          trigger,
+          is_reply_response: true,
+          newly_received: newlyReceivedItems,
+          still_missing: remainingMissingLabels
+        }
+      });
+
+      console.log(`[agent-welkom] v1.6.0 ✅ Follow-up response sent in ${Date.now() - startTime}ms`);
+
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          skipped: true, 
-          reason: 'welcome_email_already_sent',
-          welcome_email_sent_at: fullApp.welcome_email_sent_at,
-          age_minutes: ageMinutes,
-          stage_completed: false  // Don't trigger stage advance
+        JSON.stringify({
+          success: true,
+          stage_completed: false,
+          email_sent: true,
+          email_type: 'followup_question',
+          is_reply_response: true,
+          remaining_missing_info: remainingMissingLabels,
+          newly_received: newlyReceivedItems,
+          message: 'Follow-up response verstuurd na kandidaat reply',
+          execution_time_ms: Date.now() - startTime
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
