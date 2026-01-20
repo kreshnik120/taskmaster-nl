@@ -1055,6 +1055,173 @@ async function debugQueueStatus(supabase: any) {
 }
 
 // =====================================================
+// MULTI-AGENT SPECIALIST ROUTING (Priority)
+// =====================================================
+
+// Goal type to pipeline stage mapping
+const GOAL_TO_STAGE_MAP: Record<string, string> = {
+  'send_welcome_and_intake': 'nieuw',
+  'application_intake_completion': 'intake_verstuurd',
+  'send_reply_response': 'intake_verstuurd',
+  'schedule_interview': 'intake_verstuurd',
+  'request_documents': 'intake_verstuurd',
+};
+
+interface SpecialistRoutingResult {
+  routed: boolean;
+  success: boolean;
+  agent?: string;
+  error?: string;
+}
+
+async function routeToSpecialistAgent(
+  supabase: any,
+  goal: AgentGoal
+): Promise<SpecialistRoutingResult> {
+  const startTime = Date.now();
+  
+  try {
+    // Check if multi-agent architecture is enabled
+    const { data: featureFlag } = await supabase
+      .from('system_feature_flags')
+      .select('is_enabled, rollout_percentage')
+      .eq('feature_name', 'multi_agent_architecture')
+      .single();
+
+    if (!featureFlag) {
+      console.log(`🔀 [Specialist] No multi_agent_architecture flag found`);
+      return { routed: false, success: false };
+    }
+
+    // Check rollout percentage
+    const isEnabled = featureFlag.is_enabled && 
+      (featureFlag.rollout_percentage >= 100 || Math.random() * 100 < featureFlag.rollout_percentage);
+
+    if (!isEnabled) {
+      console.log(`🔀 [Specialist] Multi-agent disabled or outside rollout (${featureFlag.rollout_percentage}%)`);
+      return { routed: false, success: false };
+    }
+
+    // Get the pipeline stage for this goal type
+    const pipelineStage = GOAL_TO_STAGE_MAP[goal.goal_type];
+    
+    if (!pipelineStage) {
+      console.log(`🔀 [Specialist] No stage mapping for goal type: ${goal.goal_type}`);
+      return { routed: false, success: false };
+    }
+
+    console.log(`🎯 [Specialist] Goal ${goal.goal_type} maps to stage ${pipelineStage}`);
+
+    // Route via pipeline-stage-controller
+    const applicationId = goal.input_data?.application_id;
+    
+    if (!applicationId) {
+      console.log(`🔀 [Specialist] No application_id in goal, cannot route`);
+      return { routed: false, success: false };
+    }
+
+    // Mark goal as executing
+    await supabase
+      .from('agent_goals')
+      .update({ 
+        status: 'executing_specialist',
+        started_at: new Date().toISOString()
+      })
+      .eq('id', goal.id);
+
+    // Call pipeline-stage-controller with route action
+    const { data: routeResult, error: routeError } = await supabase.functions.invoke('pipeline-stage-controller', {
+      body: {
+        action: 'route',
+        application_id: applicationId,
+        trigger: goal.goal_type,
+        trigger_source: 'ai-agent-orchestrator',
+        context: goal.input_data,
+        extracted_data: goal.input_data.extracted_data || {}
+      }
+    });
+
+    const duration = Date.now() - startTime;
+
+    if (routeError) {
+      console.error(`❌ [Specialist] Pipeline controller error (${duration}ms):`, routeError);
+      
+      // Mark goal as failed
+      await supabase
+        .from('agent_goals')
+        .update({ 
+          status: 'failed',
+          completed_at: new Date().toISOString(),
+          output_data: { 
+            specialist_error: routeError.message,
+            duration_ms: duration
+          }
+        })
+        .eq('id', goal.id);
+      
+      return { 
+        routed: true, 
+        success: false, 
+        agent: 'pipeline-stage-controller',
+        error: routeError.message 
+      };
+    }
+
+    // Check the result
+    const success = routeResult?.success !== false;
+    const agent = routeResult?.routed_to || routeResult?.agent || 'unknown';
+
+    console.log(`✅ [Specialist] Goal ${goal.id} completed via ${agent} (${duration}ms)`);
+
+    // Mark goal as completed
+    await supabase
+      .from('agent_goals')
+      .update({ 
+        status: success ? 'completed' : 'failed',
+        completed_at: new Date().toISOString(),
+        success_score: success ? 1.0 : 0.0,
+        output_data: {
+          specialist_result: routeResult,
+          routed_via: 'pipeline-stage-controller',
+          agent: agent,
+          duration_ms: duration
+        }
+      })
+      .eq('id', goal.id);
+
+    return { 
+      routed: true, 
+      success, 
+      agent,
+      error: routeResult?.error 
+    };
+
+  } catch (err) {
+    const duration = Date.now() - startTime;
+    console.error(`❌ [Specialist] Routing error (${duration}ms):`, err);
+    
+    // Mark goal as failed
+    await supabase
+      .from('agent_goals')
+      .update({ 
+        status: 'failed',
+        completed_at: new Date().toISOString(),
+        output_data: { 
+          specialist_routing_error: err instanceof Error ? err.message : 'Unknown error',
+          duration_ms: duration
+        }
+      })
+      .eq('id', goal.id);
+    
+    return { 
+      routed: true, 
+      success: false, 
+      error: err instanceof Error ? err.message : 'Unknown error' 
+    };
+  }
+}
+
+// =====================================================
 // REACT AGENT ROUTING - Backwards Compatibility Layer
 // =====================================================
 
@@ -1348,7 +1515,21 @@ async function processPendingGoals(supabase: any, limit: number, filterApplicati
     // ===== END RACE CONDITION MITIGATIE =====
     
     try {
-      // ===== Check ReAct routing =====
+      // ===== PHASE 1: Check Multi-Agent Specialist Routing (Priority) =====
+      const specialistResult = await routeToSpecialistAgent(supabase, goal);
+      
+      if (specialistResult.routed) {
+        results.push({ 
+          goal_id: goal.id, 
+          success: specialistResult.success, 
+          routed_to: `specialist:${specialistResult.agent}`,
+          error: specialistResult.error
+        });
+        continue;
+      }
+      // ===== END Specialist Routing =====
+      
+      // ===== PHASE 2: Check ReAct routing (Fallback) =====
       const { route, config } = await shouldRouteToReActAgent(
         supabase, goal.goal_type, goal.org_id
       );
@@ -1379,7 +1560,7 @@ async function processPendingGoals(supabase: any, limit: number, filterApplicati
       }
       // ===== END ReAct routing =====
       
-      // Original legacy processing
+      // ===== PHASE 3: Original legacy processing =====
       const result = await planAndQueueGoal(supabase, goal);
       results.push({ goal_id: goal.id, success: true, actions_created: result.actions_created, routed_to: 'legacy' });
     } catch (err: unknown) {
@@ -2411,37 +2592,39 @@ async function executeWelcomeAndIntake(supabase: any, action: any) {
 
     console.log('✅ [Welcome] Welcome email sent successfully');
     
-    // 🔧 FASE 1 FIX: Update pipeline_stage to 'intake_verstuurd' after welcome email
-    // KRITIEK: NIET naar 'screening' - dat triggert EMREX te vroeg!
-    // Screening transitie komt pas bij kandidaat-reactie in handle-application-reply
-    const { error: stageError } = await supabase
+    // Update ONLY welcome_email_sent_at - stage transition is handled by pipeline-stage-controller
+    // This ensures the specialist agent (agent-welkom) has proper control via the centralized controller
+    const { error: timestampError } = await supabase
       .from('professional_applications')
       .update({
-        pipeline_stage: 'intake_verstuurd',
         welcome_email_sent_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
-      .eq('id', applicationId)
-      .eq('pipeline_stage', 'nieuw'); // Only update if still 'nieuw'
+      .eq('id', applicationId);
     
-    if (stageError) {
-      console.error('[Welcome] Pipeline stage update failed:', stageError);
+    if (timestampError) {
+      console.error('[Welcome] Timestamp update failed:', timestampError);
     } else {
-      console.log('✅ [Welcome] Pipeline stage updated to intake_verstuurd (awaiting candidate response)');
-      
-      // Log stage audit
-      await supabase.from('application_stage_audit').insert({
+      console.log('✅ [Welcome] welcome_email_sent_at timestamp updated');
+    }
+
+    // Trigger pipeline-stage-controller to advance stage (if appropriate)
+    console.log('[Welcome] Triggering pipeline-stage-controller for stage advancement...');
+    const { data: advanceResult, error: advanceError } = await supabase.functions.invoke('pipeline-stage-controller', {
+      body: {
+        action: 'advance',
         application_id: applicationId,
-        from_stage: 'nieuw',
-        to_stage: 'intake_verstuurd',
-        reason: 'Welkomstmail verzonden - wacht op reactie kandidaat voor verdere stappen',
-        performed_by: null,
-        metadata: {
-          trigger: 'executeWelcomeAndIntake',
-          email_sent: true,
-          awaiting_response: true,
-        }
-      });
+        trigger_source: 'legacy-executeWelcomeAndIntake',
+        trigger: 'welcome_email_sent'
+      }
+    });
+
+    if (advanceError) {
+      console.warn('[Welcome] Pipeline advance failed (may be expected if requirements not met):', advanceError.message);
+    } else if (advanceResult?.success) {
+      console.log(`✅ [Welcome] Pipeline stage advanced: ${advanceResult.previous_stage} → ${advanceResult.new_stage}`);
+    } else {
+      console.log('[Welcome] Pipeline advance not executed:', advanceResult?.blockers || 'unknown reason');
     }
     
     return { 
@@ -2451,7 +2634,7 @@ async function executeWelcomeAndIntake(supabase: any, action: any) {
       email_generated: !!emailData,
       email_sent: !!sendData,
       fields_asked: action.input_data.fields_to_ask?.length || 0,
-      pipeline_stage_updated: !stageError,
+      pipeline_advance_result: advanceResult,
       ...sendData 
     };
 
