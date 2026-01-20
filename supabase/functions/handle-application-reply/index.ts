@@ -2330,27 +2330,38 @@ Return JSON in dit formaat:
       ...completenessResult.expiredDocs.map(doc => `${doc}_verlopen`),
     ];
     
-    // FIX 4: Dedupe document fields - verwijder redundante vragen als document al aanwezig
-    // Check diploma - verwijder 'diploma' text field als diploma_upload al aanwezig is OF diploma_file_path al bestaat
-    if (application.diploma_file_path) {
-      finalRemainingMissing = finalRemainingMissing.filter(f => 
-        f !== 'diploma' && f !== 'diploma_upload' && f !== 'diploma_type'
-      );
-      console.log("📋 Diploma file present, removed diploma/diploma_upload from missing info");
-    }
-    
-    // Check CV - verwijder 'cv_upload' als cv_file_path al bestaat
-    if (application.cv_file_path) {
-      finalRemainingMissing = finalRemainingMissing.filter(f => 
-        f !== 'cv' && f !== 'cv_upload'
-      );
-      console.log("📋 CV file present, removed cv/cv_upload from missing info");
-    }
+    // v1.7.1: Document checks moved to after application_documents queries below
+    // (See lines ~2350+ for document-aware CV, Diploma, VOG filtering)
     
     // =====================================================
-    // v1.7.0 FIX: DOCUMENT-AWARE VOG STATUS CHECK
-    // Query application_documents table instead of just columns
+    // v1.7.1 FIX: DOCUMENT-AWARE STATUS CHECK FOR ALL DOC TYPES
+    // Query application_documents table for CV, Diploma, VOG
     // =====================================================
+    
+    // Query CV documents
+    const { data: cvDocuments } = await supabase
+      .from('application_documents')
+      .select('id, is_verified, document_type')
+      .eq('application_id', applicationId)
+      .eq('document_type', 'cv')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    const hasCVInDocuments = cvDocuments && cvDocuments.length > 0;
+    
+    // Query Diploma documents
+    const { data: diplomaDocuments } = await supabase
+      .from('application_documents')
+      .select('id, is_verified, document_type')
+      .eq('application_id', applicationId)
+      .eq('document_type', 'diploma')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    const hasDiplomaInDocuments = diplomaDocuments && diplomaDocuments.length > 0;
+    const diplomaDocVerified = diplomaDocuments?.[0]?.is_verified === true;
+    
+    // Query VOG documents
     const { data: vogDocuments } = await supabase
       .from('application_documents')
       .select('id, is_verified, document_type, metadata')
@@ -2363,9 +2374,28 @@ Return JSON in dit formaat:
     const vogDocVerified = vogDocuments?.[0]?.is_verified === true;
     const vogPendingReview = hasVogInDocuments && !vogDocVerified;
     
-    console.log(`📋 [v1.7.0] VOG document check: inDocTable=${hasVogInDocuments}, verified=${vogDocVerified}, pendingReview=${vogPendingReview}`);
+    console.log(`📋 [v1.7.1] Document-aware check:`);
+    console.log(`   CV: inDocTable=${hasCVInDocuments}, columnPath=${!!application.cv_file_path}`);
+    console.log(`   Diploma: inDocTable=${hasDiplomaInDocuments}, verified=${diplomaDocVerified}, columnPath=${!!application.diploma_file_path}`);
+    console.log(`   VOG: inDocTable=${hasVogInDocuments}, verified=${vogDocVerified}, pendingReview=${vogPendingReview}`);
     
-    // Check VOG - verwijder vog vragen als document aanwezig is OF validation status OK is
+    // v1.7.1: Document-aware CV check
+    if (application.cv_file_path || hasCVInDocuments) {
+      finalRemainingMissing = finalRemainingMissing.filter(f => 
+        f !== 'cv' && f !== 'cv_upload'
+      );
+      console.log("📋 CV present (path or doc table), removed cv from missing info");
+    }
+    
+    // v1.7.1: Document-aware Diploma check
+    if (application.diploma_file_path || hasDiplomaInDocuments) {
+      finalRemainingMissing = finalRemainingMissing.filter(f => 
+        f !== 'diploma' && f !== 'diploma_upload' && f !== 'diploma_type'
+      );
+      console.log("📋 Diploma present (path or doc table), removed diploma from missing info");
+    }
+    
+    // v1.7.1: Document-aware VOG check
     const vogValidStatuses = ['pending', 'pending_review', 'valid', 'verified', 'verified_gaav'];
     const vogStatusFromData = mergedData.vog_validation_status || application.vog_validation_status;
     
@@ -2390,6 +2420,8 @@ Return JSON in dit formaat:
     console.log("   Expired docs:", completenessResult.expiredDocs);
     console.log("   Missing fields:", completenessResult.missingFields);
     console.log("   Blockers:", completenessResult.blockers);
+    console.log("   CV in documents table:", hasCVInDocuments);
+    console.log("   Diploma in documents table:", hasDiplomaInDocuments);
     console.log("   VOG in documents table:", hasVogInDocuments);
     console.log("   Final remaining missing:", finalRemainingMissing);
 
@@ -2437,9 +2469,10 @@ Return JSON in dit formaat:
     // VERWIJDERD: Automatische transitie naar 'docs_compleet'
     // De stage 'docs_compleet' is geëlimineerd uit de flow.
     // =====================================================
-    const hasCV = !!application.cv_file_path || !!mergedData.cv_file_path;
-    const hasDiploma = !!application.diploma_file_path || !!mergedData.diploma_file_path;
-    const isDiplomaVerified = ['verified_duo', 'verified_manual', 'verified_emrex', 'signature_valid'].includes(
+    // v1.7.1: Document-aware checks using both columns AND application_documents table
+    const hasCV = !!application.cv_file_path || !!mergedData.cv_file_path || hasCVInDocuments;
+    const hasDiploma = !!application.diploma_file_path || !!mergedData.diploma_file_path || hasDiplomaInDocuments;
+    const isDiplomaVerified = diplomaDocVerified || ['verified_duo', 'verified_manual', 'verified_emrex', 'signature_valid'].includes(
       (application.diploma_validation_status as string) || ''
     );
     const hasMinimalCompleteness = newCompletenessScore >= 70;
@@ -2960,11 +2993,15 @@ Return JSON in dit formaat:
                 org_name: orgInfo.displayName,
                 email_config: emailConfig,
                 followup_count: currentFollowupCount + 1, // Track follow-up count
-                // v1.7.0 FIX: Document status met application_documents table check
+                // v1.7.1 FIX: Document status met application_documents table check voor ALLE doc types
                 document_statuses: {
+                  // v1.7.1: Document-aware CV check
                   cv: hasCV ? 'received' : 'missing',
-                  diploma: hasDiploma ? (isDiplomaVerified ? 'verified' : 'received') : 'missing',
-                  // v1.7.0: Check application_documents table for VOG
+                  // v1.7.1: Document-aware Diploma check  
+                  diploma: hasDiploma 
+                    ? (isDiplomaVerified ? 'verified' : 'received') 
+                    : 'missing',
+                  // v1.7.1: Document-aware VOG check
                   vog: vogDocVerified || mergedData.vog_validation_status === 'verified' || mergedData.vog_validation_status === 'verified_gaav'
                     ? 'verified'
                     : hasVogInDocuments || mergedData.vog_validation_status === 'pending_review' || !!mergedData.vog_file_path
@@ -2972,10 +3009,10 @@ Return JSON in dit formaat:
                       : 'missing'
                 },
                 template_data: {
+                  // v1.7.1: Document-aware flags for ALL document types
                   cv_uploaded: hasCV,
                   diploma_uploaded: hasDiploma,
                   diploma_verified: isDiplomaVerified,
-                  // v1.7.0: VOG status from documents table
                   vog_uploaded: hasVogInDocuments || !!mergedData.vog_file_path,
                   vog_verified: vogDocVerified || mergedData.vog_validation_status === 'verified' || mergedData.vog_validation_status === 'verified_gaav',
                   vog_pending_review: vogPendingReview || mergedData.vog_pending_review || false,
