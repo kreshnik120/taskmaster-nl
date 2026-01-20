@@ -576,23 +576,62 @@ export const FIELD_ALIASES: Record<string, string[]> = {
 } as const;
 
 /**
+ * Document record from application_documents table
+ * v1.7.2: Used for document-aware field checking
+ */
+export interface ApplicationDocumentRecord {
+  document_type?: string | null;
+  is_verified?: boolean | null;
+  file_path?: string | null;
+  category?: string | null;
+}
+
+/**
  * Checks if a field has a valid value, using aliases and placeholder detection
+ * v1.7.2: Now document-aware - checks application_documents table FIRST for document fields
+ * 
  * @param data - The extracted_data object to check
  * @param field - The canonical field name to check
  * @param applicationData - Optional: full application record to check document file paths
+ * @param applicationDocuments - Optional: array of documents from application_documents table (v1.7.2)
  * @returns true if field has a valid (non-placeholder) value
  */
 export function hasField(
   data: Record<string, unknown>, 
   field: string,
-  applicationData?: Record<string, unknown>
+  applicationData?: Record<string, unknown>,
+  applicationDocuments?: ApplicationDocumentRecord[]
 ): boolean {
-  // Document fields: check file_path columns on application record first
+  // v1.7.2: Document-aware check - check application_documents table FIRST
+  if (applicationDocuments && applicationDocuments.length > 0) {
+    const docTypeMapping: Record<string, string[]> = {
+      'diploma': ['diploma', 'Diploma', 'certificaat'],
+      'vog': ['vog', 'VOG'],
+      'cv': ['cv', 'CV', 'curriculum vitae']
+    };
+    
+    const docTypes = docTypeMapping[field];
+    if (docTypes) {
+      const hasDoc = applicationDocuments.some(doc => 
+        docTypes.some(type => 
+          doc.document_type?.toLowerCase() === type.toLowerCase() ||
+          doc.category?.toLowerCase() === type.toLowerCase()
+        )
+      );
+      if (hasDoc) {
+        console.log(`[hasField v1.7.2] ✅ ${field} found in application_documents table`);
+        return true;
+      }
+    }
+  }
+  
+  // Document fields: check file_path columns on application record
   if (applicationData) {
     if (field === 'diploma' && applicationData.diploma_file_path) return true;
     // VOG check: use validation_status since there's no vog_file_path column
+    // v1.7.2: More inclusive VOG status check
     if (field === 'vog' && applicationData.vog_validation_status && 
-        applicationData.vog_validation_status !== 'not_uploaded') return true;
+        !['not_uploaded', 'missing'].includes(applicationData.vog_validation_status as string)) return true;
     if (field === 'cv' && applicationData.cv_file_path) return true;
   }
   
@@ -636,16 +675,20 @@ export const ACTIVE_GOAL_STATUSES = [
 
 /**
  * Recalculates missing_info based on extracted_data using aliases and placeholder detection
+ * v1.7.2: Now document-aware - accepts application_documents array to check document table
+ * 
  * @param extractedData - The extracted_data object from the application
  * @param applicationData - Optional: full application record to check document file paths
+ * @param applicationDocuments - Optional: array of documents from application_documents table (v1.7.2)
  */
 export function recalculateMissingInfo(
   extractedData: Record<string, unknown> | null,
-  applicationData?: Record<string, unknown>
+  applicationData?: Record<string, unknown>,
+  applicationDocuments?: ApplicationDocumentRecord[]
 ): string[] {
   if (!extractedData) return [...CRITICAL_FIELDS];
   
-  return CRITICAL_FIELDS.filter(field => !hasField(extractedData, field, applicationData));
+  return CRITICAL_FIELDS.filter(field => !hasField(extractedData, field, applicationData, applicationDocuments));
 }
 
 // ============================================
