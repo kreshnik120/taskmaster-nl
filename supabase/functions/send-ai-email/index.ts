@@ -140,12 +140,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   try {
     const body: SendEmailRequest = await req.json();
     
-    console.log("[send-ai-email] Received request:", {
+    console.log("[send-ai-email] v1.5.0 Received request:", {
       email_type: body.email_type,
       recipient_email: body.recipient_email,
       recipient_name: body.recipient_name,
       subject: body.subject,
-      org_id: body.org_id
+      org_id: body.org_id,
+      application_id: body.application_id
     });
 
     const {
@@ -161,6 +162,45 @@ Deno.serve(async (req: Request): Promise<Response> => {
       org_id,
       reply_to
     } = body;
+
+    // =====================================================
+    // v1.5.0 FIX: EMAIL IDEMPOTENCY GUARD (5 min dedup window)
+    // Prevents duplicate emails from race conditions between
+    // agent-welkom, orchestrator, and handle-application-reply
+    // =====================================================
+    const supabaseForDedup = createAdminClient();
+    
+    if (application_id) {
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      
+      const { data: recentEmail, error: dedupError } = await supabaseForDedup
+        .from('system_events')
+        .select('id, created_at, event_type')
+        .eq('entity_id', application_id)
+        .eq('event_type', `email_sent_${email_type}`)
+        .gte('created_at', fiveMinutesAgo)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (dedupError) {
+        console.warn('[send-ai-email] Dedup check failed (continuing anyway):', dedupError.message);
+      } else if (recentEmail) {
+        const ageSeconds = Math.round((Date.now() - new Date(recentEmail.created_at).getTime()) / 1000);
+        console.log(`⏭️ [send-ai-email] DEDUP: Skipping ${email_type} - already sent ${ageSeconds}s ago (id: ${recentEmail.id})`);
+        
+        return jsonResponse({ 
+          success: true, 
+          skipped: true, 
+          reason: 'duplicate_prevented',
+          duplicate_email_type: email_type,
+          original_email_id: recentEmail.id,
+          age_seconds: ageSeconds
+        });
+      }
+      
+      console.log(`✅ [send-ai-email] DEDUP: No recent ${email_type} found for ${application_id} - proceeding`);
+    }
 
     // Validate required fields - subject is now optional (auto-generated)
     if (!recipient_email) {

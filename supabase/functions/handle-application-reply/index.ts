@@ -2837,19 +2837,22 @@ Return JSON in dit formaat:
     if (skipResponseEmail) {
       console.log(`⏭️ Skipping agent response - combined interview email already sent`);
     } else {
-      // 🔧 FIX: Check for existing pending goals to prevent duplicates
+      // 🔧 FIX v1.5.0: Extended goal dedup with time window (10 min) and more goal types
+      // Also checks recently completed goals to prevent duplicate response emails
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      
       const { data: existingGoal } = await supabase
         .from("agent_goals")
         .select("id, goal_type, status, created_at")
         .filter("input_data->>application_id", "eq", applicationId)
-        .in("goal_type", APPLICATION_GOAL_TYPES as unknown as string[])
-        .in("status", ACTIVE_GOAL_STATUSES as unknown as string[])
+        .in("goal_type", [...APPLICATION_GOAL_TYPES, 'send_welcome_and_intake', 'send_reply_response'] as unknown as string[])
+        .or(`status.in.(${ACTIVE_GOAL_STATUSES.join(',')}),and(status.eq.completed,created_at.gte.${tenMinutesAgo})`)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
       
       if (existingGoal) {
-        console.log(`⏭️ Skipping goal creation - existing active goal found: ${existingGoal.goal_type} (${existingGoal.status})`);
+        console.log(`⏭️ Skipping goal creation - existing/recent goal found: ${existingGoal.goal_type} (${existingGoal.status}) from ${existingGoal.created_at}`);
       } else {
         // 🔧 FIX: Check follow-up count to prevent email spam
         const currentFollowupCount = (mergedData.followup_email_count as number) || 0;
