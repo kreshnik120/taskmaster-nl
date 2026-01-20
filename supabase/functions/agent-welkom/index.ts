@@ -1,5 +1,5 @@
 /**
- * Agent Welkom v1.2.0
+ * Agent Welkom v1.3.0
  * ===================
  * Specialist agent for the 'nieuw' stage.
  * Handles: nieuw → intake_verstuurd
@@ -9,6 +9,10 @@
  * - Request missing information using DATABASE missing_info (not self-calculated)
  * - Update welcome_email_sent_at timestamp (CRITICAL)
  * 
+ * v1.3.0 FIX: 
+ * - ALWAYS fetch from database (orchestrator doesn't pass missing_info)
+ * - Use template_data instead of context for send-ai-email
+ * 
  * v1.2.0 FIX: Use database missing_info array instead of self-calculating
  * 
  * This agent does NOTHING else:
@@ -16,7 +20,7 @@
  * - No interview scheduling (Planning Agent)
  * - No VOG requests (Screening Agent)
  */
-console.log('[agent-welkom] v1.2.0 BOOTED at', new Date().toISOString());
+console.log('[agent-welkom] v1.3.0 BOOTED at', new Date().toISOString());
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -108,23 +112,27 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get full application data if not provided
-    let app: ApplicationData = application;
-    if (!app || !app.extracted_data?.naam) {
-      const { data, error } = await supabase
-        .from('professional_applications')
-        .select('*')
-        .eq('id', application_id)
-        .single();
+    // v1.3.0 FIX: ALWAYS fetch from database!
+    // The orchestrator does NOT pass missing_info in the application object
+    console.log('[agent-welkom] v1.3.0: Force fetching from database for missing_info');
+    
+    const { data: fullApp, error: fetchError } = await supabase
+      .from('professional_applications')
+      .select('*')
+      .eq('id', application_id)
+      .single();
 
-      if (error || !data) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Application not found' }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      app = data;
+    if (fetchError || !fullApp) {
+      console.error('[agent-welkom] Failed to fetch application:', fetchError);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Application not found' }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+    
+    const app: ApplicationData = fullApp;
+    console.log(`[agent-welkom] DB fetch complete - missing_info: ${JSON.stringify(app.missing_info)}`);
+    console.log(`[agent-welkom] DB fetch complete - werkvorm: ${app.werkvorm}, completeness: ${app.completeness_score}%`);
 
     // v1.2.0 FIX: Use database missing_info instead of self-calculating
     // The missing_info is pre-calculated by extract-cv-data or the intake system
@@ -196,24 +204,32 @@ Deno.serve(async (req) => {
 
     console.log(`[agent-welkom] Sending ${emailType} email to ${app.email_from}, missing items: ${missingInfo.length}`);
 
-    // Call send-ai-email
+    // v1.3.0 FIX: Use template_data instead of context!
+    // send-ai-email reads from template_data.fields_to_ask, not context.missing_info
+    console.log(`[agent-welkom] v1.3.0: Calling send-ai-email with template_data.fields_to_ask (${missingInfo.length} items)`);
+    
     const { data: emailResult, error: emailError } = await supabase.functions.invoke('send-ai-email', {
       body: {
         application_id: app.id,
         email_type: emailType,
         recipient_email: app.email_from,
         recipient_name: candidateName,
-        context: {
+        // v1.3.0 FIX: send-ai-email reads from template_data, NOT context!
+        template_data: {
+          fields_to_ask: missingInfo,           // PRIMARY: send-ai-email uses this
+          missing_info: missingInfo,             // FALLBACK: for backwards compat
           candidate_name: candidateName,
           first_name: firstName,
-          missing_info: missingInfo,
+          extracted_data: app.extracted_data,    // Show what we already have
           functie_interesse: app.functie_interesse,
           regio_voorkeur: app.regio_voorkeur,
           has_cv: !!app.cv_file_path,
           has_diploma: !!app.diploma_file_path,
           completeness_score: app.completeness_score || 0,
+          werkvorm: app.werkvorm,
           agent: 'welkom'
-        }
+        },
+        org_id: app.org_id
       }
     });
 
