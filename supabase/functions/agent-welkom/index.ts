@@ -1,20 +1,22 @@
 /**
- * Agent Welkom v1.1.0
+ * Agent Welkom v1.2.0
  * ===================
  * Specialist agent for the 'nieuw' stage.
  * Handles: nieuw → intake_verstuurd
  * 
  * Responsibilities:
  * - Send professional welcome email to new applicants
- * - Request missing information (CV, diploma if not present)
- * - Update welcome_email_sent_at timestamp (CRITICAL FIX)
+ * - Request missing information using DATABASE missing_info (not self-calculated)
+ * - Update welcome_email_sent_at timestamp (CRITICAL)
+ * 
+ * v1.2.0 FIX: Use database missing_info array instead of self-calculating
  * 
  * This agent does NOTHING else:
  * - No document verification (Document Agent)
  * - No interview scheduling (Planning Agent)
  * - No VOG requests (Screening Agent)
  */
-console.log('[agent-welkom] v1.1.0 BOOTED at', new Date().toISOString());
+console.log('[agent-welkom] v1.2.0 BOOTED at', new Date().toISOString());
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -38,7 +40,7 @@ Na het succesvol versturen van de welkomstmail: nieuw → intake_verstuurd
 
 ## WAT JE MOET DOEN
 1. Analyseer de sollicitatie gegevens
-2. Bepaal welke informatie ontbreekt (CV, diploma, werkervaring, beschikbaarheid)
+2. Gebruik de missing_info uit de database (niet zelf berekenen!)
 3. Stuur een gepersonaliseerde welkomstmail met intake vragen
 
 ## WAT JE NIET DOET
@@ -65,6 +67,8 @@ interface ApplicationData {
   raw_email_content: string | null;
   functie_interesse: string | null;
   regio_voorkeur: string | null;
+  missing_info: string[] | null;  // v1.2.0: Added - use this instead of calculating
+  werkvorm: string | null;
 }
 
 Deno.serve(async (req) => {
@@ -122,15 +126,64 @@ Deno.serve(async (req) => {
       app = data;
     }
 
-    // Determine what's missing
-    const missingInfo: string[] = [];
-    if (!app.cv_file_path) missingInfo.push('CV');
-    if (!app.diploma_file_path) missingInfo.push('Diploma');
-    if (!app.functie_interesse) missingInfo.push('Functie interesse');
-    if (!app.regio_voorkeur) missingInfo.push('Regio voorkeur');
+    // v1.2.0 FIX: Use database missing_info instead of self-calculating
+    // The missing_info is pre-calculated by extract-cv-data or the intake system
+    const dbMissingInfo = app.missing_info || [];
+    
+    console.log(`[agent-welkom] Database missing_info: ${JSON.stringify(dbMissingInfo)}`);
+    console.log(`[agent-welkom] CV present: ${!!app.cv_file_path}, Diploma present: ${!!app.diploma_file_path}`);
+    console.log(`[agent-welkom] Completeness: ${app.completeness_score}%, Werkvorm: ${app.werkvorm}`);
 
-    // Determine email type
-    const emailType = missingInfo.length > 0 ? 'welcome_intake' : 'welcome';
+    // Filter for email-relevant items (not technical field names)
+    // Convert technical field names to human-readable labels
+    const FIELD_LABEL_MAP: Record<string, string> = {
+      'kvk_nummer': 'KvK-nummer',
+      'iban': 'IBAN rekeningnummer',
+      'bedrijfsnaam': 'Bedrijfsnaam',
+      'beroepsaansprakelijkheidsverzekering': 'Beroepsaansprakelijkheidsverzekering',
+      'vog_upload': 'Verklaring Omtrent Gedrag (VOG)',
+      'diploma_upload': 'Diploma',
+      'cv_upload': 'CV document',
+      'id_bewijs': 'Identiteitsbewijs',
+      'big_registratie': 'BIG-registratienummer',
+      'rijbewijs': 'Rijbewijs',
+      'telefoon': 'Telefoonnummer',
+      'geboortedatum': 'Geboortedatum',
+      'adres': 'Adresgegevens',
+      'postcode': 'Postcode',
+      'woonplaats': 'Woonplaats',
+      'nationaliteit': 'Nationaliteit',
+      'bsn': 'BSN-nummer',
+    };
+
+    // Transform database missing_info to readable labels
+    const missingInfo: string[] = dbMissingInfo.map((item: string) => {
+      // Check if it's a known field
+      const lower = item.toLowerCase().replace(/[-_\s]/g, '_');
+      return FIELD_LABEL_MAP[lower] || item;
+    }).filter((item: string) => {
+      // Filter out already-present items (defensive check)
+      const lowerItem = item.toLowerCase();
+      if (lowerItem.includes('cv') && app.cv_file_path) return false;
+      if (lowerItem.includes('diploma') && app.diploma_file_path) return false;
+      return true;
+    });
+
+    // Add basic document checks as fallback if not in missing_info
+    if (!app.diploma_file_path && !missingInfo.some(m => m.toLowerCase().includes('diploma'))) {
+      missingInfo.push('Diploma');
+    }
+
+    console.log(`[agent-welkom] Final missing_info for email: ${JSON.stringify(missingInfo)}`);
+
+    // Determine email type based on completeness AND missing info
+    const hasSignificantMissing = missingInfo.length > 0;
+    const isProfileComplete = (app.completeness_score || 0) >= 85;
+    
+    let emailType = 'welcome_intake'; // Default: ask for more info
+    if (isProfileComplete && !hasSignificantMissing) {
+      emailType = 'welcome'; // Profile complete, just confirmation
+    }
 
     // Validate email type is allowed
     if (!allowed_email_types.includes(emailType)) {
@@ -141,7 +194,7 @@ Deno.serve(async (req) => {
     const candidateName = app.extracted_data?.naam || null;
     const firstName = candidateName?.split(' ')[0] || 'daar';
 
-    console.log(`[agent-welkom] Sending ${emailType} email to ${app.email_from}, missing: ${missingInfo.join(', ')}`);
+    console.log(`[agent-welkom] Sending ${emailType} email to ${app.email_from}, missing items: ${missingInfo.length}`);
 
     // Call send-ai-email
     const { data: emailResult, error: emailError } = await supabase.functions.invoke('send-ai-email', {
