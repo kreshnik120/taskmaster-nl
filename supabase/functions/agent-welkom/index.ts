@@ -191,6 +191,22 @@ Deno.serve(async (req) => {
       console.log('[agent-welkom] ✅ Updated welcome_email_sent_at');
     }
 
+    // Log to function_call_logs for AI System Health Dashboard monitoring
+    await supabase.from('function_call_logs').insert({
+      function_name: 'agent-welkom',
+      org_id: app.org_id,
+      execution_time_ms: Date.now() - startTime,
+      success: true,
+      metadata: {
+        application_id: app.id,
+        email_type: emailType,
+        missing_info: missingInfo,
+        candidate_name: candidateName,
+        pipeline_stage: 'nieuw',
+        target_stage: 'intake_verstuurd'
+      }
+    });
+
     // Log to application_conversations for audit trail
     await supabase.from('application_conversations').insert({
       application_id: app.id,
