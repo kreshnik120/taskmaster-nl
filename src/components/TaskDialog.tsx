@@ -254,7 +254,18 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
 
       // Upload pending files if any
       if (pendingFiles.length > 0 && savedTaskId) {
-        await uploadTaskAttachments(savedTaskId, pendingFiles);
+        const result = await uploadTaskAttachments(savedTaskId, pendingFiles);
+        
+        if (result.success > 0) {
+          toast.success(
+            `📎 ${result.success} bijlage${result.success > 1 ? 'n' : ''} succesvol geüpload`,
+            { description: result.uploadedFiles.join(', ') }
+          );
+        }
+        
+        if (result.failed > 0) {
+          toast.warning(`${result.failed} bestand(en) konden niet worden geüpload`);
+        }
       }
 
       toast.success(taskId ? "Taak bijgewerkt" : "Taak aangemaakt");

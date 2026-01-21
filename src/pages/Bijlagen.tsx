@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow, isToday, isThisWeek, isThisMonth } from "date-fns";
 import { nl } from "date-fns/locale";
-import { getFileCategory, getFileCategoryLabel, getFileCategoryColor, canPreview, FileCategory } from "@/lib/fileHelpers";
+import { getFileCategory, getFileCategoryLabel, getFileCategoryColor, canPreview, formatFileSize, FileCategory } from "@/lib/fileHelpers";
 import { cn } from "@/lib/utils";
 
 interface AttachmentWithTask {
@@ -37,6 +37,7 @@ interface AttachmentWithTask {
   url: string;
   created_at: string;
   task_id: string;
+  file_size?: number;
   tasks: {
     id: string;
     title: string;
@@ -307,9 +308,10 @@ export default function Bijlagen() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[40%]">Bestand</TableHead>
+                  <TableHead className="w-[35%]">Bestand</TableHead>
                   <TableHead>Taak</TableHead>
                   <TableHead>Type</TableHead>
+                  <TableHead>Grootte</TableHead>
                   <TableHead>Geüpload</TableHead>
                   <TableHead className="text-right">Acties</TableHead>
                 </TableRow>
@@ -348,6 +350,11 @@ export default function Bijlagen() {
                         >
                           {getFileCategoryLabel(category)}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground">
+                          {attachment.file_size ? formatFileSize(attachment.file_size) : '-'}
+                        </span>
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">

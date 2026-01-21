@@ -48,7 +48,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useTaskTimer } from "@/hooks/useTaskTimer";
 import { InterviewDetails } from "@/types/recruitment";
-import { canPreview } from "@/lib/fileHelpers";
+import { canPreview, formatFileSize } from "@/lib/fileHelpers";
 
 interface Subtask {
   id: string;
@@ -68,6 +68,7 @@ interface Attachment {
   name: string;
   url: string;
   created_at: string;
+  file_size?: number;
 }
 
 interface Task {
@@ -985,7 +986,14 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                           >
                             <div className="flex items-center gap-3 min-w-0 flex-1">
                               {getFileIcon(attachment.name)}
-                              <span className="text-sm truncate">{attachment.name}</span>
+                              <div className="min-w-0 flex-1">
+                                <span className="text-sm truncate block">{attachment.name}</span>
+                                {attachment.file_size && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatFileSize(attachment.file_size)}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
                               {previewable && (
