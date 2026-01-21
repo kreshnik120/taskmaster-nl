@@ -227,6 +227,9 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
         dueAtISO = dueDateTime.toISOString();
       }
 
+      // Default to Backlog column if no columnId provided
+      const defaultBacklogColumnId = '770e8400-e29b-41d4-a716-446655440001';
+      
       const taskData = {
         title: values.title,
         description: values.description || null,
@@ -236,7 +239,7 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
         due_at: dueAtISO,
         next_action: values.next_action || null,
         org_id: defaultOrgId,
-        column_id: columnId || null,
+        column_id: columnId || defaultBacklogColumnId,
       };
 
       let savedTaskId = taskId;
