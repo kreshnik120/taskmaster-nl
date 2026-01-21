@@ -141,6 +141,53 @@ const Kanban = () => {
     localStorage.setItem('kanban-show-only-my-tasks', String(showOnlyMyTasks));
   }, [showOnlyMyTasks]);
 
+  // Realtime subscription voor subtaken - direct updates bij toewijzing
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('my-subtasks-kanban')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'subtasks',
+          filter: `assignee_id=eq.${user.id}`
+        },
+        () => {
+          // Herlaad subtaken bij wijziging
+          loadSubtasks();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  // Aparte functie om subtaken te laden (voor realtime refresh)
+  const loadSubtasks = async () => {
+    if (!user) return;
+
+    const { data: subtasksData } = await supabase
+      .from('subtasks')
+      .select(`
+        id, title, task_id, status, assignee_id, due_at, order_key,
+        tasks!inner(id, title, column_id, priority, deleted_at)
+      `)
+      .eq('assignee_id', user.id)
+      .in('status', ['pending', 'active'])
+      .is('tasks.deleted_at', null);
+
+    const formattedSubtasks = (subtasksData || []).map((s: any) => ({
+      ...s,
+      parent_task: s.tasks
+    }));
+    setMySubtasks(formattedSubtasks);
+  };
+
   const loadData = async () => {
     try {
       // Load columns
@@ -196,22 +243,8 @@ const Kanban = () => {
       if (tasksError) throw tasksError;
       setTasks(tasksData || []);
 
-      // Laad subtaken waar de gebruiker aan toegewezen is
-      const { data: subtasksData } = await supabase
-        .from('subtasks')
-        .select(`
-          id, title, task_id, status, assignee_id, due_at, order_key,
-          tasks!inner(id, title, column_id, priority, deleted_at)
-        `)
-        .eq('assignee_id', user.id)
-        .in('status', ['pending', 'active'])
-        .is('tasks.deleted_at', null);
-
-      const formattedSubtasks = (subtasksData || []).map((s: any) => ({
-        ...s,
-        parent_task: s.tasks
-      }));
-      setMySubtasks(formattedSubtasks);
+      // Laad subtaken via aparte functie (ook gebruikt door realtime)
+      await loadSubtasks();
 
       setLoading(false);
     } catch (error) {
@@ -431,7 +464,7 @@ const Kanban = () => {
     }
   };
 
-  // Toggle collapsed state naar database
+  // Toggle collapsed state naar database met error feedback
   const handleToggleColumnCollapse = async (columnId: string, collapsed: boolean) => {
     try {
       const column = columns.find(c => c.id === columnId);
@@ -449,9 +482,11 @@ const Kanban = () => {
 
       if (error) {
         log.error("Fout bij opslaan collapsed state:", error);
+        toast.error("Kon voorkeur niet opslaan");
+        return; // Geen optimistic update bij error
       }
 
-      // Optimistic update
+      // Optimistic update alleen bij succes
       setColumns((prev) =>
         prev.map((col) =>
           col.id === columnId ? { ...col, isCollapsed: collapsed } : col
@@ -459,6 +494,7 @@ const Kanban = () => {
       );
     } catch (err: any) {
       log.error("Onverwachte fout bij collapsed state:", err);
+      toast.error("Er ging iets mis bij het opslaan");
     }
   };
 
