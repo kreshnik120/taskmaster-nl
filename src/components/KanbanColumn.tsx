@@ -109,6 +109,13 @@ export function KanbanColumn({ id, title, tasks, subtasks = [], status, isCollap
     setIsOpen(!isCollapsed);
   }, [isCollapsed]);
 
+  // Sync editedName wanneer title prop extern verandert
+  useEffect(() => {
+    if (!isEditing) {
+      setEditedName(title);
+    }
+  }, [title, isEditing]);
+
   const handleToggleOpen = async (open: boolean) => {
     setIsOpen(open);
     if (onToggleCollapse) {
