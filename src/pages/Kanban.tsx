@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { useAiScoring } from "@/hooks/useAiScoring";
+import { useGreeting } from "@/hooks/useGreeting";
 import { logger } from "@/lib/logger";
 
 const log = logger.create('Kanban');
@@ -589,6 +590,10 @@ const Kanban = () => {
     );
   }
 
+  // Get personalized greeting
+  const displayName = user?.user_metadata?.name || user?.email?.split('@')[0];
+  const { fullGreeting } = useGreeting(displayName);
+
   const activeTasks = getTasksForColumn(columns.find(c => c.status === 'DOING')?.id || '').length + 
                       getTasksForColumn(columns.find(c => c.status === 'REVIEW')?.id || '').length;
   const blockedCount = getTasksForColumn(columns.find(c => c.status === 'BLOCKED')?.id || '').length;
@@ -661,10 +666,12 @@ const Kanban = () => {
         />
       </div>
 
-      {/* Compact Header */}
+      {/* Compact Header with Personalized Greeting */}
       <div className="flex items-center justify-between py-4 border-b mb-6">
         <div>
-          <h1 className="text-xl font-medium text-foreground">Kanban bord</h1>
+          <h1 className="text-xl font-medium text-foreground">
+            {fullGreeting}
+          </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {activeTasks} actief • {blockedCount} blocked • {completedToday} vandaag afgerond
           </p>
