@@ -5755,6 +5755,39 @@ export type Database = {
           },
         ]
       }
+      user_invitations: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string | null
+          role: Database["public"]["Enums"]["app_role"] | null
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          email: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          role?: Database["public"]["Enums"]["app_role"] | null
+          token?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          role?: Database["public"]["Enums"]["app_role"] | null
+          token?: string
+        }
+        Relationships: []
+      }
       user_organizations: {
         Row: {
           org_id: string
@@ -6527,6 +6560,10 @@ export type Database = {
       }
     }
     Functions: {
+      accept_invitation: {
+        Args: { p_token: string; p_user_id: string }
+        Returns: boolean
+      }
       atomic_increment_feedback: {
         Args: {
           p_feedback_type: string
@@ -6800,6 +6837,15 @@ export type Database = {
       user_is_org_member: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
+      }
+      validate_invitation_token: {
+        Args: { p_token: string }
+        Returns: {
+          email: string
+          invitation_id: string
+          is_valid: boolean
+          role: Database["public"]["Enums"]["app_role"]
+        }[]
       }
       verify_document_manual: {
         Args: {

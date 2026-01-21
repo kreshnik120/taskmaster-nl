@@ -158,6 +158,10 @@ verify_jwt = false
 verify_jwt = false
 # Purpose: Receive applications from external Lovable projects (Citozorg, ABCzorg) - uses API key auth
 
+[functions.invite-user]
+verify_jwt = true
+# Purpose: Admin-only function to invite new users via email
+
 # -----------------------------------------------------------------------------
 # AUTHENTICATED FUNCTIONS (JWT verification required)
 # -----------------------------------------------------------------------------
