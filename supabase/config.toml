@@ -493,3 +493,12 @@ schedule = "45 4 * * *"
 [functions.react-agent]
 verify_jwt = false
 # Purpose: Enterprise ReAct AI Agent with dynamic tool selection, self-correction, and learning integration
+
+# -----------------------------------------------------------------------------
+# USER MANAGEMENT
+# -----------------------------------------------------------------------------
+
+[functions.manage-users]
+verify_jwt = false
+# Purpose: Admin-only user management (list users, assign roles)
+# Note: JWT verification done in code for more granular control

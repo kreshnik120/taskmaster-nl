@@ -89,6 +89,11 @@ const menuGroups: MenuGroup[] = [{
     icon: Brain,
     badge: 'validationCount',
     requiresAdmin: true
+  }, {
+    title: "Gebruikers",
+    url: "/gebruikers",
+    icon: Users,
+    requiresAdmin: true
   }]
 }, {
   label: "Archief",
