@@ -211,7 +211,7 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
     setLoading(true);
     try {
       // Combine date and time for start_at and due_at
-      let startAtISO = null;
+      let startAtISO: string | null = null;
       if (values.start_at) {
         const [hours, minutes] = (values.start_time || "09:00").split(":");
         const startDateTime = new Date(values.start_at);
@@ -219,7 +219,7 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
         startAtISO = startDateTime.toISOString();
       }
 
-      let dueAtISO = null;
+      let dueAtISO: string | null = null;
       if (values.due_at) {
         const [hours, minutes] = (values.due_time || "17:00").split(":");
         const dueDateTime = new Date(values.due_at);
