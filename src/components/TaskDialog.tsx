@@ -15,8 +15,9 @@ import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, ArrowDown, Minus, ArrowUp, AlertCircle, CalendarIcon } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, CheckCircle2, ArrowDown, Minus, ArrowUp, AlertCircle, CalendarIcon, Paperclip } from "lucide-react";
 import { SubtaskManager } from "./SubtaskManager";
+import { TaskAttachmentUpload, uploadTaskAttachments } from "./TaskAttachmentUpload";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -58,6 +59,13 @@ const PRIORITIES = [
   { value: "CRITICAL" as const, label: "Kritiek", icon: AlertCircle, color: "text-red-600" },
 ];
 
+interface Attachment {
+  id: string;
+  name: string;
+  url: string;
+  created_at: string;
+}
+
 export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, defaultStartDate, defaultDueDate }: TaskDialogProps) {
   const [loading, setLoading] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -67,6 +75,8 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
   const [currentStep, setCurrentStep] = useState(1);
   const [startDate, setStartDate] = useState<Date>();
   const [dueDate, setDueDate] = useState<Date>();
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [existingAttachments, setExistingAttachments] = useState<Attachment[]>([]);
 
   const form = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
@@ -87,8 +97,10 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
     if (open) {
       loadProfiles();
       loadDefaultOrg();
+      setPendingFiles([]);
       if (taskId) {
         loadTask();
+        loadExistingAttachments();
       } else {
         const startDateValue = defaultStartDate ? format(defaultStartDate, 'yyyy-MM-dd') : "";
         const dueDateValue = defaultDueDate ? format(defaultDueDate, 'yyyy-MM-dd') : "";
@@ -107,9 +119,20 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
         setCurrentStep(1);
         setStartDate(defaultStartDate);
         setDueDate(defaultDueDate);
+        setExistingAttachments([]);
       }
     }
   }, [open, taskId, defaultStartDate, defaultDueDate]);
+
+  const loadExistingAttachments = async () => {
+    if (!taskId) return;
+    const { data } = await supabase
+      .from("attachments")
+      .select("*")
+      .eq("task_id", taskId)
+      .order("created_at", { ascending: false });
+    if (data) setExistingAttachments(data);
+  };
 
   const loadProfiles = async () => {
     const { data } = await supabase.from("profiles").select("id, name, email");
@@ -216,24 +239,33 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
         column_id: columnId || null,
       };
 
+      let savedTaskId = taskId;
+      
       if (taskId) {
         // Update existing task
         const { error } = await supabase.from("tasks").update(taskData).eq("id", taskId);
         if (error) throw error;
-        toast.success("Taak bijgewerkt");
       } else {
         // Create new task
-        const { error } = await supabase.from("tasks").insert(taskData);
+        const { data, error } = await supabase.from("tasks").insert(taskData).select('id').single();
         if (error) throw error;
-        toast.success("Taak aangemaakt");
+        savedTaskId = data.id;
       }
 
+      // Upload pending files if any
+      if (pendingFiles.length > 0 && savedTaskId) {
+        await uploadTaskAttachments(savedTaskId, pendingFiles);
+      }
+
+      toast.success(taskId ? "Taak bijgewerkt" : "Taak aangemaakt");
       onSuccess();
       onOpenChange(false);
       form.reset();
       setCurrentStep(1);
       setStartDate(undefined);
       setDueDate(undefined);
+      setPendingFiles([]);
+      setExistingAttachments([]);
     } catch (error: any) {
       toast.error("Fout: " + error.message);
     } finally {
@@ -524,6 +556,27 @@ export function TaskDialog({ open, onOpenChange, onSuccess, taskId, columnId, de
                     </FormItem>
                   )}
                 />
+
+                {/* Bijlagen sectie */}
+                <div className="pt-4 border-t space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Paperclip className="h-4 w-4 text-muted-foreground" />
+                    <FormLabel className="mb-0">Bijlagen</FormLabel>
+                    {(pendingFiles.length > 0 || existingAttachments.length > 0) && (
+                      <Badge variant="secondary" className="text-xs">
+                        {pendingFiles.length + existingAttachments.length}
+                      </Badge>
+                    )}
+                  </div>
+                  <TaskAttachmentUpload
+                    taskId={taskId}
+                    pendingFiles={pendingFiles}
+                    onPendingFilesChange={setPendingFiles}
+                    existingAttachments={existingAttachments}
+                    onAttachmentDeleted={loadExistingAttachments}
+                    compact
+                  />
+                </div>
               </div>
             )}
 
