@@ -24,6 +24,7 @@ import Sollicitaties from "./pages/Sollicitaties";
 import SollicitatiesArchief from "./pages/SollicitatiesArchief";
 import Klanten from "./pages/Klanten";
 import Plaatsingen from "./pages/Plaatsingen";
+import Gebruikers from "./pages/Gebruikers";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -95,6 +96,7 @@ const App = () => (
             <Route path="/sollicitaties/archief" element={<SollicitatiesArchief />} />
             <Route path="/klanten" element={<Klanten />} />
             <Route path="/plaatsingen" element={<Plaatsingen />} />
+            <Route path="/gebruikers" element={<Gebruikers />} />
           </Route>
           
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
