@@ -6,12 +6,16 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { SecurityAlertBell } from "@/components/notifications/SecurityAlertBell";
 import { supabase } from "@/integrations/supabase/client";
+import { useOAuthGuard } from "@/hooks/useOAuthGuard";
 import { Loader2 } from "lucide-react";
 
 export const Layout = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const navigate = useNavigate();
   const [, setSearchParams] = useSearchParams();
+  
+  // Check if OAuth user was blocked (no profile created)
+  useOAuthGuard();
 
   useEffect(() => {
     // Check initial session

@@ -4802,6 +4802,45 @@ export type Database = {
         }
         Relationships: []
       }
+      security_audit_log: {
+        Row: {
+          blocked_reason: string | null
+          created_at: string | null
+          email: string | null
+          event_type: string
+          id: string
+          ip_address: string | null
+          metadata: Json | null
+          provider: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          blocked_reason?: string | null
+          created_at?: string | null
+          email?: string | null
+          event_type: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          provider?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          blocked_reason?: string | null
+          created_at?: string | null
+          email?: string | null
+          event_type?: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          provider?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       share_links: {
         Row: {
           can_comment: boolean
