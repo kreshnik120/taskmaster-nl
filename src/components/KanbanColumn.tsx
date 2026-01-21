@@ -6,7 +6,9 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Pencil, ChevronDown, Inbox } from "lucide-react";
+import { Pencil, ChevronDown, Inbox, ListTree, Calendar } from "lucide-react";
+import { format } from "date-fns";
+import { nl } from "date-fns/locale";
 
 interface Task {
   id: string;
@@ -48,13 +50,31 @@ interface Task {
   };
 }
 
+interface Subtask {
+  id: string;
+  title: string;
+  task_id: string;
+  status: string;
+  assignee_id: string | null;
+  due_at: string | null;
+  order_key: number;
+  parent_task?: {
+    id: string;
+    title: string;
+    column_id: string | null;
+    priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  };
+}
+
 interface KanbanColumnProps {
   id: string;
   title: string;
   tasks: Task[];
+  subtasks?: Subtask[];
   status: string;
   onUpdateName?: (columnId: string, newName: string) => Promise<void>;
   onTaskClick?: (task: Task) => void;
+  onSubtaskClick?: (subtask: Subtask) => void;
 }
 
 const statusBorderColors: Record<string, string> = {
@@ -75,7 +95,7 @@ const statusCountColors: Record<string, string> = {
   DONE: "bg-status-done/10 text-status-done",
 };
 
-export function KanbanColumn({ id, title, tasks, status, onUpdateName, onTaskClick }: KanbanColumnProps) {
+export function KanbanColumn({ id, title, tasks, subtasks = [], status, onUpdateName, onTaskClick, onSubtaskClick }: KanbanColumnProps) {
   const { setNodeRef } = useDroppable({ id });
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState(title);
@@ -166,30 +186,80 @@ export function KanbanColumn({ id, title, tasks, status, onUpdateName, onTaskCli
               </div>
             </CollapsibleTrigger>
             <Badge className={`text-xs font-medium ${statusCountColors[status] || "bg-muted/50 text-muted-foreground"}`}>
-              {tasks.length}
+              {tasks.length + subtasks.length}
             </Badge>
           </div>
         </CardHeader>
         <CollapsibleContent>
           <CardContent>
             <div ref={setNodeRef} className="space-y-2 min-h-[200px]">
-              {tasks.length === 0 ? (
+              {tasks.length === 0 && subtasks.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <Inbox className="h-8 w-8 text-muted-foreground/30 mb-3" />
                   <p className="text-sm text-muted-foreground/60">Geen taken</p>
                   <p className="text-xs text-muted-foreground/40 mt-1">Sleep hier om toe te voegen</p>
                 </div>
               ) : (
-                <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-                  {tasks.map((task) => (
-                    <TaskCard 
-                      key={task.id} 
-                      task={task} 
-                      onClick={onTaskClick}
-                      aiScore={task.aiScore}
-                    />
-                  ))}
-                </SortableContext>
+                <>
+                  <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                    {tasks.map((task) => (
+                      <TaskCard 
+                        key={task.id} 
+                        task={task} 
+                        onClick={onTaskClick}
+                        aiScore={task.aiScore}
+                      />
+                    ))}
+                  </SortableContext>
+                  
+                  {/* Subtaken toegewezen aan jou */}
+                  {subtasks.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
+                        <ListTree className="h-3 w-3" />
+                        Mijn subtaken ({subtasks.length})
+                      </p>
+                      {subtasks.map((subtask) => (
+                        <div
+                          key={subtask.id}
+                          onClick={() => onSubtaskClick?.(subtask)}
+                          className="group relative bg-muted/30 border border-border/50 rounded-md p-2.5 cursor-pointer hover:bg-muted/50 hover:border-primary/30 transition-all"
+                        >
+                          <div className="flex items-start gap-2">
+                            <ListTree className="h-3.5 w-3.5 text-primary/60 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground truncate">
+                                {subtask.title}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                ↳ {subtask.parent_task?.title}
+                              </p>
+                              {subtask.due_at && (
+                                <div className="flex items-center gap-1 mt-1.5 text-xs text-muted-foreground">
+                                  <Calendar className="h-3 w-3" />
+                                  {format(new Date(subtask.due_at), "d MMM", { locale: nl })}
+                                </div>
+                              )}
+                            </div>
+                            {subtask.parent_task?.priority && (
+                              <Badge 
+                                variant="outline" 
+                                className={`text-[10px] px-1.5 py-0 ${
+                                  subtask.parent_task.priority === 'CRITICAL' ? 'border-destructive/50 text-destructive' :
+                                  subtask.parent_task.priority === 'HIGH' ? 'border-orange-500/50 text-orange-600' :
+                                  'border-muted-foreground/30 text-muted-foreground'
+                                }`}
+                              >
+                                {subtask.parent_task.priority === 'CRITICAL' ? '!' : 
+                                 subtask.parent_task.priority === 'HIGH' ? '↑' : '·'}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </CardContent>
