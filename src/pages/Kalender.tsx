@@ -382,12 +382,12 @@ export default function Kalender() {
         
         <div className="flex items-center gap-3">
           {/* Mijn taken / Alle taken toggle - consistent met Kanban */}
-          <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-full">
+          <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg">
             <Button 
               variant={showOnlyMyTasks ? "default" : "ghost"} 
               size="sm"
               onClick={() => setShowOnlyMyTasks(true)}
-              className="gap-1.5 rounded-full h-8 px-3 text-sm"
+              className="gap-1.5 h-8 px-3 text-sm"
             >
               <User className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Mijn taken</span>
@@ -396,7 +396,7 @@ export default function Kalender() {
               variant={!showOnlyMyTasks ? "default" : "ghost"} 
               size="sm"
               onClick={() => setShowOnlyMyTasks(false)}
-              className="gap-1.5 rounded-full h-8 px-3 text-sm"
+              className="gap-1.5 h-8 px-3 text-sm"
             >
               <Users className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Alle taken</span>
@@ -714,36 +714,48 @@ export default function Kalender() {
                       </div>
                     ))}
                     
-                    {/* Subtaken - visuele distinctie consistent met Kanban (↳ indicator, dashed border) */}
-                    {daySubtasks.map((subtask) => (
-                      <div 
-                        key={subtask.id}
-                        onClick={() => {
-                          // Open parent task modal
-                          const parentTask = tasks.find(t => t.id === subtask.task_id);
-                          if (parentTask) {
-                            setSelectedTask(parentTask);
-                            setDetailModalOpen(true);
-                          }
-                        }}
-                        className="group cursor-pointer rounded-lg px-3 py-2.5 transition-all hover:shadow-sm bg-muted/30 border border-dashed border-muted-foreground/20 hover:border-muted-foreground/40"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground text-xs shrink-0">↳</span>
-                          <span className="text-sm font-medium truncate">{subtask.title}</span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[10px] text-muted-foreground/60 truncate">
-                            {subtask.task_title}
-                          </span>
-                          {subtask.due_at && (
-                            <span className="text-[10px] text-muted-foreground/50 tabular-nums shrink-0">
-                              {format(parseISO(subtask.due_at), 'HH:mm')}
-                            </span>
+                    {/* Subtaken - visuele distinctie consistent met Kanban (↳ indicator, priority border, status badge) */}
+                    {daySubtasks.map((subtask) => {
+                      const subtaskPriority = subtask.task_priority || 'medium';
+                      return (
+                        <div 
+                          key={subtask.id}
+                          onClick={() => {
+                            // Open parent task modal
+                            const parentTask = tasks.find(t => t.id === subtask.task_id);
+                            if (parentTask) {
+                              setSelectedTask(parentTask);
+                              setDetailModalOpen(true);
+                            }
+                          }}
+                          className={cn(
+                            "group cursor-pointer rounded-lg px-3 py-2.5 transition-all hover:shadow-sm bg-muted/30 border border-dashed border-muted-foreground/20 hover:border-muted-foreground/40",
+                            "border-l-2",
+                            PRIORITY_BORDERS[subtaskPriority] || PRIORITY_BORDERS.medium
                           )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground text-xs shrink-0">↳</span>
+                            <span className="text-sm font-medium truncate flex-1">{subtask.title}</span>
+                            {subtask.status === 'active' && (
+                              <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 shrink-0">
+                                Actief
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] text-muted-foreground/60 truncate">
+                              {subtask.task_title}
+                            </span>
+                            {subtask.due_at && (
+                              <span className="text-[10px] text-muted-foreground/50 tabular-nums shrink-0">
+                                {format(parseISO(subtask.due_at), 'HH:mm')}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </>
                 )}
               </CardContent>
