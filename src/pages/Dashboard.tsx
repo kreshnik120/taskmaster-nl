@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, Zap, CheckSquare, CheckCircle2, ListTodo, User } from "lucide-react";
+import { Plus, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, Zap, CheckSquare, CheckCircle2, ListTodo, User, AlertCircle } from "lucide-react";
 import { TaskItem } from "@/components/TaskItem";
 import { UpcomingRemindersWidget } from "@/components/UpcomingRemindersWidget";
 import { motion } from "framer-motion";
@@ -778,8 +778,8 @@ const Dashboard = () => {
               </CardDescription>
             </div>
             <Select value={sortOrder} onValueChange={(value: any) => setSortOrder(value)}>
-              <SelectTrigger className="w-[180px]">
-                <ArrowUpDown className="h-4 w-4 mr-2" />
+              <SelectTrigger className="w-[140px] h-8 text-xs">
+                <ArrowUpDown className="h-3.5 w-3.5 mr-1.5" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -829,48 +829,43 @@ const Dashboard = () => {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.2 }}
-                    className="border rounded-lg bg-card hover:shadow-md hover:border-primary/30 transition-all duration-200 group"
+                    className="border rounded-lg bg-card hover:shadow-sm hover:bg-accent/20 transition-all duration-150 group"
                   >
                     <div
                       onClick={() => handleTaskClick(task)}
-                      className={`flex items-center justify-between p-3 hover:bg-accent/30 transition-colors cursor-pointer ${
+                      className={`flex items-center justify-between px-4 py-3 hover:bg-accent/30 transition-colors cursor-pointer ${
                         activeTimer ? "ring-2 ring-primary/50 bg-primary/5" : ""
                       }`}
                     >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-medium">{task.title}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <p className="font-medium text-sm leading-snug truncate">{task.title}</p>
+                        </div>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+                            {task.profiles?.name || task.profiles?.email || 'Niet toegewezen'}
+                          </span>
                           {hasSubtasks && (
-                            <Badge variant="outline" className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
                               <ListTodo className="h-3 w-3" />
                               {task.completed_subtask_count}/{task.subtask_count}
-                            </Badge>
-                          )}
-                          {task.profiles ? (
-                            <Badge variant="secondary" className="flex items-center gap-1">
-                              <User className="h-3 w-3" />
-                              {task.profiles.name || task.profiles.email}
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="flex items-center gap-1 text-muted-foreground">
-                              <User className="h-3 w-3" />
-                              Niet toegewezen
-                            </Badge>
+                            </span>
                           )}
                           {activeTimer && (
-                            <Badge variant="secondary" className="text-xs bg-primary/20">
-                              <Clock className="h-3 w-3 mr-1" />
+                            <span className="text-xs text-primary flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
                               {getRunningTime(activeTimer.start)}
-                            </Badge>
+                            </span>
                           )}
                         </div>
                         {task.next_action && (
-                          <p className="text-sm text-muted-foreground mt-1">{task.next_action}</p>
+                          <p className="text-xs text-muted-foreground/80 mt-0.5 line-clamp-1">{task.next_action}</p>
                         )}
                         {hasSubtasks && (
                           <Progress 
                             value={progressPercentage} 
-                            className="h-2 mt-2" 
+                            className="h-1 mt-2" 
                             style={{
                               '--progress-color': progressPercentage === 100 ? 'hsl(var(--green-500))' : 'hsl(var(--primary))'
                             } as React.CSSProperties}
@@ -882,15 +877,32 @@ const Dashboard = () => {
                           </p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className={priorityColors[task.priority]}>
-                          {priorityLabels[task.priority]}
-                        </Badge>
-                        {task.due_at && (
-                          <span className="text-sm text-muted-foreground">
-                            {format(new Date(task.due_at), "d MMM", { locale: nl })}
-                          </span>
-                        )}
+                      <div className="flex items-center gap-3 shrink-0 ml-4">
+                        <div className={`text-xs flex items-center gap-1 ${
+                          task.priority === 'CRITICAL' ? 'text-foreground font-semibold' :
+                          task.priority === 'HIGH' ? 'text-foreground' :
+                          'text-muted-foreground'
+                        }`}>
+                          {(task.priority === 'HIGH' || task.priority === 'CRITICAL') && (
+                            <AlertCircle className="h-3 w-3" />
+                          )}
+                          <span>{priorityLabels[task.priority]}</span>
+                        </div>
+                        {task.due_at && (() => {
+                          const dueDate = new Date(task.due_at);
+                          const today = new Date();
+                          const isOverdue = dueDate < today && dueDate.toDateString() !== today.toDateString();
+                          const isToday = dueDate.toDateString() === today.toDateString();
+                          return (
+                            <span className={`text-xs w-12 text-right ${
+                              isOverdue ? 'text-destructive font-medium' :
+                              isToday ? 'text-foreground' :
+                              'text-muted-foreground'
+                            }`}>
+                              {format(dueDate, "d MMM", { locale: nl })}
+                            </span>
+                          );
+                        })()}
                         {hasSubtasks && (
                           <Button
                             variant="ghost"
@@ -928,7 +940,7 @@ const Dashboard = () => {
                             e.stopPropagation();
                             openDeleteDialog(task.id);
                           }}
-                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          className="h-8 w-8 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity hover:text-destructive hover:bg-destructive/10"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -936,9 +948,9 @@ const Dashboard = () => {
                     </div>
                     
                     {isExpanded && hasSubtasks && (
-                      <div className="px-3 pb-3 border-t">
-                        <div className="pt-3 space-y-2">
-                          <h4 className="text-sm font-medium mb-2">Processtappen</h4>
+                      <div className="px-4 pb-3 border-t border-border/50 bg-muted/20">
+                        <div className="pt-2 space-y-1">
+                          <h4 className="text-xs font-medium text-muted-foreground mb-2">Processtappen</h4>
                           {task.subtasks?.map((subtask) => (
                             <div
                               key={subtask.id}
