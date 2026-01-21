@@ -2,9 +2,9 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { format, startOfWeek, endOfDay, startOfDay, addDays, isSameDay, parseISO, getWeek, endOfWeek } from "date-fns";
+import { format, startOfWeek, endOfDay, startOfDay, addDays, isSameDay, parseISO, getWeek, endOfWeek, differenceInDays, isAfter } from "date-fns";
 import { nl } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle, UserCheck, Video, Phone, MapPin } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle, UserCheck, Video, Phone, MapPin, Sparkles, Coffee } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
@@ -14,6 +14,7 @@ import { useCountUp } from "@/hooks/useCountUp";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { KPICard } from "@/components/ui/kpi-card";
 import { InterviewDetails } from "@/types/recruitment";
+import { Progress } from "@/components/ui/progress";
 
 interface Task {
   id: string;
@@ -80,6 +81,53 @@ const isInterviewTask = (task: Task): boolean => {
   return task.category === 'interview' || 
          task.recruitment_action_type === 'interview' ||
          task.interview_details !== null;
+};
+
+// Helper function to check if a task is overdue
+const isOverdue = (task: Task): boolean => {
+  const dueDate = task.due_at ? parseISO(task.due_at) : task.start_at ? parseISO(task.start_at) : null;
+  if (!dueDate) return false;
+  const now = new Date();
+  // Set to end of day for comparison
+  dueDate.setHours(23, 59, 59, 999);
+  return isAfter(now, dueDate);
+};
+
+// Get contextual empty state message
+const getEmptyStateMessage = (day: Date, isWeekend: boolean): { icon: typeof Sparkles; message: string } => {
+  const dayOfWeek = day.getDay();
+  
+  if (isWeekend) {
+    return { icon: Coffee, message: "Weekend vrij" };
+  }
+  
+  const now = new Date();
+  if (isSameDay(day, now)) {
+    return { icon: Sparkles, message: "Vrije dag vandaag!" };
+  }
+  
+  if (differenceInDays(day, now) < 0) {
+    return { icon: Calendar, message: "Geen taken" };
+  }
+  
+  return { icon: Plus, message: "Plan een taak" };
+};
+
+// Calculate work week progress (Monday = 0%, Friday EOD = 100%)
+const getWeekProgress = (): number => {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const hour = now.getHours();
+  
+  // Sunday = 0, Monday = 1, ..., Saturday = 6
+  if (dayOfWeek === 0 || dayOfWeek === 6) return 100; // Weekend = complete
+  
+  // Monday = 1 -> 0, Friday = 5 -> 4
+  const workDayIndex = dayOfWeek - 1; // 0-4 for Mon-Fri
+  const dayProgress = hour / 24; // 0-1 progress through current day
+  
+  // Total progress = (completed days + current day progress) / 5 days
+  return Math.round(((workDayIndex + dayProgress) / 5) * 100);
 };
 
 export default function Kalender() {
@@ -355,37 +403,51 @@ export default function Kalender() {
         />
       </div>
 
-      {/* Centered Week Navigation */}
-      <div className="flex items-center justify-center gap-6">
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          onClick={goToPreviousWeek}
-          className="h-8 w-8 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/5"
-        >
-          <ChevronLeft className="h-3.5 w-3.5" />
-        </Button>
-        
-        <div className="text-center min-w-[180px]">
-          <p className="text-sm font-medium tabular-nums">
-            {format(currentWeekStart, 'd MMM', { locale: nl }).toLowerCase()} – {format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'd MMM yyyy', { locale: nl }).toLowerCase()}
-          </p>
-          <button 
-            onClick={goToToday}
-            className="text-[11px] font-medium text-primary hover:text-primary/80 hover:underline transition-colors"
+      {/* Centered Week Navigation with Progress Bar */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-center gap-6">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={goToPreviousWeek}
+            className="h-8 w-8 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/5"
           >
-            Vandaag
-          </button>
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </Button>
+          
+          <div className="text-center min-w-[180px]">
+            <p className="text-sm font-medium tabular-nums">
+              {format(currentWeekStart, 'd MMM', { locale: nl }).toLowerCase()} – {format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'd MMM yyyy', { locale: nl }).toLowerCase()}
+            </p>
+            <button 
+              onClick={goToToday}
+              className="text-[11px] font-medium text-primary hover:text-primary/80 hover:underline transition-colors"
+            >
+              Vandaag
+            </button>
+          </div>
+          
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={goToNextWeek}
+            className="h-8 w-8 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/5"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
         </div>
         
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          onClick={goToNextWeek}
-          className="h-8 w-8 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/5"
-        >
-          <ChevronRight className="h-3.5 w-3.5" />
-        </Button>
+        {/* Week Progress Bar - Apple-style thin bar */}
+        {isSameDay(currentWeekStart, startOfWeek(new Date(), { locale: nl, weekStartsOn: 1 })) && (
+          <div className="flex items-center justify-center gap-3 px-16">
+            <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">Ma</span>
+            <Progress 
+              value={getWeekProgress()} 
+              className="h-1 w-48 bg-muted/30" 
+            />
+            <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">Vr</span>
+          </div>
+        )}
       </div>
 
       {/* Responsive Calendar Grid */}
@@ -431,18 +493,25 @@ export default function Kalender() {
               </CardHeader>
               <CardContent className="space-y-2.5 px-3.5 pb-3.5">
                 {dayTasks.length === 0 && dayReminders.length === 0 ? (
-                  <button 
-                    onClick={() => handleDayClick(day)}
-                    className="w-full text-center py-12 rounded-xl transition-all duration-200 group border border-dashed border-muted-foreground/10 hover:border-muted-foreground/25 hover:bg-primary/[0.04]"
-                  >
-                    <Plus className="h-4 w-4 mx-auto mb-1.5 text-muted-foreground/25 group-hover:text-primary/50 transition-colors" />
-                    <p className="text-xs text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors">Taak toevoegen</p>
-                  </button>
+                  (() => {
+                    const emptyState = getEmptyStateMessage(day, isWeekend);
+                    const EmptyIcon = emptyState.icon;
+                    return (
+                      <button 
+                        onClick={() => handleDayClick(day)}
+                        className="w-full text-center py-12 rounded-xl transition-all duration-200 group border border-dashed border-muted-foreground/10 hover:border-muted-foreground/25 hover:bg-primary/[0.04]"
+                      >
+                        <EmptyIcon className="h-4 w-4 mx-auto mb-1.5 text-muted-foreground/25 group-hover:text-primary/50 transition-colors" />
+                        <p className="text-xs text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors">{emptyState.message}</p>
+                      </button>
+                    );
+                  })()
                 ) : (
                   <>
                     {/* Task Cards - Ultra-subtle Apple style with priority border + bg tint */}
                     {dayTasks.map((task, taskIndex) => {
                       const isInterview = isInterviewTask(task);
+                      const taskIsOverdue = isOverdue(task);
                       const candidateName = task.interview_details?.candidate_name;
                       const interviewType = task.interview_details?.interview_type;
                       const durationMinutes = task.interview_details?.duration_minutes;
@@ -473,13 +542,23 @@ export default function Kalender() {
                           key={task.id} 
                           onClick={() => handleTaskClick(task)} 
                           className={cn(
-                            "p-3.5 rounded-lg border-l-2 shadow-[0_0.5px_1px_rgba(0,0,0,0.02)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.05)] hover:translate-y-[-0.5px] cursor-pointer transition-all duration-200 space-y-1.5",
+                            "p-3.5 rounded-lg border-l-2 shadow-[0_0.5px_1px_rgba(0,0,0,0.02)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.05)] hover:translate-y-[-0.5px] cursor-pointer transition-all duration-200 space-y-1.5 relative",
                             isInterview 
                               ? [INTERVIEW_STYLES.border, INTERVIEW_STYLES.bg]
-                              : [PRIORITY_BORDERS[task.priority] || PRIORITY_BORDERS.medium, PRIORITY_BG[task.priority] || PRIORITY_BG.medium]
+                              : [PRIORITY_BORDERS[task.priority] || PRIORITY_BORDERS.medium, PRIORITY_BG[task.priority] || PRIORITY_BG.medium],
+                            // Overdue styling: red ring + subtle red tint
+                            taskIsOverdue && "ring-1 ring-red-400/50 bg-red-50/30 dark:bg-red-950/20"
                           )}
                           {...(taskIndex === 0 && (task.priority === 'high' || task.priority === 'critical') && { 'data-urgent-task': true })}
                         >
+                          {/* Overdue pulsing indicator */}
+                          {taskIsOverdue && (
+                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                            </span>
+                          )}
+                          
                           {/* Header row: Icon + Title + Time */}
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-1.5 flex-1 min-w-0">
@@ -519,15 +598,22 @@ export default function Kalender() {
                               )}
                             </div>
                           ) : (
-                            /* Non-interview: Priority dot + assignee */
-                            <div className="flex items-center gap-1.5">
-                              <span className={cn(
-                                "h-2 w-2 rounded-full", 
-                                PRIORITY_DOTS[task.priority] || PRIORITY_DOTS.medium
-                              )} />
-                              {task.profiles && (
-                                <span className="text-[11px] text-muted-foreground/70 truncate max-w-[120px]">
-                                  {task.profiles.name || task.profiles.email}
+                            /* Non-interview: Priority dot + assignee + overdue badge */
+                            <div className="flex items-center justify-between gap-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className={cn(
+                                  "h-2 w-2 rounded-full", 
+                                  taskIsOverdue ? "bg-red-500" : (PRIORITY_DOTS[task.priority] || PRIORITY_DOTS.medium)
+                                )} />
+                                {task.profiles && (
+                                  <span className="text-[11px] text-muted-foreground/70 truncate max-w-[100px]">
+                                    {task.profiles.name || task.profiles.email}
+                                  </span>
+                                )}
+                              </div>
+                              {taskIsOverdue && (
+                                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 uppercase tracking-wide">
+                                  Verlopen
                                 </span>
                               )}
                             </div>
