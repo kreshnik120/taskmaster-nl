@@ -420,11 +420,27 @@ export default function Lijst() {
   };
 
   const formatPeriod = (start: string | null, end: string | null) => {
+    if (!start && !end) return "—";
+    
     if (start && end) {
-      const startDate = format(new Date(start), "d MMM", { locale: nl });
-      const endDate = format(new Date(end), "d MMM", { locale: nl });
-      return `${startDate} - ${endDate}`;
+      const startD = new Date(start);
+      const endD = new Date(end);
+      
+      // Zelfde dag → toon slechts één datum
+      if (startD.toDateString() === endD.toDateString()) {
+        return format(startD, "d MMM", { locale: nl });
+      }
+      
+      // Zelfde maand → compacte weergave: "21 – 22 jan."
+      if (startD.getMonth() === endD.getMonth() && 
+          startD.getFullYear() === endD.getFullYear()) {
+        return `${format(startD, "d")} – ${format(endD, "d MMM", { locale: nl })}`;
+      }
+      
+      // Verschillende maanden → volledige weergave
+      return `${format(startD, "d MMM", { locale: nl })} – ${format(endD, "d MMM", { locale: nl })}`;
     }
+    
     if (start) return `Vanaf ${format(new Date(start), "d MMM", { locale: nl })}`;
     if (end) return `Tot ${format(new Date(end), "d MMM", { locale: nl })}`;
     return "—";
@@ -432,13 +448,34 @@ export default function Lijst() {
 
   const getDateUrgency = (dueAt: string | null) => {
     if (!dueAt) return { status: 'none', className: '', badge: null };
-    const due = new Date(dueAt);
-    const now = new Date();
-    const diffDays = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
     
-    if (diffDays < 0) return { status: 'overdue', className: 'text-red-600 dark:text-red-400 font-medium', badge: 'Verlopen' };
-    if (diffDays === 0) return { status: 'today', className: 'text-orange-600 dark:text-orange-400 font-medium', badge: 'Vandaag' };
-    if (diffDays === 1) return { status: 'tomorrow', className: 'text-amber-600 dark:text-amber-400', badge: 'Morgen' };
+    const due = new Date(dueAt);
+    due.setHours(23, 59, 59, 999); // Einde van de dag
+    const now = new Date();
+    const diffMs = due.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) {
+      return { 
+        status: 'overdue', 
+        className: 'text-destructive font-medium', 
+        badge: 'Verlopen' 
+      };
+    }
+    if (diffDays === 0) {
+      return { 
+        status: 'today', 
+        className: 'text-orange-600 dark:text-orange-400 font-medium', 
+        badge: 'Vandaag' 
+      };
+    }
+    if (diffDays === 1) {
+      return { 
+        status: 'tomorrow', 
+        className: 'text-amber-600 dark:text-amber-400', 
+        badge: 'Morgen' 
+      };
+    }
     return { status: 'normal', className: 'text-muted-foreground', badge: null };
   };
 
@@ -1250,26 +1287,37 @@ export default function Lijst() {
                       <TableCell>
                         <PriorityBadge taskId={task.id} priority={task.priority} size="md" />
                       </TableCell>
-                             <TableCell className="hidden sm:table-cell">
-                               {(() => {
-                                 const urgency = getDateUrgency(task.due_at);
-                                 return (
-                                   <div className="flex items-center gap-2">
-                                     <span className={urgency.className}>
-                                       {formatPeriod(task.start_at, task.due_at)}
-                                     </span>
-                                     {urgency.badge && (
-                                       <Badge 
-                                         variant={urgency.status === 'overdue' ? 'destructive' : 'secondary'}
-                                         className="text-xs"
-                                       >
-                                         {urgency.badge}
-                                       </Badge>
-                                     )}
-                                   </div>
-                                 );
-                               })()}
-                             </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        {(() => {
+                          const urgency = getDateUrgency(task.due_at);
+                          return (
+                            <div className="flex items-center gap-2">
+                              <span className={cn(
+                                "text-sm tabular-nums",
+                                urgency.className
+                              )}>
+                                {formatPeriod(task.start_at, task.due_at)}
+                              </span>
+                              {urgency.badge && (
+                                <span className={cn(
+                                  "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium tracking-wide",
+                                  urgency.status === 'overdue' && "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-400",
+                                  urgency.status === 'today' && "bg-orange-50 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400",
+                                  urgency.status === 'tomorrow' && "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
+                                )}>
+                                  <span className={cn(
+                                    "h-1.5 w-1.5 rounded-full",
+                                    urgency.status === 'overdue' && "bg-red-500",
+                                    urgency.status === 'today' && "bg-orange-500",
+                                    urgency.status === 'tomorrow' && "bg-amber-500"
+                                  )} />
+                                  {urgency.badge}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </TableCell>
                             <TableCell className="min-w-[200px]">
                               {editingAction === task.id ? (
                                 <div className="flex items-center gap-2">
