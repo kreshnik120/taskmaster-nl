@@ -35,7 +35,8 @@ import {
   FileSpreadsheet,
   Image as ImageIcon,
   File,
-  Eye
+  Eye,
+  GitBranch
 } from "lucide-react";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -43,6 +44,7 @@ import { TaskDialog } from "./TaskDialog";
 import { ReminderDialog } from "./ReminderDialog";
 import { ProcessTimeline } from "./ProcessTimeline";
 import { AttachmentPreviewModal } from "./AttachmentPreviewModal";
+import { ActionTimeline, ActionHistoryItem } from "./ActionTimeline";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -138,9 +140,12 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const [sectionsOpen, setSectionsOpen] = useState({
     info: true,
     description: true,
+    actions: true,
     steps: true,
     attachments: true
   });
+  const [actionHistory, setActionHistory] = useState<ActionHistoryItem[]>([]);
+  const [loadingActions, setLoadingActions] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
   const { activeTimer, isLoading: timerLoading, elapsedTime, startTimer, stopTimer, isTimerActive } = useTaskTimer(task?.id || null);
@@ -182,12 +187,13 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [open, isTimerActive, startTimer, stopTimer]);
 
-  // Load subtasks, attachments and application when task changes
+  // Load subtasks, attachments, actions and application when task changes
   useEffect(() => {
     if (task?.id && open) {
       loadSubtasks();
       loadNextReminder();
       loadAttachments();
+      loadActionHistory();
       
       // Load linked application if exists
       if (task.application_id) {
@@ -198,7 +204,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
       
       // Subscribe to realtime updates
       const channel = supabase
-        .channel(`subtasks-${task.id}`)
+        .channel(`task-updates-${task.id}`)
         .on(
           'postgres_changes',
           {
@@ -209,6 +215,18 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
           },
           () => {
             loadSubtasks();
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'task_action_history',
+            filter: `task_id=eq.${task.id}`
+          },
+          () => {
+            loadActionHistory();
           }
         )
         .subscribe();
@@ -309,6 +327,47 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
       console.error('Error loading attachments:', error);
     } finally {
       setLoadingAttachments(false);
+    }
+  };
+
+  const loadActionHistory = async () => {
+    if (!task?.id) return;
+    
+    setLoadingActions(true);
+    try {
+      const { data, error } = await supabase
+        .from('task_action_history')
+        .select(`
+          id,
+          action_text,
+          action_type,
+          created_at,
+          completed_at,
+          is_current,
+          created_by_profile:created_by(name),
+          completed_by_profile:completed_by(name)
+        `)
+        .eq('task_id', task.id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      
+      const mapped: ActionHistoryItem[] = (data || []).map((item: any) => ({
+        id: item.id,
+        action_text: item.action_text,
+        action_type: item.action_type,
+        created_at: item.created_at,
+        completed_at: item.completed_at,
+        is_current: item.is_current,
+        created_by_name: item.created_by_profile?.name,
+        completed_by_name: item.completed_by_profile?.name
+      }));
+      
+      setActionHistory(mapped);
+    } catch (error) {
+      console.error('Error loading action history:', error);
+    } finally {
+      setLoadingActions(false);
     }
   };
 
@@ -904,18 +963,48 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
               </Collapsible>
             )}
 
-            {/* Next Action */}
-            {task.next_action && (
-              <div className="p-4 rounded-lg bg-gradient-to-r from-primary/10 to-primary/5 border-l-4 border-primary animate-fade-in">
-                <div className="flex items-start gap-3">
-                  <ArrowRight className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <h3 className="text-sm font-semibold text-foreground">Volgende actie</h3>
-                    <p className="text-sm text-foreground/90">{task.next_action}</p>
-                  </div>
+            {/* Actieverloop Section - Unified Timeline */}
+            <Collapsible 
+              open={sectionsOpen.actions} 
+              onOpenChange={() => toggleSection('actions')}
+            >
+              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/20 transition-colors duration-150 group">
+                <div className="flex items-center gap-2">
+                  <GitBranch className="h-5 w-5 text-primary/80" />
+                  <h3 className="font-semibold text-foreground">Actieverloop</h3>
+                  {(task.next_action || actionHistory.length > 0) && (
+                    <Badge variant="secondary" className="ml-2">
+                      {actionHistory.filter(a => a.completed_at).length + (task.next_action ? 1 : 0)}
+                    </Badge>
+                  )}
                 </div>
-              </div>
-            )}
+                <ChevronDown className={cn(
+                  "h-4 w-4 text-muted-foreground/60 transition-transform duration-200",
+                  sectionsOpen.actions && "rotate-180"
+                )} />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-3 animate-accordion-down">
+                {loadingActions ? (
+                  <div className="text-sm text-muted-foreground px-3">Laden...</div>
+                ) : (
+                  <div className="px-3">
+                    <ActionTimeline
+                      taskId={task.id}
+                      currentAction={task.next_action}
+                      actionHistory={actionHistory}
+                      onActionAdded={() => {
+                        onTaskUpdated();
+                        loadActionHistory();
+                      }}
+                      onActionCompleted={() => {
+                        onTaskUpdated();
+                        loadActionHistory();
+                      }}
+                    />
+                  </div>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
 
             {/* Process Steps Section - Fase 7, 8, 9 */}
             {subtasks.length > 0 && (

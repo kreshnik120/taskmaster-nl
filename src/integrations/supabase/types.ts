@@ -5335,6 +5335,67 @@ export type Database = {
           },
         ]
       }
+      task_action_history: {
+        Row: {
+          action_text: string
+          action_type: string | null
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          is_current: boolean | null
+          order_index: number | null
+          task_id: string
+        }
+        Insert: {
+          action_text: string
+          action_type?: string | null
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_current?: boolean | null
+          order_index?: number | null
+          task_id: string
+        }
+        Update: {
+          action_text?: string
+          action_type?: string | null
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_current?: boolean | null
+          order_index?: number | null
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_action_history_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_action_history_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_action_history_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_feedback_events: {
         Row: {
           components: Json
