@@ -9,6 +9,7 @@ import { ChatWidget } from "@/components/AIAssistant/ChatWidget";
 import { supabase } from "@/integrations/supabase/client";
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
+import Bijlagen from "./pages/Bijlagen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Layout } from "./components/Layout";
 import Kanban from "./pages/Kanban";
@@ -97,6 +98,7 @@ const App = () => (
             <Route path="/klanten" element={<Klanten />} />
             <Route path="/plaatsingen" element={<Plaatsingen />} />
             <Route path="/gebruikers" element={<Gebruikers />} />
+            <Route path="/bijlagen" element={<Bijlagen />} />
           </Route>
           
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

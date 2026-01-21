@@ -34,18 +34,21 @@ import {
   Loader2,
   FileSpreadsheet,
   Image as ImageIcon,
-  File
+  File,
+  Eye
 } from "lucide-react";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
 import { TaskDialog } from "./TaskDialog";
 import { ReminderDialog } from "./ReminderDialog";
 import { ProcessTimeline } from "./ProcessTimeline";
+import { AttachmentPreviewModal } from "./AttachmentPreviewModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useTaskTimer } from "@/hooks/useTaskTimer";
 import { InterviewDetails } from "@/types/recruitment";
+import { canPreview } from "@/lib/fileHelpers";
 
 interface Subtask {
   id: string;
@@ -130,6 +133,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loadingAttachments, setLoadingAttachments] = useState(false);
   const [deletingAttachment, setDeletingAttachment] = useState<string | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
   const [sectionsOpen, setSectionsOpen] = useState({
     info: true,
     description: true,
@@ -972,40 +976,54 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                     <div className="text-sm text-muted-foreground px-3">Laden...</div>
                   ) : (
                     <div className="px-3 space-y-2">
-                      {attachments.map((attachment) => (
-                        <div 
-                          key={attachment.id} 
-                          className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border border-border/50 group hover:bg-muted/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            {getFileIcon(attachment.name)}
-                            <span className="text-sm truncate">{attachment.name}</span>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <Button 
-                              size="icon" 
-                              variant="ghost" 
-                              className="h-8 w-8"
-                              onClick={() => downloadAttachment(attachment)}
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                            <Button 
-                              size="icon" 
-                              variant="ghost" 
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              onClick={() => deleteAttachment(attachment)}
-                              disabled={deletingAttachment === attachment.id}
-                            >
-                              {deletingAttachment === attachment.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-4 w-4" />
+                      {attachments.map((attachment) => {
+                        const previewable = canPreview(attachment.name);
+                        return (
+                          <div 
+                            key={attachment.id} 
+                            className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border border-border/50 group hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              {getFileIcon(attachment.name)}
+                              <span className="text-sm truncate">{attachment.name}</span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {previewable && (
+                                <Button 
+                                  size="icon" 
+                                  variant="ghost" 
+                                  className="h-8 w-8"
+                                  onClick={() => setPreviewAttachment(attachment)}
+                                  title="Bekijken"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
                               )}
-                            </Button>
+                              <Button 
+                                size="icon" 
+                                variant="ghost" 
+                                className="h-8 w-8"
+                                onClick={() => downloadAttachment(attachment)}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                size="icon" 
+                                variant="ghost" 
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                onClick={() => deleteAttachment(attachment)}
+                                disabled={deletingAttachment === attachment.id}
+                              >
+                                {deletingAttachment === attachment.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </CollapsibleContent>
@@ -1061,6 +1079,13 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
           loadNextReminder();
           toast({ title: "Herinnering toegevoegd" });
         }}
+      />
+
+      <AttachmentPreviewModal
+        attachment={previewAttachment}
+        open={!!previewAttachment}
+        onOpenChange={(open) => !open && setPreviewAttachment(null)}
+        onDownload={() => previewAttachment && downloadAttachment(previewAttachment)}
       />
     </>
   );
