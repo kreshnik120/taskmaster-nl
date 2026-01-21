@@ -4,8 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { format, startOfWeek, endOfDay, startOfDay, addDays, isSameDay, parseISO, getWeek, endOfWeek, differenceInDays, isAfter } from "date-fns";
 import { nl } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle, UserCheck, Video, Phone, MapPin, Sparkles, Coffee, User, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle, UserCheck, Video, Phone, MapPin, Sparkles, Coffee, User, Users, GripVertical } from "lucide-react";
 import { useMySubtasks } from "@/hooks/useMySubtasks";
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useDroppable, useDraggable } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
@@ -16,6 +17,9 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { KPICard } from "@/components/ui/kpi-card";
 import { InterviewDetails } from "@/types/recruitment";
 import { Progress } from "@/components/ui/progress";
+
+// Type from useMySubtasks hook
+type SubtaskFromHook = ReturnType<typeof useMySubtasks>['subtasks'][number];
 
 interface Task {
   id: string;
@@ -131,6 +135,90 @@ const getWeekProgress = (): number => {
   return Math.round(((workDayIndex + dayProgress) / 5) * 100);
 };
 
+// ===== Drag & Drop Components =====
+
+interface DraggableTaskProps {
+  task: Task;
+  children: React.ReactNode;
+}
+
+const DraggableTask = ({ task, children }: DraggableTaskProps) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `task-${task.id}`,
+    data: { type: 'task', task }
+  });
+
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+  } : undefined;
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style} 
+      {...listeners} 
+      {...attributes}
+      className={cn(isDragging && "opacity-50 cursor-grabbing", "cursor-grab")}
+    >
+      {children}
+    </div>
+  );
+};
+
+interface DraggableSubtaskProps {
+  subtask: SubtaskFromHook;
+  children: React.ReactNode;
+}
+
+const DraggableSubtask = ({ subtask, children }: DraggableSubtaskProps) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `subtask-${subtask.id}`,
+    data: { type: 'subtask', subtask }
+  });
+
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+  } : undefined;
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style} 
+      {...listeners} 
+      {...attributes}
+      className={cn(isDragging && "opacity-50 cursor-grabbing", "cursor-grab")}
+    >
+      {children}
+    </div>
+  );
+};
+
+interface DroppableDayProps {
+  day: Date;
+  children: React.ReactNode;
+}
+
+const DroppableDay = ({ day, children }: DroppableDayProps) => {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `day-${day.toISOString()}`,
+    data: { day }
+  });
+
+  return (
+    <div 
+      ref={setNodeRef}
+      className={cn(
+        "transition-all duration-200 rounded-xl",
+        isOver && "ring-2 ring-primary/50 ring-inset bg-primary/5"
+      )}
+    >
+      {children}
+    </div>
+  );
+};
+
+// ===== Main Component =====
+
 export default function Kalender() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -144,6 +232,12 @@ export default function Kalender() {
   const [newTaskDialogOpen, setNewTaskDialogOpen] = useState(false);
   const [newTaskDate, setNewTaskDate] = useState<Date | null>(null);
   const [activeKpi, setActiveKpi] = useState<string | null>(null);
+  
+  // Drag & Drop state
+  const [activeItem, setActiveItem] = useState<{ 
+    type: 'task' | 'subtask'; 
+    data: Task | SubtaskFromHook 
+  } | null>(null);
   
   // Personalisatie: Mijn taken / Alle taken toggle (consistent met Kanban)
   const [userId, setUserId] = useState<string | null>(null);
@@ -327,6 +421,110 @@ export default function Kalender() {
       console.error('Error deleting reminder:', error);
       toast({ title: "Fout", description: "Er is een fout opgetreden.", variant: "destructive" });
     }
+  };
+
+  // ===== Drag & Drop Handlers =====
+  
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    const activeData = active.data.current;
+    
+    if (activeData?.type === 'task') {
+      setActiveItem({ type: 'task', data: activeData.task });
+    } else if (activeData?.type === 'subtask') {
+      setActiveItem({ type: 'subtask', data: activeData.subtask });
+    }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveItem(null);
+
+    if (!over) return;
+
+    // Extract target day from droppable ID
+    const overId = over.id as string;
+    if (!overId.startsWith('day-')) return;
+
+    const targetDayISO = overId.replace('day-', '');
+    const targetDay = parseISO(targetDayISO);
+    const activeData = active.data.current;
+
+    if (activeData?.type === 'task') {
+      await rescheduleTask(activeData.task, targetDay);
+    } else if (activeData?.type === 'subtask') {
+      await rescheduleSubtask(activeData.subtask, targetDay);
+    }
+  };
+
+  const rescheduleTask = async (task: Task, newDay: Date) => {
+    const updates: Record<string, string> = {};
+    
+    if (task.start_at) {
+      // Preserve time, change only day
+      const originalStart = parseISO(task.start_at);
+      const newStart = new Date(newDay);
+      newStart.setHours(originalStart.getHours(), originalStart.getMinutes(), 0, 0);
+      updates.start_at = newStart.toISOString();
+    }
+    
+    if (task.due_at) {
+      const originalDue = parseISO(task.due_at);
+      const newDue = new Date(newDay);
+      newDue.setHours(originalDue.getHours(), originalDue.getMinutes(), 0, 0);
+      updates.due_at = newDue.toISOString();
+    }
+
+    // If neither set, default to noon
+    if (!task.start_at && !task.due_at) {
+      const noon = new Date(newDay);
+      noon.setHours(12, 0, 0, 0);
+      updates.due_at = noon.toISOString();
+    }
+
+    const { error } = await supabase
+      .from('tasks')
+      .update(updates)
+      .eq('id', task.id);
+
+    if (error) {
+      toast({ title: "Fout", description: "Kon taak niet verplaatsen", variant: "destructive" });
+      return;
+    }
+
+    // Optimistic UI update
+    setTasks(prev => prev.map(t => 
+      t.id === task.id ? { ...t, ...updates } : t
+    ));
+    
+    toast({ 
+      title: "Taak verplaatst", 
+      description: `${task.title} → ${format(newDay, 'EEEE d MMM', { locale: nl })}`
+    });
+  };
+
+  const rescheduleSubtask = async (subtask: SubtaskFromHook, newDay: Date) => {
+    const originalDue = subtask.due_at ? parseISO(subtask.due_at) : new Date();
+    const newDue = new Date(newDay);
+    newDue.setHours(originalDue.getHours(), originalDue.getMinutes(), 0, 0);
+
+    const { error } = await supabase
+      .from('subtasks')
+      .update({ due_at: newDue.toISOString() })
+      .eq('id', subtask.id);
+
+    if (error) {
+      toast({ title: "Fout", description: "Kon subtaak niet verplaatsen", variant: "destructive" });
+      return;
+    }
+
+    // Subtasks worden via realtime hook automatisch bijgewerkt
+    refetchSubtasks();
+    
+    toast({ 
+      title: "Subtaak verplaatst", 
+      description: `${subtask.title} → ${format(newDay, 'EEEE d MMM', { locale: nl })}`
+    });
   };
 
   // Keyboard shortcuts
@@ -517,252 +715,271 @@ export default function Kalender() {
         )}
       </div>
 
-      {/* Responsive Calendar Grid */}
-      <div className={cn(
-        "grid gap-3",
-        viewMode === "5" 
-          ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-5" 
-          : "grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7"
-      )}>
-        {weekDays.map((day) => {
-          const dayTasks = getTasksForDay(day);
-          const dayReminders = getRemindersForDay(day);
-          const daySubtasks = showOnlyMyTasks ? getSubtasksForDay(day) : [];
-          const isToday = isSameDay(day, new Date());
-          const dayOfWeek = day.getDay();
-          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-          const hasContent = dayTasks.length > 0 || dayReminders.length > 0 || daySubtasks.length > 0;
+      {/* Responsive Calendar Grid with Drag & Drop */}
+      <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <div className={cn(
+          "grid gap-3",
+          viewMode === "5" 
+            ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-5" 
+            : "grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7"
+        )}>
+          {weekDays.map((day) => {
+            const dayTasks = getTasksForDay(day);
+            const dayReminders = getRemindersForDay(day);
+            const daySubtasks = showOnlyMyTasks ? getSubtasksForDay(day) : [];
+            const isToday = isSameDay(day, new Date());
+            const dayOfWeek = day.getDay();
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+            const hasContent = dayTasks.length > 0 || dayReminders.length > 0 || daySubtasks.length > 0;
 
-          return (
-            <Card 
-              key={day.toISOString()} 
-              className={cn(
-                "overflow-hidden min-h-[480px] border border-border/20 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)]",
-                isToday && "bg-primary/[0.03] border-primary/10",
-                isWeekend && !isToday && "bg-muted/[0.02] dark:bg-muted/[0.04]"
-              )}
-            >
-              <CardHeader className="pb-3 pt-3.5 px-3.5">
-                <CardTitle className="text-sm font-normal tracking-wide flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    {isToday && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                    )}
-                    <span className={cn(
-                      isToday ? "text-primary font-semibold" : "text-muted-foreground",
-                      isWeekend && !isToday && "text-muted-foreground/70"
-                    )}>
-                      {format(day, 'EEEE', { locale: nl })}
-                    </span>
-                  </span>
-                  <span className="text-[11px] font-normal text-muted-foreground/50 tabular-nums">
-                    {format(day, 'd MMM', { locale: nl }).toLowerCase()}
-                  </span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2.5 px-3.5 pb-3.5">
-                {!hasContent ? (
-                  (() => {
-                    const emptyState = getEmptyStateMessage(day, isWeekend);
-                    const EmptyIcon = emptyState.icon;
-                    return (
-                      <button 
-                        onClick={() => handleDayClick(day)}
-                        className="w-full text-center py-12 rounded-xl transition-all duration-200 group border border-dashed border-muted-foreground/10 hover:border-muted-foreground/25 hover:bg-primary/[0.04]"
-                      >
-                        <EmptyIcon className="h-4 w-4 mx-auto mb-1.5 text-muted-foreground/25 group-hover:text-primary/50 transition-colors" />
-                        <p className="text-xs text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors">{emptyState.message}</p>
-                      </button>
-                    );
-                  })()
-                ) : (
-                  <>
-                    {/* Task Cards - Ultra-subtle Apple style with priority border + bg tint */}
-                    {dayTasks.map((task, taskIndex) => {
-                      const isInterview = isInterviewTask(task);
-                      const taskIsOverdue = isOverdue(task);
-                      const candidateName = task.interview_details?.candidate_name;
-                      const interviewType = task.interview_details?.interview_type;
-                      const durationMinutes = task.interview_details?.duration_minutes;
-                      const organizationName = task.interview_details?.organization_name;
-                      
-                      // Interview type icons
-                      const InterviewTypeIcon = interviewType === 'video' ? Video 
-                        : interviewType === 'phone' ? Phone 
-                        : interviewType === 'in_person' ? MapPin 
-                        : UserCheck;
-                      
-                      const interviewTypeLabel = interviewType === 'video' ? 'Teams' 
-                        : interviewType === 'phone' ? 'Telefoon' 
-                        : interviewType === 'in_person' ? 'Locatie' 
-                        : 'Interview';
-                      
-                      // Calculate end time if duration is available
-                      const startTime = task.start_at ? format(parseISO(task.start_at), 'HH:mm') : task.due_at ? format(parseISO(task.due_at), 'HH:mm') : null;
-                      let timeDisplay = startTime;
-                      if (startTime && durationMinutes && task.start_at) {
-                        const startDate = parseISO(task.start_at);
-                        const endDate = new Date(startDate.getTime() + durationMinutes * 60000);
-                        timeDisplay = `${startTime}-${format(endDate, 'HH:mm')}`;
-                      }
-                      
-                      return (
-                        <div 
-                          key={task.id} 
-                          onClick={() => handleTaskClick(task)} 
-                          className={cn(
-                            "p-3.5 rounded-lg border-l-2 shadow-[0_0.5px_1px_rgba(0,0,0,0.02)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.05)] hover:translate-y-[-0.5px] cursor-pointer transition-all duration-200 space-y-1.5 relative",
-                            isInterview 
-                              ? [INTERVIEW_STYLES.border, INTERVIEW_STYLES.bg]
-                              : [PRIORITY_BORDERS[task.priority] || PRIORITY_BORDERS.medium, PRIORITY_BG[task.priority] || PRIORITY_BG.medium],
-                            // Overdue styling: red ring + subtle red tint
-                            taskIsOverdue && "ring-1 ring-red-400/50 bg-red-50/30 dark:bg-red-950/20"
-                          )}
-                          {...(taskIndex === 0 && (task.priority === 'high' || task.priority === 'critical') && { 'data-urgent-task': true })}
-                        >
-                          {/* Overdue pulsing indicator */}
-                          {taskIsOverdue && (
-                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                            </span>
-                          )}
-                          
-                          {/* Header row: Icon + Title + Time */}
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                              {isInterview && (
-                                <InterviewTypeIcon className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
-                              )}
-                              <p className="font-medium text-sm text-foreground/90 leading-tight tracking-tight line-clamp-2">
-                                {isInterview ? (candidateName || task.title) : task.title}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              {timeDisplay && (
-                                <span className="text-[11px] text-muted-foreground/70 tabular-nums font-medium">
-                                  {timeDisplay}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          
-                          {/* Interview-specific: Type badge + Organization */}
-                          {isInterview ? (
-                            <div className="flex items-center justify-between gap-1.5">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300">
-                                  {interviewTypeLabel}
-                                </span>
-                                {organizationName && (
-                                  <span className="text-[10px] text-muted-foreground/60 truncate max-w-[80px]">
-                                    {organizationName}
-                                  </span>
-                                )}
-                              </div>
-                              {durationMinutes && (
-                                <span className="text-[10px] text-muted-foreground/50">
-                                  {durationMinutes}min
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            /* Non-interview: Priority dot + assignee + overdue badge */
-                            <div className="flex items-center justify-between gap-1.5">
-                              <div className="flex items-center gap-1.5">
-                                <span className={cn(
-                                  "h-2 w-2 rounded-full", 
-                                  taskIsOverdue ? "bg-red-500" : (PRIORITY_DOTS[task.priority] || PRIORITY_DOTS.medium)
-                                )} />
-                                {task.profiles && (
-                                  <span className="text-[11px] text-muted-foreground/70 truncate max-w-[100px]">
-                                    {task.profiles.name || task.profiles.email}
-                                  </span>
-                                )}
-                              </div>
-                              {taskIsOverdue && (
-                                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 uppercase tracking-wide">
-                                  Verlopen
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {/* Reminder Cards - Amber accent style */}
-                    {dayReminders.map((reminder, reminderIndex) => (
-                      <div 
-                        key={reminder.id} 
-                        className="p-3 rounded-xl bg-amber-50/20 dark:bg-amber-900/15 border-l-2 border-l-amber-400/50 group transition-all duration-200 hover:bg-amber-50/30 dark:hover:bg-amber-900/25"
-                        {...(reminderIndex === 0 && { 'data-reminders': true })}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 space-y-0.5">
-                            <p className="font-medium text-sm line-clamp-2">{reminder.title || "Herinnering"}</p>
-                            <p className="text-[11px] text-muted-foreground/60 tabular-nums">{format(parseISO(reminder.at), 'HH:mm')}</p>
-                          </div>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            onClick={(e) => handleDeleteReminder(reminder.id, e)} 
-                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all"
+            return (
+              <DroppableDay key={day.toISOString()} day={day}>
+                <Card 
+                  className={cn(
+                    "overflow-hidden min-h-[480px] border border-border/20 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)]",
+                    isToday && "bg-primary/[0.03] border-primary/10",
+                    isWeekend && !isToday && "bg-muted/[0.02] dark:bg-muted/[0.04]"
+                  )}
+                >
+                  <CardHeader className="pb-3 pt-3.5 px-3.5">
+                    <CardTitle className="text-sm font-normal tracking-wide flex items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        {isToday && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                        )}
+                        <span className={cn(
+                          isToday ? "text-primary font-semibold" : "text-muted-foreground",
+                          isWeekend && !isToday && "text-muted-foreground/70"
+                        )}>
+                          {format(day, 'EEEE', { locale: nl })}
+                        </span>
+                      </span>
+                      <span className="text-[11px] font-normal text-muted-foreground/50 tabular-nums">
+                        {format(day, 'd MMM', { locale: nl }).toLowerCase()}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2.5 px-3.5 pb-3.5">
+                    {!hasContent ? (
+                      (() => {
+                        const emptyState = getEmptyStateMessage(day, isWeekend);
+                        const EmptyIcon = emptyState.icon;
+                        return (
+                          <button 
+                            onClick={() => handleDayClick(day)}
+                            className="w-full text-center py-12 rounded-xl transition-all duration-200 group border border-dashed border-muted-foreground/10 hover:border-muted-foreground/25 hover:bg-primary/[0.04]"
                           >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                    
-                    {/* Subtaken - visuele distinctie consistent met Kanban (↳ indicator, priority border, status badge) */}
-                    {daySubtasks.map((subtask) => {
-                      const subtaskPriority = subtask.task_priority || 'medium';
-                      return (
-                        <div 
-                          key={subtask.id}
-                          onClick={() => {
-                            // Open parent task modal
-                            const parentTask = tasks.find(t => t.id === subtask.task_id);
-                            if (parentTask) {
-                              setSelectedTask(parentTask);
-                              setDetailModalOpen(true);
-                            }
-                          }}
-                          className={cn(
-                            "group cursor-pointer rounded-lg px-3 py-2.5 transition-all hover:shadow-sm bg-muted/30 border border-dashed border-muted-foreground/20 hover:border-muted-foreground/40",
-                            "border-l-2",
-                            PRIORITY_BORDERS[subtaskPriority] || PRIORITY_BORDERS.medium
-                          )}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-muted-foreground text-xs shrink-0">↳</span>
-                            <span className="text-sm font-medium truncate flex-1">{subtask.title}</span>
-                            {subtask.status === 'active' && (
-                              <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 shrink-0">
-                                Actief
-                              </span>
-                            )}
+                            <EmptyIcon className="h-4 w-4 mx-auto mb-1.5 text-muted-foreground/25 group-hover:text-primary/50 transition-colors" />
+                            <p className="text-xs text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors">{emptyState.message}</p>
+                          </button>
+                        );
+                      })()
+                    ) : (
+                      <>
+                        {/* Task Cards - Draggable */}
+                        {dayTasks.map((task, taskIndex) => {
+                          const isInterview = isInterviewTask(task);
+                          const taskIsOverdue = isOverdue(task);
+                          const candidateName = task.interview_details?.candidate_name;
+                          const interviewType = task.interview_details?.interview_type;
+                          const durationMinutes = task.interview_details?.duration_minutes;
+                          const organizationName = task.interview_details?.organization_name;
+                          
+                          // Interview type icons
+                          const InterviewTypeIcon = interviewType === 'video' ? Video 
+                            : interviewType === 'phone' ? Phone 
+                            : interviewType === 'in_person' ? MapPin 
+                            : UserCheck;
+                          
+                          const interviewTypeLabel = interviewType === 'video' ? 'Teams' 
+                            : interviewType === 'phone' ? 'Telefoon' 
+                            : interviewType === 'in_person' ? 'Locatie' 
+                            : 'Interview';
+                          
+                          // Calculate end time if duration is available
+                          const startTime = task.start_at ? format(parseISO(task.start_at), 'HH:mm') : task.due_at ? format(parseISO(task.due_at), 'HH:mm') : null;
+                          let timeDisplay = startTime;
+                          if (startTime && durationMinutes && task.start_at) {
+                            const startDate = parseISO(task.start_at);
+                            const endDate = new Date(startDate.getTime() + durationMinutes * 60000);
+                            timeDisplay = `${startTime}-${format(endDate, 'HH:mm')}`;
+                          }
+                          
+                          return (
+                            <DraggableTask key={task.id} task={task}>
+                              <div 
+                                onClick={() => handleTaskClick(task)} 
+                                className={cn(
+                                  "p-3.5 rounded-lg border-l-2 shadow-[0_0.5px_1px_rgba(0,0,0,0.02)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.05)] hover:translate-y-[-0.5px] cursor-grab active:cursor-grabbing transition-all duration-200 space-y-1.5 relative",
+                                  isInterview 
+                                    ? [INTERVIEW_STYLES.border, INTERVIEW_STYLES.bg]
+                                    : [PRIORITY_BORDERS[task.priority] || PRIORITY_BORDERS.medium, PRIORITY_BG[task.priority] || PRIORITY_BG.medium],
+                                  // Overdue styling: red ring + subtle red tint
+                                  taskIsOverdue && "ring-1 ring-red-400/50 bg-red-50/30 dark:bg-red-950/20"
+                                )}
+                                {...(taskIndex === 0 && (task.priority === 'high' || task.priority === 'critical') && { 'data-urgent-task': true })}
+                              >
+                                {/* Overdue pulsing indicator */}
+                                {taskIsOverdue && (
+                                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                  </span>
+                                )}
+                                
+                                {/* Header row: Icon + Title + Time */}
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                    {isInterview && (
+                                      <InterviewTypeIcon className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                                    )}
+                                    <p className="font-medium text-sm text-foreground/90 leading-tight tracking-tight line-clamp-2">
+                                      {isInterview ? (candidateName || task.title) : task.title}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {timeDisplay && (
+                                      <span className="text-[11px] text-muted-foreground/70 tabular-nums font-medium">
+                                        {timeDisplay}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                {/* Interview-specific: Type badge + Organization */}
+                                {isInterview ? (
+                                  <div className="flex items-center justify-between gap-1.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300">
+                                        {interviewTypeLabel}
+                                      </span>
+                                      {organizationName && (
+                                        <span className="text-[10px] text-muted-foreground/60 truncate max-w-[80px]">
+                                          {organizationName}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {durationMinutes && (
+                                      <span className="text-[10px] text-muted-foreground/50">
+                                        {durationMinutes}min
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  /* Non-interview: Priority dot + assignee + overdue badge */
+                                  <div className="flex items-center justify-between gap-1.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={cn(
+                                        "h-2 w-2 rounded-full", 
+                                        taskIsOverdue ? "bg-red-500" : (PRIORITY_DOTS[task.priority] || PRIORITY_DOTS.medium)
+                                      )} />
+                                      {task.profiles && (
+                                        <span className="text-[11px] text-muted-foreground/70 truncate max-w-[100px]">
+                                          {task.profiles.name || task.profiles.email}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {taskIsOverdue && (
+                                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 uppercase tracking-wide">
+                                        Verlopen
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </DraggableTask>
+                          );
+                        })}
+                        {/* Reminder Cards - Amber accent style (not draggable) */}
+                        {dayReminders.map((reminder, reminderIndex) => (
+                          <div 
+                            key={reminder.id} 
+                            className="p-3 rounded-xl bg-amber-50/20 dark:bg-amber-900/15 border-l-2 border-l-amber-400/50 group transition-all duration-200 hover:bg-amber-50/30 dark:hover:bg-amber-900/25"
+                            {...(reminderIndex === 0 && { 'data-reminders': true })}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 space-y-0.5">
+                                <p className="font-medium text-sm line-clamp-2">{reminder.title || "Herinnering"}</p>
+                                <p className="text-[11px] text-muted-foreground/60 tabular-nums">{format(parseISO(reminder.at), 'HH:mm')}</p>
+                              </div>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={(e) => handleDeleteReminder(reminder.id, e)} 
+                                className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[10px] text-muted-foreground/60 truncate">
-                              {subtask.task_title}
-                            </span>
-                            {subtask.due_at && (
-                              <span className="text-[10px] text-muted-foreground/50 tabular-nums shrink-0">
-                                {format(parseISO(subtask.due_at), 'HH:mm')}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                        ))}
+                        
+                        {/* Subtaken - Draggable */}
+                        {daySubtasks.map((subtask) => {
+                          const subtaskPriority = subtask.task_priority || 'medium';
+                          return (
+                            <DraggableSubtask key={subtask.id} subtask={subtask}>
+                              <div 
+                                onClick={() => {
+                                  // Open parent task modal
+                                  const parentTask = tasks.find(t => t.id === subtask.task_id);
+                                  if (parentTask) {
+                                    setSelectedTask(parentTask);
+                                    setDetailModalOpen(true);
+                                  }
+                                }}
+                                className={cn(
+                                  "group cursor-grab active:cursor-grabbing rounded-lg px-3 py-2.5 transition-all hover:shadow-sm bg-muted/30 border border-dashed border-muted-foreground/20 hover:border-muted-foreground/40",
+                                  "border-l-2",
+                                  PRIORITY_BORDERS[subtaskPriority] || PRIORITY_BORDERS.medium
+                                )}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-muted-foreground text-xs shrink-0">↳</span>
+                                  <span className="text-sm font-medium truncate flex-1">{subtask.title}</span>
+                                  {subtask.status === 'active' && (
+                                    <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 shrink-0">
+                                      Actief
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-[10px] text-muted-foreground/60 truncate">
+                                    {subtask.task_title}
+                                  </span>
+                                  {subtask.due_at && (
+                                    <span className="text-[10px] text-muted-foreground/50 tabular-nums shrink-0">
+                                      {format(parseISO(subtask.due_at), 'HH:mm')}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </DraggableSubtask>
+                          );
+                        })}
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              </DroppableDay>
+            );
+          })}
+        </div>
+
+        {/* Drag Overlay - ghost preview during drag */}
+        <DragOverlay>
+          {activeItem && activeItem.type === 'task' && (
+            <div className="p-3 rounded-lg bg-card border shadow-lg opacity-90 max-w-[200px] rotate-2">
+              <p className="text-sm font-medium truncate">{(activeItem.data as Task).title}</p>
+            </div>
+          )}
+          {activeItem && activeItem.type === 'subtask' && (
+            <div className="p-2 rounded-lg bg-muted/80 border border-dashed shadow-lg opacity-90 max-w-[200px] rotate-2">
+              <p className="text-sm truncate">↳ {(activeItem.data as SubtaskFromHook).title}</p>
+            </div>
+          )}
+        </DragOverlay>
+      </DndContext>
 
       <TaskDetailModal task={selectedTask} open={detailModalOpen} onOpenChange={setDetailModalOpen} onTaskUpdated={handleTaskUpdated} />
       <TaskDialog 
