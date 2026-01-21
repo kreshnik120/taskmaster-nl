@@ -5717,6 +5717,44 @@ export type Database = {
           },
         ]
       }
+      user_column_preferences: {
+        Row: {
+          column_id: string
+          created_at: string | null
+          custom_name: string
+          id: string
+          is_collapsed: boolean | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          column_id: string
+          created_at?: string | null
+          custom_name: string
+          id?: string
+          is_collapsed?: boolean | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          column_id?: string
+          created_at?: string | null
+          custom_name?: string
+          id?: string
+          is_collapsed?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_column_preferences_column_id_fkey"
+            columns: ["column_id"]
+            isOneToOne: false
+            referencedRelation: "columns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_organizations: {
         Row: {
           org_id: string

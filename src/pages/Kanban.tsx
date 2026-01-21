@@ -49,13 +49,31 @@ interface Task {
 interface Column {
   id: string;
   name: string;
+  originalName: string; // De standaard naam voor iedereen
   status: string;
   order: number;
+}
+
+interface Subtask {
+  id: string;
+  title: string;
+  task_id: string;
+  status: string;
+  assignee_id: string | null;
+  due_at: string | null;
+  order_key: number;
+  parent_task?: {
+    id: string;
+    title: string;
+    column_id: string | null;
+    priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  };
 }
 
 const Kanban = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [columns, setColumns] = useState<Column[]>([]);
+  const [mySubtasks, setMySubtasks] = useState<Subtask[]>([]);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
@@ -133,7 +151,24 @@ const Kanban = () => {
       if (columnsError) throw columnsError;
 
       if (columnsData && columnsData.length > 0) {
-        setColumns(columnsData);
+        // Laad persoonlijke kolom voorkeuren
+        const { data: prefsData } = await supabase
+          .from("user_column_preferences")
+          .select("column_id, custom_name, is_collapsed")
+          .eq("user_id", user.id);
+
+        const prefsMap = new Map(
+          (prefsData || []).map(p => [p.column_id, p])
+        );
+
+        // Merge kolommen met persoonlijke voorkeuren
+        const mergedColumns = columnsData.map(col => ({
+          ...col,
+          originalName: col.name,
+          name: prefsMap.get(col.id)?.custom_name || col.name,
+        }));
+
+        setColumns(mergedColumns);
       } else {
         // Create default columns if none exist
         await createDefaultColumns();
@@ -158,6 +193,23 @@ const Kanban = () => {
 
       if (tasksError) throw tasksError;
       setTasks(tasksData || []);
+
+      // Laad subtaken waar de gebruiker aan toegewezen is
+      const { data: subtasksData } = await supabase
+        .from('subtasks')
+        .select(`
+          id, title, task_id, status, assignee_id, due_at, order_key,
+          tasks!inner(id, title, column_id, priority, deleted_at)
+        `)
+        .eq('assignee_id', user.id)
+        .in('status', ['pending', 'active'])
+        .is('tasks.deleted_at', null);
+
+      const formattedSubtasks = (subtasksData || []).map((s: any) => ({
+        ...s,
+        parent_task: s.tasks
+      }));
+      setMySubtasks(formattedSubtasks);
 
       setLoading(false);
     } catch (error) {
@@ -224,7 +276,10 @@ const Kanban = () => {
     const { data, error } = await supabase.from("columns").insert(defaultColumns).select();
 
     if (error) throw error;
-    if (data) setColumns(data);
+    if (data) {
+      // Voeg originalName toe aan nieuwe kolommen
+      setColumns(data.map(col => ({ ...col, originalName: col.name })));
+    }
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -342,10 +397,17 @@ const Kanban = () => {
 
   const handleUpdateColumnName = async (columnId: string, newName: string) => {
     try {
+      // Sla op naar persoonlijke voorkeuren (niet naar globale columns tabel)
       const { error } = await supabase
-        .from("columns")
-        .update({ name: newName })
-        .eq("id", columnId);
+        .from("user_column_preferences")
+        .upsert({
+          user_id: user.id,
+          column_id: columnId,
+          custom_name: newName,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,column_id'
+        });
 
       if (error) {
         log.error("Fout bij bijwerken kolomnaam:", error);
@@ -360,10 +422,44 @@ const Kanban = () => {
         )
       );
 
-      toast.success("Kolomnaam bijgewerkt");
+      toast.success("Je kolomnaam is opgeslagen");
     } catch (err: any) {
       log.error("Onverwachte fout bij bijwerken kolomnaam:", err);
       toast.error("Fout bij opslaan van kolomnaam");
+    }
+  };
+
+  // Haal subtaken voor een specifieke kolom
+  const getSubtasksForColumn = (columnId: string) => {
+    return mySubtasks.filter(s => s.parent_task?.column_id === columnId);
+  };
+
+  const handleSubtaskClick = (subtask: Subtask) => {
+    // Zoek de parent taak en open die in de modal
+    const parentTask = tasks.find(t => t.id === subtask.task_id);
+    if (parentTask) {
+      setSelectedTask(parentTask);
+      setDetailModalOpen(true);
+      toast.info(`Subtaak: ${subtask.title}`);
+    } else {
+      // Als de parent taak niet geladen is (bijv. andere assignee), laad hem apart
+      loadParentTaskAndOpen(subtask.task_id, subtask.title);
+    }
+  };
+
+  const loadParentTaskAndOpen = async (taskId: string, subtaskTitle: string) => {
+    const { data, error } = await supabase
+      .from("tasks")
+      .select(`*, profiles:profiles!tasks_assignee_id_fkey(name, email), task_scoring_metadata(*)`)
+      .eq("id", taskId)
+      .single();
+    
+    if (data && !error) {
+      setSelectedTask(data);
+      setDetailModalOpen(true);
+      toast.info(`Subtaak: ${subtaskTitle}`);
+    } else {
+      toast.error("Kon de taak niet laden");
     }
   };
 
@@ -568,9 +664,11 @@ const Kanban = () => {
                       id={column.id}
                       title={column.name}
                       tasks={getTasksForColumn(column.id)}
+                      subtasks={getSubtasksForColumn(column.id)}
                       status={column.status}
                       onUpdateName={handleUpdateColumnName}
                       onTaskClick={handleTaskClick}
+                      onSubtaskClick={handleSubtaskClick}
                     />
                   </div>
                 ))}
