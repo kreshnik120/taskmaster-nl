@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, Clock, SkipForward } from "lucide-react";
+import { CheckCircle2, Circle, Clock, SkipForward, User, Calendar } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -55,7 +55,7 @@ export function ProcessTimeline({
 
   const getStatusIcon = (subtask: Subtask, isClickable: boolean = true) => {
     const iconClasses = cn(
-      "h-5 w-5 transition-all",
+      "h-4 w-4 transition-all duration-150",
       isClickable && !compact && "cursor-pointer hover:scale-110"
     );
     
@@ -63,28 +63,28 @@ export function ProcessTimeline({
       case 'completed':
         return (
           <CheckCircle2 
-            className={cn(iconClasses, "text-green-600 hover:text-green-700")}
+            className={cn(iconClasses, "text-green-500 hover:text-green-600")}
             onClick={() => isClickable && !compact && handleIconClick(subtask)}
           />
         );
       case 'active':
         return (
           <Clock 
-            className={cn(iconClasses, "text-primary animate-pulse hover:text-primary/80")}
+            className={cn(iconClasses, "text-primary hover:text-primary/80")}
             onClick={() => isClickable && !compact && handleIconClick(subtask)}
           />
         );
       case 'skipped':
         return (
           <SkipForward 
-            className={cn(iconClasses, "text-muted-foreground hover:text-foreground")}
+            className={cn(iconClasses, "text-muted-foreground/70 hover:text-muted-foreground")}
             onClick={() => isClickable && !compact && handleIconClick(subtask)}
           />
         );
       default:
         return (
           <Circle 
-            className={cn(iconClasses, "text-muted-foreground hover:text-primary")}
+            className={cn(iconClasses, "text-muted-foreground/60 hover:text-primary")}
             onClick={() => isClickable && !compact && handleIconClick(subtask)}
           />
         );
@@ -107,13 +107,13 @@ export function ProcessTimeline({
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
-        return 'bg-green-100 border-green-300';
+        return 'bg-green-50/50 dark:bg-green-950/20 border-green-200 dark:border-green-800/50';
       case 'active':
-        return 'bg-primary/10 border-primary';
+        return 'bg-primary/5 border-primary/50';
       case 'skipped':
-        return 'bg-muted border-muted-foreground/20';
+        return 'bg-muted/30 border-muted-foreground/10';
       default:
-        return 'bg-background border-border';
+        return 'bg-background/50 border-border/60';
     }
   };
 
@@ -127,14 +127,14 @@ export function ProcessTimeline({
         {/* Progress indicator */}
         <div className="flex items-center gap-4">
           <div className="flex-1">
-            <div className="h-2 bg-muted rounded-full overflow-hidden">
+            <div className="h-1 bg-muted/50 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-primary transition-all duration-500"
                 style={{ width: `${(completedCount / totalCount) * 100}%` }}
               />
             </div>
           </div>
-          <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+          <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
             {completedCount}/{totalCount} afgerond
           </span>
         </div>
@@ -159,29 +159,32 @@ export function ProcessTimeline({
                 </Tooltip>
                 {index < sortedSubtasks.length - 1 && (
                   <div className={cn(
-                    "w-0.5 flex-1 mt-2",
-                    subtask.status === 'completed' ? "bg-green-300" : "bg-border"
+                    "w-px flex-1 mt-2 min-h-[20px]",
+                    subtask.status === 'completed' 
+                      ? "bg-gradient-to-b from-green-400 to-green-300/50" 
+                      : "bg-border/60"
                   )} />
                 )}
               </div>
 
             {/* Step content */}
             <div className={cn(
-              "flex-1 rounded-lg border p-3 transition-all",
+              "flex-1 rounded-xl border p-3.5 transition-all duration-150 group/step",
               getStatusColor(subtask.status)
             )}>
               <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 space-y-1">
+                <div className="flex-1 space-y-1.5">
                   <div className="flex items-center gap-2">
                     <span className={cn(
-                      "font-medium",
+                      "font-medium text-sm leading-snug",
                       subtask.status === 'completed' && "line-through text-muted-foreground",
-                      subtask.status === 'active' && "text-primary"
+                      subtask.status === 'active' && "text-foreground"
                     )}>
                       {subtask.title}
                     </span>
                     {subtask.status === 'active' && (
-                      <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full">
+                      <span className="text-xs text-primary flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
                         Actief
                       </span>
                     )}
@@ -189,33 +192,35 @@ export function ProcessTimeline({
 
                   {/* Assignee & Deadline */}
                   {!compact && (
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       {subtask.profiles && (
-                        <span className="flex items-center gap-1">
-                          👤 {subtask.profiles.name || subtask.profiles.email}
+                        <span className="flex items-center gap-1.5">
+                          <User className="h-3 w-3" />
+                          {subtask.profiles.name || subtask.profiles.email}
                         </span>
                       )}
                       {subtask.due_at && (
-                        <span className="flex items-center gap-1">
-                          📅 {format(parseISO(subtask.due_at), "d MMM yyyy", { locale: nl })}
+                        <span className="flex items-center gap-1.5">
+                          <Calendar className="h-3 w-3" />
+                          {format(parseISO(subtask.due_at), "d MMM yyyy", { locale: nl })}
                         </span>
                       )}
                     </div>
                   )}
                 </div>
 
-                {/* Action buttons for active step */}
+                {/* Action buttons for active step - only visible on hover */}
                 {subtask.status === 'active' && !compact && (
-                  <div className="flex gap-1">
+                  <div className="flex gap-1.5 opacity-0 group-hover/step:opacity-100 transition-opacity duration-150">
                     <button
                       onClick={() => onCompleteStep(subtask.id)}
-                      className="px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
+                      className="px-2.5 py-1 text-xs bg-primary/90 text-primary-foreground rounded-md hover:bg-primary transition-colors"
                     >
                       Voltooid
                     </button>
                     <button
                       onClick={() => onSkipStep(subtask.id)}
-                      className="px-2 py-1 text-xs bg-muted text-muted-foreground rounded hover:bg-muted/80 transition-colors"
+                      className="px-2.5 py-1 text-xs bg-muted/80 text-muted-foreground rounded-md hover:bg-muted transition-colors"
                     >
                       Overslaan
                     </button>
