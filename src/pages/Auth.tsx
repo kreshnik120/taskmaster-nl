@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { withTimeout } from "@/lib/withTimeout";
 import { Button } from "@/components/ui/button";
@@ -12,20 +12,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Loader2, CheckCircle2, AlertCircle, Check, X } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, Check, X, Mail, ShieldCheck } from "lucide-react";
 import { z } from "zod";
 import { logger } from "@/lib/logger";
 
 const log = logger.create('Auth');
+
+// Interface for invitation validation
+interface InvitationData {
+  invitation_id: string;
+  email: string;
+  role: 'admin' | 'manager' | 'user';
+  is_valid: boolean;
+}
 
 /**
  * Password strength validation schema (min 12 chars + complexity + special char)
@@ -40,7 +42,6 @@ const passwordSchema = z.string()
 
 /**
  * Calculate password strength score (0-100%)
- * Enhanced scoring for longer passwords and special characters
  */
 const calculatePasswordStrength = (pwd: string): number => {
   let strength = 0;
@@ -56,7 +57,6 @@ const calculatePasswordStrength = (pwd: string): number => {
 
 /**
  * Get password strength requirements status
- * All 5 requirements must be met for valid password
  */
 const getPasswordRequirements = (pwd: string) => ({
   length: pwd.length >= 12,
@@ -74,7 +74,6 @@ const translateAuthError = (error: any): string => {
 
   const errorMsg = error?.message?.toLowerCase() || "";
 
-  // Network and timeout errors
   if (
     errorMsg.includes("failed to fetch") ||
     errorMsg.includes("networkerror") ||
@@ -84,7 +83,6 @@ const translateAuthError = (error: any): string => {
     return "De backend is tijdelijk niet bereikbaar. Probeer het later opnieuw.";
   }
 
-  // Common Supabase auth errors
   if (
     errorMsg.includes("invalid login credentials") ||
     errorMsg.includes("invalid credentials")
@@ -109,7 +107,6 @@ const translateAuthError = (error: any): string => {
   if (errorMsg.includes("user not found")) {
     return "Geen account gevonden met dit e‑mailadres";
   }
-  // OAuth provider mismatch
   if (
     errorMsg.includes("sign in using the same provider") ||
     errorMsg.includes("other sign in method") ||
@@ -118,11 +115,13 @@ const translateAuthError = (error: any): string => {
     return "Je hebt je aangemeld met een andere provider (bijv. GitHub of Google). Gebruik dezelfde provider om in te loggen.";
   }
 
-  // Fallback
   return error?.message || "Er ging iets mis. Probeer het opnieuw.";
 };
 
 const Auth = () => {
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get('invite');
+  
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -138,11 +137,67 @@ const Auth = () => {
     error?: string;
     duration?: number;
   } | null>(null);
-  const [demoMode, setDemoMode] = useState(false);
   const [forceLoginAttempt, setForceLoginAttempt] = useState(false);
+  
+  // Invite flow state
+  const [inviteData, setInviteData] = useState<InvitationData | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  
   const navigate = useNavigate();
   const healthCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
+
+  // Validate invite token on mount
+  useEffect(() => {
+    if (inviteToken) {
+      validateInviteToken(inviteToken);
+    }
+  }, [inviteToken]);
+
+  const validateInviteToken = async (token: string) => {
+    setInviteLoading(true);
+    setInviteError(null);
+    
+    try {
+      const { data, error } = await supabase.rpc('validate_invitation_token', {
+        p_token: token
+      });
+      
+      if (error) {
+        log.error('Invite token validation failed', error);
+        setInviteError('Kon uitnodiging niet valideren');
+        return;
+      }
+      
+      if (!data || data.length === 0) {
+        setInviteError('Ongeldige uitnodigingslink');
+        return;
+      }
+      
+      const invite = data[0];
+      
+      if (!invite.is_valid) {
+        setInviteError('Deze uitnodiging is verlopen of al gebruikt');
+        return;
+      }
+      
+      setInviteData({
+        invitation_id: invite.invitation_id,
+        email: invite.email,
+        role: invite.role,
+        is_valid: invite.is_valid,
+      });
+      setEmail(invite.email);
+      
+      log.log('Invite validated successfully', { email: invite.email, role: invite.role });
+    } catch (err) {
+      log.error('Invite validation error', err);
+      setInviteError('Er ging iets mis bij het valideren van de uitnodiging');
+    } finally {
+      setInviteLoading(false);
+    }
+  };
 
   const checkBackendHealth = async () => {
     const startTime = Date.now();
@@ -231,22 +286,6 @@ const Auth = () => {
     }, delay);
   };
 
-  const enableDemoMode = () => {
-    const mockSession = {
-      user: {
-        id: 'demo-user',
-        email: 'demo@example.com',
-        user_metadata: { name: 'Demo Gebruiker' },
-      },
-      access_token: 'demo-token',
-      expires_at: Date.now() + 3600000,
-    };
-    localStorage.setItem('demo-session', JSON.stringify(mockSession));
-    setDemoMode(true);
-    toast.success('Demo modus geactiveerd - Alleen UI demonstratie!');
-    navigate('/');
-  };
-
   useEffect(() => {
     isMountedRef.current = true;
     checkBackendHealth();
@@ -282,10 +321,15 @@ const Auth = () => {
     };
   }, []);
 
-  const handleSignUp = async (e: React.FormEvent) => {
+  const handleInviteSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate password strength before submission
+    if (!inviteData || !inviteToken) {
+      toast.error('Ongeldige uitnodiging');
+      return;
+    }
+    
+    // Validate password strength
     const validation = passwordSchema.safeParse(password);
     if (!validation.success) {
       const errors = validation.error.errors.map(e => e.message);
@@ -294,27 +338,26 @@ const Auth = () => {
       return;
     }
     
-    // Block common/predictable passwords
+    // Block common passwords
     const commonPasswords = [
       'password', '123456', 'qwerty', 'admin123', 'welkom01', 
       'welkom123', 'zorg123', 'abczorg', 'citozott', 'wachtwoord',
       'password123', '12345678', '123456789', 'qwerty123', 'abc123',
-      'letmein', 'monkey', 'dragon', 'master', 'trustno1', 'football',
-      'iloveyou', 'starwars', 'superman', 'batman', 'welcome'
     ];
     
     if (commonPasswords.includes(password.toLowerCase())) {
-      setPasswordErrors(['Dit wachtwoord is te voorspelbaar en kan gemakkelijk worden geraden']);
-      toast.error('Kies een uniek wachtwoord - dit wachtwoord is te voorspelbaar');
+      setPasswordErrors(['Dit wachtwoord is te voorspelbaar']);
+      toast.error('Kies een uniek wachtwoord');
       return;
     }
     
     setLoading(true);
 
     try {
-      const { error } = await withTimeout(
+      // Create user account
+      const { data: signUpData, error: signUpError } = await withTimeout(
         supabase.auth.signUp({
-          email,
+          email: inviteData.email,
           password,
           options: {
             data: {
@@ -326,9 +369,32 @@ const Auth = () => {
         10000,
       );
 
-      if (error) throw error;
+      if (signUpError) throw signUpError;
+      
+      if (!signUpData.user) {
+        throw new Error('Account aanmaken mislukt');
+      }
+
+      // Accept the invitation (assigns role)
+      const { data: acceptResult, error: acceptError } = await supabase.rpc('accept_invitation', {
+        p_token: inviteToken,
+        p_user_id: signUpData.user.id,
+      });
+
+      if (acceptError) {
+        log.error('Failed to accept invitation', acceptError);
+        // User is created but role assignment failed - log but continue
+        toast.warning('Account aangemaakt, maar rol kon niet worden toegewezen. Neem contact op met een admin.');
+      } else if (!acceptResult) {
+        log.warn('Invitation acceptance returned false');
+        toast.warning('Account aangemaakt, maar de uitnodiging kon niet worden geaccepteerd.');
+      }
 
       toast.success('Account aangemaakt! Je kunt nu inloggen.');
+      
+      // Clear invite params and redirect to login
+      navigate('/auth', { replace: true });
+      
     } catch (error: any) {
       toast.error(translateAuthError(error));
     } finally {
@@ -413,213 +479,56 @@ const Auth = () => {
     }
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="flex items-center justify-center mb-4">
-            <CheckCircle2 className="h-12 w-12 text-primary" />
-          </div>
-          <CardTitle className="text-2xl">TaskFlow</CardTitle>
-          <CardDescription>Beheer je taken efficiënt</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {backendOffline && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Backend Offline</AlertTitle>
-              <AlertDescription className="flex flex-col gap-2">
-                <span className="font-semibold">De backend is tijdelijk niet bereikbaar.</span>
-                {lastHealthCheck && (
-                  <div className="mt-2 p-2 bg-muted rounded-md text-xs font-mono">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">Laatste controle:</span>
-                      <span>{lastHealthCheck.timestamp.toLocaleTimeString('nl-NL')}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">Status:</span>
-                      <span className={lastHealthCheck.success ? 'text-green-600' : 'text-red-600'}>
-                        {lastHealthCheck.success ? '✅ Online' : '❌ Offline'}
-                      </span>
-                    </div>
-                    {lastHealthCheck.error && (
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">Fout:</span>
-                        <span className="text-red-600">{lastHealthCheck.error}</span>
-                      </div>
-                    )}
-                    {lastHealthCheck.duration !== undefined && (
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">Duur:</span>
-                        <span>{lastHealthCheck.duration}ms</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="flex flex-col gap-2 mt-2">
-                  <div className="flex gap-2 flex-wrap">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        setHealthCheckAttempts(0);
-                        await checkBackendHealth();
-                      }}
-                    >
-                      Opnieuw proberen
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setForceLoginAttempt(true);
-                        setBackendOffline(false);
-                        toast.info("Je kunt nu inloggen proberen ondanks de offline status");
-                      }}
-                    >
-                      Toch inloggen proberen
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setBackendOffline(false)}
-                    >
-                      Negeren
-                    </Button>
-                  </div>
+  // Render invite registration form
+  if (inviteToken) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="flex items-center justify-center mb-4">
+              <Mail className="h-12 w-12 text-primary" />
+            </div>
+            <CardTitle className="text-2xl">Uitnodiging Accepteren</CardTitle>
+            <CardDescription>Maak je TaskFlow account aan</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {inviteLoading ? (
+              <div className="flex flex-col items-center justify-center py-8 gap-4">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-muted-foreground">Uitnodiging valideren...</p>
+              </div>
+            ) : inviteError ? (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Uitnodiging Ongeldig</AlertTitle>
+                <AlertDescription className="flex flex-col gap-4">
+                  <span>{inviteError}</span>
                   <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={enableDemoMode}
-                    className="w-full"
+                    variant="outline"
+                    onClick={() => navigate('/auth', { replace: true })}
                   >
-                    🎨 Demo modus (alleen UI)
+                    Ga naar inloggen
                   </Button>
-                  <p className="text-xs text-muted-foreground">
-                    Demo modus: Bekijk de UI zonder backend. Geen data wordt opgeslagen.
-                  </p>
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
-          <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login">Inloggen</TabsTrigger>
-              <TabsTrigger value="signup">Registreren</TabsTrigger>
-            </TabsList>
-            <TabsContent value="login">
-              {resetMode ? (
-                <form onSubmit={handlePasswordReset} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="reset-email">E‑mailadres</Label>
-                    <Input
-                      id="reset-email"
-                      type="email"
-                      placeholder="naam@voorbeeld.nl"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Versturen...
-                      </>
-                    ) : (
-                      'Wachtwoord reset link versturen'
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="w-full"
-                    onClick={() => setResetMode(false)}
-                  >
-                    Terug naar inloggen
-                  </Button>
-                </form>
-              ) : (
-                <form onSubmit={handleSignIn} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">E‑mailadres</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="naam@voorbeeld.nl"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Wachtwoord</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Inloggen...
-                      </>
-                    ) : (
-                      'Inloggen'
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="w-full"
-                    onClick={() => setResetMode(true)}
-                  >
-                    Wachtwoord vergeten?
-                  </Button>
-                  
-                  <div className="relative my-4">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-background px-2 text-muted-foreground">
-                        Of login met
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => handleOAuthLogin('google')}
-                      disabled={loading}
-                    >
-                      Google
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => handleOAuthLogin('github')}
-                      disabled={loading}
-                    >
-                      GitHub
-                    </Button>
-                  </div>
-                </form>
-              )}
-            </TabsContent>
-            <TabsContent value="signup">
-              <form onSubmit={handleSignUp} className="space-y-4">
+                </AlertDescription>
+              </Alert>
+            ) : inviteData ? (
+              <form onSubmit={handleInviteSignUp} className="space-y-4">
+                {/* Role badge */}
+                <Alert className="bg-primary/5 border-primary/20">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  <AlertTitle className="text-primary">
+                    Je wordt uitgenodigd als{' '}
+                    <span className="font-semibold">
+                      {inviteData.role === 'admin' ? 'Administrator' : 
+                       inviteData.role === 'manager' ? 'Manager' : 'Medewerker'}
+                    </span>
+                  </AlertTitle>
+                </Alert>
+                
                 <div className="space-y-2">
-                  <Label htmlFor="signup-name">Naam</Label>
+                  <Label htmlFor="invite-name">Naam</Label>
                   <Input
-                    id="signup-name"
+                    id="invite-name"
                     type="text"
                     placeholder="Je naam"
                     value={name}
@@ -627,21 +536,25 @@ const Auth = () => {
                     required
                   />
                 </div>
+                
                 <div className="space-y-2">
-                  <Label htmlFor="signup-email">E‑mailadres</Label>
+                  <Label htmlFor="invite-email">E‑mailadres</Label>
                   <Input
-                    id="signup-email"
+                    id="invite-email"
                     type="email"
-                    placeholder="naam@voorbeeld.nl"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
+                    value={inviteData.email}
+                    disabled
+                    className="bg-muted"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Dit e-mailadres is gekoppeld aan je uitnodiging
+                  </p>
                 </div>
+                
                 <div className="space-y-2">
-                  <Label htmlFor="signup-password">Wachtwoord</Label>
+                  <Label htmlFor="invite-password">Wachtwoord</Label>
                   <Input
-                    id="signup-password"
+                    id="invite-password"
                     type="password"
                     value={password}
                     onChange={(e) => {
@@ -649,7 +562,6 @@ const Auth = () => {
                       setPassword(pwd);
                       setPasswordStrength(calculatePasswordStrength(pwd));
                       
-                      // Clear errors on valid password
                       const validation = passwordSchema.safeParse(pwd);
                       if (validation.success) {
                         setPasswordErrors([]);
@@ -704,7 +616,6 @@ const Auth = () => {
                         ))}
                       </div>
                       
-                      {/* Error Messages */}
                       {passwordErrors.length > 0 && (
                         <Alert variant="destructive" className="py-2">
                           <AlertCircle className="h-4 w-4" />
@@ -720,19 +631,214 @@ const Auth = () => {
                     </div>
                   )}
                 </div>
+                
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Registreren...
+                      Account aanmaken...
                     </>
                   ) : (
-                    'Account aanmaken'
+                    'Account Aanmaken'
                   )}
                 </Button>
+                
+                <p className="text-center text-sm text-muted-foreground">
+                  Heb je al een account?{' '}
+                  <Button
+                    variant="link"
+                    className="p-0 h-auto"
+                    onClick={() => navigate('/auth', { replace: true })}
+                  >
+                    Inloggen
+                  </Button>
+                </p>
               </form>
-            </TabsContent>
-          </Tabs>
+            ) : null}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Standard login form (no public registration)
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <div className="flex items-center justify-center mb-4">
+            <CheckCircle2 className="h-12 w-12 text-primary" />
+          </div>
+          <CardTitle className="text-2xl">TaskFlow</CardTitle>
+          <CardDescription>Beheer je taken efficiënt</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {backendOffline && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Backend Offline</AlertTitle>
+              <AlertDescription className="flex flex-col gap-2">
+                <span className="font-semibold">De backend is tijdelijk niet bereikbaar.</span>
+                {lastHealthCheck && (
+                  <div className="mt-2 p-2 bg-muted rounded-md text-xs font-mono">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">Laatste controle:</span>
+                      <span>{lastHealthCheck.timestamp.toLocaleTimeString('nl-NL')}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">Status:</span>
+                      <span className={lastHealthCheck.success ? 'text-green-600' : 'text-red-600'}>
+                        {lastHealthCheck.success ? '✅ Online' : '❌ Offline'}
+                      </span>
+                    </div>
+                    {lastHealthCheck.error && (
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">Fout:</span>
+                        <span className="text-red-600">{lastHealthCheck.error}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="flex gap-2 flex-wrap mt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      setHealthCheckAttempts(0);
+                      await checkBackendHealth();
+                    }}
+                  >
+                    Opnieuw proberen
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setForceLoginAttempt(true);
+                      setBackendOffline(false);
+                      toast.info("Je kunt nu inloggen proberen ondanks de offline status");
+                    }}
+                  >
+                    Toch inloggen proberen
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {resetMode ? (
+            <form onSubmit={handlePasswordReset} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="reset-email">E‑mailadres</Label>
+                <Input
+                  id="reset-email"
+                  type="email"
+                  placeholder="naam@voorbeeld.nl"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Versturen...
+                  </>
+                ) : (
+                  'Wachtwoord reset link versturen'
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={() => setResetMode(false)}
+              >
+                Terug naar inloggen
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleSignIn} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">E‑mailadres</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="naam@voorbeeld.nl"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Wachtwoord</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Inloggen...
+                  </>
+                ) : (
+                  'Inloggen'
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={() => setResetMode(true)}
+              >
+                Wachtwoord vergeten?
+              </Button>
+              
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    Of login met
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleOAuthLogin('google')}
+                  disabled={loading}
+                >
+                  Google
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleOAuthLogin('github')}
+                  disabled={loading}
+                >
+                  GitHub
+                </Button>
+              </div>
+              
+              {/* Invite-only notice */}
+              <Alert className="mt-6 bg-muted/50">
+                <ShieldCheck className="h-4 w-4" />
+                <AlertDescription className="text-sm">
+                  Nieuwe accounts kunnen alleen worden aangemaakt via een uitnodiging van een beheerder.
+                </AlertDescription>
+              </Alert>
+            </form>
+          )}
         </CardContent>
       </Card>
     </div>
