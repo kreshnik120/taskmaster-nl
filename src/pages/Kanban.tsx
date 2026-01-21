@@ -95,12 +95,9 @@ const Kanban = () => {
   // AI Scoring integration
   const { priorityScores, loading: aiLoading, getScoreForTask } = useAiScoring(tasks, true);
 
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Goedemorgen";
-    if (hour < 18) return "Goedemiddag";
-    return "Goedenavond";
-  };
+  // Personalized greeting - must be called before any early returns (React hooks rule)
+  const displayName = user?.user_metadata?.name || user?.email?.split('@')[0];
+  const { fullGreeting } = useGreeting(displayName);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -590,9 +587,6 @@ const Kanban = () => {
     );
   }
 
-  // Get personalized greeting
-  const displayName = user?.user_metadata?.name || user?.email?.split('@')[0];
-  const { fullGreeting } = useGreeting(displayName);
 
   const activeTasks = getTasksForColumn(columns.find(c => c.status === 'DOING')?.id || '').length + 
                       getTasksForColumn(columns.find(c => c.status === 'REVIEW')?.id || '').length;
