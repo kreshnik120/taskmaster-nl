@@ -76,7 +76,7 @@ export function TaskAttachmentUpload({
 
   const validateFile = (file: File): boolean => {
     if (file.size > MAX_FILE_SIZE) {
-      toast.error(`${file.name} is te groot. Maximaal 10MB toegestaan.`);
+      toast.error(`${file.name} is te groot. Maximaal 50MB toegestaan.`);
       return false;
     }
     if (!ALLOWED_TYPES.includes(file.type)) {
