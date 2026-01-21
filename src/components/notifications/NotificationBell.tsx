@@ -1,6 +1,7 @@
 import { Bell, CheckCheck, ExternalLink } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -15,13 +16,22 @@ interface NotificationBellProps {
 }
 
 export function NotificationBell({ onNotificationClick }: NotificationBellProps) {
+  const navigate = useNavigate();
   const { notifications, unreadCount, isLoading, markAsRead, markAllAsRead } =
     useUnreadNotifications();
 
   const handleNotificationClick = (notification: typeof notifications[0]) => {
-    const applicationId = (notification.metadata as Record<string, unknown>)?.application_id as string;
+    const metadata = notification.metadata as Record<string, unknown>;
+    const applicationId = metadata?.application_id as string;
+    const taskId = metadata?.task_id as string;
     
     markAsRead(notification.id);
+    
+    // Handle subtask assignment - navigate to task list with task highlight
+    if (notification.notification_type === 'subtask_assignment' && taskId) {
+      navigate(`/lijst?task=${taskId}&highlight=subtask`);
+      return;
+    }
     
     if (applicationId && onNotificationClick) {
       onNotificationClick(applicationId);
@@ -29,7 +39,12 @@ export function NotificationBell({ onNotificationClick }: NotificationBellProps)
   };
 
   const getNotificationIcon = (type: string) => {
-    return type === "diploma_upgrade" ? "🎓" : "📜";
+    switch (type) {
+      case "diploma_upgrade": return "🎓";
+      case "vog_verified": return "📜";
+      case "subtask_assignment": return "📋";
+      default: return "🔔";
+    }
   };
 
   return (

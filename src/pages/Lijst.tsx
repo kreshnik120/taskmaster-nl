@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef, memo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { logger } from "@/lib/logger";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -7,10 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { KPICard } from "@/components/ui/kpi-card";
 import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, Filter, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown, User, Search, UserPlus, CheckCircle2, X, Users, ListTodo, AlertTriangle } from "lucide-react";
-import { motion } from "framer-motion";
+import { Loader2, Filter, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown, User, Search, UserPlus, CheckCircle2, X, Users, ListTodo, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -20,6 +20,8 @@ import { toast } from "sonner";
 import { useCountUp } from "@/hooks/useCountUp";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
+import { useMySubtasks } from "@/hooks/useMySubtasks";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -78,6 +80,7 @@ TimerCell.displayName = 'TimerCell';
 
 export default function Lijst() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
@@ -104,6 +107,24 @@ export default function Lijst() {
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [bulkAssignee, setBulkAssignee] = useState<string | null>(null);
   const [bulkPriority, setBulkPriority] = useState<string | null>(null);
+  const [mySubtasksOpen, setMySubtasksOpen] = useState(true);
+
+  // Hook for assigned subtasks
+  const { subtasks: mySubtasks, loading: subtasksLoading } = useMySubtasks(currentUserId);
+
+  // Handle URL params for task highlighting (from notifications)
+  useEffect(() => {
+    const taskId = searchParams.get('task');
+    if (taskId && tasks.length > 0) {
+      const task = tasks.find(t => t.id === taskId);
+      if (task) {
+        setSelectedTask(task);
+        setDetailModalOpen(true);
+        // Clear URL params after opening
+        navigate('/lijst', { replace: true });
+      }
+    }
+  }, [searchParams, tasks, navigate]);
 
   useEffect(() => {
     checkAuth();
@@ -898,7 +919,81 @@ export default function Lijst() {
         </div>
       </motion.div>
 
-      {/* Bulk Actions Floating Bar */}
+      {/* Mijn Subtaken Section - Only show if there are assigned subtasks */}
+      <AnimatePresence>
+        {mySubtasks.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Card className="border-primary/20 bg-primary/5 overflow-hidden">
+              <Collapsible open={mySubtasksOpen} onOpenChange={setMySubtasksOpen}>
+                <CollapsibleTrigger className="w-full p-4 flex items-center justify-between hover:bg-primary/10 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <ListTodo className="h-4 w-4 text-primary" />
+                    <span className="font-medium">
+                      Aan jou toegewezen subtaken
+                    </span>
+                    <Badge variant="secondary" className="text-xs">
+                      {mySubtasks.length}
+                    </Badge>
+                  </div>
+                  {mySubtasksOpen ? (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="px-4 pb-4 space-y-2">
+                    {mySubtasks.map((subtask) => (
+                      <div
+                        key={subtask.id}
+                        className="flex items-center justify-between p-3 bg-background rounded-lg border hover:border-primary/40 transition-colors cursor-pointer"
+                        onClick={() => {
+                          const task = tasks.find(t => t.id === subtask.task_id);
+                          if (task) {
+                            setSelectedTask(task);
+                            setDetailModalOpen(true);
+                          }
+                        }}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">
+                            {subtask.title}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            Onderdeel van: {subtask.task_title}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {subtask.task_priority && (
+                            <PriorityBadge taskId={subtask.task_id} priority={subtask.task_priority} editable={false} size="sm" />
+                          )}
+                          {subtask.due_at && (
+                            <Badge 
+                              variant={new Date(subtask.due_at) < new Date() ? "destructive" : "outline"}
+                              className="text-xs"
+                            >
+                              {formatDistanceToNow(new Date(subtask.due_at), { 
+                                addSuffix: true, 
+                                locale: nl 
+                              })}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {selectedTaskIds.size > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
