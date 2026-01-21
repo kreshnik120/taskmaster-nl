@@ -72,7 +72,9 @@ interface KanbanColumnProps {
   tasks: Task[];
   subtasks?: Subtask[];
   status: string;
+  isCollapsed?: boolean;
   onUpdateName?: (columnId: string, newName: string) => Promise<void>;
+  onToggleCollapse?: (columnId: string, collapsed: boolean) => Promise<void>;
   onTaskClick?: (task: Task) => void;
   onSubtaskClick?: (subtask: Subtask) => void;
 }
@@ -95,19 +97,24 @@ const statusCountColors: Record<string, string> = {
   DONE: "bg-status-done/10 text-status-done",
 };
 
-export function KanbanColumn({ id, title, tasks, subtasks = [], status, onUpdateName, onTaskClick, onSubtaskClick }: KanbanColumnProps) {
+export function KanbanColumn({ id, title, tasks, subtasks = [], status, isCollapsed, onUpdateName, onToggleCollapse, onTaskClick, onSubtaskClick }: KanbanColumnProps) {
   const { setNodeRef } = useDroppable({ id });
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState(title);
   const [isHovered, setIsHovered] = useState(false);
-  const [isOpen, setIsOpen] = useState(() => {
-    const saved = localStorage.getItem(`kanban-column-${status}-open`);
-    return saved !== null ? saved === "true" : true;
-  });
+  const [isOpen, setIsOpen] = useState(!isCollapsed);
 
+  // Sync with database value when it changes
   useEffect(() => {
-    localStorage.setItem(`kanban-column-${status}-open`, String(isOpen));
-  }, [isOpen, status]);
+    setIsOpen(!isCollapsed);
+  }, [isCollapsed]);
+
+  const handleToggleOpen = async (open: boolean) => {
+    setIsOpen(open);
+    if (onToggleCollapse) {
+      await onToggleCollapse(id, !open);
+    }
+  };
 
   const handleSave = async () => {
     const trimmedName = editedName.trim();
@@ -144,7 +151,7 @@ export function KanbanColumn({ id, title, tasks, subtasks = [], status, onUpdate
 
   return (
     <Card className={`flex-shrink-0 w-80 bg-card ${statusBorderColors[status] || ""}`}>
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <Collapsible open={isOpen} onOpenChange={handleToggleOpen}>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CollapsibleTrigger className="flex items-center gap-2 flex-1 hover:opacity-80 transition-opacity">

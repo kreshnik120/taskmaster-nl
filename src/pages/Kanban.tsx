@@ -52,6 +52,7 @@ interface Column {
   originalName: string; // De standaard naam voor iedereen
   status: string;
   order: number;
+  isCollapsed: boolean; // Persoonlijke collapsed state
 }
 
 interface Subtask {
@@ -166,6 +167,7 @@ const Kanban = () => {
           ...col,
           originalName: col.name,
           name: prefsMap.get(col.id)?.custom_name || col.name,
+          isCollapsed: prefsMap.get(col.id)?.is_collapsed || false,
         }));
 
         setColumns(mergedColumns);
@@ -277,8 +279,8 @@ const Kanban = () => {
 
     if (error) throw error;
     if (data) {
-      // Voeg originalName toe aan nieuwe kolommen
-      setColumns(data.map(col => ({ ...col, originalName: col.name })));
+      // Voeg originalName en isCollapsed toe aan nieuwe kolommen
+      setColumns(data.map(col => ({ ...col, originalName: col.name, isCollapsed: false })));
     }
   };
 
@@ -426,6 +428,37 @@ const Kanban = () => {
     } catch (err: any) {
       log.error("Onverwachte fout bij bijwerken kolomnaam:", err);
       toast.error("Fout bij opslaan van kolomnaam");
+    }
+  };
+
+  // Toggle collapsed state naar database
+  const handleToggleColumnCollapse = async (columnId: string, collapsed: boolean) => {
+    try {
+      const column = columns.find(c => c.id === columnId);
+      const { error } = await supabase
+        .from("user_column_preferences")
+        .upsert({
+          user_id: user.id,
+          column_id: columnId,
+          custom_name: column?.name || column?.originalName || '',
+          is_collapsed: collapsed,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,column_id'
+        });
+
+      if (error) {
+        log.error("Fout bij opslaan collapsed state:", error);
+      }
+
+      // Optimistic update
+      setColumns((prev) =>
+        prev.map((col) =>
+          col.id === columnId ? { ...col, isCollapsed: collapsed } : col
+        )
+      );
+    } catch (err: any) {
+      log.error("Onverwachte fout bij collapsed state:", err);
     }
   };
 
@@ -666,7 +699,9 @@ const Kanban = () => {
                       tasks={getTasksForColumn(column.id)}
                       subtasks={getSubtasksForColumn(column.id)}
                       status={column.status}
+                      isCollapsed={column.isCollapsed}
                       onUpdateName={handleUpdateColumnName}
+                      onToggleCollapse={handleToggleColumnCollapse}
                       onTaskClick={handleTaskClick}
                       onSubtaskClick={handleSubtaskClick}
                     />
