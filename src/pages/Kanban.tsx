@@ -8,7 +8,8 @@ import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { KPICard } from "@/components/ui/kpi-card";
-import { Plus, Loader2, Sparkles, AlertCircle, Search, ListTodo, Clock, CheckCircle2, User, Users } from "lucide-react";
+import { Plus, Loader2, Sparkles, AlertCircle, Search, ListTodo, Clock, CheckCircle2, User, Users, ArrowUp, ArrowDown, ArrowUpDown, Calendar, GripVertical } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -88,7 +89,26 @@ const Kanban = () => {
     const stored = localStorage.getItem('kanban-show-only-my-tasks');
     return stored === null ? true : stored === 'true';
   });
+  
+  // Sorteer-voorkeur met localStorage persistentie (enterprise-niveau)
+  const [sortBy, setSortBy] = useState<'due_at' | 'priority' | 'created_at' | 'manual'>(() => {
+    const stored = localStorage.getItem('kanban-sort-by');
+    return (stored as 'due_at' | 'priority' | 'created_at' | 'manual') || 'due_at';
+  });
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(() => {
+    const stored = localStorage.getItem('kanban-sort-direction');
+    return (stored as 'asc' | 'desc') || 'asc';
+  });
+  
   const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  // Priority ranking voor sortering
+  const priorityRank: Record<string, number> = {
+    'CRITICAL': 4,
+    'HIGH': 3,
+    'MEDIUM': 2,
+    'LOW': 1,
+  };
   const navigate = useNavigate();
   const { taskId } = useParams();
   
@@ -138,6 +158,12 @@ const Kanban = () => {
   useEffect(() => {
     localStorage.setItem('kanban-show-only-my-tasks', String(showOnlyMyTasks));
   }, [showOnlyMyTasks]);
+
+  // Persist sorteer voorkeuren
+  useEffect(() => {
+    localStorage.setItem('kanban-sort-by', sortBy);
+    localStorage.setItem('kanban-sort-direction', sortDirection);
+  }, [sortBy, sortDirection]);
 
   // Realtime subscription voor subtaken - direct updates bij toewijzing
   useEffect(() => {
@@ -425,6 +451,36 @@ const Kanban = () => {
       );
     }
     
+    // Sorteer de gefilterde taken
+    if (sortBy !== 'manual') {
+      filteredTasks = [...filteredTasks].sort((a, b) => {
+        if (sortBy === 'due_at') {
+          // Taken zonder due_at onderaan
+          if (!a.due_at && !b.due_at) return 0;
+          if (!a.due_at) return 1;
+          if (!b.due_at) return -1;
+          
+          const dateA = new Date(a.due_at).getTime();
+          const dateB = new Date(b.due_at).getTime();
+          return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+        }
+        
+        if (sortBy === 'priority') {
+          const rankA = priorityRank[a.priority] || 0;
+          const rankB = priorityRank[b.priority] || 0;
+          return sortDirection === 'asc' ? rankA - rankB : rankB - rankA;
+        }
+        
+        if (sortBy === 'created_at') {
+          const dateA = new Date(a.created_at).getTime();
+          const dateB = new Date(b.created_at).getTime();
+          return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+        }
+        
+        return 0;
+      });
+    }
+    
     // Enrich tasks with AI scores
     return filteredTasks.map(task => ({
       ...task,
@@ -500,9 +556,33 @@ const Kanban = () => {
     }
   };
 
-  // Haal subtaken voor een specifieke kolom
+  // Haal subtaken voor een specifieke kolom met sortering
   const getSubtasksForColumn = (columnId: string) => {
-    return mySubtasks.filter(s => s.parent_task?.column_id === columnId);
+    let columnSubtasks = mySubtasks.filter(s => s.parent_task?.column_id === columnId);
+    
+    // Zelfde sorteerlogica als taken
+    if (sortBy !== 'manual') {
+      columnSubtasks = [...columnSubtasks].sort((a, b) => {
+        if (sortBy === 'due_at') {
+          if (!a.due_at && !b.due_at) return 0;
+          if (!a.due_at) return 1;
+          if (!b.due_at) return -1;
+          const dateA = new Date(a.due_at).getTime();
+          const dateB = new Date(b.due_at).getTime();
+          return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+        }
+        
+        if (sortBy === 'priority') {
+          const rankA = priorityRank[a.parent_task?.priority || 'LOW'] || 0;
+          const rankB = priorityRank[b.parent_task?.priority || 'LOW'] || 0;
+          return sortDirection === 'asc' ? rankA - rankB : rankB - rankA;
+        }
+        
+        return 0;
+      });
+    }
+    
+    return columnSubtasks;
   };
 
   const handleSubtaskClick = (subtask: Subtask) => {
@@ -695,6 +775,60 @@ const Kanban = () => {
               <Users className="h-4 w-4" />
               Alle taken
             </Button>
+          </div>
+          
+          {/* Sorteer controls - subtiele pill-style */}
+          <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+              <SelectTrigger className="h-8 w-[130px] border-0 bg-transparent hover:bg-muted/80 transition-colors focus:ring-0">
+                <div className="flex items-center gap-1.5">
+                  <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  <SelectValue />
+                </div>
+              </SelectTrigger>
+              <SelectContent align="start" className="bg-popover">
+                <SelectItem value="due_at">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>Deadline</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="priority">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>Prioriteit</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="created_at">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>Aangemaakt</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="manual">
+                  <div className="flex items-center gap-2">
+                    <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span>Handmatig</span>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {/* Richting toggle - alleen zichtbaar bij niet-manual */}
+            {sortBy !== 'manual' && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
+                className="h-8 w-8 p-0 hover:bg-muted/80"
+              >
+                {sortDirection === 'asc' ? (
+                  <ArrowUp className="h-3.5 w-3.5" />
+                ) : (
+                  <ArrowDown className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            )}
           </div>
           
           <div className="relative w-64">
