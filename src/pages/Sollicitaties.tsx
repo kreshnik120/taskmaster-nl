@@ -125,6 +125,10 @@ const Sollicitaties = () => {
   }>({ open: false, application: null, previousStage: '', selectedWerkvorm: '' });
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Get personalized greeting - must be called unconditionally before any early returns
+  const displayName = user?.user_metadata?.name || user?.email?.split('@')[0];
+  const { fullGreeting } = useGreeting(displayName);
 
   // Proactive AI match notifications - shows toast when new high-match applications arrive
   const handleNotificationClick = (applicationId: string) => {
@@ -172,12 +176,6 @@ const Sollicitaties = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Goedemorgen";
-    if (hour < 18) return "Goedemiddag";
-    return "Goedenavond";
-  };
 
   useEffect(() => {
     const initAuth = async () => {
@@ -1042,9 +1040,6 @@ const Sollicitaties = () => {
   }).length;
   const hasActiveFilters = searchQuery || filterFunctieNiveau !== "all" || filterWerkvorm !== "all" || filterOrganisatie !== "all" || filterRegio !== "";
 
-  // Get personalized greeting
-  const displayName = user?.user_metadata?.name || user?.email?.split('@')[0];
-  const { fullGreeting } = useGreeting(displayName);
 
   return (
     <div className="flex flex-col h-full space-y-6">
