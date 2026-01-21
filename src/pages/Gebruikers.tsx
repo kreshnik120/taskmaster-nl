@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AdminOnly } from "@/components/auth/AdminOnly";
 import { PageHero } from "@/components/ui/page-hero";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { SecurityAuditWidget } from "@/components/users/SecurityAuditWidget";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -471,6 +472,9 @@ export default function Gebruikers() {
           </CardContent>
         </Card>
 
+        {/* Security Audit Widget */}
+        <SecurityAuditWidget />
+
         {/* Info Card */}
         <Card className="bg-muted/50">
           <CardContent className="pt-6">
@@ -497,6 +501,10 @@ export default function Gebruikers() {
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5" />
                 <span>De toegewezen rol wordt automatisch toegepast na registratie</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5" />
+                <span>OAuth login (Google/GitHub) werkt alleen voor uitgenodigde gebruikers</span>
               </div>
             </div>
           </CardContent>

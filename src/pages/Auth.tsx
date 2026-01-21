@@ -465,10 +465,17 @@ const Auth = () => {
   const handleOAuthLogin = async (provider: 'github' | 'google') => {
     try {
       setLoading(true);
+      
+      // Info: OAuth only works for invited/existing users
+      toast.info('OAuth login is alleen beschikbaar voor uitgenodigde medewerkers.', {
+        duration: 4000,
+      });
+      
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
           redirectTo: `${window.location.origin}/`,
+          scopes: provider === 'google' ? 'email profile' : 'user:email',
         },
       });
       if (error) throw error;
