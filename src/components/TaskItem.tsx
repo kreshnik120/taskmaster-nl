@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Clock, User, Edit, Check, Play, Square } from "lucide-react";
+import { Clock, User, Edit, Check, Play, Square, ArrowRight } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ interface Task {
   description: string | null;
   priority: string;
   due_at: string | null;
+  next_action?: string | null;
   profiles: {
     name: string | null;
     email: string | null;
@@ -101,6 +102,14 @@ export function TaskItem({ task, onTaskClick, onCompleteTask, onEditTask }: Task
               </div>
             )}
           </div>
+            
+          {/* Next Action Indicator */}
+          {task.next_action && (
+            <div className="flex items-center gap-1.5 mt-2 text-xs text-primary/70">
+              <ArrowRight className="h-3 w-3 shrink-0" />
+              <span className="truncate">{task.next_action}</span>
+            </div>
+          )}
 
           {subtasksTotal > 0 && (
             <div className="mt-3">
