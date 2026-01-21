@@ -48,6 +48,7 @@ export function ActionTimeline({
   const [newActionText, setNewActionText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [completingAction, setCompletingAction] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Combineer historie en huidige actie in één tijdlijn
@@ -56,7 +57,14 @@ export function ActionTimeline({
     .sort((a, b) => new Date(a.completed_at!).getTime() - new Date(b.completed_at!).getTime());
 
   const handleCompleteCurrentAction = async () => {
-    if (!currentAction) return;
+    if (!currentAction || completingAction) return;
+    
+    // Start animatie EERST
+    setCompletingAction(currentAction);
+    
+    // Wacht op animatie (400ms)
+    await new Promise(resolve => setTimeout(resolve, 400));
+    
     setIsCompleting(true);
 
     try {
@@ -99,6 +107,7 @@ export function ActionTimeline({
       });
     } finally {
       setIsCompleting(false);
+      setCompletingAction(null);
     }
   };
 
@@ -255,20 +264,46 @@ export function ActionTimeline({
 
           {/* Huidige actie */}
           {currentAction && (
-            <div className="relative flex items-start gap-3 group">
-              {/* Pulse indicator */}
-              <div className="relative z-10 h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 ring-2 ring-background">
-                <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" style={{ animationDuration: '2s' }} />
-                <ArrowRight className="h-3.5 w-3.5 text-primary relative z-10" />
+            <div 
+              className={cn(
+                "relative flex items-start gap-3 group transition-all duration-300",
+                completingAction === currentAction && "animate-complete-slide-up"
+              )}
+            >
+              {/* Pulse/Check indicator met morphing */}
+              <div className={cn(
+                "relative z-10 h-6 w-6 rounded-full flex items-center justify-center shrink-0 ring-2 ring-background transition-colors duration-300",
+                completingAction === currentAction 
+                  ? "bg-green-100 dark:bg-green-900/30" 
+                  : "bg-primary/10"
+              )}>
+                {completingAction === currentAction ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400 animate-check-pop" />
+                ) : (
+                  <>
+                    <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" style={{ animationDuration: '2s' }} />
+                    <ArrowRight className="h-3.5 w-3.5 text-primary relative z-10" />
+                  </>
+                )}
               </div>
 
-              {/* Content */}
+              {/* Content card met kleurovergang */}
               <div className="flex-1 min-w-0">
-                <div className="p-3 rounded-xl bg-gradient-to-r from-primary/5 via-primary/[0.03] to-transparent border border-primary/15 hover:bg-primary/[0.08] transition-colors">
+                <div className={cn(
+                  "p-3 rounded-xl border transition-all duration-300",
+                  completingAction === currentAction 
+                    ? "bg-green-50/50 dark:bg-green-900/20 border-green-200/50 dark:border-green-800/30" 
+                    : "bg-gradient-to-r from-primary/5 via-primary/[0.03] to-transparent border-primary/15 hover:bg-primary/[0.08]"
+                )}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <span className="text-[10px] font-medium uppercase tracking-wider text-primary/70">
-                        Nu actief
+                      <span className={cn(
+                        "text-[10px] font-medium uppercase tracking-wider transition-colors duration-300",
+                        completingAction === currentAction 
+                          ? "text-green-600 dark:text-green-400" 
+                          : "text-primary/70"
+                      )}>
+                        {completingAction === currentAction ? "Voltooid!" : "Nu actief"}
                       </span>
                       <p className="text-sm font-medium text-foreground leading-snug mt-0.5">
                         {currentAction}
@@ -277,9 +312,14 @@ export function ActionTimeline({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 px-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-green-600 hover:text-green-700 hover:bg-green-50"
+                      className={cn(
+                        "h-7 px-2 shrink-0 transition-all text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/30",
+                        completingAction === currentAction 
+                          ? "opacity-100" 
+                          : "opacity-0 group-hover:opacity-100"
+                      )}
                       onClick={handleCompleteCurrentAction}
-                      disabled={isCompleting}
+                      disabled={isCompleting || !!completingAction}
                     >
                       <CheckCircle2 className="h-4 w-4 mr-1" />
                       <span className="text-xs">Voltooid</span>
