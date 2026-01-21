@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/core";
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { TaskCard } from "@/components/TaskCard";
 import { TaskDialog } from "@/components/TaskDialog";
@@ -8,12 +8,11 @@ import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { KPICard } from "@/components/ui/kpi-card";
-import { Plus, Loader2, Sparkles, AlertCircle, Search, ListTodo, Clock, CheckCircle2, User, Users, ArrowUp, ArrowDown, ArrowUpDown, Calendar, GripVertical } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Plus, Loader2, AlertCircle, Search, ListTodo, Clock, CheckCircle2, User, Users, ArrowUp, ArrowDown, ArrowUpDown, Calendar, GripVertical } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { nl } from "date-fns/locale";
 import { useAiScoring } from "@/hooks/useAiScoring";
 import { useGreeting } from "@/hooks/useGreeting";
 import { logger } from "@/lib/logger";
@@ -111,6 +110,16 @@ const Kanban = () => {
   };
   const navigate = useNavigate();
   const { taskId } = useParams();
+  
+  // Sensors configuratie met distance threshold
+  // Voorkomt dat klikken als drag worden geregistreerd
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 10, // Pas na 10px beweging wordt het een drag
+      },
+    })
+  );
   
   // AI Scoring integration
   const { priorityScores, loading: aiLoading, getScoreForTask } = useAiScoring(tasks, true);
@@ -578,6 +587,11 @@ const Kanban = () => {
           return sortDirection === 'asc' ? rankA - rankB : rankB - rankA;
         }
         
+        if (sortBy === 'created_at') {
+          // Subtasks: sorteer op order_key als fallback
+          return sortDirection === 'asc' ? a.order_key - b.order_key : b.order_key - a.order_key;
+        }
+        
         return 0;
       });
     }
@@ -814,20 +828,30 @@ const Kanban = () => {
               </SelectContent>
             </Select>
             
-            {/* Richting toggle - alleen zichtbaar bij niet-manual */}
+            {/* Richting toggle met tooltip - alleen zichtbaar bij niet-manual */}
             {sortBy !== 'manual' && (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
-                className="h-8 w-8 p-0 hover:bg-muted/80"
-              >
-                {sortDirection === 'asc' ? (
-                  <ArrowUp className="h-3.5 w-3.5" />
-                ) : (
-                  <ArrowDown className="h-3.5 w-3.5" />
-                )}
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
+                    className="h-8 w-8 p-0 hover:bg-muted/80"
+                  >
+                    {sortDirection === 'asc' ? (
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    ) : (
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {sortBy === 'priority' 
+                    ? (sortDirection === 'asc' ? 'Laagste prioriteit eerst' : 'Hoogste prioriteit eerst')
+                    : (sortDirection === 'asc' ? 'Vroegste eerst' : 'Laatste eerst')
+                  }
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
           
@@ -864,7 +888,7 @@ const Kanban = () => {
         </div>
       </div>
 
-            <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
               <div className="flex gap-4 overflow-x-auto pb-4">
                 {columns.map((column) => (
                   <div key={column.id} id={`column-${column.id}`}>
