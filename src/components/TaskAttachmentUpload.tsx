@@ -14,9 +14,12 @@ import {
   Loader2,
   Download,
   Trash2,
-  Paperclip
+  Paperclip,
+  CheckCircle2,
+  AlertCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatFileSize } from "@/lib/fileHelpers";
 
 interface Attachment {
   id: string;
@@ -34,7 +37,7 @@ interface TaskAttachmentUploadProps {
   compact?: boolean;
 }
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB - verhoogd voor grote documenten
 const ALLOWED_TYPES = [
   'application/pdf',
   'application/msword',
@@ -212,7 +215,7 @@ export function TaskAttachmentUpload({
           {isDragging ? "Laat los om te uploaden" : "Klik of sleep bestanden hierheen"}
         </p>
         <p className="text-xs text-muted-foreground/70 mt-1">
-          PDF, Word, Excel, afbeeldingen (max 10MB)
+          PDF, Word, Excel, afbeeldingen (max 50MB)
         </p>
       </div>
 
@@ -223,23 +226,26 @@ export function TaskAttachmentUpload({
             {pendingFiles.length} bestand{pendingFiles.length > 1 ? 'en' : ''} geselecteerd
           </p>
           <div className="space-y-1.5">
-            {pendingFiles.map((file, index) => (
+      {pendingFiles.map((file, index) => (
               <div 
                 key={`pending-${index}`} 
-                className="flex items-center justify-between p-2 bg-muted/50 rounded-lg group"
+                className="flex items-center justify-between p-2.5 bg-primary/5 border border-primary/20 rounded-lg group animate-in fade-in slide-in-from-bottom-2 duration-300"
               >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                  {getFileIcon(file.name)}
-                  <span className="text-sm truncate">{file.name}</span>
-                  <Badge variant="outline" className="text-[10px] shrink-0">
-                    {(file.size / 1024).toFixed(0)} KB
-                  </Badge>
+                  <div className="p-1.5 rounded-md bg-primary/10">
+                    {getFileIcon(file.name)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm font-medium truncate block">{file.name}</span>
+                    <span className="text-xs text-muted-foreground">{formatFileSize(file.size)}</span>
+                  </div>
+                  <CheckCircle2 className="h-4 w-4 text-primary shrink-0 animate-in zoom-in duration-200" />
                 </div>
                 <Button 
                   type="button"
                   size="icon" 
                   variant="ghost" 
-                  className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ml-2"
                   onClick={(e) => {
                     e.stopPropagation();
                     removeFile(index);
@@ -318,9 +324,24 @@ export function TaskAttachmentUpload({
 }
 
 // Helper function to upload files after task is created/updated
-export async function uploadTaskAttachments(taskId: string, files: File[]): Promise<void> {
-  for (const file of files) {
+export interface UploadResult {
+  success: number;
+  failed: number;
+  uploadedFiles: string[];
+}
+
+export async function uploadTaskAttachments(
+  taskId: string, 
+  files: File[],
+  onProgress?: (fileIndex: number, progress: number, fileName: string) => void
+): Promise<UploadResult> {
+  const result: UploadResult = { success: 0, failed: 0, uploadedFiles: [] };
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
     const fileName = `${taskId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+    
+    onProgress?.(i, 10, file.name);
     
     const { error: uploadError } = await supabase.storage
       .from('task-attachments')
@@ -328,21 +349,30 @@ export async function uploadTaskAttachments(taskId: string, files: File[]): Prom
 
     if (uploadError) {
       console.error('Upload error:', uploadError);
-      toast.error(`Kon ${file.name} niet uploaden`);
+      result.failed++;
       continue;
     }
+
+    onProgress?.(i, 70, file.name);
 
     const { error: dbError } = await supabase
       .from('attachments')
       .insert({
         task_id: taskId,
         name: file.name,
-        url: fileName
+        url: fileName,
+        file_size: file.size
       });
 
     if (dbError) {
       console.error('DB error:', dbError);
-      toast.error(`Kon ${file.name} niet opslaan`);
+      result.failed++;
+    } else {
+      result.success++;
+      result.uploadedFiles.push(file.name);
+      onProgress?.(i, 100, file.name);
     }
   }
+
+  return result;
 }

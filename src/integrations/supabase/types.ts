@@ -1519,6 +1519,7 @@ export type Database = {
       attachments: {
         Row: {
           created_at: string
+          file_size: number | null
           id: string
           name: string
           task_id: string
@@ -1526,6 +1527,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          file_size?: number | null
           id?: string
           name: string
           task_id: string
@@ -1533,6 +1535,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          file_size?: number | null
           id?: string
           name?: string
           task_id?: string
