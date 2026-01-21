@@ -27,7 +27,14 @@ import {
   Phone,
   MapPin,
   Users,
-  FileUser
+  FileUser,
+  Paperclip,
+  Download,
+  Trash2,
+  Loader2,
+  FileSpreadsheet,
+  Image as ImageIcon,
+  File
 } from "lucide-react";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -51,6 +58,13 @@ interface Subtask {
     name: string | null;
     email: string | null;
   } | null;
+}
+
+interface Attachment {
+  id: string;
+  name: string;
+  url: string;
+  created_at: string;
 }
 
 interface Task {
@@ -113,10 +127,14 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const [nextReminder, setNextReminder] = useState<any>(null);
   const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [loadingAttachments, setLoadingAttachments] = useState(false);
+  const [deletingAttachment, setDeletingAttachment] = useState<string | null>(null);
   const [sectionsOpen, setSectionsOpen] = useState({
     info: true,
     description: true,
-    steps: true
+    steps: true,
+    attachments: true
   });
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -159,11 +177,12 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [open, isTimerActive, startTimer, stopTimer]);
 
-  // Load subtasks and application when task changes
+  // Load subtasks, attachments and application when task changes
   useEffect(() => {
     if (task?.id && open) {
       loadSubtasks();
       loadNextReminder();
+      loadAttachments();
       
       // Load linked application if exists
       if (task.application_id) {
@@ -265,6 +284,93 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
       });
     } finally {
       setLoadingSubtasks(false);
+    }
+  };
+
+  const loadAttachments = async () => {
+    if (!task?.id) return;
+    
+    setLoadingAttachments(true);
+    try {
+      const { data, error } = await supabase
+        .from('attachments')
+        .select('*')
+        .eq('task_id', task.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setAttachments(data || []);
+    } catch (error) {
+      console.error('Error loading attachments:', error);
+    } finally {
+      setLoadingAttachments(false);
+    }
+  };
+
+  const getFileIcon = (filename: string) => {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    if (['pdf'].includes(ext || '')) return <FileText className="h-4 w-4 text-red-500" />;
+    if (['doc', 'docx'].includes(ext || '')) return <FileText className="h-4 w-4 text-blue-500" />;
+    if (['xls', 'xlsx'].includes(ext || '')) return <FileSpreadsheet className="h-4 w-4 text-green-500" />;
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext || '')) return <ImageIcon className="h-4 w-4 text-purple-500" />;
+    return <File className="h-4 w-4 text-muted-foreground" />;
+  };
+
+  const downloadAttachment = async (attachment: Attachment) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('task-attachments')
+        .download(attachment.url);
+
+      if (error) throw error;
+
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = attachment.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      console.error('Download error:', error);
+      toast({
+        title: "Fout",
+        description: "Kon bestand niet downloaden",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const deleteAttachment = async (attachment: Attachment) => {
+    setDeletingAttachment(attachment.id);
+    try {
+      // Delete from storage
+      const { error: storageError } = await supabase.storage
+        .from('task-attachments')
+        .remove([attachment.url]);
+
+      if (storageError) throw storageError;
+
+      // Delete from database
+      const { error: dbError } = await supabase
+        .from('attachments')
+        .delete()
+        .eq('id', attachment.id);
+
+      if (dbError) throw dbError;
+
+      toast({ title: "Bijlage verwijderd" });
+      loadAttachments();
+    } catch (error: any) {
+      console.error('Delete error:', error);
+      toast({
+        title: "Fout",
+        description: "Kon bijlage niet verwijderen",
+        variant: "destructive"
+      });
+    } finally {
+      setDeletingAttachment(null);
     }
   };
 
@@ -836,6 +942,70 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                         onSkipStep={handleSkipStep}
                         onResetStep={handleResetStep}
                       />
+                    </div>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+
+            {/* Attachments Section */}
+            {attachments.length > 0 && (
+              <Collapsible 
+                open={sectionsOpen.attachments} 
+                onOpenChange={() => toggleSection('attachments')}
+              >
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg hover:bg-muted/20 transition-colors duration-150 group">
+                  <div className="flex items-center gap-2">
+                    <Paperclip className="h-5 w-5 text-primary/80" />
+                    <h3 className="font-semibold text-foreground">Bijlagen</h3>
+                    <Badge variant="secondary" className="ml-2">
+                      {attachments.length}
+                    </Badge>
+                  </div>
+                  <ChevronDown className={cn(
+                    "h-4 w-4 text-muted-foreground/60 transition-transform duration-200",
+                    sectionsOpen.attachments && "rotate-180"
+                  )} />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-3 animate-accordion-down">
+                  {loadingAttachments ? (
+                    <div className="text-sm text-muted-foreground px-3">Laden...</div>
+                  ) : (
+                    <div className="px-3 space-y-2">
+                      {attachments.map((attachment) => (
+                        <div 
+                          key={attachment.id} 
+                          className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border border-border/50 group hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            {getFileIcon(attachment.name)}
+                            <span className="text-sm truncate">{attachment.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              className="h-8 w-8"
+                              onClick={() => downloadAttachment(attachment)}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              onClick={() => deleteAttachment(attachment)}
+                              disabled={deletingAttachment === attachment.id}
+                            >
+                              {deletingAttachment === attachment.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </CollapsibleContent>
