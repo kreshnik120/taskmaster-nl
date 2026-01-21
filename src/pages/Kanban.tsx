@@ -8,7 +8,7 @@ import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { KPICard } from "@/components/ui/kpi-card";
-import { Plus, Loader2, Sparkles, AlertCircle, Search, ListTodo, Clock, CheckCircle2 } from "lucide-react";
+import { Plus, Loader2, Sparkles, AlertCircle, Search, ListTodo, Clock, CheckCircle2, User, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -64,6 +64,10 @@ const Kanban = () => {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [lastScrolledKpi, setLastScrolledKpi] = useState<string | null>(null);
+  const [showOnlyMyTasks, setShowOnlyMyTasks] = useState(() => {
+    const stored = localStorage.getItem('kanban-show-only-my-tasks');
+    return stored === null ? true : stored === 'true';
+  });
   const searchInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { taskId } = useParams();
@@ -84,7 +88,6 @@ const Kanban = () => {
       
       if (session) {
         setUser(session.user);
-        loadData();
       } else {
         navigate("/auth");
       }
@@ -107,6 +110,18 @@ const Kanban = () => {
     };
   }, [navigate]);
 
+  // Load data when user is set or filter changes
+  useEffect(() => {
+    if (user) {
+      loadData();
+    }
+  }, [user, showOnlyMyTasks]);
+
+  // Persist showOnlyMyTasks preference
+  useEffect(() => {
+    localStorage.setItem('kanban-show-only-my-tasks', String(showOnlyMyTasks));
+  }, [showOnlyMyTasks]);
+
   const loadData = async () => {
     try {
       // Load columns
@@ -124,16 +139,22 @@ const Kanban = () => {
         await createDefaultColumns();
       }
 
-      // Load tasks with scoring metadata
-      const { data: tasksData, error: tasksError } = await supabase
+      // Load tasks with scoring metadata - filter by user if showOnlyMyTasks
+      let query = supabase
         .from("tasks")
         .select(`
           *,
           profiles:profiles!tasks_assignee_id_fkey(name, email),
           task_scoring_metadata(*)
         `)
-        .is("deleted_at", null)
-        .order("order_key");
+        .is("deleted_at", null);
+      
+      // Filter by current user's tasks if toggle is on
+      if (showOnlyMyTasks && user) {
+        query = query.eq("assignee_id", user.id);
+      }
+      
+      const { data: tasksData, error: tasksError } = await query.order("order_key");
 
       if (tasksError) throw tasksError;
       setTasks(tasksData || []);
@@ -484,6 +505,28 @@ const Kanban = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Mijn taken / Alle taken toggle */}
+          <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
+            <Button 
+              variant={showOnlyMyTasks ? "default" : "ghost"} 
+              size="sm"
+              onClick={() => setShowOnlyMyTasks(true)}
+              className="gap-1.5"
+            >
+              <User className="h-4 w-4" />
+              Mijn taken
+            </Button>
+            <Button 
+              variant={!showOnlyMyTasks ? "default" : "ghost"} 
+              size="sm"
+              onClick={() => setShowOnlyMyTasks(false)}
+              className="gap-1.5"
+            >
+              <Users className="h-4 w-4" />
+              Alle taken
+            </Button>
+          </div>
+          
           <div className="relative w-64">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
