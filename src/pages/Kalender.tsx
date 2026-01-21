@@ -6,7 +6,7 @@ import { format, startOfWeek, endOfDay, startOfDay, addDays, isSameDay, parseISO
 import { nl } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle, UserCheck, Video, Phone, MapPin, Sparkles, Coffee, User, Users, GripVertical } from "lucide-react";
 import { useMySubtasks } from "@/hooks/useMySubtasks";
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useDroppable, useDraggable } from "@dnd-kit/core";
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useDroppable, useDraggable, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
@@ -238,6 +238,16 @@ export default function Kalender() {
     type: 'task' | 'subtask'; 
     data: Task | SubtaskFromHook 
   } | null>(null);
+  
+  // Sensors configuratie met distance threshold
+  // Voorkomt dat klikken als drag worden geregistreerd
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 10, // Pas na 10px beweging wordt het een drag
+      },
+    })
+  );
   
   // Personalisatie: Mijn taken / Alle taken toggle (consistent met Kanban)
   const [userId, setUserId] = useState<string | null>(null);
@@ -716,7 +726,7 @@ export default function Kalender() {
       </div>
 
       {/* Responsive Calendar Grid with Drag & Drop */}
-      <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className={cn(
           "grid gap-3",
           viewMode === "5" 
