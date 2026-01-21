@@ -22,6 +22,7 @@ import { PriorityBadge } from "@/components/PriorityBadge";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { useMySubtasks } from "@/hooks/useMySubtasks";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { formatPeriod, getDateUrgency, getUrgencyBadgeClasses } from "@/lib/dateFormatters";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -418,66 +419,7 @@ export default function Lijst() {
       .toUpperCase()
       .slice(0, 2);
   };
-
-  const formatPeriod = (start: string | null, end: string | null) => {
-    if (!start && !end) return "—";
-    
-    if (start && end) {
-      const startD = new Date(start);
-      const endD = new Date(end);
-      
-      // Zelfde dag → toon slechts één datum
-      if (startD.toDateString() === endD.toDateString()) {
-        return format(startD, "d MMM", { locale: nl });
-      }
-      
-      // Zelfde maand → compacte weergave: "21 – 22 jan."
-      if (startD.getMonth() === endD.getMonth() && 
-          startD.getFullYear() === endD.getFullYear()) {
-        return `${format(startD, "d")} – ${format(endD, "d MMM", { locale: nl })}`;
-      }
-      
-      // Verschillende maanden → volledige weergave
-      return `${format(startD, "d MMM", { locale: nl })} – ${format(endD, "d MMM", { locale: nl })}`;
-    }
-    
-    if (start) return `Vanaf ${format(new Date(start), "d MMM", { locale: nl })}`;
-    if (end) return `Tot ${format(new Date(end), "d MMM", { locale: nl })}`;
-    return "—";
-  };
-
-  const getDateUrgency = (dueAt: string | null) => {
-    if (!dueAt) return { status: 'none', className: '', badge: null };
-    
-    const due = new Date(dueAt);
-    due.setHours(23, 59, 59, 999); // Einde van de dag
-    const now = new Date();
-    const diffMs = due.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-    
-    if (diffDays < 0) {
-      return { 
-        status: 'overdue', 
-        className: 'text-destructive font-medium', 
-        badge: 'Verlopen' 
-      };
-    }
-    if (diffDays === 0) {
-      return { 
-        status: 'today', 
-        className: 'text-orange-600 dark:text-orange-400 font-medium', 
-        badge: 'Vandaag' 
-      };
-    }
-    if (diffDays === 1) {
-      return { 
-        status: 'tomorrow', 
-        className: 'text-amber-600 dark:text-amber-400', 
-        badge: 'Morgen' 
-      };
-    }
-    return { status: 'normal', className: 'text-muted-foreground', badge: null };
-  };
+  // formatPeriod and getDateUrgency are now imported from @/lib/dateFormatters
 
   const handleTaskClick = (task: Task) => {
     setSelectedTask(task);
