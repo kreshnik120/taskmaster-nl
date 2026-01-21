@@ -6,9 +6,8 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Pencil, ChevronDown, Inbox, ListTree, Calendar } from "lucide-react";
-import { format } from "date-fns";
-import { nl } from "date-fns/locale";
+import { Pencil, ChevronDown, Inbox, ListTree } from "lucide-react";
+import { UrgencyBadge } from "@/components/ui/urgency-badge";
 
 interface Task {
   id: string;
@@ -249,9 +248,8 @@ export function KanbanColumn({ id, title, tasks, subtasks = [], status, isCollap
                                 ↳ {subtask.parent_task?.title}
                               </p>
                               {subtask.due_at && (
-                                <div className="flex items-center gap-1 mt-1.5 text-xs text-muted-foreground">
-                                  <Calendar className="h-3 w-3" />
-                                  {format(new Date(subtask.due_at), "d MMM", { locale: nl })}
+                                <div className="mt-1.5">
+                                  <UrgencyBadge dueAt={subtask.due_at} className="text-xs" />
                                 </div>
                               )}
                             </div>

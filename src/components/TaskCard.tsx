@@ -1,13 +1,15 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
-import { GripVertical, Clock, Edit, Calendar } from "lucide-react";
+import { GripVertical, Edit, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Button } from "@/components/ui/button";
 import { logger } from "@/lib/logger";
+import { UrgencyBadge, UrgencyDot } from "@/components/ui/urgency-badge";
+import { formatDateFull } from "@/lib/dateFormatters";
 
 const log = logger.create('TaskCard');
 
@@ -178,12 +180,9 @@ export function TaskCard({ task, onClick, aiScore }: TaskCardProps) {
                     </p>
                   )}
 
-                  {/* Due date */}
+                  {/* Due date with urgency */}
                   {task.due_at && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      {format(new Date(task.due_at), "d MMM", { locale: nl })}
-                    </div>
+                    <UrgencyBadge dueAt={task.due_at} className="text-xs" />
                   )}
 
                   {/* Time in column */}
@@ -232,7 +231,7 @@ export function TaskCard({ task, onClick, aiScore }: TaskCardProps) {
               <p>👤 {assigneeName}</p>
             )}
             {task.due_at && (
-              <p>📅 {format(new Date(task.due_at), "d MMM yyyy", { locale: nl })}</p>
+              <p>📅 {formatDateFull(task.due_at)}</p>
             )}
             {task.priority && (
               <p>⚡ Prioriteit: {task.priority}</p>

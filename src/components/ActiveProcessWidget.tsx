@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { Clock, AlertCircle } from "lucide-react";
-import { format, parseISO, isPast, differenceInDays } from "date-fns";
-import { nl } from "date-fns/locale";
+import { Clock } from "lucide-react";
 import { ProcessTimeline } from "./ProcessTimeline";
 import { useToast } from "@/hooks/use-toast";
 import { logger } from "@/lib/logger";
+import { UrgencyBadge } from "@/components/ui/urgency-badge";
+import { formatDateTime } from "@/lib/dateFormatters";
 
 interface Subtask {
   id: string;
@@ -131,15 +131,7 @@ export function ActiveProcessWidget() {
     }
   };
 
-  const getUrgency = (dueAt: string | null) => {
-    if (!dueAt) return null;
-    const due = parseISO(dueAt);
-    if (isPast(due)) return 'overdue';
-    const daysUntil = differenceInDays(due, new Date());
-    if (daysUntil <= 1) return 'urgent';
-    if (daysUntil <= 3) return 'soon';
-    return 'ok';
-  };
+  // Urgency is now handled by UrgencyBadge component
 
   if (loading) {
     return null;
@@ -178,10 +170,7 @@ export function ActiveProcessWidget() {
           <div key={taskId} className="space-y-2">
             <h3 className="font-medium text-sm">{taskTitle}</h3>
             
-            {subtasks.map((subtask) => {
-              const urgency = getUrgency(subtask.due_at);
-              
-              return (
+            {subtasks.map((subtask) => (
                 <div 
                   key={subtask.id}
                   className="flex items-start gap-3 p-3 border rounded-lg bg-card"
@@ -189,21 +178,14 @@ export function ActiveProcessWidget() {
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{subtask.title}</span>
-                      {urgency === 'overdue' && (
-                        <AlertCircle className="h-4 w-4 text-destructive" />
-                      )}
                     </div>
                     
                     {subtask.due_at && (
-                      <div className={`text-xs ${
-                        urgency === 'overdue' ? 'text-destructive font-medium' :
-                        urgency === 'urgent' ? 'text-orange-600 font-medium' :
-                        urgency === 'soon' ? 'text-yellow-600' :
-                        'text-muted-foreground'
-                      }`}>
-                        {format(parseISO(subtask.due_at), "d MMM yyyy 'om' HH:mm", { locale: nl })}
-                        {urgency === 'overdue' && ' - VERLOPEN'}
-                        {urgency === 'urgent' && ' - URGENT'}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {formatDateTime(subtask.due_at)}
+                        </span>
+                        <UrgencyBadge dueAt={subtask.due_at} showDate={false} />
                       </div>
                     )}
                   </div>
@@ -223,8 +205,7 @@ export function ActiveProcessWidget() {
                     </button>
                   </div>
                 </div>
-              );
-            })}
+            ))}
           </div>
         ))}
       </CardContent>
