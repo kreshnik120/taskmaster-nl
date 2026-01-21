@@ -405,10 +405,14 @@ const Kanban = () => {
   const getTasksForColumn = (columnId: string) => {
     const column = columns.find(c => c.id === columnId);
     
-    // For Backlog column, also include tasks without a column_id
+    // For Backlog column, also include tasks without a column_id (null or undefined)
     let filteredTasks;
     if (column?.status === 'BACKLOG') {
-      filteredTasks = tasks.filter((task) => task.column_id === columnId || task.column_id === null);
+      filteredTasks = tasks.filter((task) => 
+        task.column_id === columnId || 
+        task.column_id === null || 
+        task.column_id === undefined
+      );
     } else {
       filteredTasks = tasks.filter((task) => task.column_id === columnId);
     }
