@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { useGreeting } from "@/hooks/useGreeting";
 
 interface CompletedTask {
   id: string;
@@ -45,12 +46,6 @@ const priorityLabels: Record<string, string> = {
   CRITICAL: "Kritiek",
 };
 
-const getGreeting = () => {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Goedemorgen";
-  if (hour < 18) return "Goedemiddag";
-  return "Goedenavond";
-};
 
 const AfgerondeTaken = () => {
   const [tasks, setTasks] = useState<CompletedTask[]>([]);
@@ -58,6 +53,10 @@ const AfgerondeTaken = () => {
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<string>("all");
   const navigate = useNavigate();
+
+  // Get personalized greeting
+  const displayName = user?.user_metadata?.name || user?.email?.split('@')[0];
+  const { fullGreeting } = useGreeting(displayName);
 
   useEffect(() => {
     checkAuth();
@@ -193,7 +192,7 @@ const AfgerondeTaken = () => {
     <div className="space-y-6">
       {/* Hero Section */}
       <div>
-        <h1 className="text-2xl font-semibold mb-1">Afgeronde Taken</h1>
+        <h1 className="text-2xl font-semibold mb-1">{fullGreeting}</h1>
         <p className="text-sm text-muted-foreground">
           Bekijk voltooide taken en prestaties
         </p>

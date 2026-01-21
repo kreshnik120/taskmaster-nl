@@ -40,6 +40,7 @@ import { useDiplomaUpgradeNotifications } from "@/hooks/useDiplomaUpgradeNotific
 import { useVogVerificationNotifications } from "@/hooks/useVogVerificationNotifications";
 import { checkExistingActivePlacement } from "@/lib/checkExistingPlacement";
 import { HumanReviewQueue } from "@/components/recruitment/HumanReviewQueue";
+import { useGreeting } from "@/hooks/useGreeting";
 
 interface Application {
   id: string;
@@ -1041,12 +1042,16 @@ const Sollicitaties = () => {
   }).length;
   const hasActiveFilters = searchQuery || filterFunctieNiveau !== "all" || filterWerkvorm !== "all" || filterOrganisatie !== "all" || filterRegio !== "";
 
+  // Get personalized greeting
+  const displayName = user?.user_metadata?.name || user?.email?.split('@')[0];
+  const { fullGreeting } = useGreeting(displayName);
+
   return (
     <div className="flex flex-col h-full space-y-6">
             {/* Compact Header - Apple Minimalism */}
             <div className="flex items-center justify-between py-4">
               <div className="flex items-center gap-4">
-                <h1 className="text-xl font-medium text-foreground">Sollicitaties</h1>
+                <h1 className="text-xl font-medium text-foreground">{fullGreeting}</h1>
                 <AIIntakeStatusWidget />
               </div>
               <div className="flex items-center gap-2">

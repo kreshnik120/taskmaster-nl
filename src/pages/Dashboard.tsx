@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
+import { useGreeting } from "@/hooks/useGreeting";
 import { logger } from "@/lib/logger";
 
 const log = logger.create('Dashboard');
@@ -701,12 +702,16 @@ const Dashboard = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Get personalized greeting
+  const displayName = user?.user_metadata?.name || user?.email?.split('@')[0];
+  const { fullGreeting } = useGreeting(displayName);
+
   return (
     <div className="space-y-6">
       {/* Hero Section - Minimal */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{fullGreeting}</h1>
           <p className="text-muted-foreground">
             {tasks.length > 0 ? (
               <>

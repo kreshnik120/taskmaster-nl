@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
+import { useGreeting } from "@/hooks/useGreeting";
 
 interface DeletedTask {
   id: string;
@@ -53,13 +54,6 @@ const priorityLabels: Record<string, string> = {
   CRITICAL: "Kritiek",
 };
 
-const getGreeting = () => {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Goedemorgen";
-  if (hour < 18) return "Goedemiddag";
-  return "Goedenavond";
-};
-
 const VerwijderdeTaken = () => {
   const [tasks, setTasks] = useState<DeletedTask[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,6 +62,10 @@ const VerwijderdeTaken = () => {
   const [user, setUser] = useState<any>(null);
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const navigate = useNavigate();
+
+  // Get personalized greeting
+  const displayName = user?.user_metadata?.name || user?.email?.split('@')[0];
+  const { fullGreeting } = useGreeting(displayName);
 
   useEffect(() => {
     checkAuth();
@@ -159,7 +157,7 @@ const VerwijderdeTaken = () => {
     <div className="space-y-6">
       {/* Hero Section */}
       <div>
-        <h1 className="text-2xl font-semibold mb-1">Verwijderde Taken</h1>
+        <h1 className="text-2xl font-semibold mb-1">{fullGreeting}</h1>
         <p className="text-sm text-muted-foreground">
           Terugzetten of definitief verwijderen
         </p>
