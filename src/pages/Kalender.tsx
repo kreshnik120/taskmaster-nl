@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { format, startOfWeek, endOfDay, startOfDay, addDays, isSameDay, parseISO, getWeek, endOfWeek, differenceInDays, isAfter } from "date-fns";
 import { nl } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle, UserCheck, Video, Phone, MapPin, Sparkles, Coffee } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle, UserCheck, Video, Phone, MapPin, Sparkles, Coffee, User, Users } from "lucide-react";
+import { useMySubtasks } from "@/hooks/useMySubtasks";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
@@ -143,12 +144,35 @@ export default function Kalender() {
   const [newTaskDialogOpen, setNewTaskDialogOpen] = useState(false);
   const [newTaskDate, setNewTaskDate] = useState<Date | null>(null);
   const [activeKpi, setActiveKpi] = useState<string | null>(null);
+  
+  // Personalisatie: Mijn taken / Alle taken toggle (consistent met Kanban)
+  const [userId, setUserId] = useState<string | null>(null);
+  const [showOnlyMyTasks, setShowOnlyMyTasks] = useState(() => {
+    return localStorage.getItem('kalender-show-only-my-tasks') === 'true';
+  });
+  
+  // Subtaken via reusable hook (consistent met Kanban)
+  const { subtasks: mySubtasks, refetch: refetchSubtasks } = useMySubtasks(userId);
 
   useEffect(() => {
     checkAuth();
-    fetchTasks();
-    fetchReminders();
   }, []);
+  
+  // Persist toggle preference & refetch when changed
+  useEffect(() => {
+    localStorage.setItem('kalender-show-only-my-tasks', String(showOnlyMyTasks));
+    if (userId) {
+      fetchTasks();
+    }
+  }, [showOnlyMyTasks]);
+  
+  // Initial data load after auth
+  useEffect(() => {
+    if (userId) {
+      fetchTasks();
+      fetchReminders();
+    }
+  }, [userId]);
 
   useEffect(() => {
     const tasksChannel = supabase
@@ -175,7 +199,13 @@ export default function Kalender() {
     (task.start_at && isSameDay(parseISO(task.start_at), day)) || (task.due_at && isSameDay(parseISO(task.due_at), day))
   );
   
+  // Subtaken helper - filter op due_at per dag (consistent met Kanban)
+  const getSubtasksForDay = (day: Date) => mySubtasks.filter((subtask) => 
+    subtask.due_at && isSameDay(parseISO(subtask.due_at), day)
+  );
+  
   const todayTasks = !loading ? getTasksForDay(new Date()).length : 0;
+  const todaySubtasks = !loading ? getSubtasksForDay(new Date()).length : 0;
   const urgentCount = !loading ? tasks.filter(t => t.priority === 'high' || t.priority === 'critical').length : 0;
 
   // Animated counters - always called in same order
@@ -186,7 +216,11 @@ export default function Kalender() {
 
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) navigate("/auth");
+    if (!session) {
+      navigate("/auth");
+    } else {
+      setUserId(session.user.id);
+    }
   };
 
   const fetchTasks = async () => {
@@ -206,7 +240,7 @@ export default function Kalender() {
         return;
       }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from("tasks")
         .select(`
           id, title, description, priority, start_at, due_at, next_action, assignee_id, application_id, recruitment_action_type, category, interview_details,
@@ -215,8 +249,14 @@ export default function Kalender() {
         .eq("org_id", userOrgs.org_id)
         .is("deleted_at", null)
         .is("completed_at", null)
-        .or("start_at.not.is.null,due_at.not.is.null")
-        .order("start_at", { ascending: true });
+        .or("start_at.not.is.null,due_at.not.is.null");
+      
+      // Filter op eigen taken als toggle actief (consistent met Kanban)
+      if (showOnlyMyTasks && userId) {
+        query = query.eq("assignee_id", userId);
+      }
+      
+      const { data, error } = await query.order("start_at", { ascending: true });
 
       if (error) throw error;
       setTasks((data || []) as Task[]);
@@ -331,34 +371,61 @@ export default function Kalender() {
   return (
     <div className="space-y-8">
       {/* Minimal Hero Section */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="space-y-1">
           <h1 className="text-xl font-medium tracking-tight">Kalender</h1>
-          <p className="text-sm text-muted-foreground/80">Week {weekNumber} · {tasks.length} taken gepland</p>
+          <p className="text-sm text-muted-foreground/80">
+            Week {weekNumber} · {tasks.length} taken
+            {showOnlyMyTasks && mySubtasks.length > 0 && ` + ${mySubtasks.length} subtaken`}
+          </p>
         </div>
         
-        {/* Pill-style Toggle */}
-        <ToggleGroup 
-          type="single" 
-          value={viewMode} 
-          onValueChange={(value) => value && setViewMode(value as "5" | "7")}
-          className="bg-muted/50 p-1 rounded-full"
-        >
-          <ToggleGroupItem 
-            value="5" 
-            aria-label="Werkweek"
-            className="rounded-full px-4 text-sm data-[state=on]:bg-background data-[state=on]:shadow-sm data-[state=on]:text-primary"
+        <div className="flex items-center gap-3">
+          {/* Mijn taken / Alle taken toggle - consistent met Kanban */}
+          <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-full">
+            <Button 
+              variant={showOnlyMyTasks ? "default" : "ghost"} 
+              size="sm"
+              onClick={() => setShowOnlyMyTasks(true)}
+              className="gap-1.5 rounded-full h-8 px-3 text-sm"
+            >
+              <User className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Mijn taken</span>
+            </Button>
+            <Button 
+              variant={!showOnlyMyTasks ? "default" : "ghost"} 
+              size="sm"
+              onClick={() => setShowOnlyMyTasks(false)}
+              className="gap-1.5 rounded-full h-8 px-3 text-sm"
+            >
+              <Users className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Alle taken</span>
+            </Button>
+          </div>
+          
+          {/* Pill-style View Toggle */}
+          <ToggleGroup 
+            type="single" 
+            value={viewMode} 
+            onValueChange={(value) => value && setViewMode(value as "5" | "7")}
+            className="bg-muted/50 p-1 rounded-full"
           >
-            Ma-Vr
-          </ToggleGroupItem>
-          <ToggleGroupItem 
-            value="7" 
-            aria-label="Volle week"
-            className="rounded-full px-4 text-sm data-[state=on]:bg-background data-[state=on]:shadow-sm data-[state=on]:text-primary"
-          >
-            Ma-Zo
-          </ToggleGroupItem>
-        </ToggleGroup>
+            <ToggleGroupItem 
+              value="5" 
+              aria-label="Werkweek"
+              className="rounded-full px-4 text-sm data-[state=on]:bg-background data-[state=on]:shadow-sm data-[state=on]:text-primary"
+            >
+              Ma-Vr
+            </ToggleGroupItem>
+            <ToggleGroupItem 
+              value="7" 
+              aria-label="Volle week"
+              className="rounded-full px-4 text-sm data-[state=on]:bg-background data-[state=on]:shadow-sm data-[state=on]:text-primary"
+            >
+              Ma-Zo
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
       </div>
 
       {/* KPI Cards - System style variants */}
@@ -460,9 +527,11 @@ export default function Kalender() {
         {weekDays.map((day) => {
           const dayTasks = getTasksForDay(day);
           const dayReminders = getRemindersForDay(day);
+          const daySubtasks = showOnlyMyTasks ? getSubtasksForDay(day) : [];
           const isToday = isSameDay(day, new Date());
           const dayOfWeek = day.getDay();
           const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+          const hasContent = dayTasks.length > 0 || dayReminders.length > 0 || daySubtasks.length > 0;
 
           return (
             <Card 
@@ -492,7 +561,7 @@ export default function Kalender() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2.5 px-3.5 pb-3.5">
-                {dayTasks.length === 0 && dayReminders.length === 0 ? (
+                {!hasContent ? (
                   (() => {
                     const emptyState = getEmptyStateMessage(day, isWeekend);
                     const EmptyIcon = emptyState.icon;
@@ -641,6 +710,37 @@ export default function Kalender() {
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* Subtaken - visuele distinctie consistent met Kanban (↳ indicator, dashed border) */}
+                    {daySubtasks.map((subtask) => (
+                      <div 
+                        key={subtask.id}
+                        onClick={() => {
+                          // Open parent task modal
+                          const parentTask = tasks.find(t => t.id === subtask.task_id);
+                          if (parentTask) {
+                            setSelectedTask(parentTask);
+                            setDetailModalOpen(true);
+                          }
+                        }}
+                        className="group cursor-pointer rounded-lg px-3 py-2.5 transition-all hover:shadow-sm bg-muted/30 border border-dashed border-muted-foreground/20 hover:border-muted-foreground/40"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground text-xs shrink-0">↳</span>
+                          <span className="text-sm font-medium truncate">{subtask.title}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] text-muted-foreground/60 truncate">
+                            {subtask.task_title}
+                          </span>
+                          {subtask.due_at && (
+                            <span className="text-[10px] text-muted-foreground/50 tabular-nums shrink-0">
+                              {format(parseISO(subtask.due_at), 'HH:mm')}
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
