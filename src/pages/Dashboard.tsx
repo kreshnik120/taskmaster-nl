@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, Zap, CheckSquare, CheckCircle2, ListTodo, User, AlertCircle } from "lucide-react";
+import { Plus, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, Zap, CheckSquare, CheckCircle2, ListTodo, User, AlertCircle, ArrowRight } from "lucide-react";
 import { TaskItem } from "@/components/TaskItem";
 import { UpcomingRemindersWidget } from "@/components/UpcomingRemindersWidget";
 import { motion } from "framer-motion";
@@ -860,7 +860,12 @@ const Dashboard = () => {
                           )}
                         </div>
                         {task.next_action && (
-                          <p className="text-xs text-muted-foreground/80 mt-0.5 line-clamp-1">{task.next_action}</p>
+                          <div className="flex items-center gap-1.5 mt-1 group/action">
+                            <ArrowRight className="h-3 w-3 text-primary/60 shrink-0" />
+                            <p className="text-xs text-muted-foreground/80 line-clamp-1 group-hover/action:text-primary transition-colors">
+                              {task.next_action}
+                            </p>
+                          </div>
                         )}
                         {hasSubtasks && (
                           <Progress 

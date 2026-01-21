@@ -1,7 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
-import { GripVertical, Edit, Calendar } from "lucide-react";
+import { GripVertical, Edit, Calendar, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -180,6 +180,14 @@ export function TaskCard({ task, onClick, aiScore }: TaskCardProps) {
                     </p>
                   )}
 
+                  {/* Next Action Indicator */}
+                  {task.next_action && (
+                    <div className="flex items-center gap-1.5 text-[10px] text-primary/70 mt-1">
+                      <ArrowRight className="h-2.5 w-2.5 shrink-0" />
+                      <span className="truncate">{task.next_action}</span>
+                    </div>
+                  )}
+
                   {/* Due date with urgency */}
                   {task.due_at && (
                     <UrgencyBadge dueAt={task.due_at} className="text-xs" />
@@ -235,6 +243,17 @@ export function TaskCard({ task, onClick, aiScore }: TaskCardProps) {
             )}
             {task.priority && (
               <p>⚡ Prioriteit: {task.priority}</p>
+            )}
+            {task.next_action && (
+              <div className="mt-2 pt-2 border-t border-border/50">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1">
+                  Volgende actie
+                </p>
+                <p className="text-xs text-foreground/80 flex items-center gap-1.5">
+                  <ArrowRight className="h-3 w-3 text-primary" />
+                  {task.next_action}
+                </p>
+              </div>
             )}
             <p className="text-[10px] mt-2 text-muted-foreground/60">
               Aangemaakt: {format(new Date(task.created_at), "d MMM yyyy", { locale: nl })}
