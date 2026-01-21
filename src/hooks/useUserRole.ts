@@ -87,6 +87,7 @@ export function useUserRole(): UseUserRoleReturn {
     loading,
     isAdmin: () => role === 'admin',
     isManager: () => role === 'manager',
-    canEdit: () => role === 'admin' || role === 'manager',
+    // All logged-in users can access Recruitment; Analyse & AI remains admin-only via requiresAdmin
+    canEdit: () => role === 'admin' || role === 'manager' || role === 'user',
   };
 }
