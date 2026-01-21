@@ -829,7 +829,7 @@ const Dashboard = () => {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.2 }}
-                    className="border rounded-lg bg-card hover:shadow-sm hover:bg-accent/20 transition-all duration-150 group"
+                    className="border rounded-lg bg-card hover:shadow-sm hover:bg-accent/20 transition-all duration-150 group focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2"
                   >
                     <div
                       onClick={() => handleTaskClick(task)}
@@ -878,16 +878,17 @@ const Dashboard = () => {
                         )}
                       </div>
                       <div className="flex items-center gap-3 shrink-0 ml-4">
-                        <div className={`text-xs flex items-center gap-1 ${
-                          task.priority === 'CRITICAL' ? 'text-foreground font-semibold' :
-                          task.priority === 'HIGH' ? 'text-foreground' :
-                          'text-muted-foreground'
-                        }`}>
-                          {(task.priority === 'HIGH' || task.priority === 'CRITICAL') && (
-                            <AlertCircle className="h-3 w-3" />
-                          )}
-                          <span>{priorityLabels[task.priority]}</span>
-                        </div>
+                            <div className={`text-xs flex items-center gap-1 ${
+                              task.priority === 'CRITICAL' ? 'text-destructive/90 font-semibold' :
+                              task.priority === 'HIGH' ? 'text-amber-700 dark:text-amber-400' :
+                              task.priority === 'MEDIUM' ? 'text-muted-foreground' :
+                              'text-muted-foreground/70'
+                            }`}>
+                              {(task.priority === 'HIGH' || task.priority === 'CRITICAL') && (
+                                <AlertCircle className="h-3 w-3" />
+                              )}
+                              <span>{priorityLabels[task.priority]}</span>
+                            </div>
                         {task.due_at && (() => {
                           const dueDate = new Date(task.due_at);
                           const today = new Date();
