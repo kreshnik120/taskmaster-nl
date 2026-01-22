@@ -9,10 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Download, Eye, Trash2, Building2, UserPlus, ChevronDown, ChevronUp, Sparkles, MapPin, Cake, ZoomIn, Briefcase } from "lucide-react";
+import { Mail, User, FileText, Calendar, AlertCircle, CheckCircle2, Clock, Phone, CalendarClock, ClipboardCheck, Plus, ExternalLink, Loader2, X, Upload, Trash2, Building2, UserPlus, ChevronDown, ChevronUp, Sparkles, MapPin, Cake, ZoomIn, Briefcase } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -29,7 +29,7 @@ import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 import { resolveApplicationName } from "@/lib/utils";
 import { ApplicationActivityTimeline } from "@/components/recruitment/ApplicationActivityTimeline";
@@ -161,12 +161,6 @@ const getFieldConfidence = (field: any, fallbackGlobal?: number): number | undef
   return fallbackGlobal; // Old format: use global confidence
 };
 
-// Check if extracted_data uses new per-field confidence format
-const hasPerFieldConfidence = (extractedData: any): boolean => {
-  if (!extractedData) return false;
-  // Check if any field has the new {value, confidence} structure
-  return extractedData.naam && typeof extractedData.naam === 'object' && 'confidence' in extractedData.naam;
-};
 
 // Confidence Badge Component for AI extraction transparency
 const ConfidenceBadge = ({ 
@@ -399,16 +393,6 @@ export function ApplicationDetailModal({
     return labels[stage] || stage;
   };
 
-  const getStatusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      nieuw: "Nieuw",
-      in_behandeling: "In behandeling",
-      wacht_op_info: "Wacht op info",
-      compleet: "Compleet",
-      afgerond: "Afgerond",
-    };
-    return labels[status] || status;
-  };
 
   const getActionTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
@@ -445,7 +429,7 @@ export function ApplicationDetailModal({
     }));
   };
 
-  const handleQuickOrganizationAssign = async (organization: string) => {
+  const _handleQuickOrganizationAssign = async (organization: string) => {
     if (!application?.id) return;
 
     setUpdating(true);

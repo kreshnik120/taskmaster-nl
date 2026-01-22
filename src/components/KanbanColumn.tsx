@@ -237,7 +237,6 @@ export function KanbanColumn({ id, title, tasks, subtasks = [], subtasksByTaskId
                         task={task}
                         subtasks={getSubtasksForTask(task.id)}
                         onClick={onTaskClick}
-                        aiScore={task.aiScore}
                       />
                     ))}
                   </SortableContext>

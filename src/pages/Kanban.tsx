@@ -121,8 +121,8 @@ const Kanban = () => {
     })
   );
   
-  // AI Scoring integration
-  const { getScoreForTask } = useAiScoring(tasks, true);
+  // AI Scoring - hook called for side effects
+  useAiScoring(tasks, true);
 
   // Personalized greeting - must be called before any early returns (React hooks rule)
   const displayName = user?.user_metadata?.name || user?.email?.split('@')[0];
@@ -441,7 +441,7 @@ const Kanban = () => {
     const column = columns.find(c => c.id === columnId);
     
     // For Backlog column, also include tasks without a column_id (null or undefined)
-    let filteredTasks;
+    let filteredTasks: Task[];
     if (column?.status === 'BACKLOG') {
       filteredTasks = tasks.filter((task) => 
         task.column_id === columnId || 
@@ -454,7 +454,7 @@ const Kanban = () => {
     
     // Apply search filter
     if (searchQuery) {
-      filteredTasks = filteredTasks.filter(task => 
+      filteredTasks = filteredTasks.filter((task: Task) => 
         task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         task.description?.toLowerCase().includes(searchQuery.toLowerCase())
       );
@@ -490,11 +490,7 @@ const Kanban = () => {
       });
     }
     
-    // Enrich tasks with AI scores
-    return filteredTasks.map(task => ({
-      ...task,
-      aiScore: getScoreForTask(task.id)
-    }));
+    return filteredTasks;
   };
 
   const handleUpdateColumnName = async (columnId: string, newName: string) => {
@@ -926,7 +922,6 @@ const Kanban = () => {
                   <TaskCard 
                     task={activeTask} 
                     subtasks={subtasksByTaskId.get(activeTask.id) || []}
-                    aiScore={getScoreForTask(activeTask.id)}
                   />
                 )}
               </DragOverlay>

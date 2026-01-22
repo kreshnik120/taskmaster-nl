@@ -3,16 +3,14 @@ import { logger } from "@/lib/logger";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, Search, X, Filter, RotateCcw, Undo2, BarChart3, Users, Inbox, CheckCircle2, TrendingUp } from "lucide-react";
+import { Plus, Search, Filter, RotateCcw, Users, Inbox, CheckCircle2, TrendingUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown } from "lucide-react";
+
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { nl } from "date-fns/locale";
 import confetti from "canvas-confetti";
 import { ApplicationKanbanColumn } from "@/components/ApplicationKanbanColumn";
 import { ApplicationCard, ApplicationCardSkeleton } from "@/components/ApplicationCard";
@@ -32,7 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { SublocationSelectionDialog } from "@/components/SublocationSelectionDialog";
+
 import { SmartSublocationPicker } from "@/components/SmartSublocationPicker";
 import { KPICard } from "@/components/ui/kpi-card";
 import { useProactiveMatchNotifications } from "@/hooks/useProactiveMatchNotifications";
@@ -104,7 +102,7 @@ const Sollicitaties = () => {
   const [filterOrganisatie, setFilterOrganisatie] = useState<string>("all");
   const [filterRegio, setFilterRegio] = useState<string>("");
   const [filterStage, setFilterStage] = useState<string>("all");
-  const [lastMove, setLastMove] = useState<{ applicationId: string; fromStage: string; toStage: string } | null>(null);
+  
   const [selectedApplicationIds, setSelectedApplicationIds] = useState<Set<string>>(new Set());
   const [analyticsSheetOpen, setAnalyticsSheetOpen] = useState(false);
   const [confirmGoedgekeurdDialog, setConfirmGoedgekeurdDialog] = useState<{
@@ -362,8 +360,6 @@ const Sollicitaties = () => {
         prev.map((a) => (a.id === applicationId ? { ...a, pipeline_stage: newStage, status: newStatus } : a))
       );
 
-      // Save move for undo
-      setLastMove({ applicationId, fromStage: previousStage, toStage: newStage });
 
       const stage = PIPELINE_STAGES.find(s => s.id === newStage);
       
@@ -426,7 +422,7 @@ const Sollicitaties = () => {
 
   // Handle goedgekeurd confirmation
   const handleConfirmGoedgekeurd = async () => {
-    const { application, previousStage } = confirmGoedgekeurdDialog;
+    const { application } = confirmGoedgekeurdDialog;
     if (!application) return;
 
     try {
@@ -811,7 +807,6 @@ const Sollicitaties = () => {
 
       const stage = PIPELINE_STAGES.find(s => s.id === previousStage);
       toast.success(`Sollicitatie teruggezet naar ${stage?.name}`);
-      setLastMove(null);
     } catch (err: any) {
       console.error("Error undoing move:", err);
       toast.error(`Fout bij ongedaan maken: ${err?.message || 'Onbekende fout'}`);
@@ -1022,22 +1017,10 @@ const Sollicitaties = () => {
   }
 
   const filteredApplications = getFilteredApplications();
-  const stageStats = getStageStats();
   const totalApplications = applications.length;
   const displayedTotal = filteredApplications.length;
   const displayedNew = filteredApplications.filter(app => app.pipeline_stage === 'nieuw').length;
   const displayedApproved = filteredApplications.filter(app => app.pipeline_stage === 'goedgekeurd').length;
-  const avgCompleteness = applications.length > 0
-    ? Math.round(applications.reduce((sum, app) => sum + (app.completeness_score || 0), 0) / applications.length)
-    : 0;
-  const displayedAvgCompleteness = filteredApplications.length > 0
-    ? Math.round(filteredApplications.reduce((sum, app) => sum + (app.completeness_score || 0), 0) / filteredApplications.length)
-    : 0;
-  const newThisWeek = applications.filter(app => {
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    return new Date(app.created_at) >= weekAgo;
-  }).length;
   const hasActiveFilters = searchQuery || filterFunctieNiveau !== "all" || filterWerkvorm !== "all" || filterOrganisatie !== "all" || filterRegio !== "";
 
 
