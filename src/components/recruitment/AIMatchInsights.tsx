@@ -9,7 +9,7 @@ interface AIMatchInsightsProps {
   doelgroep?: string[];
 }
 
-interface SuccessPattern {
+interface AIMatchInsight {
   pattern: string;
   confidence: number;
   source: string;
@@ -18,9 +18,9 @@ interface SuccessPattern {
 export function AIMatchInsights({ functieNiveau, sector, doelgroep }: AIMatchInsightsProps) {
   const { data: insights, isLoading } = useQuery({
     queryKey: ["ai-match-insights", functieNiveau, sector?.join(","), doelgroep?.join(",")],
-    queryFn: async (): Promise<SuccessPattern[]> => {
+    queryFn: async (): Promise<AIMatchInsight[]> => {
       // Query knowledge base for relevant success patterns
-      const patterns: SuccessPattern[] = [];
+      const patterns: AIMatchInsight[] = [];
 
       // Query success patterns from knowledge base (no org_id filter - knowledge is shared)
       const { data: knowledgeItems, error } = await supabase
