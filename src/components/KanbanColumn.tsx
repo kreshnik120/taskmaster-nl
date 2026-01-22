@@ -35,18 +35,6 @@ interface Task {
     business_impact_score: number | null;
     market_demand_factor: number | null;
   } | null;
-  aiScore?: {
-    priority_score: number;
-    label: "NORMAL" | "CRITICAL" | "LOW_PRIORITY";
-    breakdown?: {
-      klant_impact: number;
-      omzet_bescherming: number;
-      overgang_voorbereiding: number;
-      compliance: number;
-      operationeel: number;
-    };
-    explanation?: string;
-  };
 }
 
 interface Subtask {
