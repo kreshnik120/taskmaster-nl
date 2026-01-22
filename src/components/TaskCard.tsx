@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { logger } from "@/lib/logger";
 import { UrgencyBadge } from "@/components/ui/urgency-badge";
 import { formatDateFull } from "@/lib/dateFormatters";
+import { SUBTASK_TOKENS, ACTION_TOKENS } from "@/lib/constants/designTokens";
+import { cn } from "@/lib/utils";
 
 const log = logger.create('TaskCard');
 
@@ -190,38 +192,62 @@ export function TaskCard({ task, subtasks = [], onClick, aiScore }: TaskCardProp
                     </p>
                   )}
 
-                  {/* Next Action Indicator */}
+                  {/* Next Action Indicator - Unified tokens */}
                   {task.next_action && (
-                    <div className="flex items-center gap-1.5 text-[10px] text-primary/70 mt-1">
-                      <ArrowRight className="h-2.5 w-2.5 shrink-0" />
-                      <span className="truncate">{task.next_action}</span>
+                    <div className={ACTION_TOKENS.inline.wrapper + " mt-1"}>
+                      <ArrowRight className={ACTION_TOKENS.inline.icon} />
+                      <span className={ACTION_TOKENS.inline.text + " truncate"}>{task.next_action}</span>
                     </div>
                   )}
 
                   {/* Compact Subtasks Preview - Enterprise-niveau integratie */}
                   {subtasks.length > 0 && (() => {
                     const completedCount = subtasks.filter(s => s.status === 'completed').length;
+                    const activeSubtask = subtasks.find(s => s.status === 'active') 
+                      || subtasks.find(s => s.status === 'pending');
+                    const isComplete = completedCount === subtasks.length;
+                    
                     return (
                       <div className="mt-2 pt-2 border-t border-border/30 space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 flex items-center gap-1">
-                            <ListChecks className="h-2.5 w-2.5" />
+                          <p className={SUBTASK_TOKENS.counter.wrapper + " uppercase tracking-wider"}>
+                            <ListChecks className={SUBTASK_TOKENS.counter.icon} />
                             Subtaken ({completedCount}/{subtasks.length})
                           </p>
                         </div>
-                        {/* Subtle progress bar */}
-                        <div className="h-1 bg-muted rounded-full overflow-hidden">
+                        {/* Subtle progress bar - unified token */}
+                        <div className={cn(SUBTASK_TOKENS.progress.height, SUBTASK_TOKENS.progress.background, "rounded-full overflow-hidden")}>
                           <div 
-                            className="h-full bg-primary/60 rounded-full transition-all duration-300"
+                            className={cn(
+                              "h-full rounded-full transition-all duration-300",
+                              isComplete ? SUBTASK_TOKENS.progress.fillComplete : SUBTASK_TOKENS.progress.fill
+                            )}
                             style={{ width: `${(completedCount / subtasks.length) * 100}%` }}
                           />
                         </div>
+                        
+                        {/* Actieve subtaak indicator - Enterprise UX */}
+                        {activeSubtask && !isComplete && (
+                          <div className={SUBTASK_TOKENS.activeIndicator.wrapper}>
+                            <div className={SUBTASK_TOKENS.activeIndicator.dot} />
+                            <span className={SUBTASK_TOKENS.activeIndicator.text + " truncate"}>
+                              {activeSubtask.title}
+                            </span>
+                          </div>
+                        )}
+                        
                         {subtasks.slice(0, 2).map(st => (
-                          <div key={st.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <div key={st.id} className={cn(
+                            SUBTASK_TOKENS.inlinePreview.text,
+                            "flex items-center gap-1.5",
+                            st.status === 'active' && SUBTASK_TOKENS.inlinePreview.activeText
+                          )}>
                             {st.status === 'completed' ? (
-                              <CheckCircle2 className="h-3 w-3 text-green-500 flex-shrink-0" />
+                              <CheckCircle2 className={cn(SUBTASK_TOKENS.inlinePreview.icon, "text-green-500 flex-shrink-0")} />
+                            ) : st.status === 'active' ? (
+                              <div className={SUBTASK_TOKENS.inlinePreview.activeIcon} />
                             ) : (
-                              <Circle className="h-3 w-3 flex-shrink-0" />
+                              <Circle className={cn(SUBTASK_TOKENS.inlinePreview.icon, "flex-shrink-0")} />
                             )}
                             <span className="truncate">{st.title}</span>
                           </div>
@@ -309,9 +335,14 @@ export function TaskCard({ task, subtasks = [], onClick, aiScore }: TaskCardProp
                 </p>
                 <div className="space-y-1">
                   {subtasks.map(st => (
-                    <p key={st.id} className="text-xs flex items-center gap-1.5">
+                    <p key={st.id} className={cn(
+                      "text-xs flex items-center gap-1.5",
+                      st.status === 'active' && "text-primary font-medium"
+                    )}>
                       {st.status === 'completed' ? (
                         <CheckCircle2 className="h-3 w-3 text-green-500" />
+                      ) : st.status === 'active' ? (
+                        <div className={SUBTASK_TOKENS.inlinePreview.activeIcon} />
                       ) : (
                         <Circle className="h-3 w-3" />
                       )}

@@ -876,6 +876,21 @@ const Dashboard = () => {
                             } as React.CSSProperties}
                           />
                         )}
+                        {/* Actieve subtaak indicator - Enterprise UX */}
+                        {hasSubtasks && (() => {
+                          const activeSubtask = task.subtasks?.find(s => s.status === 'active')
+                            || task.subtasks?.find(s => s.status === 'pending');
+                          const isComplete = progressPercentage === 100;
+                          
+                          return activeSubtask && !isComplete ? (
+                            <div className="flex items-center gap-1 mt-1">
+                              <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                              <span className="text-[10px] text-primary/80 truncate">
+                                {activeSubtask.title}
+                              </span>
+                            </div>
+                          ) : null;
+                        })()}
                         {activeTimer && (
                           <p className="text-xs text-primary mt-1">
                             {activeTimer.profiles?.name || "Iemand"} werkt hieraan
