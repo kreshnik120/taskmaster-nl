@@ -21,7 +21,6 @@ import {
   Eye,
   RefreshCw,
   ShieldX,
-  XCircle,
   ExternalLink
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';

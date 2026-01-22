@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  X, Send, Building2, MoveRight, Trash2, CheckCircle2 
+  X, Send, Building2, MoveRight, Trash2 
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
