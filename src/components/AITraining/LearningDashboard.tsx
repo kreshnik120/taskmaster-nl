@@ -7,19 +7,15 @@ import { Brain, TrendingUp, Target, Database, Lightbulb, AlertCircle, Activity, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
 import { AdminOnly } from "@/components/auth/AdminOnly";
 import { LearningProgressCharts } from "./LearningProgressCharts";
 import { TopValidatorsLeaderboard } from "./TopValidatorsLeaderboard";
 import { GroupedCategoryDisplay } from "./GroupedCategoryDisplay";
 import { useNavigate } from "react-router-dom";
-import { CATEGORY_TO_GROUP, getCoverageIcon } from "@/lib/constants/knowledgeCategoryHierarchy";
+import { getCoverageIcon } from "@/lib/constants/knowledgeCategoryHierarchy";
 
 export const LearningDashboard = () => {
-  const { toast } = useToast();
   const navigate = useNavigate();
-  const [isCleaningUp, setIsCleaningUp] = useState(false);
 
   // Fetch validation stats for health dashboard
   const { data: stats } = useQuery({
@@ -39,7 +35,7 @@ export const LearningDashboard = () => {
 
 
   // Fetch knowledge base stats with FULL coverage data (embedded + total per category)
-  const { data: knowledgeStats, refetch: refetchKnowledgeStats } = useQuery({
+  const { data: knowledgeStats } = useQuery({
     queryKey: ['ai-knowledge-stats-grouped'],
     queryFn: async () => {
       // Fetch ALL knowledge items (for total counts)
@@ -128,7 +124,7 @@ export const LearningDashboard = () => {
   });
 
   // Fetch learning events
-  const { data: learningEvents, refetch: refetchLearningEvents } = useQuery({
+  const { data: learningEvents } = useQuery({
     queryKey: ['learning-events'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -143,7 +139,7 @@ export const LearningDashboard = () => {
   });
 
   // Fetch business intelligence
-  const { data: businessIntel, refetch: refetchBusinessIntel } = useQuery({
+  const { data: businessIntel } = useQuery({
     queryKey: ['business-intelligence'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -215,10 +211,6 @@ export const LearningDashboard = () => {
       </Badge>
     );
   };
-
-  const verificationRate = knowledgeStats?.total 
-    ? ((knowledgeStats.total - (stats?.unverified || 0)) / knowledgeStats.total * 100)
-    : 0;
 
   return (
     <div className="space-y-6">
