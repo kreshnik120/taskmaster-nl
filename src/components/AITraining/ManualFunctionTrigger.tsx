@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Play, CheckCircle2, AlertCircle, AlertTriangle, RefreshCw, Database } from "lucide-react";
@@ -15,9 +14,6 @@ interface ManualFunctionTriggerProps {
 }
 
 export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTriggerProps) => {
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [status, setStatus] = useState<"idle" | "running" | "success" | "error">("idle");
-  const [result, setResult] = useState<any>(null);
   const [triggeringFunction, setTriggeringFunction] = useState<string | null>(null);
   const [isBackfilling, setIsBackfilling] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -84,35 +80,6 @@ export const ManualFunctionTrigger = ({ hideBackfill = false }: ManualFunctionTr
     refetchInterval: 30000,
     refetchIntervalInBackground: false,
   });
-
-  const triggerMegaForecastGenerator = async () => {
-    setIsGenerating(true);
-    setStatus("running");
-    setResult(null);
-
-    try {
-      toast.info("🚀 Starting Mega Forecast Generator...");
-      
-      const { data, error } = await supabase.functions.invoke('mega-forecast-generator', {
-        body: {}
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      setStatus("success");
-      setResult(data);
-      toast.success(`✅ Forecast Generator completed! Generated ${data?.generatedTasks || 0} tasks`);
-    } catch (error: any) {
-      log.error("Error triggering function:", error);
-      setStatus("error");
-      toast.error(`❌ Error: ${error.message || 'Failed to trigger function'}`);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
 
   const triggerValidationFunction = async (functionName: string, bodyParams?: Record<string, any>) => {
     setTriggeringFunction(functionName);

@@ -7,10 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, CheckCircle, XCircle, AlertCircle, Zap, Database, Link, Trash2, AlertTriangle, EyeOff } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, AlertCircle, Zap, Link, Trash2, AlertTriangle, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import confetti from "canvas-confetti";
-import { Progress } from "@/components/ui/progress";
 import { useSearchParams } from "react-router-dom";
 import {
   AlertDialog,
