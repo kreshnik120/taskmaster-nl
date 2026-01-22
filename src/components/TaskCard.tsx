@@ -1,7 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
-import { GripVertical, Edit, Calendar, ArrowRight } from "lucide-react";
+import { GripVertical, Edit, Calendar, ArrowRight, ListChecks, CheckCircle2, Circle } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -41,6 +41,15 @@ interface Task {
   } | null;
 }
 
+interface Subtask {
+  id: string;
+  title: string;
+  task_id: string;
+  status: string;
+  assignee_id: string | null;
+  due_at: string | null;
+}
+
 interface AIScore {
   priority_score: number;
   label: "NORMAL" | "CRITICAL" | "LOW_PRIORITY";
@@ -56,6 +65,7 @@ interface AIScore {
 
 interface TaskCardProps {
   task: Task;
+  subtasks?: Subtask[];
   onClick?: (task: Task) => void;
   aiScore?: AIScore;
 }
@@ -106,7 +116,7 @@ const getHumanizedTime = (days: number) => {
 
 // Removed priority colors and AI badge colors for clean, minimalist design
 
-export function TaskCard({ task, onClick, aiScore }: TaskCardProps) {
+export function TaskCard({ task, subtasks = [], onClick, aiScore }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
@@ -185,6 +195,31 @@ export function TaskCard({ task, onClick, aiScore }: TaskCardProps) {
                     <div className="flex items-center gap-1.5 text-[10px] text-primary/70 mt-1">
                       <ArrowRight className="h-2.5 w-2.5 shrink-0" />
                       <span className="truncate">{task.next_action}</span>
+                    </div>
+                  )}
+
+                  {/* Compact Subtasks Preview - Enterprise-niveau integratie */}
+                  {subtasks.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-border/30 space-y-1">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 flex items-center gap-1">
+                        <ListChecks className="h-2.5 w-2.5" />
+                        Subtaken ({subtasks.length})
+                      </p>
+                      {subtasks.slice(0, 2).map(st => (
+                        <div key={st.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          {st.status === 'completed' ? (
+                            <CheckCircle2 className="h-3 w-3 text-green-500 flex-shrink-0" />
+                          ) : (
+                            <Circle className="h-3 w-3 flex-shrink-0" />
+                          )}
+                          <span className="truncate">{st.title}</span>
+                        </div>
+                      ))}
+                      {subtasks.length > 2 && (
+                        <p className="text-[10px] text-muted-foreground/50 pl-4">
+                          +{subtasks.length - 2} meer...
+                        </p>
+                      )}
                     </div>
                   )}
 

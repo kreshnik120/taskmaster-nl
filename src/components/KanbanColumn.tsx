@@ -70,6 +70,7 @@ interface KanbanColumnProps {
   title: string;
   tasks: Task[];
   subtasks?: Subtask[];
+  subtasksByTaskId?: Map<string, Subtask[]>;
   status: string;
   isCollapsed?: boolean;
   onUpdateName?: (columnId: string, newName: string) => Promise<void>;
@@ -96,7 +97,7 @@ const statusCountColors: Record<string, string> = {
   DONE: "bg-status-done/10 text-status-done",
 };
 
-export function KanbanColumn({ id, title, tasks, subtasks = [], status, isCollapsed, onUpdateName, onToggleCollapse, onTaskClick, onSubtaskClick }: KanbanColumnProps) {
+export function KanbanColumn({ id, title, tasks, subtasks = [], subtasksByTaskId, status, isCollapsed, onUpdateName, onToggleCollapse, onTaskClick, onSubtaskClick }: KanbanColumnProps) {
   const { setNodeRef } = useDroppable({ id });
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState(title);
@@ -155,6 +156,20 @@ export function KanbanColumn({ id, title, tasks, subtasks = [], status, isCollap
     }
   };
 
+  // Enterprise-niveau: Bereken "orphan" subtasks - subtasks waarvan de parent task NIET in deze kolom is
+  // Deze worden apart getoond als "Toegewezen aan mij"
+  const orphanSubtasks = subtasks.filter(s => 
+    !tasks.some(t => t.id === s.task_id)
+  );
+
+  // Helper: Haal subtasks voor een specifieke taak
+  const getSubtasksForTask = (taskId: string): Subtask[] => {
+    if (subtasksByTaskId) {
+      return subtasksByTaskId.get(taskId) || [];
+    }
+    return subtasks.filter(s => s.task_id === taskId);
+  };
+
   return (
     <Card className={`flex-shrink-0 w-80 bg-card ${statusBorderColors[status] || ""}`}>
       <Collapsible open={isOpen} onOpenChange={handleToggleOpen}>
@@ -198,15 +213,16 @@ export function KanbanColumn({ id, title, tasks, subtasks = [], status, isCollap
                 )}
               </div>
             </CollapsibleTrigger>
+            {/* Badge toont alleen het aantal taken (subtaken zitten nu IN taken) */}
             <Badge className={`text-xs font-medium ${statusCountColors[status] || "bg-muted/50 text-muted-foreground"}`}>
-              {tasks.length + subtasks.length}
+              {tasks.length + orphanSubtasks.length}
             </Badge>
           </div>
         </CardHeader>
         <CollapsibleContent>
           <CardContent>
             <div ref={setNodeRef} className="space-y-2 min-h-[200px]">
-              {tasks.length === 0 && subtasks.length === 0 ? (
+              {tasks.length === 0 && orphanSubtasks.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <Inbox className="h-8 w-8 text-muted-foreground/30 mb-3" />
                   <p className="text-sm text-muted-foreground/60">Geen taken</p>
@@ -218,21 +234,23 @@ export function KanbanColumn({ id, title, tasks, subtasks = [], status, isCollap
                     {tasks.map((task) => (
                       <TaskCard 
                         key={task.id} 
-                        task={task} 
+                        task={task}
+                        subtasks={getSubtasksForTask(task.id)}
                         onClick={onTaskClick}
                         aiScore={task.aiScore}
                       />
                     ))}
                   </SortableContext>
                   
-                  {/* Subtaken toegewezen aan jou */}
-                  {subtasks.length > 0 && (
+                  {/* Orphan subtasks: subtaken waarvan de parent taak NIET in deze kolom is */}
+                  {/* Dit zijn taken van collega's waarbij jij een subtaak hebt */}
+                  {orphanSubtasks.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
                       <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
                         <ListTree className="h-3 w-3" />
-                        Mijn subtaken ({subtasks.length})
+                        Toegewezen aan mij ({orphanSubtasks.length})
                       </p>
-                      {subtasks.map((subtask) => (
+                      {orphanSubtasks.map((subtask) => (
                         <div
                           key={subtask.id}
                           onClick={() => onSubtaskClick?.(subtask)}
