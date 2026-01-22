@@ -6,6 +6,7 @@ import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useTaskTimer } from "@/hooks/useTaskTimer";
+import { SUBTASK_TOKENS, ACTION_TOKENS } from "@/lib/constants/designTokens";
 
 interface Task {
   id: string;
@@ -19,6 +20,8 @@ interface Task {
     email: string | null;
   } | null;
   subtasks?: Array<{
+    id: string;
+    title: string;
     status: string;
   }>;
 }
@@ -103,20 +106,39 @@ export function TaskItem({ task, onTaskClick, onCompleteTask, onEditTask }: Task
             )}
           </div>
             
-          {/* Next Action Indicator */}
+          {/* Next Action Indicator - Design Tokens */}
           {task.next_action && (
-            <div className="flex items-center gap-1.5 mt-2 text-xs text-primary/70">
-              <ArrowRight className="h-3 w-3 shrink-0" />
-              <span className="truncate">{task.next_action}</span>
+            <div className={cn(ACTION_TOKENS.compact.wrapper, "mt-2")}>
+              <ArrowRight className={cn(ACTION_TOKENS.compact.icon, "shrink-0")} />
+              <span className={cn(ACTION_TOKENS.compact.text, "truncate")}>{task.next_action}</span>
             </div>
           )}
 
           {subtasksTotal > 0 && (
             <div className="mt-3">
-              <Progress value={progressPercentage} className="h-2 mt-2 bg-muted/50" />
-              <p className="text-xs text-muted-foreground mt-1">
+              <Progress 
+                value={progressPercentage} 
+                className={cn(SUBTASK_TOKENS.progress.height, "mt-2 bg-muted/50")} 
+              />
+              <p className={cn(SUBTASK_TOKENS.counter.wrapper, "text-muted-foreground mt-1")}>
                 {subtasksCompleted} van {subtasksTotal} stappen voltooid
               </p>
+              
+              {/* Actieve subtaak indicator - Enterprise UX */}
+              {(() => {
+                const activeSubtask = task.subtasks?.find(s => s.status === 'active')
+                  || task.subtasks?.find(s => s.status === 'pending');
+                const isComplete = progressPercentage === 100;
+                
+                return activeSubtask && !isComplete ? (
+                  <div className={cn(SUBTASK_TOKENS.activeIndicator.wrapper, "mt-1")}>
+                    <div className={SUBTASK_TOKENS.activeIndicator.dot} />
+                    <span className={cn(SUBTASK_TOKENS.activeIndicator.text, "truncate")}>
+                      {activeSubtask.title}
+                    </span>
+                  </div>
+                ) : null;
+              })()}
             </div>
           )}
         </div>
