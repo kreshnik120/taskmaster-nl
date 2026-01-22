@@ -1,6 +1,5 @@
 import { 
   Brain, 
-  MessageSquare, 
   GitBranch, 
   Zap, 
   Clock, 
@@ -144,9 +143,3 @@ export function getLearningFunctionByName(name: string): LearningFunction | unde
   return LEARNING_FUNCTIONS.find(fn => fn.name === name);
 }
 
-/**
- * Helper om functies per categorie te groeperen
- */
-export function getLearningFunctionsByCategory(category: 'learning' | 'pipeline' | 'specialist'): LearningFunction[] {
-  return LEARNING_FUNCTIONS.filter(fn => fn.category === category);
-}
