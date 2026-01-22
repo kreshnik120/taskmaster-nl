@@ -3,9 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { useCountUp } from "@/hooks/useCountUp";
 import { useNavigate } from "react-router-dom";
 import { Plus, Search, ChevronDown, X, Users, CheckCircle, UserPlus, TrendingUp } from "lucide-react";
 import { ProfessionalBulkActionBar } from "@/components/recruitment/ProfessionalBulkActionBar";
@@ -16,7 +15,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { KPICard } from "@/components/ui/kpi-card";
 import { PageHero } from "@/components/ui/page-hero";
-import { Skeleton } from "@/components/ui/skeleton";
+
 import {
   Dialog,
   DialogContent,

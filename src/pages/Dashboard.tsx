@@ -733,6 +733,30 @@ const Dashboard = () => {
         </div>
       </div>
 
+      {/* Personal Stats - Today's Progress */}
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="border-0 bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition-all">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="h-2 w-2 rounded-full bg-blue-500" />
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="text-2xl font-bold tabular-nums">{todayHours}</div>
+            <div className="text-sm font-medium text-muted-foreground">Vandaag gewerkt</div>
+          </CardContent>
+        </Card>
+        <Card className="border-0 bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition-all">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="h-2 w-2 rounded-full bg-green-500" />
+              <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="text-2xl font-bold tabular-nums">{completedThisWeek}</div>
+            <div className="text-sm font-medium text-muted-foreground">Deze week afgerond</div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Recruitment KPI's - Core Dashboard Metrics */}
       <RecruitmentKPIs />
 
