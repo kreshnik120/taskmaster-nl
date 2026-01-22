@@ -75,7 +75,6 @@ interface Task {
 }
 
 const Dashboard = () => {
-  
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -689,7 +688,6 @@ const Dashboard = () => {
           )}
         </div>
       </div>
-
 
       {/* Recruitment KPI's - Core Dashboard Metrics */}
       <RecruitmentKPIs />
