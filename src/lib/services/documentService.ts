@@ -407,7 +407,7 @@ export async function checkDocumentExistsInStorage(params: {
   
   try {
     // Try to get a signed URL - this validates file existence without downloading
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from(config.bucket)
       .createSignedUrl(params.filePath, 1);
 
@@ -502,7 +502,7 @@ async function cleanupOrphanDocument(applicationId: string, documentType: string
 /**
  * Get documents summary for dashboard/widgets
  */
-export async function getDocumentsSummary(orgId?: string): Promise<{
+export async function getDocumentsSummary(): Promise<{
   totalApplicationsWithMissingDocs: number;
   expiringWithin7Days: number;
   expiringWithin14Days: number;
