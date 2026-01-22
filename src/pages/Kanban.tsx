@@ -925,6 +925,7 @@ const Kanban = () => {
                 {activeTask && (
                   <TaskCard 
                     task={activeTask} 
+                    subtasks={subtasksByTaskId.get(activeTask.id) || []}
                     aiScore={getScoreForTask(activeTask.id)}
                   />
                 )}
