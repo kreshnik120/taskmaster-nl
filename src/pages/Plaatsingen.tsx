@@ -174,15 +174,7 @@ export default function Plaatsingen() {
     completed: placements.filter(p => p.status === "completed").length
   };
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "active": return "Actief";
-      case "draft": return "Concept";
-      case "completed": return "Afgerond";
-      case "cancelled": return "Geannuleerd";
-      default: return status;
-    }
-  };
+  // getStatusLabel removed - unused
 
   return (
     <div className="space-y-6">

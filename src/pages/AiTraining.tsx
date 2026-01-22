@@ -3,8 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/AppSidebar";
+// SidebarProvider, SidebarTrigger, AppSidebar removed - unused
 import { Loader2, CheckCircle, Target, TrendingUp, BarChart3, Coins, Settings, Database, MessageSquare } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -44,7 +43,7 @@ import { EvaluationLearningWidget } from "@/components/AITraining/EvaluationLear
 import { TriggerLearningButton } from "@/components/AITraining/TriggerLearningButton";
 import { AIAgentTestPanel } from "@/components/AITraining/AIAgentTestPanel";
 import { ReactAgentTestPanel } from "@/components/AITraining/ReactAgentTestPanel";
-import { N8nIntegrationTestPanel } from "@/components/AITraining/N8nIntegrationTestPanel";
+// N8nIntegrationTestPanel removed - unused
 import { ResendInboundSetup } from "@/components/AITraining/ResendInboundSetup";
 import { EmailReplyTestPanel } from "@/components/AITraining/EmailReplyTestPanel";
 import { AIChatTestDashboard } from "@/components/AITraining/AIChatTestDashboard";

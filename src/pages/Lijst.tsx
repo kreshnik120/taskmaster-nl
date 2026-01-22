@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef, memo } from "react";
+import { useState, useEffect, useMemo, useRef, memo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { logger } from "@/lib/logger";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,7 +9,7 @@ import { KPICard } from "@/components/ui/kpi-card";
 import { Badge } from "@/components/ui/badge";
 import { format, formatDistanceToNow } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, Filter, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown, User, Search, UserPlus, CheckCircle2, X, Users, ListTodo, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, Plus, Check, Edit2, Clock, Trash2, ArrowUp, ArrowDown, User, Search, UserPlus, CheckCircle2, X, ListTodo, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ import { PriorityBadge } from "@/components/PriorityBadge";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { useMySubtasks } from "@/hooks/useMySubtasks";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { formatPeriod, getDateUrgency, getUrgencyBadgeClasses } from "@/lib/dateFormatters";
+import { formatPeriod, getDateUrgency } from "@/lib/dateFormatters";
 import { SUBTASK_TOKENS } from "@/lib/constants/designTokens";
 import {
   AlertDialog,
@@ -117,7 +117,7 @@ export default function Lijst() {
   const [mySubtasksOpen, setMySubtasksOpen] = useState(true);
 
   // Hook for assigned subtasks
-  const { subtasks: mySubtasks, loading: subtasksLoading } = useMySubtasks(currentUserId);
+  const { subtasks: mySubtasks } = useMySubtasks(currentUserId);
 
   // Handle URL params for task highlighting (from notifications)
   useEffect(() => {
@@ -411,11 +411,7 @@ export default function Lijst() {
     }
   };
 
-  const getTaskStatus = (task: Task) => {
-    if (task.accepted_by) return "accepted";
-    if (task.assignee_id) return "assigned";
-    return "unassigned";
-  };
+  // getTaskStatus removed - unused
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return "?";
