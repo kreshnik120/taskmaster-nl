@@ -63,7 +63,7 @@ interface Subtask {
   status: string;
   assignee_id: string | null;
   due_at: string | null;
-  order_key: number;
+  order: number;
   parent_task?: {
     id: string;
     title: string;
@@ -207,7 +207,7 @@ const Kanban = () => {
     const { data: subtasksData } = await supabase
       .from('subtasks')
       .select(`
-        id, title, task_id, status, assignee_id, due_at, order_key,
+        id, title, task_id, status, assignee_id, due_at, "order",
         tasks!inner(id, title, column_id, priority, deleted_at)
       `)
       .eq('assignee_id', user.id)
@@ -588,8 +588,8 @@ const Kanban = () => {
         }
         
         if (sortBy === 'created_at') {
-          // Subtasks: sorteer op order_key als fallback
-          return sortDirection === 'asc' ? a.order_key - b.order_key : b.order_key - a.order_key;
+          // Subtasks: sorteer op order als fallback
+          return sortDirection === 'asc' ? a.order - b.order : b.order - a.order;
         }
         
         return 0;
