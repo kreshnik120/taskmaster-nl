@@ -53,19 +53,7 @@ interface PriorityScore {
   label: "NORMAL" | "CRITICAL" | "LOW_PRIORITY";
 }
 
-const priorityColors = {
-  LOW: "bg-priority-low text-priority-low-foreground",
-  MEDIUM: "bg-priority-medium text-priority-medium-foreground",
-  HIGH: "bg-priority-high text-priority-high-foreground",
-  CRITICAL: "bg-priority-critical text-priority-critical-foreground",
-};
-
-const priorityLabels = {
-  LOW: "Laag",
-  MEDIUM: "Gemiddeld",
-  HIGH: "Hoog",
-  CRITICAL: "Kritiek",
-};
+// priorityColors and priorityLabels removed - unused in this component
 
 type FilterType = "achterstallig" | "deze-week" | "met-actie" | null;
 
@@ -79,7 +67,6 @@ export default function Opvolging() {
   
   // Use the smart caching hook
   const {
-    priorityScores,
     loading: scoringLoading,
     getScoreForTask
   } = useAiScoring(tasks, true);
@@ -217,22 +204,7 @@ export default function Opvolging() {
       })
     : allFocusTasks;
 
-  const isTaskInCategory = (task: Task, category: FilterType): boolean => {
-    if (category === "achterstallig") {
-      return !!(task.due_at && new Date(task.due_at) < new Date());
-    }
-    if (category === "deze-week") {
-      return !!(
-        task.due_at &&
-        new Date(task.due_at) >= new Date() &&
-        differenceInDays(new Date(task.due_at), new Date()) <= 7
-      );
-    }
-    if (category === "met-actie") {
-      return !!task.next_action;
-    }
-    return false;
-  };
+  // isTaskInCategory removed - unused
 
   // Calculate average AI score
   const avgScore = focusTasks.length > 0 

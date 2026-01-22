@@ -122,7 +122,7 @@ const Kanban = () => {
   );
   
   // AI Scoring integration
-  const { priorityScores, loading: aiLoading, getScoreForTask } = useAiScoring(tasks, true);
+  const { getScoreForTask } = useAiScoring(tasks, true);
 
   // Personalized greeting - must be called before any early returns (React hooks rule)
   const displayName = user?.user_metadata?.name || user?.email?.split('@')[0];
