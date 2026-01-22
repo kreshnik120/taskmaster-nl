@@ -210,7 +210,7 @@ export function TaskCard({ task, subtasks = [], onClick, aiScore }: TaskCardProp
                     return (
                       <div className="mt-2 pt-2 border-t border-border/30 space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <p className={SUBTASK_TOKENS.counter.wrapper + " uppercase tracking-wider"}>
+                          <p className={cn(SUBTASK_TOKENS.counter.wrapper, "uppercase tracking-wider")}>
                             <ListChecks className={SUBTASK_TOKENS.counter.icon} />
                             Subtaken ({completedCount}/{subtasks.length})
                           </p>
@@ -230,7 +230,7 @@ export function TaskCard({ task, subtasks = [], onClick, aiScore }: TaskCardProp
                         {activeSubtask && !isComplete && (
                           <div className={SUBTASK_TOKENS.activeIndicator.wrapper}>
                             <div className={SUBTASK_TOKENS.activeIndicator.dot} />
-                            <span className={SUBTASK_TOKENS.activeIndicator.text + " truncate"}>
+                            <span className={cn(SUBTASK_TOKENS.activeIndicator.text, "truncate")}>
                               {activeSubtask.title}
                             </span>
                           </div>
