@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { format, parseISO } from "date-fns";
+import { useState, useMemo } from "react";
+import { format, parseISO, isToday, isWithinInterval, subDays } from "date-fns";
 import { nl } from "date-fns/locale";
 import { 
   CheckCircle2, 
@@ -13,7 +13,11 @@ import {
   Pencil,
   Trash2,
   X,
-  Check
+  Check,
+  Filter,
+  Search,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -30,6 +34,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export interface ActionHistoryItem {
   id: string;
@@ -59,6 +70,8 @@ interface ActionTimelineProps {
   onSubtaskCompleted?: (subtaskId: string) => void;
   compact?: boolean;
 }
+
+type DateFilterType = 'all' | 'today' | 'week' | 'month';
 
 export function ActionTimeline({ 
   taskId, 
@@ -91,11 +104,85 @@ export function ActionTimeline({
   // Expand state for long texts
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   
+  // Filter state
+  const [showFilters, setShowFilters] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFilter, setDateFilter] = useState<DateFilterType>('all');
+  const [userFilter, setUserFilter] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  
   const { toast } = useToast();
 
   const completedActions = actionHistory
     .filter(a => a.completed_at)
     .sort((a, b) => new Date(a.completed_at!).getTime() - new Date(b.completed_at!).getTime());
+
+  // Extract unique users from action history
+  const uniqueUsers = useMemo(() => {
+    const users = new Set<string>();
+    actionHistory.forEach(action => {
+      if (action.completed_by_name) {
+        users.add(action.completed_by_name);
+      }
+    });
+    return Array.from(users);
+  }, [actionHistory]);
+
+  // Filtered and sorted actions
+  const filteredActions = useMemo(() => {
+    let actions = completedActions;
+    
+    // Text search
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      actions = actions.filter(a => 
+        a.action_text.toLowerCase().includes(query)
+      );
+    }
+    
+    // Date filter
+    if (dateFilter !== 'all') {
+      const now = new Date();
+      
+      actions = actions.filter(a => {
+        if (!a.completed_at) return false;
+        const completedDate = parseISO(a.completed_at);
+        
+        switch (dateFilter) {
+          case 'today':
+            return isToday(completedDate);
+          case 'week':
+            return isWithinInterval(completedDate, {
+              start: subDays(now, 7),
+              end: now
+            });
+          case 'month':
+            return isWithinInterval(completedDate, {
+              start: subDays(now, 30),
+              end: now
+            });
+          default:
+            return true;
+        }
+      });
+    }
+    
+    // User filter
+    if (userFilter) {
+      actions = actions.filter(a => a.completed_by_name === userFilter);
+    }
+    
+    // Sort
+    return [...actions].sort((a, b) => {
+      const dateA = new Date(a.completed_at!).getTime();
+      const dateB = new Date(b.completed_at!).getTime();
+      return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+    });
+  }, [completedActions, searchQuery, dateFilter, userFilter, sortOrder]);
+
+  // Check if any filter is active
+  const hasActiveFilters = searchQuery || dateFilter !== 'all' || userFilter;
+  const activeFilterCount = [searchQuery, dateFilter !== 'all', userFilter].filter(Boolean).length;
 
   const toggleExpand = (id: string) => {
     setExpandedItems(prev => {
@@ -426,25 +513,165 @@ export function ActionTimeline({
     );
   }
 
+  const clearFilters = () => {
+    setSearchQuery("");
+    setDateFilter('all');
+    setUserFilter(null);
+  };
+
   return (
     <div className="space-y-4">
-      {/* Header met toevoeg-knop */}
+      {/* Header met filter toggle en toevoeg-knop */}
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
           Actieverloop
+          {/* Active filter indicator badge */}
+          {hasActiveFilters && (
+            <span className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full bg-primary/10 text-[9px] font-bold text-primary">
+              {activeFilterCount}
+            </span>
+          )}
         </span>
-        {!isAdding && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => setIsAdding(true)}
-          >
-            <Plus className="h-3.5 w-3.5 mr-1" />
-            Actie
-          </Button>
-        )}
+        
+        <div className="flex items-center gap-1">
+          {/* Filter toggle - only show when there's history */}
+          {completedActions.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-7 w-7 p-0 text-muted-foreground hover:text-foreground",
+                showFilters && "bg-muted text-foreground"
+              )}
+              onClick={() => setShowFilters(!showFilters)}
+              aria-label="Filters tonen/verbergen"
+              title="Filters"
+            >
+              <Filter className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          
+          {!isAdding && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setIsAdding(true)}
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Actie
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Filter Panel */}
+      {showFilters && (
+        <div className="space-y-3 p-3 rounded-lg bg-muted/30 border border-border/50 animate-in slide-in-from-top-1 duration-200">
+          {/* Search bar */}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Zoek in acties..."
+              className="h-8 pl-8 pr-8 text-sm bg-background"
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 p-0"
+                onClick={() => setSearchQuery("")}
+                aria-label="Zoekterm wissen"
+                title="Wissen"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+          
+          {/* Filter row */}
+          <div className="flex flex-wrap gap-2">
+            {/* Date filter */}
+            <Select value={dateFilter} onValueChange={(v) => setDateFilter(v as DateFilterType)}>
+              <SelectTrigger className="h-7 w-auto min-w-[120px] text-xs bg-background">
+                <Calendar className="h-3 w-3 mr-1.5 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle data</SelectItem>
+                <SelectItem value="today">Vandaag</SelectItem>
+                <SelectItem value="week">Afgelopen 7 dagen</SelectItem>
+                <SelectItem value="month">Afgelopen 30 dagen</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {/* User filter */}
+            {uniqueUsers.length > 0 && (
+              <Select 
+                value={userFilter || "all"} 
+                onValueChange={(v) => setUserFilter(v === "all" ? null : v)}
+              >
+                <SelectTrigger className="h-7 w-auto min-w-[130px] text-xs bg-background">
+                  <User className="h-3 w-3 mr-1.5 text-muted-foreground" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alle gebruikers</SelectItem>
+                  {uniqueUsers.map(user => (
+                    <SelectItem key={user} value={user}>{user}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            
+            {/* Sort toggle */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 text-xs bg-background"
+              onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+              aria-label={sortOrder === 'asc' ? 'Sorteren: oudste eerst' : 'Sorteren: nieuwste eerst'}
+              title={sortOrder === 'asc' ? 'Oudste eerst' : 'Nieuwste eerst'}
+            >
+              {sortOrder === 'asc' ? (
+                <>
+                  <ArrowUp className="h-3 w-3 mr-1" />
+                  Oudste eerst
+                </>
+              ) : (
+                <>
+                  <ArrowDown className="h-3 w-3 mr-1" />
+                  Nieuwste eerst
+                </>
+              )}
+            </Button>
+            
+            {/* Clear filters */}
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={clearFilters}
+                aria-label="Alle filters wissen"
+                title="Wissen"
+              >
+                <X className="h-3 w-3 mr-1" />
+                Wissen
+              </Button>
+            )}
+          </div>
+          
+          {/* Result indicator */}
+          {hasActiveFilters && (
+            <p className="text-[10px] text-muted-foreground">
+              {filteredActions.length} van {completedActions.length} acties
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Timeline container */}
       <div className="relative">
@@ -457,8 +684,16 @@ export function ActionTimeline({
         )}
 
         <div className="space-y-2">
-          {/* Voltooide acties */}
-          {completedActions.map((action) => {
+          {/* No results after filtering */}
+          {filteredActions.length === 0 && completedActions.length > 0 && hasActiveFilters && (
+            <div className="text-center py-4 text-sm text-muted-foreground/60">
+              <Search className="h-4 w-4 mx-auto mb-1 opacity-50" />
+              Geen acties gevonden voor deze filters
+            </div>
+          )}
+
+          {/* Filtered completed actions */}
+          {filteredActions.map((action) => {
             const isEditing = editingAction?.id === action.id;
             const isExpanded = expandedItems.has(action.id);
             const isLongText = action.action_text.length > 80;
