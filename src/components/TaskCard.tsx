@@ -52,24 +52,10 @@ interface Subtask {
   due_at: string | null;
 }
 
-interface AIScore {
-  priority_score: number;
-  label: "NORMAL" | "CRITICAL" | "LOW_PRIORITY";
-  breakdown?: {
-    klant_impact: number;
-    omzet_bescherming: number;
-    overgang_voorbereiding: number;
-    compliance: number;
-    operationeel: number;
-  };
-  explanation?: string;
-}
-
 interface TaskCardProps {
   task: Task;
   subtasks?: Subtask[];
   onClick?: (task: Task) => void;
-  aiScore?: AIScore;
 }
 
 // Helper functions
@@ -118,7 +104,7 @@ const getHumanizedTime = (days: number) => {
 
 // Removed priority colors and AI badge colors for clean, minimalist design
 
-export function TaskCard({ task, subtasks = [], onClick, aiScore }: TaskCardProps) {
+export function TaskCard({ task, subtasks = [], onClick }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
