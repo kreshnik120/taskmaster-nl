@@ -56,7 +56,7 @@ interface Subtask {
   status: string;
   assignee_id: string | null;
   due_at: string | null;
-  order_key: number;
+  order: number;
   parent_task?: {
     id: string;
     title: string;
