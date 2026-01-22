@@ -42,7 +42,6 @@ export interface EnrichResponse {
     description: string | null;
   };
   updatedFields?: string[];
-  updated?: any;
   error?: string;
 }
 

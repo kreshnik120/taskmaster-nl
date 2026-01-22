@@ -44,54 +44,6 @@ export function deepMerge<T extends DeepMergeable>(target: T, source: Partial<T>
   return source as T;
 }
 
-/**
- * Zet een waarde in een genest object via een dot-notated path
- * Bijv: setNestedValue(obj, "value.opmerkingen", "text") 
- * -> obj.value.opmerkingen = "text"
- */
-export function setNestedValue(obj: any, path: string, value: any): any {
-  const keys = path.split('.');
-  const result = { ...obj };
-  let current = result;
-
-  // Navigeer naar het parent object
-  for (let i = 0; i < keys.length - 1; i++) {
-    const key = keys[i];
-    
-    // Maak nested object aan als het niet bestaat
-    if (!(key in current) || !isObject(current[key])) {
-      current[key] = {};
-    } else {
-      // Clone om mutatie te voorkomen
-      current[key] = { ...current[key] };
-    }
-    
-    current = current[key];
-  }
-
-  // Zet de waarde op het laatste niveau
-  current[keys[keys.length - 1]] = value;
-  
-  return result;
-}
-
-/**
- * Haalt een waarde op uit een genest object via een dot-notated path
- */
-export function getNestedValue(obj: any, path: string): any {
-  const keys = path.split('.');
-  let current = obj;
-
-  for (const key of keys) {
-    if (current && typeof current === 'object' && key in current) {
-      current = current[key];
-    } else {
-      return undefined;
-    }
-  }
-
-  return current;
-}
 
 /**
  * Detecteert duplicate velden tussen top-level en nested structuren
