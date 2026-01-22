@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { format, parseISO, isToday, isWithinInterval, subDays } from "date-fns";
 import { nl } from "date-fns/locale";
 import { 
@@ -17,7 +17,10 @@ import {
   Filter,
   Search,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Download,
+  Copy,
+  ClipboardCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -73,6 +76,8 @@ interface ActionTimelineProps {
 
 type DateFilterType = 'all' | 'today' | 'week' | 'month';
 
+const FILTER_STORAGE_KEY = 'actionTimeline_filters';
+
 export function ActionTimeline({ 
   taskId, 
   currentAction, 
@@ -104,12 +109,64 @@ export function ActionTimeline({
   // Expand state for long texts
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   
-  // Filter state
-  const [showFilters, setShowFilters] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [dateFilter, setDateFilter] = useState<DateFilterType>('all');
-  const [userFilter, setUserFilter] = useState<string | null>(null);
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  // Export state
+  const [copiedToClipboard, setCopiedToClipboard] = useState(false);
+  
+  // Filter state with localStorage initialization
+  const [showFilters, setShowFilters] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`${FILTER_STORAGE_KEY}_${taskId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.showFilters ?? false;
+      }
+    } catch {}
+    return false;
+  });
+  
+  const [searchQuery, setSearchQuery] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`${FILTER_STORAGE_KEY}_${taskId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.searchQuery ?? "";
+      }
+    } catch {}
+    return "";
+  });
+  
+  const [dateFilter, setDateFilter] = useState<DateFilterType>(() => {
+    try {
+      const saved = localStorage.getItem(`${FILTER_STORAGE_KEY}_${taskId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.dateFilter ?? 'all';
+      }
+    } catch {}
+    return 'all';
+  });
+  
+  const [userFilter, setUserFilter] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem(`${FILTER_STORAGE_KEY}_${taskId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.userFilter ?? null;
+      }
+    } catch {}
+    return null;
+  });
+  
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
+    try {
+      const saved = localStorage.getItem(`${FILTER_STORAGE_KEY}_${taskId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.sortOrder ?? 'asc';
+      }
+    } catch {}
+    return 'asc';
+  });
   
   const { toast } = useToast();
 
@@ -513,11 +570,122 @@ export function ActionTimeline({
     );
   }
 
-  const clearFilters = () => {
+  // Sync filters to localStorage
+  useEffect(() => {
+    const filterState = {
+      showFilters,
+      searchQuery,
+      dateFilter,
+      userFilter,
+      sortOrder
+    };
+    try {
+      localStorage.setItem(`${FILTER_STORAGE_KEY}_${taskId}`, JSON.stringify(filterState));
+    } catch (error) {
+      console.warn('Could not save filter state to localStorage:', error);
+    }
+  }, [taskId, showFilters, searchQuery, dateFilter, userFilter, sortOrder]);
+
+  const clearFilters = useCallback(() => {
     setSearchQuery("");
     setDateFilter('all');
     setUserFilter(null);
-  };
+    try {
+      localStorage.removeItem(`${FILTER_STORAGE_KEY}_${taskId}`);
+    } catch {}
+  }, [taskId]);
+
+  // Export helpers
+  const formatActionsForExport = useCallback((actions: ActionHistoryItem[]) => {
+    return actions.map(action => ({
+      datum: action.completed_at 
+        ? format(parseISO(action.completed_at), "d MMM yyyy HH:mm", { locale: nl })
+        : "",
+      actie: action.action_text,
+      uitgevoerd_door: action.completed_by_name || "",
+      type: action.action_type === 'followup' ? 'Opvolging' 
+          : action.action_type === 'note' ? 'Notitie' 
+          : 'Status wijziging'
+    }));
+  }, []);
+
+  const exportToCSV = useCallback(() => {
+    const actionsToExport = hasActiveFilters ? filteredActions : completedActions;
+    
+    if (actionsToExport.length === 0) {
+      toast({
+        title: "Geen acties om te exporteren",
+        description: "Pas de filters aan of voeg eerst acties toe.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    const formattedData = formatActionsForExport(actionsToExport);
+    
+    const headers = ["Datum", "Actie", "Uitgevoerd door", "Type"];
+    const csvRows = [
+      headers.join(";"),
+      ...formattedData.map(row => 
+        [row.datum, `"${row.actie.replace(/"/g, '""')}"`, row.uitgevoerd_door, row.type].join(";")
+      )
+    ];
+    
+    const csvContent = csvRows.join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `actieverloop_${format(new Date(), "yyyy-MM-dd_HHmm")}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: "Export gelukt",
+      description: `${actionsToExport.length} acties geëxporteerd naar CSV.`
+    });
+  }, [hasActiveFilters, filteredActions, completedActions, formatActionsForExport, toast]);
+
+  const copyToClipboard = useCallback(async () => {
+    const actionsToExport = hasActiveFilters ? filteredActions : completedActions;
+    
+    if (actionsToExport.length === 0) {
+      toast({
+        title: "Geen acties om te kopiëren",
+        description: "Pas de filters aan of voeg eerst acties toe.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    const formattedData = formatActionsForExport(actionsToExport);
+    
+    const textContent = formattedData.map(row => 
+      `${row.datum} - ${row.uitgevoerd_door || 'Onbekend'}\n${row.actie}`
+    ).join("\n\n---\n\n");
+    
+    try {
+      await navigator.clipboard.writeText(textContent);
+      setCopiedToClipboard(true);
+      
+      toast({
+        title: "Gekopieerd naar klembord",
+        description: `${actionsToExport.length} acties gekopieerd.`
+      });
+      
+      setTimeout(() => setCopiedToClipboard(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+      toast({
+        title: "Kopiëren mislukt",
+        description: "Probeer het opnieuw of gebruik de CSV export.",
+        variant: "destructive"
+      });
+    }
+  }, [hasActiveFilters, filteredActions, completedActions, formatActionsForExport, toast]);
 
   return (
     <div className="space-y-4">
@@ -670,6 +838,55 @@ export function ActionTimeline({
               {filteredActions.length} van {completedActions.length} acties
             </p>
           )}
+          
+          {/* Export buttons */}
+          <div className="flex items-center gap-2 pt-2 border-t border-border/30">
+            <span className="text-[10px] text-muted-foreground mr-1">Export:</span>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-[10px] bg-background"
+              onClick={exportToCSV}
+              disabled={completedActions.length === 0}
+              aria-label="Exporteer naar CSV"
+              title="Download als CSV bestand"
+            >
+              <Download className="h-3 w-3 mr-1" />
+              CSV
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn(
+                "h-6 px-2 text-[10px] bg-background transition-colors",
+                copiedToClipboard && "bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:border-green-800 dark:text-green-400"
+              )}
+              onClick={copyToClipboard}
+              disabled={completedActions.length === 0}
+              aria-label="Kopieer naar klembord"
+              title="Kopieer acties naar klembord"
+            >
+              {copiedToClipboard ? (
+                <>
+                  <ClipboardCheck className="h-3 w-3 mr-1" />
+                  Gekopieerd!
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3 w-3 mr-1" />
+                  Kopiëren
+                </>
+              )}
+            </Button>
+            
+            {hasActiveFilters && (
+              <span className="text-[9px] text-muted-foreground/60 ml-auto">
+                Export {filteredActions.length} gefilterde acties
+              </span>
+            )}
+          </div>
         </div>
       )}
 
