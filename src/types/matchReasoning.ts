@@ -80,7 +80,6 @@ export interface StoredMatchReasoning {
   };
 }
 
-
 /**
  * Check if breakdown data is valid and complete enough to render MatchScoreBreakdown
  * Used to decide between full breakdown vs simple fallback display

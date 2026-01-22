@@ -1567,7 +1567,6 @@ export function calculateUnifiedMatchScore(
       // Match experience (direct matches) - FIX 2: Use expanded aliases!
       const candidateDoelgroepenLower = (candidate.doelgroep_ervaring || []).map(d => d.toLowerCase());
       const candidateSectorenLower = (candidate.ervaring_sector || []).map(s => s.toLowerCase());
-      const allCandidateExpRaw = [...candidateDoelgroepenLower, ...candidateSectorenLower];
       // CRITICAL FIX: Expand with aliases to match "NAH" → "niet-aangeboren hersenletsel"
       const allCandidateExp = expandExperienceWithAliases([
         ...(candidate.doelgroep_ervaring || []),
@@ -2246,7 +2245,6 @@ export function calculateApplicationMatchScore(
  */
 export async function calculateTopMatchesForApplication(
   supabaseClient: any,
-  applicationId: string,
   extractedData: any,
   options?: {
     sublocationLimit?: number;
