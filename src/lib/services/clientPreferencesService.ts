@@ -111,7 +111,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // ============= LOAD FUNCTIONS =============
 
-export async function loadClientPreferences(orgId?: string): Promise<ClientExpertPreference[]> {
+export async function loadClientPreferences(): Promise<ClientExpertPreference[]> {
   const now = Date.now();
   
   // Return cache if still valid
