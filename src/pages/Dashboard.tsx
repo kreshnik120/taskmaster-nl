@@ -587,13 +587,6 @@ const Dashboard = () => {
     }
   });
 
-  const priorityColors: Record<string, string> = {
-    LOW: "text-priority-low",
-    MEDIUM: "text-priority-medium",
-    HIGH: "text-priority-high",
-    CRITICAL: "text-priority-critical",
-  };
-
   const priorityLabels: Record<string, string> = {
     LOW: "Laag",
     MEDIUM: "Gemiddeld",
@@ -616,14 +609,6 @@ const Dashboard = () => {
       </div>
     </div>
   );
-
-  // Helper function voor context-aware greeting
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Goedemorgen";
-    if (hour < 18) return "Goedemiddag";
-    return "Goedenavond";
-  };
 
   // Priority breakdown voor smart summary
   const priorityBreakdown = {
