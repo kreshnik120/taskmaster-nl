@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 import { useGreeting } from "@/hooks/useGreeting";
 import { logger } from "@/lib/logger";
+import { SUBTASK_TOKENS } from "@/lib/constants/designTokens";
 
 const log = logger.create('Dashboard');
 
@@ -883,9 +884,9 @@ const Dashboard = () => {
                           const isComplete = progressPercentage === 100;
                           
                           return activeSubtask && !isComplete ? (
-                            <div className="flex items-center gap-1 mt-1">
-                              <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                              <span className="text-[10px] text-primary/80 truncate">
+                            <div className={SUBTASK_TOKENS.activeIndicator.wrapper + " mt-1"}>
+                              <div className={SUBTASK_TOKENS.activeIndicator.dot} />
+                              <span className={SUBTASK_TOKENS.activeIndicator.text + " truncate"}>
                                 {activeSubtask.title}
                               </span>
                             </div>
