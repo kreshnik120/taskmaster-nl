@@ -48,7 +48,7 @@ export function RatingTrendSparkline() {
     return <span className="text-xs text-muted-foreground">Geen trend data</span>;
   }
 
-  const isUpward = trendData[trendData.length - 1].rating > trendData[0].rating;
+  const isPositiveTrend = trendData[trendData.length - 1].rating > trendData[0].rating;
 
   return (
     <div className="h-8 w-20">
@@ -70,7 +70,7 @@ export function RatingTrendSparkline() {
           <Line
             type="monotone"
             dataKey="rating"
-            stroke={isUpward ? "hsl(var(--chart-2))" : "hsl(var(--destructive))"}
+            stroke={isPositiveTrend ? "hsl(var(--chart-2))" : "hsl(var(--destructive))"}
             strokeWidth={2}
             dot={false}
             isAnimationActive={false}
