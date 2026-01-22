@@ -596,18 +596,11 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
     }
   };
 
-  if (!task) return null;
-
-  const priorityInfo = priorityConfig[task.priority as keyof typeof priorityConfig] || priorityConfig.MEDIUM;
-  
-  // Calculate progress
-  const completedCount = subtasks.filter(s => s.status === 'completed').length;
-  const totalCount = subtasks.length;
-  const progressPercentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
-
   // Bereken de actieve subtaak voor koppeling met Actieverloop
   // Prioriteit: eerste 'active' subtaak, anders eerste 'pending' als fallback
+  // BELANGRIJK: Deze hook MOET vóór de early return staan (Rules of Hooks)
   const activeSubtask: ActiveSubtaskInfo | null = useMemo(() => {
+    if (subtasks.length === 0) return null;
     const sorted = [...subtasks].sort((a, b) => a.order - b.order);
     const active = sorted.find(s => s.status === 'active');
     const firstPending = !active ? sorted.find(s => s.status === 'pending') : null;
@@ -624,6 +617,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   }, [subtasks]);
 
   // Auto-activate first pending subtask for UX consistency
+  // BELANGRIJK: Deze hook MOET vóór de early return staan (Rules of Hooks)
   useEffect(() => {
     const autoActivateFirstPending = async () => {
       if (subtasks.length === 0 || !open) return;
@@ -647,6 +641,16 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
     
     autoActivateFirstPending();
   }, [subtasks, open]);
+
+  // Early return NA alle hooks - voldoet aan Rules of Hooks
+  if (!task) return null;
+
+  const priorityInfo = priorityConfig[task.priority as keyof typeof priorityConfig] || priorityConfig.MEDIUM;
+  
+  // Calculate progress
+  const completedCount = subtasks.filter(s => s.status === 'completed').length;
+  const totalCount = subtasks.length;
+  const progressPercentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
   // Handler voor voltooien van subtaak via Actieverloop
   const handleSubtaskCompletedViaTimeline = async (subtaskId: string) => {
