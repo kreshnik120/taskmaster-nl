@@ -36,8 +36,7 @@ import {
 import {
   loadSuccessPatterns,
   calculateAILearningBoost,
-  trackPatternUsage,
-  type SuccessPattern
+  trackPatternUsage
 } from '../aiLearningBoost';
 
 // ============= INTERFACES =============

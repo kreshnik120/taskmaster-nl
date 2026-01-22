@@ -23,8 +23,6 @@ export interface MatchDetails {
   matched_sectors?: string[];
   matched_doelgroepen?: string[];
   distance_km?: number;
-  postcode_match?: boolean;
-  provincie_match?: boolean;
   expert_matches?: string[];
   track_record_placements?: number;
   track_record_rehire_rate?: number;
@@ -82,15 +80,6 @@ export interface StoredMatchReasoning {
   };
 }
 
-/**
- * Type guard to check if ai_match_reasoning has full breakdown data
- */
-export function hasFullBreakdown(reasoning: any): reasoning is StoredMatchReasoning {
-  return reasoning && 
-    typeof reasoning.functieMatch === 'number' &&
-    typeof reasoning.totalScore === 'number' &&
-    reasoning.details !== undefined;
-}
 
 /**
  * Check if breakdown data is valid and complete enough to render MatchScoreBreakdown
@@ -129,40 +118,3 @@ export function isValidMatchBreakdown(reasoning: any): boolean {
   return true;
 }
 
-/**
- * Extract display-ready breakdown from stored reasoning
- * Ensures aiBoostReasons is always an array to prevent crashes
- */
-export function extractBreakdownForDisplay(reasoning: any): Partial<StoredMatchReasoning> | null {
-  if (!reasoning) return null;
-  
-  if (hasFullBreakdown(reasoning)) {
-    // Ensure aiBoostReasons is always an array (null-safe)
-    return {
-      ...reasoning,
-      aiBoostReasons: reasoning.aiBoostReasons || []
-    };
-  }
-  
-  // Legacy format - try to extract what we can
-  return {
-    match_score: reasoning.score_breakdown?.match_score || reasoning.match_score || null,
-    functieMatch: 0,
-    regioMatch: 0,
-    sectorMatch: 0,
-    doelgroepMatch: 0,
-    mobiliteitMatch: 0,
-    beschikbaarheidMatch: 0,
-    werkvormMatch: 0,
-    aiBoost: 0,
-    totalScore: reasoning.score_breakdown?.match_score || 0,
-    normalizedScore: reasoning.score_breakdown?.match_score || 0,
-    hasAIBoost: false,
-    aiBoostReasons: [],
-    details: {},
-    professional_data: reasoning.professional_data || {},
-    sublocation_data: reasoning.sublocation_data || {},
-    calculated_at: reasoning.calculated_at || '',
-    source: reasoning.source || reasoning.score_breakdown?.source || 'unknown' as any,
-  };
-}
