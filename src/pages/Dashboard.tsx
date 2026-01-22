@@ -39,7 +39,7 @@ import { Progress } from "@/components/ui/progress";
 import { useGreeting } from "@/hooks/useGreeting";
 import { logger } from "@/lib/logger";
 import { cn } from "@/lib/utils";
-import { SUBTASK_TOKENS } from "@/lib/constants/designTokens";
+import { SUBTASK_TOKENS, ACTION_TOKENS } from "@/lib/constants/designTokens";
 
 const log = logger.create('Dashboard');
 
@@ -862,9 +862,9 @@ const Dashboard = () => {
                           )}
                         </div>
                         {task.next_action && (
-                          <div className="flex items-center gap-1.5 mt-1 group/action">
-                            <ArrowRight className="h-3 w-3 text-primary/60 shrink-0" />
-                            <p className="text-xs text-muted-foreground/80 line-clamp-1 group-hover/action:text-primary transition-colors">
+                          <div className={cn(ACTION_TOKENS.compact.wrapper, "mt-1")}>
+                            <ArrowRight className={ACTION_TOKENS.compact.icon} />
+                            <p className={cn(ACTION_TOKENS.compact.text, "line-clamp-1")}>
                               {task.next_action}
                             </p>
                           </div>
