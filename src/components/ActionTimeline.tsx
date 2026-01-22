@@ -893,7 +893,7 @@ export function ActionTimeline({
       {/* Timeline container */}
       <div className="relative">
         {/* Verticale connector lijn */}
-        {(completedActions.length > 0 || currentAction) && (
+        {(completedActions.length > 0 || currentAction || activeSubtask) && (
           <div 
             className="absolute left-[11px] top-3 bottom-3 w-px bg-border/60" 
             aria-hidden="true" 

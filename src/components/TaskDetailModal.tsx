@@ -1081,7 +1081,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 )} />
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-3 animate-accordion-down">
-                {loadingActions ? (
+                {(loadingActions || loadingSubtasks) ? (
                   <div className="text-sm text-muted-foreground px-3">Laden...</div>
                 ) : (
                   <div className="px-3">
