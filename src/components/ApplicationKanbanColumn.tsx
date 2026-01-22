@@ -4,8 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApplicationCard } from "./ApplicationCard";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { Inbox, ChevronDown, Plus } from "lucide-react";
+import { Inbox, ChevronDown } from "lucide-react";
 import { useState, useEffect } from "react";
 
 interface Application {
@@ -45,9 +44,9 @@ export function ApplicationKanbanColumn({
   id,
   title,
   applications,
-  color,
+  color: _color,
   borderColor,
-  countColor,
+  countColor: _countColor,
   onApplicationClick,
   searchQuery = "",
   selectedApplicationIds = new Set(),
