@@ -3,14 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, Zap, CheckSquare, CheckCircle2, ListTodo, User, AlertCircle, ArrowRight } from "lucide-react";
-import { TaskItem } from "@/components/TaskItem";
+import { Plus, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, Zap, CheckCircle2, ListTodo, AlertCircle, ArrowRight } from "lucide-react";
 import { UpcomingRemindersWidget } from "@/components/UpcomingRemindersWidget";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import confetti from "canvas-confetti";
-import { Badge } from "@/components/ui/badge";
 import { TaskDialog } from "@/components/TaskDialog";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { QuickTimerButton } from "@/components/QuickTimerButton";
@@ -862,9 +860,9 @@ const Dashboard = () => {
                           )}
                         </div>
                         {task.next_action && (
-                          <div className={cn(ACTION_TOKENS.compact.wrapper, "mt-1")}>
+                          <div className={cn(ACTION_TOKENS.compact.wrapper, "mt-1 group/action")}>
                             <ArrowRight className={ACTION_TOKENS.compact.icon} />
-                            <p className={cn(ACTION_TOKENS.compact.text, "line-clamp-1")}>
+                            <p className={cn(ACTION_TOKENS.compact.text, "line-clamp-1 group-hover/action:text-primary transition-colors")}>
                               {task.next_action}
                             </p>
                           </div>
