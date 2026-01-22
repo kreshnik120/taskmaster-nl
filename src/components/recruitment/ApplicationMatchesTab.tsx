@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Building2, MapPin, Users, Briefcase, Link2, Clock, Sparkles, CheckCircle2, AlertCircle, Brain, Info, X, ListChecks, Filter, SlidersHorizontal } from "lucide-react";
+import { Loader2, Building2, MapPin, Briefcase, Link2, Clock, Sparkles, CheckCircle2, AlertCircle, Brain, Info, X, ListChecks, Filter, SlidersHorizontal } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { 
@@ -19,7 +19,7 @@ import {
   type FitAnalysis 
 } from "@/lib/services/matchingService";
 import { MatchScoreBreakdown as MatchScoreBreakdownUI } from "./MatchScoreBreakdown";
-import { loadSuccessPatterns, calculateAILearningBoost, trackPatternUsage, type SuccessPattern } from "@/lib/aiLearningBoost";
+import { loadSuccessPatterns, calculateAILearningBoost, trackPatternUsage } from "@/lib/aiLearningBoost";
 import confetti from "canvas-confetti";
 import { logger } from "@/lib/logger";
 

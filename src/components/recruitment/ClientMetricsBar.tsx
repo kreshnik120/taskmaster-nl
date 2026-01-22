@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Building2, TrendingUp, TrendingDown, CheckCircle2 } from "lucide-react";
+import { Building2, CheckCircle2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ClientMetricsBarProps {

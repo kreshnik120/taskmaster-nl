@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { TrendingUp, TrendingDown, Clock, Target } from "lucide-react";
 
@@ -16,9 +16,6 @@ export function RecruitmentAnalytics({ applications }: RecruitmentAnalyticsProps
   // Conversion rates per stage
   const stageOrder = ["nieuw", "intake_verstuurd", "screening", "interview", "goedgekeurd", "geplaatst"];
   
-  const getStageCount = (stage: string) => {
-    return applications.filter(app => app.pipeline_stage === stage).length;
-  };
 
   const getConversionRate = (fromStage: string, toStage: string) => {
     const fromCount = applications.filter(app => {

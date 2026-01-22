@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -162,7 +161,7 @@ export function StageTransitionButton({
 
       if (feedback === 'positive') {
         // Proceed to screening + trigger VOG request
-        const { data, error } = await supabase.rpc('transition_application_stage', {
+        const { error } = await supabase.rpc('transition_application_stage', {
           p_application_id: applicationId,
           p_to_stage: 'screening',
           p_reason: `Gesprek positief afgerond - transitie naar screening + VOG aanvraag`,

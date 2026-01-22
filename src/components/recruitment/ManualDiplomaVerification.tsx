@@ -28,7 +28,7 @@ export function ManualDiplomaVerification({
   const handleVerification = async (verified: boolean) => {
     setIsVerifying(true);
     try {
-      const { data, error } = await supabase.functions.invoke('verify-diploma-duo', {
+      const { error } = await supabase.functions.invoke('verify-diploma-duo', {
         body: {
           action: 'manual_verify',
           application_id: applicationId,

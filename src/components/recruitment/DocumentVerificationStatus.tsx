@@ -26,7 +26,6 @@ interface DocumentVerificationStatusProps {
   applicationId: string;
   vogStatus: VogStatus;
   vogSource?: string | null;
-  vogIssueDate?: string | null;
   vogValidUntil?: string | null;
   vogVerificationResponse?: Record<string, unknown> | null;
   diplomaStatus: DiplomaStatus;
@@ -162,7 +161,6 @@ export function DocumentVerificationStatus({
   applicationId,
   vogStatus,
   vogSource,
-  vogIssueDate,
   vogValidUntil,
   vogVerificationResponse,
   diplomaStatus,
@@ -265,7 +263,7 @@ export function DocumentVerificationStatus({
   const handleManualVerification = async (documentType: 'vog' | 'diploma', verified: boolean) => {
     setIsManualVerifying(documentType);
     try {
-      const { data, error } = await supabase.rpc('verify_document_manual', {
+      const { error } = await supabase.rpc('verify_document_manual', {
         p_application_id: applicationId,
         p_document_type: documentType,
         p_verified: verified,

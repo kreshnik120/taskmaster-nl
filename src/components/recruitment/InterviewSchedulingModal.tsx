@@ -10,7 +10,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, Clock, MapPin, Video, Phone, Building2, Mail, Download, Loader2, Send } from "lucide-react";
+import { CalendarIcon, Clock, Video, Phone, Building2, Mail, Download, Loader2, Send } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";

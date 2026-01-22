@@ -11,7 +11,6 @@ interface DiplomaVerificationBannerProps {
   applicationId: string;
   functieNiveau: string | null | undefined;
   diplomaFilePath: string | null | undefined;
-  diplomaStatus: string | null | undefined;
   candidateEmail: string;
   candidateName: string;
   orgId: string;
@@ -22,7 +21,6 @@ export function DiplomaVerificationBanner({
   applicationId,
   functieNiveau,
   diplomaFilePath,
-  diplomaStatus,
   candidateEmail,
   candidateName,
   orgId,

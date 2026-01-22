@@ -19,7 +19,6 @@ import {
   ChevronRight,
   Loader2,
   Eye,
-  X,
   PartyPopper,
   AlertCircle
 } from 'lucide-react';

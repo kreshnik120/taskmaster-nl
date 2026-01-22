@@ -48,8 +48,6 @@ export function RatingTrendSparkline() {
     return <span className="text-xs text-muted-foreground">Geen trend data</span>;
   }
 
-  const minRating = Math.min(...trendData.map(d => d.rating));
-  const maxRating = Math.max(...trendData.map(d => d.rating));
   const isUpward = trendData[trendData.length - 1].rating > trendData[0].rating;
 
   return (

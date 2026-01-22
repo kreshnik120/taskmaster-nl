@@ -1006,7 +1006,6 @@ export function ApplicationDetailModal({
                     applicationId={application.id}
                     functieNiveau={getFieldValue(application.extracted_data?.functie_niveau) as string | null}
                     diplomaFilePath={(application as any).diploma_file_path || application.extracted_data?.diploma_file_path || null}
-                    diplomaStatus={diplomaStatus}
                     candidateEmail={application.email || application.email_from}
                     candidateName={resolveApplicationName(application)}
                     orgId={application.org_id || '550e8400-e29b-41d4-a716-446655440000'}
@@ -1109,7 +1108,6 @@ export function ApplicationDetailModal({
                       applicationId={application.id}
                       vogStatus={vogStatus as any}
                       vogSource={application.vog_validation_source}
-                      vogIssueDate={application.vog_issue_date}
                       vogValidUntil={application.vog_valid_until}
                       vogVerificationResponse={application.vog_verification_response}
                       diplomaStatus={diplomaStatus as any}
