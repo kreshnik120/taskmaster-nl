@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { subDays, format, eachDayOfInterval, eachWeekOfInterval, startOfWeek, endOfWeek } from 'date-fns';
+import { subDays, format, eachWeekOfInterval, endOfWeek } from 'date-fns';
 
 interface WeeklyMetrics {
   weekLabel: string;

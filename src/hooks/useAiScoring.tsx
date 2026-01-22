@@ -186,7 +186,6 @@ export const useAiScoring = (tasks: Task[], enableAutoScoring: boolean = false) 
   // Auto-score on mount or when tasks change (if enabled)
   useEffect(() => {
     if (enableAutoScoring && tasks.length > 0) {
-      const taskIds = tasks.map(t => t.id).join(',');
       logger.log(`🔄 Auto-scoring triggered for ${tasks.length} tasks`);
       calculateScores(tasks);
     }
