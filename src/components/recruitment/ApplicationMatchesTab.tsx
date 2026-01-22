@@ -1246,7 +1246,7 @@ export function ApplicationMatchesTab({ application, onApplicationUpdated }: App
           <div style={{ height: Math.min(filteredSublocations.length * 100, 600) }}>
             <Virtuoso
               data={filteredSublocations}
-              itemContent={(index, sublocation) => (
+              itemContent={(_index, sublocation) => (
                 <div className="pb-2">
                   <SublocationCard
                     sublocation={sublocation}

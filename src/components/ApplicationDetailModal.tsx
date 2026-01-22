@@ -429,35 +429,6 @@ export function ApplicationDetailModal({
     }));
   };
 
-  const _handleQuickOrganizationAssign = async (organization: string) => {
-    if (!application?.id) return;
-
-    setUpdating(true);
-    try {
-      const updatedExtractedData = {
-        ...application.extracted_data,
-        assigned_organization: organization,
-      };
-
-      const { error } = await supabase
-        .from("professional_applications")
-        .update({
-          extracted_data: updatedExtractedData,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", application.id);
-
-      if (error) throw error;
-
-      toast.success(`Bemiddelingsbureau ingesteld op ${organization}`);
-      onApplicationUpdated();
-    } catch (error) {
-      console.error("Error assigning organization:", error);
-      toast.error("Fout bij toewijzen bemiddelingsbureau");
-    } finally {
-      setUpdating(false);
-    }
-  };
 
   const handleSaveEdit = async () => {
     if (!application?.id) return;
