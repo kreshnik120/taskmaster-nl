@@ -8,7 +8,9 @@ import {
   Plus,
   ChevronRight,
   Clock,
-  User
+  User,
+  ListChecks,
+  Calendar
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -27,12 +29,22 @@ export interface ActionHistoryItem {
   is_current: boolean;
 }
 
+// Actieve subtaak interface voor koppeling
+export interface ActiveSubtaskInfo {
+  id: string;
+  title: string;
+  assignee_name?: string;
+  due_at?: string;
+}
+
 interface ActionTimelineProps {
   taskId: string;
   currentAction: string | null;
   actionHistory: ActionHistoryItem[];
+  activeSubtask?: ActiveSubtaskInfo | null;
   onActionAdded?: () => void;
   onActionCompleted?: () => void;
+  onSubtaskCompleted?: (subtaskId: string) => void;
   compact?: boolean;
 }
 
@@ -40,8 +52,10 @@ export function ActionTimeline({
   taskId, 
   currentAction, 
   actionHistory, 
+  activeSubtask,
   onActionAdded,
   onActionCompleted,
+  onSubtaskCompleted,
   compact = false 
 }: ActionTimelineProps) {
   const [isAdding, setIsAdding] = useState(false);
@@ -55,6 +69,17 @@ export function ActionTimeline({
   const completedActions = actionHistory
     .filter(a => a.completed_at)
     .sort((a, b) => new Date(a.completed_at!).getTime() - new Date(b.completed_at!).getTime());
+
+  // Handler voor het voltooien van een actieve subtaak via de timeline
+  const handleCompleteSubtask = async () => {
+    if (!activeSubtask || !onSubtaskCompleted) return;
+    
+    setCompletingAction(activeSubtask.title);
+    await new Promise(resolve => setTimeout(resolve, 400));
+    
+    onSubtaskCompleted(activeSubtask.id);
+    setCompletingAction(null);
+  };
 
   const handleCompleteCurrentAction = async () => {
     if (!currentAction || completingAction) return;
@@ -70,19 +95,38 @@ export function ActionTimeline({
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // 1. Voeg huidige actie toe aan historie als voltooid
-      const { error: historyError } = await supabase
+      // Check of deze actie al bestaat om duplicaten te voorkomen
+      const { data: existing } = await supabase
         .from('task_action_history')
-        .insert({
-          task_id: taskId,
-          action_text: currentAction,
-          action_type: 'followup',
-          completed_at: new Date().toISOString(),
-          completed_by: user?.id,
-          is_current: false
-        });
+        .select('id')
+        .eq('task_id', taskId)
+        .eq('action_text', currentAction)
+        .limit(1);
 
-      if (historyError) throw historyError;
+      if (existing && existing.length > 0) {
+        // Update bestaande entry
+        const { error: updateError } = await supabase
+          .from('task_action_history')
+          .update({ 
+            completed_at: new Date().toISOString(), 
+            completed_by: user?.id 
+          })
+          .eq('id', existing[0].id);
+        if (updateError) throw updateError;
+      } else {
+        // Nieuwe entry toevoegen
+        const { error: historyError } = await supabase
+          .from('task_action_history')
+          .insert({
+            task_id: taskId,
+            action_text: currentAction,
+            action_type: 'followup',
+            completed_at: new Date().toISOString(),
+            completed_by: user?.id,
+            is_current: false
+          });
+        if (historyError) throw historyError;
+      }
 
       // 2. Clear de next_action op de taak
       const { error: taskError } = await supabase
@@ -119,17 +163,37 @@ export function ActionTimeline({
       const { data: { user } } = await supabase.auth.getUser();
 
       // Als er een huidige actie is, verplaats deze eerst naar historie
+      // Check eerst of deze actie al bestaat om duplicaten te voorkomen
       if (currentAction) {
-        await supabase
+        const { data: existing } = await supabase
           .from('task_action_history')
-          .insert({
-            task_id: taskId,
-            action_text: currentAction,
-            action_type: 'followup',
-            completed_at: new Date().toISOString(),
-            completed_by: user?.id,
-            is_current: false
-          });
+          .select('id')
+          .eq('task_id', taskId)
+          .eq('action_text', currentAction)
+          .limit(1);
+
+        if (existing && existing.length > 0) {
+          // Update bestaande entry
+          await supabase
+            .from('task_action_history')
+            .update({ 
+              completed_at: new Date().toISOString(), 
+              completed_by: user?.id 
+            })
+            .eq('id', existing[0].id);
+        } else {
+          // Nieuwe entry toevoegen
+          await supabase
+            .from('task_action_history')
+            .insert({
+              task_id: taskId,
+              action_text: currentAction,
+              action_type: 'followup',
+              completed_at: new Date().toISOString(),
+              completed_by: user?.id,
+              is_current: false
+            });
+        }
       }
 
       // Stel de nieuwe actie in als next_action
@@ -262,27 +326,31 @@ export function ActionTimeline({
             </div>
           ))}
 
-          {/* Huidige actie */}
-          {currentAction && (
+          {/* NU ACTIEF sectie - Prioriteit: Subtaak > next_action */}
+          {(activeSubtask || currentAction) && (
             <div 
               className={cn(
                 "relative flex items-start gap-3 group transition-all duration-300",
-                completingAction === currentAction && "animate-complete-slide-up"
+                (completingAction === activeSubtask?.title || completingAction === currentAction) && "animate-complete-slide-up"
               )}
             >
               {/* Pulse/Check indicator met morphing */}
               <div className={cn(
                 "relative z-10 h-6 w-6 rounded-full flex items-center justify-center shrink-0 ring-2 ring-background transition-colors duration-300",
-                completingAction === currentAction 
+                (completingAction === activeSubtask?.title || completingAction === currentAction)
                   ? "bg-green-100 dark:bg-green-900/30" 
                   : "bg-primary/10"
               )}>
-                {completingAction === currentAction ? (
+                {(completingAction === activeSubtask?.title || completingAction === currentAction) ? (
                   <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400 animate-check-pop" />
                 ) : (
                   <>
                     <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" style={{ animationDuration: '2s' }} />
-                    <ArrowRight className="h-3.5 w-3.5 text-primary relative z-10" />
+                    {activeSubtask ? (
+                      <ListChecks className="h-3.5 w-3.5 text-primary relative z-10" />
+                    ) : (
+                      <ArrowRight className="h-3.5 w-3.5 text-primary relative z-10" />
+                    )}
                   </>
                 )}
               </div>
@@ -291,7 +359,7 @@ export function ActionTimeline({
               <div className="flex-1 min-w-0">
                 <div className={cn(
                   "p-3 rounded-xl border transition-all duration-300",
-                  completingAction === currentAction 
+                  (completingAction === activeSubtask?.title || completingAction === currentAction)
                     ? "bg-green-50/50 dark:bg-green-900/20 border-green-200/50 dark:border-green-800/30" 
                     : "bg-gradient-to-r from-primary/5 via-primary/[0.03] to-transparent border-primary/15 hover:bg-primary/[0.08]"
                 )}>
@@ -299,26 +367,48 @@ export function ActionTimeline({
                     <div className="flex-1 min-w-0">
                       <span className={cn(
                         "text-[10px] font-medium uppercase tracking-wider transition-colors duration-300",
-                        completingAction === currentAction 
+                        (completingAction === activeSubtask?.title || completingAction === currentAction)
                           ? "text-green-600 dark:text-green-400" 
                           : "text-primary/70"
                       )}>
-                        {completingAction === currentAction ? "Voltooid!" : "Nu actief"}
+                        {(completingAction === activeSubtask?.title || completingAction === currentAction) 
+                          ? "Voltooid!" 
+                          : activeSubtask 
+                            ? "Actieve Subtaak" 
+                            : "Nu actief"}
                       </span>
                       <p className="text-sm font-medium text-foreground leading-snug mt-0.5">
-                        {currentAction}
+                        {activeSubtask ? activeSubtask.title : currentAction}
                       </p>
+                      
+                      {/* Extra context voor subtaak */}
+                      {activeSubtask && (activeSubtask.assignee_name || activeSubtask.due_at) && (
+                        <div className="flex gap-3 mt-1.5 text-[10px] text-muted-foreground/60">
+                          {activeSubtask.assignee_name && (
+                            <span className="flex items-center gap-1">
+                              <User className="h-3 w-3" />
+                              {activeSubtask.assignee_name}
+                            </span>
+                          )}
+                          {activeSubtask.due_at && (
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {format(parseISO(activeSubtask.due_at), "d MMM", { locale: nl })}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
                       className={cn(
                         "h-7 px-2 shrink-0 transition-all text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/30",
-                        completingAction === currentAction 
+                        (completingAction === activeSubtask?.title || completingAction === currentAction)
                           ? "opacity-100" 
                           : "opacity-0 group-hover:opacity-100"
                       )}
-                      onClick={handleCompleteCurrentAction}
+                      onClick={activeSubtask ? handleCompleteSubtask : handleCompleteCurrentAction}
                       disabled={isCompleting || !!completingAction}
                     >
                       <CheckCircle2 className="h-4 w-4 mr-1" />
@@ -372,7 +462,7 @@ export function ActionTimeline({
           )}
 
           {/* Lege staat */}
-          {!currentAction && completedActions.length === 0 && !isAdding && (
+          {!currentAction && !activeSubtask && completedActions.length === 0 && !isAdding && (
             <div className="text-center py-6">
               <div className="inline-flex items-center justify-center h-10 w-10 rounded-full bg-muted/30 mb-2">
                 <Circle className="h-5 w-5 text-muted-foreground/40" />

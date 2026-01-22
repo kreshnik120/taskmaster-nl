@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, Clock, SkipForward, User, Calendar } from "lucide-react";
+import { CheckCircle2, Circle, Clock, SkipForward, User, Calendar, ArrowRight } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -189,6 +189,14 @@ export function ProcessTimeline({
                       </span>
                     )}
                   </div>
+
+                  {/* Indicator: zichtbaar in Actieverloop */}
+                  {subtask.status === 'active' && (
+                    <div className="flex items-center gap-1 text-[10px] text-primary/60 mt-0.5">
+                      <ArrowRight className="h-3 w-3" />
+                      <span>Zichtbaar in Actieverloop</span>
+                    </div>
+                  )}
 
                   {/* Assignee & Deadline */}
                   {!compact && (

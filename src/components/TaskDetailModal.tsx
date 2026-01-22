@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -44,7 +44,7 @@ import { TaskDialog } from "./TaskDialog";
 import { ReminderDialog } from "./ReminderDialog";
 import { ProcessTimeline } from "./ProcessTimeline";
 import { AttachmentPreviewModal } from "./AttachmentPreviewModal";
-import { ActionTimeline, ActionHistoryItem } from "./ActionTimeline";
+import { ActionTimeline, ActionHistoryItem, ActiveSubtaskInfo } from "./ActionTimeline";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -605,6 +605,78 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const totalCount = subtasks.length;
   const progressPercentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
+  // Bereken de actieve subtaak voor koppeling met Actieverloop
+  // Prioriteit: eerste 'active' subtaak, anders eerste 'pending' als fallback
+  const activeSubtask: ActiveSubtaskInfo | null = useMemo(() => {
+    const sorted = [...subtasks].sort((a, b) => a.order - b.order);
+    const active = sorted.find(s => s.status === 'active');
+    const firstPending = !active ? sorted.find(s => s.status === 'pending') : null;
+    const target = active || firstPending;
+    
+    if (!target) return null;
+    
+    return {
+      id: target.id,
+      title: target.title,
+      assignee_name: target.profiles?.name || target.profiles?.email || undefined,
+      due_at: target.due_at || undefined
+    };
+  }, [subtasks]);
+
+  // Handler voor voltooien van subtaak via Actieverloop
+  const handleSubtaskCompletedViaTimeline = async (subtaskId: string) => {
+    try {
+      // 1. Complete de huidige subtaak
+      await supabase
+        .from('subtasks')
+        .update({ status: 'completed' })
+        .eq('id', subtaskId);
+        
+      // 2. Activeer de volgende pending subtaak
+      const sorted = [...subtasks].sort((a, b) => a.order - b.order);
+      const currentIndex = sorted.findIndex(s => s.id === subtaskId);
+      const nextPending = sorted.slice(currentIndex + 1).find(s => s.status === 'pending');
+      
+      if (nextPending) {
+        await supabase
+          .from('subtasks')
+          .update({ status: 'active' })
+          .eq('id', nextPending.id);
+      }
+      
+      // 3. Log naar action history voor audit trail
+      const { data: { user } } = await supabase.auth.getUser();
+      const completedSubtask = subtasks.find(s => s.id === subtaskId);
+      
+      await supabase
+        .from('task_action_history')
+        .insert({
+          task_id: task.id,
+          action_text: `Subtaak voltooid: ${completedSubtask?.title || 'Onbekend'}`,
+          action_type: 'status_change',
+          completed_at: new Date().toISOString(),
+          completed_by: user?.id,
+          is_current: false
+        });
+      
+      toast({
+        title: "Subtaak voltooid",
+        description: completedSubtask?.title || "Processtap is afgerond"
+      });
+      
+      loadSubtasks();
+      loadActionHistory();
+      onTaskUpdated();
+    } catch (error) {
+      console.error('Error completing subtask via timeline:', error);
+      toast({
+        title: "Fout",
+        description: "Kon subtaak niet voltooien",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleEdit = () => {
     setEditDialogOpen(true);
   };
@@ -972,9 +1044,9 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                 <div className="flex items-center gap-2">
                   <GitBranch className="h-5 w-5 text-primary/80" />
                   <h3 className="font-semibold text-foreground">Actieverloop</h3>
-                  {(task.next_action || actionHistory.length > 0) && (
+                  {(task.next_action || activeSubtask || actionHistory.length > 0) && (
                     <Badge variant="secondary" className="ml-2">
-                      {actionHistory.filter(a => a.completed_at).length + (task.next_action ? 1 : 0)}
+                      {actionHistory.filter(a => a.completed_at).length + ((activeSubtask || task.next_action) ? 1 : 0)}
                     </Badge>
                   )}
                 </div>
@@ -990,8 +1062,9 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                   <div className="px-3">
                     <ActionTimeline
                       taskId={task.id}
-                      currentAction={task.next_action}
+                      currentAction={activeSubtask ? null : task.next_action}
                       actionHistory={actionHistory}
+                      activeSubtask={activeSubtask}
                       onActionAdded={() => {
                         onTaskUpdated();
                         loadActionHistory();
@@ -1000,6 +1073,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
                         onTaskUpdated();
                         loadActionHistory();
                       }}
+                      onSubtaskCompleted={handleSubtaskCompletedViaTimeline}
                     />
                   </div>
                 )}
