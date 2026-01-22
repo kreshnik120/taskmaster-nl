@@ -81,10 +81,12 @@ export function ActionTimeline({
   const [editText, setEditText] = useState("");
   const [editingCurrentAction, setEditingCurrentAction] = useState(false);
   const [currentActionEditText, setCurrentActionEditText] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
   
   // Delete state
   const [deletingAction, setDeletingAction] = useState<ActionHistoryItem | null>(null);
   const [deletingCurrentAction, setDeletingCurrentAction] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // Expand state for long texts
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
@@ -256,8 +258,9 @@ export function ActionTimeline({
   };
 
   const handleUpdateAction = async () => {
-    if (!editingAction || !editText.trim()) return;
+    if (!editingAction || !editText.trim() || isUpdating) return;
     
+    setIsUpdating(true);
     try {
       const { error } = await supabase
         .from('task_action_history')
@@ -277,6 +280,8 @@ export function ActionTimeline({
         description: "Kon de actie niet bijwerken.",
         variant: "destructive"
       });
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -286,8 +291,9 @@ export function ActionTimeline({
   };
 
   const handleUpdateCurrentAction = async () => {
-    if (!currentActionEditText.trim()) return;
+    if (!currentActionEditText.trim() || isUpdating) return;
     
+    setIsUpdating(true);
     try {
       const { error } = await supabase
         .from('tasks')
@@ -307,13 +313,16 @@ export function ActionTimeline({
         description: "Kon de actie niet bijwerken.",
         variant: "destructive"
       });
+    } finally {
+      setIsUpdating(false);
     }
   };
 
   // Delete handlers
   const handleDeleteAction = async () => {
-    if (!deletingAction) return;
+    if (!deletingAction || isDeleting) return;
     
+    setIsDeleting(true);
     try {
       const { error } = await supabase
         .from('task_action_history')
@@ -332,10 +341,15 @@ export function ActionTimeline({
         description: "Kon de actie niet verwijderen.",
         variant: "destructive"
       });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
   const handleDeleteCurrentAction = async () => {
+    if (isDeleting) return;
+    
+    setIsDeleting(true);
     try {
       const { error } = await supabase
         .from('tasks')
@@ -354,6 +368,8 @@ export function ActionTimeline({
         description: "Kon de actie niet verwijderen.",
         variant: "destructive"
       });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -490,8 +506,15 @@ export function ActionTimeline({
                           variant="ghost"
                           className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
                           onClick={handleUpdateAction}
+                          disabled={isUpdating}
+                          aria-label="Opslaan"
+                          title="Opslaan"
                         >
-                          <Check className="h-3.5 w-3.5" />
+                          {isUpdating ? (
+                            <div className="h-3.5 w-3.5 border-2 border-green-600/30 border-t-green-600 rounded-full animate-spin" />
+                          ) : (
+                            <Check className="h-3.5 w-3.5" />
+                          )}
                         </Button>
                         <Button
                           size="sm"
@@ -501,6 +524,9 @@ export function ActionTimeline({
                             setEditingAction(null);
                             setEditText("");
                           }}
+                          disabled={isUpdating}
+                          aria-label="Annuleren"
+                          title="Annuleren"
                         >
                           <X className="h-3.5 w-3.5" />
                         </Button>
@@ -531,6 +557,8 @@ export function ActionTimeline({
                             size="sm"
                             className="h-6 w-6 p-0 text-muted-foreground/50 hover:text-foreground hover:bg-muted/50"
                             onClick={() => handleStartEditAction(action)}
+                            aria-label="Bewerk actie"
+                            title="Bewerk actie"
                           >
                             <Pencil className="h-3 w-3" />
                           </Button>
@@ -539,6 +567,8 @@ export function ActionTimeline({
                             size="sm"
                             className="h-6 w-6 p-0 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10"
                             onClick={() => setDeletingAction(action)}
+                            aria-label="Verwijder actie"
+                            title="Verwijder actie"
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>
@@ -603,8 +633,15 @@ export function ActionTimeline({
                         variant="ghost"
                         className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
                         onClick={handleUpdateCurrentAction}
+                        disabled={isUpdating}
+                        aria-label="Opslaan"
+                        title="Opslaan"
                       >
-                        <Check className="h-3.5 w-3.5" />
+                        {isUpdating ? (
+                          <div className="h-3.5 w-3.5 border-2 border-green-600/30 border-t-green-600 rounded-full animate-spin" />
+                        ) : (
+                          <Check className="h-3.5 w-3.5" />
+                        )}
                       </Button>
                       <Button
                         size="sm"
@@ -614,6 +651,9 @@ export function ActionTimeline({
                           setEditingCurrentAction(false);
                           setCurrentActionEditText("");
                         }}
+                        disabled={isUpdating}
+                        aria-label="Annuleren"
+                        title="Annuleren"
                       >
                         <X className="h-3.5 w-3.5" />
                       </Button>
@@ -652,7 +692,14 @@ export function ActionTimeline({
                                 {format(parseISO(activeSubtask.due_at), "d MMM", { locale: nl })}
                               </span>
                             )}
-                          </div>
+                            </div>
+                        )}
+                        
+                        {/* Hint voor subtaak editing */}
+                        {activeSubtask && (
+                          <p className="text-[9px] text-muted-foreground/40 mt-1.5 italic">
+                            Bewerk via Processtappen
+                          </p>
                         )}
                       </div>
                       
@@ -666,6 +713,8 @@ export function ActionTimeline({
                               size="sm"
                               className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted/50"
                               onClick={handleStartEditCurrentAction}
+                              aria-label="Bewerk huidige actie"
+                              title="Bewerk actie"
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
@@ -674,6 +723,8 @@ export function ActionTimeline({
                               size="sm"
                               className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                               onClick={() => setDeletingCurrentAction(true)}
+                              aria-label="Verwijder huidige actie"
+                              title="Verwijder actie"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
@@ -777,12 +828,13 @@ export function ActionTimeline({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Annuleren</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteAction}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isDeleting}
             >
-              Verwijderen
+              {isDeleting ? "Verwijderen..." : "Verwijderen"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -798,12 +850,13 @@ export function ActionTimeline({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Annuleren</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteCurrentAction}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isDeleting}
             >
-              Verwijderen
+              {isDeleting ? "Verwijderen..." : "Verwijderen"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
