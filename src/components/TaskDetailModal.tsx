@@ -12,7 +12,6 @@ import {
   Clock, 
   User, 
   FileText, 
-  ArrowRight, 
   Edit, 
   ListChecks, 
   Mail, 
@@ -128,7 +127,6 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [loadingSubtasks, setLoadingSubtasks] = useState(false);
   const [linkedApplication, setLinkedApplication] = useState<LinkedApplication | null>(null);
-  const [loadingApplication, setLoadingApplication] = useState(false);
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
   const [nextReminder, setNextReminder] = useState<any>(null);
   const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false);
@@ -148,7 +146,7 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const [loadingActions, setLoadingActions] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { activeTimer, isLoading: timerLoading, elapsedTime, startTimer, stopTimer, isTimerActive } = useTaskTimer(task?.id || null);
+  const { isLoading: timerLoading, elapsedTime, startTimer, stopTimer, isTimerActive } = useTaskTimer(task?.id || null);
 
   // Keyboard shortcuts (e/c/t)
   useEffect(() => {
@@ -240,7 +238,6 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
   const loadLinkedApplication = async () => {
     if (!task?.application_id) return;
     
-    setLoadingApplication(true);
     try {
       const { data, error } = await supabase
         .from('professional_applications')
@@ -257,8 +254,6 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
       setLinkedApplication(data);
     } catch (error) {
       console.error('Error loading linked application:', error);
-    } finally {
-      setLoadingApplication(false);
     }
   };
 
