@@ -168,7 +168,7 @@ export function PlacementDetailModal({
   open, 
   onOpenChange,
   onStatusChange,
-  applicationId
+  applicationId: _applicationId
 }: PlacementDetailModalProps) {
   const navigate = useNavigate();
   const [completionDialogOpen, setCompletionDialogOpen] = useState(false);
