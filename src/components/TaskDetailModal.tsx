@@ -623,6 +623,31 @@ export function TaskDetailModal({ task, open, onOpenChange, onTaskUpdated }: Tas
     };
   }, [subtasks]);
 
+  // Auto-activate first pending subtask for UX consistency
+  useEffect(() => {
+    const autoActivateFirstPending = async () => {
+      if (subtasks.length === 0 || !open) return;
+      
+      const sorted = [...subtasks].sort((a, b) => a.order - b.order);
+      const hasActive = sorted.some(s => s.status === 'active');
+      
+      if (!hasActive) {
+        const firstPending = sorted.find(s => s.status === 'pending');
+        const hasCompleted = sorted.some(s => s.status === 'completed');
+        
+        // Auto-activate if workflow started (has completed) or all are pending (new task)
+        if (firstPending && (hasCompleted || sorted.every(s => s.status === 'pending'))) {
+          await supabase
+            .from('subtasks')
+            .update({ status: 'active' })
+            .eq('id', firstPending.id);
+        }
+      }
+    };
+    
+    autoActivateFirstPending();
+  }, [subtasks, open]);
+
   // Handler voor voltooien van subtaak via Actieverloop
   const handleSubtaskCompletedViaTimeline = async (subtaskId: string) => {
     try {
