@@ -71,6 +71,45 @@ export const PROGRESS_HEIGHTS = {
   lg: 'h-2',      // 8px
 } as const;
 
+// Subtask indicator styling - Enterprise-niveau consistentie
+export const SUBTASK_TOKENS = {
+  progress: {
+    height: 'h-1',
+    background: 'bg-muted',
+    fill: 'bg-primary/60',
+    fillComplete: 'bg-green-500/60',
+  },
+  counter: {
+    wrapper: 'text-[10px] text-muted-foreground/60 flex items-center gap-0.5',
+    icon: 'h-2.5 w-2.5',
+  },
+  activeIndicator: {
+    dot: 'h-1.5 w-1.5 rounded-full bg-primary animate-pulse',
+    text: 'text-[10px] text-primary/80',
+    wrapper: 'flex items-center gap-1',
+  },
+  inlinePreview: {
+    text: 'text-xs text-muted-foreground',
+    activeText: 'text-primary font-medium',
+    icon: 'h-3 w-3',
+    activeIcon: 'h-2 w-2 rounded-full bg-primary animate-pulse',
+  },
+} as const;
+
+// Next Action styling - Consistente weergave
+export const ACTION_TOKENS = {
+  inline: {
+    icon: 'h-2.5 w-2.5 text-primary/60 shrink-0',
+    text: 'text-[10px] text-primary/70',
+    wrapper: 'flex items-center gap-1.5',
+  },
+  compact: {
+    icon: 'h-3 w-3 text-primary/60 shrink-0',
+    text: 'text-xs text-muted-foreground/80',
+    wrapper: 'flex items-center gap-1.5 mt-1 group/action',
+  },
+} as const;
+
 // Helper functions
 export function getScoreColor(score: number): string {
   if (score >= 80) return SCORE_COLORS.excellent;

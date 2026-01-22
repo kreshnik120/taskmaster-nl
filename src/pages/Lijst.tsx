@@ -55,6 +55,10 @@ interface Task {
     name: string | null;
     email: string | null;
   } | null;
+  subtasks?: Array<{
+    id: string;
+    status: string;
+  }>;
 }
 
 interface Profile {
@@ -228,7 +232,8 @@ export default function Lijst() {
           application_id,
           recruitment_action_type,
           organizations(name),
-          profiles:profiles!tasks_assignee_id_fkey(name, email)
+          profiles:profiles!tasks_assignee_id_fkey(name, email),
+          subtasks:subtasks(id, status)
         `)
         .is("deleted_at", null)
         .is("completed_at", null)
@@ -1168,7 +1173,21 @@ export default function Lijst() {
                             <TableCell className="font-mono text-xs text-muted-foreground">
                               {String(task.sequence_number).padStart(2, '0')}
                             </TableCell>
-                            <TableCell className="font-medium">{task.title}</TableCell>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                <span>{task.title}</span>
+                                {(task as any).subtasks?.length > 0 && (() => {
+                                  const subtasks = (task as any).subtasks || [];
+                                  const completedCount = subtasks.filter((s: any) => s.status === 'completed').length;
+                                  return (
+                                    <span className="text-[10px] text-muted-foreground/60 flex items-center gap-0.5">
+                                      <ListTodo className="h-2.5 w-2.5" />
+                                      {completedCount}/{subtasks.length}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
+                            </TableCell>
                       <TableCell className="hidden md:table-cell">
                         {task.organizations?.name || "-"}
                       </TableCell>
