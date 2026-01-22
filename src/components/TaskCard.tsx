@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Button } from "@/components/ui/button";
 import { logger } from "@/lib/logger";
-import { UrgencyBadge, UrgencyDot } from "@/components/ui/urgency-badge";
+import { UrgencyBadge } from "@/components/ui/urgency-badge";
 import { formatDateFull } from "@/lib/dateFormatters";
 
 const log = logger.create('TaskCard');
@@ -199,29 +199,41 @@ export function TaskCard({ task, subtasks = [], onClick, aiScore }: TaskCardProp
                   )}
 
                   {/* Compact Subtasks Preview - Enterprise-niveau integratie */}
-                  {subtasks.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-border/30 space-y-1">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 flex items-center gap-1">
-                        <ListChecks className="h-2.5 w-2.5" />
-                        Subtaken ({subtasks.length})
-                      </p>
-                      {subtasks.slice(0, 2).map(st => (
-                        <div key={st.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          {st.status === 'completed' ? (
-                            <CheckCircle2 className="h-3 w-3 text-green-500 flex-shrink-0" />
-                          ) : (
-                            <Circle className="h-3 w-3 flex-shrink-0" />
-                          )}
-                          <span className="truncate">{st.title}</span>
+                  {subtasks.length > 0 && (() => {
+                    const completedCount = subtasks.filter(s => s.status === 'completed').length;
+                    return (
+                      <div className="mt-2 pt-2 border-t border-border/30 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 flex items-center gap-1">
+                            <ListChecks className="h-2.5 w-2.5" />
+                            Subtaken ({completedCount}/{subtasks.length})
+                          </p>
                         </div>
-                      ))}
-                      {subtasks.length > 2 && (
-                        <p className="text-[10px] text-muted-foreground/50 pl-4">
-                          +{subtasks.length - 2} meer...
-                        </p>
-                      )}
-                    </div>
-                  )}
+                        {/* Subtle progress bar */}
+                        <div className="h-1 bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-primary/60 rounded-full transition-all duration-300"
+                            style={{ width: `${(completedCount / subtasks.length) * 100}%` }}
+                          />
+                        </div>
+                        {subtasks.slice(0, 2).map(st => (
+                          <div key={st.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            {st.status === 'completed' ? (
+                              <CheckCircle2 className="h-3 w-3 text-green-500 flex-shrink-0" />
+                            ) : (
+                              <Circle className="h-3 w-3 flex-shrink-0" />
+                            )}
+                            <span className="truncate">{st.title}</span>
+                          </div>
+                        ))}
+                        {subtasks.length > 2 && (
+                          <p className="text-[10px] text-muted-foreground/50 pl-4">
+                            +{subtasks.length - 2} meer...
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Due date with urgency */}
                   {task.due_at && (
@@ -288,6 +300,25 @@ export function TaskCard({ task, subtasks = [], onClick, aiScore }: TaskCardProp
                   <ArrowRight className="h-3 w-3 text-primary" />
                   {task.next_action}
                 </p>
+              </div>
+            )}
+            {subtasks.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-border/50">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1">
+                  Subtaken
+                </p>
+                <div className="space-y-1">
+                  {subtasks.map(st => (
+                    <p key={st.id} className="text-xs flex items-center gap-1.5">
+                      {st.status === 'completed' ? (
+                        <CheckCircle2 className="h-3 w-3 text-green-500" />
+                      ) : (
+                        <Circle className="h-3 w-3" />
+                      )}
+                      <span className="truncate">{st.title}</span>
+                    </p>
+                  ))}
+                </div>
               </div>
             )}
             <p className="text-[10px] mt-2 text-muted-foreground/60">
