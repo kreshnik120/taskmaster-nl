@@ -23,6 +23,7 @@ import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { useMySubtasks } from "@/hooks/useMySubtasks";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatPeriod, getDateUrgency, getUrgencyBadgeClasses } from "@/lib/dateFormatters";
+import { SUBTASK_TOKENS } from "@/lib/constants/designTokens";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,6 +58,7 @@ interface Task {
   } | null;
   subtasks?: Array<{
     id: string;
+    title: string;
     status: string;
   }>;
 }
@@ -233,7 +235,7 @@ export default function Lijst() {
           recruitment_action_type,
           organizations(name),
           profiles:profiles!tasks_assignee_id_fkey(name, email),
-          subtasks:subtasks(id, status)
+          subtasks:subtasks(id, title, status)
         `)
         .is("deleted_at", null)
         .is("completed_at", null)
@@ -1180,8 +1182,8 @@ export default function Lijst() {
                                   const subtasks = (task as any).subtasks || [];
                                   const completedCount = subtasks.filter((s: any) => s.status === 'completed').length;
                                   return (
-                                    <span className="text-[10px] text-muted-foreground/60 flex items-center gap-0.5">
-                                      <ListTodo className="h-2.5 w-2.5" />
+                                    <span className={cn(SUBTASK_TOKENS.counter.wrapper, "text-muted-foreground/60")}>
+                                      <ListTodo className={SUBTASK_TOKENS.counter.icon} />
                                       {completedCount}/{subtasks.length}
                                     </span>
                                   );

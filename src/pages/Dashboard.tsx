@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 import { useGreeting } from "@/hooks/useGreeting";
 import { logger } from "@/lib/logger";
+import { cn } from "@/lib/utils";
 import { SUBTASK_TOKENS } from "@/lib/constants/designTokens";
 
 const log = logger.create('Dashboard');
@@ -871,7 +872,7 @@ const Dashboard = () => {
                         {hasSubtasks && (
                           <Progress 
                             value={progressPercentage} 
-                            className="h-1 mt-2" 
+                            className={cn(SUBTASK_TOKENS.progress.height, "mt-2")} 
                             style={{
                               '--progress-color': progressPercentage === 100 ? 'hsl(var(--green-500))' : 'hsl(var(--primary))'
                             } as React.CSSProperties}
@@ -884,9 +885,9 @@ const Dashboard = () => {
                           const isComplete = progressPercentage === 100;
                           
                           return activeSubtask && !isComplete ? (
-                            <div className={SUBTASK_TOKENS.activeIndicator.wrapper + " mt-1"}>
+                            <div className={cn(SUBTASK_TOKENS.activeIndicator.wrapper, "mt-1")}>
                               <div className={SUBTASK_TOKENS.activeIndicator.dot} />
-                              <span className={SUBTASK_TOKENS.activeIndicator.text + " truncate"}>
+                              <span className={cn(SUBTASK_TOKENS.activeIndicator.text, "truncate")}>
                                 {activeSubtask.title}
                               </span>
                             </div>
