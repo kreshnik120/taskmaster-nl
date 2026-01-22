@@ -194,9 +194,9 @@ export function TaskCard({ task, subtasks = [], onClick, aiScore }: TaskCardProp
 
                   {/* Next Action Indicator - Unified tokens */}
                   {task.next_action && (
-                    <div className={ACTION_TOKENS.inline.wrapper + " mt-1"}>
+                    <div className={cn(ACTION_TOKENS.inline.wrapper, "mt-1")}>
                       <ArrowRight className={ACTION_TOKENS.inline.icon} />
-                      <span className={ACTION_TOKENS.inline.text + " truncate"}>{task.next_action}</span>
+                      <span className={cn(ACTION_TOKENS.inline.text, "truncate")}>{task.next_action}</span>
                     </div>
                   )}
 
