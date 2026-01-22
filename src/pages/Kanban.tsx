@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
@@ -633,9 +633,22 @@ const Kanban = () => {
     setDetailModalOpen(true);
   };
 
-  const handleTaskUpdated = () => {
-    loadData();
-  };
+  // Enterprise-niveau: Memoized subtasks grouped by task_id voor efficiënte lookup
+  const subtasksByTaskId = useMemo(() => {
+    const map = new Map<string, Subtask[]>();
+    mySubtasks.forEach(s => {
+      const taskId = s.task_id;
+      if (!map.has(taskId)) map.set(taskId, []);
+      map.get(taskId)!.push(s);
+    });
+    return map;
+  }, [mySubtasks]);
+
+  // Granulaire refresh: alleen subtasks herladen na subtask wijziging
+  const handleTaskUpdated = useCallback(() => {
+    loadSubtasks();
+    loadData(); // Full reload om column_id sync te garanderen
+  }, [user]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -897,6 +910,7 @@ const Kanban = () => {
                       title={column.name}
                       tasks={getTasksForColumn(column.id)}
                       subtasks={getSubtasksForColumn(column.id)}
+                      subtasksByTaskId={subtasksByTaskId}
                       status={column.status}
                       isCollapsed={column.isCollapsed}
                       onUpdateName={handleUpdateColumnName}
