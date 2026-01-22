@@ -78,41 +78,6 @@ export interface MatchTarget {
   publieke_opmerking?: string | null; // NEW: sublocation description for keyword matching
 }
 
-// ============= QUERY RESULT INTERFACES (for type-safe callbacks) =============
-
-interface SublocationQueryResult {
-  id: string;
-  naam: string;
-  plaats: string | null;
-  sector: string[] | null;
-  doelgroep: string[] | null;
-  gezochte_functies: string[] | null;
-  provincie: string | null;
-  location?: {
-    naam: string;
-    client_org?: { name: string };
-  };
-}
-
-interface VacancyQueryResult {
-  id: string;
-  titel: string;
-  functie_niveau: string | null;
-  urgentie: string | null;
-  uren_per_week: number | null;
-  sublocation?: SublocationQueryResult | null;
-}
-
-interface ScoredSublocation {
-  sublocation: SublocationQueryResult;
-  score: MatchScoreBreakdown;
-}
-
-interface ScoredVacancy {
-  vacancy: VacancyQueryResult;
-  score: MatchScoreBreakdown;
-}
-
 // ============= PROFESSIONAL PERFORMANCE INTERFACE =============
 
 export interface ProfessionalPerformance {
@@ -2275,88 +2240,6 @@ export function calculateApplicationMatchScore(
   return calculateUnifiedMatchScore(candidate, target, aiBoostData);
 }
 
-/**
- * Batch calculate top matches for an application against all sublocations and vacancies
- */
-export async function calculateTopMatchesForApplication(
-  supabaseClient: any,
-  extractedData: any,
-  options?: {
-    sublocationLimit?: number;
-    vacancyLimit?: number;
-    minScore?: number;
-  }
-): Promise<{
-  sublocations: Array<{ sublocation: any; score: MatchScoreBreakdown }>;
-  vacancies: Array<{ vacancy: any; score: MatchScoreBreakdown }>;
-}> {
-  const limit = options?.sublocationLimit || 10;
-  const vacancyLimit = options?.vacancyLimit || 10;
-  const minScore = options?.minScore || 40;
-  
-  const application = { extracted_data: extractedData };
-  
-  // Fetch active sublocations
-  const { data: sublocations } = await supabaseClient
-    .from('client_sublocations')
-    .select(`
-      id, naam, plaats, sector, doelgroep, gezochte_functies, provincie,
-      location:client_locations(naam, client_org:client_organizations(name))
-    `)
-    .eq('is_active', true)
-    .limit(200);
-
-  // Fetch open vacancies
-  const { data: vacancies } = await supabaseClient
-    .from('vacancies')
-    .select(`
-      id, titel, functie_niveau, urgentie, uren_per_week,
-      sublocation:client_sublocations(naam, plaats, sector, doelgroep, gezochte_functies, provincie)
-    `)
-    .eq('status', 'open')
-    .limit(100);
-
-  // Calculate sublocation scores
-  const scoredSublocations = (sublocations || [])
-    .map((sub: SublocationQueryResult) => {
-      const target: MatchTarget = {
-        gezochte_functies: sub.gezochte_functies,
-        sector: sub.sector,
-        doelgroep: sub.doelgroep,
-        plaats: sub.plaats,
-        provincie: sub.provincie,
-      };
-      const score = calculateApplicationMatchScore(application, target);
-      return { sublocation: sub, score };
-    })
-    .filter((item: ScoredSublocation) => item.score.normalizedScore >= minScore)
-    .sort((a: ScoredSublocation, b: ScoredSublocation) => b.score.normalizedScore - a.score.normalizedScore)
-    .slice(0, limit);
-
-  // Calculate vacancy scores
-  const scoredVacancies = (vacancies || [])
-    .filter((vac: VacancyQueryResult) => vac.sublocation)
-    .map((vac: VacancyQueryResult) => {
-      const sub = vac.sublocation;
-      const target: MatchTarget = {
-        gezochte_functies: [vac.functie_niveau, ...(sub?.gezochte_functies || [])],
-        sector: sub?.sector,
-        doelgroep: sub?.doelgroep,
-        plaats: sub?.plaats,
-        provincie: sub?.provincie,
-      };
-      const score = calculateApplicationMatchScore(application, target);
-      return { vacancy: vac, score };
-    })
-    .filter((item: ScoredVacancy) => item.score.normalizedScore >= minScore)
-    .sort((a: ScoredVacancy, b: ScoredVacancy) => b.score.normalizedScore - a.score.normalizedScore)
-    .slice(0, vacancyLimit);
-
-  return {
-    sublocations: scoredSublocations,
-    vacancies: scoredVacancies,
-  };
-}
 
 // ============= FIX 1: ASYNC APPLICATION MATCHING WITH EXPERT KNOWLEDGE =============
 
