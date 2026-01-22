@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef } from "react";
-// useNavigate removed - unused in this component
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -76,15 +75,13 @@ interface Task {
 }
 
 const Dashboard = () => {
-  // navigate removed - unused
+  
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"high-to-low" | "low-to-high">("high-to-low");
-  const [todayHours, setTodayHours] = useState<string>("0 uur");
-  const [completedThisWeek, setCompletedThisWeek] = useState<number>(0);
   const [activeTimers, setActiveTimers] = useState<Record<string, { user_id: string; start: string; profiles: { name: string | null } | null }>>({});
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -120,8 +117,6 @@ const Dashboard = () => {
 
   useEffect(() => {
     loadTasks();
-    loadTodayHours();
-    loadCompletedThisWeek();
     loadActiveTimers();
     loadUrgencyApplications();
 
@@ -138,7 +133,6 @@ const Dashboard = () => {
         (payload) => {
           log.log('Task change detected:', payload);
           loadTasks();
-          loadCompletedThisWeek();
         }
       )
       .subscribe();
@@ -191,7 +185,6 @@ const Dashboard = () => {
           table: 'time_entries'
         },
         () => {
-          loadTodayHours();
           loadActiveTimers();
         }
       )
@@ -253,41 +246,6 @@ const Dashboard = () => {
       log.error("Error loading tasks:", error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadTodayHours = async () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const { data } = await supabase
-      .from("time_entries")
-      .select("duration_min")
-      .gte("start", today.toISOString());
-    
-    if (data) {
-      const totalMinutes = data.reduce((sum, entry) => sum + (entry.duration_min || 0), 0);
-      const hours = Math.floor(totalMinutes / 60);
-      const minutes = totalMinutes % 60;
-      setTodayHours(minutes > 0 ? `${hours} uur ${minutes}m` : `${hours} uur`);
-    }
-  };
-
-  const loadCompletedThisWeek = async () => {
-    const now = new Date();
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay() + 1); // Monday
-    weekStart.setHours(0, 0, 0, 0);
-    
-    const { data, error } = await supabase
-      .from("tasks")
-      .select("id")
-      .not("completed_at", "is", null)
-      .is("deleted_at", null)
-      .gte("completed_at", weekStart.toISOString());
-    
-    if (!error && data) {
-      setCompletedThisWeek(data.length || 0);
     }
   };
 
@@ -443,7 +401,6 @@ const Dashboard = () => {
 
   const handleTaskUpdated = () => {
     loadTasks();
-    loadCompletedThisWeek();
   };
 
   const toggleTaskExpansion = (taskId: string) => {
@@ -733,29 +690,6 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Personal Stats - Today's Progress */}
-      <div className="grid grid-cols-2 gap-3">
-        <Card className="border-0 bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition-all">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="h-2 w-2 rounded-full bg-blue-500" />
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div className="text-2xl font-bold tabular-nums">{todayHours}</div>
-            <div className="text-sm font-medium text-muted-foreground">Vandaag gewerkt</div>
-          </CardContent>
-        </Card>
-        <Card className="border-0 bg-background shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition-all">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="h-2 w-2 rounded-full bg-green-500" />
-              <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div className="text-2xl font-bold tabular-nums">{completedThisWeek}</div>
-            <div className="text-sm font-medium text-muted-foreground">Deze week afgerond</div>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Recruitment KPI's - Core Dashboard Metrics */}
       <RecruitmentKPIs />
