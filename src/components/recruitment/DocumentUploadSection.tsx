@@ -673,7 +673,7 @@ export function DocumentUploadSection({
     }
   };
 
-  const getStatusBadge = (status: string | null | undefined, docType: DocumentType) => {
+  const getStatusBadge = (status: string | null | undefined, _docType: DocumentType) => {
     if (!status || status === 'missing') {
       return <Badge variant="outline" className="text-destructive border-destructive/30">Ontbreekt</Badge>;
     }
