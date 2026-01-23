@@ -274,7 +274,7 @@ export function VacancyEditDialog({
                 value={newCertificaat}
                 onChange={(e) => setNewCertificaat(e.target.value)}
                 placeholder="bijv. BHV, EHBO"
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addCertificaat())}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addCertificaat())}
               />
               <Button type="button" variant="outline" size="icon" onClick={addCertificaat}>
                 <Plus className="h-4 w-4" />

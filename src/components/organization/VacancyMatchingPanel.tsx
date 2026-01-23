@@ -226,23 +226,6 @@ export function VacancyMatchingPanel({ vacancy, sublocationName }: VacancyMatchi
     }
   };
 
-  const handleUpdateApplicationStatus = async (applicationId: string, newStatus: string) => {
-    try {
-      const { error } = await supabase
-        .from("vacancy_applications")
-        .update({ status: newStatus })
-        .eq("id", applicationId);
-
-      if (error) throw error;
-
-      toast.success("Status bijgewerkt");
-      queryClient.invalidateQueries({ queryKey: ["vacancy-applications", vacancy.id] });
-    } catch (error) {
-      console.error("Error updating status:", error);
-      toast.error("Kon status niet bijwerken");
-    }
-  };
-
   if (applicationsLoading || professionalsLoading) {
     return (
       <div className="space-y-4">
