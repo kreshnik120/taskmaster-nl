@@ -21,6 +21,7 @@ import {
   Clock,
   XCircle,
   TrendingUp,
+  MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
 import { calculateVacancyMatchScore, MatchCandidate } from "@/lib/services/matchingService";
@@ -184,7 +185,9 @@ export function VacancyMatchingPanel({ vacancy, sublocationName }: VacancyMatchi
 
       if (error) throw error;
 
-      toast.success(`${professional.full_name} voorgesteld voor ${vacancy.titel}`);
+      toast.success(`${professional.full_name} voorgesteld`, {
+        description: `Voor ${vacancy.titel} bij ${sublocationName}`
+      });
       queryClient.invalidateQueries({ queryKey: ["vacancy-applications", vacancy.id] });
       queryClient.invalidateQueries({ queryKey: ["professionals-for-vacancy", vacancy.id] });
     } catch (error) {
@@ -215,7 +218,9 @@ export function VacancyMatchingPanel({ vacancy, sublocationName }: VacancyMatchi
 
       if (error) throw error;
 
-      toast.success(`${top5.length} professionals voorgesteld`);
+      toast.success(`${top5.length} professionals voorgesteld`, {
+        description: `Voor ${vacancy.titel} bij ${sublocationName}`
+      });
       queryClient.invalidateQueries({ queryKey: ["vacancy-applications", vacancy.id] });
       queryClient.invalidateQueries({ queryKey: ["professionals-for-vacancy", vacancy.id] });
     } catch (error) {
@@ -237,6 +242,12 @@ export function VacancyMatchingPanel({ vacancy, sublocationName }: VacancyMatchi
 
   return (
     <div className="space-y-6">
+      {/* Location Context Header */}
+      <div className="flex items-center gap-2 text-sm text-muted-foreground pb-3 border-b">
+        <MapPin className="h-4 w-4" />
+        <span>Matching voor <span className="font-medium text-foreground">{sublocationName}</span></span>
+      </div>
+
       {/* Current Applications */}
       {applications && applications.length > 0 && (
         <div className="space-y-3">
