@@ -18,8 +18,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useCountUp } from "@/hooks/useCountUp";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
+import { TaskDialog } from "@/components/TaskDialog";
 import { useMySubtasks } from "@/hooks/useMySubtasks";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatPeriod, getDateUrgency } from "@/lib/dateFormatters";
@@ -109,13 +111,16 @@ export default function Lijst() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [selectedRowIndex, setSelectedRowIndex] = useState<number>(-1);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
   const tableRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [bulkAssignee, setBulkAssignee] = useState<string | null>(null);
   const [bulkPriority, setBulkPriority] = useState<string | null>(null);
   const [mySubtasksOpen, setMySubtasksOpen] = useState(true);
-
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   // Hook for assigned subtasks
   const { subtasks: mySubtasks } = useMySubtasks(currentUserId);
 
@@ -512,12 +517,14 @@ export default function Lijst() {
   };
 
   const handleBulkDelete = async () => {
-    if (!currentUserId || selectedTaskIds.size === 0) return;
+    if (!currentUserId || selectedTaskIds.size === 0 || isBulkDeleting) return;
+
+    setIsBulkDeleting(true);
 
     try {
       const taskIdsArray = Array.from(selectedTaskIds);
 
-      // === FIX #2: STORAGE CLEANUP FOR BULK DELETE ===
+      // === STORAGE CLEANUP FOR BULK DELETE ===
       // Fetch all attachments for selected tasks
       const { data: attachments, error: fetchError } = await supabase
         .from('attachments')
@@ -554,12 +561,15 @@ export default function Lijst() {
 
       if (error) throw error;
 
-      toast.success(`${selectedTaskIds.size} taken verwijderd`);
+      toast.success(`${selectedTaskIds.size} ${selectedTaskIds.size === 1 ? 'taak' : 'taken'} verwijderd`);
       setSelectedTaskIds(new Set());
+      setBulkDeleteDialogOpen(false);
       fetchTasks();
     } catch (error) {
-      console.error("Error bulk deleting:", error);
+      console.error("[Lijst] Bulk delete failed:", error);
       toast.error("Fout bij verwijderen van taken");
+    } finally {
+      setIsBulkDeleting(false);
     }
   };
 
@@ -614,9 +624,9 @@ export default function Lijst() {
   // Memoized filtered and sorted tasks for performance
   const filteredTasks = useMemo(() => {
     let filtered = tasks.filter((task) => {
-      // Search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
+      // Search filter - use debounced value for performance
+      if (debouncedSearchQuery) {
+        const query = debouncedSearchQuery.toLowerCase();
         const matchesTitle = task.title?.toLowerCase().includes(query);
         const matchesDescription = task.description?.toLowerCase().includes(query);
         const matchesAssignee = task.profiles?.name?.toLowerCase().includes(query);
@@ -658,7 +668,7 @@ export default function Lijst() {
     }
 
     return filtered;
-  }, [tasks, filterPriority, filterStatus, sortColumn, sortDirection, searchQuery]);
+  }, [tasks, filterPriority, filterStatus, sortColumn, sortDirection, debouncedSearchQuery]);
 
   const groupedTasks = () => {
     if (groupBy === "none") return { "Alle taken": filteredTasks };
@@ -719,7 +729,7 @@ export default function Lijst() {
       // n = Open nieuwe taak dialog
       if (e.key === 'n' && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
-        navigate('/lijst?new=true');
+        setTaskDialogOpen(true);
         return;
       }
 
@@ -1099,11 +1109,12 @@ export default function Lijst() {
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={handleBulkDelete}
+                  onClick={() => setBulkDeleteDialogOpen(true)}
                   className="h-9"
+                  disabled={selectedTaskIds.size === 0}
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
-                  Verwijderen
+                  Verwijderen ({selectedTaskIds.size})
                 </Button>
               </div>
             </CardContent>
@@ -1147,7 +1158,7 @@ export default function Lijst() {
                             Filters wissen
                           </Button>
                         )}
-                        <Button onClick={() => navigate("/kanban")}>
+                        <Button onClick={() => setTaskDialogOpen(true)}>
                           <Plus className="h-4 w-4 mr-2" />
                           Nieuwe taak
                         </Button>
@@ -1461,6 +1472,51 @@ export default function Lijst() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {selectedTaskIds.size} {selectedTaskIds.size === 1 ? 'taak' : 'taken'} verwijderen?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Deze actie verwijdert {selectedTaskIds.size} {selectedTaskIds.size === 1 ? 'taak' : 'taken'} inclusief 
+              alle bijlagen, subtaken en herinneringen. De taken worden verplaatst naar "Verwijderde Taken" 
+              en kunnen later worden hersteld.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBulkDeleting}>
+              Annuleren
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isBulkDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Bezig met verwijderen...
+                </>
+              ) : (
+                "Verwijderen"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Task Creation Dialog */}
+      <TaskDialog 
+        open={taskDialogOpen} 
+        onOpenChange={setTaskDialogOpen} 
+        onSuccess={() => {
+          toast.success("Taak aangemaakt");
+          fetchTasks();
+        }}
+      />
     </div>
   );
 }
