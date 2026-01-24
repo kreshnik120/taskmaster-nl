@@ -152,6 +152,7 @@ export function SubtaskManager({ taskId, profiles, onSubtasksChange }: SubtaskMa
   const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(null);
   // === FIX #4: DELETE CONFIRMATION STATE ===
   const [deleteConfirmIndex, setDeleteConfirmIndex] = useState<number | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -281,9 +282,14 @@ export function SubtaskManager({ taskId, profiles, onSubtasksChange }: SubtaskMa
   };
 
   const executeDeleteSubtask = async () => {
-    if (deleteConfirmIndex !== null) {
-      await deleteSubtask(deleteConfirmIndex);
-      setDeleteConfirmIndex(null);
+    if (deleteConfirmIndex !== null && !isDeleting) {
+      setIsDeleting(true);
+      try {
+        await deleteSubtask(deleteConfirmIndex);
+      } finally {
+        setIsDeleting(false);
+        setDeleteConfirmIndex(null);
+      }
     }
   };
 
@@ -454,9 +460,10 @@ export function SubtaskManager({ taskId, profiles, onSubtasksChange }: SubtaskMa
             <AlertDialogCancel>Annuleren</AlertDialogCancel>
             <AlertDialogAction
               onClick={executeDeleteSubtask}
+              disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Verwijderen
+              {isDeleting ? 'Bezig...' : 'Verwijderen'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
