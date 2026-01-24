@@ -401,9 +401,86 @@ export default function Kalender() {
     setDetailModalOpen(true);
   };
 
-  const handleTaskUpdated = () => {
-    fetchTasks();
-    setDetailModalOpen(false);
+  const handleTaskUpdated = async () => {
+    const previousWeekStart = currentWeekStart;
+    setLoading(true);
+    
+    try {
+      if (selectedTask) {
+        const { data: updatedTask, error: fetchError } = await supabase
+          .from("tasks")
+          .select("id, start_at, due_at, title")
+          .eq("id", selectedTask.id)
+          .maybeSingle();
+        
+        if (fetchError) {
+          console.error('[Kalender] Failed to fetch updated task:', fetchError);
+          throw fetchError;
+        }
+        
+        if (updatedTask) {
+          const taskDate = updatedTask.start_at 
+            ? parseISO(updatedTask.start_at)
+            : updatedTask.due_at 
+              ? parseISO(updatedTask.due_at)
+              : null;
+          
+          if (taskDate) {
+            const newWeekStart = startOfWeek(taskDate, { locale: nl, weekStartsOn: 1 });
+            const currentWeekEnd = endOfWeek(currentWeekStart, { locale: nl, weekStartsOn: 1 });
+            
+            // Check if task moved outside current week view
+            if (taskDate < currentWeekStart || taskDate > currentWeekEnd) {
+              // Audit logging
+              const { data: { user } } = await supabase.auth.getUser();
+              const { error: auditError } = await supabase
+                .from('task_action_history')
+                .insert({
+                  task_id: selectedTask.id,
+                  action_text: `Taak bewerkt: datum gewijzigd naar ${format(taskDate, 'EEEE d MMMM', { locale: nl })}`,
+                  action_type: 'date_change',
+                  completed_at: new Date().toISOString(),
+                  completed_by: user?.id || null,
+                });
+              
+              if (auditError) {
+                console.error('[Kalender] Audit log failed:', auditError);
+              }
+              
+              // Smart navigation to new week
+              setCurrentWeekStart(newWeekStart);
+              
+              toast({
+                title: "Taak verplaatst",
+                description: `Genavigeerd naar ${format(taskDate, 'd MMMM yyyy', { locale: nl })}`,
+                duration: 8000,
+                action: (
+                  <ToastAction 
+                    altText="Terug naar vorige week" 
+                    onClick={() => setCurrentWeekStart(previousWeekStart)}
+                  >
+                    Terug
+                  </ToastAction>
+                ),
+              });
+            }
+          }
+        }
+      }
+      
+      await fetchTasks();
+      
+    } catch (error) {
+      console.error('[Kalender] handleTaskUpdated failed:', error);
+      toast({
+        title: "Fout bij bijwerken",
+        description: "Kon taakgegevens niet ophalen. Probeer opnieuw.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+      setDetailModalOpen(false);
+    }
   };
 
   const handleDayClick = (day: Date) => {
