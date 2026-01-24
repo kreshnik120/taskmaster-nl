@@ -84,9 +84,17 @@ const Kanban = () => {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [lastScrolledKpi, setLastScrolledKpi] = useState<string | null>(null);
+  // Globale filter state - consistent met andere pagina's via useGlobalTaskFilter
+  // We houden hier lokale state aan die synct met localStorage voor backwards compatibility
   const [showOnlyMyTasks, setShowOnlyMyTasks] = useState(() => {
-    const stored = localStorage.getItem('kanban-show-only-my-tasks');
-    return stored === null ? true : stored === 'true';
+    // Eerst nieuwe unified key checken, dan fallback naar oude key
+    const unifiedStored = localStorage.getItem('mijn-werk-filter');
+    if (unifiedStored !== null) {
+      return unifiedStored === 'true';
+    }
+    // Fallback: oude key migreren
+    const oldStored = localStorage.getItem('kanban-show-only-my-tasks');
+    return oldStored === null ? true : oldStored === 'true';
   });
   
   // Sorteer-voorkeur met localStorage persistentie (enterprise-niveau)
@@ -163,8 +171,10 @@ const Kanban = () => {
     }
   }, [user, showOnlyMyTasks]);
 
-  // Persist showOnlyMyTasks preference
+  // Persist showOnlyMyTasks preference - unified key voor alle pagina's
   useEffect(() => {
+    localStorage.setItem('mijn-werk-filter', String(showOnlyMyTasks));
+    // Behoud oude key voor backwards compatibility
     localStorage.setItem('kanban-show-only-my-tasks', String(showOnlyMyTasks));
   }, [showOnlyMyTasks]);
 
@@ -264,7 +274,8 @@ const Kanban = () => {
           profiles:profiles!tasks_assignee_id_fkey(name, email),
           task_scoring_metadata(*)
         `)
-        .is("deleted_at", null);
+        .is("deleted_at", null)
+        .is("completed_at", null);  // TOEGEVOEGD: Filter completed tasks uit actieve kolommen
       
       // Filter by current user's tasks if toggle is on
       if (showOnlyMyTasks && user) {

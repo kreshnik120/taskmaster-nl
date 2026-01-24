@@ -227,8 +227,8 @@ const Dashboard = () => {
         `)
         .is("completed_at", null)
         .is("deleted_at", null)
-        .order("due_at", { ascending: true })
-        .limit(10);
+        .order("due_at", { ascending: true });
+        // .limit(10) VERWIJDERD - KPI's moeten alle taken zien
 
       if (error) throw error;
       

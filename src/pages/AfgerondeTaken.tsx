@@ -62,6 +62,25 @@ const AfgerondeTaken = () => {
     checkAuth();
   }, []);
 
+  // Realtime channel voor completed tasks - multi-user sync
+  useEffect(() => {
+    const channel = supabase
+      .channel('afgerond-tasks-realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'tasks',
+      }, (payload) => {
+        console.log('[AfgerondeTaken] Realtime update:', payload.eventType);
+        fetchCompletedTasks();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {

@@ -71,6 +71,25 @@ const VerwijderdeTaken = () => {
     checkAuth();
   }, []);
 
+  // Realtime channel voor deleted tasks - multi-user sync
+  useEffect(() => {
+    const channel = supabase
+      .channel('verwijderd-tasks-realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'tasks',
+      }, (payload) => {
+        console.log('[VerwijderdeTaken] Realtime update:', payload.eventType);
+        fetchDeletedTasks();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
