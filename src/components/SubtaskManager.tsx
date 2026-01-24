@@ -3,6 +3,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Plus, GripVertical, Trash2, Bell } from "lucide-react";
 import { ReminderDialog } from "./ReminderDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -140,6 +150,8 @@ export function SubtaskManager({ taskId, profiles, onSubtasksChange }: SubtaskMa
   const [loading, setLoading] = useState(false);
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
   const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(null);
+  // === FIX #4: DELETE CONFIRMATION STATE ===
+  const [deleteConfirmIndex, setDeleteConfirmIndex] = useState<number | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -199,31 +211,80 @@ export function SubtaskManager({ taskId, profiles, onSubtasksChange }: SubtaskMa
   const deleteSubtask = async (index: number) => {
     const subtask = subtasks[index];
     
-    if (subtask.id && !subtask.isNew) {
-      const { error } = await supabase
-        .from('subtasks')
-        .delete()
-        .eq('id', subtask.id);
+    try {
+      if (subtask.id && !subtask.isNew) {
+        // === CASCADE DELETE: First delete linked reminders ===
+        const { error: reminderError } = await supabase
+          .from('reminders')
+          .delete()
+          .eq('subtask_id', subtask.id);
 
-      if (error) {
-        toast({
-          title: "Fout bij verwijderen",
-          description: "Kon subtaak niet verwijderen",
-          variant: "destructive",
-        });
-        return;
+        if (reminderError) {
+          console.error('[SubtaskManager] Failed to delete reminders:', reminderError);
+          // Continue anyway - database CASCADE should handle this
+        }
+
+        // Then delete subtask
+        const { error } = await supabase
+          .from('subtasks')
+          .delete()
+          .eq('id', subtask.id);
+
+        if (error) {
+          console.error('[SubtaskManager] Failed to delete subtask:', error);
+          toast({
+            title: "Fout bij verwijderen",
+            description: "Kon subtaak niet verwijderen",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Log audit action (best-effort)
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          await supabase.from('task_action_history').insert({
+            task_id: taskId,
+            action_text: `Subtaak "${subtask.title}" verwijderd`,
+            action_type: 'status_change',
+            completed_at: new Date().toISOString(),
+            completed_by: user?.id || null,
+            is_current: false,
+          });
+        } catch (auditErr) {
+          console.error('[SubtaskManager] Audit log failed:', auditErr);
+        }
       }
+
+      const updated = subtasks.filter((_, i) => i !== index);
+      // Reorder remaining subtasks
+      updated.forEach((s, i) => s.order = i);
+      setSubtasks(updated);
+
+      toast({
+        title: "Verwijderd",
+        description: "Subtaak is verwijderd",
+      });
+    } catch (err) {
+      console.error('[SubtaskManager] Unexpected error:', err);
+      toast({
+        title: "Fout",
+        description: "Onverwachte fout bij verwijderen",
+        variant: "destructive",
+      });
     }
+  };
 
-    const updated = subtasks.filter((_, i) => i !== index);
-    // Reorder remaining subtasks
-    updated.forEach((s, i) => s.order = i);
-    setSubtasks(updated);
+  // === FIX #4: DELETE CONFIRMATION HANDLER ===
+  const confirmDeleteSubtask = (index: number) => {
+    setDeleteConfirmIndex(index);
+  };
 
-    toast({
-      title: "Verwijderd",
-      description: "Subtaak is verwijderd",
-    });
+  const executeDeleteSubtask = async () => {
+    if (deleteConfirmIndex !== null) {
+      await deleteSubtask(deleteConfirmIndex);
+      setDeleteConfirmIndex(null);
+    }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -341,7 +402,7 @@ export function SubtaskManager({ taskId, profiles, onSubtasksChange }: SubtaskMa
                   index={index}
                   profiles={profiles}
                   onUpdate={updateSubtask}
-                  onDelete={deleteSubtask}
+                  onDelete={confirmDeleteSubtask}
                   onReminderClick={(subtaskId) => {
                     setSelectedSubtaskId(subtaskId);
                     setReminderDialogOpen(true);
@@ -372,6 +433,34 @@ export function SubtaskManager({ taskId, profiles, onSubtasksChange }: SubtaskMa
           setSelectedSubtaskId(null);
         }}
       />
+
+      {/* === FIX #4: DELETE CONFIRMATION DIALOG === */}
+      <AlertDialog 
+        open={deleteConfirmIndex !== null} 
+        onOpenChange={(open) => !open && setDeleteConfirmIndex(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Subtaak verwijderen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Weet je zeker dat je "{deleteConfirmIndex !== null ? subtasks[deleteConfirmIndex]?.title || 'deze subtaak' : ''}" 
+              wilt verwijderen? Deze actie kan niet ongedaan gemaakt worden.
+              <span className="block mt-2 text-orange-600 font-medium">
+                Let op: Eventuele gekoppelde herinneringen worden ook verwijderd.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeDeleteSubtask}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Verwijderen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

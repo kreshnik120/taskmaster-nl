@@ -287,6 +287,34 @@ const Dashboard = () => {
 
       log.log("Deleting task:", taskToDelete, "by user:", user.id);
       
+      // === FIX #2: STORAGE CLEANUP ===
+      // Fetch attachments BEFORE delete to get file paths
+      const { data: attachments, error: fetchError } = await supabase
+        .from('attachments')
+        .select('id, url')
+        .eq('task_id', taskToDelete);
+
+      if (fetchError) {
+        console.error('[Dashboard] Failed to fetch attachments:', fetchError);
+        // Continue - cleanup is best-effort
+      }
+
+      // Delete storage files if attachments exist
+      if (attachments && attachments.length > 0) {
+        const filePaths = attachments.map(att => att.url);
+        const { error: storageError } = await supabase.storage
+          .from('task-attachments')
+          .remove(filePaths);
+
+        if (storageError) {
+          console.error('[Dashboard] Storage cleanup failed:', storageError);
+          // Log but continue - soft delete is more important
+        } else {
+          log.log(`[Dashboard] Cleaned up ${filePaths.length} storage files`);
+        }
+      }
+
+      // Soft delete task (CASCADE deletes attachments records, subtasks, reminders)
       const { error } = await supabase
         .from("tasks")
         .update({ 

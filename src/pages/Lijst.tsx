@@ -442,6 +442,34 @@ export default function Lijst() {
     if (!taskToDelete || !currentUserId) return;
 
     try {
+      // === FIX #2: STORAGE CLEANUP ===
+      // Fetch attachments BEFORE delete to get file paths
+      const { data: attachments, error: fetchError } = await supabase
+        .from('attachments')
+        .select('id, url')
+        .eq('task_id', taskToDelete.id);
+
+      if (fetchError) {
+        console.error('[Lijst] Failed to fetch attachments:', fetchError);
+        // Continue - cleanup is best-effort
+      }
+
+      // Delete storage files if attachments exist
+      if (attachments && attachments.length > 0) {
+        const filePaths = attachments.map(att => att.url);
+        const { error: storageError } = await supabase.storage
+          .from('task-attachments')
+          .remove(filePaths);
+
+        if (storageError) {
+          console.error('[Lijst] Storage cleanup failed:', storageError);
+          // Log but continue - soft delete is more important
+        } else {
+          console.log(`[Lijst] Cleaned up ${filePaths.length} storage files`);
+        }
+      }
+
+      // Soft delete task
       const { error } = await supabase
         .from("tasks")
         .update({
@@ -487,13 +515,42 @@ export default function Lijst() {
     if (!currentUserId || selectedTaskIds.size === 0) return;
 
     try {
+      const taskIdsArray = Array.from(selectedTaskIds);
+
+      // === FIX #2: STORAGE CLEANUP FOR BULK DELETE ===
+      // Fetch all attachments for selected tasks
+      const { data: attachments, error: fetchError } = await supabase
+        .from('attachments')
+        .select('id, url')
+        .in('task_id', taskIdsArray);
+
+      if (fetchError) {
+        console.error('[Lijst] Failed to fetch bulk attachments:', fetchError);
+        // Continue - cleanup is best-effort
+      }
+
+      // Delete storage files if attachments exist
+      if (attachments && attachments.length > 0) {
+        const filePaths = attachments.map(att => att.url);
+        const { error: storageError } = await supabase.storage
+          .from('task-attachments')
+          .remove(filePaths);
+
+        if (storageError) {
+          console.error('[Lijst] Bulk storage cleanup failed:', storageError);
+        } else {
+          console.log(`[Lijst] Bulk cleaned up ${filePaths.length} storage files`);
+        }
+      }
+
+      // Bulk soft delete tasks
       const { error } = await supabase
         .from("tasks")
         .update({
           deleted_at: new Date().toISOString(),
           deleted_by: currentUserId,
         })
-        .in("id", Array.from(selectedTaskIds));
+        .in("id", taskIdsArray);
 
       if (error) throw error;
 
