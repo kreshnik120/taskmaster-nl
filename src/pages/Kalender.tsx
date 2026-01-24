@@ -250,10 +250,17 @@ export default function Kalender() {
     })
   );
   
-  // Personalisatie: Mijn taken / Alle taken toggle (consistent met Kanban)
+  // Personalisatie: Mijn taken / Alle taken toggle (consistent met Kanban via unified key)
   const [userId, setUserId] = useState<string | null>(null);
   const [showOnlyMyTasks, setShowOnlyMyTasks] = useState(() => {
-    return localStorage.getItem('kalender-show-only-my-tasks') === 'true';
+    // Unified key met TRUE als default (consistent met andere pagina's)
+    const unifiedStored = localStorage.getItem('mijn-werk-filter');
+    if (unifiedStored !== null) {
+      return unifiedStored === 'true';
+    }
+    // Fallback: oude key migreren
+    const oldStored = localStorage.getItem('kalender-show-only-my-tasks');
+    return oldStored === null ? true : oldStored === 'true'; // Default TRUE (was FALSE)
   });
   
   // Subtaken via reusable hook (consistent met Kanban)
@@ -263,8 +270,10 @@ export default function Kalender() {
     checkAuth();
   }, []);
   
-  // Persist toggle preference & refetch when changed
+  // Persist toggle preference & refetch when changed - unified key
   useEffect(() => {
+    localStorage.setItem('mijn-werk-filter', String(showOnlyMyTasks));
+    // Behoud oude key voor backwards compatibility
     localStorage.setItem('kalender-show-only-my-tasks', String(showOnlyMyTasks));
     if (userId) {
       fetchTasks();
