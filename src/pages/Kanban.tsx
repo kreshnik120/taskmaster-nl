@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAiScoring } from "@/hooks/useAiScoring";
 import { useGreeting } from "@/hooks/useGreeting";
+import { useGlobalTaskFilter } from "@/hooks/useGlobalTaskFilter";
 import { logger } from "@/lib/logger";
 
 const log = logger.create('Kanban');
@@ -84,18 +85,9 @@ const Kanban = () => {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [lastScrolledKpi, setLastScrolledKpi] = useState<string | null>(null);
-  // Globale filter state - consistent met andere pagina's via useGlobalTaskFilter
-  // We houden hier lokale state aan die synct met localStorage voor backwards compatibility
-  const [showOnlyMyTasks, setShowOnlyMyTasks] = useState(() => {
-    // Eerst nieuwe unified key checken, dan fallback naar oude key
-    const unifiedStored = localStorage.getItem('mijn-werk-filter');
-    if (unifiedStored !== null) {
-      return unifiedStored === 'true';
-    }
-    // Fallback: oude key migreren
-    const oldStored = localStorage.getItem('kanban-show-only-my-tasks');
-    return oldStored === null ? true : oldStored === 'true';
-  });
+  
+  // Gebruik centrale hook voor filter state (elimineert handmatige localStorage logica)
+  const { showOnlyMyTasks, setShowOnlyMyTasks, userId: globalFilterUserId } = useGlobalTaskFilter();
   
   // Sorteer-voorkeur met localStorage persistentie (enterprise-niveau)
   const [sortBy, setSortBy] = useState<'due_at' | 'priority' | 'created_at' | 'manual'>(() => {
@@ -171,12 +163,7 @@ const Kanban = () => {
     }
   }, [user, showOnlyMyTasks]);
 
-  // Persist showOnlyMyTasks preference - unified key voor alle pagina's
-  useEffect(() => {
-    localStorage.setItem('mijn-werk-filter', String(showOnlyMyTasks));
-    // Behoud oude key voor backwards compatibility
-    localStorage.setItem('kanban-show-only-my-tasks', String(showOnlyMyTasks));
-  }, [showOnlyMyTasks]);
+  // Filter persistentie wordt nu afgehandeld door useGlobalTaskFilter hook
 
   // Persist sorteer voorkeuren
   useEffect(() => {

@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useCountUp } from "@/hooks/useCountUp";
+import { useActiveTimers } from "@/hooks/useActiveTimers";
 import { Loader2, Play, Square, Clock, Trash2, Calendar, ListChecks, Timer } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -58,9 +59,10 @@ const Tijdregistratie = () => {
   const [note, setNote] = useState("");
   const [filterPeriod, setFilterPeriod] = useState<string>("today");
   const [totalMinutes, setTotalMinutes] = useState(0);
-  const [activeTimers, setActiveTimers] = useState<Record<string, ActiveTimerInfo>>({});
-  const [currentTime, setCurrentTime] = useState(new Date());
   const navigate = useNavigate();
+  
+  // Gebruik centrale hook voor globale timer state
+  const { activeTimers, currentTime } = useActiveTimers();
 
   // Calculate animated metrics (BEFORE early returns)
   const todayMinutes = timeEntries
@@ -92,7 +94,6 @@ const Tijdregistratie = () => {
         loadTasks();
         loadTimeEntries();
         checkActiveTimer();
-        loadAllActiveTimers();
       } else {
         navigate("/auth");
       }
@@ -125,7 +126,7 @@ const Tijdregistratie = () => {
       )
       .subscribe();
 
-    // Real-time listener voor time_entries
+    // Real-time listener voor time_entries (alleen voor lokale user timer)
     const timeEntriesChannel = supabase
       .channel('tijdregistratie-time-entries')
       .on(
@@ -138,7 +139,7 @@ const Tijdregistratie = () => {
         () => {
           checkActiveTimer();
           loadTimeEntries();
-          loadAllActiveTimers();
+          // activeTimers wordt nu globaal bijgehouden door useActiveTimers hook
         }
       )
       .subscribe();
@@ -156,16 +157,7 @@ const Tijdregistratie = () => {
     }
   }, [filterPeriod, user]);
 
-  // Live timer update elke seconde
-  useEffect(() => {
-    if (activeTimer || Object.keys(activeTimers).length > 0) {
-      const interval = setInterval(() => {
-        setCurrentTime(new Date());
-      }, 1000);
-
-      return () => clearInterval(interval);
-    }
-  }, [activeTimer, activeTimers]);
+  // Timer interval wordt nu afgehandeld door useActiveTimers hook
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -208,20 +200,7 @@ const Tijdregistratie = () => {
     if (data) setTasks(data);
   };
 
-  const loadAllActiveTimers = async () => {
-    const { data } = await supabase
-      .from("time_entries")
-      .select("task_id, user_id, start, profiles:profiles!time_entries_user_id_fkey(name)")
-      .is("end", null);
-    
-    if (data) {
-      const timersMap: Record<string, ActiveTimerInfo> = {};
-      data.forEach((entry: any) => {
-        timersMap[entry.task_id] = entry;
-      });
-      setActiveTimers(timersMap);
-    }
-  };
+  // loadAllActiveTimers is nu in useActiveTimers hook
 
   const checkActiveTimer = async () => {
     const { data } = await supabase
@@ -303,7 +282,7 @@ const Tijdregistratie = () => {
 
     setActiveTimer(data);
     setNote("");
-    loadAllActiveTimers();
+    // activeTimers wordt nu automatisch bijgewerkt door useActiveTimers hook
     toast.success("Timer gestart");
   };
 
@@ -330,7 +309,7 @@ const Tijdregistratie = () => {
 
     setActiveTimer(null);
     loadTimeEntries();
-    loadAllActiveTimers();
+    // activeTimers wordt nu automatisch bijgewerkt door useActiveTimers hook
     toast.success(`Timer gestopt: ${formatMinutes(durationMin)}`);
   };
 

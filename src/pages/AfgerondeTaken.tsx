@@ -62,7 +62,7 @@ const AfgerondeTaken = () => {
     checkAuth();
   }, []);
 
-  // Realtime channel voor completed tasks - multi-user sync
+  // Realtime channel voor completed tasks - multi-user sync met filter
   useEffect(() => {
     const channel = supabase
       .channel('afgerond-tasks-realtime')
@@ -70,6 +70,7 @@ const AfgerondeTaken = () => {
         event: '*',
         schema: 'public',
         table: 'tasks',
+        filter: 'completed_at=not.is.null',  // Alleen completed task changes
       }, (payload) => {
         console.log('[AfgerondeTaken] Realtime update:', payload.eventType);
         fetchCompletedTasks();

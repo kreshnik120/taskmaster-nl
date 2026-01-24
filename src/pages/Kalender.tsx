@@ -6,6 +6,7 @@ import { format, startOfWeek, endOfDay, startOfDay, addDays, isSameDay, parseISO
 import { nl } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Trash2, Plus, Calendar, CheckCircle2, Clock, AlertCircle, UserCheck, Video, Phone, MapPin, Sparkles, Coffee, User, Users } from "lucide-react";
 import { useMySubtasks } from "@/hooks/useMySubtasks";
+import { useGlobalTaskFilter } from "@/hooks/useGlobalTaskFilter";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useDroppable, useDraggable, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -250,18 +251,8 @@ export default function Kalender() {
     })
   );
   
-  // Personalisatie: Mijn taken / Alle taken toggle (consistent met Kanban via unified key)
-  const [userId, setUserId] = useState<string | null>(null);
-  const [showOnlyMyTasks, setShowOnlyMyTasks] = useState(() => {
-    // Unified key met TRUE als default (consistent met andere pagina's)
-    const unifiedStored = localStorage.getItem('mijn-werk-filter');
-    if (unifiedStored !== null) {
-      return unifiedStored === 'true';
-    }
-    // Fallback: oude key migreren
-    const oldStored = localStorage.getItem('kalender-show-only-my-tasks');
-    return oldStored === null ? true : oldStored === 'true'; // Default TRUE (was FALSE)
-  });
+  // Gebruik centrale hook voor filter state (elimineert handmatige localStorage logica)
+  const { showOnlyMyTasks, setShowOnlyMyTasks, userId } = useGlobalTaskFilter();
   
   // Subtaken via reusable hook (consistent met Kanban)
   const { subtasks: mySubtasks, refetch: refetchSubtasks } = useMySubtasks(userId);
@@ -270,11 +261,8 @@ export default function Kalender() {
     checkAuth();
   }, []);
   
-  // Persist toggle preference & refetch when changed - unified key
+  // Refetch when filter changes - persistentie wordt nu afgehandeld door hook
   useEffect(() => {
-    localStorage.setItem('mijn-werk-filter', String(showOnlyMyTasks));
-    // Behoud oude key voor backwards compatibility
-    localStorage.setItem('kalender-show-only-my-tasks', String(showOnlyMyTasks));
     if (userId) {
       fetchTasks();
     }
@@ -332,9 +320,8 @@ export default function Kalender() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       navigate("/auth");
-    } else {
-      setUserId(session.user.id);
     }
+    // userId wordt nu automatisch ingesteld door useGlobalTaskFilter hook
   };
 
   const fetchTasks = async () => {
