@@ -13,7 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { 
   User, Building2, Calendar, TrendingUp, CheckCircle2, 
-  Clock, Phone, Mail, MapPin, Award, Briefcase, CalendarIcon, Star, Check, ChevronRight, FileText, Users
+  Clock, Phone, Mail, MapPin, Award, Briefcase, CalendarIcon, Star, Check, ChevronRight, FileText, Users,
+  AlertTriangle, X
 } from "lucide-react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -181,6 +182,11 @@ export function PlacementDetailModal({
   const [wouldRehire, setWouldRehire] = useState(true);
   const [isSavingEvaluation, setIsSavingEvaluation] = useState(false);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
+  
+  // Cancel placement state
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
 
   if (!placement) return null;
 
@@ -256,6 +262,68 @@ export function PlacementDetailModal({
       toast.error("Fout bij afronden");
     } finally {
       setIsSavingEvaluation(false);
+    }
+  };
+
+  const handleCancelPlacement = async () => {
+    setIsCancelling(true);
+    try {
+      // 1. Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // 2. Update assignment status
+      const { error: updateError } = await supabase
+        .from('assignments')
+        .update({
+          status: 'cancelled',
+          cancelled_at: new Date().toISOString(),
+          cancelled_by: user?.id || null,
+          cancelled_reason: cancelReason.trim() || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', placement.id);
+
+      if (updateError) throw updateError;
+
+      // 3. Log to audit trail
+      const auditText = cancelReason.trim()
+        ? `Opdracht geannuleerd: ${cancelReason.trim()}`
+        : `Opdracht geannuleerd (${placement.professionals?.full_name} bij ${placement.client_sublocations?.naam})`;
+
+      const { error: auditError } = await supabase
+        .from('assignment_action_history')
+        .insert({
+          assignment_id: placement.id,
+          action_text: auditText,
+          action_type: 'cancellation',
+          completed_at: new Date().toISOString(),
+          completed_by: user?.id || null,
+        });
+
+      if (auditError) {
+        console.error('[PlacementModal] Audit log failed:', auditError);
+        // Continue - niet kritiek
+      }
+
+      // 4. Success feedback
+      toast.success('Opdracht geannuleerd', {
+        description: placement.professionals?.full_name || 'Professional'
+      });
+      
+      // 5. Cleanup en close
+      setCancelDialogOpen(false);
+      setCancelReason('');
+      onOpenChange(false);
+      
+      // 6. Notify parent voor refresh
+      if (onStatusChange) {
+        onStatusChange(placement.id, 'cancelled');
+      }
+    } catch (error) {
+      console.error('[PlacementModal] Cancel error:', error);
+      toast.error('Kon opdracht niet annuleren');
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -533,7 +601,7 @@ export function PlacementDetailModal({
             {/* Quick Actions */}
             <div>
               <h3 className="text-sm font-semibold mb-3">Acties</h3>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 {placement.status === "draft" && (
                   <Button onClick={() => handleStatusChange("active")}>
                     <CheckCircle2 className="h-4 w-4 mr-2" />
@@ -546,6 +614,19 @@ export function PlacementDetailModal({
                     Rond Af
                   </Button>
                 )}
+                
+                {/* Annuleer button - alleen voor draft/active */}
+                {!['completed', 'cancelled'].includes(placement.status) && (
+                  <Button 
+                    variant="ghost" 
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => setCancelDialogOpen(true)}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Annuleer
+                  </Button>
+                )}
+                
                 <Button variant="ghost">
                   <Briefcase className="h-4 w-4 mr-2" />
                   Bekijk Taken
@@ -700,6 +781,63 @@ export function PlacementDetailModal({
                   Bevestig Afronden
                 </>
               )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cancel Confirmation Dialog */}
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Opdracht Annuleren?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4">
+                <p>
+                  Weet je zeker dat je de opdracht van{" "}
+                  <span className="font-semibold text-foreground">
+                    {placement.professionals?.full_name}
+                  </span>{" "}
+                  bij{" "}
+                  <span className="font-semibold text-foreground">
+                    {placement.client_sublocations?.naam}
+                  </span>{" "}
+                  wilt annuleren?
+                </p>
+                
+                {/* Cancel Reason Field */}
+                <div className="space-y-2">
+                  <Label htmlFor="cancel-reason" className="text-foreground">
+                    Reden (optioneel)
+                  </Label>
+                  <Textarea
+                    id="cancel-reason"
+                    placeholder="Bijv: Dubbele aanmaak, foutieve koppeling, klant heeft geannuleerd..."
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    className="h-20 resize-none"
+                  />
+                </div>
+                
+                <p className="text-amber-600 dark:text-amber-400 text-sm bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg">
+                  De opdracht verdwijnt uit de actieve lijst maar blijft in de database bewaard voor administratieve doeleinden.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isCancelling}>
+              Terug
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleCancelPlacement}
+              disabled={isCancelling}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isCancelling ? 'Bezig...' : 'Ja, Annuleer Opdracht'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

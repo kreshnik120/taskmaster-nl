@@ -1369,6 +1369,51 @@ export type Database = {
           },
         ]
       }
+      assignment_action_history: {
+        Row: {
+          action_text: string
+          action_type: string
+          assignment_id: string
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string | null
+          id: string
+        }
+        Insert: {
+          action_text: string
+          action_type?: string
+          assignment_id: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string | null
+          id?: string
+        }
+        Update: {
+          action_text?: string
+          action_type?: string
+          assignment_id?: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignment_action_history_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "assignment_details"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignment_action_history_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "assignments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assignment_evaluations: {
         Row: {
           assignment_id: string
@@ -1418,6 +1463,9 @@ export type Database = {
         Row: {
           ai_match_reasoning: Json | null
           ai_match_score: number | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          cancelled_reason: string | null
           completed_at: string | null
           created_at: string
           created_by: string | null
@@ -1439,6 +1487,9 @@ export type Database = {
         Insert: {
           ai_match_reasoning?: Json | null
           ai_match_score?: number | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          cancelled_reason?: string | null
           completed_at?: string | null
           created_at?: string
           created_by?: string | null
@@ -1460,6 +1511,9 @@ export type Database = {
         Update: {
           ai_match_reasoning?: Json | null
           ai_match_score?: number | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          cancelled_reason?: string | null
           completed_at?: string | null
           created_at?: string
           created_by?: string | null

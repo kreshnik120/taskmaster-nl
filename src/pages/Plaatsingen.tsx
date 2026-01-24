@@ -104,7 +104,6 @@ export default function Plaatsingen() {
           )
         `)
         .is("professionals.deleted_at", null)
-        .neq("status", "cancelled")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -162,7 +161,10 @@ export default function Plaatsingen() {
       sublocationName.includes(searchQuery.toLowerCase()) ||
       orgName.includes(searchQuery.toLowerCase());
 
-    const matchesStatus = statusFilter === "all" || placement.status === statusFilter;
+    const matchesStatus = 
+      statusFilter === "all"
+        ? placement.status !== "cancelled"  // "all" excludes cancelled
+        : placement.status === statusFilter; // Direct match voor alle filters
 
     return matchesSearch && matchesStatus;
   });
@@ -254,6 +256,7 @@ export default function Plaatsingen() {
             <SelectItem value="draft">Concept</SelectItem>
             <SelectItem value="active">Actief</SelectItem>
             <SelectItem value="completed">Afgerond</SelectItem>
+            <SelectItem value="cancelled">Geannuleerd</SelectItem>
           </SelectContent>
         </Select>
       </div>
