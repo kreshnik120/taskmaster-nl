@@ -71,7 +71,7 @@ const VerwijderdeTaken = () => {
     checkAuth();
   }, []);
 
-  // Realtime channel voor deleted tasks - multi-user sync
+  // Realtime channel voor deleted tasks - multi-user sync met filter
   useEffect(() => {
     const channel = supabase
       .channel('verwijderd-tasks-realtime')
@@ -79,6 +79,7 @@ const VerwijderdeTaken = () => {
         event: '*',
         schema: 'public',
         table: 'tasks',
+        filter: 'deleted_at=not.is.null',  // Alleen deleted task changes
       }, (payload) => {
         console.log('[VerwijderdeTaken] Realtime update:', payload.eventType);
         fetchDeletedTasks();

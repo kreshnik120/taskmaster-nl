@@ -26,6 +26,8 @@ import { useMySubtasks } from "@/hooks/useMySubtasks";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatPeriod, getDateUrgency } from "@/lib/dateFormatters";
 import { SUBTASK_TOKENS } from "@/lib/constants/designTokens";
+import { useActiveTimers } from "@/hooks/useActiveTimers";
+import { useGlobalTaskFilter } from "@/hooks/useGlobalTaskFilter";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -79,7 +81,7 @@ const priorityLabels = {
 
 
 // Memoized timer cell to prevent parent re-renders
-const TimerCell = memo(({ activeTimer, currentTime, getRunningTime }: any) => (
+const TimerCell = memo(({ activeTimer, getRunningTime }: { activeTimer: { start: string }; getRunningTime: (start: string) => string }) => (
   <Badge variant="secondary" className="text-xs bg-primary/20">
     <Clock className="h-3 w-3 mr-1" />
     {getRunningTime(activeTimer.start)}
@@ -98,9 +100,11 @@ export default function Lijst() {
   const [groupBy, setGroupBy] = useState<string>("none");
   const [editingAction, setEditingAction] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState<string>("");
-  const [activeTimers, setActiveTimers] = useState<Record<string, { user_id: string; start: string; profiles: { name: string | null } | null }>>({});
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  
+  // Centrale hooks voor timer en filter state
+  const { activeTimers, getRunningTime } = useActiveTimers();
+  const { showOnlyMyTasks, setShowOnlyMyTasks, userId: globalFilterUserId } = useGlobalTaskFilter();
   const [editingAssignee, setEditingAssignee] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -141,7 +145,6 @@ export default function Lijst() {
   useEffect(() => {
     checkAuth();
     fetchTasks();
-    loadActiveTimers();
     loadProfiles();
 
     // Real-time listener voor taak updates
@@ -161,38 +164,21 @@ export default function Lijst() {
       )
       .subscribe();
 
-    // Real-time listener voor time_entries
-    const timeEntriesChannel = supabase
-      .channel('lijst-time-entries')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'time_entries'
-        },
-        () => {
-          loadActiveTimers();
-        }
-      )
-      .subscribe();
+    // Timer realtime wordt nu afgehandeld door useActiveTimers hook
 
     return () => {
       supabase.removeChannel(tasksChannel);
-      supabase.removeChannel(timeEntriesChannel);
     };
   }, []);
 
-  // Live timer update elke seconde
+  // Refetch wanneer filter wijzigt
   useEffect(() => {
-    if (Object.keys(activeTimers).length > 0) {
-      const interval = setInterval(() => {
-        setCurrentTime(new Date());
-      }, 1000);
-
-      return () => clearInterval(interval);
+    if (currentUserId) {
+      fetchTasks();
     }
-  }, [activeTimers]);
+  }, [showOnlyMyTasks]);
+
+  // Timer interval wordt nu afgehandeld door useActiveTimers hook
 
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -220,7 +206,7 @@ export default function Lijst() {
 
   const fetchTasks = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("tasks")
         .select(`
           id,
@@ -243,8 +229,14 @@ export default function Lijst() {
           subtasks:subtasks(id, title, status)
         `)
         .is("deleted_at", null)
-        .is("completed_at", null)
-        .order("sequence_number", { ascending: true });
+        .is("completed_at", null);
+      
+      // Filter op huidige gebruiker indien "Mijn taken" actief
+      if (showOnlyMyTasks && globalFilterUserId) {
+        query = query.eq("assignee_id", globalFilterUserId);
+      }
+      
+      const { data, error } = await query.order("sequence_number", { ascending: true });
 
       if (error) throw error;
       setTasks(data || []);
@@ -255,30 +247,7 @@ export default function Lijst() {
     }
   };
 
-  const loadActiveTimers = async () => {
-    const { data } = await supabase
-      .from("time_entries")
-      .select("task_id, user_id, start, profiles:profiles!time_entries_user_id_fkey(name)")
-      .is("end", null);
-    
-    if (data) {
-      const timersMap: Record<string, any> = {};
-      data.forEach((entry: any) => {
-        timersMap[entry.task_id] = entry;
-      });
-      setActiveTimers(timersMap);
-    }
-  };
-
-  const getRunningTime = (start: string) => {
-    const now = currentTime;
-    const startTime = new Date(start);
-    const totalSeconds = Math.floor((now.getTime() - startTime.getTime()) / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    return `${hours}u ${minutes}m ${seconds}s`;
-  };
+  // loadActiveTimers en getRunningTime zijn nu in useActiveTimers hook
 
   const handleToggleComplete = async (taskId: string, currentStatus: string | null) => {
     try {
@@ -1378,7 +1347,6 @@ export default function Lijst() {
                               {activeTimer ? (
                                 <TimerCell 
                                   activeTimer={activeTimer}
-                                  currentTime={currentTime}
                                   getRunningTime={getRunningTime}
                                 />
                               ) : (

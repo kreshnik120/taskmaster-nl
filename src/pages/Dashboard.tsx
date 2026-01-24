@@ -37,6 +37,7 @@ import { useGreeting } from "@/hooks/useGreeting";
 import { logger } from "@/lib/logger";
 import { cn } from "@/lib/utils";
 import { SUBTASK_TOKENS, ACTION_TOKENS } from "@/lib/constants/designTokens";
+import { useActiveTimers } from "@/hooks/useActiveTimers";
 
 const log = logger.create('Dashboard');
 
@@ -81,9 +82,10 @@ const Dashboard = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"high-to-low" | "low-to-high">("high-to-low");
-  const [activeTimers, setActiveTimers] = useState<Record<string, { user_id: string; start: string; profiles: { name: string | null } | null }>>({});
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  
+  // Gebruik centrale hook voor timer state (elimineert duplicate queries)
+  const { activeTimers, getRunningTime, currentTime } = useActiveTimers();
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const lastUserActionRef = useRef<number>(0);
@@ -116,7 +118,6 @@ const Dashboard = () => {
 
   useEffect(() => {
     loadTasks();
-    loadActiveTimers();
     loadUrgencyApplications();
 
     // Real-time listener voor taak updates
@@ -173,40 +174,16 @@ const Dashboard = () => {
       )
       .subscribe();
 
-    // Real-time listener voor time_entries
-    const timeEntriesChannel = supabase
-      .channel('dashboard-time-entries')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'time_entries'
-        },
-        () => {
-          loadActiveTimers();
-        }
-      )
-      .subscribe();
+    // Timer realtime wordt nu afgehandeld door useActiveTimers hook
 
     return () => {
       supabase.removeChannel(tasksChannel);
       supabase.removeChannel(subtasksChannel);
-      supabase.removeChannel(timeEntriesChannel);
       supabase.removeChannel(applicationsChannel);
     };
   }, []);
 
-  // Live timer update elke seconde
-  useEffect(() => {
-    if (Object.keys(activeTimers).length > 0) {
-      const interval = setInterval(() => {
-        setCurrentTime(new Date());
-      }, 1000);
-
-      return () => clearInterval(interval);
-    }
-  }, [activeTimers]);
+  // Timer interval wordt nu afgehandeld door useActiveTimers hook
 
   const loadTasks = async () => {
     try {
@@ -248,30 +225,7 @@ const Dashboard = () => {
     }
   };
 
-  const loadActiveTimers = async () => {
-    const { data } = await supabase
-      .from("time_entries")
-      .select("task_id, user_id, start, profiles:profiles!time_entries_user_id_fkey(name)")
-      .is("end", null);
-    
-    if (data) {
-      const timersMap: Record<string, any> = {};
-      data.forEach((entry: any) => {
-        timersMap[entry.task_id] = entry;
-      });
-      setActiveTimers(timersMap);
-    }
-  };
-
-  const getRunningTime = (start: string) => {
-    const now = currentTime;
-    const startTime = new Date(start);
-    const totalSeconds = Math.floor((now.getTime() - startTime.getTime()) / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    return `${hours}u ${minutes}m ${seconds}s`;
-  };
+  // loadActiveTimers en getRunningTime zijn nu in useActiveTimers hook
 
   const handleDeleteTask = async () => {
     if (!taskToDelete) return;
