@@ -469,6 +469,18 @@ export default function Kalender() {
   };
 
   const rescheduleTask = async (task: Task, newDay: Date) => {
+    // === Check of datum daadwerkelijk verandert ===
+    const currentDate = task.start_at 
+      ? format(parseISO(task.start_at), 'yyyy-MM-dd')
+      : task.due_at 
+        ? format(parseISO(task.due_at), 'yyyy-MM-dd')
+        : null;
+    const newDate = format(newDay, 'yyyy-MM-dd');
+    
+    if (currentDate === newDate) {
+      return; // Geen wijziging nodig, voorkom onnodige audit logs
+    }
+    
     // === Bewaar originele waarden voor undo & audit ===
     const originalStartAt = task.start_at;
     const originalDueAt = task.due_at;
@@ -521,7 +533,7 @@ export default function Kalender() {
     const newDateDisplay = format(newDay, 'EEEE d MMM', { locale: nl });
     const { data: { user } } = await supabase.auth.getUser();
     
-    await supabase.from('task_action_history').insert({
+    const { error: auditError } = await supabase.from('task_action_history').insert({
       task_id: task.id,
       action_text: `Datum verplaatst: ${originalDateDisplay} → ${newDateDisplay}`,
       action_type: 'status_change',
@@ -529,6 +541,10 @@ export default function Kalender() {
       completed_by: user?.id || null,
       is_current: false,
     });
+    
+    if (auditError) {
+      console.error('[Kalender] Audit log failed:', auditError);
+    }
 
     // === UNDO FUNCTIONALITEIT ===
     const undoReschedule = async () => {
@@ -547,7 +563,7 @@ export default function Kalender() {
       }
       
       // Log undo action
-      await supabase.from('task_action_history').insert({
+      const { error: undoAuditError } = await supabase.from('task_action_history').insert({
         task_id: task.id,
         action_text: `Verplaatsing ongedaan gemaakt: ${newDateDisplay} → ${originalDateDisplay}`,
         action_type: 'status_change',
@@ -555,6 +571,10 @@ export default function Kalender() {
         completed_by: user?.id || null,
         is_current: false,
       });
+      
+      if (undoAuditError) {
+        console.error('[Kalender] Undo audit log failed:', undoAuditError);
+      }
       
       fetchTasks();
       toast({ title: "Ongedaan gemaakt", description: `${task.title} terug naar ${originalDateDisplay}` });
@@ -573,6 +593,14 @@ export default function Kalender() {
   };
 
   const rescheduleSubtask = async (subtask: SubtaskFromHook, newDay: Date) => {
+    // === Check of datum daadwerkelijk verandert ===
+    const currentDate = subtask.due_at ? format(parseISO(subtask.due_at), 'yyyy-MM-dd') : null;
+    const newDate = format(newDay, 'yyyy-MM-dd');
+    
+    if (currentDate === newDate) {
+      return; // Geen wijziging nodig, voorkom onnodige audit logs
+    }
+    
     // === Bewaar originele waarden voor undo & audit ===
     const originalDueAt = subtask.due_at;
     const originalDateDisplay = subtask.due_at 
@@ -601,7 +629,7 @@ export default function Kalender() {
     const newDateDisplay = format(newDay, 'EEEE d MMM', { locale: nl });
     const { data: { user } } = await supabase.auth.getUser();
     
-    await supabase.from('task_action_history').insert({
+    const { error: auditError } = await supabase.from('task_action_history').insert({
       task_id: subtask.task_id,
       action_text: `Subtaak "${subtask.title}" verplaatst: ${originalDateDisplay} → ${newDateDisplay}`,
       action_type: 'status_change',
@@ -609,6 +637,10 @@ export default function Kalender() {
       completed_by: user?.id || null,
       is_current: false,
     });
+    
+    if (auditError) {
+      console.error('[Kalender] Subtask audit log failed:', auditError);
+    }
 
     // === UNDO FUNCTIONALITEIT ===
     const undoReschedule = async () => {
@@ -623,7 +655,7 @@ export default function Kalender() {
       }
       
       // Log undo action op parent task
-      await supabase.from('task_action_history').insert({
+      const { error: undoAuditError } = await supabase.from('task_action_history').insert({
         task_id: subtask.task_id,
         action_text: `Subtaak "${subtask.title}" verplaatsing ongedaan: ${newDateDisplay} → ${originalDateDisplay}`,
         action_type: 'status_change',
@@ -631,6 +663,10 @@ export default function Kalender() {
         completed_by: user?.id || null,
         is_current: false,
       });
+      
+      if (undoAuditError) {
+        console.error('[Kalender] Subtask undo audit log failed:', undoAuditError);
+      }
       
       refetchSubtasks();
       toast({ title: "Ongedaan gemaakt", description: `${subtask.title} terug naar ${originalDateDisplay}` });
