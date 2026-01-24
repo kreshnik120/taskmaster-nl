@@ -17,6 +17,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { KPICard } from "@/components/ui/kpi-card";
 import { InterviewDetails } from "@/types/recruitment";
 import { Progress } from "@/components/ui/progress";
+import { ToastAction } from "@/components/ui/toast";
 
 // Type from useMySubtasks hook
 type SubtaskFromHook = ReturnType<typeof useMySubtasks>['subtasks'][number];
@@ -468,6 +469,15 @@ export default function Kalender() {
   };
 
   const rescheduleTask = async (task: Task, newDay: Date) => {
+    // === Bewaar originele waarden voor undo & audit ===
+    const originalStartAt = task.start_at;
+    const originalDueAt = task.due_at;
+    const originalDateDisplay = task.start_at 
+      ? format(parseISO(task.start_at), 'EEEE d MMM', { locale: nl })
+      : task.due_at 
+        ? format(parseISO(task.due_at), 'EEEE d MMM', { locale: nl })
+        : 'onbekend';
+    
     const updates: Record<string, string> = {};
     
     if (task.start_at) {
@@ -506,21 +516,77 @@ export default function Kalender() {
     setTasks(prev => prev.map(t => 
       t.id === task.id ? { ...t, ...updates } : t
     ));
+
+    // === AUDIT LOGGING: Log verplaatsing naar task_action_history ===
+    const newDateDisplay = format(newDay, 'EEEE d MMM', { locale: nl });
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    await supabase.from('task_action_history').insert({
+      task_id: task.id,
+      action_text: `Datum verplaatst: ${originalDateDisplay} → ${newDateDisplay}`,
+      action_type: 'status_change',
+      completed_at: new Date().toISOString(),
+      completed_by: user?.id || null,
+      is_current: false,
+    });
+
+    // === UNDO FUNCTIONALITEIT ===
+    const undoReschedule = async () => {
+      const undoUpdates: Record<string, string | null> = {};
+      if (originalStartAt) undoUpdates.start_at = originalStartAt;
+      if (originalDueAt) undoUpdates.due_at = originalDueAt;
+      
+      const { error: undoError } = await supabase
+        .from('tasks')
+        .update(undoUpdates)
+        .eq('id', task.id);
+      
+      if (undoError) {
+        toast({ title: "Fout", description: "Kon verplaatsing niet ongedaan maken", variant: "destructive" });
+        return;
+      }
+      
+      // Log undo action
+      await supabase.from('task_action_history').insert({
+        task_id: task.id,
+        action_text: `Verplaatsing ongedaan gemaakt: ${newDateDisplay} → ${originalDateDisplay}`,
+        action_type: 'status_change',
+        completed_at: new Date().toISOString(),
+        completed_by: user?.id || null,
+        is_current: false,
+      });
+      
+      fetchTasks();
+      toast({ title: "Ongedaan gemaakt", description: `${task.title} terug naar ${originalDateDisplay}` });
+    };
     
     toast({ 
       title: "Taak verplaatst", 
-      description: `${task.title} → ${format(newDay, 'EEEE d MMM', { locale: nl })}`
+      description: `${task.title} → ${newDateDisplay}`,
+      duration: 8000,
+      action: (
+        <ToastAction altText="Ongedaan maken" onClick={undoReschedule}>
+          Ongedaan maken
+        </ToastAction>
+      ),
     });
   };
 
   const rescheduleSubtask = async (subtask: SubtaskFromHook, newDay: Date) => {
+    // === Bewaar originele waarden voor undo & audit ===
+    const originalDueAt = subtask.due_at;
+    const originalDateDisplay = subtask.due_at 
+      ? format(parseISO(subtask.due_at), 'EEEE d MMM', { locale: nl })
+      : 'onbekend';
+    
     const originalDue = subtask.due_at ? parseISO(subtask.due_at) : new Date();
     const newDue = new Date(newDay);
     newDue.setHours(originalDue.getHours(), originalDue.getMinutes(), 0, 0);
+    const newDueISO = newDue.toISOString();
 
     const { error } = await supabase
       .from('subtasks')
-      .update({ due_at: newDue.toISOString() })
+      .update({ due_at: newDueISO })
       .eq('id', subtask.id);
 
     if (error) {
@@ -530,10 +596,55 @@ export default function Kalender() {
 
     // Subtasks worden via realtime hook automatisch bijgewerkt
     refetchSubtasks();
+
+    // === AUDIT LOGGING: Log verplaatsing naar task_action_history van PARENT task ===
+    const newDateDisplay = format(newDay, 'EEEE d MMM', { locale: nl });
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    await supabase.from('task_action_history').insert({
+      task_id: subtask.task_id,
+      action_text: `Subtaak "${subtask.title}" verplaatst: ${originalDateDisplay} → ${newDateDisplay}`,
+      action_type: 'status_change',
+      completed_at: new Date().toISOString(),
+      completed_by: user?.id || null,
+      is_current: false,
+    });
+
+    // === UNDO FUNCTIONALITEIT ===
+    const undoReschedule = async () => {
+      const { error: undoError } = await supabase
+        .from('subtasks')
+        .update({ due_at: originalDueAt })
+        .eq('id', subtask.id);
+      
+      if (undoError) {
+        toast({ title: "Fout", description: "Kon verplaatsing niet ongedaan maken", variant: "destructive" });
+        return;
+      }
+      
+      // Log undo action op parent task
+      await supabase.from('task_action_history').insert({
+        task_id: subtask.task_id,
+        action_text: `Subtaak "${subtask.title}" verplaatsing ongedaan: ${newDateDisplay} → ${originalDateDisplay}`,
+        action_type: 'status_change',
+        completed_at: new Date().toISOString(),
+        completed_by: user?.id || null,
+        is_current: false,
+      });
+      
+      refetchSubtasks();
+      toast({ title: "Ongedaan gemaakt", description: `${subtask.title} terug naar ${originalDateDisplay}` });
+    };
     
     toast({ 
       title: "Subtaak verplaatst", 
-      description: `${subtask.title} → ${format(newDay, 'EEEE d MMM', { locale: nl })}`
+      description: `${subtask.title} → ${newDateDisplay}`,
+      duration: 8000,
+      action: (
+        <ToastAction altText="Ongedaan maken" onClick={undoReschedule}>
+          Ongedaan maken
+        </ToastAction>
+      ),
     });
   };
 
