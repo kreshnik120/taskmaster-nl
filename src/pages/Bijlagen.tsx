@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -77,6 +77,40 @@ export default function Bijlagen() {
       return data as AttachmentWithTask[];
     }
   });
+
+  // === FIX #3: REALTIME SYNC ===
+  // Subscribe to attachments table changes for cross-user sync
+  useEffect(() => {
+    const channel = supabase
+      .channel('bijlagen-realtime-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'attachments',
+        },
+        (payload) => {
+          console.log('[Bijlagen] Realtime update:', payload.eventType, payload.new);
+          // Invalidate queries to trigger refetch
+          queryClient.invalidateQueries({ queryKey: ['all-attachments'] });
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[Bijlagen] Realtime channel subscribed');
+        }
+        if (status === 'CHANNEL_ERROR') {
+          console.error('[Bijlagen] Realtime channel error');
+        }
+      });
+
+    // Cleanup on unmount
+    return () => {
+      console.log('[Bijlagen] Unsubscribing realtime channel');
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   // Filter and sort attachments
   const filteredAttachments = useMemo(() => {
