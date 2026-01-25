@@ -92,9 +92,11 @@ export default function Bijlagen() {
     }
   });
 
-  // === FIX #3: REALTIME SYNC ===
+  // === REALTIME SYNC with 200ms debounce (consistent with useTasksQuery) ===
   // Subscribe to attachments table changes for cross-user sync
   useEffect(() => {
+    let debounceTimer: NodeJS.Timeout | null = null;
+
     const channel = supabase
       .channel('bijlagen-realtime-updates')
       .on(
@@ -106,8 +108,16 @@ export default function Bijlagen() {
         },
         (payload) => {
           console.log('[Bijlagen] Realtime update:', payload.eventType, payload.new);
-          // Invalidate queries to trigger refetch
-          queryClient.invalidateQueries({ queryKey: ['all-attachments'] });
+          
+          // Debounce invalidation to 200ms (match useTasksQuery pattern)
+          if (debounceTimer) {
+            clearTimeout(debounceTimer);
+          }
+          
+          debounceTimer = setTimeout(() => {
+            console.log('[Bijlagen] Invalidating cache after debounce');
+            queryClient.invalidateQueries({ queryKey: ['all-attachments'] });
+          }, 200);
         }
       )
       .subscribe((status) => {
@@ -121,6 +131,9 @@ export default function Bijlagen() {
 
     // Cleanup on unmount
     return () => {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
       console.log('[Bijlagen] Unsubscribing realtime channel');
       supabase.removeChannel(channel);
     };
