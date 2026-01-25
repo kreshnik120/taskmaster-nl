@@ -5999,6 +5999,36 @@ export type Database = {
         }
         Relationships: []
       }
+      user_widget_preferences: {
+        Row: {
+          created_at: string | null
+          display_order: number
+          id: string
+          is_visible: boolean | null
+          updated_at: string | null
+          user_id: string
+          widget_key: string
+        }
+        Insert: {
+          created_at?: string | null
+          display_order: number
+          id?: string
+          is_visible?: boolean | null
+          updated_at?: string | null
+          user_id: string
+          widget_key: string
+        }
+        Update: {
+          created_at?: string | null
+          display_order?: number
+          id?: string
+          is_visible?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+          widget_key?: string
+        }
+        Relationships: []
+      }
       vacancies: {
         Row: {
           aantal_fte: number | null
