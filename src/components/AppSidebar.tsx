@@ -48,9 +48,9 @@ const menuGroups: MenuGroup[] = [{
     url: "/kalender",
     icon: Calendar
   }, {
-    title: "Tijdregistratie",
-    url: "/tijdregistratie",
-    icon: Clock
+    title: "Opvolging",
+    url: "/opvolging",
+    icon: BarChart3
   }, {
     title: "Bijlagen",
     url: "/bijlagen",
@@ -84,10 +84,6 @@ const menuGroups: MenuGroup[] = [{
   label: "Analyse & AI",
   defaultOpen: 'conditional',
   items: [{
-    title: "Opvolging",
-    url: "/opvolging",
-    icon: BarChart3
-  }, {
     title: "AI Training",
     url: "/ai-training",
     icon: Brain,
@@ -115,6 +111,10 @@ const menuGroups: MenuGroup[] = [{
     url: "/sollicitaties-archief",
     icon: Archive,
     requiresEdit: true
+  }, {
+    title: "Tijdregistratie",
+    url: "/tijdregistratie",
+    icon: Clock
   }]
 }];
 interface CollapsibleGroupProps {
