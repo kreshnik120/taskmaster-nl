@@ -438,9 +438,10 @@ export default function Kalender() {
                 .insert({
                   task_id: selectedTask.id,
                   action_text: `Taak bewerkt: datum gewijzigd naar ${format(taskDate, 'EEEE d MMMM', { locale: nl })}`,
-                  action_type: 'date_change',
+                  action_type: 'status_change',
                   completed_at: new Date().toISOString(),
                   completed_by: user?.id || null,
+                  is_current: false,
                 });
               
               if (auditError) {
