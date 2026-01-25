@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useTasksQuery, Task, ACTIVE_TASKS_QUERY_KEY } from "@/hooks/useTasksQuery";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, Zap, CheckCircle2, ListTodo, AlertCircle, ArrowRight } from "lucide-react";
@@ -43,41 +45,13 @@ const log = logger.create('Dashboard');
 
 // Deployment trigger - 2025-10-03 23:21
 
-interface Subtask {
-  id: string;
-  title: string;
-  status: 'pending' | 'active' | 'completed' | 'skipped';
-  order: number;
-  due_at: string | null;
-  assignee_id: string | null;
-  profiles: {
-    name: string | null;
-  } | null;
-}
-
-interface Task {
-  id: string;
-  title: string;
-  priority: string;
-  due_at: string | null;
-  next_action: string | null;
-  description: string | null;
-  start_at: string | null;
-  assignee_id: string | null;
-  application_id: string | null;
-  recruitment_action_type: string | null;
-  profiles: {
-    name: string | null;
-    email: string | null;
-  } | null;
-  subtasks?: Subtask[];
-  subtask_count?: number;
-  completed_subtask_count?: number;
-}
+// Task and Subtask interfaces are now imported from useTasksQuery
 
 const Dashboard = () => {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use shared TanStack Query hook for tasks (shared with Opvolging)
+  const { data: tasks = [], isLoading: loading, refetch: refetchTasks } = useTasksQuery();
+  const queryClient = useQueryClient();
+  
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
@@ -117,27 +91,12 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    loadTasks();
+    // Load urgency applications on mount
     loadUrgencyApplications();
-
-    // Real-time listener voor taak updates
-    const tasksChannel = supabase
-      .channel('dashboard-tasks-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tasks'
-        },
-        (payload) => {
-          log.log('Task change detected:', payload);
-          loadTasks();
-        }
-      )
-      .subscribe();
     
-    // Real-time listener voor applicaties (urgency panel)
+    // Tasks are now handled by useTasksQuery hook (shared realtime channel)
+    
+    // Real-time listener voor applicaties (urgency panel) - KEEP
     const applicationsChannel = supabase
       .channel('dashboard-applications-changes')
       .on(
@@ -153,7 +112,7 @@ const Dashboard = () => {
       )
       .subscribe();
 
-    // Real-time listener voor subtasks
+    // Real-time listener voor subtasks - KEEP (for optimistic updates)
     const subtasksChannel = supabase
       .channel('dashboard-subtasks-changes')
       .on(
@@ -168,7 +127,7 @@ const Dashboard = () => {
           // This prevents real-time updates from overriding optimistic updates
           const timeSinceLastAction = Date.now() - lastUserActionRef.current;
           if (timeSinceLastAction > 1000) {
-            loadTasks();
+            queryClient.invalidateQueries({ queryKey: ACTIVE_TASKS_QUERY_KEY });
           }
         }
       )
@@ -177,52 +136,17 @@ const Dashboard = () => {
     // Timer realtime wordt nu afgehandeld door useActiveTimers hook
 
     return () => {
-      supabase.removeChannel(tasksChannel);
       supabase.removeChannel(subtasksChannel);
       supabase.removeChannel(applicationsChannel);
     };
-  }, []);
+  }, [queryClient]);
 
   // Timer interval wordt nu afgehandeld door useActiveTimers hook
+  // loadTasks is now replaced by useTasksQuery hook
 
-  const loadTasks = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("tasks")
-        .select(`
-          *,
-          profiles:profiles!tasks_assignee_id_fkey(name, email),
-          subtasks(
-            id,
-            title,
-            status,
-            order,
-            due_at,
-            assignee_id,
-            profiles:profiles!subtasks_assignee_id_fkey(name)
-          )
-        `)
-        .is("completed_at", null)
-        .is("deleted_at", null)
-        .order("due_at", { ascending: true });
-        // .limit(10) VERWIJDERD - KPI's moeten alle taken zien
-
-      if (error) throw error;
-      
-      // Calculate subtask counts (completed + skipped count as done)
-      const tasksWithCounts = (data || []).map(task => ({
-        ...task,
-        subtasks: task.subtasks?.sort((a: Subtask, b: Subtask) => a.order - b.order) || [],
-        subtask_count: task.subtasks?.length || 0,
-        completed_subtask_count: task.subtasks?.filter((s: Subtask) => s.status === 'completed' || s.status === 'skipped').length || 0
-      }));
-      
-      setTasks(tasksWithCounts);
-    } catch (error) {
-      log.error("Error loading tasks:", error);
-    } finally {
-      setLoading(false);
-    }
+  // Helper to invalidate tasks cache (replaces loadTasks calls)
+  const invalidateTasks = () => {
+    queryClient.invalidateQueries({ queryKey: ACTIVE_TASKS_QUERY_KEY });
   };
 
   // loadActiveTimers en getRunningTime zijn nu in useActiveTimers hook
@@ -283,7 +207,7 @@ const Dashboard = () => {
       }
 
       toast.success("Taak verwijderd");
-      loadTasks();
+      invalidateTasks();
     } catch (error: any) {
       log.error("Error deleting task:", error);
       toast.error(`Fout bij verwijderen: ${error.message || 'Onbekende fout'}`);
@@ -332,7 +256,7 @@ const Dashboard = () => {
         }
       });
 
-      loadTasks();
+      invalidateTasks();
     } catch (error) {
       log.error("Error completing task:", error);
       toast.error("Fout bij afronden van taak");
@@ -363,7 +287,7 @@ const Dashboard = () => {
         description: "Terug op je lijst" 
       });
       
-      loadTasks();
+      invalidateTasks();
     } catch (error) {
       log.error('Error undoing complete:', error);
       toast.error("Kon taak niet herstellen");
@@ -381,7 +305,7 @@ const Dashboard = () => {
   };
 
   const handleTaskUpdated = () => {
-    loadTasks();
+    invalidateTasks();
   };
 
   const toggleTaskExpansion = (taskId: string) => {
@@ -400,9 +324,10 @@ const Dashboard = () => {
     // Track user action timestamp
     lastUserActionRef.current = Date.now();
     
-    // Optimistic update - update local state immediately
-    setTasks(prevTasks => 
-      prevTasks.map(task => {
+    // Optimistic update using React Query's setQueryData
+    queryClient.setQueryData<Task[]>(ACTIVE_TASKS_QUERY_KEY, (oldTasks) => {
+      if (!oldTasks) return oldTasks;
+      return oldTasks.map(task => {
         if (task.subtasks?.some(s => s.id === subtaskId)) {
           const updatedSubtasks = task.subtasks.map(s => 
             s.id === subtaskId ? { ...s, status: 'completed' as const } : s
@@ -414,8 +339,8 @@ const Dashboard = () => {
           };
         }
         return task;
-      })
-    );
+      });
+    });
 
     try {
       const { error } = await supabase
@@ -430,7 +355,7 @@ const Dashboard = () => {
       log.error('Error completing subtask:', error);
       toast.error("Kon subtaak niet voltooien");
       // Rollback on error
-      loadTasks();
+      invalidateTasks();
     }
   };
 
@@ -438,9 +363,10 @@ const Dashboard = () => {
     // Track user action timestamp
     lastUserActionRef.current = Date.now();
     
-    // Optimistic update
-    setTasks(prevTasks => 
-      prevTasks.map(task => {
+    // Optimistic update using React Query's setQueryData
+    queryClient.setQueryData<Task[]>(ACTIVE_TASKS_QUERY_KEY, (oldTasks) => {
+      if (!oldTasks) return oldTasks;
+      return oldTasks.map(task => {
         if (task.subtasks?.some(s => s.id === subtaskId)) {
           const updatedSubtasks = task.subtasks.map(s => 
             s.id === subtaskId ? { ...s, status: 'skipped' as const } : s
@@ -452,8 +378,8 @@ const Dashboard = () => {
           };
         }
         return task;
-      })
-    );
+      });
+    });
 
     try {
       const { error } = await supabase
@@ -468,7 +394,7 @@ const Dashboard = () => {
       log.error('Error skipping subtask:', error);
       toast.error("Kon subtaak niet overslaan");
       // Rollback on error
-      loadTasks();
+      invalidateTasks();
     }
   };
 
@@ -476,9 +402,10 @@ const Dashboard = () => {
     // Track user action timestamp
     lastUserActionRef.current = Date.now();
     
-    // Optimistic update
-    setTasks(prevTasks => 
-      prevTasks.map(task => {
+    // Optimistic update using React Query's setQueryData
+    queryClient.setQueryData<Task[]>(ACTIVE_TASKS_QUERY_KEY, (oldTasks) => {
+      if (!oldTasks) return oldTasks;
+      return oldTasks.map(task => {
         if (task.subtasks?.some(s => s.id === subtaskId)) {
           const updatedSubtasks = task.subtasks.map(s => 
             s.id === subtaskId ? { ...s, status: 'pending' as const } : s
@@ -490,8 +417,8 @@ const Dashboard = () => {
           };
         }
         return task;
-      })
-    );
+      });
+    });
 
     try {
       const { error } = await supabase
@@ -506,7 +433,7 @@ const Dashboard = () => {
       console.error('Error resetting subtask:', error);
       toast.error("Kon subtaak niet terugzetten");
       // Rollback on error
-      loadTasks();
+      invalidateTasks();
     }
   };
 
@@ -963,9 +890,7 @@ const Dashboard = () => {
       <TaskDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        onSuccess={() => {
-          loadTasks();
-        }}
+        onSuccess={invalidateTasks}
         columnId="770e8400-e29b-41d4-a716-446655440001"
       />
 

@@ -16,29 +16,10 @@ import { useCountUp } from "@/hooks/useCountUp";
 import { useAiScoring } from "@/hooks/useAiScoring";
 import { KPICard } from "@/components/ui/kpi-card";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
+import { useTasksQuery } from "@/hooks/useTasksQuery";
 
-interface Task {
-  id: string;
-  title: string;
-  description?: string | null;
-  priority: string;
-  start_at: string | null;
-  due_at: string | null;
-  next_action: string | null;
-  completed_at: string | null;
-  estimate_min: number | null;
-  application_id: string | null;
-  recruitment_action_type: string | null;
-  org_id: string;
-  organizations: { name: string } | null;
-  profiles: { name: string | null } | null;
-  task_scoring_metadata?: {
-    estimated_value_eur: number | null;
-    complexity_score: number | null;
-    business_impact_score: number | null;
-    market_demand_factor: number | null;
-  } | null;
-}
+// Task interface is now imported from useTasksQuery
+// Local interfaces only for scoring
 
 interface PriorityScore {
   task_id: string;
@@ -61,57 +42,25 @@ type FilterType = "achterstallig" | "deze-week" | "met-actie" | null;
 export default function Opvolging() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // Use shared TanStack Query hook for tasks (shared with Dashboard)
+  const { data: tasks = [], isLoading: loading, refetch: refetchTasks } = useTasksQuery();
+  
   const [activeFilter, setActiveFilter] = useState<FilterType>(null);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Task detail modal state
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   
-  // Use the smart caching hook
+  // Use the smart caching hook for AI scoring
   const {
     loading: scoringLoading,
     getScoreForTask
   } = useAiScoring(tasks, true);
 
+  // Auth check on mount
   useEffect(() => {
     checkAuth();
-    fetchTasks();
-
-    // Subscribe to real-time updates with debouncing
-    const channel = supabase
-      .channel('tasks-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tasks'
-        },
-        (payload) => {
-          // Only refetch for relevant events
-          if (['INSERT', 'UPDATE', 'DELETE'].includes(payload.eventType)) {
-            // Debounce refetch to prevent cascade updates
-            if (debounceTimerRef.current) {
-              clearTimeout(debounceTimerRef.current);
-            }
-            debounceTimerRef.current = setTimeout(() => {
-              logger.log('🔄 Real-time update detected, refetching tasks');
-              fetchTasks();
-            }, 300);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-      supabase.removeChannel(channel);
-    };
   }, []);
 
   const checkAuth = async () => {
@@ -121,46 +70,7 @@ export default function Opvolging() {
     }
   };
 
-  const fetchTasks = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("tasks")
-        .select(`
-          id,
-          title,
-          description,
-          priority,
-          start_at,
-          due_at,
-          next_action,
-          completed_at,
-          estimate_min,
-          org_id,
-          application_id,
-          recruitment_action_type,
-          organizations(name),
-          profiles:profiles!tasks_assignee_id_fkey(name),
-          task_scoring_metadata(estimated_value_eur, complexity_score, business_impact_score, market_demand_factor)
-        `)
-        .is("completed_at", null)
-        .is("deleted_at", null)
-        .order("due_at", { ascending: true });
-
-      if (error) throw error;
-      setTasks(data || []);
-      
-      // useAiScoring hook will automatically handle scoring
-    } catch (error) {
-      logger.error("Error fetching tasks:", error);
-      toast({
-        title: "Fout bij ophalen taken",
-        description: "Er is een fout opgetreden bij het ophalen van de taken.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Tasks are now handled by useTasksQuery hook (shared realtime channel with Dashboard)
 
 
   const tasksWithNextAction = tasks.filter((t) => t.next_action);
@@ -533,7 +443,7 @@ export default function Opvolging() {
         task={selectedTask}
         open={taskDetailOpen}
         onOpenChange={setTaskDetailOpen}
-        onTaskUpdated={fetchTasks}
+        onTaskUpdated={refetchTasks}
       />
     </div>
   );
