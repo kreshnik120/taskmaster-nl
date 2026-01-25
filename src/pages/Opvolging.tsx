@@ -1,14 +1,15 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { logger } from "@/lib/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format, differenceInDays } from "date-fns";
 import { nl } from "date-fns/locale";
-import { Loader2, Clock, AlertCircle, Calendar, CheckCircle2, TrendingUp } from "lucide-react";
+import { Loader2, Clock, AlertCircle, Calendar, CheckCircle2, TrendingUp, Check } from "lucide-react";
+import confetti from "canvas-confetti";
+import { toast as sonnerToast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
@@ -52,6 +53,9 @@ export default function Opvolging() {
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   
+  // Completion state
+  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
+  
   // Use the smart caching hook for AI scoring
   const {
     loading: scoringLoading,
@@ -71,6 +75,86 @@ export default function Opvolging() {
   };
 
   // Tasks are now handled by useTasksQuery hook (shared realtime channel with Dashboard)
+
+  // === COMPLETION HANDLERS ===
+  const handleCompleteTask = async (taskId: string, taskTitle: string) => {
+    setCompletingTaskId(taskId);
+    
+    try {
+      // Find DONE column for status update
+      const { data: doneColumn } = await supabase
+        .from("columns")
+        .select("id")
+        .eq("status", "DONE")
+        .maybeSingle();
+
+      const { error } = await supabase
+        .from("tasks")
+        .update({ 
+          completed_at: new Date().toISOString(),
+          status: 'DONE',
+          column_id: doneColumn?.id 
+        })
+        .eq("id", taskId);
+
+      if (error) throw error;
+
+      // Confetti celebration
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+
+      // Toast met 8-seconden undo optie
+      sonnerToast.success("Taak afgerond!", {
+        description: taskTitle,
+        duration: 8000,
+        action: {
+          label: "Ongedaan maken",
+          onClick: () => undoComplete(taskId)
+        }
+      });
+
+      refetchTasks();
+    } catch (error) {
+      console.error("[Opvolging] Error completing task:", error);
+      sonnerToast.error("Fout bij afronden van taak");
+    } finally {
+      setCompletingTaskId(null);
+    }
+  };
+
+  const undoComplete = async (taskId: string) => {
+    try {
+      // Find IN_PROGRESS column
+      const { data: doingColumn } = await supabase
+        .from("columns")
+        .select("id, status")
+        .eq("status", "DOING")
+        .maybeSingle();
+
+      const { error } = await supabase
+        .from('tasks')
+        .update({ 
+          completed_at: null, 
+          status: doingColumn?.status || 'DOING',
+          column_id: doingColumn?.id || undefined
+        })
+        .eq('id', taskId);
+
+      if (error) throw error;
+      
+      sonnerToast.success("Taak hersteld", { 
+        description: "Terug op je lijst" 
+      });
+      
+      refetchTasks();
+    } catch (error) {
+      console.error('[Opvolging] Error undoing complete:', error);
+      sonnerToast.error("Kon taak niet herstellen");
+    }
+  };
 
 
   const tasksWithNextAction = tasks.filter((t) => t.next_action);
@@ -334,7 +418,26 @@ export default function Opvolging() {
                         )}
                       </div>
 
-                      <div className="flex flex-col items-end gap-2 min-w-[100px]">
+                      <div className="flex flex-col items-end gap-2 min-w-[120px]">
+                        {/* Completion Button */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-green-600 hover:bg-green-50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCompleteTask(task.id, task.title);
+                          }}
+                          disabled={completingTaskId === task.id}
+                          title="Taak afronden"
+                        >
+                          {completingTaskId === task.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Check className="h-4 w-4" />
+                          )}
+                        </Button>
+
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>

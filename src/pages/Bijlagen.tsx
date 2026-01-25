@@ -7,7 +7,7 @@ import { PageHero } from "@/components/ui/page-hero";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,7 +34,9 @@ import {
   File,
   ExternalLink,
   Loader2,
-  Filter
+  Filter,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { format, formatDistanceToNow, isToday, isThisWeek, isThisMonth } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -59,6 +61,8 @@ type DateFilter = 'all' | 'today' | 'week' | 'month';
 type TypeFilter = 'all' | FileCategory;
 type SortOption = 'newest' | 'oldest' | 'name-asc' | 'name-desc';
 
+const PAGE_SIZE = 20;
+
 export default function Bijlagen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
@@ -70,10 +74,16 @@ export default function Bijlagen() {
     open: boolean;
     attachment: AttachmentWithTask | null;
   }>({ open: false, attachment: null });
+  const [currentPage, setCurrentPage] = useState(1);
   
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, typeFilter, dateFilter, sortOption]);
 
   // Fetch all attachments with linked task info
   const { data: attachments, isLoading, error } = useQuery({
@@ -190,6 +200,14 @@ export default function Bijlagen() {
 
     return result;
   }, [attachments, searchQuery, typeFilter, dateFilter, sortOption]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredAttachments.length / PAGE_SIZE);
+  const paginatedAttachments = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+    return filteredAttachments.slice(start, end);
+  }, [filteredAttachments, currentPage]);
 
   const getFileIcon = (filename: string) => {
     const category = getFileCategory(filename);
@@ -388,7 +406,7 @@ export default function Bijlagen() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAttachments.map((attachment) => {
+                {paginatedAttachments.map((attachment) => {
                   const category = getFileCategory(attachment.name);
                   const previewable = canPreview(attachment.name);
                   
@@ -481,6 +499,69 @@ export default function Bijlagen() {
                 })}
               </TableBody>
             </Table>
+          )}
+          
+          {/* Pagination Controls */}
+          {filteredAttachments.length > 0 && (
+            <div className="flex items-center justify-between px-4 py-4 border-t">
+              {/* Info text */}
+              <p className="text-sm text-muted-foreground">
+                Pagina {currentPage} van {totalPages} • {filteredAttachments.length} resultaten
+              </p>
+              
+              {/* Pagination buttons */}
+              {totalPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    Vorige
+                  </Button>
+                  
+                  {/* Page numbers - show max 5 */}
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum: number;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={currentPage === pageNum ? "default" : "ghost"}
+                          size="sm"
+                          className="w-8 h-8 p-0"
+                          onClick={() => setCurrentPage(pageNum)}
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Volgende
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
