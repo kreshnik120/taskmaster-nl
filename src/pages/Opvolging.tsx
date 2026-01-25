@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCountUp } from "@/hooks/useCountUp";
 import { useAiScoring } from "@/hooks/useAiScoring";
 import { KPICard } from "@/components/ui/kpi-card";
+import { TaskDetailModal } from "@/components/TaskDetailModal";
 
 interface Task {
   id: string;
@@ -64,6 +65,10 @@ export default function Opvolging() {
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Task detail modal state
+  const [selectedTask, setSelectedTask] = useState<any>(null);
+  const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   
   // Use the smart caching hook
   const {
@@ -357,7 +362,22 @@ export default function Opvolging() {
                   return (
                     <div
                       key={task.id}
-                      onClick={() => navigate(`/lijst?task=${task.id}`)}
+                    onClick={() => {
+                      setSelectedTask({
+                        id: task.id,
+                        title: task.title,
+                        description: task.description || null,
+                        priority: task.priority,
+                        start_at: task.start_at,
+                        due_at: task.due_at,
+                        next_action: task.next_action,
+                        assignee_id: null,
+                        application_id: task.application_id,
+                        recruitment_action_type: task.recruitment_action_type,
+                        profiles: task.profiles
+                      });
+                      setTaskDetailOpen(true);
+                    }}
                       className={`flex items-start gap-4 rounded-lg border p-4 hover:bg-muted/50 cursor-pointer transition-all ${
                         isCritical ? "border-destructive/50" : ""
                       }`}
@@ -471,7 +491,22 @@ export default function Opvolging() {
                 {overdueTasks.slice(0, 5).map((task) => (
                   <div
                     key={task.id}
-                    onClick={() => navigate(`/lijst?task=${task.id}`)}
+                    onClick={() => {
+                      setSelectedTask({
+                        id: task.id,
+                        title: task.title,
+                        description: task.description || null,
+                        priority: task.priority,
+                        start_at: task.start_at,
+                        due_at: task.due_at,
+                        next_action: task.next_action,
+                        assignee_id: null,
+                        application_id: task.application_id,
+                        recruitment_action_type: task.recruitment_action_type,
+                        profiles: task.profiles
+                      });
+                      setTaskDetailOpen(true);
+                    }}
                     className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 cursor-pointer"
                   >
                     <div>
@@ -492,6 +527,14 @@ export default function Opvolging() {
           </Card>
         )}
       </div>
+
+      {/* Task Detail Modal */}
+      <TaskDetailModal
+        task={selectedTask}
+        open={taskDetailOpen}
+        onOpenChange={setTaskDetailOpen}
+        onTaskUpdated={fetchTasks}
+      />
     </div>
   );
 }
