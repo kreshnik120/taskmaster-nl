@@ -1,10 +1,10 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTasksQuery, Task, ACTIVE_TASKS_QUERY_KEY } from "@/hooks/useTasksQuery";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, Zap, CheckCircle2, ListTodo, AlertCircle, ArrowRight } from "lucide-react";
+import { Plus, Clock, Trash2, ArrowUpDown, Check, ChevronDown, ChevronRight, Circle, SkipForward, Zap, CheckCircle2, ListTodo, AlertCircle, ArrowRight, Settings } from "lucide-react";
 import { UpcomingRemindersWidget } from "@/components/UpcomingRemindersWidget";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
@@ -16,6 +16,8 @@ import { QuickTimerButton } from "@/components/QuickTimerButton";
 import { RecruitmentKPIs } from "@/components/dashboard/RecruitmentKPIs";
 import { TodayFocusCard } from "@/components/dashboard/TodayFocusCard";
 import { UrgencyActionPanel } from "@/components/recruitment/UrgencyActionPanel";
+import { WidgetSettingsModal } from "@/components/dashboard/WidgetSettingsModal";
+import { useWidgetPreferences } from "@/hooks/useWidgetPreferences";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -66,6 +68,10 @@ const Dashboard = () => {
   const [activatingFunctions, setActivatingFunctions] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [urgencyApplications, setUrgencyApplications] = useState<{ id: string; pipeline_stage: string; created_at: string; updated_at: string | null }[]>([]);
+  
+  // Widget customization
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const { widgets, loading: widgetsLoading, saving: widgetsSaving, updatePreference, reorderWidgets, resetToDefaults } = useWidgetPreferences();
 
   useEffect(() => {
     const getUser = async () => {
@@ -595,24 +601,40 @@ const Dashboard = () => {
               <Zap className="h-4 w-4" />
             </Button>
           )}
+          <Button 
+            variant="ghost" 
+            size="icon"
+            onClick={() => setSettingsModalOpen(true)}
+            title="Dashboard aanpassen"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
-      {/* Recruitment KPI's - Core Dashboard Metrics */}
-      <RecruitmentKPIs />
+      {/* Dynamic Widget Rendering based on user preferences */}
+      {widgets.filter(w => w.isVisible).map(widget => {
+        switch (widget.key) {
+          case 'recruitment-kpis':
+            return <RecruitmentKPIs key={widget.key} />;
+          case 'urgency-actions':
+            return urgencyApplications.length > 0 ? (
+              <UrgencyActionPanel key={widget.key} applications={urgencyApplications} />
+            ) : null;
+          case 'today-focus':
+            return <TodayFocusCard key={widget.key} />;
+          case 'upcoming-reminders':
+            return <UpcomingRemindersWidget key={widget.key} />;
+          case 'task-list':
+            // Task list is rendered below with full card
+            return null;
+          default:
+            return null;
+        }
+      })}
 
-      {/* Urgency Action Panel - Recruitment Alerts */}
-      {urgencyApplications.length > 0 && (
-        <UrgencyActionPanel applications={urgencyApplications} />
-      )}
-
-      {/* Vandaag Focus - Full Width */}
-      <TodayFocusCard />
-
-      {/* Upcoming Reminders Widget */}
-      <UpcomingRemindersWidget />
-
-      {/* Zone 1: Nu Doen - Primary Focus Tasks */}
+      {/* Zone 1: Nu Doen - Primary Focus Tasks (conditionally rendered) */}
+      {widgets.find(w => w.key === 'task-list')?.isVisible && (
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -886,6 +908,7 @@ const Dashboard = () => {
           )}
         </CardContent>
       </Card>
+      )}
 
       <TaskDialog
         open={dialogOpen}
@@ -919,6 +942,17 @@ const Dashboard = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Widget Settings Modal */}
+      <WidgetSettingsModal
+        open={settingsModalOpen}
+        onOpenChange={setSettingsModalOpen}
+        widgets={widgets}
+        onUpdatePreference={updatePreference}
+        onReorderWidgets={reorderWidgets}
+        onResetToDefaults={resetToDefaults}
+        saving={widgetsSaving}
+      />
     </div>
   );
 };
