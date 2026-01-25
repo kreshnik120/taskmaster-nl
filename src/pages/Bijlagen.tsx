@@ -12,6 +12,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AttachmentPreviewModal } from "@/components/AttachmentPreviewModal";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   Search, 
   Paperclip, 
@@ -56,6 +66,10 @@ export default function Bijlagen() {
   const [sortOption, setSortOption] = useState<SortOption>('newest');
   const [previewAttachment, setPreviewAttachment] = useState<AttachmentWithTask | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    open: boolean;
+    attachment: AttachmentWithTask | null;
+  }>({ open: false, attachment: null });
   
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -199,6 +213,16 @@ export default function Bijlagen() {
         variant: "destructive"
       });
     }
+  };
+
+  const handleDeleteClick = (attachment: AttachmentWithTask) => {
+    setDeleteConfirmation({ open: true, attachment });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmation.attachment) return;
+    await deleteAttachment(deleteConfirmation.attachment);
+    setDeleteConfirmation({ open: false, attachment: null });
   };
 
   const deleteAttachment = async (attachment: AttachmentWithTask) => {
@@ -427,8 +451,8 @@ export default function Bijlagen() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => deleteAttachment(attachment)}
-                            disabled={deletingId === attachment.id}
+                            onClick={() => handleDeleteClick(attachment)}
+                            disabled={deletingId === attachment.id || deleteConfirmation.open}
                             title="Verwijderen"
                           >
                             {deletingId === attachment.id ? (
@@ -447,6 +471,31 @@ export default function Bijlagen() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog
+        open={deleteConfirmation.open}
+        onOpenChange={(open) => !open && setDeleteConfirmation({ open: false, attachment: null })}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Bijlage verwijderen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{deleteConfirmation.attachment?.name}" wordt permanent verwijderd.
+              Dit kan niet ongedaan worden gemaakt.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Verwijderen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Preview Modal */}
       <AttachmentPreviewModal
