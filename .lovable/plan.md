@@ -1,64 +1,88 @@
 
-# Fase 7A: Document Intelligence Foundation - Implementatieplan
+# Fase 7A.1: PDF/Word Extractie Error Handling Fix
 
 ## 1. Overzicht
 
 | Aspect | Details |
 |--------|---------|
-| **Scope** | PDF/Word extractie in edge function, uitgebreide MIME types in hook, accept attribute update |
-| **Risico niveau** | MEDIUM (npm dependencies in Deno edge function) |
-| **Bestaande patronen** | `ai-extract-meeting-minute` edge function, `useAIExtractMeeting` hook |
-| **Wijzigingen** | 3 bestaande bestanden |
-| **Geschatte omvang** | ~150-200 regels |
+| **Scope** | Verbeterde error handling voor PDF/Word extractie |
+| **Risico niveau** | LOW (alleen error handling verbeteringen) |
+| **Wijzigingen** | 3 bestanden |
+| **Geschatte omvang** | ~100 regels wijzigingen |
 
 ---
 
-## 2. Huidige Situatie Analyse
+## 2. Geïdentificeerde Problemen
 
-### Edge Function (`ai-extract-meeting-minute/index.ts`)
-- **Ontvangt**: `documentText` als string (regel 107)
-- **Ondersteunt**: Alleen tekst die al geëxtraheerd is
-- **Ontbreekt**: PDF/Word binary parsing
+### Edge Function Problemen (regels 56-110)
+1. **TextExtractionResult interface mist `error` property** - wanneer extractie faalt, wordt geen specifieke foutmelding doorgegeven
+2. **Dynamic imports zonder library caching** - bij elke request worden libraries opnieuw geladen (inefficiënt)
+3. **Generieke error messages** - "Kon bestand niet lezen" geeft geen context
+4. **Empty text niet gedetecteerd** - gescande PDFs zonder OCR geven lege tekst maar geen warning
 
-### Hook (`useAIExtractMeeting.ts`)
-- **Ondersteunt**: Alleen `text/plain`, `text/markdown` (regels 100-101)
-- **Leest**: Bestanden als tekst via `readAsText` (regel 112)
-- **Ontbreekt**: Base64 encoding voor binaire bestanden
+### Hook Problemen (regels 143-161)
+1. **Error response parsing** - als edge function faalt met HTTP error, wordt alleen generieke toast getoond
+2. **Geen console logging** - debugging is lastig
 
-### CreateMeetingMinuteDialog
-- **Accept attribute**: `.txt,.md` (moet uitgebreid naar PDF/Word)
-
-### MeetingMinuteDetail
-- **Content veld**: Bestaat al in "Notities" sectie (regels 355-370)
-- **Database**: `content TEXT` veld bestaat al in `meeting_minutes` tabel
-- **Conclusie**: Content sectie werkt al correct, geen wijziging nodig!
+### Dialog Problemen (regels 248-273)
+1. **Geen fallback hint** - gebruiker weet niet wat te doen bij failure
 
 ---
 
-## 3. Technische Aanpak
+## 3. Implementatie
 
-### 3A. Edge Function Update: PDF/Word Extractie
+### 3A. Edge Function: Verbeterde Error Handling
 
 **Bestand**: `supabase/functions/ai-extract-meeting-minute/index.ts`
 
-**Nieuwe imports** (Deno npm: specifier):
-```typescript
-// Top van bestand - Deno npm imports
-import pdf from "npm:pdf-parse@1.1.1";
-import mammoth from "npm:mammoth@1.6.0";
-```
-
-**Nieuwe helper functie** (~50 regels):
+**Wijziging 1**: Update `TextExtractionResult` interface (regel 50-53):
 ```typescript
 interface TextExtractionResult {
   text: string;
   method: 'pdf-parse' | 'mammoth' | 'direct' | 'unsupported' | 'failed';
+  error?: string;  // NIEUW: Specifieke foutmelding
+}
+```
+
+**Wijziging 2**: Library loading met caching en error handling (vóór regel 56):
+```typescript
+// Library caching voor performance
+let pdfParseLib: any = null;
+let mammothLib: any = null;
+
+async function loadPdfLibrary() {
+  if (!pdfParseLib) {
+    try {
+      pdfParseLib = (await import("https://esm.sh/pdf-parse@1.1.1")).default;
+    } catch (error) {
+      console.error('Failed to load pdf-parse library:', error);
+      throw new Error('PDF library kon niet geladen worden');
+    }
+  }
+  return pdfParseLib;
 }
 
+async function loadMammothLibrary() {
+  if (!mammothLib) {
+    try {
+      mammothLib = (await import("https://esm.sh/mammoth@1.6.0")).default;
+    } catch (error) {
+      console.error('Failed to load mammoth library:', error);
+      throw new Error('Word library kon niet geladen worden');
+    }
+  }
+  return mammothLib;
+}
+```
+
+**Wijziging 3**: Update `extractTextFromFile` met specifieke errors (vervang regels 56-110):
+```typescript
 async function extractTextFromFile(
   base64Content: string,
   mimeType: string
 ): Promise<TextExtractionResult> {
+  console.log(`📁 extractTextFromFile called with mimeType: ${mimeType}, content length: ${base64Content.length}`);
+  
   try {
     // Decode base64 to Uint8Array
     const binaryString = atob(base64Content);
@@ -66,296 +90,265 @@ async function extractTextFromFile(
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
+    console.log(`📁 Decoded ${bytes.length} bytes from base64`);
 
     // PDF Extractie
     if (mimeType === 'application/pdf') {
       try {
-        // pdf-parse verwacht een Buffer
-        const pdfData = await pdf(bytes);
+        const pdfParse = await loadPdfLibrary();
+        const pdfData = await pdfParse(bytes);
+        
+        if (!pdfData.text || pdfData.text.trim().length === 0) {
+          console.warn('📄 PDF parsed but contains no text (possibly scanned)');
+          return { 
+            text: '', 
+            method: 'pdf-parse',
+            error: 'PDF bevat geen leesbare tekst. Dit kan een gescand document zijn. Kopieer de tekst naar een .txt bestand en probeer opnieuw.'
+          };
+        }
+        
         console.log(`📄 PDF parsed: ${pdfData.numpages} pages, ${pdfData.text.length} chars`);
         return { text: pdfData.text, method: 'pdf-parse' };
       } catch (pdfError) {
         console.error('PDF parse error:', pdfError);
-        return { text: '', method: 'failed' };
+        const errorMessage = pdfError instanceof Error ? pdfError.message : 'Onbekende PDF fout';
+        return { 
+          text: '', 
+          method: 'failed',
+          error: `Kon PDF niet lezen: ${errorMessage}. Probeer een ander bestand of kopieer de tekst naar .txt.`
+        };
       }
     }
 
-    // Word Extractie (.docx)
+    // Word Extractie (.docx, .doc)
     if (
       mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       mimeType === 'application/msword'
     ) {
       try {
+        const mammoth = await loadMammothLibrary();
         const result = await mammoth.extractRawText({ buffer: bytes });
+        
+        if (!result.value || result.value.trim().length === 0) {
+          console.warn('📝 Word parsed but contains no text');
+          return { 
+            text: '', 
+            method: 'mammoth',
+            error: 'Word document bevat geen leesbare tekst. Kopieer de inhoud naar een .txt bestand.'
+          };
+        }
+        
         console.log(`📝 Word parsed: ${result.value.length} chars`);
         return { text: result.value, method: 'mammoth' };
       } catch (wordError) {
         console.error('Word parse error:', wordError);
-        return { text: '', method: 'failed' };
+        const errorMessage = wordError instanceof Error ? wordError.message : 'Onbekende Word fout';
+        return { 
+          text: '', 
+          method: 'failed',
+          error: `Kon Word document niet lezen: ${errorMessage}. Probeer .docx in plaats van .doc, of kopieer naar .txt.`
+        };
       }
     }
 
-    // Plain text / Markdown - decode als UTF-8
+    // Plain text / Markdown
     if (mimeType === 'text/plain' || mimeType === 'text/markdown') {
-      const decoder = new TextDecoder('utf-8');
-      return { text: decoder.decode(bytes), method: 'direct' };
+      try {
+        const decoder = new TextDecoder('utf-8');
+        const text = decoder.decode(bytes);
+        console.log(`📝 Text decoded: ${text.length} chars`);
+        return { text, method: 'direct' };
+      } catch (decodeError) {
+        return { 
+          text: '', 
+          method: 'failed',
+          error: 'Kon tekstbestand niet decoderen. Controleer de encoding (UTF-8 vereist).'
+        };
+      }
     }
 
-    return { text: '', method: 'unsupported' };
+    return { 
+      text: '', 
+      method: 'unsupported',
+      error: `Bestandstype "${mimeType}" wordt niet ondersteund. Gebruik PDF, Word (.docx), of tekst (.txt, .md).`
+    };
   } catch (error) {
     console.error('Text extraction error:', error);
-    return { text: '', method: 'failed' };
+    return { 
+      text: '', 
+      method: 'failed',
+      error: error instanceof Error ? error.message : 'Onverwachte fout bij bestandsverwerking'
+    };
   }
 }
 ```
 
-**Update request handler** (wijziging in serve functie):
+**Wijziging 4**: Update main handler om extraction.error door te geven (vervang regels 180-190):
 ```typescript
-// Was:
-const { documentText } = await req.json();
-
-// Wordt:
-const body = await req.json();
-const { documentText, fileContent, mimeType } = body;
-
-let textToAnalyze = documentText;
-let extractionMethod = 'direct';
-
-// Als fileContent aanwezig is, extraheer tekst uit bestand
-if (fileContent && mimeType) {
-  console.log(`📁 Processing file with MIME type: ${mimeType}`);
-  const extraction = await extractTextFromFile(fileContent, mimeType);
-  
-  if (!extraction.text || extraction.method === 'failed' || extraction.method === 'unsupported') {
-    return new Response(JSON.stringify({ 
-      data: getEmptyResult(),
-      error: extraction.method === 'unsupported' 
-        ? 'Bestandstype niet ondersteund' 
-        : 'Kon bestand niet lezen'
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
-  }
-  
-  textToAnalyze = extraction.text;
-  extractionMethod = extraction.method;
-}
-
-if (!textToAnalyze || typeof textToAnalyze !== 'string') {
-  return new Response(JSON.stringify({ error: 'Document tekst is verplicht' }), {
-    status: 400,
+if (extraction.error) {
+  console.error(`❌ Extraction failed: ${extraction.error}`);
+  return new Response(JSON.stringify({ 
+    data: getEmptyResult(),
+    error: extraction.error,
+    extraction_method: extraction.method
+  }), {
+    status: 200,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
   });
 }
 
-// Rest van de functie gebruikt textToAnalyze i.p.v. documentText
-```
-
-**Response uitbreiding**:
-```typescript
-// In de succesvolle response:
-return new Response(JSON.stringify({ 
-  data: extractedData,
-  extraction_method: extractionMethod
-}), {
-  headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-});
-```
-
----
-
-### 3B. Hook Update: MIME Types & Base64 Encoding
-
-**Bestand**: `src/hooks/notulen/useAIExtractMeeting.ts`
-
-**Uitgebreide MIME types** (vervang regels 100-101):
-```typescript
-const SUPPORTED_MIME_TYPES = [
-  'text/plain',
-  'text/markdown',
-  'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/msword'
-] as const;
-
-const SUPPORTED_EXTENSIONS = ['.txt', '.md', '.pdf', '.doc', '.docx'];
-```
-
-**Nieuwe fileToBase64 functie** (toevoegen na readFileAsText):
-```typescript
-async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      // Extract base64 part from data URL (format: "data:mime;base64,CONTENT")
-      const base64 = result.split(',')[1];
-      resolve(base64);
-    };
-    reader.onerror = () => reject(new Error('Kon bestand niet lezen'));
-    reader.readAsDataURL(file);
+if (!extraction.text || extraction.text.trim().length === 0) {
+  return new Response(JSON.stringify({ 
+    data: getEmptyResult(),
+    error: 'Geen leesbare tekst gevonden in bestand',
+    extraction_method: extraction.method
+  }), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
   });
 }
 ```
 
-**Update extractFromFile functie** (vervang regels 98-118):
+---
+
+### 3B. Hook: Verbeterde Error Handling
+
+**Bestand**: `src/hooks/notulen/useAIExtractMeeting.ts`
+
+**Wijziging 1**: Verbeterde error handling in extractFromFile (vervang regels 143-161):
 ```typescript
-const extractFromFile = useCallback(async (file: File): Promise<ExtractedMeetingData | null> => {
-  const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
-  const isTextFile = file.type === 'text/plain' || file.type === 'text/markdown' || 
-                     ext === '.txt' || ext === '.md';
-  const isPdfOrWord = file.type === 'application/pdf' || 
-                      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-                      file.type === 'application/msword' ||
-                      ext === '.pdf' || ext === '.doc' || ext === '.docx';
-  
-  if (!isTextFile && !isPdfOrWord) {
-    toast.error("Alleen PDF, Word (.docx, .doc) en tekst (.txt, .md) worden ondersteund");
-    return null;
-  }
+const { data, error: invokeError } = await supabase.functions.invoke('ai-extract-meeting-minute', {
+  body: { fileContent: base64Content, mimeType }
+});
 
-  setIsExtracting(true);
-  setError(null);
+if (invokeError) {
+  console.error('Edge function invoke error:', invokeError);
+  throw new Error(invokeError.message || 'Fout bij verbinding met AI service');
+}
 
-  try {
-    // Voor tekst bestanden: lees als tekst en stuur documentText
-    if (isTextFile) {
-      const text = await readFileAsText(file);
-      return await extractFromText(text);
-    }
-    
-    // Voor PDF/Word: encode als base64 en stuur fileContent + mimeType
-    const base64Content = await fileToBase64(file);
-    const mimeType = file.type || (ext === '.pdf' ? 'application/pdf' : 
-                     ext === '.docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
-                     'application/msword');
-    
-    const { data, error: invokeError } = await supabase.functions.invoke('ai-extract-meeting-minute', {
-      body: { fileContent: base64Content, mimeType }
-    });
+// Check voor specifieke extraction errors
+if (data?.error) {
+  console.error('Extraction error from edge function:', data.error);
+  setError(data.error);
+  toast.error("Document verwerking mislukt", {
+    description: data.error,
+    duration: 6000, // Langere duration voor error details
+  });
+  return null;
+}
 
-    if (invokeError) throw invokeError;
+if (!data?.data) {
+  console.error('No data returned from edge function');
+  setError('Geen data ontvangen van AI service');
+  toast.error("Kon document niet analyseren");
+  return null;
+}
 
-    if (data?.error) {
-      setError(data.error);
-      toast.error(data.error);
-      return null;
-    }
+console.log(`✅ Extraction successful via ${data.extraction_method || 'unknown'}`);
+setExtractedData(data.data);
+return data.data;
+```
 
-    setExtractedData(data?.data || null);
-    return data?.data || null;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Extractie mislukt';
-    setError(message);
-    toast.error("Kon document niet analyseren");
-    return null;
-  } finally {
-    setIsExtracting(false);
-  }
-}, [extractFromText]);
+**Wijziging 2**: Verbeterde catch block (vervang regels 157-161):
+```typescript
+} catch (err) {
+  console.error('AI extraction error:', err);
+  const message = err instanceof Error ? err.message : 'Extractie mislukt';
+  setError(message);
+  toast.error("Document verwerking mislukt", {
+    description: message.length > 100 
+      ? "Probeer een ander bestand of kopieer de tekst naar .txt" 
+      : message,
+    duration: 5000,
+  });
+  return null;
+} finally {
 ```
 
 ---
 
-### 3C. CreateMeetingMinuteDialog: Accept Uitbreiden
+### 3C. Dialog: Fallback Hint Toevoegen
 
 **Bestand**: `src/components/notulen/CreateMeetingMinuteDialog.tsx`
 
-**Wijziging 1** - AI import file input (regel 211):
-```typescript
-// Was:
-accept=".txt,.md"
-
-// Wordt:
-accept=".txt,.md,.pdf,.doc,.docx"
-```
-
-**Wijziging 2** - Hint tekst (regel 220):
-```typescript
-// Was:
-<span className="text-xs text-muted-foreground">
-  (.txt, .md)
-</span>
-
-// Wordt:
-<span className="text-xs text-muted-foreground">
-  (PDF, Word, .txt, .md)
-</span>
+**Wijziging**: Voeg fallback hint toe onder AI import sectie (na regel 272):
+```tsx
+{/* AI Import section */}
+<div className="flex flex-col gap-1 py-2 border-b">
+  <div className="flex items-center gap-2">
+    <input
+      ref={aiFileInputRef}
+      type="file"
+      accept=".txt,.md,.pdf,.doc,.docx"
+      onChange={handleAIImportFile}
+      className="hidden"
+    />
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={handleAIImportClick}
+      disabled={isCreating || isExtracting || isUploading}
+    >
+      {isExtracting ? (
+        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+      ) : (
+        <Sparkles className="h-4 w-4 mr-2" />
+      )}
+      {isExtracting ? "Analyseren..." : "Importeer van bestand"}
+    </Button>
+    <span className="text-xs text-muted-foreground">
+      (PDF, Word, .txt, .md)
+    </span>
+  </div>
+  <p className="text-xs text-muted-foreground/70 italic">
+    Tip: Bij problemen met PDF, kopieer de tekst naar een .txt bestand
+  </p>
+</div>
 ```
 
 ---
 
-## 4. Content Sectie Analyse
-
-Na onderzoek is gebleken dat de **Content sectie al correct geïmplementeerd is** in `MeetingMinuteDetail.tsx`:
-
-| Feature | Status | Locatie |
-|---------|--------|---------|
-| Content weergave | ✅ Werkt | Regels 355-370 ("Notities" sectie) |
-| Content bewerken | ✅ Werkt | Textarea in edit mode |
-| Empty state | ✅ Werkt | "Geen notities toegevoegd" |
-| Database veld | ✅ Bestaat | `content TEXT` in meeting_minutes |
-
-**Conclusie**: Geen wijzigingen nodig aan MeetingMinuteDetail.tsx voor content weergave.
-
-De "Toon volledige inhoud" toggle en "Kopieer naar klembord" features uit de originele requirements zijn **nice-to-have** en kunnen in een latere iteratie worden toegevoegd.
-
----
-
-## 5. Implementatie Volgorde
+## 4. Implementatie Volgorde
 
 | Stap | Bestand | Wijziging | Prioriteit |
 |------|---------|-----------|------------|
-| 1 | `supabase/functions/ai-extract-meeting-minute/index.ts` | +extractTextFromFile, +npm imports, +handler update | HIGH |
-| 2 | `src/hooks/notulen/useAIExtractMeeting.ts` | +MIME types, +fileToBase64, extractFromFile update | HIGH |
-| 3 | `src/components/notulen/CreateMeetingMinuteDialog.tsx` | accept attribute + hint tekst | HIGH |
-
-**Totaal: ~150 regels gewijzigde code**
+| 1 | `supabase/functions/ai-extract-meeting-minute/index.ts` | Library caching + error interface | HIGH |
+| 2 | `supabase/functions/ai-extract-meeting-minute/index.ts` | extractTextFromFile met specifieke errors | HIGH |
+| 3 | `supabase/functions/ai-extract-meeting-minute/index.ts` | Main handler error propagation | HIGH |
+| 4 | `src/hooks/notulen/useAIExtractMeeting.ts` | Verbeterde error handling + logging | MEDIUM |
+| 5 | `src/components/notulen/CreateMeetingMinuteDialog.tsx` | Fallback hint UI | LOW |
 
 ---
 
-## 6. Technische Risico's en Mitigaties
+## 5. Acceptatie Criteria
+
+| Criterium | Verificatie |
+|-----------|-------------|
+| PDF upload toont specifieke foutmelding | Test met corrupt PDF |
+| Gescande PDF geeft duidelijke melding | Test met image-only PDF |
+| Word upload toont specifieke foutmelding | Test met corrupt .docx |
+| Console logs tonen extraction details | Check browser console |
+| Nederlandse foutmeldingen | Alle errors in NL |
+| Fallback hint zichtbaar | UI check |
+| TypeScript compileert | Build succesvol |
+
+---
+
+## 6. Bestandsoverzicht
+
+| Bestand | Wijzigingen |
+|---------|-------------|
+| `supabase/functions/ai-extract-meeting-minute/index.ts` | +TextExtractionResult.error, +library caching, +specifieke errors (~80 regels) |
+| `src/hooks/notulen/useAIExtractMeeting.ts` | +console logging, +toast descriptions (~20 regels) |
+| `src/components/notulen/CreateMeetingMinuteDialog.tsx` | +fallback hint (~5 regels) |
+
+---
+
+## 7. Risico's en Mitigaties
 
 | Risico | Mitigatie |
 |--------|-----------|
-| npm: imports in Deno | Gebruik expliciete versies (`npm:pdf-parse@1.1.1`) |
-| PDF parsing failures | Graceful fallback met duidelijke foutmelding |
-| Grote bestanden | Edge function heeft timeout; base64 vergroot ~33% |
-| Word .doc (legacy) | mammoth ondersteunt .doc beperkt; primaire focus op .docx |
-| Memory in edge function | pdf-parse is memory-intensief; max 50MB input |
-
----
-
-## 7. Acceptatie Criteria Checklist
-
-| Criterium | Test |
-|-----------|------|
-| PDF import werkt | Upload "Notulen overleg ZZP 26-01-2026.pdf" → tekst geëxtraheerd |
-| Word .docx import werkt | Upload Word document → tekst geëxtraheerd |
-| AI analyse werkt op PDF tekst | Extracted text → agenda_items, decisions gevuld |
-| Foutmelding bij corrupte PDF | "Kon bestand niet lezen" |
-| Nederlandse UI | Alle labels in Nederlands |
-| TypeScript compileert | Geen type errors |
-
----
-
-## 8. Wat NIET wordt gebouwd
-
-| Item | Reden |
-|------|-------|
-| OCR voor gescande PDFs | Vereist Vision API (Fase 7B) |
-| "Toon volledige inhoud" toggle | Nice-to-have, huidige implementatie werkt |
-| "Kopieer naar klembord" button | Nice-to-have |
-| Batch import | Out of scope |
-| Content Section refactor | Bestaande "Notities" sectie werkt al |
-
----
-
-## 9. Bestandsoverzicht
-
-| Bestand | Wijziging |
-|---------|-----------|
-| `supabase/functions/ai-extract-meeting-minute/index.ts` | +npm imports, +extractTextFromFile (~50 regels), handler update (~30 regels) |
-| `src/hooks/notulen/useAIExtractMeeting.ts` | +MIME types, +fileToBase64, extractFromFile refactor (~60 regels) |
-| `src/components/notulen/CreateMeetingMinuteDialog.tsx` | accept uitbreiden, hint tekst (~2 regels) |
+| esm.sh imports kunnen falen | Library caching + specifieke error handling |
+| Grote PDFs kunnen timeout veroorzaken | Existing 50KB limit + error message |
+| .doc (legacy) werkt niet goed | Error message suggereert .docx |
