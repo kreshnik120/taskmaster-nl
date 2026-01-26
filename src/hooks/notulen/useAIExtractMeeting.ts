@@ -61,6 +61,20 @@ async function readFileAsText(file: File): Promise<string> {
   });
 }
 
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Extract base64 part from data URL (format: "data:mime;base64,CONTENT")
+      const base64 = result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error('Kon bestand niet lezen'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export function useAIExtractMeeting(): UseAIExtractMeetingReturn {
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractedData, setExtractedData] = useState<ExtractedMeetingData | null>(null);
@@ -96,24 +110,57 @@ export function useAIExtractMeeting(): UseAIExtractMeetingReturn {
   }, []);
 
   const extractFromFile = useCallback(async (file: File): Promise<ExtractedMeetingData | null> => {
-    // Only support text-based files for now
-    const allowedTypes = ['text/plain', 'text/markdown'];
-    const allowedExtensions = ['.txt', '.md'];
-    
     const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
-    const isAllowed = allowedTypes.includes(file.type) || allowedExtensions.includes(ext);
+    const isTextFile = file.type === 'text/plain' || file.type === 'text/markdown' || 
+                       ext === '.txt' || ext === '.md';
+    const isPdfOrWord = file.type === 'application/pdf' || 
+                        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                        file.type === 'application/msword' ||
+                        ext === '.pdf' || ext === '.doc' || ext === '.docx';
     
-    if (!isAllowed) {
-      toast.error("Alleen .txt en .md bestanden worden ondersteund voor AI extractie");
+    if (!isTextFile && !isPdfOrWord) {
+      toast.error("Alleen PDF, Word (.docx, .doc) en tekst (.txt, .md) worden ondersteund");
       return null;
     }
 
+    setIsExtracting(true);
+    setError(null);
+
     try {
-      const text = await readFileAsText(file);
-      return await extractFromText(text);
+      // Voor tekst bestanden: lees als tekst en stuur documentText
+      if (isTextFile) {
+        const text = await readFileAsText(file);
+        setIsExtracting(false);
+        return await extractFromText(text);
+      }
+      
+      // Voor PDF/Word: encode als base64 en stuur fileContent + mimeType
+      const base64Content = await fileToBase64(file);
+      const mimeType = file.type || (ext === '.pdf' ? 'application/pdf' : 
+                       ext === '.docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
+                       'application/msword');
+      
+      const { data, error: invokeError } = await supabase.functions.invoke('ai-extract-meeting-minute', {
+        body: { fileContent: base64Content, mimeType }
+      });
+
+      if (invokeError) throw invokeError;
+
+      if (data?.error) {
+        setError(data.error);
+        toast.error(data.error);
+        return null;
+      }
+
+      setExtractedData(data?.data || null);
+      return data?.data || null;
     } catch (err) {
-      toast.error("Kon bestand niet lezen");
+      const message = err instanceof Error ? err.message : 'Extractie mislukt';
+      setError(message);
+      toast.error("Kon document niet analyseren");
       return null;
+    } finally {
+      setIsExtracting(false);
     }
   }, [extractFromText]);
 
