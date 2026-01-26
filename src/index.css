@@ -48,7 +48,7 @@ All colors MUST be HSL.
     --status-backlog: 220 13% 69%;
     --status-ready: 221 83% 53%;
     --status-doing: 262 83% 58%;
-    --status-blocked: 0 84% 60%;
+    --status-blocked: 38 92% 50%;
     --status-review: 38 92% 50%;
     --status-done: 142 71% 45%;
     
@@ -139,7 +139,7 @@ All colors MUST be HSL.
     --status-backlog: 220 13% 69%;
     --status-ready: 221 83% 53%;
     --status-doing: 262 83% 58%;
-    --status-blocked: 0 84% 60%;
+    --status-blocked: 38 92% 50%;
     --status-review: 38 92% 50%;
     --status-done: 142 71% 45%;
     --sidebar-background: 240 5.9% 10%;
