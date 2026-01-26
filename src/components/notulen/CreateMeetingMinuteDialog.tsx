@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -35,10 +35,15 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Loader2, CalendarIcon } from "lucide-react";
+import { Loader2, CalendarIcon, Paperclip, X, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useCreateMeetingMinute } from "@/hooks/useCreateMeetingMinute";
+import { useUploadAttachment, ALLOWED_MIME_TYPES, MAX_FILE_SIZE } from "@/hooks/notulen/useUploadAttachment";
+import { formatFileSize } from "@/lib/fileHelpers";
+import { supabase } from "@/integrations/supabase/client";
+import { useAIExtractMeeting } from "@/hooks/notulen/useAIExtractMeeting";
+import { ExtractedDataPreview } from "./ExtractedDataPreview";
 
 interface CreateMeetingMinuteDialogProps {
   open: boolean;
@@ -89,6 +94,11 @@ export function CreateMeetingMinuteDialog({
   linkedTaskId,
 }: CreateMeetingMinuteDialogProps) {
   const { createMeetingMinute, isCreating } = useCreateMeetingMinute();
+  const { uploadMultiple, isUploading } = useUploadAttachment();
+  const { extractFromFile, isExtracting, extractedData, clearExtractedData } = useAIExtractMeeting();
+  
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const aiFileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<CreateMeetingMinuteFormData>({
     resolver: zodResolver(createMeetingMinuteSchema),
@@ -113,8 +123,62 @@ export function CreateMeetingMinuteDialog({
         location: "",
         meeting_link: "",
       });
+      setPendingFiles([]);
+      clearExtractedData();
     }
-  }, [open, defaultTitle, form]);
+  }, [open, defaultTitle, form, clearExtractedData]);
+
+  // File selection handlers
+  const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const validFiles = files.filter(file => {
+      if (file.size > MAX_FILE_SIZE) {
+        toast.error(`${file.name}: Bestand te groot (max 10MB)`);
+        return false;
+      }
+      if (!ALLOWED_MIME_TYPES.includes(file.type as typeof ALLOWED_MIME_TYPES[number])) {
+        toast.error(`${file.name}: Bestandstype niet toegestaan`);
+        return false;
+      }
+      return true;
+    });
+    setPendingFiles(prev => [...prev, ...validFiles].slice(0, 5));
+    e.target.value = '';
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // AI Import handlers
+  const handleAIImportClick = () => {
+    aiFileInputRef.current?.click();
+  };
+
+  const handleAIImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      await extractFromFile(file);
+    }
+    e.target.value = '';
+  };
+
+  const applyExtractedData = () => {
+    if (!extractedData) return;
+    
+    if (extractedData.title) form.setValue('title', extractedData.title);
+    if (extractedData.meeting_type) form.setValue('meeting_type', extractedData.meeting_type);
+    if (extractedData.meeting_date) {
+      form.setValue('start_at', new Date(extractedData.meeting_date));
+    }
+    if (extractedData.meeting_time) {
+      form.setValue('start_time', extractedData.meeting_time);
+    }
+    if (extractedData.location) form.setValue('location', extractedData.location);
+    
+    clearExtractedData();
+    toast.success("Gegevens toegepast");
+  };
 
   const onSubmit = async (values: CreateMeetingMinuteFormData) => {
     try {
@@ -132,12 +196,26 @@ export function CreateMeetingMinuteDialog({
         linkedTaskId: linkedTaskId,
       });
 
+      // Upload pending files after successful creation
+      if (pendingFiles.length > 0) {
+        const { data: userOrg } = await supabase
+          .from('user_organizations')
+          .select('org_id')
+          .limit(1)
+          .maybeSingle();
+        
+        if (userOrg?.org_id) {
+          await uploadMultiple(minuteId, userOrg.org_id, pendingFiles);
+        }
+      }
+
       toast.success("Notulen aangemaakt", {
         description: `"${values.title}" is toegevoegd als concept`,
       });
 
       onOpenChange(false);
       form.reset();
+      setPendingFiles([]);
       onSuccess?.(minuteId);
     } catch (error: any) {
       toast.error("Kon notulen niet aanmaken", {
@@ -149,6 +227,8 @@ export function CreateMeetingMinuteDialog({
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
       form.reset();
+      setPendingFiles([]);
+      clearExtractedData();
     }
     onOpenChange(newOpen);
   };
@@ -163,6 +243,43 @@ export function CreateMeetingMinuteDialog({
             agenda, beslissingen en deelnemers toevoegen.
           </DialogDescription>
         </DialogHeader>
+
+        {/* AI Import section */}
+        <div className="flex items-center gap-2 py-2 border-b">
+          <input
+            ref={aiFileInputRef}
+            type="file"
+            accept=".txt,.md"
+            onChange={handleAIImportFile}
+            className="hidden"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleAIImportClick}
+            disabled={isCreating || isExtracting || isUploading}
+          >
+            {isExtracting ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4 mr-2" />
+            )}
+            {isExtracting ? "Analyseren..." : "Importeer van bestand"}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            (.txt, .md)
+          </span>
+        </div>
+
+        {/* Show extracted data preview */}
+        {extractedData && (
+          <ExtractedDataPreview
+            data={extractedData}
+            onApply={applyExtractedData}
+            onCancel={clearExtractedData}
+          />
+        )}
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -318,20 +435,68 @@ export function CreateMeetingMinuteDialog({
               )}
             />
 
+            {/* Bijlagen Sectie */}
+            <div className="space-y-2">
+              <FormLabel>Bijlagen (optioneel)</FormLabel>
+              <div className="space-y-2">
+                {/* File input trigger */}
+                <label className="flex items-center gap-2 px-3 py-2 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary/50 transition-colors">
+                  <Paperclip className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">
+                    Bestanden toevoegen (PDF, Word, Excel, afbeeldingen)
+                  </span>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.xls,.xlsx"
+                    onChange={handleFilesSelected}
+                    className="hidden"
+                    disabled={isCreating || isUploading}
+                  />
+                </label>
+                
+                {/* Pending files list */}
+                {pendingFiles.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">
+                      {pendingFiles.length} bestand(en) geselecteerd
+                    </p>
+                    {pendingFiles.map((file, index) => (
+                      <div key={index} className="flex items-center gap-2 text-sm bg-muted/50 rounded px-2 py-1">
+                        <span className="truncate flex-1">{file.name}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {formatFileSize(file.size)}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 shrink-0"
+                          onClick={() => handleRemoveFile(index)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
             <DialogFooter className="pt-4">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => handleOpenChange(false)}
-                disabled={isCreating}
+                disabled={isCreating || isUploading}
               >
                 Annuleren
               </Button>
-              <Button type="submit" disabled={isCreating}>
-                {isCreating && (
+              <Button type="submit" disabled={isCreating || isUploading}>
+                {(isCreating || isUploading) && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Aanmaken
+                {isUploading ? "Uploaden..." : "Aanmaken"}
               </Button>
             </DialogFooter>
           </form>
