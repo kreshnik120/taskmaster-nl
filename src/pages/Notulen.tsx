@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useMeetingMinutes, MeetingMinute } from "@/hooks/useMeetingMinutes";
+import { MeetingMinuteDetail } from "@/components/notulen/MeetingMinuteDetail";
+import { CreateMeetingMinuteDialog } from "@/components/notulen/CreateMeetingMinuteDialog";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { format, isToday, isThisWeek, isThisMonth } from "date-fns";
 import { nl } from "date-fns/locale";
@@ -109,6 +111,13 @@ export default function Notulen() {
   // Paginatie
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Detail Sheet state
+  const [selectedMinute, setSelectedMinute] = useState<MeetingMinute | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+
+  // Create Dialog state
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+
   // Data fetching
   const { minutes, isLoading, isError } = useMeetingMinutes();
 
@@ -213,17 +222,10 @@ export default function Notulen() {
           title="Vergadernotulen"
           subtitle={`${stats.total} notulen • ${stats.draft} concept • ${stats.approved} goedgekeurd`}
         >
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button disabled className="opacity-50 cursor-not-allowed">
-                <Plus className="h-4 w-4 mr-2" />
-                Nieuwe notulen
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Komt beschikbaar in Fase 3</p>
-            </TooltipContent>
-          </Tooltip>
+          <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nieuwe notulen
+          </Button>
         </PageHero>
 
         {/* Filter Card */}
@@ -330,7 +332,14 @@ export default function Notulen() {
                 </TableHeader>
                 <TableBody>
                   {paginatedMinutes.map((minute) => (
-                    <TableRow key={minute.id}>
+                    <TableRow
+                      key={minute.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => {
+                        setSelectedMinute(minute);
+                        setIsDetailOpen(true);
+                      }}
+                    >
                       <TableCell className="font-medium">
                         {minute.tasks?.title || "Geen titel"}
                       </TableCell>
@@ -350,21 +359,17 @@ export default function Notulen() {
                       </TableCell>
                       <TableCell>{getStatusBadge(minute.status)}</TableCell>
                       <TableCell>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              disabled
-                              className="opacity-50"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Detail komt in Fase 3</p>
-                          </TooltipContent>
-                        </Tooltip>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedMinute(minute);
+                            setIsDetailOpen(true);
+                          }}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -414,6 +419,19 @@ export default function Notulen() {
             </>
           )}
         </Card>
+
+        {/* Detail Sheet */}
+        <MeetingMinuteDetail
+          minute={selectedMinute}
+          open={isDetailOpen}
+          onOpenChange={setIsDetailOpen}
+        />
+
+        {/* Create Dialog */}
+        <CreateMeetingMinuteDialog
+          open={isCreateDialogOpen}
+          onOpenChange={setIsCreateDialogOpen}
+        />
       </div>
     </TooltipProvider>
   );
