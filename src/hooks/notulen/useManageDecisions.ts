@@ -83,9 +83,33 @@ export function useManageDecisions() {
     }
   };
 
+  const linkTaskToDecision = async (
+    minuteId: string,
+    decisionId: string,
+    taskId: string
+  ): Promise<void> => {
+    setIsUpdating(true);
+    try {
+      const currentDecisions = await fetchCurrentDecisions(minuteId);
+      const updatedDecisions = currentDecisions.map((d) =>
+        d.id === decisionId ? { ...d, linked_task_id: taskId } : d
+      );
+
+      await updateDecisions(minuteId, updatedDecisions);
+      toast.success("Taak gekoppeld aan beslissing");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Onbekende fout';
+      toast.error("Kon taak niet koppelen", { description: message });
+      throw error;
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   return {
     addDecision,
     removeDecision,
+    linkTaskToDecision,
     isUpdating,
   };
 }

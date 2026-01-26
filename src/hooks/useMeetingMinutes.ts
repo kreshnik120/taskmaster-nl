@@ -18,6 +18,7 @@ export interface Decision {
   text: string;
   decided_at: string;
   decided_by: string | null;
+  linked_task_id?: string | null;
 }
 
 // Meeting Minutes met gekoppelde data
