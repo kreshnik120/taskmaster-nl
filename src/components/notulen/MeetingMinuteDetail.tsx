@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import {
@@ -12,59 +13,38 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
-  MapPin,
-  Link2,
-  Calendar,
-  ClipboardList,
-  CheckCircle2,
   FileText,
-  Users,
   Edit2,
-  Check,
+  Loader2,
   X,
-  ExternalLink,
+  Save,
 } from "lucide-react";
-import { MeetingMinute, AgendaItem, Decision } from "@/hooks/useMeetingMinutes";
+import { cn } from "@/lib/utils";
+import { MeetingMinute } from "@/hooks/useMeetingMinutes";
+import { useUpdateMeetingMinute } from "@/hooks/notulen/useUpdateMeetingMinute";
+import { StatusSelector } from "./StatusSelector";
+import { EditableMetaSection } from "./EditableMetaSection";
+import { EditableAgendaSection } from "./EditableAgendaSection";
+import { EditableDecisionsSection } from "./EditableDecisionsSection";
+import { EditableAttendeesSection } from "./EditableAttendeesSection";
 
 interface MeetingMinuteDetailProps {
   minute: MeetingMinute | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-// Status badge helper
-function getStatusBadge(status: string | null) {
-  switch (status) {
-    case "draft":
-      return <Badge variant="secondary">Concept</Badge>;
-    case "pending_approval":
-      return (
-        <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-transparent">
-          Wacht op goedkeuring
-        </Badge>
-      );
-    case "approved":
-      return (
-        <Badge className="bg-green-500/10 text-green-700 dark:text-green-400 border-transparent">
-          Goedgekeurd
-        </Badge>
-      );
-    case "archived":
-      return (
-        <Badge variant="outline" className="text-muted-foreground">
-          Gearchiveerd
-        </Badge>
-      );
-    default:
-      return <Badge variant="outline">Onbekend</Badge>;
-  }
 }
 
 // Meeting type badge helper
@@ -95,26 +75,49 @@ function getTypeBadge(type: string | null) {
   return <Badge className={`${c.className} border-transparent`}>{c.label}</Badge>;
 }
 
+// Status badge helper (for view mode)
+function getStatusBadge(status: string | null) {
+  switch (status) {
+    case "draft":
+      return <Badge variant="secondary">Concept</Badge>;
+    case "pending_approval":
+      return (
+        <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-transparent">
+          Wacht op goedkeuring
+        </Badge>
+      );
+    case "approved":
+      return (
+        <Badge className="bg-green-500/10 text-green-700 dark:text-green-400 border-transparent">
+          Goedgekeurd
+        </Badge>
+      );
+    case "archived":
+      return (
+        <Badge variant="outline" className="text-muted-foreground">
+          Gearchiveerd
+        </Badge>
+      );
+    default:
+      return <Badge variant="outline">Onbekend</Badge>;
+  }
+}
+
 // Section component for consistent styling
 function Section({
   icon: Icon,
   title,
-  count,
   children,
 }: {
   icon: React.ElementType;
   title: string;
-  count?: number;
   children: React.ReactNode;
 }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
         <Icon className="h-4 w-4" />
-        <span>
-          {title}
-          {count !== undefined && ` (${count})`}
-        </span>
+        <span>{title}</span>
       </div>
       {children}
     </div>
@@ -133,251 +136,248 @@ export function MeetingMinuteDetail({
   open,
   onOpenChange,
 }: MeetingMinuteDetailProps) {
+  const { updateMeetingMinute, isUpdating } = useUpdateMeetingMinute();
+  
+  // Edit mode state
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  
+  // Edited values
+  const [editedLocation, setEditedLocation] = useState("");
+  const [editedMeetingLink, setEditedMeetingLink] = useState("");
+  const [editedNextMeetingDate, setEditedNextMeetingDate] = useState<Date | null>(null);
+  const [editedContent, setEditedContent] = useState("");
+  const [editedStatus, setEditedStatus] = useState<string>("");
+  
+  // Track if there are unsaved changes
+  const hasChanges = minute && (
+    editedLocation !== (minute.location || "") ||
+    editedMeetingLink !== (minute.meeting_link || "") ||
+    editedContent !== (minute.content || "") ||
+    editedStatus !== (minute.status || "draft") ||
+    (editedNextMeetingDate?.toISOString() || null) !== (minute.next_meeting_date || null)
+  );
+
+  // Reset edited values when minute changes or edit mode is entered
+  const resetEditedValues = useCallback(() => {
+    if (minute) {
+      setEditedLocation(minute.location || "");
+      setEditedMeetingLink(minute.meeting_link || "");
+      setEditedContent(minute.content || "");
+      setEditedStatus(minute.status || "draft");
+      setEditedNextMeetingDate(
+        minute.next_meeting_date ? new Date(minute.next_meeting_date) : null
+      );
+    }
+  }, [minute]);
+
+  // Reset when minute changes
+  useEffect(() => {
+    resetEditedValues();
+  }, [minute?.id, resetEditedValues]);
+
+  // Reset edit mode when sheet closes
+  useEffect(() => {
+    if (!open) {
+      setIsEditMode(false);
+    }
+  }, [open]);
+
+  // Keyboard support
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isEditMode && open) {
+        e.preventDefault();
+        handleCancelEdit();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isEditMode, open, hasChanges]);
+
+  const handleCancelEdit = () => {
+    if (hasChanges) {
+      setShowDiscardDialog(true);
+    } else {
+      setIsEditMode(false);
+      resetEditedValues();
+    }
+  };
+
+  const handleConfirmDiscard = () => {
+    setShowDiscardDialog(false);
+    setIsEditMode(false);
+    resetEditedValues();
+  };
+
+  const handleSave = async () => {
+    if (!minute) return;
+
+    await updateMeetingMinute(minute.id, {
+      location: editedLocation || null,
+      meeting_link: editedMeetingLink || null,
+      next_meeting_date: editedNextMeetingDate?.toISOString() || null,
+      content: editedContent || null,
+      status: editedStatus as 'draft' | 'pending_approval' | 'approved' | 'archived',
+    });
+
+    setIsEditMode(false);
+  };
+
+  const handleEnterEditMode = () => {
+    resetEditedValues();
+    setIsEditMode(true);
+  };
+
   if (!minute) return null;
 
-  const attendees = minute.meeting_attendees || [];
-  const agendaItems = minute.agenda_items || [];
-  const decisions = minute.decisions || [];
-
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-xl flex flex-col">
-        <SheetHeader className="space-y-3">
-          {/* Type + Status badges */}
-          <div className="flex items-center gap-2">
-            {getTypeBadge(minute.meeting_type)}
-            {getStatusBadge(minute.status)}
-          </div>
-
-          <SheetTitle className="text-xl">
-            {minute.tasks?.title || "Geen titel"}
-          </SheetTitle>
-
-          <SheetDescription>
-            {minute.tasks?.start_at
-              ? format(
-                  new Date(minute.tasks.start_at),
-                  "EEEE d MMMM yyyy 'om' HH:mm",
-                  { locale: nl }
-                )
-              : "Geen datum"}
-          </SheetDescription>
-        </SheetHeader>
-
-        <Separator className="my-4" />
-
-        <ScrollArea className="flex-1 pr-4">
-          <div className="space-y-6 pb-6">
-            {/* META Section */}
-            <Section icon={MapPin} title="Locatie & Details">
-              <Card className="p-4 space-y-3">
-                {minute.location ? (
-                  <div className="flex items-start gap-2 text-sm">
-                    <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <span>{minute.location}</span>
-                  </div>
-                ) : null}
-
-                {minute.meeting_link ? (
-                  <div className="flex items-start gap-2 text-sm">
-                    <Link2 className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <a
-                      href={minute.meeting_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline flex items-center gap-1"
-                    >
-                      Meeting link
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                ) : null}
-
-                {minute.next_meeting_date ? (
-                  <div className="flex items-start gap-2 text-sm">
-                    <Calendar className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <span>
-                      Volgende vergadering:{" "}
-                      {format(new Date(minute.next_meeting_date), "d MMMM yyyy", {
-                        locale: nl,
-                      })}
-                    </span>
-                  </div>
-                ) : null}
-
-                {!minute.location &&
-                  !minute.meeting_link &&
-                  !minute.next_meeting_date && (
-                    <EmptyState message="Geen locatie of details toegevoegd" />
-                  )}
-              </Card>
-            </Section>
-
-            {/* AGENDA Section */}
-            <Section
-              icon={ClipboardList}
-              title="Agenda"
-              count={agendaItems.length}
-            >
-              <Card className="p-4">
-                {agendaItems.length > 0 ? (
-                  <ul className="space-y-2">
-                    {agendaItems.map((item: AgendaItem, index: number) => (
-                      <li
-                        key={item.id || index}
-                        className="flex items-start gap-3 text-sm"
-                      >
-                        <span
-                          className={`shrink-0 mt-0.5 ${
-                            item.discussed
-                              ? "text-green-600"
-                              : "text-muted-foreground"
-                          }`}
-                        >
-                          {item.discussed ? (
-                            <Check className="h-4 w-4" />
-                          ) : (
-                            <X className="h-4 w-4" />
-                          )}
-                        </span>
-                        <span className="flex-1">
-                          {item.order}. {item.title}
-                        </span>
-                        {item.duration_min > 0 && (
-                          <span className="text-xs text-muted-foreground shrink-0">
-                            {item.duration_min} min
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <EmptyState message="Geen agenda items toegevoegd" />
-                )}
-              </Card>
-            </Section>
-
-            {/* DECISIONS Section */}
-            <Section
-              icon={CheckCircle2}
-              title="Beslissingen"
-              count={decisions.length}
-            >
-              <Card className="p-4">
-                {decisions.length > 0 ? (
-                  <ul className="space-y-3">
-                    {decisions.map((decision: Decision, index: number) => (
-                      <li key={decision.id || index} className="text-sm">
-                        <p className="font-medium">• {decision.text}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {decision.decided_by
-                            ? `Besloten door: ${decision.decided_by}`
-                            : "Besloten"}
-                          {decision.decided_at &&
-                            ` op ${format(
-                              new Date(decision.decided_at),
-                              "d MMM yyyy",
-                              { locale: nl }
-                            )}`}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <EmptyState message="Geen beslissingen vastgelegd" />
-                )}
-              </Card>
-            </Section>
-
-            {/* NOTES Section */}
-            <Section icon={FileText} title="Notities">
-              <Card className="p-4">
-                {minute.content ? (
-                  <p className="text-sm whitespace-pre-wrap">{minute.content}</p>
-                ) : (
-                  <EmptyState message="Geen notities toegevoegd" />
-                )}
-              </Card>
-            </Section>
-
-            {/* ATTENDEES Section */}
-            <Section
-              icon={Users}
-              title="Deelnemers"
-              count={attendees.length}
-            >
-              <Card className="p-4">
-                {attendees.length > 0 ? (
-                  <ul className="space-y-2">
-                    {attendees.map((attendee) => (
-                      <li
-                        key={attendee.id}
-                        className="flex items-center justify-between text-sm"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span>
-                            {attendee.profiles?.name ||
-                              attendee.external_name ||
-                              "Onbekend"}
-                          </span>
-                          {attendee.role && (
-                            <Badge variant="outline" className="text-xs">
-                              {attendee.role}
-                            </Badge>
-                          )}
-                        </div>
-                        <Badge
-                          variant={attendee.attended ? "default" : "secondary"}
-                          className={
-                            attendee.attended
-                              ? "bg-green-500/10 text-green-700 dark:text-green-400 border-transparent"
-                              : ""
-                          }
-                        >
-                          {attendee.attended ? "Aanwezig" : "Afwezig"}
-                        </Badge>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <EmptyState message="Geen deelnemers toegevoegd" />
-                )}
-              </Card>
-            </Section>
-          </div>
-        </ScrollArea>
-
-        <Separator className="my-4" />
-
-        <SheetFooter className="flex-col sm:flex-row gap-2">
-          {/* Approval info */}
-          {minute.approved_by && minute.approved_at && (
-            <p className="text-xs text-muted-foreground flex-1">
-              Goedgekeurd op{" "}
-              {format(new Date(minute.approved_at), "d MMMM yyyy", {
-                locale: nl,
-              })}
-            </p>
+    <>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent 
+          className={cn(
+            "w-full sm:max-w-xl flex flex-col",
+            isEditMode && "bg-muted/20"
           )}
+        >
+          <SheetHeader className="space-y-3">
+            {/* Type + Status badges */}
+            <div className="flex items-center gap-2">
+              {getTypeBadge(minute.meeting_type)}
+              {isEditMode ? (
+                <StatusSelector
+                  currentStatus={editedStatus}
+                  onStatusChange={setEditedStatus}
+                  disabled={isUpdating}
+                />
+              ) : (
+                getStatusBadge(minute.status)
+              )}
+            </div>
 
-          {/* Edit button (disabled for Fase 3) */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                disabled
-                className="opacity-50 cursor-not-allowed"
-              >
+            <SheetTitle className="text-xl">
+              {minute.tasks?.title || "Geen titel"}
+            </SheetTitle>
+
+            <SheetDescription>
+              {minute.tasks?.start_at
+                ? format(
+                    new Date(minute.tasks.start_at),
+                    "EEEE d MMMM yyyy 'om' HH:mm",
+                    { locale: nl }
+                  )
+                : "Geen datum"}
+            </SheetDescription>
+          </SheetHeader>
+
+          <Separator className="my-4" />
+
+          <ScrollArea className="flex-1 pr-4">
+            <div className="space-y-6 pb-6">
+              {/* META Section */}
+              <EditableMetaSection
+                minute={minute}
+                isEditMode={isEditMode}
+                editedLocation={editedLocation}
+                editedMeetingLink={editedMeetingLink}
+                editedNextMeetingDate={editedNextMeetingDate}
+                onLocationChange={setEditedLocation}
+                onMeetingLinkChange={setEditedMeetingLink}
+                onNextMeetingDateChange={setEditedNextMeetingDate}
+              />
+
+              {/* AGENDA Section */}
+              <EditableAgendaSection minute={minute} isEditMode={isEditMode} />
+
+              {/* DECISIONS Section */}
+              <EditableDecisionsSection minute={minute} isEditMode={isEditMode} />
+
+              {/* NOTES Section */}
+              <Section icon={FileText} title="Notities">
+                <Card className="p-4">
+                  {isEditMode ? (
+                    <Textarea
+                      value={editedContent}
+                      onChange={(e) => setEditedContent(e.target.value)}
+                      placeholder="Voeg notities toe..."
+                      className="min-h-[120px]"
+                    />
+                  ) : minute.content ? (
+                    <p className="text-sm whitespace-pre-wrap">{minute.content}</p>
+                  ) : (
+                    <EmptyState message="Geen notities toegevoegd" />
+                  )}
+                </Card>
+              </Section>
+
+              {/* ATTENDEES Section */}
+              <EditableAttendeesSection minute={minute} isEditMode={isEditMode} />
+            </div>
+          </ScrollArea>
+
+          <Separator className="my-4" />
+
+          <SheetFooter className="flex-col sm:flex-row gap-2">
+            {/* Approval info */}
+            {!isEditMode && minute.approved_by && minute.approved_at && (
+              <p className="text-xs text-muted-foreground flex-1">
+                Goedgekeurd op{" "}
+                {format(new Date(minute.approved_at), "d MMMM yyyy", {
+                  locale: nl,
+                })}
+              </p>
+            )}
+
+            {isEditMode ? (
+              <>
+                <Button 
+                  variant="outline" 
+                  onClick={handleCancelEdit}
+                  disabled={isUpdating}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Annuleren
+                </Button>
+                <Button 
+                  onClick={handleSave} 
+                  disabled={isUpdating || !hasChanges}
+                >
+                  {isUpdating ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  Opslaan
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" onClick={handleEnterEditMode}>
                 <Edit2 className="h-4 w-4 mr-2" />
                 Bewerken
               </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Komt beschikbaar in Fase 3B</p>
-            </TooltipContent>
-          </Tooltip>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+            )}
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* Discard changes confirmation dialog */}
+      <AlertDialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Wijzigingen negeren?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Je hebt niet-opgeslagen wijzigingen. Weet je zeker dat je deze wilt negeren?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Terug</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDiscard}>
+              Wijzigingen negeren
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
