@@ -506,3 +506,12 @@ verify_jwt = false
 verify_jwt = false
 # Purpose: Admin-only user management (list users, assign roles)
 # Note: JWT verification done in code for more granular control
+
+# -----------------------------------------------------------------------------
+# NOTULEN AI EXTRACTION
+# -----------------------------------------------------------------------------
+
+[functions.ai-extract-meeting-minute]
+verify_jwt = false
+# Purpose: Extract meeting data from documents using Gemini Flash
+# Note: Used by CreateMeetingMinuteDialog for AI import feature

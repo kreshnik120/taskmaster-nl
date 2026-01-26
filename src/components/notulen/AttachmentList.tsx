@@ -189,10 +189,26 @@ export function AttachmentList({ attachments, isLoading, isEditMode }: Attachmen
   }
 
   if (attachments.length === 0) {
+    if (isEditMode) {
+      // In edit mode: simpele tekst (upload zone is al zichtbaar erboven)
+      return (
+        <p className="text-sm text-muted-foreground italic py-2">
+          Nog geen bijlagen toegevoegd
+        </p>
+      );
+    }
+    
+    // In view mode: hint om naar edit mode te gaan
     return (
-      <p className="text-sm text-muted-foreground italic py-2">
-        Nog geen bijlagen toegevoegd
-      </p>
+      <div className="text-center py-6 border-2 border-dashed rounded-lg bg-muted/20">
+        <FileText className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+        <p className="text-sm text-muted-foreground">
+          Geen bijlagen toegevoegd
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Klik op <span className="font-medium">"Bewerken"</span> om bijlagen toe te voegen
+        </p>
+      </div>
     );
   }
 
